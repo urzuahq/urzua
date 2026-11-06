@@ -2,7 +2,7 @@
 Stable-Id: 01M6NNNZJ92WC419AF3NQP471H
 Status: Draft
 Date: 2026-11-05
-Version: '0.1'
+Version: '0.2'
 Author: beauwilliams
 Subject: 'The `condition` record type -- a dependency on a fact that is observed rather than built, declared in configuration alone.'
 Parent: —
@@ -75,6 +75,11 @@ whether the Signal is precise is a reviewer's judgement, as for any section (`SP
 - **Blocked.** A dependent of an `Open` condition is blocked and out of the ready set. A dependent of
   a `Met` one is not blocked. A dependent of a `Dropped` one stays out of the ready set and is listed
   in the roadmap's `needs_replan`, as a dependent of any failure-state record is.
+- **Not work.** A condition is met or dropped, never started or ordered. A repository that leaves the
+  type out of `roadmap.work_types` (`SPEC-3`) keeps the condition out of the roadmap's waves, ready
+  set, critical path, records and groups, while it still gates its dependents as above and is listed
+  under the roadmap's `waiting_on` until it is `Met` (`MILE-196`). The engine reads no type name; the
+  setting lists the types that are work. Without the setting a condition is ordered like any record.
 - **Who moves it.** A person moves a condition to `Met` or `Dropped`. An agent drafting the work that
   waits on it files the condition `Open` and does not decide it (`AGENTS.md`).
 
@@ -108,3 +113,4 @@ whether the Signal is precise is a reviewer's judgement, as for any section (`SP
 > |---|---|---|
 > | 2026-11-05 | Initial spec. **Why:** `MILE-187`, maintainer decision of 2026-11-05: the `condition` type of `RFC-48` is declared in configuration so waits on facts are structured and the computed roadmap sees them. | **structural** |
 > | 2026-11-05 | `Met-by` is unset while `Open`. **Why:** review of `MILE-187`: `Met-by` names the record that shows the signal happened, so naming a record before then asserts evidence that does not exist; `COND-1` no longer sets `Met-by: RFC-9`. | **structural** |
+> | 2026-11-05 | Bumped to `0.2`. A condition is read as non-work when a repository leaves it out of `roadmap.work_types`: it gates but is not ordered, and is listed under `waiting_on`. **Why:** `MILE-196` builds the `ADR-82` Amendment of 2026-11-05, which this repository's own configuration uses so `COND-1` to `COND-4` leave the ready set. | **substantive** |

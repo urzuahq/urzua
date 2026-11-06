@@ -90,11 +90,17 @@ pub struct RoadmapDecl {
     /// names none; each must be declared by some record type.
     #[serde(default)]
     pub group_by: Vec<String>,
+    /// Names of `record_types` entries that are work (`ADR-82`, Amendment of
+    /// 2026-11-05): the records the roadmap orders. A record of any other type
+    /// still gates its dependents but is not in waves, `ready`, the critical
+    /// path, `records` or `groups`. Absent means every type is work.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub work_types: Option<Vec<String>>,
 }
 
 impl RoadmapDecl {
     fn is_empty(&self) -> bool {
-        self.pairs.is_empty() && self.group_by.is_empty()
+        self.pairs.is_empty() && self.group_by.is_empty() && self.work_types.is_none()
     }
 }
 
@@ -2813,8 +2819,8 @@ fn validate_companion_fields(config: &Config) -> Result<(), ConfigError> {
 }
 
 /// Load-time checks for `roadmap` (`ADR-82`): `pairs` names declared, acyclic
-/// pairs, each once, and `group_by` names fields some record type declares,
-/// each once. A declaration that can never apply reads as a clean roadmap, so
+/// pairs, each once, `group_by` names fields some record type declares, each
+/// once, and `work_types` names record types, each once. A declaration that can never apply reads as a clean roadmap, so
 /// it is refused (`ADR-7`, `ADR-64` clause 5).
 fn validate_roadmap(config: &Config) -> Result<(), ConfigError> {
     let bad = |reason: String| Err(ConfigError::InvalidRoadmap { reason });
@@ -2854,6 +2860,29 @@ fn validate_roadmap(config: &Config) -> Result<(), ConfigError> {
             return bad(format!(
                 "group_by names '{field}', which is not in the required_fields or known_fields of any record type, so no record could carry it"
             ));
+        }
+    }
+    if let Some(work_types) = &config.roadmap.work_types {
+        if work_types.is_empty() {
+            return bad(
+                "work_types is an empty list, which declares that nothing is work; omit the key to treat every type as work".to_string(),
+            );
+        }
+        let mut listed = std::collections::BTreeSet::new();
+        for name in work_types {
+            if name.trim().is_empty() || *name != name.trim() {
+                return bad(format!(
+                    "work_types name '{name}' is blank or has surrounding whitespace"
+                ));
+            }
+            if !listed.insert(name.as_str()) {
+                return bad(format!("work_types lists '{name}' twice"));
+            }
+            if !config.record_types.contains_key(name) {
+                return bad(format!(
+                    "work_types names '{name}', which is not a record_types entry"
+                ));
+            }
         }
     }
     Ok(())

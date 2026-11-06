@@ -78,6 +78,23 @@ pub struct Roadmap {
     pub needs_replan: Vec<NeedsReplan>,
     pub cycles: Vec<Vec<String>>,
     pub notes: Vec<RoadmapNote>,
+    /// The non-work records not in a `success` status (`ADR-82`, Amendment of
+    /// 2026-11-05). Present only when `roadmap.work_types` is declared.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub waiting_on: Option<Vec<WaitingOn>>,
+}
+
+/// A record of a type `roadmap.work_types` leaves out, still open or failed:
+/// a wait that gates the work records listed in `blocks`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct WaitingOn {
+    pub record: String,
+    #[serde(rename = "type")]
+    pub record_type: String,
+    /// The written value, `null` when the record states none.
+    pub status: Option<String>,
+    /// The work records that transitively depend on it.
+    pub blocks: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -178,6 +195,7 @@ fn empty_roadmap(pairs: &[String]) -> Roadmap {
         needs_replan: Vec::new(),
         cycles: Vec::new(),
         notes: Vec::new(),
+        waiting_on: None,
     }
 }
 
@@ -318,6 +336,15 @@ pub fn compute_roadmap(records: &[Record], config: &Config) -> Roadmap {
         .cloned()
         .collect();
 
+    // The records the roadmap orders (`ADR-82`, Amendment of 2026-11-05):
+    // every type when `work_types` is absent. A non-work record stays in the
+    // graph and gates its dependents; it is never a subject of the output.
+    let work_types = config.roadmap.work_types.as_ref();
+    let is_work = |id: &RecordId| -> bool {
+        work_types.is_none_or(|types| types.contains(&index[id].record_type))
+    };
+    let open_work: BTreeSet<RecordId> = open.iter().filter(|id| is_work(id)).cloned().collect();
+
     notes_about_claims(&slots, &index, &pairs, &mut notes);
 
     // ---- cycles: strongly connected components of the whole declared graph.
@@ -413,7 +440,33 @@ pub fn compute_roadmap(records: &[Record], config: &Config) -> Roadmap {
         }
         pending = rest;
     }
-    let included: BTreeSet<RecordId> = open.difference(&excluded).cloned().collect();
+    let included: BTreeSet<RecordId> = open_work.difference(&excluded).cloned().collect();
+
+    // The edges waves and the critical path read: a work record's dependencies
+    // contract through chains of non-work records, whatever their status, so a
+    // non-work record in between does not cut the ordering. Only the work
+    // records at the end of such a chain count. Gating is not contracted: a
+    // non-work record's own status is read from `blocked_by` and `reason`.
+    let reach = |from: &RecordId, edges: &dyn Fn(&RecordId) -> Vec<RecordId>| -> Vec<RecordId> {
+        let mut found: BTreeSet<RecordId> = BTreeSet::new();
+        let mut seen: BTreeSet<RecordId> = BTreeSet::new();
+        let mut frontier = vec![from.clone()];
+        while let Some(at) = frontier.pop() {
+            for next in edges(&at) {
+                if next == *from || !seen.insert(next.clone()) {
+                    continue;
+                }
+                if is_work(&next) {
+                    found.insert(next);
+                } else {
+                    frontier.push(next);
+                }
+            }
+        }
+        found.into_iter().collect()
+    };
+    let work_deps_of =
+        |id: &RecordId| -> Vec<RecordId> { reach(id, &|at| deps_of(at).iter().cloned().collect()) };
 
     // ---- waves: 1 + the deepest open dependency; a success dependency is ignored.
     let mut wave: BTreeMap<RecordId, usize> = BTreeMap::new();
@@ -421,12 +474,14 @@ pub fn compute_roadmap(records: &[Record], config: &Config) -> Roadmap {
     while !waiting.is_empty() {
         let mut rest = Vec::new();
         for id in waiting.iter().copied() {
-            let open_deps: Vec<&RecordId> = deps_of(id)
-                .iter()
-                .filter(|d| state(d) == Standing::Open)
+            // A dependency kept out is not ordered; the record behind it is
+            // kept out too unless a non-work record in between is finished.
+            let open_deps: Vec<RecordId> = work_deps_of(id)
+                .into_iter()
+                .filter(|d| state(d) == Standing::Open && included.contains(d))
                 .collect();
-            if open_deps.iter().all(|d| wave.contains_key(*d)) {
-                let w = open_deps.iter().map(|d| wave[*d] + 1).max().unwrap_or(0);
+            if open_deps.iter().all(|d| wave.contains_key(d)) {
+                let w = open_deps.iter().map(|d| wave[d] + 1).max().unwrap_or(0);
                 wave.insert(id.clone(), w);
             } else {
                 rest.push(id);
@@ -447,23 +502,17 @@ pub fn compute_roadmap(records: &[Record], config: &Config) -> Roadmap {
     }
 
     // ---- per record: blocked_by, blocks, ready.
+    // Dependents of open records, and of every non-work record (a finished one
+    // still sits between the work records it orders).
     let mut dependents: BTreeMap<&RecordId, Vec<&RecordId>> = BTreeMap::new();
-    for id in &open {
+    for id in scope.iter().filter(|id| open.contains(*id) || !is_work(id)) {
         for d in deps_of(id) {
             dependents.entry(d).or_default().push(id);
         }
     }
     let mut entries: Vec<(String, RoadmapRecord)> = Vec::new();
     let mut ready: Vec<String> = Vec::new();
-    for id in sorted_naturally(open.iter()) {
-        let blocked_by = names(
-            deps_of(id)
-                .iter()
-                .filter(|d| state(d) != Standing::Success)
-                .map(RecordId::as_str),
-        );
-        let blocked = !blocked_by.is_empty();
-        let is_ready = included.contains(id) && !blocked;
+    let blocked_work = |id: &RecordId| -> Vec<String> {
         let mut seen: BTreeSet<&RecordId> = BTreeSet::new();
         let mut frontier = vec![id];
         while let Some(at) = frontier.pop() {
@@ -473,6 +522,24 @@ pub fn compute_roadmap(records: &[Record], config: &Config) -> Roadmap {
                 }
             }
         }
+        names(
+            seen.into_iter()
+                .filter(|n| open_work.contains(*n))
+                .map(RecordId::as_str),
+        )
+    };
+    for id in sorted_naturally(open_work.iter()) {
+        let blocked_by = names(
+            deps_of(id)
+                .iter()
+                .filter(|d| state(d) != Standing::Success)
+                .map(RecordId::as_str),
+        );
+        let blocked = !blocked_by.is_empty();
+        // Ready is wave 0 and unblocked. With every type work that is just
+        // unblocked; a work record behind open work through a finished
+        // non-work record is unblocked but in a later wave, so not ready.
+        let is_ready = included.contains(id) && !blocked && wave.get(id) == Some(&0);
         if is_ready {
             ready.push(id.as_str().to_string());
         }
@@ -485,7 +552,7 @@ pub fn compute_roadmap(records: &[Record], config: &Config) -> Roadmap {
                 ready: is_ready,
                 blocked,
                 blocked_by,
-                blocks: names(seen.into_iter().map(RecordId::as_str)),
+                blocks: blocked_work(id),
             },
         ));
     }
@@ -497,15 +564,17 @@ pub fn compute_roadmap(records: &[Record], config: &Config) -> Roadmap {
     let mut by_wave: Vec<&RecordId> = included.iter().collect();
     by_wave.sort_by_key(|id| std::cmp::Reverse(wave[*id]));
     let next_of = |id: &RecordId| -> Vec<&RecordId> {
-        dependents
-            .get(id)
-            .map(|v| {
-                v.iter()
-                    .copied()
-                    .filter(|n| included.contains(*n))
-                    .collect()
-            })
-            .unwrap_or_default()
+        reach(id, &|at| {
+            dependents
+                .get(at)
+                .into_iter()
+                .flatten()
+                .map(|n| (*n).clone())
+                .collect()
+        })
+        .into_iter()
+        .filter_map(|n| included.get(&n))
+        .collect()
     };
     for id in by_wave {
         let tail = next_of(id).iter().map(|n| longest[n]).max().unwrap_or(0);
@@ -534,14 +603,14 @@ pub fn compute_roadmap(records: &[Record], config: &Config) -> Roadmap {
     let value_of = |id: &RecordId, field: &str| -> Option<String> {
         present(index[id].header.get(field)).map(str::to_string)
     };
-    let all: Vec<&RecordId> = open.iter().collect();
+    let all: Vec<&RecordId> = open_work.iter().collect();
     let groups = if fields.is_empty() {
         Vec::new()
     } else {
         group(&all, fields, &value_of)
     };
     for field in fields {
-        if !open.iter().any(|id| value_of(id, field).is_some()) {
+        if !open_work.iter().any(|id| value_of(id, field).is_some()) {
             notes.push(RoadmapNote {
                 kind: NoteKind::GroupFieldUnset,
                 record: None,
@@ -555,7 +624,7 @@ pub fn compute_roadmap(records: &[Record], config: &Config) -> Roadmap {
     }
 
     // ---- notes that read the open set.
-    if open.is_empty() {
+    if open_work.is_empty() {
         notes.push(RoadmapNote {
             kind: NoteKind::NothingOpen,
             record: None,
@@ -566,7 +635,7 @@ pub fn compute_roadmap(records: &[Record], config: &Config) -> Roadmap {
                     .to_string(),
         });
     }
-    unstructured_waits(&open, &index, config, &slots, &mut notes);
+    unstructured_waits(&open_work, &index, config, &slots, &mut notes);
 
     notes.sort_by(|a, b| {
         a.kind
@@ -580,6 +649,7 @@ pub fn compute_roadmap(records: &[Record], config: &Config) -> Roadmap {
 
     let mut needs_replan: Vec<NeedsReplan> = reason
         .iter()
+        .filter(|(id, _)| open_work.contains(*id))
         .map(|(id, (why, via))| NeedsReplan {
             record: id.as_str().to_string(),
             reason: *why,
@@ -599,6 +669,24 @@ pub fn compute_roadmap(records: &[Record], config: &Config) -> Roadmap {
         .map(|c| c.iter().map(|i| i.as_str().to_string()).collect())
         .collect();
     roadmap.notes = notes;
+    // The waits the work is gated on. Absent unless the setting is declared.
+    if work_types.is_some() {
+        roadmap.waiting_on = Some(
+            sorted_naturally(
+                scope
+                    .iter()
+                    .filter(|id| !is_work(id) && state(id) != Standing::Success),
+            )
+            .into_iter()
+            .map(|id| WaitingOn {
+                record: id.as_str().to_string(),
+                record_type: index[id].record_type.clone(),
+                status: written.get(id).cloned().flatten(),
+                blocks: blocked_work(id),
+            })
+            .collect(),
+        );
+    }
     roadmap
 }
 
