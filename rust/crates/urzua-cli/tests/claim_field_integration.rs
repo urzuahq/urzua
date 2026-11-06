@@ -333,15 +333,19 @@ fn verb_claims_false_turns_the_prose_reading_off_and_keeps_the_field_observed_fa
 #[test]
 fn verb_claims_absent_or_true_is_the_reading_as_it_was_observed_failing() {
     let prose = "---\ndefault: patch\ncloses: [BUG-2]\n---\n\nFixes BUG-1.\n";
-    let absent = check(&repo("verb-absent", OPTIONS, &[("a.md", prose)]));
-    let on = check(&repo(
+    let dir_absent = repo("verb-absent", OPTIONS, &[("a.md", prose)]);
+    let dir_on = repo(
         "verb-on",
         "    closes: closes\n    strict: true\n    verb_claims: true\n",
         &[("a.md", prose)],
-    ));
+    );
+    let absent = check(&dir_absent);
+    let on = check(&dir_on);
     assert_eq!(absent.0, 1);
     assert_eq!(claim_findings(&absent.1).len(), 1, "{}", absent.1);
     assert_eq!(absent, on);
+    std::fs::remove_dir_all(&dir_absent).ok();
+    std::fs::remove_dir_all(&dir_on).ok();
 }
 
 #[test]
