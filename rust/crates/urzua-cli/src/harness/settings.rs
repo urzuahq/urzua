@@ -48,6 +48,46 @@ pub fn handler_of(hook: &J) -> Option<String> {
     (!handler.is_empty()).then_some(handler)
 }
 
+/// What the scripts of the first-generation editor guardrail have in their
+/// names (a shell hook and its adapter), which a repository copied by hand
+/// before the bundle existed. Wired beside the bundle's own hook, each record
+/// edit runs both: a block is raised twice and an override is logged twice.
+const LEGACY_SCRIPTS: [&str; 1] = ["record-edit"];
+
+/// The hook commands in `settings` that run a first-generation editor hook.
+pub fn legacy_commands(settings: &J) -> Vec<String> {
+    let Some(J::Obj(events)) = settings.get("hooks") else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for (_, groups) in events {
+        let J::Arr(groups) = groups else { continue };
+        for group in groups {
+            let Some(J::Arr(hooks)) = group.get("hooks") else {
+                continue;
+            };
+            for hook in hooks {
+                if let Some(command) = hook.get("command").and_then(J::as_str) {
+                    if LEGACY_SCRIPTS.iter().any(|s| command.contains(s))
+                        && !out.contains(&command.to_string())
+                    {
+                        out.push(command.to_string());
+                    }
+                }
+            }
+        }
+    }
+    out
+}
+
+/// The warning that names those commands and says what to remove.
+pub fn legacy_warning(file: &str, commands: &[String]) -> String {
+    format!(
+        "{file} still wires a hand-copied first-generation editor hook ({}) beside the bundle's: every record edit runs both, so a block is raised twice and an override is logged twice; remove those entries (and delete the copied scripts) so only `urzua harness run edit` judges",
+        commands.join(", ")
+    )
+}
+
 /// The entries a fragment holds, or why it is not a fragment.
 pub fn entries(fragment: &J) -> Result<Vec<Entry>, String> {
     let J::Obj(events) = fragment.get("hooks").ok_or("the fragment has no `hooks`")? else {

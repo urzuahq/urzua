@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5E1D23JRXBPTP54NSG
-Version: '0.10'
+Version: '0.11'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -61,9 +61,9 @@ empty, same as every other command's report.
 | `rules-enabled` | At least one rule is enabled (level other than `off`). `error` if none is: every rule is opt-in (`ADR-53`), so `check` would report not-run and examine nothing (`BUG-174`). |
 | `record-type-dir` | One check per declared type: does `dir` actually exist on disk. `error` if not — this fires today for `waiver` in this very repo, correctly, since no waiver record has been created yet (MILE-59) and its directory was deliberately never pre-created. |
 | `record-type-required-fields` | One check per declared type with an empty `required_fields`. `warn`, not `error` — a type with no required fields is unusual, not necessarily wrong. |
-| `ci-wired` | Some workflow under `.github/workflows/` contains `urzua check`, `make records` or a reference to urzua's reusable `actions/urzua-gate` action (`MILE-180`), which runs the checker for the caller. `warn` if not — a check that exists but is never run reports nothing to anyone. |
+| `ci-wired` | Some workflow under `.github/workflows/` runs `urzua check` (a call in a command position: a `#` comment and an `echo`/`printf` line are not a call) or uses urzua's reusable `actions/urzua-gate` action (`MILE-180`); a repository's own wrapper script or make target is not recognised, which runs the checker for the caller. `warn` if not — a check that exists but is never run reports nothing to anyone. |
 
-| `hook-wired` | One check per local hook layer (`pre-commit`, `pre-push`), carrying `layer` and a machine-readable `state` (`MILE-179`, `ADR-71`). The hooks directory is `core.hooksPath` (relative to the working tree root) when set, else the repository's own `hooks`. `state` is `not-installed`, `installed-running-urzua` (the file mentions `urzua` or `make records`), `installed-not-running-urzua`, or `installed-not-executable` (git ignores a hook without the execute bit; not checked on non-Unix hosts). `ok` only for `installed-running-urzua`; the other states are `warn`, since a local layer is a convenience and only CI is the guarantee. `error` when the hooks directory or hook file cannot be read: not knowing is not the same as absent. Hook-manager configuration (lefthook, pre-commit framework) is not read; a manager that installs real hook files, or sets `core.hooksPath`, is seen. |
+| `hook-wired` | One check per local hook layer (`pre-commit`, `pre-push`), carrying `layer` and a machine-readable `state` (`MILE-179`, `ADR-71`). The hooks directory is `core.hooksPath` (relative to the working tree root) when set, else the repository's own `hooks`. `state` is `not-installed`, `installed-running-urzua` (the file runs `urzua <subcommand>`, by a path ending in `urzua` or by a variable assigned one; a mention in a comment or an `echo` does not count), `installed-not-running-urzua`, or `installed-not-executable` (git ignores a hook without the execute bit; not checked on non-Unix hosts). `ok` only for `installed-running-urzua`; the other states are `warn`, since a local layer is a convenience and only CI is the guarantee. `error` when the hooks directory or hook file cannot be read: not knowing is not the same as absent. Hook-manager configuration (lefthook, pre-commit framework) is not read; a manager that installs real hook files, or sets `core.hooksPath`, is seen. |
 
 ## What's aspirational, not yet built
 
@@ -77,7 +77,7 @@ than compounded:
   when none is enabled (`rules-enabled`), but it does not list which individual rules are off or what
   level each has.
 - **Whether the binary is invoked from CI, a hook, or ad hoc** — `doctor` checks whether the CI
-  *workflow file* mentions `urzua check`/`make records` as text; it doesn't detect the actual
+  *workflow file* runs `urzua check` as text; it doesn't detect the actual
   invocation context of the specific run currently executing `doctor` itself.
 
 ## References
@@ -104,3 +104,4 @@ than compounded:
 > | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-cli/src/commands/doctor.rs, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs, test:rust/crates/urzua-cli/tests/check_integration.rs` -- stated `Not started` disagreed with the computed value `Verified`. | **structural** |
 > | 2026-11-05 | Status changed from Accepted to Shipped and bumped to `0.9`. **Why:** maintainer decision of 2026-11-05 to ship the specs whose implementation is verified; `Embodiment: Verified` with `Realized-by` naming the implementing code and tests. | **structural** |
 > | 2026-11-05 | Bumped to `0.10`. `doctor` reads the global `--config`, as every other command does, instead of always reporting on the default file. **Why:** review of the CLI found `urzua doctor --config x.yaml` reported on the default config, a silent no-op. | **substantive** |
+> | 2026-11-06 | Bumped to `0.11`. `ci-wired` and `hook-wired` read a call, not a word: a `#` comment and an `echo`/`printf` line are dropped, the call is `urzua <subcommand>` (a path ending in `urzua`, or a variable assigned one), and `make records` is no longer recognised; the harness checks gain `harness-legacy-hook`. **Why:** Phase 0 hardening from a second adopter switchover -- a hook whose only mention of urzua was a comment read as wired, and the engine carried one repository's make target. | **substantive** |
