@@ -134,6 +134,13 @@ enum Command {
         /// `rules_selected` and omits the other rules from `rules_executed`.
         #[arg(long, value_delimiter = ',', value_name = "ID")]
         rules: Vec<String>,
+        /// A JSON file of the identities the host supplied for a `--base` run:
+        /// `{"schema": 1, "pr_author": LOGIN, "approvers": [LOGIN, ...]}`, which
+        /// the gate action writes from the GitHub API. Read by
+        /// `diff.decider-required`; never fetched. Cannot be combined with
+        /// --stdin-path.
+        #[arg(long, value_name = "FILE")]
+        actors: Option<PathBuf>,
         paths: Vec<PathBuf>,
     },
 
@@ -434,6 +441,7 @@ fn main() -> ExitCode {
             fail_on,
             stdin_path,
             rules,
+            actors,
             paths,
         } => commands::check::run(
             cli.config,
@@ -443,6 +451,7 @@ fn main() -> ExitCode {
                 fail_on: fail_on.map(Into::into),
                 stdin_path,
                 rules,
+                actors,
                 ..Default::default()
             },
         ),

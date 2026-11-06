@@ -1,0 +1,2514 @@
+   Compiling urzua-core v0.3.0 (/tmp/claude-0/-home-user/1e4d20c9-755b-5755-8896-3764dc00103f/scratchpad/w200/rust/crates/urzua-core)
+   Compiling urzua-cli v0.3.0 (/tmp/claude-0/-home-user/1e4d20c9-755b-5755-8896-3764dc00103f/scratchpad/w200/rust/crates/urzua-cli)
+    Finished `test` profile [unoptimized] target(s) in 8.79s
+     Running unittests src/lib.rs (target/debug/deps/urzua_agdr-22aaca708aca36e0)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (target/debug/deps/urzua-64a335f0fd42061a)
+
+running 35 tests
+test commands::init::tests::a_disambiguated_name_can_still_collide_with_an_unrelated_directory_observed_failing ... ok
+test commands::init::tests::a_corpus_with_no_prefix_is_not_offered_rules_that_cannot_fire ... ok
+test commands::init::tests::a_detected_prefix_is_written_so_the_proposed_rules_can_read_an_identity ... ok
+test commands::init::tests::detects_one_type_per_populated_docs_subdirectory ... ok
+test commands::init::tests::every_directory_holding_records_becomes_its_own_type ... ok
+test commands::init::tests::one_prefix_less_type_does_not_disarm_the_types_that_have_a_prefix ... ok
+test commands::init::tests::specs_directory_proposes_singular_type_name ... ok
+test commands::init::tests::a_rule_reading_a_declaration_init_does_not_write_is_not_proposed_observed_failing ... ok
+test commands::init::tests::rendering_is_deterministic_across_runs ... ok
+test commands::init::tests::the_withheld_rules_are_disclosed_with_the_declaration_each_needs ... ok
+test commands::refs::tests::a_missing_repository_and_a_bad_token_are_named ... ok
+test commands::refs::tests::a_transport_failure_is_passed_up ... ok
+test commands::refs::tests::curl_output_with_a_proxy_preamble_parses_as_the_last_response ... ok
+test commands::refs::tests::a_rate_limited_answer_fails_with_the_reset_time_and_writes_nothing ... ok
+test commands::init::tests::a_directory_name_full_of_yaml_metacharacters_survives_render_and_reparse_observed_failing ... ok
+test commands::refs::tests::pages_are_followed_until_the_listing_ends_and_split_by_kind ... ok
+test commands::refs::tests::the_snapshot_a_refresh_builds_is_sorted_whatever_order_the_api_used ... ok
+test harness::block::tests::a_marker_without_its_partner_is_refused_not_guessed ... ok
+test gate::tests::derives_each_branch ... ok
+test harness::block::tests::applying_twice_is_identical_and_only_the_block_changes ... ok
+test harness::block::tests::text_after_the_block_is_left_alone ... ok
+test harness::block::tests::remove_restores_the_original ... ok
+test harness::bundle::tests::an_adapter_provides_only_guardrails_the_engine_knows ... ok
+test harness::json::tests::a_canonical_document_round_trips_byte_for_byte ... ok
+test harness::bundle::tests::every_adapter_directory_and_file_in_the_bundle_is_embedded ... ok
+test harness::json::tests::member_order_and_number_spelling_are_kept ... ok
+test harness::json::tests::unicode_escapes_decode_and_malformed_documents_are_refused ... ok
+test harness::lock::tests::a_lock_of_another_schema_or_no_lock_at_all_is_refused ... ok
+test harness::lock::tests::a_lock_round_trips_and_is_written_in_a_stable_order ... ok
+test harness::settings::tests::a_fragment_yields_one_keyed_entry_per_hook ... ok
+test harness::settings::tests::a_settings_file_of_the_wrong_shape_is_refused ... ok
+test harness::settings::tests::an_edited_entry_with_our_key_is_a_conflict_not_overwritten ... ok
+test harness::settings::tests::merging_into_nothing_builds_the_structure_and_a_second_merge_changes_nothing ... ok
+test harness::settings::tests::every_other_key_and_entry_is_left_as_written ... ok
+test commands::init::tests::the_generated_config_omits_rules_that_require_options ... ok
+
+test result: ok. 35 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/acceptance.rs (target/debug/deps/acceptance-d4e0e580d19f8a47)
+acceptance: URZUA_ACCEPTANCE_EXTRA not set; skipping private corpora
+ok         [corpus-a] check-names-the-removed-bold-list-header
+ok         [corpus-a] check-removed-bold-list-config-is-rejected
+ok         [corpus-a] init-names-the-removed-bold-list-form
+ok         [corpus-b] audit-reports-one-sided-supersession
+ok         [corpus-c] clean-frontmatter-passes
+ok         [corpus-d] accepted-requires-its-declared-fields
+ok         [corpus-d] all-rules-run-over-a-real-population
+ok         [corpus-d] annotation-references-are-never-claims
+ok         [corpus-d] blank-field-is-not-absent
+ok         [corpus-d] body-bullet-does-not-satisfy-a-header-field
+ok         [corpus-d] cited-path-that-does-not-exist-is-reported
+ok         [corpus-d] dangling-pointer-is-reported-and-annotation-is-not-read
+ok         [corpus-d] file-with-no-identity-is-reported
+ok         [corpus-d] filename-and-title-number-must-agree
+ok         [corpus-d] header-is-not-cut-at-a-hash-line
+ok         [corpus-d] impossible-date-is-reported
+ok         [corpus-d] invented-field-is-undeclared
+ok         [corpus-d] lower-case-key-is-a-case-mismatch
+ok         [corpus-d] missing-required-section-is-reported
+ok         [corpus-d] mistyped-dir-beside-a-working-type-is-reported
+ok         [corpus-d] one-sided-supersession-is-reported
+ok         [corpus-d] pending-field-is-not-blank
+ok         [corpus-d] prose-citation-of-a-missing-record-is-reported
+ok         [corpus-d] record-in-a-subdirectory-is-not-silently-ungoverned
+ok         [corpus-d] revision-log-entry-without-a-class-is-blocking
+ok         [corpus-d] status-with-free-text-tail-is-undeclared
+ok         [corpus-d] two-records-one-identity-is-a-collision
+ok         [corpus-d] untrimmed-value-is-reported
+ok         [corpus-d] wrapped-field-value-is-read-whole
+ok         [corpus-e] an-undeclared-type-receives-no-rule
+ok         [corpus-e] nth-record-type-costs-a-declaration-not-a-checker
+ok         [corpus-f] clean-record-draws-no-finding
+ok         [corpus-f] cross-type-claim-is-reported-not-skipped
+ok         [corpus-f] decision-without-the-five-phrases-fails-its-shape
+ok         [corpus-f] forbidden-field-at-a-status-is-reported
+ok         [corpus-f] keys-differing-only-by-case-are-reported
+ok         [corpus-f] thin-options-table-fails-its-shape
+ok         [corpus-g] a-scope-changed-nudge-fires-only-on-a-changed-record
+ok         [corpus-g] a-scope-changed-rule-judges-nothing-on-a-plain-check-and-says-why
+ok         [corpus-g] dangling-back-pointer-is-not-defined-by-a-mention
+ok         [corpus-g] drift-is-reported-with-a-blocking-exit
+ok         [corpus-g] neighbouring-file-change-is-not-drift-of-the-cited-file
+ok         [corpus-g] no-drift-without-a-change-to-the-cited-file
+ok         [corpus-g] renamed-record-keeps-its-prior-state
+ok         [corpus-g] shallow-clone-is-a-notice-never-a-clean-zero
+ok         [corpus-g] shared-locator-is-a-promotion-candidate
+ok         [corpus-g] value-only-edit-of-a-cited-file-is-drift
+ok         [corpus-h] a-back-pointer-inside-a-generated-boundary-is-reported
+ok         [corpus-h] a-marker-that-suppresses-nothing-is-reported
+ok         [corpus-h] a-published-boundarys-severity-sets-its-findings-level
+ok         [corpus-h] a-vendored-boundary-prohibits-nothing
+ok         [corpus-h] an-exclude-and-a-path-that-match-nothing-are-reported
+ok         [corpus-h] built-record-still-marked-unbuilt-is-reported
+ok         [corpus-h] gate-source-beside-a-fix-record-is-released
+ok         [corpus-h] gate-source-beside-a-milestone-implementing-an-accepted-decision-is-released
+ok         [corpus-h] gate-source-beside-a-milestone-with-no-decision-link-is-held
+ok         [corpus-h] gate-source-beside-a-proposed-decision-is-held
+ok         [corpus-h] gate-source-beside-an-accepted-decision-is-released
+ok         [corpus-h] issue-missing-from-the-snapshot-is-reported-without-network
+ok         [corpus-h] record-cited-inside-a-published-path-is-reported
+ok         [corpus-h] source-and-records-in-one-change-is-mixed
+ok         [corpus-h] source-change-with-a-record-change-is-clean
+ok         [corpus-h] source-change-without-a-record-change-is-blocked
+ok         [corpus-h] structure-without-content-is-not-closable
+ok         [corpus-i] declared-extra-dir-that-does-not-exist-is-reported
+ok         [corpus-i] file-with-no-identity-in-an-extra-directory-is-reported
+ok         [corpus-i] new-numbers-past-the-highest-id-in-any-directory
+ok         [corpus-i] one-id-in-two-directories-is-a-collision
+ok         [corpus-i] pointer-resolves-across-the-types-directories
+ok         [corpus-j] a-declared-status-no-edge-reaches-is-reported
+ok         [corpus-j] a-graph-naming-an-undeclared-status-is-refused
+ok         [corpus-j] a-new-record-at-an-initial-status-is-clean
+ok         [corpus-j] a-new-record-must-start-at-an-initial-status
+ok         [corpus-j] a-renamed-record-keeps-its-committed-status
+ok         [corpus-j] a-renamed-record-may-take-an-allowed-edge
+ok         [corpus-j] a-renamed-record-reset-to-an-initial-status-is-reported
+ok         [corpus-j] a-terminal-status-cannot-be-left
+ok         [corpus-j] a-whole-repo-run-judges-no-transition
+ok         [corpus-j] an-allowed-edge-is-clean
+ok         [corpus-j] an-edge-the-graph-does-not-list-is-reported
+ok         [corpus-k] a-migrated-config-checks-clean
+ok         [corpus-k] a-version-newer-than-the-current-is-a-structured-error
+ok         [corpus-k] a-version-older-than-the-window-is-a-structured-error
+ok         [corpus-k] migrate-config-does-nothing-on-a-second-run
+ok         [corpus-k] migrate-config-reports-every-key-it-touched
+ok         [corpus-k] the-current-schema-version-loads-clean
+ok         [corpus-k] the-previous-schema-version-loads-with-one-warning
+ok         [corpus-l] a-claim-that-resolves-to-nothing-is-reported
+ok         [corpus-l] a-cycle-is-reported-and-never-looped-on
+ok         [corpus-l] a-declared-pair-no-record-carries-a-value-for-is-reported
+ok         [corpus-l] a-dependency-in-a-failure-terminal-keeps-its-dependents-out
+ok         [corpus-l] a-loop-across-two-declared-pairs-is-a-cycle
+ok         [corpus-l] a-repository-with-no-acyclic-pair-has-no-roadmap
+ok         [corpus-l] the-critical-path-is-the-smallest-id-sequence-among-the-longest-chains
+FAIL       [corpus-zero] own-config-citation-rules-run
+             - exit 1, expected 0
+             - /blocking is true, expected false
+FAIL       [corpus-zero] own-config-claim-rules-run
+             - exit 1, expected 0
+             - /blocking is true, expected false
+FAIL       [corpus-zero] own-config-config-rules-run
+             - exit 1, expected 0
+             - /blocking is true, expected false
+FAIL       [corpus-zero] own-config-date-rules-run
+             - exit 1, expected 0
+             - /blocking is true, expected false
+FAIL       [corpus-zero] own-config-embodiment-rules-run
+             - exit 1, expected 0
+             - /blocking is true, expected false
+FAIL       [corpus-zero] own-config-field-rules-run
+             - exit 1, expected 0
+             - /blocking is true, expected false
+FAIL       [corpus-zero] own-config-filename-rules-run
+             - exit 1, expected 0
+             - /blocking is true, expected false
+FAIL       [corpus-zero] own-config-header-rules-run
+             - exit 1, expected 0
+             - /blocking is true, expected false
+FAIL       [corpus-zero] own-config-identity-rules-run
+             - exit 1, expected 0
+             - /blocking is true, expected false
+FAIL       [corpus-zero] own-config-index-rules-run
+             - exit 1, expected 0
+             - /blocking is true, expected false
+FAIL       [corpus-zero] own-config-narrative-field-rules-run
+             - exit 1, expected 0
+             - /blocking is true, expected false
+FAIL       [corpus-zero] own-config-pointer-rules-run
+             - exit 1, expected 0
+             - /blocking is true, expected false
+FAIL       [corpus-zero] own-config-relation-rules-run
+             - exit 1, expected 0
+             - /blocking is true, expected false
+FAIL       [corpus-zero] own-config-revision-log-rules-run
+             - exit 1, expected 0
+             - /blocking is true, expected false
+FAIL       [corpus-zero] own-config-section-rules-run
+             - exit 1, expected 0
+             - /blocking is true, expected false
+FAIL       [corpus-zero] own-config-status-rules-run
+             - exit 1, expected 0
+             - /blocking is true, expected false
+FAIL       [corpus-zero] own-config-type-rules-run
+             - exit 1, expected 0
+             - /blocking is true, expected false
+FAIL       [corpus-zero] own-config-waiver-rules-run
+             - exit 1, expected 0
+             - /blocking is true, expected false
+FAIL       [corpus-zero] own-corpus-findings-declare-their-action
+             - exit 1, expected 0
+             - /blocking is true, expected false
+FAIL       [corpus-zero] own-docs-check-has-no-errors
+             - exit 1, expected 0
+acceptance: 114 cases, 94 ok, 0 known-gap, 20 failed
+acceptance coverage: 36 of 64 rules have a case that fails with the rule off
+acceptance coverage: 28 rules have NO acceptance case:
+  uncovered  pointer.target-status
+  uncovered  claim.status-agreement
+  uncovered  relation.pair-reciprocity
+  uncovered  sequence.cycle
+  uncovered  sequence.unresolved-blocker
+  uncovered  sequence.status-agreement
+  uncovered  relation.target-status-undeclared
+  uncovered  revision-log.version-bump-required
+  uncovered  embodiment.requires-accepted-status
+  uncovered  embodiment.back-pointer-decision-accepted
+  uncovered  embodiment.locator-exists
+  uncovered  field.leading-reserved-indicator
+  uncovered  narrative-field.stale
+  uncovered  type.no-declared-spec
+  uncovered  header.pointer-field-clean
+  uncovered  config.companion-declaration-missing
+  uncovered  config.pointer-declaration-missing
+  uncovered  config.pointer-field-not-known
+  uncovered  config.pointer-narrative-overlap
+  uncovered  config.header-none-has-no-required-fields
+  uncovered  config.relation-field-not-known
+  uncovered  config.known-fields-declaration-missing
+  uncovered  date.field-order
+  uncovered  index.freshness
+  uncovered  diff.decider-required
+  uncovered  override.unreviewed
+  uncovered  config.scope-matches-nothing
+  uncovered  waiver.matches-nothing
+error: test failed, to rerun pass `-p urzua-cli --test acceptance`
+
+Caused by:
+  process didn't exit successfully: `/tmp/claude-0/-home-user/1e4d20c9-755b-5755-8896-3764dc00103f/scratchpad/w200/rust/target/debug/deps/acceptance-d4e0e580d19f8a47` (exit status: 1)
+     Running tests/acceptance_property.rs (target/debug/deps/acceptance_property-91c506be135950bf)
+
+running 3 tests
+test relation_claims_round_trip_to_the_references_that_begin_each_entry ... ok
+test wrapping_the_body_in_any_fence_or_comment_leaves_the_verdict_unchanged ... ok
+test a_generated_field_name_is_accepted_as_declared_or_reported ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.44s
+
+     Running tests/attestation_integration.rs (target/debug/deps/attestation_integration-6398d20678701b39)
+
+running 11 tests
+test an_unknown_actor_is_refused_and_writes_nothing ... ok
+test an_undeclared_config_without_gh_takes_by_as_given_and_says_asserted ... ok
+test an_undeclared_config_keeps_the_gh_login_and_records_it_as_gh_verified ... ok
+test an_unknown_identity_is_a_load_error_naming_the_allowed_values ... ok
+test asserted_without_a_gh_answer_records_no_verified_login ... ok
+test require_verified_with_a_gh_answer_applies_as_gh_verified ... ok
+test require_verified_with_asserted_is_a_load_error ... ok
+test asserted_records_by_as_given_with_the_verified_login_beside_it ... ok
+test without_by_and_gh_the_git_config_name_is_recorded_as_git_config ... ok
+test actor_is_recorded_by_both_commands_and_is_the_callers_claim ... ok
+test require_verified_without_a_gh_answer_is_not_run_and_writes_nothing ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.34s
+
+     Running tests/audit_fold_integration.rs (target/debug/deps/audit_fold_integration-b40444c7e320281b)
+
+running 10 tests
+test an_unfiltered_run_reports_rules_selected_as_null ... ok
+test a_rule_the_config_does_not_declare_is_an_invocation_error ... ok
+test audit_is_check_over_the_configured_rules_plus_one_deprecation_notice ... ok
+test a_rule_this_build_does_not_ship_and_an_empty_entry_are_invocation_errors ... ok
+test rules_restricts_the_run_names_the_filter_and_omits_the_rest ... ok
+test audit_on_a_clean_corpus_still_exits_0_with_the_notice ... ok
+test selection_never_enables_a_declared_off_rule ... ok
+test audit_on_the_config_init_writes_for_a_prefixless_corpus_matches_check ... ok
+test several_ids_keep_the_order_given_and_a_repeat_is_one ... ok
+test status_and_the_exit_code_are_computed_over_the_selected_set ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.34s
+
+     Running tests/authority_integration.rs (target/debug/deps/authority_integration-9ac8decc10d16065)
+
+running 27 tests
+test a_gate_naming_a_group_that_is_not_declared_is_a_load_error ... ok
+test a_changed_protected_path_needs_the_group_too ... ok
+test a_change_that_is_not_gated_is_not_judged ... ok
+test a_gate_that_is_not_enabled_refuses_nothing ... ok
+test a_broken_configuration_still_denies_an_agent_the_protected_paths_and_names_the_way_out ... ok
+test a_gated_move_authored_by_a_decider_passes_with_the_default_evidence ... ok
+test a_group_with_no_login_is_a_load_error_naming_the_group ... ok
+test a_gated_move_authored_by_someone_else_is_an_error_naming_the_record_and_the_group ... ok
+test a_human_actor_moving_a_record_to_an_accepting_status_is_not_denied ... ok
+test a_gate_whose_type_or_to_the_configuration_does_not_declare_is_a_load_error ... ok
+test a_gated_move_with_no_actors_file_is_info_locally_and_an_error_under_require_evidence ... ok
+test actors_cannot_be_combined_with_stdin_path ... ok
+test a_login_in_no_group_is_a_load_error_naming_the_login ... ok
+test a_well_formed_authority_table_loads_and_evidence_defaults_to_the_pr_author ... ok
+test an_actors_file_no_rule_reads_is_reported_not_ignored ... ok
+test an_agent_moving_a_record_to_an_accepting_status_is_denied ... ok
+test an_agent_filing_a_new_record_already_accepted_is_denied ... ok
+test an_agent_edit_that_does_not_move_the_status_is_not_refused_by_the_gate ... ok
+test an_agent_writing_a_protected_path_is_denied_and_a_person_is_not ... ok
+test an_approver_counts_only_when_the_evidence_names_pr_approver ... ok
+test an_unreadable_or_malformed_actors_file_is_could_not_run ... ok
+test an_enabled_guardrail_with_no_gate_to_enforce_is_a_load_error ... ok
+test the_decider_rule_enabled_with_no_authority_is_a_load_error ... ok
+test an_unknown_evidence_kind_and_an_unknown_key_are_load_errors ... ok
+test the_override_cannot_lift_the_acceptance_denial_and_the_output_says_so ... ok
+test without_a_base_the_rule_is_not_applicable_not_clean ... ok
+test this_repositorys_own_authority_denies_an_agent_acceptance_and_leaves_a_person_free ... ok
+
+test result: ok. 27 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.67s
+
+     Running tests/back_pointer_integration.rs (target/debug/deps/back_pointer_integration-476a90600abe2ce6)
+
+running 8 tests
+test a_cited_record_computes_to_implemented_and_a_dangling_citation_is_reported ... ok
+test an_uncovered_path_action_targets_the_config_file ... ok
+test a_decision_uncovered_path_action_targets_the_config_file ... ok
+test a_back_pointer_to_a_proposed_decision_is_reported_and_an_accepted_one_is_not ... ok
+test without_a_comment_the_stated_tier_disagrees ... ok
+test without_the_rule_the_comment_is_not_evidence ... ok
+test fix_detect_agrees_with_check_about_a_cited_record ... ok
+test on_a_base_run_only_changed_source_files_are_judged ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.40s
+
+     Running tests/block_on_integration.rs (target/debug/deps/block_on_integration-0d5ddd8e4323c22b)
+
+running 9 tests
+test all_lets_a_clean_proposal_through ... ok
+test all_blocks_an_error_already_on_disk_and_skips_the_baseline_run ... ok
+test an_invalid_value_is_a_load_error_naming_the_key_and_the_value ... ok
+test both_valid_values_load ... ok
+test all_is_relayed_unchanged_by_the_claude_code_adapter ... ok
+test an_explicit_introduced_is_byte_identical_to_an_absent_key ... ok
+test the_hook_names_an_invalid_value_and_says_it_did_not_judge ... ok
+test the_named_override_works_under_all_and_is_recorded ... ok
+test introduced_does_not_block_an_error_already_on_disk_and_runs_the_baseline ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.76s
+
+     Running tests/case_variant_key_integration.rs (target/debug/deps/case_variant_key_integration-f4c5ea93268c4d80)
+
+running 4 tests
+test it_composes_beside_the_exact_match_rules_without_changing_them ... ok
+test a_declared_rule_reports_the_case_variant_and_what_it_examined_observed_failing ... ok
+test an_undeclared_rule_does_not_run ... ok
+test the_declared_level_sets_the_severity ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+
+     Running tests/check_integration.rs (target/debug/deps/check_integration-0f0d4f9d4add721a)
+
+running 119 tests
+test a_bare_number_corpus_is_reported_once_per_type_with_rename_guidance ... ok
+test a_bad_flag_emits_json_not_a_panic ... ok
+test a_blocking_finding_is_never_reported_as_a_run_that_did_not_happen ... ok
+test a_claim_path_prefix_is_read_to_any_depth ... ok
+test a_claim_paths_entry_behind_a_permission_denied_ancestor_aborts ... ok
+test a_claim_paths_entry_naming_a_file_does_not_load ... ok
+test a_claim_paths_root_symlinked_to_a_real_directory_is_usable ... ok
+test a_config_level_finding_names_a_repository_relative_config_path_observed_failing ... ok
+test a_config_scoped_rule_alone_discloses_that_it_read_no_record ... ok
+test a_declared_non_record_file_is_in_no_rule_population_or_census_observed_failing ... ok
+test a_directory_symlink_inside_claim_paths_is_treated_like_the_root ... ok
+test a_field_rule_counts_declared_slots_not_records ... ok
+test a_large_bare_number_corpus_names_a_few_renames_and_counts_the_rest ... ok
+test a_path_scope_narrows_what_is_reported_on_not_what_a_pointer_resolves_against ... ok
+test a_locator_naming_a_staged_deletion_is_reported_observed_failing ... ok
+test a_path_scoped_rule_alone_discloses_that_it_read_no_record ... ok
+test a_post_disambiguation_name_collision_is_refused_not_silently_dropped_observed_failing ... ok
+test a_record_below_a_declared_dir_but_not_in_it_is_reported_not_dropped ... ok
+test a_record_with_no_revision_log_is_a_finding_when_its_type_declares_one_required ... ok
+test a_record_whose_name_git_quotes_is_still_examined ... ok
+test a_reference_to_an_untracked_file_is_told_apart_from_a_missing_one_observed_failing ... ok
+test a_record_with_no_revision_log_stays_unexamined_when_its_type_declares_required_false ... ok
+test a_run_in_which_no_rule_examined_anything_is_not_ok ... ok
+test a_scope_excludes_a_finding_about_a_file_that_is_not_a_record ... ok
+test a_rule_handed_nothing_discloses_that_it_certified_nothing ... ok
+test a_scope_keeps_a_finding_about_a_file_git_does_not_track ... ok
+test a_same_type_identifier_collision_resolves_deterministically ... ok
+test a_scoped_invocation_still_reports_a_claim_finding_observed_failing ... ok
+test a_staged_deletion_below_a_declared_dir_is_not_reported_as_outside_it_observed_failing ... ok
+test a_symlink_cycle_inside_a_claim_path_terminates_and_reads_each_claim_once ... ok
+test a_staged_deletion_is_not_reported_as_owned_by_no_type ... ok
+test a_symlink_cycle_that_stays_inside_the_prefix_terminates ... ok
+test a_symlink_resolving_to_the_prefix_root_itself_is_deduped_not_rejected ... ok
+test a_symlinked_claim_file_is_read_not_skipped ... ok
+test an_absent_claim_paths_directory_is_reported_not_fatal ... ok
+test a_waiver_record_suppresses_blocking_but_the_finding_stays_listed ... ok
+test a_type_declaring_only_required_fields_is_still_checked_for_whitespace ... ok
+test an_undeclared_rule_is_reported_as_not_enabled_never_omitted ... ok
+test an_excluded_file_is_not_counted_in_the_all_off_pattern_total ... ok
+test an_exclude_files_entry_matching_no_file_is_reported_observed_failing ... ok
+test an_undeclared_readme_is_still_reported_and_counted ... ok
+test an_untracked_file_below_an_explicitly_requested_directory_is_not_examined ... ok
+test an_undeclared_stray_file_is_reported_beside_a_declared_exclusion ... ok
+test an_unstaged_deletion_of_a_tracked_record_stops_the_run ... ok
+test an_untracked_file_named_explicitly_is_examined_not_silently_dropped_observed_failing ... ok
+test an_untracked_scratch_file_is_never_examined ... ok
+test an_unreadable_tracked_record_stops_the_run_rather_than_shrinking_the_corpus ... ok
+test audit_help_describes_a_deprecated_alias_of_check_not_the_old_rule_pair ... ok
+test audit_discloses_an_identity_collision_as_a_notice_when_the_rule_is_disabled_observed_failing ... ok
+test audit_exits_0_on_reciprocated_supersession ... ok
+test audit_exits_1_and_reports_a_one_directional_supersession_claim_observed_failing ... ok
+test audit_is_ok_on_a_clean_corpus_with_no_relationships ... ok
+test audit_reports_an_identity_collision_check_would_also_report_observed_failing ... ok
+test audit_with_no_rule_declared_is_not_ok ... ok
+test audit_honours_the_declared_level_of_a_rule_instead_of_running_it_unconditionally ... ok
+test check_discloses_an_identity_collision_as_a_notice_when_the_rule_is_disabled_observed_failing ... ok
+test check_exits_0_on_a_clean_corpus ... ok
+test check_exits_1_on_a_missing_required_field ... ok
+test check_exits_2_when_no_config_exists ... ok
+test ci_wired_recognises_the_gate_action_as_an_invocation ... ok
+test ci_wired_finds_the_invocation_in_any_workflow_not_just_ci_yml ... ok
+test check_scopes_to_the_requested_path_not_the_whole_corpus ... ok
+test check_reports_an_unechoed_claim_in_a_declared_cross_type_relation_pair ... ok
+test doctor_emits_json_not_plain_text_lines ... ok
+test doctor_follows_core_hooks_path ... ok
+test ci_wired_reports_an_error_when_the_workflows_cannot_be_read ... FAILED
+test declared_statuses_are_enforced_end_to_end ... ok
+test doctor_errors_when_no_rule_is_enabled ... ok
+test doctor_reports_a_hook_that_does_not_run_urzua ... ok
+test doctor_reports_a_hook_that_is_not_installed ... ok
+test doctor_reports_a_non_executable_hook_git_would_ignore ... ok
+test doctor_reports_a_hook_that_runs_urzua ... ok
+test doctor_missing_config_emits_parseable_json_with_checks ... ok
+test doctor_reports_missing_config_as_exit_2 ... ok
+test doctor_reports_on_the_config_named_by_the_global_flag ... ok
+test explain_could_not_run_emits_json ... ok
+test every_header_reading_rule_reports_a_header_none_type_as_out_of_scope ... ok
+test drift_is_detected_against_a_custom_embodiment_locator_field_name_observed_failing ... ok
+test doctor_reports_an_invalid_record_type_prefix_or_dir ... ok
+test fix_apply_appends_inside_a_plain_revision_log_table ... ok
+test fix_apply_on_an_empty_corpus_still_exits_0 ... ok
+test fix_could_not_run_emits_json ... ok
+test fix_apply_preserves_crlf_and_the_absent_trailing_newline ... ok
+test graph_and_explain_on_an_empty_corpus_report_a_zero_population_with_no_notice ... ok
+test graph_and_explain_report_a_population_and_name_an_unreadable_record_observed_failing ... ok
+test graph_could_not_run_emits_json ... ok
+test help_exits_0_with_plain_text_not_json ... ok
+test graph_discloses_an_identity_collision_as_a_notice_observed_failing ... ok
+test init_does_not_warn_about_audit_and_audit_runs_what_the_config_declares ... ok
+test init_dry_run_reports_the_proposed_config_as_structured_json ... ok
+test init_does_not_propose_rules_that_would_examine_nothing_on_the_corpus_it_adopted ... ok
+test init_on_a_bold_list_corpus_proposes_yaml_frontmatter_and_names_the_removed_form ... ok
+test init_flags_headerless_numbered_pages_and_finds_a_slug_named_record_directory ... ok
+test init_on_a_mixed_removed_shape_type_counts_each_form ... ok
+test init_on_records_with_no_readable_header_keeps_yaml_frontmatter_and_says_so ... ok
+test init_prefers_leading_frontmatter_over_more_numerous_body_bullets ... ok
+test init_real_write_omits_config_yaml_from_the_report ... ok
+test init_then_check_names_a_pre_existing_blockquote_record_as_an_unsupported_form ... ok
+test migrate_ids_apply_preserves_crlf_and_the_absent_trailing_newline ... ok
+test migrate_ids_apply_refuses_while_another_apply_holds_the_lock ... ok
+test migrate_ids_apply_reports_per_file_outcomes_as_structured_json ... ok
+test pre_commit_hook_passes_silently_on_a_clean_check ... ok
+test migrate_ids_exits_1_on_a_real_write_failure ... ok
+test one_off_pattern_file_among_conforming_ones_is_reported_on_that_file ... ok
+test pre_commit_hook_reports_a_check_that_could_not_run ... ok
+test pre_commit_hook_says_loudly_when_the_binary_is_absent ... ok
+test pre_commit_hook_stops_a_commit_on_a_blocking_finding_and_shows_it ... ok
+test fix_apply_ids_that_match_no_repair_is_a_failure_naming_the_selector ... ok
+test pre_commit_hook_stops_a_planted_bad_header_with_the_real_binary ... ok
+test records_read_never_exceeds_files_examined ... ok
+test scope_source_is_the_declared_contract_value_not_a_debug_rendering ... ok
+test target_status_fields_naming_an_undeclared_field_is_a_config_error_observed_failing ... ok
+test the_acceptance_date_by_status_is_expressed_with_statuses_require_forbid_and_date_field_valid ... ok
+test target_status_fields_restricts_which_declared_fields_warn_observed_failing ... ok
+test target_status_without_fields_warns_on_every_declared_field ... ok
+test the_declared_level_overrides_the_rule_body_s_own_severity ... ok
+test two_records_claiming_one_identifier_are_reported ... ok
+test the_filename_pattern_rule_is_opt_in ... ok
+test two_records_citing_the_same_locator_are_both_detected_as_drifted ... ok
+
+failures:
+
+---- ci_wired_reports_an_error_when_the_workflows_cannot_be_read stdout ----
+
+thread 'ci_wired_reports_an_error_when_the_workflows_cannot_be_read' panicked at crates/urzua-cli/tests/check_integration.rs:2315:5:
+assertion `left == right` failed: an unreadable workflows directory is not the same as an unwired checker: {
+  "status": "error",
+  "checks": [
+    {
+      "check": "config-exists",
+      "status": "ok",
+      "message": "/tmp/urzua-cli-test-ci-wired-unreadable-25272-63/.urzua/config.yaml exists"
+    },
+    {
+      "check": "config-parses",
+      "status": "ok",
+      "message": "config parses (no unrecognized keys)"
+    },
+    {
+      "check": "rules-enabled",
+      "status": "error",
+      "message": "no rule is enabled under `rules:` -- check will report not-run and examine nothing"
+    },
+    {
+      "check": "record-type-dir",
+      "status": "ok",
+      "message": "record type 'adr' -> docs/adr exists"
+    },
+    {
+      "check": "record-type-required-fields",
+      "status": "warn",
+      "message": "record type 'adr' has no required_fields -- field.quality and field.pending will never fire for it"
+    },
+    {
+      "check": "ci-wired",
+      "status": "ok",
+      "message": "a workflow invokes `urzua check` or the urzua-gate action"
+    },
+    {
+      "check": "hook-wired",
+      "status": "warn",
+      "message": "no pre-commit hook at /tmp/urzua-cli-test-ci-wired-unreadable-25272-63/.git/hooks/pre-commit -- add one that runs `urzua check`; CI remains the guarantee (ADR-71)",
+      "layer": "pre-commit",
+      "state": "not-installed"
+    },
+    {
+      "check": "hook-wired",
+      "status": "warn",
+      "message": "no pre-push hook at /tmp/urzua-cli-test-ci-wired-unreadable-25272-63/.git/hooks/pre-push -- add one that runs `urzua check`; CI remains the guarantee (ADR-71)",
+      "layer": "pre-push",
+      "state": "not-installed"
+    }
+  ]
+}
+
+  left: String("ok")
+ right: "error"
+stack backtrace:
+   0: __rustc::rust_begin_unwind
+   1: core::panicking::panic_fmt
+   2: core::panicking::assert_failed_inner
+   3: core::panicking::assert_failed
+   4: check_integration::ci_wired_reports_an_error_when_the_workflows_cannot_be_read
+   5: check_integration::ci_wired_reports_an_error_when_the_workflows_cannot_be_read::{{closure}}
+   6: core::ops::function::FnOnce::call_once
+note: Some details are omitted, run with `RUST_BACKTRACE=full` for a verbose backtrace.
+
+
+failures:
+    ci_wired_reports_an_error_when_the_workflows_cannot_be_read
+
+test result: FAILED. 118 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.62s
+
+error: test failed, to rerun pass `-p urzua-cli --test check_integration`
+     Running tests/check_stdin_integration.rs (target/debug/deps/check_stdin_integration-c5efc7b0d8720462)
+
+running 10 tests
+test a_record_new_at_head_has_no_committed_copy_to_compare_with ... ok
+test a_path_no_record_type_governs_is_a_could_not_run_naming_it ... ok
+test a_rule_that_cannot_report_on_a_record_is_not_applicable_and_not_reported ... ok
+test a_new_revision_row_without_a_version_bump_is_judged_against_the_committed_copy ... ok
+test it_is_refused_with_paths_or_base ... ok
+test a_status_edge_the_type_does_not_allow_is_judged_against_the_committed_copy ... ok
+test only_the_proposed_record_is_reported_on ... ok
+test proposed_content_is_judged_against_every_enabled_rule_and_nothing_is_written ... ok
+test the_proposal_replaces_the_disk_copy_for_cross_record_rules ... ok
+test the_same_record_made_valid_reports_nothing ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.36s
+
+     Running tests/citation_resolution_integration.rs (target/debug/deps/citation_resolution_integration-ed079d70cf14bed2)
+
+running 16 tests
+test a_declared_external_id_is_skipped_and_counted_eligible_not_out_of_scope_end_to_end ... ok
+test a_declared_external_id_is_not_a_misconfiguration_end_to_end_observed_failing ... ok
+test a_declared_id_the_record_never_cites_is_a_finding_end_to_end_observed_failing ... ok
+test a_cited_path_that_is_missing_warns_and_an_existing_file_or_directory_does_not ... ok
+test a_declared_revision_log_heading_is_the_log_and_prose_mentions_are_not_observed_failing ... ok
+test a_declared_rule_reports_a_dangling_citation_and_counts_citations ... ok
+test a_non_reference_field_no_type_lists_fails_the_config_load ... ok
+test a_declared_non_reference_id_survives_the_id_becoming_a_real_record_end_to_end_observed_failing ... ok
+test a_skipped_revision_log_hides_revision_log_paths_end_to_end_observed_failing ... ok
+test a_run_over_no_declarations_reports_zero_eligible_entries_observed_failing ... ok
+test an_external_id_under_no_declared_prefix_fails_the_config_load ... ok
+test an_undeclared_rule_does_not_run ... ok
+test without_non_reference_field_there_is_no_second_population ... ok
+test declared_entries_are_their_own_field_entry_population_observed_failing ... ok
+test an_untracked_but_present_file_is_still_missing ... ok
+test the_field_entry_population_is_exercised_on_this_repositorys_own_corpus_observed_failing ... ok
+
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 10.16s
+
+     Running tests/claim_field_integration.rs (target/debug/deps/claim_field_integration-1d3dac4d8547677f)
+
+running 13 tests
+test a_block_list_an_unresolved_id_and_a_non_id_are_findings_observed_failing ... ok
+test a_verb_claim_in_the_body_is_still_found_and_counted_observed_failing ... ok
+test a_fragment_listing_a_still_open_record_fails_the_check_observed_failing ... ok
+test closed_records_an_empty_list_and_a_non_fragment_are_clean_and_disclosed_observed_failing ... ok
+test strict_without_closes_does_not_load_observed_failing ... ok
+test verb_claims_absent_or_true_is_the_reading_as_it_was_observed_failing ... ok
+test strict_catches_the_incident_shape_a_fragment_naming_a_record_and_declaring_nothing_observed_failing ... ok
+test verb_claims_false_turns_the_prose_reading_off_and_keeps_the_field_observed_failing ... ok
+test verb_claims_false_without_strict_carries_a_notice_observed_failing ... ok
+test verb_claims_on_another_rule_is_not_applicable_observed_failing ... ok
+test verb_claims_needs_closes_whether_true_or_false_observed_failing ... ok
+test strict_reports_a_fence_the_release_tool_cannot_read_observed_failing ... ok
+test without_the_options_the_rule_reads_closing_verbs_alone_observed_failing ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.67s
+
+     Running tests/condition_type_integration.rs (target/debug/deps/condition_type_integration-7e11b8ba8cd89158)
+
+running 8 tests
+test a_dependency_on_a_condition_is_judged_like_any_other_edge ... ok
+test met_needs_its_evidence_and_the_lifecycle_is_enforced ... ok
+test any_type_declaring_depends_on_resolves_to_a_condition_not_only_milestones ... ok
+test the_engine_has_no_special_case_for_the_name_condition ... ok
+test the_own_config_declares_the_type_and_holds_met_to_its_evidence ... ok
+test the_roadmap_blocks_on_open_keeps_dropped_out_and_frees_met ... ok
+test the_four_waits_are_conditions_the_roadmap_reads ... ok
+test the_own_corpus_checks_clean_and_no_prose_wait_is_left_to_report ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 9.79s
+
+     Running tests/could_not_run_integration.rs (target/debug/deps/could_not_run_integration-614a6aea5eb980e3)
+
+running 6 tests
+test doctor_reports_a_missing_config_as_its_own_report ... ok
+test every_corpus_command_reports_a_missing_config ... ok
+test rules_reads_no_repository_and_runs_outside_one ... ok
+test every_command_that_reads_a_repository_exits_2_outside_one_observed_failing ... ok
+test every_corpus_command_reports_an_unreadable_tracked_record ... ok
+test every_corpus_command_refuses_a_non_canonical_dir_and_names_the_canonical_form ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.37s
+
+     Running tests/date_order_integration.rs (target/debug/deps/date_order_integration-811bdc9857732790)
+
+running 2 tests
+test an_adr_accepted_before_it_was_written_is_reported ... ok
+test equal_later_and_absent_acceptance_dates_pass ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.47s
+
+     Running tests/diff_gate_integration.rs (target/debug/deps/diff_gate_integration-ff16f682b1b79f1b)
+
+running 28 tests
+test a_decided_status_is_judged_per_type ... ok
+test a_diff_touching_only_test_files_beside_the_code_is_not_a_trigger ... ok
+test a_deleted_decision_record_does_not_satisfy_the_gate ... ok
+test a_file_below_a_record_directory_is_not_a_governed_record_change ... ok
+test a_change_touching_only_one_side_does_not_warn ... ok
+test a_fix_record_exempts_the_change ... ok
+test a_gate_finding_offers_an_add_record_action ... ok
+test a_path_option_that_escapes_the_repository_is_rejected ... ok
+test a_prefix_only_configuration_still_treats_a_test_file_as_source ... ok
+test a_record_linking_a_decided_decision_through_a_link_field_satisfies_the_gate ... ok
+test a_record_change_alone_and_an_undeclared_path_change_are_clean ... ok
+test a_single_decision_type_names_the_record_to_add ... ok
+test a_record_linking_an_undecided_decision_or_nothing_does_not ... ok
+test a_source_change_beside_a_decision_at_a_decided_status_is_clean ... ok
+test a_source_change_beside_only_an_undecided_decision_record_is_reported_observed_failing ... ok
+test both_rules_need_their_path_options_to_load ... ok
+test code_changed_beside_its_tests_still_triggers_and_names_the_code ... ok
+test excluded_paths_are_not_application_source ... ok
+test mixed_rule_without_base_is_not_applicable ... ok
+test source_change_alongside_a_record_change_is_clean ... ok
+test mixed_change_warns_once_naming_a_path_from_each_side ... ok
+test source_change_with_no_record_change_is_an_error_naming_the_path ... ok
+test a_gate_declaration_that_can_never_match_is_a_config_error ... ok
+test the_gate_options_are_refused_on_a_rule_that_does_not_take_them ... ok
+test the_gate_is_off_unless_declared_so_any_governed_record_still_satisfies_the_rule ... ok
+test without_base_the_rule_reports_not_applicable_and_the_run_is_not_ok ... ok
+test this_repositorys_own_config_lets_a_crate_test_change_through_but_not_its_source ... ok
+test this_repositorys_own_gate_holds_a_source_change_until_a_decision_fix_or_link_changes ... ok
+
+test result: ok. 28 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.94s
+
+     Running tests/diff_scope_integration.rs (target/debug/deps/diff_scope_integration-1b6ea463607c6553)
+
+running 36 tests
+test a_base_copy_that_cannot_be_read_is_unreadable_not_new ... ok
+test a_changed_file_outside_its_declared_dir_keeps_its_finding ... ok
+test a_change_to_a_non_record_file_is_an_empty_diff_not_a_whole_corpus_run ... ok
+test a_changed_path_with_spaces_is_examined ... ok
+test a_comma_joined_pointer_value_traces_each_reference ... ok
+test a_changed_record_is_still_judged_and_blocks ... ok
+test a_default_run_reports_a_null_base ... ok
+test a_deleted_target_still_reports_the_surviving_referrer ... ok
+test a_config_change_puts_the_whole_corpus_in_scope ... ok
+test a_deleted_waiver_reports_the_finding_it_stopped_waiving ... ok
+test a_path_argument_that_excludes_the_changed_records_says_so ... ok
+test a_glob_locator_covering_a_changed_file_makes_the_record_a_dependent ... ok
+test a_newly_added_record_is_examined ... ok
+test a_path_argument_narrows_the_diff_further ... ok
+test a_path_the_base_lacks_is_still_a_new_record ... ok
+test a_pointer_to_an_unchanged_record_still_resolves ... ok
+test a_shallow_clone_says_to_fetch_history_not_that_histories_are_unrelated ... ok
+test a_target_renamed_to_a_different_id_still_reports_the_referrer ... ok
+test a_shared_locator_pulls_in_the_unchanged_record_citing_it ... ok
+test an_empty_diff_is_ok_with_nothing_examined_and_says_so ... ok
+test a_waiver_whose_scope_changed_reports_the_finding_it_stopped_waiving ... ok
+test a_target_status_change_reports_the_unchanged_referrers ... ok
+test an_empty_diff_with_no_rule_enabled_is_not_run_like_a_full_run ... ok
+test an_option_like_ref_is_rejected_not_passed_to_git ... ok
+test an_unknown_ref_could_not_run_rather_than_examining_nothing ... ok
+test an_error_in_an_unchanged_record_is_not_reported ... ok
+test an_unstaged_deletion_cannot_be_loaded_so_the_run_could_not_run ... ok
+test an_untracked_file_argument_cannot_combine_with_a_base ... ok
+test an_evidence_only_change_reports_drift_on_the_unchanged_record ... ok
+test deleted_evidence_reports_the_unchanged_record ... ok
+test retargeting_a_symlinked_config_puts_the_whole_corpus_in_scope ... ok
+test only_the_changed_record_is_examined_and_the_base_is_reported ... ok
+test supersession_reciprocity_is_reported_on_the_unchanged_peer ... ok
+test uncommitted_and_staged_edits_count_as_changed ... ok
+test unrelated_histories_say_there_is_no_merge_base ... ok
+test the_comparison_starts_at_the_merge_base_not_the_moving_tip ... ok
+
+test result: ok. 36 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.67s
+
+     Running tests/document_model_integration.rs (target/debug/deps/document_model_integration-5583c0dec66e0754)
+
+running 6 tests
+test a_title_form_mismatch_is_reported_for_a_declaring_type ... ok
+test a_prefix_lines_corpus_gets_ids_and_fields_from_its_declaration ... ok
+test a_bare_numbered_corpus_passes_a_hand_written_config ... ok
+test an_identity_pattern_that_does_not_compile_stops_the_run_naming_the_type ... ok
+test the_same_corpus_without_a_declaration_has_no_identity_and_no_header ... ok
+test an_identity_pattern_without_a_prefix_group_stops_the_run_naming_the_type ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.22s
+
+     Running tests/drafting_commands_integration.rs (target/debug/deps/drafting_commands_integration-1b8d7f3d98225eaf)
+
+running 6 tests
+test a_field_urzua_new_did_not_write_is_refused ... ok
+test a_decision_status_written_into_the_draft_is_refused_and_nothing_is_staged ... ok
+test a_milestone_draft_carries_the_required_section_and_check_refuses_one_without_it ... ok
+test commands_carry_no_schema_knowledge_of_their_own ... ok
+test a_sweep_examines_a_scaffold_only_once_it_is_staged ... ok
+test each_command_drafts_a_record_that_check_examined_and_passes ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 20.76s
+
+     Running tests/embodiment_vocabulary_integration.rs (target/debug/deps/embodiment_vocabulary_integration-f478317fdf371542)
+
+running 11 tests
+test a_built_claiming_declared_state_needs_an_accepted_status ... ok
+test a_declared_vocabulary_is_what_check_holds_records_to ... ok
+test a_delivery_tier_in_the_built_in_vocabulary_is_refused_under_a_renamed_one ... ok
+test a_sticky_state_naming_a_declared_state_is_refused ... ok
+test delivery_agreement_reads_the_renamed_tiers_end_to_end ... ok
+test fix_repairs_to_the_declared_names ... ok
+test the_declared_tier_order_decides_which_evidence_wins ... ok
+test a_bad_declaration_is_refused_at_load ... ok
+test stating_the_default_vocabulary_explicitly_changes_nothing ... ok
+test without_a_declaration_the_built_in_vocabulary_applies ... ok
+test a_declaration_missing_a_key_is_refused_not_defaulted ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.71s
+
+     Running tests/evidence_pins_integration.rs (target/debug/deps/evidence_pins_integration-82b0368846080187)
+
+running 17 tests
+test a_claim_older_than_the_configured_age_warns_observed_failing ... ok
+test a_claim_younger_than_the_configured_age_is_silent ... ok
+test a_fresh_locator_change_inside_the_grace_window_does_not_report_observed_failing ... ok
+test a_locator_change_older_than_the_grace_window_reports ... ok
+test a_malformed_last_audit_is_reported_and_falls_back_to_the_files_last_change ... ok
+test a_recent_last_audit_holds_back_drift_the_locator_dates_would_report ... ok
+test a_pin_that_no_longer_matches_is_drift_even_when_the_record_is_newer_observed_failing ... ok
+test a_stated_drift_detected_agrees_with_drift_older_than_the_grace_window ... ok
+test a_stated_drift_detected_is_not_contradicted_by_fresh_drift_inside_the_grace_window_observed_failing ... ok
+test a_pin_that_still_matches_overrides_the_git_history_heuristic_observed_failing ... ok
+test a_record_without_the_audit_field_counts_from_the_files_last_change ... ok
+test the_new_options_belong_to_embodiment_consistency_only ... ok
+test a_stated_tier_is_still_accepted_for_fresh_drift_inside_the_grace_window ... ok
+test an_old_last_audit_reports_drift_the_locator_dates_would_hold_back ... ok
+test fix_does_not_flip_a_stated_drift_detected_while_the_drift_is_inside_the_grace_window_observed_failing ... ok
+test without_a_claim_age_an_old_claim_is_silent ... ok
+test with_no_grace_window_a_fresh_change_reports_as_before ... ok
+
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.96s
+
+     Running tests/export_integration.rs (target/debug/deps/export_integration-5d447528cf979dde)
+
+running 8 tests
+test export_json_emits_every_record_with_parsed_header_and_raw_text ... ok
+test export_agdr_stays_unimplemented_and_json_must_be_named ... ok
+test export_json_emits_declared_sections_with_aliases_resolved_and_the_preamble ... ok
+test export_json_gives_a_declared_type_with_no_headings_an_empty_list ... ok
+test export_json_marks_an_unreadable_header_instead_of_an_empty_one ... ok
+test export_json_marks_a_type_with_no_sections_declaration_with_null ... ok
+test export_json_refuses_a_record_symlinked_outside_the_repository ... ok
+test export_json_treats_a_headerless_type_as_readable ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.51s
+
+     Running tests/fail_on_integration.rs (target/debug/deps/fail_on_integration-40c108fb126646c1)
+
+running 6 tests
+test an_unknown_fail_on_value_is_refused ... ok
+test an_invalid_config_fail_on_is_a_could_not_run ... ok
+test a_warning_exits_0_when_nothing_is_configured_observed_failing ... ok
+test fail_on_warning_still_exits_0_on_a_clean_corpus ... ok
+test config_fail_on_warning_makes_a_warning_exit_1_with_unchanged_json_observed_failing ... ok
+test the_flag_overrides_the_config_in_both_directions_observed_failing ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.31s
+
+     Running tests/field_levels_integration.rs (target/debug/deps/field_levels_integration-4609ffa6277d5509)
+
+running 4 tests
+test only_a_blank_reviewers_warns_and_does_not_block_observed_failing ... ok
+test without_the_option_every_finding_takes_the_rule_level ... ok
+test an_unlisted_field_takes_the_rule_level ... ok
+test a_blank_deciders_is_an_error_and_a_blank_reviewers_a_warning_observed_failing ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+
+     Running tests/fix_drift_git_integration.rs (target/debug/deps/fix_drift_git_integration-cf0ca2288a36a925)
+
+running 3 tests
+test fix_does_not_run_when_embodiment_consistency_is_off ... ok
+test check_and_fix_name_a_shallow_clone_instead_of_reporting_no_drift ... ok
+test a_path_scoped_check_blames_only_the_records_in_scope ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.35s
+
+     Running tests/fix_drift_integration.rs (target/debug/deps/fix_drift_integration-ddb134007c82a347)
+
+running 5 tests
+test a_stale_drift_detected_is_recomputed_once_the_line_is_reverified ... ok
+test a_locator_unchanged_since_the_realized_by_line_is_not_drift ... ok
+test detect_reports_drift_detected_as_the_computed_value ... ok
+test apply_is_idempotent_and_check_agrees_afterwards ... ok
+test apply_writes_drift_detected_and_a_revision_log_row ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.79s
+
+     Running tests/fix_paths_integration.rs (target/debug/deps/fix_paths_integration-49b0d8040ac23463)
+
+running 5 tests
+test a_path_matching_no_record_is_reported_not_skipped ... ok
+test a_directory_path_selects_every_record_under_it ... ok
+test a_path_limits_the_examination_and_the_repairs_to_that_record ... ok
+test apply_with_a_path_writes_only_that_record ... ok
+test ids_outside_the_given_paths_are_reported_as_matching_no_repair ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.61s
+
+     Running tests/fix_rebaseline_integration.rs (target/debug/deps/fix_rebaseline_integration-1c5bc17a099a6eab)
+
+running 8 tests
+test an_authenticated_gh_login_is_recorded_over_by_and_the_override_is_disclosed ... ok
+test a_git_user_name_with_a_pipe_is_refused_for_the_row_too ... ok
+test an_identity_that_would_break_the_revision_row_is_refused_and_writes_nothing ... ok
+test an_ids_entry_with_no_stale_pin_fails_naming_it_observed_failing ... ok
+test detect_lists_each_stale_pin_with_both_hashes_and_writes_nothing_observed_failing ... ok
+test rebaseline_cannot_be_combined_with_stdin_path ... ok
+test apply_re_pins_only_the_chosen_record_with_who_and_why_then_is_a_no_op_observed_failing ... ok
+test apply_refuses_without_a_selector_or_a_reason_and_force_is_explicit_observed_failing ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.07s
+
+     Running tests/fix_revision_log_required_integration.rs (target/debug/deps/fix_revision_log_required_integration-d1d99502a71e0cb8)
+
+running 4 tests
+test a_non_boolean_required_is_a_config_error ... ok
+test not_required_apply_writes_the_field_without_a_log_row ... ok
+test required_by_default_a_missing_section_fails_naming_the_record ... ok
+test required_true_declared_with_a_heading_fails_without_the_section ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.54s
+
+     Running tests/fix_stdin_integration.rs (target/debug/deps/fix_stdin_integration-ab21afe43d468e07)
+
+running 6 tests
+test a_path_that_does_not_exist_on_disk_yet_is_judged ... ok
+test a_realized_by_line_edited_in_the_proposal_is_not_drift ... ok
+test a_realized_by_line_unchanged_since_a_locator_moved_is_drift ... ok
+test a_path_no_record_type_governs_is_could_not_run ... ok
+test stdin_path_refuses_apply_and_other_paths ... ok
+test stdin_content_is_judged_and_nothing_is_written ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.41s
+
+     Running tests/harness_integration.rs (target/debug/deps/harness_integration-84a6bfc067f35fc2)
+
+running 29 tests
+test a_gate_enabled_without_an_authority_table_does_not_load ... ok
+test a_hand_set_embodiment_is_blocked_with_the_computed_value_and_evidence ... ok
+test a_second_install_changes_nothing_byte_for_byte ... ok
+test a_named_override_lets_the_edit_through_and_a_nameless_one_does_not ... ok
+test a_header_error_blocks_a_warning_is_shown_and_the_message_names_what_ran ... ok
+test an_absent_harness_key_installs_and_enables_nothing ... ok
+test a_settings_file_that_is_not_json_or_holds_an_edited_entry_is_refused ... ok
+test an_existing_settings_file_is_merged_and_every_other_key_and_entry_stays_as_written ... ok
+test a_shallow_clone_still_blocks_what_needs_no_history_and_says_what_it_skipped ... ok
+test an_ungoverned_path_is_not_governed_and_a_new_record_is_judged_from_the_proposal ... ok
+test an_override_is_recorded_in_the_declared_log_and_check_then_reports_it_unreviewed ... ok
+test install_writes_the_translator_settings_block_and_lock_and_dry_run_writes_nothing ... ok
+test an_error_already_on_disk_does_not_block_an_unrelated_edit_but_a_new_one_does ... ok
+test no_engine_source_file_names_an_agent_vendor_and_the_bundle_is_the_one_exclusion ... ok
+test on_unjudged_deny_also_refuses_an_unreadable_request_and_an_unenterable_cwd ... ok
+test on_unjudged_deny_refuses_an_agent_allows_a_person_and_names_the_escape_hatch ... ok
+test an_unknown_adapter_guardrail_or_key_is_reported_and_an_unprovided_guardrail_is_never_skipped ... ok
+test session_start_is_quiet_when_ready_and_names_each_thing_that_would_fail_open ... ok
+test status_reports_a_missing_a_modified_and_an_out_of_date_file_and_exits_1 ... ok
+test the_adapters_command_lists_the_adapter_directories_of_the_bundle ... ok
+test the_computed_value_and_an_error_already_on_disk_pass ... ok
+test the_instructions_block_is_rewritten_only_between_its_markers ... ok
+test the_installed_hook_command_judges_an_edit_and_does_not_depend_on_the_project_variable ... ok
+test the_session_start_command_relays_its_message_to_the_agent ... ok
+test update_rewrites_an_unmodified_file_and_reports_a_modified_one_unless_forced ... ok
+test uninstall_removes_what_matches_the_lock_and_reports_what_a_person_changed ... ok
+test when_urzua_cannot_judge_the_edit_proceeds_and_says_so_and_never_silently ... ok
+test without_the_engine_or_the_interpreter_the_command_states_that_the_edit_was_not_judged ... ok
+test with_a_log_declared_an_override_needs_a_reason_and_an_unwritable_log_refuses_it ... ok
+
+test result: ok. 29 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.61s
+
+     Running tests/index_freshness_integration.rs (target/debug/deps/index_freshness_integration-a134801fe1e76ce9)
+
+running 7 tests
+test a_current_index_passes_and_the_census_counts_it ... ok
+test a_missing_record_an_extra_entry_and_a_stale_title_each_block ... ok
+test a_missing_index_file_and_a_removed_marker_pair_block ... ok
+test a_multi_line_link_list_index_with_no_id_token_checks_and_regenerates ... ok
+test index_regenerates_a_declared_index_and_a_second_run_is_a_no_op_end_to_end ... ok
+test index_with_no_declared_index_is_not_run_and_a_missing_marker_is_a_failure ... ok
+test the_rule_does_not_load_without_indexes_or_with_a_bad_format ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.53s
+
+     Running tests/info_level_integration.rs (target/debug/deps/info_level_integration-74487bd262cf3041)
+
+running 9 tests
+test a_boundarys_error_severity_never_lifts_a_rule_set_to_info ... ok
+test a_boundary_may_declare_info ... ok
+test a_field_level_never_lifts_a_rule_set_to_info ... ok
+test a_waiver_covers_an_info_finding_like_any_other ... ok
+test published_paths_at_info_is_info_not_an_error ... ok
+test any_other_level_and_fail_on_info_are_refused_at_load ... ok
+test field_levels_accepts_info_and_the_other_field_keeps_its_level ... ok
+test an_info_finding_is_reported_counted_and_never_trips_fail_on ... ok
+test the_same_finding_at_warn_exits_1_under_fail_on_warning_and_differs_only_in_severity ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.45s
+
+     Running tests/locator_kinds_integration.rs (target/debug/deps/locator_kinds_integration-50937cc294e0dfb3)
+
+running 15 tests
+test a_directory_locator_under_the_default_config_keeps_todays_drift ... ok
+test a_kind_left_out_of_the_declaration_is_still_a_finding ... ok
+test a_glob_pin_follows_the_files_the_glob_matches ... ok
+test a_scope_on_a_directory_is_reported ... ok
+test a_directory_pin_hashes_the_sorted_paths_and_content_hashes_of_its_files_observed_failing ... ok
+test a_pin_on_a_directory_or_glob_needs_the_kind_to_be_pinnable ... ok
+test a_directory_or_glob_matching_no_tracked_file_is_missing ... ok
+test explain_of_a_directory_that_matches_nothing_is_a_could_not_run ... ok
+test explain_of_a_kind_the_config_does_not_declare_says_so ... ok
+test explain_shows_the_files_a_directory_or_glob_pin_covers ... ok
+test an_unpinned_directory_drifts_on_the_newest_commit_among_its_files ... ok
+test an_opted_in_directory_or_glob_is_legal_when_it_matches_a_tracked_file_observed_failing ... ok
+test the_default_accepts_a_file_only_and_a_directory_or_glob_is_a_finding_naming_the_option_observed_failing ... ok
+test the_options_are_validated_at_load ... ok
+test rebaseline_lists_the_files_and_re_pins_a_directory ... ok
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.82s
+
+     Running tests/locator_mechanism_integration.rs (target/debug/deps/locator_mechanism_integration-4b9d970af67c21c6)
+
+running 7 tests
+test a_comment_for_another_record_does_not_count_as_the_comment ... ok
+test a_code_and_a_test_locator_under_the_scanned_paths_are_each_nudged ... ok
+test a_file_that_already_carries_the_comment_is_told_to_drop_the_locator ... ok
+test a_type_that_counts_no_back_pointer_as_evidence_is_not_nudged ... ok
+test without_back_pointer_paths_the_rule_does_not_load ... ok
+test what_a_comment_cannot_say_is_not_nudged ... ok
+test no_edit_is_offered_because_the_comment_must_exist_before_the_locator_goes ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.36s
+
+     Running tests/new_integration.rs (target/debug/deps/new_integration-0fb6d9eb6d6f090e)
+
+running 12 tests
+test new_falls_back_to_the_working_tree_and_says_so_when_git_cannot_read_refs ... ok
+test new_creates_the_type_directory_for_its_first_record ... ok
+test new_emits_yaml_frontmatter_when_configured_even_with_a_blockquote_template_present ... ok
+test new_always_writes_a_stable_id_and_warns_when_the_closed_field_set_omits_it_observed_failing ... ok
+test new_fills_differently_named_date_and_author_fields_from_the_declaration ... ok
+test new_keeps_the_templates_declared_non_required_header_fields_observed_failing ... ok
+test new_numbers_across_every_directory_of_a_type ... ok
+test new_refuses_when_the_declared_pattern_cannot_name_the_file ... ok
+test new_numbers_from_the_declared_pattern ... ok
+test new_over_a_padded_identity_pattern_passes_check_with_no_edit_observed_failing ... ok
+test new_refuses_a_title_with_no_slug_and_writes_nothing ... ok
+test new_skips_a_number_claimed_on_another_branch_and_names_it ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.84s
+
+     Running tests/override_log_integration.rs (target/debug/deps/override_log_integration-4218b3d7d98dcaf7)
+
+running 7 tests
+test a_log_path_that_leaves_the_repository_is_refused ... ok
+test a_row_that_is_not_an_entry_is_reported ... ok
+test a_declared_log_that_does_not_exist_is_reported_never_read_as_empty ... ok
+test reviewing_the_entry_clears_the_finding ... ok
+test an_unreviewed_override_is_a_warning_on_the_log_and_a_reviewed_one_is_not ... ok
+test enabling_the_rule_without_declaring_a_log_is_a_could_not_run ... ok
+test a_placeholder_or_pending_reviewer_does_not_clear_the_finding ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.46s
+
+     Running tests/own_config_integration.rs (target/debug/deps/own_config_integration-8c4211464234b12e)
+
+running 4 tests
+test the_declared_pending_vocabulary_reads_whole_values_only ... ok
+test the_own_rust_resolver_addresses_each_pinned_record_type_config_field ... ok
+test a_bug_open_with_test_evidence_is_a_finding_and_the_other_shapes_are_not ... ok
+test new_opens_a_spec_title_with_its_declared_prefix_and_other_types_with_the_bare_number ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.21s
+
+     Running tests/permanent_waiver_integration.rs (target/debug/deps/permanent_waiver_integration-cbbe6a355f22fd66)
+
+running 12 tests
+test a_no_expiry_waiver_with_a_listed_category_is_waived ... ok
+test a_cited_record_that_becomes_superseded_is_reported ... ok
+test a_no_expiry_waiver_with_an_unlisted_category_is_ineffective_naming_the_field ... ok
+test a_category_requiring_a_citation_needs_one_that_resolves ... ok
+test a_permanent_waiver_whose_finding_disappears_is_reported_as_matching_nothing ... ok
+test a_no_expiry_waiver_without_a_category_is_ineffective ... ok
+test an_ineffective_waiver_is_not_counted_as_permanent ... ok
+test a_waiver_with_an_expiry_is_unchanged_by_the_declaration ... ok
+test declaring_permanent_closes_permanence_for_a_rule_it_does_not_list ... ok
+test a_permanent_declaration_that_is_not_well_formed_is_refused_at_load ... ok
+test the_report_counts_permanent_waivers_by_category ... ok
+test undeclared_behaves_as_today ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
+
+     Running tests/placeholder_vocabulary_integration.rs (target/debug/deps/placeholder_vocabulary_integration-b50fc1fc64b38cf5)
+
+running 3 tests
+test a_real_value_that_merely_contains_the_word_is_not_reported ... ok
+test an_accepted_adr_whose_deciders_is_a_declared_placeholder_is_reported ... ok
+test a_declared_pending_pattern_reads_a_placeholder_family_observed_failing ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.60s
+
+     Running tests/process_exit_integration.rs (target/debug/deps/process_exit_integration-0d119f5f80df73d2)
+
+running 2 tests
+test a_panic_exits_2_with_a_not_run_result ... ok
+test a_closed_stdout_does_not_panic ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+
+     Running tests/provisional_claim_integration.rs (target/debug/deps/provisional_claim_integration-7837291f5f84d761)
+
+running 5 tests
+test an_accepted_amendment_is_not_settled_by_an_acknowledgement_observed_failing ... ok
+test a_draft_amendment_the_peer_acknowledges_is_not_reported_observed_failing ... ok
+test a_draft_amendment_the_peer_has_not_echoed_is_a_warning ... ok
+test an_accepted_amendment_the_peer_has_not_echoed_is_an_error ... ok
+test an_echoed_draft_amendment_is_not_reported ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.24s
+
+     Running tests/published_boundary_integration.rs (target/debug/deps/published_boundary_integration-8c83b9f0084f419c)
+
+running 18 tests
+test a_boundary_without_a_reason_does_not_load ... ok
+test a_citation_inside_a_published_path_blocks_and_names_file_and_line ... ok
+test a_binary_file_is_counted_unreadable_not_clean ... ok
+test a_boundarys_severity_sets_its_findings_level_and_the_rules_level_only_enables_it ... ok
+test a_dot_slash_entry_covers_its_files_and_names_the_normalised_path ... ok
+test a_clean_run_reports_how_many_files_it_looked_at ... ok
+test a_generated_boundary_reports_a_back_pointer_and_not_a_plain_record_id ... ok
+test a_published_path_covering_no_tracked_file_fails_closed ... ok
+test a_glob_boundary_and_the_compatible_key_apply_together ... ok
+test a_tracked_file_deleted_from_disk_is_not_a_crash_and_not_examined ... ok
+test a_vendored_boundary_is_declared_and_prohibits_nothing ... ok
+test an_exclude_excuses_a_fixture_directory_and_an_unused_one_is_reported ... ok
+test an_undeclared_rule_is_reported_not_enabled ... ok
+test the_declared_level_is_the_boundary_severity ... ok
+test the_rule_does_not_load_without_published_paths ... ok
+test the_declared_marker_excuses_its_line_and_a_stale_marker_is_reported ... ok
+test an_uncovered_path_offers_a_valueless_set_never_a_remove ... ok
+test the_same_citation_outside_every_published_path_is_not_reported ... ok
+
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.60s
+
+     Running tests/record_edit_hook_integration.rs (target/debug/deps/record_edit_hook_integration-927a774005fc8998)
+
+running 17 tests
+test a_header_error_can_be_overridden_by_name ... ok
+test a_header_error_in_the_edited_record_blocks_and_a_warning_is_shown ... ok
+test a_new_record_is_judged_from_the_proposal_alone ... ok
+test a_named_override_lets_the_edit_through_and_appears_in_the_output ... ok
+test a_rule_anchored_outside_the_record_is_listed_as_not_judged ... ok
+test a_hand_set_embodiment_is_blocked_with_the_computed_value_and_evidence ... ok
+test a_shallow_clone_still_blocks_what_needs_no_history_and_says_what_it_skipped ... ok
+test an_override_is_recorded_in_the_declared_log_and_check_then_reports_it_unreviewed ... ok
+test a_shallow_clone_with_nothing_wrong_allows_with_the_skipped_rule_disclosed ... ok
+test an_error_already_on_disk_does_not_block_an_unrelated_edit ... ok
+test the_allow_message_names_what_ran_and_what_could_not_be_judged ... ok
+test an_override_that_cannot_be_recorded_is_not_allowed ... ok
+test an_ungoverned_path_and_other_tools_are_not_touched ... ok
+test with_a_log_declared_an_override_needs_a_reason_and_nothing_is_written_without_one ... ok
+test without_a_declared_log_the_override_says_it_is_not_recorded ... ok
+test the_computed_value_and_edits_to_other_fields_pass ... ok
+test when_urzua_cannot_judge_the_edit_proceeds_and_says_so ... ok
+
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.27s
+
+     Running tests/record_types_own_config_integration.rs (target/debug/deps/record_types_own_config_integration-c130989b6aaa0a5e)
+
+running 15 tests
+test a_bug_status_outside_the_declared_vocabulary_is_a_finding_and_fixed_may_be_filed ... ok
+test a_done_milestone_needs_delivery_evidence_and_evidence_under_planned_is_a_disagreement ... ok
+test a_condition_names_met_by_only_once_met ... ok
+test a_milestone_status_outside_the_declared_vocabulary_is_a_finding ... ok
+test a_bug_needs_found_in_and_a_what_was_wrong_section ... ok
+test a_milestone_must_state_its_done_means_unless_it_is_wontdo ... ok
+test an_accepted_adr_must_name_its_deciders_and_enters_proposed ... ok
+test an_rfc_amending_another_must_be_echoed_by_the_amended_rfc ... ok
+test adr_supersession_must_be_reciprocated_and_a_retired_decision_is_a_declared_status ... ok
+test doctor_reads_the_repositorys_own_config_and_reports_the_unwired_hook_as_a_warning ... ok
+test an_rfc_follows_its_declared_lifecycle_and_vocabulary ... ok
+test explain_names_the_governing_record_and_graph_reports_kind_and_dangling_per_edge ... ok
+test audit_reports_a_one_directional_supersession_and_passes_a_reciprocated_one ... ok
+test the_required_sections_and_the_case_variant_key_are_enforced ... ok
+test the_acceptance_date_is_required_once_accepted_and_forbidden_before_it ... ok
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.35s
+
+     Running tests/refs_integration.rs (target/debug/deps/refs_integration-0b37d8f5a3652222)
+
+running 10 tests
+test a_rate_limited_refresh_exits_2_and_leaves_the_existing_snapshot_untouched ... ok
+test a_cited_number_missing_from_the_snapshot_warns_and_the_notice_names_its_date ... ok
+test a_declared_header_field_is_checked_end_to_end_and_only_when_declared ... ok
+test check_never_reaches_the_network ... ok
+test refresh_needs_the_rule_declared ... ok
+test a_second_refresh_with_the_same_answers_leaves_the_file_current ... ok
+test a_missing_or_unreadable_snapshot_is_a_finding_never_a_pass ... ok
+test refresh_without_a_network_fails_clearly_and_writes_nothing ... ok
+test the_rule_is_opt_in ... ok
+test refresh_pages_through_the_recorded_listing_and_writes_a_sorted_snapshot ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.49s
+
+     Running tests/relation_field_literals.rs (target/debug/deps/relation_field_literals-ab60a504fcae03b2)
+
+running 4 tests
+test a_literal_inside_mod_tests_is_not_a_violation ... ok
+test config_rs_itself_is_exempt ... ok
+test the_check_is_observed_failing_on_a_planted_violation ... ok
+test no_relation_field_literal_escapes_config_rs ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/roadmap_integration.rs (target/debug/deps/roadmap_integration-439b462f1751e966)
+
+running 16 tests
+test a_group_by_field_no_type_declares_is_a_load_error ... ok
+test a_cycle_is_listed_once_in_ascending_order_and_never_looped_on ... ok
+test a_blocker_in_a_failure_terminal_keeps_its_dependents_out_of_every_list ... ok
+test a_declared_roadmap_is_part_of_the_json_export ... ok
+test a_roadmap_pair_that_is_not_acyclic_is_a_load_error ... ok
+test a_loop_across_two_declared_pairs_is_a_cycle_that_check_and_the_roadmap_both_report ... ok
+test a_pair_nothing_carries_and_a_claim_that_resolves_to_nothing_are_notes ... ok
+test a_type_with_no_status_vocabulary_is_open_and_noted ... ok
+test a_prose_wait_with_no_dependency_is_noted_and_nothing_open_is_distinguished ... ok
+test notes_sort_by_kind_then_record_then_pair ... ok
+test ids_and_map_keys_come_out_in_natural_order ... ok
+test groups_nest_in_group_by_order_with_the_null_bucket_last ... ok
+test no_declared_pair_is_a_stated_absence_not_an_empty_roadmap ... ok
+test the_critical_path_is_empty_when_no_open_record_has_an_included_dependency ... ok
+test waves_ready_blocks_and_the_critical_path_match_the_hand_computed_answer ... ok
+test the_critical_path_is_the_smallest_sequence_not_a_greedy_walk ... ok
+
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.13s
+
+     Running tests/rule_option_reads.rs (target/debug/deps/rule_option_reads-feb5818625c5b935)
+
+running 2 tests
+test the_scan_is_observed_failing_on_a_planted_re_read ... ok
+test check_rs_does_not_re_read_a_rule_option_field ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+     Running tests/schema_version_integration.rs (target/debug/deps/schema_version_integration-e014e13e2ee100ef)
+
+running 9 tests
+test a_version_one_config_that_omits_header_shape_is_refused_and_left_as_it_was ... ok
+test migrate_config_keeps_comments_and_a_second_run_changes_nothing ... ok
+test check_never_rewrites_the_config ... ok
+test the_fixture_at_each_supported_version_loads_to_the_same_effective_config ... ok
+test a_previous_version_config_gives_the_findings_the_current_one_does_plus_one_warning ... ok
+test the_supported_versions_table_in_spec_3_matches_the_releases_in_code ... ok
+test migrate_config_leaves_a_file_it_cannot_make_valid_exactly_as_it_was ... ok
+test migrate_config_never_reads_a_version_outside_the_window ... ok
+test the_rewritten_file_loads_to_the_same_effective_config_as_the_upgrade ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.26s
+
+     Running tests/scope_changed_integration.rs (target/debug/deps/scope_changed_integration-9886062c0e3215d9)
+
+running 10 tests
+test a_dependent_of_a_changed_file_is_not_changed ... ok
+test a_plain_check_judges_none_says_why_and_raises_no_scope_warning ... ok
+test a_base_run_nudges_the_changed_record_and_defers_the_rest ... ok
+test a_bad_value_or_a_rule_that_does_not_take_it_fails_to_load ... ok
+test a_rule_without_the_option_is_unchanged ... ok
+test a_planted_unchanged_record_is_not_nudged_and_a_changed_one_is ... ok
+test a_real_out_of_scope_still_raises_the_scope_warning ... ok
+test an_unchanged_record_with_no_slot_is_absent_not_deferred ... ok
+test the_editor_hook_treats_the_proposed_record_as_changed ... ok
+test a_waiver_on_a_scope_changed_rule_is_not_reported_as_matching_nothing ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.62s
+
+     Running tests/scoped_pair_integration.rs (target/debug/deps/scoped_pair_integration-7f5fa1396d866f19)
+
+running 2 tests
+test the_same_claim_errors_when_the_pair_is_global ... ok
+test an_rfc_amending_an_adr_is_eligible_and_unexamined_under_the_scoped_pair_observed_failing ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.13s
+
+     Running tests/scoped_pins_integration.rs (target/debug/deps/scoped_pins_integration-426f9d81cdca6317)
+
+running 17 tests
+test a_malformed_locator_names_the_grammar_not_a_missing_file ... ok
+test a_field_that_is_gone_or_named_by_a_method_too_is_reported ... ok
+test a_commit_anchored_locator_is_not_judged_for_drift ... ok
+test a_scope_that_no_longer_resolves_is_reported_with_its_reason ... ok
+test a_scope_that_stops_resolving_is_reported_once_and_not_also_as_drift ... ok
+test a_field_pin_survives_an_edit_above_it_and_goes_stale_when_the_field_changes ... ok
+test a_scope_without_a_pin_and_a_commit_anchor_are_reported ... ok
+test a_symbol_in_a_file_type_with_no_resolver_is_reported_unsupported ... ok
+test explain_names_the_scope_each_citing_record_pins ... ok
+test a_scoped_pin_has_no_file_based_grace_window_but_an_audit_date_still_applies ... ok
+test an_edit_elsewhere_in_the_file_is_not_drift_and_an_edit_to_the_item_is ... ok
+test an_invalid_resolver_declaration_is_a_config_load_error ... ok
+test explain_resolves_a_struct_field_and_a_method_of_the_same_type ... ok
+test explain_prints_the_resolved_span_and_a_pin_ready_to_paste ... ok
+test rebaseline_lists_a_scoped_pin_on_a_missing_file_as_failed ... ok
+test symbols_members_and_ranges_that_resolve_draw_no_finding ... ok
+test rebaseline_shows_the_span_re_pins_in_its_spelling_and_lists_failed_pins ... ok
+
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.83s
+
+     Running tests/section_rules_integration.rs (target/debug/deps/section_rules_integration-621118ab6dda1d3a)
+
+running 6 tests
+test a_type_without_the_declaration_has_nothing_eligible ... ok
+test a_required_h3_under_its_h2_is_checked_end_to_end ... ok
+test an_exempted_record_does_not_trigger_scope_matches_nothing_observed_failing ... ok
+test declared_rules_report_each_failure_and_count_slots ... ok
+test undeclared_rules_do_not_run ... ok
+test this_repositorys_own_h3_headings_are_visible_to_the_section_rules ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.23s
+
+     Running tests/sequencing_integration.rs (target/debug/deps/sequencing_integration-539bfa8823be9370)
+
+running 10 tests
+test a_loop_inside_one_declared_pair_is_reported_once_per_record_as_before ... ok
+test a_dangling_depends_on_target_fails_check ... ok
+test a_pair_left_out_of_roadmap_pairs_stays_out_of_the_merged_graph ... ok
+test a_loop_across_two_declared_pairs_is_reported_on_every_member ... ok
+test a_roadmap_pair_that_is_not_acyclic_fails_check_to_load ... ok
+test a_sequence_rule_with_no_acyclic_pair_declared_fails_to_load ... ok
+test a_pair_outside_roadmap_pairs_is_still_checked_on_its_own ... ok
+test a_planted_cycle_fails_check_and_names_its_path ... ok
+test an_ordered_corpus_passes_and_the_rules_state_what_they_examined ... ok
+test the_cross_pair_loop_is_not_reported_when_roadmap_pairs_is_absent ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
+     Running tests/spec_shipped_integration.rs (target/debug/deps/spec_shipped_integration-6208a604edabc639)
+
+running 3 tests
+test a_shipped_spec_without_embodiment_and_realized_by_is_reported_observed_failing ... ok
+test a_shipped_spec_carrying_both_fields_is_clean_of_the_requirement ... ok
+test an_accepted_or_draft_spec_is_not_asked_for_them ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.22s
+
+     Running tests/status_agreement_integration.rs (target/debug/deps/status_agreement_integration-c491c76b70857945)
+
+running 22 tests
+test a_blocked_status_that_is_also_a_progress_status_fails_to_load ... ok
+test a_blocked_record_that_claims_progress_is_an_error_and_planned_is_not ... ok
+test a_dependency_in_a_failure_status_still_blocks ... ok
+test a_dangling_depends_on_with_a_written_blocked_status_is_not_called_unblocked ... ok
+test a_dependency_on_an_unreadable_record_is_not_called_unblocked ... ok
+test a_dependency_whose_type_declares_no_success_list_blocks ... ok
+test a_progress_record_depending_on_an_unreadable_record_is_unreadable_when_no_blocked_status_is_declared ... ok
+test a_dependency_with_no_status_blocks ... ok
+test a_progress_record_is_unreadable_when_an_unreadable_record_may_write_blocks_and_no_blocked_status_is_declared ... ok
+test a_repository_that_does_not_enable_the_rule_is_unchanged ... ok
+test a_repository_that_declares_no_written_blocked_status_still_reports_progress ... ok
+test a_progress_record_with_a_dangling_dependency_is_unreadable_when_no_blocked_status_is_declared ... ok
+test a_written_blocked_with_nothing_blocking_is_an_error ... ok
+test a_written_blocks_counts_as_the_dependency_it_states ... ok
+test a_roadmap_pair_must_be_declared_and_acyclic ... ok
+test an_unreadable_record_that_may_write_blocks_does_not_make_a_record_unblocked ... ok
+test enabling_the_rule_with_no_roadmap_pairs_fails_to_load ... ok
+test an_acyclic_pair_the_roadmap_does_not_declare_blocks_nothing ... ok
+test blocked_and_done_agree_with_the_derived_value ... ok
+test enabling_the_rule_with_no_type_declaring_blocked_or_progress_fails_to_load ... ok
+test the_dependency_is_judged_by_its_own_types_success_list ... ok
+test the_suggested_status_is_offered_only_when_the_lifecycle_allows_it ... ok
+
+test result: ok. 22 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s
+
+     Running tests/status_delivery_integration.rs (target/debug/deps/status_delivery_integration-d9511308124df7df)
+
+running 10 tests
+test a_test_locator_list_in_realized_by_is_delivery_evidence_with_a_run_command_action ... ok
+test a_source_back_pointer_is_delivery_evidence_for_a_record_with_no_realized_by ... ok
+test a_type_can_switch_a_source_back_pointer_off_as_delivery_evidence_observed_failing ... ok
+test a_type_declaring_no_unevidenced_tiers_never_reports_a_success_status_without_evidence_observed_failing ... ok
+test both_directions_are_reported_and_the_rest_are_clean ... ok
+test fix_proposes_the_success_status_for_delivered_records_and_never_downgrades ... ok
+test a_delivery_declaration_naming_a_status_outside_the_type_is_refused_at_load ... ok
+test the_rule_enabled_on_a_corpus_with_no_declaration_examines_nothing_and_says_so ... ok
+test the_back_pointer_option_defaults_to_counting_and_accepts_true ... ok
+test fix_apply_writes_the_status_and_a_structural_revision_row ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.79s
+
+     Running tests/sticky_state_integration.rs (target/debug/deps/sticky_state_integration-88ea85962840988c)
+
+running 4 tests
+test a_sticky_state_that_evidence_computes_is_refused_at_load ... ok
+test without_a_declaration_every_stated_value_is_held_to_the_computed_one ... ok
+test declared_sticky_states_are_not_drift_and_a_neighbour_still_is ... ok
+test fix_leaves_a_sticky_state_alone ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.13s
+
+     Running tests/suggested_action_integration.rs (target/debug/deps/suggested_action_integration-fac03556cb02ac53)
+
+running 8 tests
+test a_finding_carries_the_action_its_variant_declares ... ok
+test a_configuration_edit_names_the_repository_relative_config_and_a_key_path ... ok
+test a_finding_that_no_command_would_repair_offers_none ... ok
+test rules_lists_each_variant_with_its_action_or_its_exemption_reason ... ok
+test an_exempt_variant_omits_the_key_and_no_action_holds_a_null ... ok
+test the_editor_hook_output_is_not_wired_to_findings ... ok
+test a_waived_finding_carries_its_action_unchanged ... ok
+test a_run_command_finding_goes_away_when_its_command_runs ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.31s
+
+     Running tests/suppression_type_integration.rs (target/debug/deps/suppression_type_integration-a4f57649e5278887)
+
+running 8 tests
+test a_declared_role_displaces_the_literal_name_observed_failing ... ok
+test a_type_declaring_the_suppression_role_suppresses_whatever_it_is_named_observed_failing ... ok
+test a_suppression_carrying_the_required_field_suppresses ... ok
+test effective_requires_on_a_type_without_the_role_is_refused_at_load ... ok
+test two_types_declaring_the_role_are_refused_at_load ... ok
+test a_type_named_waiver_is_the_fallback_when_no_type_declares_the_role ... ok
+test without_the_declaration_a_reasonless_suppression_still_suppresses ... ok
+test a_suppression_missing_a_required_field_does_not_suppress_and_is_reported_observed_failing ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
+     Running tests/template_placeholder_integration.rs (target/debug/deps/template_placeholder_integration-2dba6c961b93630c)
+
+running 9 tests
+test a_field_equal_to_its_template_text_is_a_placeholder_observed_failing ... ok
+test a_type_with_no_template_is_judged_by_its_pending_list_only ... ok
+test declaring_it_with_no_template_anywhere_is_disclosed_not_silently_inert ... ok
+test the_option_is_refused_on_a_rule_that_does_not_read_it ... ok
+test the_compiled_in_token_list_does_not_apply_once_declared ... ok
+test an_edited_value_and_a_trimmed_copy_are_distinguished ... ok
+test migrate_schema_report_judges_a_field_as_field_quality_does ... ok
+test the_whole_enumerated_status_template_value_is_a_placeholder ... ok
+test without_the_declaration_nothing_changes ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+
+     Running tests/test_tier_integration.rs (target/debug/deps/test_tier_integration-6d229c0ea28e8f0e)
+
+running 6 tests
+test a_malformed_glob_test_path_is_refused_at_load ... ok
+test a_test_path_outside_every_back_pointer_path_is_refused_at_load ... ok
+test a_test_pointer_verifies_and_a_code_pointer_alone_does_not ... ok
+test fix_proposes_the_repair_for_a_cited_record_with_no_realized_by ... ok
+test with_no_test_class_declared_a_verifies_comment_is_not_evidence ... ok
+test a_glob_test_path_and_a_prefix_work_together_and_an_unmatched_entry_is_reported ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.37s
+
+     Running tests/version_bump_integration.rs (target/debug/deps/version_bump_integration-5a353ab33745930d)
+
+running 9 tests
+test a_renamed_record_is_unexamined ... ok
+test a_new_record_has_nothing_to_bump ... ok
+test a_bumped_version_a_row_of_another_class_or_no_new_row_is_clean ... ok
+test a_substantive_row_without_a_version_bump_is_reported_observed_failing ... ok
+test a_structural_row_without_a_version_bump_is_reported ... ok
+test a_malformed_declaration_is_a_config_error ... ok
+test a_type_that_does_not_declare_it_is_not_judged ... ok
+test enabling_the_rule_with_no_type_declaring_it_is_a_config_error ... ok
+test a_whole_repo_run_says_not_applicable_rather_than_clean ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.35s
+
+     Running tests/waiver_stale_integration.rs (target/debug/deps/waiver_stale_integration-b80ffba7ae2461f4)
+
+running 5 tests
+test a_waiver_for_a_rule_that_is_not_enabled_is_not_judged ... ok
+test a_path_scoped_run_does_not_call_a_waiver_stale ... ok
+test a_base_run_reports_a_changed_expired_waiver ... ok
+test a_base_run_does_not_call_an_unchanged_waiver_stale ... ok
+test a_whole_run_reports_the_stale_and_the_expired_waiver_but_not_the_live_one ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.22s
+
+     Running tests/work_types_integration.rs (target/debug/deps/work_types_integration-0af6e092a6b30b96)
+
+running 18 tests
+test a_dropped_fact_sends_its_dependent_to_needs_replan_and_is_listed ... ok
+test a_fact_is_not_counted_by_nothing_open_or_unstructured_wait ... ok
+test a_dependent_of_an_open_fact_is_blocked_and_in_wave_zero_but_not_ready ... ok
+test a_blank_name_or_one_with_surrounding_whitespace_is_a_load_error ... ok
+test a_fact_is_not_in_groups ... ok
+test a_type_listed_twice_is_a_load_error_naming_it ... ok
+test a_met_fact_releases_its_dependent_and_drops_out_of_waiting_on ... ok
+test a_non_work_record_is_in_no_list_and_still_blocks_its_dependents ... ok
+test an_unknown_type_name_is_a_load_error_naming_it ... ok
+test an_empty_list_is_a_load_error ... ok
+test contraction_runs_through_a_chain_of_facts ... ok
+test exclusion_propagates_through_a_fact_that_waits_on_failed_work ... ok
+test listing_every_type_changes_nothing_but_adds_an_empty_waiting_on ... ok
+test the_worked_example_with_a_dropped_fact_sends_the_dependent_to_needs_replan ... ok
+test work_types_with_no_pairs_is_accepted_and_inert ... ok
+test sequence_cycle_and_status_agreement_give_the_same_findings_with_and_without_work_types ... ok
+test with_the_key_absent_every_type_is_work_and_there_is_no_waiting_on ... ok
+test the_worked_example_contracts_waves_and_the_critical_path_through_a_fact ... ok
+
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.13s
+
+     Running unittests src/lib.rs (target/debug/deps/urzua_core-19df7dfbb83a1238)
+
+running 985 tests
+test authority::tests::evidence_is_any_of_the_declared_kinds_and_logins_compare_without_case ... ok
+test authority::tests::a_table_reads_back_with_the_default_evidence ... ok
+test authority::tests::malformed_shapes_are_errors_naming_the_entry ... ok
+test config::exclude_files_tests::plain_file_names_load ... ok
+test config::option_table_tests::an_option_on_a_rule_that_does_not_take_it_is_refused ... ok
+test config::exclude_files_tests::an_entry_that_is_not_a_bare_file_name_is_refused_at_load ... ok
+test config::option_table_tests::an_unknown_attestation_identity_is_a_load_error_naming_the_allowed_values ... ok
+test config::option_table_tests::attestation_absent_is_gh_verified_without_require_verified ... ok
+test config::option_table_tests::an_unknown_attestation_key_is_a_load_error ... ok
+test config::option_table_tests::require_verified_with_asserted_is_refused_at_load ... ok
+test config::option_table_tests::every_option_the_rule_table_names_is_a_struct_option_and_every_option_has_an_owner ... ok
+test authority::tests::a_gate_naming_what_the_configuration_does_not_declare_does_not_load ... ok
+test config::option_table_tests::serialization_round_trip_keeps_absent_apart_from_empty ... ok
+test config::option_table_tests::the_struct_and_the_option_tables_name_the_same_options ... ok
+test config::option_table_tests::attestation_reads_each_declared_value ... ok
+test config::scope_option_tests::scope_changed_loads_on_a_rule_that_lists_it ... ok
+test config::scope_option_tests::the_rules_that_already_judge_only_the_changed_set_do_not_take_scope ... ok
+test config::scope_option_tests::scope_survives_a_serialization_round_trip ... ok
+test config::tests::a_bad_schema_version_is_reported_before_an_invalid_declaration ... ok
+test config::scope_option_tests::a_value_other_than_changed_is_refused_naming_changed ... ok
+test config::scope_option_tests::scope_on_a_rule_that_does_not_list_it_is_refused_at_load ... ok
+test config::tests::a_blank_or_multiline_ignore_marker_is_refused_and_the_options_belong_to_one_rule ... ok
+test config::tests::a_boundary_severity_accepts_info ... ok
+test config::tests::a_blank_reason_and_an_unsupported_severity_do_not_load ... ok
+test config::tests::a_boundary_is_paths_kind_reason_severity_and_an_optional_exclude ... ok
+test config::tests::a_boundary_without_a_reason_severity_or_kind_does_not_load ... ok
+test config::tests::a_config_without_a_document_model_loads_unchanged ... ok
+test config::tests::a_config_without_relation_pairs_loads_unchanged ... ok
+test config::tests::a_declaration_outside_a_record_type_is_not_accepted ... ok
+test config::tests::a_companion_pair_naming_no_relation_role_is_refused_observed_failing ... ok
+test config::tests::a_declared_relation_pair_loads_and_cross_type_defaults_to_true ... ok
+test config::tests::a_declared_acknowledgement_field_loads_and_a_misdeclared_one_is_refused_observed_failing ... ok
+test config::tests::a_declared_document_model_loads_beside_the_ordinary_keys ... ok
+test config::tests::a_boundary_path_that_cannot_match_is_refused ... ok
+test config::tests::a_dir_escaping_the_repository_is_refused_at_load ... ok
+test config::tests::a_malformed_rule_setting_names_what_was_wrong_observed_failing ... ok
+test config::tests::a_malformed_revision_log_declaration_is_refused ... ok
+test config::tests::a_diff_path_option_takes_globs_and_refuses_a_broken_one ... ok
+test config::tests::a_misdeclared_relation_pair_is_refused_at_load ... ok
+test config::tests::a_removed_header_shape_is_a_clear_error_naming_the_form ... ok
+test config::tests::a_revision_log_identity_matches_its_line_and_not_a_mention ... ok
+test config::tests::a_pair_scoped_to_types_loads_and_a_misdeclared_scope_is_refused ... ok
+test config::tests::a_rule_level_is_written_bare_or_as_a_table ... ok
+test config::tests::a_non_canonical_dir_is_a_load_error_naming_the_canonical_form_observed_failing ... ok
+test config::tests::a_second_suppression_type_or_an_unknown_role_is_refused_at_load ... ok
+test config::tests::a_typed_error_keeps_its_line_and_column_beside_a_declaration ... ok
+test config::tests::a_rule_option_present_with_no_value_is_rejected_not_treated_as_omitted ... ok
+test config::tests::acyclic_defaults_to_false_and_parses_when_declared ... ok
+test config::tests::a_provisional_split_loads_and_a_misdeclared_one_is_refused ... ok
+test config::tests::allow_extension_prefix_loads_on_field_set_consistency_only ... ok
+test config::tests::a_rule_missing_an_option_it_requires_is_rejected_observed_failing ... ok
+test config::tests::an_invalid_declaration_fails_the_load_naming_the_type_and_key ... ok
+test config::tests::an_invalid_default_prefix_is_refused_at_load ... ok
+test config::tests::an_empty_or_root_dir_is_refused_at_load ... ok
+test config::tests::an_option_on_a_rule_that_does_not_take_it_is_rejected ... ok
+test config::tests::an_index_field_placeholder_must_name_a_declared_field ... ok
+test config::tests::an_unknown_rule_name_is_rejected_and_names_the_valid_set ... ok
+test config::tests::an_unquoted_integer_beyond_u64_loads_as_a_string_with_and_without_a_declaration ... ok
+test config::tests::an_unrecognized_key_is_a_parse_error_not_silently_ignored ... ok
+test config::tests::an_unrecognized_schema_version_is_rejected ... ok
+test config::tests::back_pointer_paths_is_required_by_the_back_pointer_rule_and_by_no_other ... ok
+test config::tests::an_unsafe_prefix_is_refused_at_load ... ok
+test config::tests::all_three_kinds_load_and_any_other_is_a_config_error ... ok
+test config::tests::declared_fields_unions_required_and_known ... ok
+test config::tests::declared_fields_none_is_a_type_with_no_header ... ok
+test config::tests::effective_requires_is_validated_at_load ... ok
+test config::tests::drift_audit_field_needs_a_window_a_declared_field_and_the_consistency_rule ... ok
+test config::tests::closes_and_strict_belong_to_the_claim_rule_and_strict_needs_closes_observed_failing ... ok
+test config::tests::enabling_a_pair_rule_with_no_pairs_declared_is_refused ... ok
+test config::tests::enabling_a_sequence_rule_without_an_acyclic_pair_is_refused ... ok
+test config::tests::both_forms_declared_both_apply_and_a_declared_severity_ignores_the_rule_level ... ok
+test config::tests::extra_dirs_are_validated_like_dir_and_owned_by_one_type ... ok
+test config::tests::fail_on_defaults_to_error_and_accepts_warning ... ok
+test config::tests::header_shape_survives_a_serialize_deserialize_round_trip ... ok
+test config::tests::fail_on_rejects_any_other_value ... ok
+test config::tests::external_ids_belongs_to_citation_resolution_and_must_be_well_formed ... ok
+test config::tests::info_is_a_rule_level_and_a_field_level_and_not_a_fail_on_observed_failing ... ok
+test config::tests::field_levels_loads_on_per_field_rules_and_is_refused_elsewhere_observed_failing ... ok
+test config::tests::missing_schema_version_is_a_parse_error ... ok
+test config::tests::indexes_is_required_by_the_index_rule_and_by_no_other ... ok
+test config::tests::omitting_rules_entirely_means_no_rule_runs ... ok
+test config::tests::other_unknown_keys_are_still_refused_beside_a_declaration ... ok
+test config::tests::issue_refs_fields_must_be_declared_header_fields_and_never_blank ... ok
+test config::tests::parse_accepts_a_declared_model_instead_of_rejecting_the_keys ... ok
+test config::tests::parses_record_types ... ok
+test config::tests::plain_scalars_typed_parsing_accepts_still_load_beside_a_declaration ... ok
+test config::tests::pointer_and_narrative_fields_round_trip ... ok
+test config::tests::non_reference_field_must_be_a_known_plain_field_of_citation_resolution ... ok
+test config::tests::published_paths_alone_still_loads_and_stands_for_a_published_boundary ... ok
+test config::tests::published_paths_are_normalised_at_parse ... ok
+test config::tests::permanent_is_validated_at_load ... ok
+test config::tests::issue_refs_is_required_by_the_issue_rule_and_by_no_other ... ok
+test config::tests::relation_fields_round_trip_and_default_when_undeclared ... ok
+test config::tests::published_paths_is_required_by_the_boundary_rule_and_by_no_other ... ok
+test config::tests::published_paths_that_are_absolute_parent_relative_or_backslashed_are_rejected ... ok
+test config::tests::reference_sections_is_required_by_citation_path_exists_and_by_no_other ... ok
+test config::tests::revision_log_identity_defaults_and_is_declared_per_type ... ok
+test config::tests::spec_pointer_is_optional_and_parses_when_present ... ok
+test config::tests::revision_log_required_defaults_true_and_may_stand_alone ... ok
+test config::tests::skip_revision_log_belongs_to_citation_path_exists_and_is_optional ... ok
+test config::tests::the_boundary_rule_with_no_boundary_at_all_does_not_load ... ok
+test config::tests::sticky_states_belongs_to_consistency_and_may_not_name_a_computed_state ... ok
+test config::tests::the_suppression_type_is_declared_by_role_with_the_literal_as_fallback ... ok
+test config::tests::two_types_sharing_a_prefix_are_refused_at_load ... ok
+test config::tests::the_issue_rule_needs_reference_sections_and_takes_skip_revision_log ... ok
+test document_model::tests::a_level_beyond_depth_or_a_misplaced_under_fails_the_load_not_a_silent_no_op ... ok
+test document_model::tests::a_captured_prefix_is_the_declared_title_prefix ... ok
+test config::tests::the_fallback_status_lists_are_optional_once_no_type_needs_them_observed_failing ... ok
+test document_model::tests::a_malformed_required_declaration_fails_the_load_naming_the_problem ... ok
+test document_model::tests::a_name_the_pattern_does_not_match_has_no_number ... ok
+test document_model::tests::a_pattern_without_a_prefix_group_is_refused_naming_the_type ... ok
+test document_model::tests::a_pattern_that_does_not_compile_or_has_no_number_group_fails_the_load ... ok
+test document_model::tests::a_number_that_overflows_u64_or_an_empty_prefix_is_no_identity ... ok
+test document_model::tests::a_removed_header_shape_as_a_fields_source_is_a_clear_error ... ok
+test document_model::tests::a_present_but_empty_or_non_mapping_part_is_refused_not_ignored ... ok
+test document_model::tests::a_required_section_declares_its_level_and_parent ... ok
+test document_model::tests::aliases_and_preamble_load_and_malformed_ones_are_refused ... ok
+test document_model::tests::a_type_declaring_nothing_is_absent ... ok
+test document_model::tests::declarations_are_kept_per_record_type ... ok
+test document_model::tests::a_zero_padded_prefixed_number_keeps_its_padding ... ok
+test document_model::tests::an_unknown_source_names_the_valid_ones ... ok
+test document_model::tests::each_part_is_independently_optional_and_sections_default_narrow ... ok
+test document_model::tests::every_existing_header_shape_is_a_fields_source ... ok
+test document_model::tests::depth_must_be_one_to_five ... ok
+test document_model::tests::exempt_statuses_without_required_is_refused_not_a_silent_no_op ... ok
+test document_model::tests::identity_requires_a_nonblank_pattern ... ok
+test document_model::tests::from_is_required ... ok
+test document_model::tests::items_must_be_a_boolean ... ok
+test document_model::tests::required_sections_and_their_shapes_parse ... ok
+test document_model::tests::a_number_capture_that_is_not_ascii_digits_is_no_number ... ok
+test document_model::tests::the_same_name_at_a_different_level_or_parent_is_not_a_duplicate ... ok
+test embodiment_model::tests::default_is_valid_and_claims_the_two_built_tiers ... ok
+test document_model::tests::unknown_keys_inside_a_part_are_refused ... ok
+test embodiment_model::tests::default_orders_test_over_code_over_spec ... ok
+test embodiment_model::tests::duplicate_names_and_evidence_are_refused ... ok
+test field_state::tests::a_real_value_that_contains_a_placeholder_substring_is_not_flagged ... ok
+test document_model::tests::the_rfc_example_parses_in_full ... ok
+test field_state::tests::a_value_equal_to_its_template_text_is_a_placeholder ... ok
+test field_state::tests::absent_field_is_blank ... ok
+test field_state::tests::em_dash_is_present_not_blank_or_placeholder ... ok
+test field_state::tests::empty_string_is_blank ... ok
+test field_state::tests::explicit_pending_marker_is_pending_not_placeholder ... ok
+test field_state::tests::retired_project_placeholder_conventions_are_placeholder_not_present ... ok
+test field_state::tests::pending_is_a_whole_word_not_a_substring_or_a_path_segment ... ok
+test field_state::tests::unedited_template_text_is_placeholder ... ok
+test fix::tests::a_back_pointed_record_repairs_to_implemented_not_specified_observed_failing ... ok
+test fix::tests::a_drifted_record_is_repaired_to_drift_detected_observed_failing ... ok
+test fix::tests::a_matching_embodiment_is_not_a_repair ... ok
+test fix::tests::a_mismatched_embodiment_is_a_tier_1_repair_observed_failing ... ok
+test fix::tests::a_rebaseline_row_carries_the_source_and_the_actor_kind ... ok
+test fix::tests::a_status_repair_edits_the_status_line_not_a_title_that_mentions_both_words ... ok
+test fix::tests::a_stale_pin_is_listed_with_both_hashes_and_a_current_one_is_not_observed_failing ... ok
+test fix::tests::a_scoped_pin_is_re_pinned_in_its_own_spelling_and_an_unresolving_one_is_a_failed_pin ... ok
+test fix::tests::a_sticky_state_is_never_repaired_and_a_neighbour_still_is ... ok
+test fix::tests::apply_repair_appends_a_plain_table_row_inside_the_plain_table_observed_failing ... ok
+test fix::tests::apply_repair_does_not_touch_a_substring_of_the_field_name_or_prose_observed_failing ... ok
+test fix::tests::a_type_declaring_custom_embodiment_field_names_is_repaired_by_those_names_observed_failing ... ok
+test fix::tests::apply_repair_edits_the_field_and_appends_a_revision_log_row_observed_failing ... ok
+test fix::tests::apply_repair_on_a_crlf_file_changes_only_the_intended_lines_observed_failing ... ok
+test fix::tests::apply_repair_refuses_an_empty_stated_value_when_the_field_now_has_one ... ok
+test fix::tests::apply_repair_refuses_when_the_stated_value_has_already_changed ... ok
+test fix::tests::apply_repair_fills_a_null_tilde_or_empty_value_by_position_observed_failing ... ok
+test fix::tests::apply_repair_refuses_without_a_revision_log_section ... ok
+test fix::tests::apply_repair_without_a_required_log_edits_only_the_field ... ok
+test fix::tests::the_attestation_label_names_the_source_and_the_actor_kind ... ok
+test fix::tests::no_realized_by_leaves_the_record_eligible_but_unexamined ... ok
+test fix::tests::fresh_drift_leaves_a_stated_drift_detected_alone_observed_failing ... ok
+test graph::tests::a_clean_or_empty_corpus_has_no_left_out_notice_and_an_empty_one_has_no_population ... ok
+test fix::tests::re_pinning_moves_only_the_hash_and_logs_who_and_why_observed_failing ... ok
+test graph::tests::explain_finds_nothing_for_an_ungoverned_path ... ok
+test graph::tests::a_config_that_also_declares_supersedes_does_not_duplicate_the_edge_observed_failing ... ok
+test graph::tests::explain_normalizes_the_queried_path_like_the_stored_locator ... ok
+test graph::tests::explain_reads_a_custom_embodiment_locator_field_name_observed_failing ... ok
+test graph::tests::explain_finds_a_record_whose_realized_by_names_the_path ... ok
+test graph::tests::graph_includes_a_narrative_edge_kinded_correctly ... ok
+test graph::tests::graph_marks_a_non_resolving_reference_as_dangling_observed_failing ... ok
+test graph::tests::graph_includes_a_resolving_implements_edge_not_dangling ... ok
+test graph::tests::graph_includes_a_parent_edge ... ok
+test graph::tests::graph_reads_a_custom_supersession_field_name_observed_failing ... ok
+test graph::tests::graph_reports_supersedes_as_pointer_kind ... ok
+test graph::tests::graph_resolves_a_padded_reference_against_an_unpadded_filename_observed_failing ... ok
+test graph::tests::the_read_population_counts_an_unreadable_header_and_names_it_observed_failing ... ok
+test harness::tests::a_config_with_no_harness_key_declares_none ... ok
+test harness::tests::a_declared_harness_reads_back_its_adapters_file_and_guardrails ... ok
+test harness::tests::a_malformed_value_is_a_load_error ... ok
+test harness::tests::a_gate_with_no_authority_names_the_guardrail ... ok
+test harness::tests::an_unknown_guardrail_or_key_is_kept_as_a_problem_never_dropped ... ok
+test harness::tests::a_config_enabling_a_gate_without_authority_does_not_load ... ok
+test header::tests::a_blockquote_header_is_named_as_an_unsupported_form_not_just_absent ... ok
+test header::tests::a_body_blockquote_or_bullet_after_the_first_section_is_not_a_legacy_header ... ok
+test harness::tests::on_unjudged_defaults_by_guardrail ... ok
+test header::tests::a_body_quote_before_a_bold_list_header_does_not_hide_the_bold_list ... ok
+test header::tests::a_document_not_opening_with_frontmatter_has_no_yaml_region ... ok
+test header::tests::a_bold_list_header_is_named_as_an_unsupported_form ... ok
+test header::tests::a_non_string_key_is_kept_not_dropped ... ok
+test header::tests::a_leading_bom_does_not_hide_the_frontmatter ... ok
+test header::tests::a_top_level_scalar_is_no_region_with_a_specific_reason ... ok
+test header::tests::a_tab_before_a_comment_and_a_nested_key_of_the_same_name_do_not_leak_into_the_value ... ok
+test header::tests::duplicate_keys_are_detected_not_first_wins ... ok
+test harness::tests::the_harness_key_round_trips_through_the_config ... ok
+test header::tests::a_value_starting_with_a_backtick_surfaces_the_real_parse_error_observed_failing ... ok
+test header::tests::get_does_not_answer_for_a_differently_cased_key ... ok
+test header::tests::get_reserved_answers_for_a_differently_cased_key ... ok
+test header::tests::no_header_shaped_region_is_none_not_empty ... ok
+test header::tests::invalid_yaml_inside_the_delimiters_is_no_region_not_a_panic ... ok
+test header::tests::invalid_yaml_surfaces_the_real_parse_error_observed_failing ... ok
+test header::tests::prefix_lines_does_not_read_prose_or_urls_as_fields ... ok
+test header::tests::prefix_lines_keeps_an_empty_value_and_stops_at_a_deeper_heading_only_when_spaced ... ok
+test header::tests::parses_yaml_frontmatter ... ok
+test header::tests::prefix_lines_with_no_field_line_has_no_region_not_an_empty_header ... ok
+test header::tests::prefix_lines_reads_bare_key_value_lines_before_the_first_section ... ok
+test header::tests::two_spellings_of_one_word_are_two_keys_not_a_duplicate ... ok
+test header::tests::yaml_frontmatter_that_never_closes_is_no_region_not_a_panic ... ok
+test line_edit::tests::insert_keeps_crlf_and_the_absent_trailing_newline ... ok
+test line_edit::tests::replace_keeps_the_terminator ... ok
+test line_edit::tests::round_trips_every_terminator_shape ... ok
+test line_edit::tests::row_prefix ... ok
+test header::tests::yaml_scalars_keep_the_text_the_file_wrote ... ok
+test locator::tests::a_bad_pin_is_malformed_not_a_path ... ok
+test locator::tests::a_commit_anchor_is_seven_to_sixty_four_lowercase_hex ... ok
+test locator::tests::a_bom_on_line_one_is_dropped_and_lines_still_count_from_one ... ok
+test locator::tests::a_brace_in_a_string_ends_the_span_early_and_that_is_not_detected ... ok
+test locator::tests::a_container_without_spans_all_must_match_exactly_one_span ... ok
+test locator::tests::a_file_level_pin_keeps_its_adr_67_meaning ... ok
+test locator::tests::a_glob_cannot_carry_a_scope ... ok
+test locator::tests::a_field_and_a_method_of_one_name_are_ambiguous_never_first_pattern_wins ... ok
+test locator::tests::a_member_is_one_mapping_or_a_list_in_config ... ok
+test locator::tests::a_member_is_found_across_every_inherent_impl_block ... ok
+test locator::tests::a_member_of_a_member_is_unsupported ... ok
+test locator::tests::a_field_pattern_does_not_match_a_path_or_a_nested_field ... ok
+test locator::tests::a_field_ends_before_the_next_field_and_the_closing_brace ... ok
+test locator::tests::a_member_matches_at_direct_child_depth_only ... ok
+test locator::tests::a_missing_symbol_is_reported ... ok
+test locator::tests::a_member_repeated_across_spans_is_ambiguous ... ok
+test locator::tests::a_range_needs_no_resolver_and_must_lie_inside_the_file ... ok
+test locator::tests::a_range_is_l_n_or_l_n_dash_l_m ... ok
+test locator::tests::a_scope_displays_as_written ... ok
+test locator::tests::a_resolver_without_container_or_trait_container_reports_the_forms_unsupported ... ok
+test locator::tests::a_plain_symbol_spans_its_leading_lines_and_balanced_body ... ok
+test locator::tests::a_symbol_scope_sits_between_path_and_pin ... ok
+test locator::tests::a_multi_line_field_type_ends_at_the_first_line_not_indented_deeper ... ok
+test locator::tests::a_trait_impl_member_and_the_whole_impl_are_addressed_with_angle_brackets ... ok
+test locator::tests::a_well_formed_resolver_set_validates ... ok
+test locator::tests::a_semicolon_ended_item_is_not_swallowed_into_the_next_fn ... ok
+test locator::tests::an_ambiguous_symbol_is_reported_with_its_lines_never_first_match ... ok
+test locator::tests::an_unpinned_unscoped_locator_is_just_a_path ... ok
+test locator::tests::an_unbalanced_item_has_no_end ... ok
+test locator::tests::an_indent_container_matches_members_at_its_child_indent ... ok
+test locator::tests::both_anchors_on_one_locator_is_malformed ... ok
+test locator::tests::covered_files::a_glob_that_cannot_compile_is_an_error ... ok
+test locator::tests::a_struct_field_is_found_with_its_doc_comment_and_attribute ... ok
+test locator::tests::blank_line_ends_before_the_next_blank_line_or_the_end_of_file ... ok
+test locator::tests::covered_files::the_pin_text_is_the_sorted_path_and_hash_lines ... ok
+test locator::tests::crlf_and_lf_files_give_the_same_pinned_bytes ... ok
+test locator::tests::every_failure_has_a_reason_that_names_the_cause ... ok
+test locator::tests::covered_files::a_name_that_matches_nothing_has_no_kind_but_a_glob_is_always_a_glob ... ok
+test locator::tests::covered_files::a_file_a_directory_and_a_glob_are_told_apart ... ok
+test locator::tests::l_followed_by_a_digit_is_a_range_or_malformed_never_a_symbol ... ok
+test locator::tests::indent_ends_before_the_next_line_indented_no_deeper ... ok
+test locator::tests::no_symbol_without_a_resolver ... ok
+test locator::tests::qualified_symbols_parse_members_and_trait_impls ... ok
+test locator::tests::heading_ends_before_the_next_heading_of_equal_or_higher_level ... ok
+test locator::tests::realized_by_locators_keeps_category_order_and_skips_text_before_the_first_category ... ok
+test locator::tests::semicolon_ends_at_the_first_line_ending_in_a_semicolon_at_its_own_depth ... ok
+test locator::tests::every_member_pattern_is_validated ... ok
+test locator::tests::methods_still_resolve_beside_a_field_pattern_and_a_missing_field_is_not_found ... ok
+test locator::tests::several_impls_of_one_generic_trait_make_a_member_ambiguous ... ok
+test locator::tests::the_pinned_bytes_drop_one_cr_per_line_join_with_lf_and_end_without_a_newline ... ok
+test locator::tests::the_re_pin_spelling_is_the_text_before_the_anchor_as_written ... ok
+test locator::tests::the_container_must_exist_and_a_trait_impl_is_not_an_inherent_container ... ok
+test locator::tests::the_scope_is_the_text_after_the_last_hash_only_when_it_matches ... ok
+test locator::tests::the_resolver_for_a_path_is_the_one_whose_glob_covers_it ... ok
+test migrate::tests::a_header_none_type_is_not_reported_as_unreadable_observed_failing ... ok
+test migrate::tests::a_record_already_carrying_the_field_is_not_reported ... ok
+test locator::tests::the_symbol_is_regex_escaped_before_substitution ... ok
+test migrate::tests::a_record_missing_the_candidate_field_is_reported_observed_failing ... ok
+test migrate::tests::an_unparsed_header_is_not_reported_as_blank_observed_failing ... ok
+test new_record::tests::a_date_named_file_is_not_a_record_number_observed_failing ... ok
+test migrate::tests::placeholder_text_is_reported_distinctly_from_blank ... ok
+test new_record::tests::a_hyphenated_type_prefix_parses_observed_failing ... ok
+test locator::tests::resolver_load_errors_are_never_first_wins ... ok
+test new_record::tests::claims_on_other_refs_push_the_number_past_them ... ok
+test new_record::tests::date_and_author_are_filled_by_their_declared_field_names ... ok
+test new_record::tests::next_display_number_counts_both_filename_conventions ... ok
+test new_record::tests::next_display_number_fails_instead_of_overflowing ... ok
+test new_record::tests::next_display_number_rejects_a_malformed_directory_entry_observed_failing ... ok
+test new_record::tests::next_display_number_skips_past_the_highest_existing_prefix ... ok
+test new_record::tests::next_display_number_starts_at_one_for_an_empty_directory ... ok
+test new_record::tests::a_pattern_no_name_fits_is_refused_naming_the_pattern ... ok
+test new_record::tests::parse_record_filename_reads_both_conventions_and_rejects_neither_shape ... ok
+test new_record::tests::render_synthetic_yaml_escapes_a_value_with_an_embedded_colon ... ok
+test new_record::tests::render_synthetic_yaml_lists_required_fields_as_blank ... ok
+test new_record::tests::render_synthetic_yaml_round_trips_a_numeric_looking_string ... ok
+test new_record::tests::slugify_lowercases_and_hyphenates_punctuation ... ok
+test new_record::tests::template_body_is_none_without_a_section_heading ... ok
+test new_record::tests::template_body_starts_at_the_first_section_heading ... ok
+test new_record::tests::template_header_fields_reads_blockquote_and_frontmatter_names_in_order ... ok
+test new_record::tests::template_header_values_read_blockquote_and_frontmatter_values ... ok
+test new_record::tests::the_status_field_starts_at_the_initial_status_and_stays_blank_without_one ... ok
+test new_record::tests::a_declared_file_name_is_padded_to_the_width_the_pattern_requires ... ok
+test property::tests::a_field_name_matches_its_declaration_exactly_and_only_exactly ... ok
+test property::tests::a_seed_reproduces_its_counterexample ... ok
+test new_record::tests::numbering_by_a_declared_pattern_reads_only_what_it_matches ... ok
+test property::tests::a_record_is_owned_only_when_directly_inside_its_declared_dir ... ok
+test property::tests::every_record_and_field_rule_can_report_examined_below_eligible ... ok
+test property::tests::the_generator_reaches_its_non_ascii_alphabet ... ok
+test record::tests::a_leading_underscore_is_a_template_not_a_record ... ok
+test property::tests::the_property_rejects_a_case_insensitive_matcher ... ok
+test record::tests::a_non_markdown_file_is_not_a_record ... ok
+test record::tests::a_type_declaring_nothing_loads_exactly_as_before ... ok
+test record::tests::an_unnumbered_markdown_file_is_still_governed ... ok
+test record::tests::declared_fields_override_the_header_shape ... ok
+test refs_snapshot::tests::an_unsorted_or_repeating_list_is_rejected ... ok
+test report::tests::a_deferred_candidate_is_counted_apart_from_out_of_scope_and_absent ... ok
+test report::tests::a_finding_without_an_action_has_no_suggested_action_key ... ok
+test report::tests::a_kind_with_no_ops_serializes_without_one_and_a_command_carries_argv ... ok
+test record::tests::declared_identity_reads_the_file_name ... ok
+test report::tests::a_population_carries_the_unit_its_numbers_are_in ... ok
+test report::tests::a_rule_that_did_not_run_contributes_no_records ... ok
+test report::tests::a_total_across_units_is_a_union_of_records_never_a_sum_of_populations ... ok
+test report::tests::a_value_is_a_string_a_list_of_strings_or_a_boolean ... ok
+test report::tests::a_waived_warning_never_fails_under_fail_on_warning ... ok
+test report::tests::a_warning_exits_0_by_default_and_1_when_fail_on_is_warning ... ok
+test report::tests::an_action_serializes_its_kind_op_and_target_and_omits_what_was_not_computed ... ok
+test report::tests::an_info_finding_never_trips_fail_on_and_serializes_as_info ... ok
+test report::tests::deferred_by_scope_is_serialized_only_when_it_is_non_zero ... ok
+test report::tests::notices_never_move_a_not_run_exit_code ... ok
+test report::tests::notices_never_move_a_successful_exit_code ... ok
+test report::tests::the_vocabulary_is_the_five_kinds_of_adr_73 ... ok
+test rules::action::tests::a_declared_action_is_joined_with_what_the_rule_computed ... ok
+test property::tests::every_field_a_record_carries_is_either_accepted_or_reported ... ok
+test locator::tests::spec_3_vectors_for_the_rust_resolver ... ok
+test rules::action::tests::a_variant_a_rule_constructs_is_declared_in_the_table ... ok
+test rules::action::tests::a_variant_names_one_rule_and_is_declared_once ... ok
+test report::tests::a_population_cannot_examine_more_than_it_was_eligible_for - should panic ... ok
+test rules::action::tests::a_declared_action_missing_a_required_key_is_a_defect - should panic ... ok
+test rules::action::tests::a_variant_the_table_does_not_declare_is_a_defect - should panic ... ok
+test rules::action::tests::an_exempt_variant_and_a_finding_no_rule_made_get_no_action ... ok
+test rules::action::tests::an_exemption_states_a_reason_and_an_action_a_valid_op ... ok
+test rules::action::tests::every_rule_declares_at_least_one_variant ... ok
+test rules::back_pointer::tests::a_back_pointer_resolves_to_the_cited_record_by_number_observed_failing ... ok
+test rules::back_pointer::tests::a_back_pointer_to_no_record_is_an_error_observed_failing ... ok
+test rules::back_pointer::tests::a_back_pointer_to_an_unaccepted_record_is_reported_observed_failing ... ok
+test rules::back_pointer::tests::a_changed_file_outside_the_declared_paths_is_still_out_of_scope ... ok
+test rules::back_pointer::tests::a_comment_line_with_the_marker_yields_each_cited_id_observed_failing ... ok
+test rules::back_pointer::tests::a_citation_of_no_record_is_left_to_the_resolution_rule ... ok
+test rules::back_pointer::tests::a_declared_type_without_implementable_falls_back_to_the_rule_option_observed_failing ... ok
+test rules::back_pointer::tests::a_disabled_boundary_rule_skips_nothing ... ok
+test rules::back_pointer::tests::a_file_outside_source_paths_is_not_evidence ... ok
+test rules::back_pointer::tests::a_marker_after_code_on_the_same_line_is_read_observed_failing ... ok
+test rules::back_pointer::tests::a_file_the_diff_did_not_change_is_not_out_of_scope_observed_failing ... ok
+test rules::back_pointer::tests::a_marker_that_is_not_a_comment_marker_is_not_read ... ok
+test rules::back_pointer::tests::a_marker_inside_a_published_boundary_is_not_evidence ... ok
+test rules::back_pointer::tests::a_non_terminal_implementable_status_passes_observed_failing ... ok
+test rules::back_pointer::tests::a_non_text_file_is_unreadable_not_clean ... ok
+test rules::back_pointer::tests::a_rejected_record_is_not_accepted ... ok
+test rules::back_pointer::tests::a_path_an_exclude_excuses_does_not_become_evidence_by_being_excused ... ok
+test rules::back_pointer::tests::a_source_path_covering_no_file_is_a_finding_not_a_clean_pass ... ok
+test rules::back_pointer::tests::a_type_without_declared_statuses_uses_the_fallback_observed_failing ... ok
+test rules::back_pointer::tests::a_verifies_comment_in_a_test_file_is_test_tier_and_an_implements_elsewhere_is_code_observed_failing ... ok
+test rules::back_pointer::tests::a_verifies_citation_of_no_record_and_an_uncovered_test_path_are_findings ... ok
+test rules::back_pointer::tests::a_verifies_comment_reads_the_same_widened_id_list ... ok
+test rules::back_pointer::tests::a_verifies_comment_outside_the_test_class_or_with_no_class_declared_is_not_read ... ok
+test rules::back_pointer::tests::each_comment_leader_is_read ... ok
+test rules::back_pointer::tests::an_id_list_continues_past_a_parenthetical_note_observed_failing ... ok
+test rules::back_pointer::tests::implementable_takes_precedence_over_the_rule_fallback ... ok
+test rules::back_pointer::tests::on_a_diff_only_changed_files_are_judged_observed_failing ... ok
+test rules::back_pointer::tests::one_record_can_be_cited_at_both_tiers_observed_failing ... ok
+test rules::back_pointer::tests::prose_citing_a_record_is_not_evidence_and_a_marker_is_not_the_only_violation ... ok
+test rules::back_pointer::tests::reading_stops_at_a_segment_that_does_not_open_with_an_id ... ok
+test rules::back_pointer::tests::terminal_success_alone_does_not_permit_implementation_observed_failing ... ok
+test rules::back_pointer::tests::the_gate_judges_every_id_of_a_noted_list_and_a_trailing_marker_observed_failing ... ok
+test rules::back_pointer::tests::with_no_declared_or_fallback_statuses_the_status_cannot_be_judged_not_passed ... ok
+test rules::boundary::tests::a_back_pointer_inside_a_generated_boundary_is_reported ... ok
+test rules::boundary::tests::a_back_pointer_inside_a_published_boundary_is_a_violation_too ... ok
+test rules::boundary::tests::a_blank_or_root_entry_covers_nothing_and_is_reported_not_treated_as_everything ... ok
+test rules::boundary::tests::a_boundary_path_whose_every_file_is_excluded_covers_nothing ... ok
+test rules::boundary::tests::a_boundarys_severity_is_the_level_of_its_findings ... ok
+test rules::boundary::tests::a_declared_path_covering_no_file_fails_closed ... ok
+test rules::boundary::tests::a_file_outside_every_declared_entry_is_out_of_scope_and_never_reported ... ok
+test rules::boundary::tests::a_file_that_is_not_text_is_unreadable_not_clean ... ok
+test rules::action::tests::every_finding_a_rule_constructs_names_a_variant ... ok
+test rules::boundary::tests::a_glob_boundary_covers_what_it_matches_and_nothing_else ... ok
+test rules::boundary::tests::a_longer_declared_prefix_is_matched_whole ... ok
+test rules::boundary::tests::a_marker_excuses_a_generated_back_pointer_too ... ok
+test rules::boundary::tests::a_marker_in_an_excluded_file_is_not_read ... ok
+test rules::boundary::tests::a_marker_that_suppresses_nothing_is_reported_at_the_boundarys_severity ... ok
+test rules::boundary::tests::a_plain_record_id_inside_a_generated_boundary_is_not_reported ... ok
+test rules::boundary::tests::a_parenthesised_dotted_identifier_still_reports_the_identifier ... ok
+test rules::boundary::tests::a_prose_citation_in_a_published_file_is_a_finding_with_its_line ... ok
+test rules::boundary::tests::a_published_finding_names_the_boundarys_reason ... ok
+test rules::boundary::tests::a_structured_marker_is_a_violation_too ... ok
+test rules::boundary::tests::a_vendored_boundary_is_declared_and_prohibits_nothing ... ok
+test rules::boundary::tests::a_type_with_no_declared_prefix_is_matched_by_its_upper_cased_name ... ok
+test rules::boundary::tests::an_empty_vendored_boundary_is_still_reported_as_covering_nothing ... ok
+test rules::boundary::tests::an_exclude_matching_nothing_is_reported ... ok
+test rules::boundary::tests::an_exclude_applies_to_its_own_boundary_only ... ok
+test rules::boundary::tests::an_exclude_removes_paths_from_the_violation_check ... ok
+test rules::boundary::tests::an_identifier_inside_a_url_path_or_snake_case_name_is_not_standing_alone ... ok
+test rules::boundary::tests::an_identifier_run_into_a_non_ascii_letter_is_not_a_citation ... ok
+test rules::boundary::tests::an_identifier_that_resolves_to_nothing_is_still_a_citation ... ok
+test rules::boundary::tests::every_uncovered_and_unused_finding_names_the_config_key_that_holds_it ... ok
+test rules::boundary::tests::no_marker_is_compiled_in ... ok
+test rules::boundary::tests::path_is_published_compares_whole_components ... ok
+test rules::boundary::tests::overlapping_published_boundaries_report_a_citation_once_at_the_highest_severity ... ok
+test rules::boundary::tests::text_that_only_looks_like_an_identifier_is_not_a_citation ... ok
+test rules::boundary::tests::several_citations_on_one_line_are_each_reported ... ok
+test rules::boundary::tests::the_declared_marker_excuses_its_own_line_only ... ok
+test rules::boundary::tests::the_population_reports_what_was_examined_not_only_what_was_found ... ok
+test rules::boundary::tests::two_boundaries_over_one_file_each_apply ... ok
+test rules::boundary::tests::a_glob_entry_matches_by_component_and_a_plain_entry_is_still_a_prefix ... ok
+test rules::citation::tests::a_citation_of_a_missing_record_is_an_error_naming_file_and_line_observed_failing ... ok
+test rules::citation::tests::a_cited_path_that_does_not_exist_is_reported_and_one_that_does_is_not_observed_failing ... ok
+test rules::citation::tests::a_configured_prefix_override_is_the_one_read ... ok
+test rules::citation::tests::a_declared_external_id_is_skipped_and_a_dangling_one_is_still_reported_observed_failing ... ok
+test rules::citation::tests::a_declaration_hides_only_the_ids_it_names_observed_failing ... ok
+test rules::citation::tests::a_cited_number_missing_from_the_snapshot_is_reported_with_the_snapshot_date ... ok
+test rules::citation::tests::a_declared_id_the_record_never_cites_is_a_finding_naming_field_id_and_line_observed_failing ... ok
+test rules::citation::tests::a_declared_non_reference_id_is_neither_resolved_nor_reported_observed_failing ... ok
+test rules::citation::tests::a_dot_directory_is_a_path_not_a_host ... ok
+test rules::citation::tests::a_longer_closing_fence_and_an_unterminated_fence_hold_to_the_end ... ok
+test rules::citation::tests::a_declared_field_a_record_lacks_is_absent_not_a_finding ... ok
+test rules::citation::tests::a_malformed_entry_is_a_finding_and_never_dropped_observed_failing ... ok
+test rules::citation::tests::a_path_escaping_the_repository_matches_nothing ... ok
+test rules::citation::tests::a_declared_header_field_is_read_and_an_undeclared_one_is_not ... ok
+test rules::citation::tests::a_skipped_revision_log_citation_is_set_aside_and_prose_is_still_read ... ok
+test rules::citation::tests::a_skipped_revision_log_is_set_aside_and_the_rest_of_the_section_is_still_read ... ok
+test rules::citation::tests::a_snapshot_is_sorted_and_deduplicated ... ok
+test rules::citation::tests::a_snapshot_of_another_repository_or_schema_is_refused ... ok
+test rules::citation::tests::an_external_declaration_never_hides_an_id_of_another_prefix ... ok
+test rules::citation::tests::an_external_range_matches_inclusively_and_numerically ... ok
+test rules::citation::tests::an_id_cited_only_in_the_header_a_fence_or_a_skipped_log_is_uncited_observed_failing ... ok
+test rules::citation::tests::a_number_after_punctuation_or_at_the_line_start_is_read ... ok
+test rules::citation::tests::declared_external_ids_do_not_make_scope_matches_nothing_fire_observed_failing ... ok
+test rules::citation::tests::a_pull_request_url_of_the_declared_repository_is_read_and_another_repository_is_not ... ok
+test rules::citation::tests::directories_anchors_line_numbers_and_relative_paths_resolve ... ok
+test rules::citation::tests::double_backtick_spans_are_read ... ok
+test rules::citation::tests::external_ids_take_precedence_over_the_declaration_observed_failing ... ok
+test rules::citation::tests::each_declared_entry_is_one_field_entry_candidate_observed_failing ... ok
+test rules::citation::tests::fenced_blocks_in_a_reference_section_are_not_read ... ok
+test rules::citation::tests::fenced_code_blocks_are_skipped_and_inline_spans_are_not ... ok
+test rules::citation::tests::identifiers_embedded_in_other_tokens_are_not_citations ... ok
+test rules::citation::tests::no_declarations_is_zero_eligible_entries_and_an_unset_option_is_no_population ... ok
+test rules::citation::tests::ids_compare_by_value_and_a_list_is_comma_separated_observed_failing ... ok
+test rules::citation::tests::only_configured_prefixes_are_read ... ok
+test rules::citation::tests::only_declared_sections_are_read ... ok
+test rules::citation::tests::only_the_declared_forms_are_read ... ok
+test rules::citation::tests::parse_exact_id_accepts_one_id_and_refuses_ranges ... ok
+test rules::citation::tests::parse_external_id_accepts_exact_and_range_and_refuses_the_rest ... ok
+test rules::citation::tests::punctuation_and_possessives_around_a_citation_still_count ... ok
+test rules::citation::tests::only_the_declared_sections_are_read_and_a_record_without_one_cites_nothing ... ok
+test rules::citation::tests::removing_the_citation_clears_the_finding ... ok
+test rules::citation::tests::skip_revision_log_false_changes_nothing ... ok
+test rules::citation::tests::an_unusable_snapshot_is_a_finding_on_its_path_and_no_citation_is_examined ... ok
+test rules::citation::tests::the_declaration_is_scoped_to_its_own_record_observed_failing ... ok
+test rules::citation::tests::the_header_region_is_not_re_read ... ok
+test rules::citation::tests::the_incident_an_id_later_created_as_a_real_record_changes_nothing_observed_failing ... ok
+test rules::citation::tests::the_population_counts_citations_not_records ... ok
+test rules::citation::tests::the_notice_is_one_aggregate_and_skips_external_ids ... ok
+test rules::citation::tests::things_that_are_not_paths_are_not_read ... ok
+test rules::citation::tests::things_that_are_not_citations_are_not_read ... ok
+test rules::citation::tests::without_a_declaration_the_colliding_standard_number_is_reported ... ok
+test rules::citation::tests::with_no_fields_declared_header_fields_are_not_read ... ok
+test rules::citation::tests::without_skip_revision_log_a_revision_log_citation_is_read_observed_failing ... ok
+test rules::citation::tests::without_skip_revision_log_a_revision_log_row_is_read_observed_failing ... ok
+test rules::citation::tests::without_the_option_nothing_changes ... ok
+test rules::citation::tests::zero_padding_resolves_numerically_observed_failing ... ok
+test rules::claim::tests::a_claim_against_a_case_differently_written_status_key_is_not_judged_observed_failing ... ok
+test rules::claim::tests::a_block_list_is_a_malformed_finding_naming_the_line_observed_failing ... ok
+test rules::claim::tests::a_claim_against_a_target_whose_type_never_declares_status_is_not_judged_observed_failing ... ok
+test rules::claim::tests::a_claim_against_a_declared_failure_terminal_is_not_an_error_observed_failing ... ok
+test rules::claim::tests::a_claim_to_close_an_already_closed_record_is_silent ... ok
+test rules::claim::tests::a_digit_bearing_prefix_reference_is_recognized_observed_failing ... ok
+test rules::claim::tests::a_claim_to_close_an_open_record_is_an_error_observed_failing ... ok
+test rules::claim::tests::a_file_with_no_frontmatter_is_out_of_scope_and_disclosed_observed_failing ... ok
+test rules::claim::tests::a_fragment_listing_a_still_open_record_is_an_error_observed_failing ... ok
+test rules::claim::tests::a_hyphenated_type_prefix_is_a_recognized_reference_observed_failing ... ok
+test rules::claim::tests::a_fragment_listing_closed_records_is_clean_observed_failing ... ok
+test rules::claim::tests::a_possessive_does_not_hide_a_reference_observed_failing ... ok
+test rules::claim::tests::a_recognized_reference_parses_as_the_same_filename_prefix ... ok
+test rules::claim::tests::a_reference_without_a_closing_verb_is_not_a_claim ... ok
+test rules::claim::tests::a_listed_id_that_resolves_to_nothing_is_an_error_but_a_verb_claim_still_is_not_observed_failing ... ok
+test rules::claim::tests::a_verb_inside_another_word_is_not_a_claim_observed_failing ... ok
+test rules::claim::tests::a_value_that_is_no_id_is_malformed_and_never_guessed_at_observed_failing ... ok
+test rules::claim::tests::claim_status_agreement_reads_a_custom_status_field_name_observed_failing ... ok
+test rules::claim::tests::an_undeclared_field_changes_nothing_observed_failing ... ok
+test rules::claim::tests::closing_verbs_in_prose_are_still_read_and_counted_when_the_field_is_declared_observed_failing ... ok
+test rules::claim::tests::findings_come_back_in_file_and_line_order_observed_failing ... ok
+test rules::claim::tests::only_the_reference_the_verb_governs_is_claimed_observed_failing ... ok
+test rules::claim::tests::scanning_prose_finds_references_that_extract_references_misses ... ok
+test rules::claim::tests::one_record_listed_by_two_fragments_is_one_candidate_and_two_findings_observed_failing ... ok
+test rules::claim::tests::several_claim_files_closing_one_record_count_as_one_claim_observed_failing ... ok
+test rules::claim::tests::strict_asks_every_fragment_for_the_field_observed_failing ... ok
+test rules::claim::tests::strict_reports_a_fence_the_release_tool_cannot_read_observed_failing ... ok
+test rules::citation::tests::skip_revision_log_sets_aside_the_log_rows ... ok
+test rules::claim_field::tests::a_block_list_is_malformed_and_named_observed_failing ... ok
+test rules::claim_field::tests::a_block_without_the_key_is_missing_and_other_keys_are_ignored_observed_failing ... ok
+test rules::claim::tests::the_fallback_closed_statuses_do_not_decide_a_listed_record_observed_failing ... ok
+test rules::claim_field::tests::a_file_without_a_closed_frontmatter_block_is_not_a_fragment_observed_failing ... ok
+test rules::claim_field::tests::a_key_declared_twice_is_malformed_observed_failing ... ok
+test rules::claim_field::tests::a_key_with_no_value_and_no_list_is_malformed_observed_failing ... ok
+test rules::claim_field::tests::a_list_continued_over_lines_is_malformed_observed_failing ... ok
+test rules::claim_field::tests::a_one_line_list_is_read_in_order_observed_failing ... ok
+test rules::claim_field::tests::a_quoted_id_is_read_as_the_id_observed_failing ... ok
+test rules::claim::tests::the_field_line_is_not_read_again_as_a_closing_verb_observed_failing ... ok
+test rules::claim_field::tests::a_single_id_and_the_empty_list_are_valid_observed_failing ... ok
+test rules::claim_field::tests::a_value_that_is_not_a_list_or_an_id_is_malformed_observed_failing ... ok
+test rules::claim_field::tests::an_unterminated_fence_or_a_blank_line_before_it_is_a_broken_fence_observed_failing ... ok
+test rules::claim_field::tests::crlf_line_endings_and_a_byte_order_mark_are_read_observed_failing ... ok
+test rules::claim_field::tests::the_frontmatter_range_covers_both_fences_observed_failing ... ok
+test rules::claim_field::tests::the_key_is_whatever_configuration_names_observed_failing ... ok
+test rules::companion::tests::a_pair_with_neither_half_declared_is_reported_not_skipped ... ok
+test rules::companion::tests::a_type_declaring_no_pair_is_not_checked_and_every_pair_is ... ok
+test rules::companion::tests::a_type_declaring_one_half_of_a_declared_pair_is_reported_observed_failing ... ok
+test rules::companion::tests::both_halves_declared_is_clean ... ok
+test rules::companion::tests::the_pair_is_whatever_the_roles_name_not_embodiment_observed_failing ... ok
+test rules::dates::tests::a_type_declaring_only_one_of_the_fields_is_not_examined ... ok
+test rules::dates::tests::a_malformed_date_is_reported_observed_failing ... ok
+test rules::dates::tests::an_absent_placeholder_or_unparseable_date_is_left_to_the_field_rules ... ok
+test rules::dates::tests::an_acceptance_date_before_the_record_date_is_reported_observed_failing ... ok
+test rules::dates::tests::date_unix_converts_real_dates_and_refuses_the_rest ... ok
+test rules::dates::tests::an_impossible_calendar_date_is_reported_and_leap_days_pass ... ok
+test rules::dates::tests::equal_and_later_acceptance_dates_pass ... ok
+test rules::dates::tests::the_options_load_only_on_their_rules_and_are_required ... ok
+test rules::dates::tests::the_rule_counts_the_date_values_it_examined ... ok
+test rules::decider::tests::a_new_record_and_an_unreadable_base_count_as_a_move ... ok
+test rules::decider::tests::a_decider_author_passes_and_anyone_else_is_an_error ... ok
+test rules::dates::tests::date_order_loads_only_on_its_rule_and_is_validated ... ok
+test rules::decider::tests::a_protected_path_needs_the_group ... ok
+test rules::decider::tests::no_diff_is_not_applicable_not_clean ... ok
+test rules::declaration::tests::a_declared_date_and_author_field_is_not_a_finding ... ok
+test rules::declaration::tests::a_field_present_in_both_pointer_and_narrative_lists_is_an_overlap_observed_failing ... ok
+test rules::declaration::tests::a_header_none_type_with_a_relation_field_override_is_a_contradiction_observed_failing ... ok
+test rules::declaration::tests::a_header_none_type_with_an_empty_pointer_fields_list_is_not_a_contradiction ... ok
+test rules::declaration::tests::a_header_none_type_with_known_fields_is_a_contradiction_observed_failing ... ok
+test rules::decider::tests::no_actors_is_info_unless_evidence_is_required ... ok
+test rules::declaration::tests::a_header_none_type_with_narrative_fields_is_a_contradiction_observed_failing ... ok
+test rules::declaration::tests::a_header_none_type_with_no_required_fields_is_not_a_contradiction ... ok
+test rules::declaration::tests::a_header_none_type_with_no_known_fields_is_not_a_missing_declaration_observed_failing ... ok
+test rules::declaration::tests::a_header_none_type_with_pointer_fields_is_a_contradiction_observed_failing ... ok
+test rules::declaration::tests::a_header_none_type_with_required_fields_is_a_contradiction_observed_failing ... ok
+test rules::declaration::tests::a_pointer_field_absent_from_known_fields_is_a_finding_observed_failing ... ok
+test rules::declaration::tests::a_pointer_field_differing_only_in_case_is_absent_from_known_fields ... ok
+test rules::decider::tests::a_status_that_did_not_move_or_is_not_gated_is_not_judged ... ok
+test rules::declaration::tests::a_relation_field_absent_from_known_fields_is_a_finding_observed_failing ... ok
+test rules::declaration::tests::a_pointer_field_present_in_known_fields_is_not_a_finding ... ok
+test rules::declaration::tests::a_relation_field_present_in_known_fields_is_not_a_finding ... ok
+test rules::declaration::tests::a_type_declaring_both_lists_including_an_explicit_empty_one_is_not_missing ... ok
+test rules::declaration::tests::a_type_declaring_known_fields_as_an_explicit_empty_list_is_not_missing ... ok
+test rules::declaration::tests::a_type_declaring_neither_list_is_not_missing ... ok
+test rules::declaration::tests::a_type_declaring_only_pointer_fields_is_a_missing_declaration_observed_failing ... ok
+test rules::declaration::tests::a_type_with_no_known_fields_declared_is_a_missing_declaration_observed_failing ... ok
+test rules::declaration::tests::a_type_with_no_declared_relation_fields_is_not_a_finding ... ok
+test rules::declaration::tests::an_undeclared_date_or_author_field_is_a_finding_observed_failing ... ok
+test rules::declaration::tests::disjoint_pointer_and_narrative_lists_are_not_an_overlap ... ok
+test rules::declaration::tests::pointer_and_narrative_names_differing_only_in_case_do_not_overlap ... ok
+test rules::declaration::tests::the_case_only_hint_names_the_same_declaration_every_run ... ok
+test rules::action::tests::a_declared_variant_is_constructed_by_some_rule ... ok
+test rules::diff_gate::tests::a_deleted_record_does_not_release_the_gate ... ok
+test rules::diff_gate::tests::a_decided_decision_a_fix_or_a_link_to_a_decided_decision_releases_the_gate ... ok
+test rules::diff_gate::tests::a_glob_source_path_selects_by_pattern_and_a_prefix_config_is_unchanged ... ok
+test rules::diff_gate::tests::an_excluded_path_is_still_set_aside_by_the_gate ... ok
+test rules::diff_gate::tests::no_diff_is_not_applicable_for_both_rules ... ok
+test rules::diff_gate::tests::an_undecided_decision_an_unresolved_link_and_a_link_to_an_undecided_one_do_not_observed_failing ... ok
+test rules::diff_gate::tests::one_decision_type_names_the_record_to_add_and_several_do_not ... ok
+test rules::diff_gate::tests::the_record_dir_is_whatever_the_config_declares ... ok
+test rules::diff_gate::tests::the_message_names_what_would_release_the_gate_and_the_near_miss ... ok
+test rules::diff_gate::tests::without_decision_types_any_governed_record_still_releases_the_rule ... ok
+test rules::embodiment::tests::a_back_pointer_never_outranks_a_test_locator_or_a_drift ... ok
+test rules::embodiment::tests::a_back_pointer_lifts_a_specified_record_to_implemented_observed_failing ... ok
+test rules::embodiment::tests::a_claim_older_than_claim_max_age_days_warns_and_only_when_declared ... ok
+test rules::embodiment::tests::a_code_only_back_pointer_does_not_reach_verified ... ok
+test rules::embodiment::tests::a_claim_retained_status_keeps_its_claim_observed_failing ... ok
+test rules::embodiment::tests::a_comma_followed_by_a_category_prefix_separates_entries ... ok
+test rules::embodiment::tests::a_comma_followed_by_an_unknown_prefix_stays_in_the_path ... ok
+test rules::embodiment::tests::a_comma_inside_a_locator_path_is_part_of_the_path_observed_failing ... ok
+test rules::diff_gate::tests::exclude_globs_also_narrow_the_mixed_rule ... ok
+test rules::embodiment::tests::a_declared_sticky_state_is_not_drift_and_a_neighbour_still_is_observed_failing ... ok
+test rules::diff_gate::tests::a_diff_touching_only_excluded_files_is_not_a_trigger_observed_failing ... ok
+test rules::embodiment::tests::a_declared_success_overrides_the_option ... ok
+test rules::embodiment::tests::a_drifted_record_computes_to_drift_detected_regardless_of_tier ... ok
+test rules::embodiment::tests::a_locator_cited_by_only_one_record_is_not_a_promotion_candidate ... ok
+test rules::embodiment::tests::a_dot_or_dotdot_spelled_locator_resolves_to_the_tracked_file_observed_failing ... ok
+test rules::embodiment::tests::a_finding_that_used_no_back_pointer_names_only_realized_by ... ok
+test rules::embodiment::tests::a_locator_cited_by_two_records_is_a_promotion_candidate_observed_failing ... ok
+test rules::embodiment::tests::a_locator_naming_an_untracked_file_on_disk_is_its_own_variant_observed_failing ... ok
+test rules::embodiment::tests::a_locator_naming_a_missing_path_is_an_error_observed_failing ... ok
+test rules::embodiment::tests::a_malformed_last_audit_date_is_reported_and_a_good_or_absent_one_is_not ... ok
+test rules::embodiment::tests::a_proposed_record_stating_implemented_or_verified_is_a_finding_observed_failing ... ok
+test rules::embodiment::tests::a_record_marked_drifted_produces_a_finding_even_when_verified_matches_its_tier ... ok
+test rules::embodiment::tests::a_locator_that_does_not_parse_is_a_malformed_finding_not_a_missing_path ... ok
+test rules::embodiment::tests::a_record_missing_half_the_pair_is_handed_to_the_rule_and_not_judged ... ok
+test rules::embodiment::tests::a_record_stating_no_tier_with_no_evidence_stays_unjudged_and_unexamined ... ok
+test rules::embodiment::tests::a_record_with_no_realized_by_is_judged_when_cited_observed_failing ... ok
+test rules::embodiment::tests::a_slot_declared_only_as_required_is_still_a_declared_slot ... ok
+test rules::embodiment::tests::a_sticky_state_is_not_a_verification_claim_so_it_draws_no_age_warning ... ok
+test rules::embodiment::tests::a_sticky_state_with_no_realized_by_is_examined_and_clean ... ok
+test rules::embodiment::tests::a_test_locator_outranks_a_code_locator ... ok
+test rules::embodiment::tests::a_test_back_pointer_computes_verified_observed_failing ... ok
+test rules::embodiment::tests::a_tier_claim_with_no_evidence_is_examined_in_the_census ... ok
+test rules::embodiment::tests::a_tier_claim_with_no_evidence_of_either_kind_is_reported ... ok
+test rules::embodiment::tests::a_type_declaring_a_custom_locator_field_name_is_read_by_that_name_observed_failing ... ok
+test rules::embodiment::tests::a_type_declaring_custom_embodiment_field_names_is_read_by_those_names_observed_failing ... ok
+test rules::embodiment::tests::a_type_declaring_no_success_uses_the_option_and_without_it_is_not_examined ... ok
+test rules::embodiment::tests::an_empty_declared_directory_is_not_a_finding ... ok
+test rules::embodiment::tests::embodiment_agreeing_with_realized_by_produces_no_finding ... ok
+test rules::embodiment::tests::an_exclude_files_entry_matching_no_file_is_a_warning_observed_failing ... ok
+test rules::embodiment::tests::embodiment_disagreeing_with_realized_by_is_a_planted_violation_observed_failing ... ok
+test rules::embodiment::tests::fresh_drift_accepts_either_the_tier_or_drift_detected_observed_failing ... ok
+test rules::embodiment::tests::one_record_citing_the_same_locator_under_two_categories_is_not_a_promotion_candidate ... ok
+test rules::embodiment::tests::a_pinned_scope_that_resolves_is_silent ... ok
+test rules::embodiment::tests::only_the_declared_states_are_sticky ... ok
+test rules::embodiment::tests::a_scope_without_a_pin_is_reported_and_names_the_authoring_route ... ok
+test rules::embodiment::tests::other_readers_see_the_bare_path_whatever_the_pin_or_scope ... ok
+test rules::embodiment::tests::realized_by_locator_paths_flattens_all_three_categories ... ok
+test rules::embodiment::tests::with_no_sticky_states_declared_deprecated_is_drift_as_before ... ok
+test rules::embodiment::tests::the_same_record_accepted_is_not_a_finding ... ok
+test rules::embodiment::tests::without_a_back_pointer_the_same_record_still_computes_specified ... ok
+test rules::field::tests::a_clean_value_is_not_reported_as_untrimmed ... ok
+test rules::embodiment::tests::specified_and_inactive_on_a_proposed_record_are_not_flagged ... ok
+test rules::field::tests::a_header_none_type_is_out_of_scope_not_unreadable_for_field_pending_observed_failing ... ok
+test rules::field::tests::a_header_none_type_is_out_of_scope_not_unreadable_for_field_quality_observed_failing ... ok
+test rules::field::tests::a_header_none_type_is_out_of_scope_not_unreadable_for_field_untrimmed_value_observed_failing ... ok
+test rules::field::tests::a_declared_pending_vocabulary_matches_whole_values_observed_failing ... ok
+test rules::field::tests::a_pending_field_belongs_to_field_pending_not_field_quality ... ok
+test rules::field::tests::a_slot_behind_an_unparsed_header_is_not_judged_and_not_reported_on ... ok
+test rules::field::tests::a_status_carrying_whitespace_does_not_silently_match_and_is_reported ... ok
+test rules::field::tests::a_type_declaring_no_pending_vocabulary_keeps_the_substring_match ... ok
+test rules::field::tests::a_value_starting_with_a_reserved_yaml_indicator_is_reported_observed_failing ... ok
+test rules::field::tests::a_value_with_no_reserved_leading_character_is_not_reported ... ok
+test rules::field::tests::a_value_with_trailing_whitespace_is_reported_observed_failing ... ok
+test rules::field::tests::field_quality_discloses_unreadable_on_its_own_observed_failing ... ok
+test rules::field::tests::field_quality_flags_a_retired_placeholder_as_an_error ... ok
+test rules::field::tests::field_quality_flags_placeholder_not_just_absence ... ok
+test rules::field::tests::an_unlisted_field_declares_no_severity_of_its_own_observed_failing ... ok
+test rules::field::tests::field_pending_reports_each_field_at_its_own_declared_level_observed_failing ... ok
+test rules::field::tests::field_quality_passes_a_real_value ... ok
+test rules::field::tests::the_no_value_em_dash_sentinel_is_not_reported ... ok
+test rules::field::tests::field_quality_reports_each_field_at_its_own_declared_level_observed_failing ... ok
+test rules::field::tests::the_option_is_refused_on_any_other_rule ... ok
+test rules::field::tests::two_untrimmed_fields_report_in_a_deterministic_order_observed_failing ... ok
+test rules::field::tests::without_the_option_no_finding_declares_a_severity ... ok
+test rules::field::tests::pending_is_legitimate_until_the_required_status_observed_failing ... ok
+test rules::filename::tests::a_conforming_corpus_and_an_empty_dir_are_silent_but_still_counted ... ok
+test rules::filename::tests::a_date_or_version_title_is_not_an_id_observed_failing ... ok
+test rules::field::tests::without_the_option_pending_is_reported_at_every_status ... ok
+test rules::embodiment::tests::every_scope_failure_is_one_finding_with_its_reason ... ok
+test rules::filename::tests::a_bare_number_corpus_under_a_declared_pattern_gets_a_rename_that_matches_it ... ok
+test rules::filename::tests::a_hyphenated_type_prefix_is_kept_whole ... ok
+test rules::filename::tests::a_title_id_is_a_leading_prefix_n_or_a_bare_n_when_no_pattern_is_declared ... ok
+test rules::filename::tests::a_title_number_too_large_to_compare_is_reported_as_overflow_not_as_absent_observed_failing ... ok
+test rules::filename::tests::a_whole_bare_number_corpus_is_one_finding_per_type_with_every_expected_name ... ok
+test rules::filename::tests::an_empty_h1_skips_that_line_and_keeps_looking ... ok
+test rules::filename::tests::an_undeclared_type_keeps_accepting_any_title_form ... ok
+test rules::filename::tests::a_declared_prefix_title_form_is_required ... ok
+test rules::filename::tests::filename_title_consistency_closes_a_fence_only_on_its_own_marker_observed_failing ... ok
+test rules::filename::tests::filename_title_consistency_ignores_an_h1_inside_a_fenced_block_observed_failing ... ok
+test rules::filename::tests::filename_title_consistency_distinguishes_an_unnumbered_h1_observed_failing ... ok
+test rules::filename::tests::filename_title_consistency_keeps_the_absent_h1_message ... ok
+test rules::filename::tests::filename_title_consistency_reads_the_number_past_a_hyphenated_prefix ... ok
+test rules::filename::tests::filename_title_consistency_reports_the_real_h1_line_observed_failing ... ok
+test rules::filename::tests::filename_title_consistency_skips_a_legacy_shaped_filename ... ok
+test rules::filename::tests::filename_title_consistency_still_catches_a_real_mismatch_on_the_new_shape ... ok
+test rules::filename::tests::filename_title_consistency_treats_an_empty_h1_as_absent ... ok
+test rules::filename::tests::filename_title_mismatch_is_a_planted_violation_observed_failing ... ok
+test rules::filename::tests::matching_filename_and_title_produce_no_finding ... ok
+test rules::filename::tests::one_off_pattern_file_among_conforming_ones_is_one_finding_observed_failing ... ok
+test rules::header::tests::a_broken_yaml_header_surfaces_the_real_parse_error_observed_failing ... ok
+test rules::header::tests::a_declared_field_never_written_at_all_is_absent_not_reported ... ok
+test rules::filename::tests::a_declared_pattern_decides_what_is_off_pattern ... ok
+test rules::header::tests::a_declared_field_written_correctly_cased_is_not_reported ... ok
+test rules::header::tests::a_declared_field_written_under_a_different_case_is_reported_observed_failing ... ok
+test rules::header::tests::a_header_none_type_is_out_of_scope_for_case_variant_key ... ok
+test rules::header::tests::a_header_none_type_is_out_of_scope_not_unreadable_for_header_field_case_mismatch_observed_failing ... ok
+test rules::header::tests::a_header_none_type_is_out_of_scope_not_unreadable_for_header_required_fields_observed_failing ... ok
+test rules::header::tests::a_header_none_type_is_out_of_scope_not_unreadable_for_header_field_set_consistency_observed_failing ... ok
+test rules::header::tests::a_known_field_produces_no_finding ... ok
+test rules::header::tests::a_planted_violation_is_observed_failing ... ok
+test rules::header::tests::a_present_required_field_produces_no_finding ... ok
+test rules::header::tests::a_type_declaring_no_header_is_not_reported_as_missing_one_observed_failing ... ok
+test rules::header::tests::a_record_with_no_case_variants_is_examined_and_clean ... ok
+test rules::header::tests::an_exact_repeat_is_not_this_rule_s_finding ... ok
+test rules::header::tests::a_type_with_no_declared_known_fields_is_skipped_entirely ... ok
+test rules::header::tests::an_exact_repeat_beside_a_case_variant_still_reports_the_variant_once ... ok
+test rules::header::tests::an_unreadable_header_is_unreadable_not_clean ... ok
+test rules::header::tests::an_undeclared_field_is_a_finding ... ok
+test rules::header::tests::an_unprefixed_unknown_key_stays_a_finding_when_the_option_is_declared ... ok
+test rules::header::tests::header_field_set_consistency_does_not_count_an_unparsed_header ... ok
+test rules::header::tests::it_leaves_the_exact_match_rules_verdicts_unchanged ... ok
+test rules::header::tests::an_x_prefixed_key_is_a_finding_when_the_option_is_absent_or_false ... ok
+test rules::header::tests::an_x_prefixed_key_is_exempt_when_the_option_is_declared_observed_failing ... ok
+test rules::header::tests::missing_required_field_is_a_finding ... ok
+test rules::header::tests::non_ascii_case_variants_are_reported_but_sharp_s_is_not_folded ... ok
+test rules::header::tests::the_rule_needs_no_field_declaration_at_all_observed_failing ... ok
+test rules::header::tests::three_spellings_of_one_key_are_one_finding_naming_all_three ... ok
+test rules::header::tests::two_independent_case_variant_pairs_are_two_findings_in_header_order ... ok
+test rules::header::tests::variants_in_two_different_records_are_not_one_pair ... ok
+test rules::header::tests::works_on_yaml_frontmatter_headers_too ... ok
+test rules::header::tests::two_keys_differing_only_by_case_are_reported_observed_failing ... ok
+test rules::identity::tests::a_configured_type_prefix_resolves_independently_of_the_type_name ... ok
+test rules::identity::tests::a_bare_numeric_filename_has_no_identity_even_with_a_declaration ... ok
+test rules::identity::tests::a_five_digit_filename_still_resolves_bug_0002_observed_failing ... ok
+test rules::identity::tests::a_legacy_pre_type_prefix_filename_no_longer_resolves ... ok
+test rules::identity::tests::a_reference_resolves_regardless_of_zero_padding ... ok
+test rules::index::tests::a_broken_multi_line_entry_is_reported_at_the_failing_line_and_later_entries_still_read ... ok
+test rules::index::tests::a_current_index_is_clean_and_counted ... ok
+test rules::index::tests::a_duplicated_entry_is_reported ... ok
+test rules::index::tests::a_line_the_format_does_not_match_is_a_finding_not_skipped ... ok
+test rules::identity::tests::a_declared_pattern_replaces_the_type_prefix_convention ... ok
+test rules::index::tests::a_link_list_needs_no_id_token_and_identifies_by_file ... ok
+test rules::identity::tests::a_declared_pattern_gives_a_padded_filename_an_identity ... ok
+test rules::index::tests::a_listed_field_the_record_lacks_is_reported ... ok
+test rules::index::tests::a_missing_artifact_is_an_error_and_not_counted_as_compared ... ok
+test rules::index::tests::a_record_with_no_entry_is_reported_by_id ... ok
+test rules::index::tests::a_multi_line_entry_is_checked_as_one_entry_observed_failing ... ok
+test rules::index::tests::a_removed_marker_pair_is_an_error ... ok
+test rules::index::tests::a_stale_title_names_both_titles ... ok
+test rules::index::tests::a_stale_file_name_is_a_finding ... ok
+test rules::index::tests::a_title_excludes_the_records_own_id_whatever_its_form ... ok
+test rules::index::tests::a_truncated_multi_line_entry_is_incomplete_not_ignored ... ok
+test rules::index::tests::an_end_marker_before_the_begin_marker_is_an_error ... ok
+test rules::index::tests::an_artifact_that_is_not_text_is_unreadable_not_clean ... ok
+test rules::index::tests::an_entry_naming_no_record_is_reported_with_its_line ... ok
+test rules::index::tests::only_records_of_the_declared_type_are_expected ... ok
+test rules::index::tests::padding_in_the_listed_id_does_not_make_an_entry_extra ... ok
+test rules::index::tests::declared_field_columns_are_checked_against_the_record_observed_failing ... ok
+test rules::index::tests::regeneration_fills_field_columns_and_a_missing_field_is_an_error ... ok
+test rules::index::tests::regeneration_refuses_rather_than_guess ... ok
+test rules::index::tests::regeneration_of_a_whole_file_multi_line_and_missing_artifact ... ok
+test rules::index::tests::regeneration_fills_the_marked_region_keeps_the_rest_and_a_second_run_changes_nothing_observed_failing ... ok
+test rules::index::tests::the_format_parser_accepts_multi_line_and_file_only_and_refuses_ambiguity ... ok
+test rules::index::tests::the_format_parser_rejects_what_cannot_be_matched ... ok
+test rules::index::tests::without_markers_every_non_blank_line_is_an_entry ... ok
+test rules::narrative::tests::a_blocked_on_pointer_to_a_non_terminal_record_is_not_stale ... ok
+test rules::narrative::tests::a_dangling_blocked_on_reference_is_not_this_rule_s_job ... ok
+test rules::narrative::tests::blocked_on_free_text_with_no_reference_is_skipped ... ok
+test rules::narrative::tests::a_blocked_on_pointer_to_a_terminal_bug_is_a_stale_finding ... ok
+test rules::narrative::tests::narrative_field_stale_generalizes_beyond_blocked_on ... ok
+test rules::narrative::tests::narrative_field_stale_judges_a_type_the_engine_has_never_heard_of ... ok
+test rules::options::tests::an_absent_optional_option_is_not_an_empty_one ... ok
+test rules::narrative::tests::narrative_field_stale_reads_a_custom_status_field_name_observed_failing ... ok
+test rules::narrative::tests::narrative_field_stale_reads_the_declared_terminals_observed_failing ... ok
+test rules::filename::tests::a_declared_pattern_reads_the_title_id_as_its_prefix_and_a_number ... ok
+test rules::options::tests::an_off_or_undeclared_rule_has_no_enabled_options ... ok
+test rules::options::tests::an_enabled_rule_yields_its_declared_options ... ok
+test rules::options::tests::the_claim_field_options_are_read_through_the_typed_accessor_observed_failing ... ok
+test rules::override_log::tests::a_declared_log_that_does_not_exist_is_reported_and_unreadable ... ok
+test rules::options::tests::locator_kinds_and_pinnable_default_to_file_and_are_checked_at_load ... ok
+test rules::override_log::tests::a_blank_placeholder_or_pending_reviewer_is_not_a_review ... ok
+test rules::override_log::tests::a_row_that_is_not_an_entry_is_a_finding_not_a_skip ... ok
+test rules::options::tests::verb_claims_defaults_to_true_and_reads_false ... ok
+test rules::override_log::tests::prose_headings_and_the_table_header_are_not_entries ... ok
+test rules::override_log::tests::a_declared_pending_value_or_pattern_is_not_a_review ... ok
+test rules::override_log::tests::an_entry_with_a_blank_reviewer_is_reported_and_a_reviewed_one_is_not ... ok
+test rules::override_log::tests::a_named_reviewer_is_a_review ... ok
+test rules::pointer::tests::a_bare_placeholder_field_is_still_not_flagged ... ok
+test rules::pointer::tests::a_bare_hyphen_number_token_is_not_a_reference_observed_failing ... ok
+test rules::pointer::tests::a_clean_bare_reference_is_not_flagged ... ok
+test rules::pointer::tests::a_dangling_parent_pointer_is_an_error ... ok
+test rules::pointer::tests::a_derives_from_status_annotation_is_flagged_observed_failing ... ok
+test rules::pointer::tests::a_header_none_type_is_out_of_scope_not_unreadable_for_header_pointer_field_clean_observed_failing ... ok
+test rules::pointer::tests::a_non_resolving_pointer_is_an_error ... ok
+test rules::pointer::tests::a_parent_field_with_freeform_trailing_prose_is_flagged ... ok
+test rules::pointer::tests::a_parent_pointer_resolves_the_same_as_implements ... ok
+test rules::pointer::tests::a_placeholder_entry_mixed_with_a_real_reference_is_not_flagged_observed_failing ... ok
+test rules::pointer::tests::a_reference_to_an_untracked_file_on_disk_is_its_own_variant_observed_failing ... ok
+test rules::pointer::tests::header_pointer_field_clean_discloses_unreadable_on_its_own_observed_failing ... ok
+test rules::pointer::tests::an_empty_entry_between_commas_is_flagged_not_silently_skipped ... ok
+test rules::pointer::tests::multiple_clean_references_are_not_flagged ... ok
+test rules::pointer::tests::a_type_declaring_a_custom_status_field_name_is_read_by_that_name_observed_failing ... ok
+test rules::pointer::tests::narrative_fields_are_excluded_even_with_trailing_prose ... ok
+test rules::pointer::tests::target_status_judges_only_the_statuses_a_repository_declared ... ok
+test rules::relation::tests::a_claim_to_a_type_outside_a_scoped_pair_is_eligible_and_unexamined_not_an_error_observed_failing ... ok
+test rules::relation::tests::a_claim_naming_several_targets_is_judged_per_target ... ok
+test rules::relation::tests::a_cross_type_claim_in_a_same_type_pair_is_left_to_its_own_rule ... ok
+test rules::relation::tests::a_draft_claim_echoed_only_in_a_pending_field_is_provisional_observed_failing ... ok
+test rules::relation::tests::a_draft_claim_the_peer_settles_is_not_reported ... ok
+test rules::relation::tests::a_forward_claim_the_inverse_side_does_not_echo_is_a_finding ... ok
+test rules::relation::tests::a_one_directional_supersession_claim_is_a_reciprocity_violation ... ok
+test rules::relation::tests::a_pair_claim_naming_no_record_is_a_finding ... ok
+test rules::relation::tests::a_pair_claim_on_an_untracked_file_on_disk_is_its_own_variant_observed_failing ... ok
+test rules::relation::tests::a_pair_declaring_no_provisional_split_is_unchanged_by_status ... ok
+test rules::relation::tests::a_pair_discloses_an_unreadable_header ... ok
+test rules::relation::tests::a_pair_declaring_no_reciprocity_is_not_examined ... ok
+test rules::relation::tests::a_reciprocated_pair_has_no_finding_and_both_slots_are_examined ... ok
+test rules::relation::tests::a_pair_may_span_two_record_types ... ok
+test rules::relation::tests::a_reciprocated_supersession_produces_no_finding ... ok
+test rules::relation::tests::a_record_of_a_type_outside_a_scoped_pair_is_not_its_business ... ok
+test rules::relation::tests::a_scoped_pair_still_judges_claims_between_its_own_types ... ok
+test rules::relation::tests::a_provisional_claim_the_peer_acknowledges_is_not_reported_observed_failing ... ok
+test rules::relation::tests::a_self_referencing_claim_is_judged_like_any_other ... ok
+test rules::relation::tests::a_supersession_to_an_untracked_file_on_disk_is_its_own_variant_observed_failing ... ok
+test rules::relation::tests::a_supersession_slot_declared_only_as_required_is_still_declared ... ok
+test rules::relation::tests::a_target_type_that_declares_no_echo_field_cannot_echo ... ok
+test rules::relation::tests::a_target_with_an_unreadable_header_is_not_blamed_for_failing_to_reciprocate_observed_failing ... ok
+test rules::relation::tests::a_type_declaring_a_custom_supersession_field_name_is_read_by_that_name_observed_failing ... ok
+test rules::relation::tests::an_accepted_claim_is_not_settled_by_an_acknowledgement_observed_failing ... ok
+test rules::relation::tests::an_accepted_claim_with_the_same_gap_keeps_the_full_severity_observed_failing ... ok
+test rules::relation::tests::an_em_dash_supersession_value_answers_its_slot ... ok
+test rules::relation::tests::an_unreadable_target_is_not_blamed_on_the_citer ... ok
+test rules::relation::tests::relation_target_status_undeclared_flags_a_resolving_reference_to_an_undeclaring_type_observed_failing ... ok
+test rules::relation::tests::an_inverse_claim_the_forward_side_does_not_echo_is_a_finding ... ok
+test rules::relation::tests::supersession_reciprocity_discloses_unreadable_on_its_own_observed_failing ... ok
+test rules::relation::tests::relation_target_status_undeclared_is_silent_when_the_target_declares_status ... ok
+test rules::relation::tests::the_same_claim_in_a_global_pair_still_errors ... ok
+test rules::revision_log::tests::a_marker_inside_a_fenced_block_is_not_the_log ... ok
+test rules::revision_log::tests::a_declared_heading_identity_finds_a_renamed_section ... ok
+test rules::relation::tests::two_records_each_claiming_the_forward_direction_are_not_reciprocal ... ok
+test rules::revision_log::tests::a_record_of_a_type_declaring_required_false_with_no_log_is_absent_and_silent ... ok
+test rules::revision_log::tests::a_record_of_a_type_declaring_required_true_with_no_revision_log_section_is_a_finding ... ok
+test rules::revision_log::tests::a_record_of_a_type_that_does_not_declare_revision_log_with_no_log_is_absent_and_silent ... ok
+test rules::revision_log::tests::a_revision_log_entry_with_no_real_change_class_is_a_planted_violation_observed_failing ... ok
+test rules::revision_log::tests::prose_mentioning_the_marker_does_not_hide_the_real_log_observed_failing ... ok
+test rules::revision_log::tests::a_revision_log_entry_with_a_real_change_class_produces_no_finding ... ok
+test rules::roadmap::tests::an_id_with_no_number_falls_back_to_text ... ok
+test rules::roadmap::tests::group_values_sort_by_the_same_order ... ok
+test rules::roadmap::tests::the_number_is_compared_as_a_number_after_the_prefix_as_text ... ok
+test rules::runner::tests::a_diff_run_keeps_a_path_anchored_finding_only_for_a_changed_path ... ok
+test rules::runner::tests::a_path_scope_keeps_what_is_not_a_record_whatever_the_prefix ... ok
+test rules::runner::tests::a_level_declared_for_the_finding_outranks_the_rule_level ... ok
+test rules::runner::tests::a_declared_file_is_kept_only_for_the_rule_that_declares_it ... ok
+test rules::runner::tests::a_rule_the_repository_has_not_enabled_is_never_run ... ok
+test rules::runner::tests::the_declared_level_replaces_the_severity_the_rule_chose ... ok
+test rules::schema_version::tests::a_config_at_the_current_version_is_examined_and_clean ... ok
+test rules::runner::tests::the_table_lists_phases_in_the_order_they_run ... ok
+test rules::section::tests::a_complete_y_statement_after_the_marker_passes ... ok
+test rules::section::tests::a_decisionless_status_is_exempt_and_counted_eligible_and_unexamined_observed_failing ... ok
+test rules::section::tests::a_declared_alias_satisfies_the_requirement_and_is_disclosed_observed_failing ... ok
+test rules::schema_version::tests::an_upgraded_config_is_one_warning_on_the_config_file_with_the_command ... ok
+test rules::section::tests::a_header_none_type_declaring_exempt_statuses_is_out_of_scope_not_unreadable ... ok
+test rules::section::tests::a_declared_marker_the_section_lacks_is_a_finding_not_a_whole_section_scan ... ok
+test rules::section::tests::a_depth_two_declaration_with_only_h2_requirements_behaves_as_depth_one ... ok
+test rules::section::tests::a_header_only_table_and_no_table_are_both_findings ... ok
+test rules::section::tests::a_list_item_ends_the_block ... ok
+test rules::section::tests::a_heading_inside_a_code_fence_is_not_a_section ... ok
+test rules::section::tests::a_marker_with_no_block_is_its_own_error ... ok
+test rules::section::tests::a_missing_required_h3_is_a_finding_naming_its_level_and_parent ... ok
+test rules::section::tests::a_missing_phrase_is_named ... ok
+test rules::section::tests::a_missing_section_is_absent_for_shape_and_reported_by_required_only ... ok
+test rules::section::tests::a_missing_required_section_is_a_finding_naming_it_and_every_slot_is_counted ... ok
+test rules::section::tests::a_record_with_every_required_section_is_clean ... ok
+test rules::section::tests::a_phrase_wrapped_across_blockquote_lines_is_found ... ok
+test rules::section::tests::a_required_h3_under_its_h2_is_found_and_counted_observed_failing ... ok
+test rules::section::tests::a_record_with_no_status_is_not_exempt ... ok
+test rules::section::tests::a_type_declaring_sections_without_required_has_nothing_eligible ... ok
+test rules::section::tests::a_table_inside_a_code_fence_is_not_a_table ... ok
+test rules::section::tests::a_required_h3_can_carry_a_shape_and_it_is_judged_inside_the_h3 ... ok
+test rules::section::tests::a_type_declaring_no_sections_behaves_as_today ... ok
+test rules::section::tests::an_all_empty_row_is_not_a_data_row ... ok
+test rules::section::tests::a_wrapped_y_statement_is_one_block ... ok
+test rules::section::tests::a_y_statement_in_the_preamble_is_judged_by_the_same_shape_check_observed_failing ... ok
+test rules::section::tests::an_unreadable_header_cannot_be_judged_exempt_and_is_counted_unreadable ... ok
+test rules::section::tests::an_h3_of_the_right_name_under_the_wrong_h2_does_not_satisfy_under ... ok
+test rules::section::tests::an_h2_of_the_same_name_does_not_satisfy_an_h3_requirement_and_the_reverse ... ok
+test rules::section::tests::matching_is_on_word_boundaries ... ok
+test rules::section::tests::one_data_row_fails_and_says_how_many ... ok
+test rules::section::tests::the_larger_of_two_tables_decides ... ok
+test rules::section::tests::phrases_outside_the_block_do_not_count ... ok
+test rules::section::tests::shape_skips_an_exempt_record ... ok
+test rules::section::tests::two_data_rows_pass ... ok
+test rules::section::tests::the_name_wins_over_an_alias_and_neither_is_a_finding_naming_both ... ok
+test rules::section::tests::without_a_declared_marker_the_first_paragraph_is_the_block ... ok
+test rules::section::tests::the_preamble_is_read_only_when_declared_and_only_when_the_marker_is_there ... ok
+test rules::sequence::tests::a_blocker_on_an_untracked_file_on_disk_is_its_own_variant_observed_failing ... ok
+test rules::sequence::tests::a_chain_and_a_diamond_are_not_cycles_and_are_counted_examined ... ok
+test rules::section::tests::the_shape_check_follows_an_alias ... ok
+test rules::sequence::tests::a_claim_the_pointer_rules_report_is_not_reported_again ... ok
+test rules::sequence::tests::a_cycle_is_only_looked_for_in_pairs_that_declare_acyclic ... ok
+test rules::sequence::tests::a_cycle_across_record_types_is_reported ... ok
+test rules::sequence::tests::a_dangling_target_is_reported_by_the_unresolved_blocker_rule ... ok
+test rules::sequence::tests::a_pair_field_that_is_not_a_pointer_field_is_always_reported ... ok
+test rules::sequence::tests::a_record_that_depends_on_itself_is_a_cycle ... ok
+test rules::sequence::tests::a_two_record_cycle_is_reported_on_both_records_with_its_path ... ok
+test rules::sequence::tests::a_value_that_names_no_record_is_reported_not_dropped ... ok
+test rules::sequence::tests::an_unacyclic_pair_is_not_the_unresolved_blocker_rules ... ok
+test rules::sequence::tests::an_entry_that_starts_with_a_reference_but_is_not_one_is_prose ... ok
+test rules::sequence::tests::an_unwritten_field_and_the_nothing_here_sentinel_are_not_findings ... ok
+test rules::sequence::tests::an_unresolved_target_is_no_edge_and_does_not_hide_a_real_cycle ... ok
+test rules::sequence::tests::the_blocks_side_is_checked_for_dangling_targets_too ... ok
+test rules::sequence::tests::the_written_inverse_field_contributes_the_reverse_edge ... ok
+test rules::status::tests::a_blank_or_template_value_does_not_satisfy_a_requirement ... ok
+test rules::status::tests::a_declared_pending_value_does_not_satisfy_a_requirement_observed_failing ... ok
+test rules::status::tests::a_declared_status_is_not_reported ... ok
+test rules::status::tests::a_type_declaring_no_statuses_is_not_examined ... ok
+test rules::status::tests::a_status_outside_the_declared_set_is_reported_observed_failing ... ok
+test rules::status::tests::a_forbidden_field_on_the_wrong_status_is_reported_observed_failing ... ok
+test rules::status::tests::an_accepted_record_without_deciders_fails_and_a_proposed_one_passes_observed_failing ... ok
+test rules::status::tests::a_missing_required_field_reports_at_its_own_declared_level_observed_failing ... ok
+test rules::table::tests::a_rule_anchor_agrees_with_its_scope ... ok
+test rules::table::tests::a_rule_judgement_agrees_with_its_scope_and_anchor ... ok
+test rules::table::tests::a_rule_outside_the_records_is_exempt_from_the_header_none_check ... ok
+test rules::table::tests::every_rule_has_a_unique_id_and_a_description ... ok
+test rules::table::tests::every_rule_id_constant_has_a_table_entry ... ok
+test rules::status::tests::the_declared_terminals_replace_the_fallback_list_and_an_undeclared_type_keeps_it ... ok
+test rules::table::tests::scope_is_listed_only_by_rules_that_judge_one_record ... ok
+test rules::table::tests::the_rules_that_read_a_per_type_declaration_name_it ... ok
+test rules::status::tests::without_a_declared_pending_vocabulary_a_dash_or_pending_text_still_satisfies ... ok
+test rules::type_scope::tests::a_declared_spec_pointer_produces_no_finding ... ok
+test rules::type_scope::tests::a_rule_with_nothing_written_yet_is_not_reported ... ok
+test rules::type_scope::tests::a_scope_reaching_nothing_is_reported_observed_failing ... ok
+test rules::type_scope::tests::a_rule_that_did_not_run_is_not_a_candidate ... ok
+test rules::type_scope::tests::a_type_with_no_declared_spec_is_a_finding_observed_failing ... ok
+test rules::type_scope::tests::it_does_not_judge_its_own_execution ... ok
+test rules::type_scope::tests::the_finding_names_the_configuration_the_caller_selected ... ok
+test rules::waiver::tests::a_finding_of_another_rule_or_file_does_not_keep_it_alive ... ok
+test rules::waiver::tests::a_partial_run_does_not_judge_a_live_waiver ... ok
+test rules::waiver::tests::a_waiver_expiring_today_is_still_active ... ok
+test rules::waiver::tests::a_waiver_for_an_unknown_rule_is_reported ... ok
+test rules::waiver::tests::a_non_date_expiry_is_reported_as_expired ... ok
+test rules::waiver::tests::a_waiver_matching_a_finding_is_not_reported ... ok
+test rules::waiver::tests::a_waiver_matching_no_finding_is_reported_observed_failing ... ok
+test rules::waiver::tests::a_waiver_on_a_scope_changed_rule_is_not_reported_as_matching_nothing ... ok
+test rules::waiver::tests::a_waiver_whose_rule_did_not_run_is_not_judged ... ok
+test rules::waiver::tests::an_expired_waiver_is_reported_once_as_expired ... ok
+test rules::waiver::tests::an_expired_waiver_on_a_scope_changed_rule_is_still_reported ... ok
+test rules::waiver::tests::a_wildcard_waiver_matches_any_finding_of_its_rule ... ok
+test rules::waiver::tests::an_expired_waiver_is_judged_only_when_its_record_was_reached ... ok
+test rules::waiver::tests::an_ineffective_waiver_is_reported_naming_the_missing_field_observed_failing ... ok
+test schema_version::tests::a_config_with_no_integer_version_is_still_a_parse_error_naming_the_field ... ok
+test schema_version::tests::a_flow_style_schema_version_is_refused_not_guessed ... ok
+test schema_version::tests::a_version_above_the_window_points_at_a_newer_urzua ... ok
+test schema_version::tests::a_multi_line_header_layout_is_refused_not_half_removed ... ok
+test schema_version::tests::a_version_an_older_release_reads_names_that_release_and_the_command ... ok
+test schema_version::tests::a_version_no_release_reads_says_so ... ok
+test schema_version::tests::a_version_one_config_with_a_rules_table_is_refused ... ok
+test schema_version::tests::a_version_one_type_that_omits_header_shape_is_refused_not_silently_changed ... ok
+test schema_version::tests::a_version_one_type_that_declares_header_shape_upgrades ... ok
+test schema_version::tests::a_version_outside_the_window_is_a_structured_error_whatever_else_is_wrong ... ok
+test schema_version::tests::every_carried_rule_is_a_shipped_rule ... ok
+test schema_version::tests::the_text_rewrite_keeps_comments_and_matches_the_upgrade ... ok
+test schema_version::tests::rules_only_ever_see_the_current_shape ... ok
+test schema_version::tests::the_window_is_the_current_version_and_the_one_before ... ok
+test section::tests::a_body_with_no_sections_yields_none ... ok
+test section::tests::a_deeper_heading_than_depth_allows_is_body_not_a_section ... ok
+test section::tests::a_fence_closes_only_on_its_own_marker_and_at_least_its_length ... ok
+test section::tests::a_heading_inside_a_fenced_block_is_not_a_section ... ok
+test schema_version::tests::the_upgrade_names_what_a_version_one_build_ran ... ok
+test section::tests::a_section_may_be_empty_and_the_last_may_lack_a_trailing_newline ... ok
+test section::tests::an_h2_body_still_holds_its_subsections_text_at_any_depth ... ok
+test section::tests::an_h3_before_any_h2_has_no_parent_and_a_skipped_level_attaches_to_the_nearest_shallower ... ok
+test section::tests::an_h3_inside_a_fence_is_not_a_section ... ok
+test section::tests::an_unclosed_fence_swallows_the_rest_of_the_body ... ok
+test section::tests::crlf_does_not_hide_a_fence_or_leak_a_carriage_return ... ok
+test section::tests::crlf_line_endings_give_the_same_sections ... ok
+test section::tests::deeper_headings_stay_inside_their_h2_body ... ok
+test section::tests::depth_one_is_exactly_parse_sections_and_every_section_is_level_two ... ok
+test section::tests::depth_two_makes_h3_a_section_nested_under_its_h2 ... ok
+test section::tests::duplicate_headings_stay_separate_sections_in_order ... ok
+test section::tests::first_line_offsets_every_number ... ok
+test section::tests::heading_text_is_trimmed_and_closing_hashes_removed ... ok
+test section::tests::sections_carry_heading_line_end_line_and_body ... ok
+test section::tests::only_a_true_h2_counts ... ok
+test schema_version::tests::a_version_one_config_loads_to_the_same_effective_config_as_its_migration ... ok
+test status_model::tests::a_declared_graph_answers_what_may_follow_and_what_is_unreachable ... ok
+test status_model::tests::a_full_declaration_loads_and_reads_back ... ok
+test status_model::tests::a_key_with_no_value_is_refused_not_read_as_absent ... ok
+test status_model::tests::a_type_without_statuses_loads_unchanged ... ok
+test status_model::tests::a_type_declaring_no_graph_has_no_transitions ... ok
+test status_model::tests::a_pending_pattern_matches_a_placeholder_family_beside_whole_values_observed_failing ... ok
+test status_model::tests::blocked_loads_and_is_validated ... ok
+test status_model::tests::an_invalid_graph_fails_the_load ... ok
+test status_model::tests::claim_retained_loads_and_is_validated_observed_failing ... ok
+test status_model::tests::an_invalid_or_malformed_pending_pattern_fails_the_load_observed_failing ... ok
+test status_model::tests::implementable_loads_and_need_not_be_terminal_observed_failing ... ok
+test values::tests::record_id_compares_by_numeric_value ... ok
+test values::tests::field_name_compares_exactly ... ok
+test values::tests::record_id_compares_by_numeric_value_with_a_hyphenated_prefix_observed_failing ... ok
+test values::tests::record_id_display_shows_the_normalized_form ... ok
+test values::tests::record_id_falls_back_to_the_original_string_when_unparseable ... ok
+test waiver::tests::a_matching_active_waiver_marks_the_finding_waived_not_removed ... ok
+test waiver::tests::a_permanent_waiver_is_always_active ... ok
+test waiver::tests::a_category_requiring_a_citation_needs_a_resolving_one ... ok
+test waiver::tests::a_refused_permanent_waiver_suppresses_nothing ... ok
+test waiver::tests::a_permanent_waiver_stands_only_under_a_listed_category_observed_failing ... ok
+test status_model::tests::progress_loads_and_is_validated ... ok
+test waiver::tests::a_suppression_carrying_the_required_field_suppresses ... ok
+test waiver::tests::a_wildcard_scope_covers_every_file_for_that_rule ... ok
+test waiver::tests::a_waiver_with_lowercase_keys_still_loads_observed_failing ... ok
+test waiver::tests::a_suppression_lacking_a_required_field_does_not_suppress_observed_failing ... ok
+test waiver::tests::an_expired_waiver_does_not_cover_anything ... ok
+test waiver::tests::an_expired_waiver_is_not_active ... ok
+test waiver::tests::an_unparseable_expiry_does_not_suppress_observed_failing ... ok
+test waiver::tests::an_expiry_or_an_undeclared_type_leaves_permanence_ungoverned ... ok
+test status_model::tests::invalid_declarations_fail_the_load_observed_failing ... ok
+test waiver::tests::without_effective_requires_a_reasonless_suppression_suppresses ... ok
+
+test result: ok. 985 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.36s
+
+     Running tests/purity.rs (target/debug/deps/purity-f5d0ab5af5bb3c29)
+
+running 2 tests
+test the_check_is_observed_failing_on_a_planted_violation ... ok
+test urzua_core_depends_on_no_io_capable_crate ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running unittests src/lib.rs (target/debug/deps/urzua_id-b0d7400cb9f54194)
+
+running 3 tests
+test tests::display_number_is_never_zero_padded ... ok
+test tests::two_generated_ids_never_collide ... ok
+test tests::later_generated_ids_sort_lexicographically_after_earlier_ones ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/urzua_io-be6ab3ab34130947)
+
+running 21 tests
+test tests::a_missing_git_repo_is_a_reported_error_not_a_silent_empty_list ... ok
+test tests::a_verified_login_that_would_break_a_row_is_refused_beside_asserted_too ... ok
+test tests::a_staged_rename_is_discovered_under_its_new_name_only_observed_failing ... ok
+test tests::asserted_takes_by_as_given_with_the_verified_login_beside_it ... ok
+test tests::discovers_only_tracked_and_staged_files_never_a_raw_walk ... ok
+test tests::asserted_without_a_gh_answer_has_no_verified_login_and_without_by_uses_git_config ... ok
+test tests::commit_for_line_is_scoped_to_the_line_not_the_whole_file ... ok
+test tests::commit_strictly_before_is_true_only_in_the_real_commit_order ... ok
+test tests::gh_verified_names_the_replaced_by_as_a_field_and_the_source ... ok
+test tests::last_commit_for_path_tracks_the_most_recent_touch ... ok
+test tests::gh_verified_without_a_gh_answer_records_by_as_asserted_and_git_as_git_config ... ok
+test tests::require_verified_accepts_a_verified_login ... ok
+test tests::require_verified_refuses_every_fallback_when_gh_does_not_answer ... ok
+test tests::resolve_identity_falls_through_to_git_config_when_gh_is_unavailable ... ok
+test tests::resolve_identity_lets_gh_win_over_a_differing_explicit_by ... ok
+test tests::write_atomic_failing_part_way_keeps_the_old_file ... ok
+test tests::write_atomic_keeps_the_mode_and_writes_through_a_symlink ... ok
+test tests::write_atomic_replaces_the_file_and_leaves_no_temporary_behind ... ok
+test tests::resolve_identity_never_lets_explicit_by_override_a_verified_gh_login ... ok
+test tests::resolve_identity_prefers_explicit_by_over_git_config ... ok
+test tests::resolve_identity_refuses_a_name_that_would_break_a_table_row ... ok
+
+test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.96s
+
+   Doc-tests urzua_agdr
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests urzua_core
+
+running 1 test
+test crates/urzua-core/src/report.rs - report::Population (line 476) - compile fail ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+   Doc-tests urzua_id
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests urzua_io
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: 2 targets failed:
+    `-p urzua-cli --test acceptance`
+    `-p urzua-cli --test check_integration`

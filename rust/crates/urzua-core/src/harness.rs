@@ -250,20 +250,37 @@ impl Serialize for HarnessDecl {
 
 /// The load-time check of `ADR-89` section 3: `acceptance` or
 /// `protected-paths` enabled with no top-level `authority` is a gate with
-/// nothing to enforce, so it is refused, naming the guardrail. Returns the
-/// message of the first one found.
-pub fn authority_problem(harness: &HarnessDecl, authority_declared: bool) -> Option<String> {
-    if authority_declared {
-        return None;
-    }
-    NEEDS_AUTHORITY
-        .iter()
-        .find(|name| harness.enabled(name))
-        .map(|name| {
-            format!(
+/// nothing to enforce, so it is refused, naming the guardrail. So is one whose
+/// table declares no gate of the kind it reads: `acceptance` reads the gates by
+/// type and status, `protected-paths` the gates by path. Returns the message of
+/// the first one found.
+pub fn authority_problem(
+    harness: &HarnessDecl,
+    authority: Option<&crate::authority::AuthorityDecl>,
+) -> Option<String> {
+    for name in NEEDS_AUTHORITY {
+        if !harness.enabled(name) {
+            continue;
+        }
+        let Some(authority) = authority else {
+            return Some(format!(
                 "harness guardrail '{name}' is enabled but no top-level `authority` is declared, so it would enforce nothing and read as protection"
-            )
-        })
+            ));
+        };
+        let (has, kind) = match *name {
+            "acceptance" => (
+                authority.has_status_gate(),
+                "by type and status ({type, to, by})",
+            ),
+            _ => (authority.has_path_gate(), "by path ({paths, by})"),
+        };
+        if !has {
+            return Some(format!(
+                "harness guardrail '{name}' is enabled but authority.gates declares no gate {kind}, so it would enforce nothing and read as protection"
+            ));
+        }
+    }
+    None
 }
 
 #[cfg(test)]
@@ -333,14 +350,31 @@ mod tests {
     #[test]
     fn a_gate_with_no_authority_names_the_guardrail() {
         let h = parse("guardrails:\n  acceptance: {enabled: true}\n").unwrap();
-        let message = authority_problem(&h, false).expect("refused");
+        let message = authority_problem(&h, None).expect("refused");
         assert!(message.contains("'acceptance'"), "{message}");
-        assert!(authority_problem(&h, true).is_none());
+        let table = |gates: &str| {
+            let v: yaml_serde::Value = yaml_serde::from_str(&format!(
+                "deciders:\n  m: {{logins: [a]}}\ngates: {gates}\n"
+            ))
+            .unwrap();
+            crate::authority::AuthorityDecl::from_value(&v).unwrap()
+        };
+        let by_status = table("[{type: adr, to: [Accepted], by: m}]");
+        assert!(authority_problem(&h, Some(&by_status)).is_none());
+        // A table with no gate of the kind the guardrail reads enforces nothing.
+        let none = table("[]");
+        let message = authority_problem(&h, Some(&none)).expect("refused");
+        assert!(
+            message.contains("'acceptance'") && message.contains("no gate"),
+            "{message}"
+        );
+        let paths = parse("guardrails:\n  protected-paths: {enabled: true}\n").unwrap();
+        assert!(authority_problem(&paths, Some(&by_status)).is_some());
         let off = parse("guardrails:\n  acceptance: {enabled: false}\n").unwrap();
-        assert!(authority_problem(&off, false).is_none());
+        assert!(authority_problem(&off, None).is_none());
     }
 
-    const BASE: &str = "schema_version: 2\nrecord_types:\n  adr:\n    dir: docs/adr\nrules:\n  header.required-fields: error\n";
+    const BASE: &str = "schema_version: 2\nrecord_types:\n  adr:\n    dir: docs/adr\n    statuses: {values: [Proposed, Accepted]}\nrules:\n  header.required-fields: error\n";
 
     #[test]
     fn a_config_with_no_harness_key_declares_none() {
@@ -356,7 +390,14 @@ mod tests {
             assert!(err.contains(&format!("'{gate}'")), "{err}");
             assert!(err.contains("authority"), "{err}");
             // With the table declared the config loads.
-            let ok = format!("{cfg}authority:\n  gates: []\n");
+            let gate = if gate == "acceptance" {
+                "{type: adr, to: [Accepted], by: m}"
+            } else {
+                "{paths: [.agent-config], by: m}"
+            };
+            let ok = format!(
+                "{cfg}authority:\n  deciders:\n    m: {{logins: [a]}}\n  gates: [{gate}]\n"
+            );
             assert!(crate::config::parse(&ok).is_ok(), "{gate}");
         }
         // An off gate needs no table.

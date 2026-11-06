@@ -26,6 +26,7 @@ use urzua_core::report::{
     ActionKind, CheckReport, Finding, FindingSeverity, Notice, Report, ReportStatus, RuleStatus,
 };
 
+use super::gate;
 use super::lock;
 use super::settings;
 use crate::commands::check::judge_proposed;
@@ -151,30 +152,93 @@ const HATCH: &str = "To repair it, a person edits outside the agent harness (a p
 /// The verdict for an edit the engine could not judge: allowed with a loud
 /// message, or, under `on_unjudged: deny`, refused for an agent.
 fn unjudged(on: OnUnjudged, actor: Actor, rel: Option<&str>, why: &str) -> Verdict {
+    unjudged_as("editor-hook", on, actor, rel, why)
+}
+
+/// `unjudged` for the named guardrail (`editor-hook`, `acceptance`,
+/// `protected-paths`).
+fn unjudged_as(
+    guardrail: &str,
+    on: OnUnjudged,
+    actor: Actor,
+    rel: Option<&str>,
+    why: &str,
+) -> Verdict {
     let what = rel.map_or("this edit".to_string(), |r| format!("this edit to {r}"));
     match (on, actor) {
         (OnUnjudged::Deny, Actor::Agent) => Verdict::new(
             "block",
             rel,
             format!(
-                "urzua harness (editor-hook): urzua did NOT judge {what} ({why}), and the guardrail is set to on_unjudged: deny, so an agent's edit is refused. {HATCH}"
+                "urzua harness ({guardrail}): urzua did NOT judge {what} ({why}), and the guardrail is set to on_unjudged: deny, so an agent's edit is refused. {HATCH}"
             ),
         ),
         (OnUnjudged::Deny, Actor::Human) => Verdict::new(
             "allow-unjudged",
             rel,
             format!(
-                "urzua harness (editor-hook): urzua did NOT judge {what} ({why}). The actor is a person, so the edit is allowed even though the guardrail is set to on_unjudged: deny; run 'urzua check' before committing."
+                "urzua harness ({guardrail}): urzua did NOT judge {what} ({why}). The actor is a person, so the edit is allowed even though the guardrail is set to on_unjudged: deny; run 'urzua check' before committing."
             ),
         ),
         (OnUnjudged::Allow, _) => Verdict::new(
             "allow-unjudged",
             rel,
             format!(
-                "urzua harness (editor-hook): urzua did NOT judge {what} ({why}). The edit is allowed; run 'urzua check' before committing."
+                "urzua harness ({guardrail}): urzua did NOT judge {what} ({why}). The edit is allowed; run 'urzua check' before committing."
             ),
         ),
     }
+}
+
+/// The verdict for an agent's edit the authority table refuses (`ADR-89`
+/// section 4). Final: the override of `ADR-78` is a name in an environment
+/// variable the agent controls, so it is not accepted here, and the output says
+/// so; nothing is written to the override log.
+fn denied(denial: &gate::Denial, rel: &str, request: &Request) -> Verdict {
+    let named = request
+        .override_request
+        .as_ref()
+        .and_then(|o| o.name.clone())
+        .or_else(|| std::env::var("URZUA_HOOK_OVERRIDE").ok())
+        .filter(|n| !n.trim().is_empty());
+    let override_note = match named {
+        Some(name) => format!(
+            " The override '{name}' you named was NOT applied and nothing was written to the override log."
+        ),
+        None => String::new(),
+    };
+    Verdict::new(
+        "block",
+        Some(rel),
+        format!(
+            "urzua harness ({}): refused. {}. A person makes this change by editing outside the agent harness (a plain editor or a terminal), where no hook runs. The override of ADR-78 is not accepted for this verdict.{override_note}",
+            denial.guardrail, denial.reason
+        ),
+    )
+}
+
+/// When the configuration does not load, the raw file still says what the
+/// denying gates protect: an agent's edit to the configuration or a gated path
+/// is refused rather than allowed because the gate could not be read.
+fn raw_gate_denial(config: Option<&Path>, request: &Request, why: &str) -> Option<Verdict> {
+    if request.actor() != Actor::Agent {
+        return None;
+    }
+    let root = crate::discovery::find_repo_root(&[PathBuf::from(".")]).ok()?;
+    let config_path = config
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| crate::discovery::default_config_path(&root));
+    let raw = gate::raw_gates(&std::fs::read_to_string(&config_path).ok()?)?;
+    let rel = crate::discovery::relative_to_root(&root, Path::new(request.paths.first()?)).ok()?;
+    let config_rel = crate::discovery::relative_to_root(&root, &config_path).ok();
+    let guardrail = raw.covers(&rel, config_rel.as_deref())?;
+    Some(unjudged_as(
+        guardrail,
+        OnUnjudged::Deny,
+        Actor::Agent,
+        Some(&rel.to_string_lossy()),
+        &format!("{why}; the {guardrail} guardrail cannot read what it protects"),
+    ))
 }
 
 // ------------------------------------------------------------------- edit
@@ -213,6 +277,9 @@ fn judge_edit(config: Option<PathBuf>, request: Request) -> Verdict {
             // the guardrail was told to do about an edit it cannot judge.
             let (enabled, on) = raw_policy(config.as_deref(), &cwd_here, "editor-hook");
             let why = format!("the configuration does not load: {}", e.message);
+            if let Some(verdict) = raw_gate_denial(config.as_deref(), &request, &why) {
+                return verdict;
+            }
             return if enabled {
                 unjudged(on, actor, request.paths.first().map(String::as_str), &why)
             } else {
@@ -230,6 +297,18 @@ fn judge_edit(config: Option<PathBuf>, request: Request) -> Verdict {
         config_path,
         config: loaded,
     } = ws;
+    // The acceptance and protected-path gates come first and do not depend on the
+    // editor hook being on: an agent's move to a gated status, or write to a gated
+    // path, is refused outright (`ADR-89` section 4).
+    if actor == Actor::Agent {
+        if let ([path], Some(content)) = (request.paths.as_slice(), request.content.as_deref()) {
+            if let Ok(rel) = crate::discovery::relative_to_root(&repo_root, Path::new(path)) {
+                if let Some(denial) = gate::judge(&repo_root, &loaded, &rel, content) {
+                    return denied(&denial, &rel.to_string_lossy(), &request);
+                }
+            }
+        }
+    }
     let Some(harness) = loaded.harness.as_ref().filter(|h| h.enabled("editor-hook")) else {
         return unjudged(
             OnUnjudged::Allow,

@@ -79,16 +79,18 @@ pub struct Config {
     /// Absent installs and enables nothing.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub harness: Option<crate::harness::HarnessDecl>,
-    /// Who may accept a record (`ADR-89` section 4). Kept as written: the
-    /// acceptance and protected-path guardrails that read it are built by
-    /// `MILE-200`, which also validates its content. Declared here so a gate
-    /// enabled without it is refused at load.
+    /// Who may accept a record and who may change a protected path (`ADR-89`
+    /// section 4, `MILE-200`, `SPEC-3`): named decider groups, the host evidence
+    /// that may name one, and the gates by type and status and by path. Read by
+    /// the acceptance and protected-path guardrails and by
+    /// `diff.decider-required`. Absent declares no gate; a key present but
+    /// empty, or malformed, is a load error.
     #[serde(
         default,
-        deserialize_with = "keep_raw",
+        deserialize_with = "keep_authority",
         skip_serializing_if = "Option::is_none"
     )]
-    pub authority: Option<yaml_serde::Value>,
+    pub authority: Option<crate::authority::AuthorityDecl>,
 }
 
 /// The `attestation` key (`ADR-89` section 5, `SPEC-3`).
@@ -323,6 +325,11 @@ pub struct RuleSetting {
     /// rule, needs `closes`, and `true` by default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub verb_claims: Option<bool>,
+    /// `true` makes a gated move or change with no `--actors` file an error
+    /// where a local run reports it as `info` (`ADR-89` section 4, `MILE-200`).
+    /// Only meaningful to `diff.decider-required`, and `false` by default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub require_evidence: Option<bool>,
     /// Statuses that mean a referenced record's work is over. Only meaningful
     /// to `narrative-field.stale`. Declared per repository rather than compiled
     /// in: a built-in table keyed on this repository's own type names is how the
@@ -1126,6 +1133,15 @@ impl Config {
 /// declaration is refused rather than read as absent.
 fn keep_raw<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<yaml_serde::Value>, D::Error> {
     yaml_serde::Value::deserialize(d).map(Some)
+}
+
+/// Reads the `authority` key. A present key is always `Some` (a null is refused
+/// by `AuthorityDecl` itself), so a half-written table is an error and never
+/// reads as absent.
+fn keep_authority<'de, D: serde::Deserializer<'de>>(
+    d: D,
+) -> Result<Option<crate::authority::AuthorityDecl>, D::Error> {
+    crate::authority::AuthorityDecl::deserialize(d).map(Some)
 }
 
 /// A fixed, small role set (`RFC-42`) -- not adopter-extensible like
@@ -2250,6 +2266,7 @@ pub fn parse_with_document_models(
             ("closes", setting.closes.is_some()),
             ("strict", setting.strict.is_some()),
             ("verb_claims", setting.verb_claims.is_some()),
+            ("require_evidence", setting.require_evidence.is_some()),
         ] {
             if present && !crate::rules::rule_accepts_option(name, option) {
                 return Err(ConfigError::OptionNotApplicable {
@@ -3218,9 +3235,27 @@ fn validate_relation_pairs(config: &Config) -> Result<(), ConfigError> {
     // A gate with nothing to enforce is not left to read as protection
     // (`ADR-89` section 3).
     if let Some(harness) = &config.harness {
-        let authority_declared = config.authority.as_ref().is_some_and(|a| !a.is_null());
-        if let Some(message) = crate::harness::authority_problem(harness, authority_declared) {
+        if let Some(message) = crate::harness::authority_problem(harness, config.authority.as_ref())
+        {
             return bad(message);
+        }
+    }
+    // Every gate names a declared group, type and status (`ADR-89` section 4).
+    if let Some(problem) = config.authority.as_ref().and_then(|a| a.problem_in(config)) {
+        return bad(problem);
+    }
+    // `diff.decider-required` reads the table: enabled without one it would
+    // examine nothing and read as protection (`MILE-200`).
+    for rule in crate::rules::rule_ids_where(|d| d.requires_authority) {
+        if config.authority.is_none()
+            && config
+                .rules
+                .get(rule)
+                .is_some_and(|s| s.level != RuleLevel::Off)
+        {
+            return bad(format!(
+                "rule '{rule}' is enabled but no top-level `authority` is declared, so it would judge no gate"
+            ));
         }
     }
     for rule in crate::rules::rule_ids_where(|d| d.requires_override_log) {
@@ -5333,6 +5368,7 @@ mod option_table_tests {
         "closes",
         "strict",
         "verb_claims",
+        "require_evidence",
         "field_levels",
         "drift_grace_days",
         "drift_audit_field",

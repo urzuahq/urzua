@@ -1,5 +1,5 @@
 ---
-Version: '0.97'
+Version: '0.98'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs, test:rust/crates/urzua-cli/tests/field_levels_integration.rs
@@ -863,16 +863,80 @@ harness:
 - **A key or guardrail the build does not know, and a guardrail the chosen adapter cannot provide, are
   reported, never skipped.** The configuration still loads with an unknown key or guardrail, so a typo does
   not stop every command; `urzua harness install` refuses (exit 2, nothing written) and `urzua doctor`
-  warns. A guardrail turned on that no chosen adapter provides in this bundle version (`post-command`,
-  `acceptance` and `protected-paths` until their milestones land) is installed around and reported by
+  warns. A guardrail turned on that no chosen adapter provides in this bundle version (`post-command`
+  until its milestone lands) is installed around and reported by
   `install`, `status` and `doctor`. A value of the wrong type (`enabled: yes-please`, `on_unjudged:
   sometimes`, `adapters: claude-code`) is a load error.
-- **`authority`** is the top-level table that says who may accept a record (`ADR-89` section 4,
-  `MILE-200`). Until that milestone it is read as written and not validated. `acceptance` or
-  `protected-paths` enabled with no `authority` key is a load error (exit 2) naming the guardrail: a gate
-  with nothing to enforce is not left to read as protection.
+- **`authority`** is the top-level table that says who may accept a record and who may change a protected
+  path (`ADR-89` section 4, `MILE-200`); it has its own section below. `acceptance` or `protected-paths`
+  enabled with no `authority` key, or with no gate of the kind it reads, is a load error (exit 2) naming
+  the guardrail: a gate with nothing to enforce is not left to read as protection.
 - The editor hook also reads `block_on` and `override_log` (above); the harness cores read them from this
   file, so the shell scripts that used to read them by line are no longer needed.
+
+## Who may accept a record: `authority`
+
+A top-level `authority` names decider groups, the host evidence that may name one, and the gates by type
+and status and by path (`ADR-89` section 4, `MILE-200`). It is read in two places, and what each can do is
+stated here and claimed nowhere beyond it.
+
+```yaml
+authority:
+  deciders:
+    maintainers: {logins: [beauwilliams]}   # the host's logins; compared without case
+  evidence: [pr-author]                     # pr-author | pr-approver, any of; pr-author when omitted
+  gates:
+    - {type: adr, to: [Accepted, Rejected], by: maintainers}
+    - {type: rfc, to: [Accepted, Rejected], by: maintainers}
+    - {paths: [".claude", "scripts/hooks", ".git-hooks", ".github/workflows", ".urzua/config.yaml"], by: maintainers}
+```
+
+- **`deciders`** maps a group name to `{logins: [...]}`. A group with no login, a bare login or a list of
+  logins where a group belongs (a login in no group), and a key other than `logins` are load errors naming
+  the group or login.
+- **`evidence`** is the pull-request facts the host supplies, any one of which may name a decider:
+  `pr-author` (the pull request's author) and `pr-approver` (a login whose approval is current for the head
+  commit). The default is `pr-author`, never `pr-approver`: a host bars an author from approving their own
+  pull request, so on a single-maintainer repository `pr-approver` could never be satisfied and no
+  acceptance could merge. An empty list and an unknown kind are load errors.
+- **`gates`** is a list. `{type, to, by}` gates a move of a record of that type to one of those statuses;
+  `{paths, by}` gates a change under those paths (a prefix or a glob, as in `diff.source-requires-record`).
+  `by` names a declared group. A gate that names a type no record type declares, a status that type does not
+  declare (or a type that declares no statuses), a group `deciders` does not declare, or that mixes the two
+  forms, is a load error naming `authority.gates[N]`. A key that is present but empty is refused, not read
+  as absent.
+- **Locally, the edit tools are refused.** With the guardrail enabled under `harness.guardrails`
+  (`acceptance` reads the gates by type and status, `protected-paths` the gates by path; an enabled
+  guardrail with no gate of its kind is a load error), `urzua harness run edit` denies an `agent` actor's
+  Write, Edit or MultiEdit that moves a record of a gated type to a gated status, compared with the copy on
+  disk and, failing that, at `HEAD` (a record filed already at the status is a move; an edit that leaves
+  the status where it was is not), or that writes a gated path. The deny is final: the override of
+  `ADR-78` is not accepted for it, the output says so and nothing is written to the override log. A `human`
+  actor is not affected, and neither is any route that does not go through the edit tools (a shell
+  command is reported by the post-command check, not stopped). When the configuration does not load, the
+  raw file still says what a denying guardrail protects: an agent's edit to the configuration, a gated
+  path or a record in a gated type's directory is refused with the way out (a person edits outside the
+  agent harness), unless the guardrail is set to `on_unjudged: allow`.
+- **In CI, the evidence is authorship.** `diff.decider-required` (`SPEC-2`), run with `--base` and
+  `--actors FILE`, requires that one of the declared `evidence` kinds names a login in the gate's group for
+  every gated move (judged against the merge base's copy) and every changed gated path. It proves who
+  opened and approved the pull request, not who decided: **with a single maintainer, and agents acting
+  under the maintainer's token, it cannot tell an agent from the maintainer.** Its option
+  `require_evidence` (`false` by default) makes a gated change with no actors file an error instead of
+  `info`. Enabling the rule with no `authority` is a load error.
+- **The actors file** is JSON the caller supplies and `check` never fetches: `{"schema": 1, "pr_author":
+  LOGIN, "approvers": [LOGIN, ...]}`. The gate action writes it from the GitHub API, listing only the
+  approvals given on the head commit, so an approval before a later push is not counted. A file that is
+  unreadable, is not JSON or has another `schema` is a could-not-run (exit 2); `--actors` with the rule off,
+  filtered out by `--rules`, or without `--base` is reported as a warning notice and not ignored; with
+  `--stdin-path` it is refused.
+- **Accepted risk.** The maintainer decided on 2026-11-05 to document and accept these routes past the
+  guardrail: a Bash command that writes the status; editing the guardrail itself by shell or through a
+  settings file the install does not read, and `git commit --no-verify`; a pull request that changes its
+  own workflow; an agent acting as the maintainer. The required status check, branch protection and any
+  `CODEOWNERS` file are the host's settings, which the engine can neither read nor verify: `urzua doctor`
+  says so and does not claim them, and names a distinct agent identity with `CODEOWNERS` on the protected
+  paths as a future option and not as configured.
 
 ## Editor hook blocking: `block_on`
 
@@ -1999,3 +2063,4 @@ proves this configuration produces the three findings.
 > | 2026-11-05 | Bumped to `0.95`. Documents the `scope` rule option (`scope: changed`): its one value, which rules take it (the table's `judges` column), how it composes with `--base` and `--stdin-path`, that dependents are not changed, and that `config.scope-matches-nothing` and `waiver.matches-nothing` treat a deferred slot as neither unreachable nor missing a finding. `embodiment.locator-on-back-pointer-path` takes it. **Why:** `MILE-203`, decided in `ADR-90`. | **substantive** |
 > | 2026-11-06 | Bumped to `0.96`. Documents the top-level `harness` key (`adapters`, `instructions_file`, `guardrails` with `enabled` and `on_unjudged`) and `authority`: an absent key installs and enables nothing, an unknown key or guardrail and a guardrail no chosen adapter provides are reported and never skipped, `acceptance` or `protected-paths` enabled with no `authority` is a load error, and `on_unjudged: deny` refuses an agent and allows a person. **Why:** `MILE-198`, decided in `ADR-89` section 3. | **substantive** |
 > | 2026-11-06 | Bumped to `0.97`. Documents the top-level `attestation` key (`identity: gh-verified \| asserted`, `require_verified`): the identity source of `fix --apply` and `fix --rebaseline --apply`, its recording in the revision row beside the actor kind, and the load errors for an unknown value, an unknown key and `require_verified` with `asserted`. **Why:** `MILE-201`, `ADR-89` section 5. | **substantive** |
+> | 2026-11-06 | Bumped to `0.98`. Documents the top-level `authority` table (`deciders` groups of `logins`, `evidence` defaulting to `pr-author`, `gates` by type and status and by path) with its load errors, the local refusal of an agent's edit-tool move to a gated status or write to a gated path (final, not liftable by the override), the rule option `require_evidence`, the actors file and the accepted risk; an enabled `acceptance` or `protected-paths` guardrail with no gate of its kind is a load error. **Why:** `MILE-200`, decided in `ADR-89` section 4, accepted by the maintainer. | **substantive** |

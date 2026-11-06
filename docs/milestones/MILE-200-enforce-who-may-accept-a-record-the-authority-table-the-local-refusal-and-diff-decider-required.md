@@ -1,11 +1,12 @@
 ---
 Stable-Id: 01M6NX36ZFJBB9DM1B17YJREVP
-Status: Planned
+Status: Done
 Phase: '0'
 Track: governance-process
 Implements: ADR-89
 Depends-on: MILE-198
 Blocked-on: null
+Realized-by: code:rust/crates/urzua-core/src/authority.rs, code:rust/crates/urzua-core/src/rules/decider.rs, code:rust/crates/urzua-core/src/harness.rs, code:rust/crates/urzua-core/src/config.rs, code:rust/crates/urzua-cli/src/harness/gate.rs, code:rust/crates/urzua-cli/src/harness/run.rs, code:rust/crates/urzua-cli/src/commands/check.rs, code:.github/actions/urzua-gate/actors.sh, test:rust/crates/urzua-cli/tests/authority_integration.rs, test:.github/actions/urzua-gate/test.sh, spec:docs/specs/SPEC-2-urzua-check.md, spec:docs/specs/SPEC-3-configuration.md, spec:docs/specs/SPEC-19-repository-agent-guardrails.md
 ---
 # 200 — Enforce who may accept a record: the authority table, the local refusal and diff.decider-required
 
@@ -34,3 +35,4 @@ An agent edit that sets `Status: Accepted`, `Deciders` and `Accepted-on` on a Pr
 > |---|---|---|
 > | 2026-11-05 | Filed. **Why:** `ADR-89` (Proposed) decides the installable agent harness bundle on maintainer decisions of 2026-11-05 and no milestone builds this part; blocked on the maintainer accepting it. | **substantive** |
 > | 2026-11-05 | Rewritten after review to claim only what holds: the local refusal covers the edit tools, Bash is reported, and in CI the evidence is authorship, so a single maintainer cannot be told from an agent. `evidence` defaults to `pr-author` (never `pr-approver`, which locks out a single maintainer), decider groups use `logins`, an enabled guardrail with no `authority` key is a load error, and the accepted risk is documented. **Why:** Independent review of pull request 355 and the maintainer decision of 2026-11-05 to document the identity limit and accept the risk. Still `Planned`. | **substantive** |
+> | 2026-11-06 | Built and marked Done. `authority` loads and is validated (a group with no login, a login in no group, an undeclared group, type or status, and an enabled `acceptance` or `protected-paths` with no gate of its kind are load errors naming the entry; `evidence` defaults to `pr-author`); `urzua harness run edit` denies an agent's edit-tool move to a gated status and write to a gated path, final and not liftable by the override, and a person is unaffected; `diff.decider-required` with `check --actors` is clean for a gated change authored by the group, an error otherwise, `info` with no file locally, an error under `require_evidence`, and `not-applicable` with no `--base`; the gate action writes the actors file (`actors.sh`, fixtures: approved, unapproved, self-authored, stale, API failure); this repository declares `authority` for `adr` and `rfc` and the protected paths, and `urzua doctor` says the host's settings are not verified. `SPEC-2` is `0.108`, `SPEC-3` `0.98`, `SPEC-19` `0.14` and `SPEC-24` `0.2`. Two Done-means lines are met in part and are recorded here: the Bash-made gated move is reported by `MILE-202`'s `urzua harness run post-command` (not built in this change, so its case is pinned there and not here), and this repository still runs `scripts/hooks` until `MILE-204`, so the refusal is exercised against this repository's own configuration (`authority_integration.rs`) and is not yet wired into an agent session here. **Why:** the delivering change for `ADR-89` section 4; each other `Done means` line is a test in `authority_integration.rs`, `authority.rs`, `decider.rs`, `harness.rs` or the gate action's `test.sh`. | **substantive** |

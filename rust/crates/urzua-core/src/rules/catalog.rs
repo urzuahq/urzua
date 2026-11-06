@@ -50,6 +50,7 @@ pub const RULE_SECTION_REQUIRED: &str = "section.required";
 pub const RULE_SECTION_SHAPE: &str = "section.shape";
 pub const RULE_DIFF_SOURCE_REQUIRES_RECORD: &str = "diff.source-requires-record";
 pub const RULE_DIFF_SOURCE_AND_RECORDS_MIXED: &str = "diff.source-and-records-mixed";
+pub const RULE_DIFF_DECIDER_REQUIRED: &str = "diff.decider-required";
 pub const RULE_FILENAME_IDENTITY_PATTERN: &str = "filename.identity-pattern";
 pub const RULE_STATUS_UNDECLARED_VALUE: &str = "status.undeclared-value";
 pub const RULE_STATUS_REQUIRED_FIELD_MISSING: &str = "status.required-field-missing";

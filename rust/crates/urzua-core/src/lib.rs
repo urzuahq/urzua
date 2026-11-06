@@ -9,6 +9,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod authority;
 pub mod config;
 pub mod document_model;
 pub mod embodiment_model;

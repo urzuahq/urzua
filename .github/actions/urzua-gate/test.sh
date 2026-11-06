@@ -26,6 +26,8 @@ case "$1" in
   api)
     [ "${FAKE_API:-ok}" = "fail" ] && { echo "HTTP 403" >&2; exit 1; }
     case "$*" in
+      *"/pulls/"*"/reviews"*) cat "$FAKE_REVIEWS"; exit 0 ;;
+      *"/pulls/"*) cat "$FAKE_PULL"; exit 0 ;;
       *"-X PATCH"* | *"-X POST"*) cat "$(echo "$*" | sed -n 's/.*body=@\([^ ]*\).*/\1/p')" >>"$FAKE_GH_LOG"; exit 0 ;;
       *) printf '%s' "${FAKE_COMMENT_ID:-}"; [ -n "${FAKE_COMMENT_ID:-}" ] && echo; exit 0 ;;
     esac ;;
@@ -90,6 +92,36 @@ FAKE_API=fail "$here/post-comment.sh" "$tmp/findings.md" >"$tmp/out.txt"
 rc=$?
 { [ "$rc" -eq 0 ] && grep -q '::warning' "$tmp/out.txt"; }
 expect "comment: a failed post warns and exits 0 (never changes the verdict)" $?
+
+# ---- actors ----
+actors() { # pull fixture, reviews fixture -> the file's JSON on stdout
+  FAKE_PULL="$here/fixtures/$1" FAKE_REVIEWS="$here/fixtures/$2" \
+    REPO=o/r PR_NUMBER=7 "$here/actors.sh" "$tmp/actors.json" && cat "$tmp/actors.json"
+}
+
+actors pull.json reviews-approved.json >"$tmp/a.json"
+{ [ "$(jq -c . "$tmp/a.json")" = '{"schema":1,"pr_author":"alice","head_sha":"bbbb222","approvers":["bob"]}' ]; }
+expect "actors: an approved pull request lists its author and the approver on the head commit" $?
+
+actors pull.json reviews-none.json >"$tmp/a.json"
+{ [ "$(jq -c '.approvers' "$tmp/a.json")" = '[]' ] && [ "$(jq -r '.pr_author' "$tmp/a.json")" = alice ]; }
+expect "actors: an unapproved, self-authored pull request lists its author and no approver" $?
+
+actors pull-agent-authored.json reviews-none.json >"$tmp/a.json"
+{ [ "$(jq -r '.pr_author' "$tmp/a.json")" = mallory ] && [ "$(jq -c '.approvers' "$tmp/a.json")" = '[]' ]; }
+expect "actors: a pull request authored by someone outside the group is just that author, with no approver" $?
+
+actors pull.json reviews-stale.json >"$tmp/a.json"
+{ [ "$(jq -c '.approvers' "$tmp/a.json")" = '[]' ]; }
+expect "actors: an approval given before a later push, and one later withdrawn, are not current" $?
+
+FAKE_API=fail actors pull.json reviews-approved.json >"$tmp/out.txt" 2>&1; rc=$?
+{ [ "$rc" -ne 0 ] && grep -q 'could not read pull request' "$tmp/out.txt"; }
+expect "actors: an API failure fails with a stated reason and writes no pass" $?
+
+REPO= PR_NUMBER= "$here/actors.sh" "$tmp/x.json" >"$tmp/out.txt" 2>&1; rc=$?
+{ [ "$rc" -ne 0 ] && grep -q 'REPO and PR_NUMBER are required' "$tmp/out.txt"; }
+expect "actors: a missing repository or pull request number fails" $?
 
 # ---- history ----
 git init -q "$tmp/origin" && (
