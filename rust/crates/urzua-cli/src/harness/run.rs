@@ -135,6 +135,17 @@ fn raw_policy(config_path: Option<&Path>, root_hint: &Path, guardrail: &str) -> 
     (enabled, on)
 }
 
+/// What the editor hook does with an edit it cannot read a request for, or
+/// whose request names a directory that cannot be entered: the declaration is
+/// read from the process's own directory, so a denying guardrail stays denying.
+fn on_unreadable_request(config: Option<&Path>) -> OnUnjudged {
+    let here = std::env::current_dir().unwrap_or_default();
+    match raw_policy(config, &here, "editor-hook") {
+        (true, on) => on,
+        (false, _) => OnUnjudged::Allow,
+    }
+}
+
 const HATCH: &str = "To repair it, a person edits outside the agent harness (a plain editor or a terminal), where no hook runs; the override of ADR-78 is not accepted for this verdict. Or set on_unjudged: allow for the guardrail in .urzua/config.yaml, and the loud message remains.";
 
 /// The verdict for an edit the engine could not judge: allowed with a loud
@@ -171,7 +182,12 @@ fn unjudged(on: OnUnjudged, actor: Actor, rel: Option<&str>, why: &str) -> Verdi
 pub fn run_edit(config: Option<PathBuf>) -> ExitCode {
     let verdict = match read_request() {
         Ok(request) => judge_edit(config, request),
-        Err(why) => unjudged(OnUnjudged::Allow, Actor::Agent, None, &why),
+        Err(why) => unjudged(
+            on_unreadable_request(config.as_deref()),
+            Actor::Agent,
+            None,
+            &why,
+        ),
     };
     emit(&verdict)
 }
@@ -179,9 +195,10 @@ pub fn run_edit(config: Option<PathBuf>) -> ExitCode {
 fn judge_edit(config: Option<PathBuf>, request: Request) -> Verdict {
     let actor = request.actor();
     if let Some(cwd) = &request.cwd {
+        let on = on_unreadable_request(config.as_deref());
         if std::env::set_current_dir(cwd).is_err() {
             return unjudged(
-                OnUnjudged::Allow,
+                on,
                 actor,
                 None,
                 &format!("the request's cwd '{cwd}' cannot be entered"),

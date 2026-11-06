@@ -925,6 +925,26 @@ fn on_unjudged_deny_refuses_an_agent_allows_a_person_and_names_the_escape_hatch(
     assert_eq!(v["verdict"], "allow-unjudged", "{v}");
 }
 
+#[test]
+fn on_unjudged_deny_also_refuses_an_unreadable_request_and_an_unenterable_cwd() {
+    // The request itself cannot be read, or names a directory that cannot be
+    // entered: the repository's declaration is still read from the process's
+    // own directory, so a denying guardrail does not turn into an allowing one.
+    let deny = "schema_version: 2\nrules: {}\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\nharness:\n  adapters: [claude-code]\n  guardrails:\n    editor-hook: {enabled: true, on_unjudged: deny}\n    session-start: {enabled: true}\n";
+    let dir = fixture("deny-request", deny);
+    let (code, v) = run_core(&dir, "edit", "not json at all", &[]);
+    assert_eq!((code, v["verdict"].as_str()), (1, Some("block")), "{v}");
+    assert!(msg(&v).contains("not valid JSON"), "{v}");
+    assert!(msg(&v).contains("outside the agent harness"), "{v}");
+    let (code, v) = edit_request(
+        &dir,
+        serde_json::json!({"event": "edit", "paths": [PATH_1], "content": RECORD, "cwd": "/nonexistent-urzua-dir"}),
+        &[],
+    );
+    assert_eq!((code, v["verdict"].as_str()), (1, Some("block")), "{v}");
+    assert!(msg(&v).contains("cannot be entered"), "{v}");
+}
+
 // ------------------------------------------------------- the translator
 
 fn run_with_stdin(c: &mut Command, stdin: &str) -> Output {
