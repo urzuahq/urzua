@@ -2,7 +2,7 @@
 Stable-Id: 01M20SH9CXA18HFPABZJQY795D
 Status: Accepted
 Date: 2026-09-08
-Version: '0.15'
+Version: '0.16'
 Author: beauwilliams
 Subject: 'Repository agent guardrails -- mechanisms that constrain or guide an AI agent working in this repo; today, `AGENTS.md` and the drafting commands in `.claude/commands/`.'
 Implements: MILE-36
@@ -131,9 +131,22 @@ the engine and an adapter per agent that only translates. The contract is `SPEC-
   reason.
 - **Vendor neutrality.** The engine source names no agent vendor. A test scans every `src/` directory for
   vendor names; the bundle directory, where an adapter names its vendor by design, is outside `src/`.
-- **Not yet.** This repository still has `scripts/hooks/*` on disk, unwired (`MILE-204` deletes it). The generated
-  drafting commands are `MILE-199`; the agent-instructions block states what an agent must not do and is
-  advisory, only the verdicts bind.
+- **Commands (`MILE-199`).** The install generates `.claude/commands/<type>.md` for every record type the
+  configuration declares from one generic template (the type name and directory are the only things filled
+  in; no command names a field, status or section), and installs `/amend`, `/repin` and `/done` and the
+  helper `.claude/hooks/urzua-record.sh` they call. `/amend` only adds: it refuses any change to the Decision
+  text, a removed list item or blank line included, and requires an added `## Amendment (date)` section and
+  revision-log row. `/repin` refuses an empty reason, lists the stale pins, runs
+  `urzua fix --rebaseline --apply --actor agent` and prints the `Re-pin:` line for the pull request body.
+  `/done` runs `urzua fix --apply --actor agent` and never writes a state itself (`ADR-70`, amendment of
+  2026-11-05); it stops when the engine computes nothing, and `fix` refuses a state an `authority` gate names.
+  A type named like a lifecycle command is refused at install, and `urzua harness status` reports a command
+  not yet installed as missing; `update` writes it. In this repository the commands for the types it had no
+  command for, `/amend`, `/repin`, `/done` and the helper are committed; `/adr`, `/rfc` and `/milestone` stay
+  hand-written (they carry type-specific guidance and differ from the generated text, so an install would
+  report them as modified) until `MILE-204`.
+- **Not yet.** This repository still has `scripts/hooks/*` on disk, unwired (`MILE-204` deletes it). The
+  agent-instructions block states what an agent must not do and is advisory, only the verdicts bind.
 
 ## Who may accept a record: the acceptance guardrail (`ADR-89` section 4, `MILE-200`)
 
@@ -221,3 +234,4 @@ and this section claims only what each place does.
 > | 2026-11-06 | Bumped to `0.13`. Documents the installable harness bundle: `urzua harness install`, `status`, `update`, `uninstall` and `adapters`, the settings-merge and instructions-block rules, the `run edit` and `run session-start` cores, the stated verdict for an unset project-directory variable, and the vendor-neutral engine; this repository still runs `scripts/hooks` until `MILE-204`. **Why:** `MILE-198`, decided in `ADR-89`. | **substantive** |
 > | 2026-11-06 | Bumped to `0.14`. Documents the post-command check: after any Bash command the harness runs `check` on the records git shows as changed (untracked included) and reports, never blocks; this repository enables it and has the Claude Code bundle installed. The editor hook is wired once, through the installed bundle; `scripts/hooks` stays on disk, unwired, until `MILE-204` deletes it, because both wired at once would block twice and write each override twice. **Why:** `MILE-202`, decided in the `ADR-78` amendment and `ADR-89`. | **substantive** |
 > | 2026-11-06 | Bumped to `0.15`. Documents the acceptance and protected-path guardrails (`MILE-200`): the local refusal of an agent's edit-tool move to a gated status or write to a protected path (final, not liftable by the override), `diff.decider-required` fed by the gate action's actors file as authorship evidence only, and the "Accepted risk" statement (the Bash, shell-edited guardrail, self-modifying workflow and shared-token routes, accepted by the maintainer on 2026-11-05). The post-command check also reports a Bash-made move to a gated status, judged against `HEAD`. **Why:** `ADR-89` section 4, accepted by the maintainer. | **substantive** |
+> | 2026-11-06 | Bumped to `0.16`. Documents the generated drafting command for every record type, `/amend`, `/repin` and `/done` and the helper they call (`MILE-199`): what each refuses, that `/done` sets a state only through `urzua fix --apply` and `fix` refuses a state an `authority` gate names, and that this repository commits the commands for the types it lacked while `/adr`, `/rfc` and `/milestone` stay hand-written until `MILE-204`. **Why:** `ADR-89` section 1, `ADR-70` amendment of 2026-11-05. | **substantive** |

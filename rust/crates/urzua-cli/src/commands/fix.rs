@@ -246,6 +246,30 @@ pub fn run(config_path: Option<PathBuf>, args: FixArgs) -> ExitCode {
             .iter()
             .find(|r| r.path == repair.record)
             .map(|r| r.record_type.as_str());
+        // A status an `authority` gate names is a decider's, never computed from
+        // evidence and written (`ADR-70` amendment, `ADR-89` section 4).
+        if let (Some(t), Some(authority)) = (record_type, config.authority.as_ref()) {
+            let status_field = urzua_core::rules::relation_field_name(
+                &config,
+                t,
+                urzua_core::config::RelationRole::Status,
+            );
+            if repair.field == status_field
+                && authority
+                    .status_gates(t, &repair.computed_value)
+                    .next()
+                    .is_some()
+            {
+                failed.push((
+                    repair.record.clone(),
+                    format!(
+                        "refused: '{}' is a {status_field} an authority gate names, so only a decider sets it and fix never writes it",
+                        repair.computed_value
+                    ),
+                ));
+                continue;
+            }
+        }
         let log_id = record_type
             .map(|t| config.revision_log_id(t))
             .unwrap_or_default();

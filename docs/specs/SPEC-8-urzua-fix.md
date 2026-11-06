@@ -1,5 +1,5 @@
 ---
-Version: '0.26'
+Version: '0.27'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -234,6 +234,12 @@ Every one of the following is a hard gate — none are optional, none are defaul
   filled in place, and its revision row reads "stated no value disagreed" rather than quoting an empty
   span.
 
+- **A status an `authority` gate names is never written** (`ADR-70` amendment of 2026-11-05, `ADR-89`
+  section 4, `MILE-199`). When the value `fix --apply` computes for a type's status field is one a gate of
+  the top-level `authority` table names for that type, the repair is refused and reported in `failed` with
+  the reason, and the record is left as it was: such a status is a decider's, not evidence's. The lifecycle
+  command `/done` runs `fix --apply` and so inherits the refusal.
+
 Every applied write appends a `structural` revision-log entry naming the computation and the
 evidence read, so the write is reversible both by `git revert` and by reading the corpus itself.
 
@@ -352,3 +358,4 @@ asserted by test, not assumed by convention.
 > | 2026-11-05 | Bumped to `0.24`. `--apply` and `--rebaseline --apply` refuse an identity (`--by`, `git config user.name`, the `gh` login) containing `|` or a line break instead of writing a row with an extra cell or a split row, and write each record through a temporary file and a rename instead of truncating it first. **Why:** review of the CLI found both: a crafted `--by` corrupted the revision log, and a failed write could leave a record empty (`BUG-192` class). | **substantive** |
 > | 2026-11-05 | Bumped to `0.25`. The record-edit hook no longer answers `allow-unjudged` for an `embodiment-drift-git` notice: it judges and blocks on what needs no history and discloses the skipped drift rule; it omits the `run:` repair hint from findings the edit introduced. **Why:** Phase 0 hardening from an adopter switchover -- every edit in a shallow clone went unjudged, and the hint answered `matched no pending repair`. | **substantive** |
 > | 2026-11-06 | Bumped to `0.26`. `--apply` and `--rebaseline --apply` resolve identity under the configuration's `attestation` (`SPEC-3`): `require_verified` makes a missing `gh` answer `not-run` with nothing written, `asserted` takes `--by` as given beside the verified login; the report gains `identity` (name, source, actor, the replaced `--by`); `--actor agent\|human` is accepted; and every tool-authored row names the identity source and the actor kind. **Why:** `MILE-201`, `ADR-89` section 5. | **substantive** |
+> | 2026-11-06 | Bumped to `0.27`. `fix --apply` refuses to write a status an `authority` gate names for the record's type and reports it in `failed`. **Why:** `MILE-199`, the `ADR-70` amendment of 2026-11-05: a lifecycle command sets a status only when the engine computes it, never one reserved to a decider. | **substantive** |
