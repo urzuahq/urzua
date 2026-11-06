@@ -130,6 +130,19 @@ impl HarnessReport {
 struct Env {
     root: PathBuf,
     harness: Option<HarnessDecl>,
+    /// Each declared record type and its directory, which the generated
+    /// drafting commands are made from.
+    types: Vec<(String, String)>,
+}
+
+fn declared_types(config: &urzua_core::config::Config) -> Vec<(String, String)> {
+    let mut types: Vec<(String, String)> = config
+        .record_types
+        .iter()
+        .map(|(name, t)| (name.clone(), t.dir.clone()))
+        .collect();
+    types.sort();
+    types
 }
 
 fn entry_hash(file: &str, entry: &settings::Entry, hash: String) -> EntryHash {
@@ -166,6 +179,11 @@ fn desired(env: &Env, adapters: &[String]) -> Result<Desired, String> {
         for (path, content) in adapter.files {
             want.files.insert(path.to_string(), content.to_string());
         }
+        if let Some(dir) = adapter.manifest().commands_dir {
+            for (path, content) in commands(adapter, &dir, &env.types)? {
+                want.files.insert(path, content);
+            }
+        }
         let fragment = json::parse(adapter.settings_fragment)
             .map_err(|e| format!("the {name} settings fragment is invalid: {e}"))?;
         for entry in settings::entries(&fragment)? {
@@ -180,6 +198,42 @@ fn desired(env: &Env, adapters: &[String]) -> Result<Desired, String> {
         want.block = Some((file, block::render(bundle::INSTRUCTIONS)));
     }
     Ok(want)
+}
+
+/// The slash commands an adapter installs (`ADR-89` section 1): the one generic
+/// drafting template rendered for every declared record type, and the lifecycle
+/// commands as they are. The type name and directory are the only things filled
+/// in, both read from the configuration; the engine adds no schema knowledge.
+fn commands(
+    adapter: &bundle::Adapter,
+    dir: &str,
+    types: &[(String, String)],
+) -> Result<Vec<(String, String)>, String> {
+    let mut out = Vec::new();
+    let lifecycle: Vec<&str> = adapter
+        .commands
+        .iter()
+        .map(|(n, _)| n.trim_end_matches(".md"))
+        .filter(|n| *n != "draft")
+        .collect();
+    for (name, content) in adapter.commands {
+        if *name == "draft.md" {
+            for (ty, ty_dir) in types {
+                if lifecycle.contains(&ty.as_str()) {
+                    return Err(format!(
+                        "the record type '{ty}' has the name of the lifecycle command /{ty}, so its drafting command would collide with it; rename the type"
+                    ));
+                }
+                out.push((
+                    format!("{dir}/{ty}.md"),
+                    content.replace("{{type}}", ty).replace("{{dir}}", ty_dir),
+                ));
+            }
+        } else {
+            out.push((format!("{dir}/{name}"), content.to_string()));
+        }
+    }
+    Ok(out)
 }
 
 fn unknown_adapter(name: &str) -> String {
@@ -264,6 +318,7 @@ fn open(config: Option<PathBuf>) -> Result<Env, String> {
     let ws = Workspace::open(&[PathBuf::from(".")], config).map_err(|e| e.message)?;
     Ok(Env {
         root: ws.repo_root,
+        types: declared_types(&ws.config),
         harness: ws.config.harness,
     })
 }
@@ -564,6 +619,11 @@ fn status(env: &Env, lock: &Lock) -> HarnessReport {
             },
         };
         mark(&mut report, "file", path, None, state);
+    }
+    // A file the bundle now wants that the lock does not know yet (a command for
+    // a record type added since the install) is missing until `update` writes it.
+    for path in want.files.keys().filter(|p| !lock.files.contains_key(*p)) {
+        mark(&mut report, "file", path, None, "missing");
     }
     let mut cache: BTreeMap<String, Option<J>> = BTreeMap::new();
     for e in &lock.entries {
@@ -1081,6 +1141,7 @@ pub(crate) fn doctor_checks(
     let env = Env {
         root: root.to_path_buf(),
         harness: Some(harness.clone()),
+        types: declared_types(config),
     };
     let adapters = chosen_adapters(&env, None);
     let (unknown, unprovided) = harness_problems(&env, &adapters);

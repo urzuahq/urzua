@@ -2,7 +2,7 @@
 Stable-Id: 01M6Q32HB672E7RB57RFQ9QEB3
 Status: Draft
 Date: 2026-11-06
-Version: '0.2'
+Version: '0.3'
 Author: beauwilliams
 Subject: 'The neutral request and verdict `urzua harness run` speaks, the adapter directory layout of the embedded bundle, and the lock file.'
 Implements: ADR-89
@@ -63,8 +63,10 @@ laid out so that it could also be published as a release asset without a second 
 bundle/
   instructions.md                    the agent-instructions block, adapter-independent
   <adapter>/
-    adapter.json                     name, description, provides, settings_file, requires
+    adapter.json                     name, description, provides, settings_file, commands_dir, requires
     settings.fragment.json           the hook entries to merge into the agent's project settings
+    commands/draft.md                the drafting command, rendered once per declared record type
+    commands/<name>.md               a lifecycle command, installed as it is
     files/<repository-relative path> installed at the same relative path
 ```
 
@@ -74,6 +76,7 @@ bundle/
 |---|---|
 | `name` | Equals the directory name. |
 | `provides` | The guardrails the adapter can wire (`editor-hook`, `session-start`, ...). A guardrail the repository turns on that no chosen adapter provides is reported at install, by `status` and by `doctor`, never skipped. |
+| `commands_dir` | Where the agent looks for slash commands. Absent: the adapter installs none. The install writes `<commands_dir>/<type>.md` for every record type the configuration declares (`{{type}}` and `{{dir}}` of `commands/draft.md` filled in) and `<commands_dir>/<name>.md` for every other file of `commands/`. A record type named like one of those lifecycle commands is refused. |
 | `settings_file` | The agent's project settings file the fragment is merged into. A local settings file and user-level settings are neither read nor written. |
 | `requires.interpreters` | Programs the translator runs under; `session-start` reports one that is not on `PATH`. |
 | `requires.env` | Variables the agent sets for its hook commands; `session-start` reports one that is unset. The adapter's commands do not depend on them. |
@@ -124,3 +127,4 @@ out of the shared files, and deletes the lock last.
 > |---|---|---|
 > | 2026-11-06 | Initial spec: the neutral request and verdict of `urzua harness run`, the adapter directory layout and the lock file. **Why:** `MILE-198`, decided in `ADR-89` section 6. | **structural** |
 > | 2026-11-06 | Bumped to `0.2`. The `block` verdict also covers an agent's move to a gated status or write to a gated path (`acceptance`, `protected-paths`, `MILE-200`), final and not liftable by an override; the guardrails now run whether or not `editor-hook` is enabled. **Why:** `ADR-89` section 4. | **substantive** |
+> | 2026-11-06 | Bumped to `0.3`. The adapter layout gains `commands/` and the manifest key `commands_dir` (`MILE-199`); `status` reports a bundle file the lock does not know yet as `missing`. **Why:** `ADR-89` section 1. | **substantive** |

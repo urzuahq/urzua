@@ -19,6 +19,9 @@ pub struct Adapter {
     pub name: &'static str,
     manifest: &'static str,
     pub settings_fragment: &'static str,
+    /// Command templates, (file name under `commands/`, content): `draft.md` is
+    /// rendered once per record type, every other file is installed as it is.
+    pub commands: &'static [(&'static str, &'static str)],
     /// (path relative to the repository root, content).
     pub files: &'static [(&'static str, &'static str)],
 }
@@ -45,6 +48,9 @@ pub struct Manifest {
     pub provides: Vec<String>,
     /// The agent's project settings file the hook entries are merged into.
     pub settings_file: String,
+    /// Where the agent looks for slash commands. Absent: this adapter installs none.
+    #[serde(default)]
+    pub commands_dir: Option<String>,
     pub requires: Requires,
 }
 

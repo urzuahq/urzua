@@ -57,6 +57,21 @@ fn main() {
             abs(&dir.join("settings.fragment.json"))
         )
         .unwrap();
+        table.push_str("        commands: &[\n");
+        let mut commands = Vec::new();
+        if dir.join("commands").is_dir() {
+            files_under(&dir.join("commands"), &dir.join("commands"), &mut commands);
+        }
+        for f in commands {
+            let rel = f.to_string_lossy().replace('\\', "/");
+            writeln!(
+                table,
+                "            ({rel:?}, include_str!({})),",
+                abs(&dir.join("commands").join(&f))
+            )
+            .unwrap();
+        }
+        table.push_str("        ],\n");
         table.push_str("        files: &[\n");
         for f in files {
             let rel = f.to_string_lossy().replace('\\', "/");
