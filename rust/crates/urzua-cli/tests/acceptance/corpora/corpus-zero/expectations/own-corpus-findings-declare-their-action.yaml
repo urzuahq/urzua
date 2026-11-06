@@ -8,9 +8,14 @@ invocation: [check]
 # slots and lists no finding; the rule still runs, and its population says how
 # many it deferred. That its findings carry no action is proved on planted
 # corpora (`locator_mechanism_integration.rs`), and the table-wide coverage of
-# `ADR-73` by the action tests; corpus-g runs the nudge under `--base`.
+# `ADR-73` by the action tests; corpus-g runs the nudge under `--base`. What this
+# run still lists are the waived `status.delivery-agreement` findings of the
+# `delivery-without-evidence` variant, declared exempt, so they must carry no
+# `suggested_action` key: the case still fails the day that declaration changes.
 expect_exit: 0
 expect_json:
   - {at: /blocking, equals: false}
+expect_findings:
+  - {rule: status.delivery-agreement, no_suggested_action: true}
 expect_rules_ran:
   - citation.resolution
