@@ -192,7 +192,12 @@ fn gate_from_value(index: usize, value: &yaml_serde::Value) -> Result<Gate, Stri
         (None, None, Some(paths)) if !paths.is_empty() => Ok(Gate {
             record_type: None,
             to: Vec::new(),
-            paths,
+            // The same canonical form every other path option is compared in,
+            // so `./.agent` gates what `.agent` does.
+            paths: paths
+                .iter()
+                .map(|p| crate::config::normalize_published_path(p))
+                .collect(),
             by,
         }),
         (None, None, Some(_)) => Err(problem(format!("{at}.paths is empty: it would gate nothing"))),
@@ -330,14 +335,15 @@ impl AuthorityDecl {
                 }
             }
             for p in &gate.paths {
-                let path = std::path::Path::new(p);
-                if p.starts_with('/')
-                    || path
-                        .components()
-                        .any(|c| matches!(c, std::path::Component::ParentDir))
-                {
+                let has_name = std::path::Path::new(p)
+                    .components()
+                    .any(|c| matches!(c, std::path::Component::Normal(_)));
+                if let Some(why) = crate::config::published_path_problem(p) {
+                    return Some(format!("{at} names the path '{p}', which {why}"));
+                }
+                if !has_name {
                     return Some(format!(
-                        "{at} names the path '{p}', which is not a repository-relative path"
+                        "{at} names the path '{p}', which names no path inside the repository, so it would gate nothing"
                     ));
                 }
             }

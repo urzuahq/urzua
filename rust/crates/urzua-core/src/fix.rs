@@ -554,6 +554,35 @@ pub fn detect_rebaselines(
     (population, found, failed)
 }
 
+/// `line` with every whole-token occurrence of `old` (`spelling@sha256:hash`)
+/// replaced by `new`, or `None` when there is none. A match must start at a
+/// token boundary, so the pin on `a.rs` does not rewrite the pin on `lib/a.rs`
+/// that carries the same hash, and must not run into a longer hash.
+fn replace_exact_pin(line: &str, old: &str, new: &str) -> Option<String> {
+    let path_char = |c: char| c.is_alphanumeric() || "_./-~@+%".contains(c);
+    let mut out = String::with_capacity(line.len());
+    let mut rest = 0;
+    let mut found = false;
+    for (at, _) in line.match_indices(old) {
+        if at < rest {
+            continue;
+        }
+        let before_ok = line[..at].chars().next_back().is_none_or(|c| !path_char(c));
+        let after_ok = line[at + old.len()..]
+            .chars()
+            .next()
+            .is_none_or(|c| !c.is_ascii_hexdigit());
+        if before_ok && after_ok {
+            out.push_str(&line[rest..at]);
+            out.push_str(new);
+            rest = at + old.len();
+            found = true;
+        }
+    }
+    out.push_str(&line[rest..]);
+    found.then_some(out)
+}
+
 // Implements: ADR-67 (attributed re-baselining of a pin)
 /// New file content for re-pinning one record: each stale pin on the
 /// `Realized-by` line becomes the current hash and nothing else on the line
@@ -581,16 +610,17 @@ pub fn apply_rebaseline(
     let mut line = doc.line(field_line).unwrap_or_default().to_string();
     for pin in &rebaseline.pins {
         let old = format!("{}@sha256:{}", pin.spelling, pin.recorded_hash);
-        if !line.contains(&old) {
+        let Some(replaced) = replace_exact_pin(
+            &line,
+            &old,
+            &format!("{}@sha256:{}", pin.spelling, pin.current_hash),
+        ) else {
             return Err(format!(
                 "the pin on '{}' is no longer on the '{}' line -- the record may have changed since detect ran",
                 pin.locator, rebaseline.field
             ));
-        }
-        line = line.replace(
-            &old,
-            &format!("{}@sha256:{}", pin.spelling, pin.current_hash),
-        );
+        };
+        line = replaced;
     }
     doc.replace_line(field_line, line);
 
@@ -708,6 +738,34 @@ mod tests {
         );
         // The existing row is untouched.
         assert!(out.contains("| 2026-01-01 | Initial. | **structural** |"));
+    }
+
+    #[test]
+    fn a_rebaseline_rewrites_the_exact_pin_and_not_one_whose_spelling_ends_with_it() {
+        let h = "aaaaaaaaaaaaaaaaaaaaaaaa";
+        let content = format!("---\nRealized-by: 'lib/a.rs@sha256:{h}, a.rs@sha256:{h}'\n---\n# 1\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Initial. | **structural** |\n");
+        let rb = Rebaseline {
+            record: PathBuf::from("docs/adr/ADR-1-a.md"),
+            field: "Realized-by".to_string(),
+            line: 2,
+            pins: vec![PinDrift {
+                locator: "a.rs".to_string(),
+                recorded_hash: h.to_string(),
+                current_hash: "bbbbbbbbbbbbbbbbbbbbbbbb".to_string(),
+                span: None,
+                files: Vec::new(),
+                spelling: "a.rs".to_string(),
+            }],
+        };
+        let who = Attestation::new("ana", IdentitySource::Asserted, ActorKind::Agent);
+        let out =
+            apply_rebaseline(&content, &rb, "2026-11-06", &who, "R.", &Default::default()).unwrap();
+        assert!(
+            out.contains(&format!(
+                "lib/a.rs@sha256:{h}, a.rs@sha256:bbbbbbbbbbbbbbbbbbbbbbbb"
+            )),
+            "{out}"
+        );
     }
 
     fn no_relation_field_overrides() -> Config {

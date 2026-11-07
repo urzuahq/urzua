@@ -780,6 +780,73 @@ impl Drop for FixLock {
     }
 }
 
+/// The one confinement check for every path the tool reads or writes on
+/// behalf of a user-supplied or config-supplied name: resolve `path` (relative
+/// paths are taken from `root`), following symlinks, and refuse anything that
+/// lands outside `root`. A path that does not exist yet is resolved through its
+/// deepest existing ancestor, so a new file below a symlinked directory that
+/// points outside the repository is refused too. Returns the resolved path.
+/// A dangling symlink is refused: writing through it would create its target,
+/// wherever that is.
+pub fn confine_to_root(root: &Path, path: &Path) -> Result<PathBuf, String> {
+    use std::path::Component;
+    let root_real = std::fs::canonicalize(root).map_err(|e| {
+        format!(
+            "could not resolve the repository root {}: {e}",
+            root.display()
+        )
+    })?;
+    let outside = || {
+        format!(
+            "{} resolves outside the repository; urzua will not read or write it",
+            path.display()
+        )
+    };
+    let full = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        root.join(path)
+    };
+    let mut existing = full.clone();
+    let mut tail: Vec<std::ffi::OsString> = Vec::new();
+    let real = loop {
+        match std::fs::canonicalize(&existing) {
+            Ok(real) => break real,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                if std::fs::symlink_metadata(&existing).is_ok() {
+                    return Err(format!(
+                        "{} is a dangling symlink; urzua will not write through it",
+                        existing.display()
+                    ));
+                }
+                match (existing.components().next_back(), existing.parent()) {
+                    (Some(Component::Normal(name)), Some(parent)) => {
+                        tail.push(name.to_os_string());
+                        existing = parent.to_path_buf();
+                    }
+                    _ => return Err(outside()),
+                }
+            }
+            Err(e) => return Err(format!("could not resolve {}: {e}", path.display())),
+        }
+    };
+    let mut resolved = real;
+    resolved.extend(tail.iter().rev());
+    if resolved.starts_with(&root_real) {
+        Ok(resolved)
+    } else {
+        Err(outside())
+    }
+}
+
+/// `write_atomic` for a file below the repository `root`: the destination is
+/// checked with `confine_to_root` first, so nothing is written outside it.
+pub fn write_atomic_in(root: &Path, path: &Path, text: &str) -> std::io::Result<()> {
+    confine_to_root(root, path)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::PermissionDenied, e))?;
+    write_atomic(path, text)
+}
+
 /// Replace `path` with `text` only once the whole text is on disk: written to a
 /// temporary file in the same directory, then renamed over the target. A write
 /// that fails (disk full) or a process killed part-way leaves the old file
@@ -904,7 +971,7 @@ pub fn commit_for_line_in(
 /// which (unlike a header field) aren't a single line (ADR-0032).
 pub fn last_commit_for_path(repo_root: &Path, path: &Path) -> Result<Option<String>, String> {
     let output = Command::new("git")
-        .args(["log", "-1", "--format=%H", "--"])
+        .args(["--literal-pathspecs", "log", "-1", "--format=%H", "--"])
         .arg(path)
         .current_dir(repo_root)
         .output()
@@ -1529,6 +1596,39 @@ mod tests {
         );
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn confine_to_root_refuses_paths_that_resolve_outside() {
+        let tmp = Scratch::new("urzua-io-confine");
+        let repo = tmp.join("repo");
+        let outside = tmp.join("elsewhere");
+        fs::create_dir_all(repo.join("docs")).unwrap();
+        fs::create_dir_all(&outside).unwrap();
+        fs::write(outside.join("secret.txt"), "s\n").unwrap();
+        std::os::unix::fs::symlink(&outside, repo.join("out")).unwrap();
+        std::os::unix::fs::symlink(outside.join("secret.txt"), repo.join("leak.txt")).unwrap();
+        std::os::unix::fs::symlink(outside.join("nope.txt"), repo.join("dangling.txt")).unwrap();
+
+        assert!(confine_to_root(&repo, Path::new("docs/new/deep.md")).is_ok());
+        assert!(confine_to_root(&repo, &repo.join("docs/x.md")).is_ok());
+        for bad in [
+            "out/idx.md",
+            "leak.txt",
+            "dangling.txt",
+            "../elsewhere/secret.txt",
+            "docs/../../elsewhere/x",
+            "docs/missing/../../../x",
+        ] {
+            assert!(
+                confine_to_root(&repo, Path::new(bad)).is_err(),
+                "{bad} should be refused"
+            );
+        }
+        assert!(confine_to_root(&repo, &outside.join("secret.txt")).is_err());
+        assert!(write_atomic_in(&repo, Path::new("out/idx.md"), "x\n").is_err());
+        assert!(!outside.join("idx.md").exists());
+    }
+
     #[test]
     fn resolve_identity_refuses_a_name_that_would_break_a_table_row() {
         let _guard = PATH_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
@@ -1797,6 +1897,24 @@ mod tests {
         assert_eq!(
             last_commit_for_path(&tmp, &tmp.join("b.txt")).unwrap(),
             Some(first)
+        );
+    }
+
+    #[test]
+    fn last_commit_for_path_reads_glob_characters_literally() {
+        let tmp = Scratch::new("urzua-io-lastcommit-literal");
+        fs::create_dir_all(tmp.join("app/[id]")).unwrap();
+        fs::create_dir_all(tmp.join("app/i")).unwrap();
+        init_repo(&tmp);
+
+        fs::write(tmp.join("app/[id]/page.tsx"), "1").unwrap();
+        let literal = commit_all(&tmp, "add the bracketed page");
+        fs::write(tmp.join("app/i/page.tsx"), "1").unwrap();
+        commit_all(&tmp, "add a page the bracket class would match");
+
+        assert_eq!(
+            last_commit_for_path(&tmp, Path::new("app/[id]/page.tsx")).unwrap(),
+            Some(literal)
         );
     }
 

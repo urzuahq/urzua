@@ -73,7 +73,7 @@ pub fn run(config_path: Option<PathBuf>, args: FixArgs) -> ExitCode {
                 "urzua fix --rebaseline --apply: pass --reason <why the evidence still holds>; a re-pin without a reason is a rubber stamp",
             ))
         }
-        (_, Some(r)) if r.contains('|') || r.contains('\n') => {
+        (_, Some(r)) if r.contains('|') || r.contains(['\n', '\r']) => {
             return emit(&CouldNotRun::from(
                 "--reason must be one line without '|' (it is written into a revision-log table row)",
             ))
@@ -147,8 +147,18 @@ pub fn run(config_path: Option<PathBuf>, args: FixArgs) -> ExitCode {
     }
     if rebaseline {
         return run_rebaseline(
-            &repo_root, &config, &records, &scoped, unmatched, apply, &ids, force, by, actor,
+            &repo_root,
+            &config,
+            &records,
+            &scoped,
+            unmatched,
+            apply,
+            &ids,
+            force,
+            by,
+            actor,
             &reason,
+            &|| {},
         );
     }
     let drift = if !enabled(urzua_core::rules::RULE_EMBODIMENT_CONSISTENCY) {
@@ -298,10 +308,12 @@ pub fn run(config_path: Option<PathBuf>, args: FixArgs) -> ExitCode {
             &log_id,
             log_required,
         ) {
-            Ok(new_content) => match urzua_io::write_atomic(&full_path, &new_content) {
-                Ok(()) => applied.push(repair),
-                Err(e) => failed.push((repair.record.clone(), format!("could not write: {e}"))),
-            },
+            Ok(new_content) => {
+                match urzua_io::write_atomic_in(&repo_root, &full_path, &new_content) {
+                    Ok(()) => applied.push(repair),
+                    Err(e) => failed.push((repair.record.clone(), format!("could not write: {e}"))),
+                }
+            }
             Err(e) => failed.push((repair.record.clone(), e)),
         }
     }
@@ -519,14 +531,35 @@ fn run_rebaseline(
     by: Option<String>,
     actor: urzua_core::fix::ActorKind,
     reason: &str,
+    after_lock: &dyn Fn(),
 ) -> ExitCode {
+    // The pin hashes written come from this detect pass, so for `--apply` the
+    // lock is taken first: evidence edited between an earlier detect and the
+    // lock would otherwise be hashed stale and attested as current.
+    let identity = if apply {
+        match resolve_attestation(by.as_deref(), actor, repo_root, config) {
+            Ok(id) => Some(id),
+            Err(e) => return emit(&CouldNotRun::from(e)),
+        }
+    } else {
+        None
+    };
+    let _lock = if apply {
+        match urzua_io::FixLock::acquire(repo_root) {
+            Ok(lock) => Some(lock),
+            Err(e) => return emit(&CouldNotRun::from(e)),
+        }
+    } else {
+        None
+    };
+    after_lock();
     let texts = crate::file_texts::FileTexts::new(repo_root.to_path_buf(), config);
     let read = |locator: &urzua_core::locator::Locator| {
         crate::pins::read_pin(repo_root, config, &texts, locator)
     };
     let (population, found, failed_pins) =
         urzua_core::fix::detect_rebaselines(scoped, config, &read);
-    if !apply {
+    let Some(identity) = identity else {
         let (found, unmatched) = narrow_to_ids(
             found,
             |r| r.record.display().to_string(),
@@ -544,14 +577,6 @@ fn run_rebaseline(
             false,
             Vec::new(),
         ));
-    }
-    let identity = match resolve_attestation(by.as_deref(), actor, repo_root, config) {
-        Ok(id) => id,
-        Err(e) => return emit(&CouldNotRun::from(e)),
-    };
-    let _lock = match urzua_io::FixLock::acquire(repo_root) {
-        Ok(lock) => lock,
-        Err(e) => return emit(&CouldNotRun::from(e)),
     };
     let today = urzua_io::today();
     let mut failed = unmatched;
@@ -593,7 +618,7 @@ fn run_rebaseline(
             reason,
             &log_id,
         ) {
-            Ok(new) => match urzua_io::write_atomic(&full_path, &new) {
+            Ok(new) => match urzua_io::write_atomic_in(repo_root, &full_path, &new) {
                 Ok(()) => applied.push(rb),
                 Err(e) => failed.push((rb.record.clone(), format!("could not write: {e}"))),
             },
@@ -610,4 +635,98 @@ fn run_rebaseline(
         true,
         Vec::new(),
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::session::{Session, Workspace};
+
+    fn git(dir: &std::path::Path, args: &[&str]) {
+        let status = std::process::Command::new("git")
+            .args(args)
+            .current_dir(dir)
+            .status()
+            .expect("git should run");
+        assert!(status.success(), "git {args:?} failed");
+    }
+
+    struct Scratch(PathBuf);
+    impl Drop for Scratch {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    /// The evidence is hashed under the lock: a file edited after the
+    /// re-baseline was started but before the lock was held is pinned at the
+    /// text it has then, not the text an earlier read saw.
+    #[test]
+    fn rebaseline_apply_hashes_the_evidence_as_it_is_under_the_lock() {
+        let v1 = "fn a() {}\n";
+        let v2 = "fn a() { let _ = 1; }\n";
+        let v3 = "fn a() { let _ = 3; }\n";
+        let dir = Scratch(
+            std::env::temp_dir().join(format!("urzua-fix-lock-race-{}", std::process::id())),
+        );
+        let _ = std::fs::remove_dir_all(&dir.0);
+        std::fs::create_dir_all(dir.0.join("docs/adr")).unwrap();
+        std::fs::create_dir_all(dir.0.join("src")).unwrap();
+        std::fs::create_dir_all(dir.0.join(".urzua")).unwrap();
+        git(&dir.0, &["init", "-q"]);
+        git(&dir.0, &["config", "user.email", "t@example.com"]);
+        git(&dir.0, &["config", "user.name", "t"]);
+        std::fs::write(
+            dir.0.join(".urzua/config.yaml"),
+            "schema_version: 2\nrules: {embodiment.consistency: error}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n",
+        )
+        .unwrap();
+        let record = format!(
+            "---\nEmbodiment: Implemented\nRealized-by: 'code:src/a.rs@sha256:{}'\n---\n# ADR-1: T\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Initial. | **structural** |\n",
+            urzua_io::sha256_hex_of_str(v1)
+        );
+        std::fs::write(dir.0.join("docs/adr/ADR-1-a.md"), record).unwrap();
+        std::fs::write(dir.0.join("src/a.rs"), v1).unwrap();
+        git(&dir.0, &["add", "-A"]);
+        git(&dir.0, &["commit", "-q", "-m", "fixture"]);
+        std::fs::write(dir.0.join("src/a.rs"), v2).unwrap();
+        git(&dir.0, &["commit", "-qam", "edit"]);
+
+        let root = dir.0.canonicalize().unwrap();
+        let config_path = root.join(".urzua/config.yaml");
+        let config = crate::discovery::load_config(&config_path).unwrap();
+        let session = Session::load(
+            Workspace {
+                repo_root: root.clone(),
+                config_path,
+                config,
+            },
+            |_, _, _| Ok(()),
+        )
+        .unwrap();
+        let evidence = root.join("src/a.rs");
+        run_rebaseline(
+            &root,
+            &session.config,
+            &session.records,
+            &session.records,
+            Vec::new(),
+            true,
+            &[],
+            true,
+            Some("ana".to_string()),
+            urzua_core::fix::ActorKind::Unspecified,
+            "checked",
+            &|| std::fs::write(&evidence, v3).unwrap(),
+        );
+        let written = std::fs::read_to_string(root.join("docs/adr/ADR-1-a.md")).unwrap();
+        assert!(
+            written.contains(&format!("@sha256:{}", urzua_io::sha256_hex_of_str(v3))),
+            "{written}"
+        );
+        assert!(
+            !written.contains(&urzua_io::sha256_hex_of_str(v2)),
+            "{written}"
+        );
+    }
 }

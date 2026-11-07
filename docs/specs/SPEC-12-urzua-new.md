@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5C0WX34AQKF79DQDS5
-Version: '0.17'
+Version: '0.18'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -77,11 +77,11 @@ as prevention: `new` never manufactures the collision RFC-13 exists to describe 
 **Other refs are consulted too (MILE-89).** After the working-tree scan, `new` also lists the type's
 directory on every local branch and remote-tracking ref (`refs/heads/*`, `refs/remotes/*`) and takes
 one past the highest number found anywhere. Each number above the working tree's own highest that
-another ref already uses is reported on stderr with the ref(s) claiming it. This is git only, with
+another ref already uses is reported in the `skipped` list of the report (below), never on stderr. This is git only, with
 no network and no `gh`: **a ref that was never fetched into this clone is invisible**, so a branch
 or PR known only to the remote can still collide -- run `git fetch` first, and still check open PRs
 before opening one. If git cannot be read (git missing, `.git` unusable), `new` numbers from the
-working tree exactly as before and says so on stderr; it never silently skips the check. The query is
+working tree exactly as before and says so in a warning notice (subject `new.numbering`); it never silently skips the check. The query is
 one `for-each-ref` plus one `ls-tree` per distinct commit: it reads a single directory tree per tip
 and knows which ref each name came from, where `git log --all --name-only` walks all history and
 cannot attribute.
@@ -125,6 +125,14 @@ touches no remote.
   fetched; `disabled`, `offline` or `timeout`), `remote` (`null` when disabled), `refs` (the count under
   `refs/urzua/pr`, fetched now or earlier), `worktrees_scanned`, and `skipped_numbers`, a list of
   `{number, held_by}` naming the refs or worktrees that held each number skipped.
+- **The skipped numbers are in the report, not on stderr (`ADR-93`, Amendment of 2026-11-07).** `new`'s JSON has
+  a top-level `skipped` list, always present and empty when nothing was skipped, with one `{number, reason}`
+  entry for each number and reason: `open-pr <ref>` when a ref under `refs/urzua/pr` holds the number (the full
+  ref name), `worktree <path>` when a sibling worktree does, and `local` when a local branch or remote-tracking
+  ref does (one entry however many such refs hold it; `pull_refs.skipped_numbers[].held_by` names them). It is
+  ordered by number, then open pull requests, worktrees and `local`, then by text. When the pull-request check
+  is off, `pull_refs.reason` is `disabled` and only local refs were consulted. Nothing about a skipped number
+  is written to stderr.
 - **Never reused still holds.** This only widens the set of taken numbers, with pull refs and sibling
   worktrees; it never frees one (`ADR-27`).
 
@@ -189,3 +197,4 @@ take content and parameters, returning a string.
 > | 2026-11-05 | Bumped to `0.15`. `new` creates the type's directory for its first record instead of failing with `could not read`. **Why:** Phase 0 hardening from an adopter switchover -- the first `urzua new waiver` failed. | **substantive** |
 > | 2026-11-06 | Bumped to `0.16`. A type that requires `Stable-Id` gets the generated value in that field instead of a blank. **Why:** maintainer decision of 2026-11-05 made `Stable-Id` required on every record type in this repository, and the blank required field overwrote the generated identity. | **substantive** |
 > | 2026-11-07 | Bumped to `0.17`. §Display-number assignment documents the opt-in open-pull-request check (`new.check_open_prs`): the fetch of pull-request head refs into `refs/urzua/pr/<segment>/*` with plain git, one namespace per pattern; numbering that skips the numbers held there, including closed and merged pull requests, and in sibling worktrees (untracked files included); the `<git-common-dir>/urzua-new.lock` lock; the offline fallback with a notice and exit 0; and the report's always-present `pull_refs`. Separate clones are stated as the remaining limit. **Why:** `MILE-89` / `ADR-93`. | **substantive** |
+> | 2026-11-07 | Bumped to `0.18`. The numbers `new` skipped are reported in a top-level `skipped` list in the JSON, each with its reason (`open-pr <ref>`, `worktree <path>` or `local`), and no longer on stderr; the working-tree-only fallback is a warning notice (`new.numbering`). **Why:** Maintainer decision, 2026-11-07, recorded as an amendment to `ADR-93`: the stderr lines contradicted `ADR-46` decision 8. | **substantive** |

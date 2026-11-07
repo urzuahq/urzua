@@ -353,6 +353,17 @@ mod tests {
     }
 
     #[test]
+    fn a_date_fields_entry_naming_no_declared_field_is_refused_observed_failing() {
+        let load = |entry: &str| {
+            let yaml = format!("schema_version: 2\nrecord_types:\n  adr:\n    dir: docs/adr\n    required_fields: [Status]\n    known_fields: [Date]\nrules:\n  date.field-valid:\n    level: error\n    date_fields: [{entry}]\n");
+            crate::config::parse(&yaml).err().map(|e| e.to_string())
+        };
+        assert!(load("Date").is_none());
+        assert!(load("Typo").unwrap().contains("date_fields"));
+        assert!(load("Date, \"\"").unwrap().contains("blank"));
+    }
+
+    #[test]
     fn the_options_load_only_on_their_rules_and_are_required() {
         let bad = |rules: &str| {
             let yaml = format!("schema_version: 2\nrecord_types:\n  adr:\n    dir: docs/adr\n    required_fields: [Status]\nrules:\n{rules}");

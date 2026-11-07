@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5GM1RYRRX2XVMZ0ZAK
-Version: '0.116'
+Version: '0.117'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs, code:rust/crates/urzua-core/src/rules.rs, test:rust/crates/urzua-cli/tests/check_integration.rs, test:rust/crates/urzua-cli/tests/fail_on_integration.rs
@@ -648,6 +648,7 @@ declares `known_fields` keeps the `append` variant.
 | `embodiment.locator-exists` | `locator-kind-unpinnable` | `edit-field` `set` |
 | `embodiment.locator-promotion-candidate` | `locator-promotion-candidate` | exempt: an advisory nudge that is never auto-promoted |
 | `header.field-set-consistency` | `undeclared-field` | `edit-field` `remove` |
+| `header.field-set-consistency` | `undeclared-field-case` | `edit-field` `rename` |
 | `field.untrimmed-value` | `untrimmed-value` | `edit-field` `set` |
 | `field.leading-reserved-indicator` | `leading-reserved-indicator` | `edit-field` `set` |
 | `header.field-case-mismatch` | `field-case-mismatch` | `edit-field` `rename` |
@@ -1029,4 +1030,5 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-07 | Bumped to `0.113`. §Discovery states `discovery.include_untracked` (`SPEC-3`): with it, untracked, non-ignored record files directly in a declared directory join the run's files (source still `tracked-sweep`), `--base` counts them as added, and a named file keeps its `BUG-24` treatment; without it, a plain `check` adds the info notice `discovery.untracked-skipped` naming the untracked records it skipped. `scope` gains the always-present `include_untracked` and `untracked_included`. The info notice `discovery.untracked-not-drift-judged` counts records with a locator and no history that drift did not judge. **Why:** `MILE-206` / `ADR-92`; `ADR-56` stands for the default and carries the amendment. | **substantive** |
 > | 2026-11-07 | Bumped to `0.114`. Adds the opt-in rule `identity.open-pr-collision` (`ADR-93`, `MILE-89`): under `--base`, a warning for an added record whose type and number a fetched pull-request ref under `refs/urzua/pr` holds with a different `Stable-Id`; `not-applicable` without `--base`; a head carrying the record's own `Stable-Id` is not a collision; `check` never fetches, and with no refs fetched the rule adds a notice saying how and its population (unit `pull-ref`) counts zero. The rule table is regenerated. **Why:** `MILE-89` / `ADR-93`. | **substantive** |
 > | 2026-11-07 | Bumped to `0.115`. `urzua rules` prints a fifth `judges` value, `anchor-scoped`, for a rule that reads other records as context and reports only on changed ones; `embodiment.locator-promotion-candidate` carries it and, under `scope: changed`, emits one finding per changed citer, so `check <path>`, `--stdin-path` and a file-scoped waiver each see the finding on their own record. **Why:** the accepted 2026-11-07 amendment to `ADR-90`, points 4 and 5. | **substantive** |
-> | 2026-11-07 | Bumped to `0.116`. `identity.open-pr-collision` names the remedy that works: rename the file and its H1 to the next free number, or waive the finding when the other pull request is abandoned (`urzua migrate ids` cannot renumber); the `open-pr-collision` action reason says the same. An unknown `harness.guardrails` name is a load error, so `check` exits 2 on it. **Why:** `ADR-93` and `ADR-89` amendments of 2026-11-07. | **substantive** |
+> | 2026-11-07 | Bumped to `0.116`. Documents that `embodiment.locator-exists` reports `Realized-by` text outside a recognised entry as `locator-malformed`; the `undeclared-field-case` variant of `header.field-set-consistency` (rename, never remove); that `revision-log.change-class-required` reads an alignment row as a delimiter; and that `header.required-fields` leaves a type with no `required_fields` out of its population. **Why:** Phase 0 hardening review of the core rules. | **substantive** |
+> | 2026-11-07 | Bumped to `0.117`. `identity.open-pr-collision` names the remedy that works: rename the file and its H1 to the next free number, or waive the finding when the other pull request is abandoned (`urzua migrate ids` cannot renumber); the `open-pr-collision` action reason says the same. An unknown `harness.guardrails` name is a load error, so `check` exits 2 on it. **Why:** `ADR-93` and `ADR-89` amendments of 2026-11-07. | **substantive** |

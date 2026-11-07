@@ -165,15 +165,18 @@ impl Suppression {
     /// as though it doesn't exist, with no separate "expired" state to
     /// configure.
     ///
-    /// The `<=` is lexical, which only holds once both sides are known
-    /// `YYYY-MM-DD`: any other value sorts above a real date
-    /// (`"2026-09-16" <= "soon"`) and would suppress findings forever. A
-    /// non-date expiry expires immediately instead -- this mechanism may
-    /// fail toward more findings, never fewer.
+    /// Both sides are compared as calendar dates. A value that is not a real
+    /// `YYYY-MM-DD` date (`soon`, `2026-9-16`, `2026-99-99`, `2026-02-30`)
+    /// would otherwise sort above every real date and suppress findings
+    /// forever, so it expires immediately instead -- this mechanism may fail
+    /// toward more findings, never fewer.
     pub fn is_active(&self, today: &str) -> bool {
         match &self.expires {
             None => true,
-            Some(expires) => is_iso_date(expires) && today <= expires.as_str(),
+            Some(expires) => match (calendar_date(expires), calendar_date(today)) {
+                (Some(expires), Some(today)) => today <= expires,
+                _ => false,
+            },
         }
     }
 
@@ -331,16 +334,31 @@ fn judge_permanence(
     }
 }
 
-/// Calendar validity (a 31st of February) is deliberately unchecked: it still
-/// orders correctly against a real date, which is all `is_active` asks.
-fn is_iso_date(value: &str) -> bool {
+/// A `YYYY-MM-DD` string as (year, month, day), or `None` when it is not a
+/// real calendar date (month 13, 31 April, 29 February in a common year).
+fn calendar_date(value: &str) -> Option<(u32, u32, u32)> {
     let bytes = value.as_bytes();
-    bytes.len() == 10
+    let shaped = bytes.len() == 10
         && bytes[4] == b'-'
         && bytes[7] == b'-'
         && [0, 1, 2, 3, 5, 6, 8, 9]
             .iter()
-            .all(|&i| bytes[i].is_ascii_digit())
+            .all(|&i| bytes[i].is_ascii_digit());
+    if !shaped {
+        return None;
+    }
+    let year: u32 = value[0..4].parse().ok()?;
+    let month: u32 = value[5..7].parse().ok()?;
+    let day: u32 = value[8..10].parse().ok()?;
+    let leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+    let last = match month {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 if leap => 29,
+        2 => 28,
+        _ => return None,
+    };
+    (1..=last).contains(&day).then_some((year, month, day))
 }
 
 /// Mark each finding covered by an active waiver. Findings are never
@@ -378,6 +396,23 @@ mod tests {
             suggested_action: None,
             action_source: ActionSource::default(),
         }
+    }
+
+    #[test]
+    fn an_expiry_is_compared_as_a_calendar_date() {
+        let w = |expires: &str| Suppression {
+            id: "w1".into(),
+            rule: "r".into(),
+            scope: "*".into(),
+            expires: Some(expires.into()),
+            unmet: Vec::new(),
+            unmet_states: Vec::new(),
+            permanence: Permanence::Ungoverned,
+        };
+        assert!(w("2028-02-29").is_active("2028-02-29"));
+        assert!(!w("2026-02-29").is_active("2026-01-01"));
+        assert!(w("2026-12-31").is_active("2026-11-07"));
+        assert!(!w("2026-11-06").is_active("2026-11-07"));
     }
 
     #[test]
@@ -441,7 +476,17 @@ scope: docs/adr/ADR-1-x.md
         // a date -- "soon", "TBD", or a single-digit month -- suppresses
         // forever. A waiver nobody can expire is the one failure this
         // mechanism must not have.
-        for bad in ["soon", "TBD", "Q4", "2026-9-16"] {
+        for bad in [
+            "soon",
+            "TBD",
+            "Q4",
+            "2026-9-16",
+            "2026-99-99",
+            "2026-19-01",
+            "2026-02-30",
+            "2026-13-01",
+            "2025-02-29",
+        ] {
             let w = Suppression {
                 id: "w1".into(),
                 rule: "r".into(),
