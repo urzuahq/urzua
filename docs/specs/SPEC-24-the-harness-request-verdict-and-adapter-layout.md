@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6Q32HB672E7RB57RFQ9QEB3
-Status: Accepted
+Status: Shipped
 Embodiment: Verified
 Realized-by: code:rust/crates/urzua-cli/src/harness/run.rs, code:rust/crates/urzua-cli/src/harness/post_command.rs, code:rust/crates/urzua-cli/src/harness/gate.rs, code:rust/crates/urzua-cli/src/harness/lock.rs, code:rust/crates/urzua-cli/src/harness/mod.rs, code:rust/crates/urzua-cli/bundle/claude-code/files/.claude/hooks/urzua-claude-code.py, test:rust/crates/urzua-cli/tests/harness_integration.rs, test:rust/crates/urzua-cli/tests/harness_hardening_integration.rs, test:rust/crates/urzua-cli/tests/harness_post_command_integration.rs, test:rust/crates/urzua-cli/tests/harness_install_report_integration.rs
 Date: 2026-11-06
-Version: '0.11'
+Version: '0.12'
 Author: beauwilliams
 Subject: 'The neutral request and verdict `urzua harness run` speaks, the adapter directory layout of the embedded bundle, and the lock file.'
 Implements: ADR-89
@@ -200,3 +200,4 @@ out of the shared files, and deletes the lock last.
 > | 2026-11-07 | Bumped to `0.10`. Status changed from Draft to Accepted. **Why:** Maintainer decision, 2026-11-07: the maintainer approved moving this spec to `Shipped`, and the lifecycle moves one step at a time (`Draft` to `Accepted` to `Shipped`). | **substantive** |
 > | 2026-11-07 | Bumped to `0.11`. Realized-by names the implementing code and tests, ready for `Shipped` (`MILE-7`). **Why:** Maintainer decision, 2026-11-07: moving this spec to `Shipped` requires `Embodiment` and `Realized-by`. | **structural** |
 > | 2026-11-07 | Tool-authored (by beauwilliams, identity: gh-verified, actor: agent): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-cli/src/harness/run.rs, code:rust/crates/urzua-cli/src/harness/post_command.rs, code:rust/crates/urzua-cli/src/harness/gate.rs, code:rust/crates/urzua-cli/src/harness/lock.rs, code:rust/crates/urzua-cli/src/harness/mod.rs, code:rust/crates/urzua-cli/bundle/claude-code/files/.claude/hooks/urzua-claude-code.py, test:rust/crates/urzua-cli/tests/harness_integration.rs, test:rust/crates/urzua-cli/tests/harness_hardening_integration.rs, test:rust/crates/urzua-cli/tests/harness_post_command_integration.rs, test:rust/crates/urzua-cli/tests/harness_install_report_integration.rs` -- stated `Not started` disagreed with the computed value `Verified`. | **structural** |
+> | 2026-11-07 | Bumped to `0.12`. Status changed from Accepted to Shipped. **Why:** Maintainer decision, 2026-11-07: its `Realized-by` evidence computes `Verified`, and each section was checked against the built code and tests. | **substantive** |
