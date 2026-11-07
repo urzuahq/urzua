@@ -520,6 +520,14 @@ fn two_pull_refs_holding_one_number_are_flagged_against_the_record_a_diff_adds()
     let message = f[0]["message"].as_str().unwrap();
     assert!(message.contains("refs/urzua/pr/origin/9"), "{message}");
     assert!(message.contains("docs/bug/BUG-2-theirs.md"), "{message}");
+    // The remedy must be one that works: `migrate ids` cannot renumber.
+    assert!(!message.contains("migrate ids"), "{message}");
+    assert!(
+        message.contains("Rename the file and its H1 to the next free number"),
+        "{message}"
+    );
+    assert!(message.contains("waive"), "{message}");
+    assert!(message.contains("docs/bug/BUG-2-theirs.md"), "{message}");
     assert_eq!(execution(&v)["status"], "ran", "{v}");
     assert_eq!(execution(&v)["population"]["eligible"], 1, "{v}");
     assert_eq!(code, 0, "a warning gates only under fail_on: warning");

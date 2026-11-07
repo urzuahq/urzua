@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5AJB7EBVDWVSMCSYZQ
-Version: '0.27'
+Version: '0.28'
 Date: 2026-07-29
 Status: Shipped
 Embodiment: Verified
@@ -135,6 +135,8 @@ for the narrower report `audit` used to give.
 ### `urzua fix`
 **Specified in full by SPEC-8.** Detects fields whose stated value disagrees with what the tool
 computes from evidence already in the record; apply mode writes the computed value back, gated hard.
+Without `--apply` nothing is written: `--ids` narrows the report (an entry matching nothing is a failure,
+as under `--apply`), and `--force`, `--by` and `--actor` are usage errors (exit 2), never ignored.
 
 ### `urzua roadmap`
 **Specified in full by SPEC-2** (the roadmap output). The order of work computed from the records:
@@ -354,3 +356,4 @@ None. Every question this spec carried has been answered or routed:
 > | 2026-11-06 | Bumped to `0.26`. `urzua export` and `urzua import` require `--format`; the `agdr` default is gone, so a bare `urzua export` says a format is required instead of reporting an unimplemented one. `urzua fix --help` says what is implemented (tier 1 and `--rebaseline`). **Why:** the second-pass review (`cli.md` #11): the defaults named a format that is not implemented and the help text no longer matched `fix`. | **substantive** |
 > | 2026-11-06 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: unspecified): re-pinned `rust/crates/urzua-cli/src/main.rs#Command` (lines 92-288) 6be4a09f031d -> c61774c9d4cb, `rust/crates/urzua-cli/tests/export_integration.rs` ffeb24dfae4a -> 188eded0b56a. Reason: main.rs#Command: export and import now require --format (the agdr default is removed) and the fix help text names what fix does; no change to any other command, flag or output; export_integration.rs: the bare `export` case now asserts the `--format` required error instead of the not-implemented one, and the `agdr` case is kept **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
 > | 2026-11-06 | Bumped to `0.27`. `urzua refs refresh` dates the snapshot with the current UTC date. **Why:** maintainer decision of 2026-11-05: every date comparison uses UTC; the date was the machine's local date. | **substantive** |
+> | 2026-11-07 | Bumped to `0.28`. `urzua fix` without `--apply`: `--ids` narrows the dry-run report and an `--ids` entry that matches nothing is a failure, as under `--apply`; `--force`, `--by` and `--actor` are usage errors (exit 2). **Why:** maintainer decision of 2026-11-07, from the CLI review: a typo'd `--ids` read as "nothing to do". | **substantive** |

@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5BCRKD027XA81J0Q8Q
-Version: '0.12'
+Version: '0.13'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -89,7 +89,11 @@ computed from non-waived findings only.
 `Reason` is required by the table above but, by default, only `header.required-fields` enforces it,
 and a waiver without one still suppresses. The type may instead declare `effective_requires: [Reason]`
 (`SPEC-3`, `BUG-177`): a waiver then takes effect only once each listed field holds a real value,
-that is present and neither blank, a placeholder nor pending. Otherwise it suppresses nothing, so its
+that is present and neither blank, a placeholder nor pending. A value is a placeholder or pending only
+as a whole (trimmed) value: it equals a declared `pending` value, or the text the type's template
+(`.urzua/templates/<type>.md`) gives that field. "Pending the upstream fix" is a real reason; "Pending"
+alone, where `pending` is declared, is not, and the finding on the waiver says it is a placeholder, not
+that the field is missing. Otherwise it suppresses nothing, so its
 target finding appears again (failing toward more findings, as for a missing `Rule`), and with
 `waiver.matches-nothing` enabled a finding on the waiver names the missing field. The default is
 unchanged.
@@ -151,3 +155,4 @@ record is edited later.
 > | 2026-11-05 | Bumped to `0.10`. The type may declare `effective_requires` (`SPEC-3`): a waiver missing a listed field, or holding a blank, placeholder or pending value, does not suppress, its target finding is reported again, and `waiver.matches-nothing` reports the waiver (`waiver-ineffective`). Off unless declared; this repository requires `Reason`. **Why:** `BUG-177`, maintainer decision of 2026-11-05: the `Reason` is the whole reviewability point and was enforced only by the opt-in `header.required-fields`. | **substantive** |
 > | 2026-11-05 | Bumped to `0.11`. The type may declare `permanent` (`SPEC-3`): a waiver without `Expires` takes effect only for a listed rule, under a declared category and, where the category requires it, a resolving `Justified-by`; declaring it closes permanence for unlisted rules, and `check` counts permanent waivers by category. Added the `Category` and `Justified-by` fields; the statement that the type has no relationship fields is amended, `Justified-by` being declared in `pointer_fields`. **Why:** `MILE-193` / `ADR-86`. | **substantive** |
 > | 2026-11-06 | Bumped to `0.12`. States that `Expires` is compared against the current UTC date, not the machine's local date. **Why:** maintainer decision of 2026-11-05: every date comparison uses UTC; the engine had read local time here and UTC for the claim-age clock. | **substantive** |
+> | 2026-11-07 | Bumped to `0.13`. A required field (`effective_requires`) is a placeholder only when its whole trimmed value equals a declared `pending` value or the template's text for it; the word "pending" inside real prose is a real reason, and the compiled-in tokens no longer apply to it. `waiver.matches-nothing` says "is a placeholder" or "is a declared pending value" for such a field, and "lacks" only for an absent or blank one. **Why:** maintainer decision of 2026-11-07, from the core-model review. | **substantive** |

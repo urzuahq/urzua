@@ -192,11 +192,31 @@ fn findings_of<'a>(report: &'a serde_json::Value, rule: &str) -> Vec<&'a serde_j
 fn a_suppression_missing_a_required_field_does_not_suppress_and_is_reported_observed_failing() {
     let cfg = config_with_matches_nothing(&declared_type(Some("[Reason]")));
     let dir = corpus("req-missing", &cfg, &[("docs/waiver", "WAIVER-1-x.md")]);
-    for (case, reason) in [
-        ("absent", None),
-        ("blank", Some("''")),
-        ("placeholder", Some("TBD")),
-        ("pending", Some("pending")),
+    // The waiver type's template gives the placeholder text for `Reason`.
+    std::fs::create_dir_all(dir.join(".urzua/templates")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/templates/waiver.md"),
+        "---\nRule: x\nReason: why this exception is accepted\n---\n# NNNN\n",
+    )
+    .unwrap();
+    for (case, reason, says) in [
+        ("absent", None, "lacks Reason"),
+        ("blank", Some("''"), "lacks Reason"),
+        (
+            "template text",
+            Some("why this exception is accepted"),
+            "Reason is a placeholder",
+        ),
+        (
+            "pending",
+            Some("pending"),
+            "Reason is a declared pending value",
+        ),
+        (
+            "Pending, exact",
+            Some("Pending"),
+            "Reason is a declared pending value",
+        ),
     ] {
         with_reason(&dir, reason);
         let (ok, report) = run(&dir);
@@ -206,8 +226,30 @@ fn a_suppression_missing_a_required_field_does_not_suppress_and_is_reported_obse
         assert_eq!(on_waiver.len(), 1, "{case}: {report}");
         assert_eq!(on_waiver[0]["file"], "docs/waiver/WAIVER-1-x.md");
         assert!(
-            on_waiver[0]["message"].as_str().unwrap().contains("Reason"),
-            "{case}: {report}"
+            on_waiver[0]["message"].as_str().unwrap().contains(says),
+            "{case}: expected '{says}': {report}"
+        );
+    }
+}
+
+/// The word "pending" inside a real reason does not make it a placeholder.
+#[test]
+fn a_reason_with_the_word_pending_in_prose_still_suppresses_observed_failing() {
+    // A type declaring no `pending` vocabulary used to fall back to the
+    // compiled-in whole-word match, which read the prose below as pending.
+    let cfg = config_with_matches_nothing(&declared_type(Some("[Reason]")))
+        .replace("      pending: [pending]\n", "");
+    let dir = corpus("req-prose", &cfg, &[("docs/waiver", "WAIVER-1-x.md")]);
+    for reason in [
+        "pending the upstream fix",
+        "Deferred until the pending refactor lands",
+    ] {
+        with_reason(&dir, Some(reason));
+        let (_, report) = run(&dir);
+        assert!(waived_by(&report).is_some(), "{reason}: {report}");
+        assert!(
+            findings_of(&report, "waiver.matches-nothing").is_empty(),
+            "{reason}: {report}"
         );
     }
 }

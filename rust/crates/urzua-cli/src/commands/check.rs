@@ -424,7 +424,24 @@ fn execute(config_path: Option<PathBuf>, args: CheckArgs) -> Result<CheckReport,
     };
     notices.extend(scope_changed_notices(&executions, &why_deferred));
     scope_findings(session, &scope, &mut findings);
-    let suppression_type = urzua_core::waiver::SuppressionType::from_config(&session.config);
+    let mut suppression_type = urzua_core::waiver::SuppressionType::from_config(&session.config);
+    // The suppression type's template says what its placeholder text is.
+    let template_path = session
+        .repo_root
+        .join(".urzua/templates")
+        .join(format!("{}.md", suppression_type.name));
+    match urzua_io::read_to_string(&template_path) {
+        Ok(text) => suppression_type = suppression_type.with_template(&text),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => notices.push(Notice {
+            severity: NoticeSeverity::Warning,
+            subject: "waiver.template".to_string(),
+            message: format!(
+                "the waiver template '{}' could not be read ({e}); a Reason still holding the template's text is not recognised as a placeholder",
+                template_path.display()
+            ),
+        }),
+    }
     let waivers = urzua_core::waiver::load_suppressions(&session.records, &suppression_type);
     notices.extend(permanent_waivers_notice(&suppression_type, &waivers));
     let today = urzua_io::today();

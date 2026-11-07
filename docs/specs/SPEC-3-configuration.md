@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.103'
+Version: '0.104'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs, test:rust/crates/urzua-cli/tests/field_levels_integration.rs
@@ -861,10 +861,15 @@ harness:
   person's is allowed). A denying guardrail that cannot judge refuses an agent's edit to the protected
   paths too, including this file; a person repairs it by editing outside the agent harness (a plain editor
   or a terminal), where no hook runs. `urzua doctor` and the verdict's message say so.
-- **A key or guardrail the build does not know, and a guardrail the chosen adapter cannot provide, are
-  reported, never skipped.** The configuration still loads with an unknown key or guardrail, so a typo does
-  not stop every command; `urzua harness install` refuses (exit 2, nothing written) and `urzua doctor`
-  warns. A guardrail turned on that no chosen adapter provides in this bundle version (`post-command`
+- **A guardrail name the build does not ship is a load error.** A name under `harness.guardrails` that is
+  not one of `editor-hook`, `post-command`, `session-start`, `acceptance`, `protected-paths` stops every
+  command (`check` exits 2) with a message naming it and, when one is close, the nearest valid name
+  (`acceptence`: did you mean `acceptance`?), because a misspelled gate leaves the one meant switched off
+  while the file reads as protection (`ADR-89` amendment of 2026-11-07).
+- **A key the build does not know, and a guardrail the chosen adapter cannot provide, are
+  reported, never skipped.** The configuration still loads with an unknown `harness` key (or an unknown key
+  inside a guardrail), so a typo does not stop every command; `urzua harness install` refuses (exit 2,
+  nothing written) and `urzua doctor` warns. A guardrail turned on that no chosen adapter provides in this bundle version (`post-command`
   until its milestone lands) is installed around and reported by
   `install`, `status` and `doctor`. A value of the wrong type (`enabled: yes-please`, `on_unjudged:
   sometimes`, `adapters: claude-code`) is a load error.
@@ -2128,3 +2133,4 @@ proves this configuration produces the three findings.
 > | 2026-11-07 | Bumped to `0.101`. Documents the top-level `discovery` key (`include_untracked`, a boolean, default `false`): untracked, non-ignored record files directly under a declared directory join discovery, and an unknown key or a non-boolean value is a load error. **Why:** `MILE-206` / `ADR-92`. | **substantive** |
 > | 2026-11-07 | Bumped to `0.102`. Documents the top-level `new` key (`check_open_prs`, `pull_ref_patterns`, `remote`, `fetch_timeout_seconds`, `lock_timeout_seconds`) and its load errors. **Why:** `MILE-89` / `ADR-93`. | **substantive** |
 > | 2026-11-07 | Bumped to `0.103`. The rule table's `judges` column gains `anchor-scoped`, which with `one-record` is the only value that lists `scope` (`ADR-90` amendment); `embodiment.locator-promotion-candidate` is labelled with it and, under `scope: changed`, emits one finding per changed citer. **Why:** the accepted 2026-11-07 amendment to `ADR-90`, points 4 and 5. | **substantive** |
+> | 2026-11-07 | Bumped to `0.104`. A `harness.guardrails` name the build does not ship is a config load error for every command, suggesting the nearest valid name; unknown keys elsewhere in `harness` are still kept and reported. **Why:** `ADR-89` amendment of 2026-11-07, maintainer decision from the core-model review. | **substantive** |

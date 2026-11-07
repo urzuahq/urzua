@@ -76,6 +76,45 @@ pub fn guardrail_info(name: &str) -> Option<&'static GuardrailInfo> {
     GUARDRAILS.iter().find(|g| g.name == name)
 }
 
+/// The load error for a `harness.guardrails` name this build does not ship,
+/// suggesting the nearest valid name when one is close.
+fn unknown_guardrail_message(name: &str) -> String {
+    let nearest = GUARDRAILS
+        .iter()
+        .map(|g| (edit_distance(name, g.name), g.name))
+        .min()
+        .filter(|(distance, _)| *distance <= (name.chars().count() / 3).max(2));
+    let hint = nearest
+        .map(|(_, valid)| format!("; did you mean '{valid}'?"))
+        .unwrap_or_default();
+    format!(
+        "harness.guardrails names '{name}', which this build does not know{hint} (it ships: {})",
+        GUARDRAILS
+            .iter()
+            .map(|g| g.name)
+            .collect::<Vec<_>>()
+            .join(", ")
+    )
+}
+
+/// Levenshtein distance between two short names.
+fn edit_distance(a: &str, b: &str) -> usize {
+    let b: Vec<char> = b.chars().collect();
+    let mut row: Vec<usize> = (0..=b.len()).collect();
+    for (i, ca) in a.chars().enumerate() {
+        let mut diagonal = row[0];
+        row[0] = i + 1;
+        for (j, cb) in b.iter().enumerate() {
+            let above = row[j + 1];
+            row[j + 1] = (row[j + 1] + 1)
+                .min(row[j] + 1)
+                .min(diagonal + usize::from(ca != *cb));
+            diagonal = above;
+        }
+    }
+    row[b.len()]
+}
+
 /// One guardrail as the repository declared it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Guardrail {
@@ -166,12 +205,11 @@ impl<'de> Deserialize<'de> for HarnessDecl {
                     })?;
                     for (name, body) in guardrails {
                         let name = name.as_str().unwrap_or("?").to_string();
+                        // A misspelled name would otherwise leave the guardrail
+                        // it meant off while reading as configured, so it stops
+                        // the load for every command (`ADR-89` amendment).
                         let Some(info) = guardrail_info(&name) else {
-                            decl.problems.push(format!(
-                                "harness.guardrails names '{name}', which this build does not know (it ships: {})",
-                                GUARDRAILS.iter().map(|g| g.name).collect::<Vec<_>>().join(", ")
-                            ));
-                            continue;
+                            return Err(D::Error::custom(unknown_guardrail_message(&name)));
                         };
                         let body = body.as_mapping().ok_or_else(|| {
                             D::Error::custom(format!(
@@ -318,18 +356,36 @@ mod tests {
     }
 
     #[test]
-    fn an_unknown_guardrail_or_key_is_kept_as_a_problem_never_dropped() {
+    fn an_unknown_key_is_kept_as_a_problem_never_dropped() {
         let h = parse(
-            "colour: blue\nguardrails:\n  teleport: {enabled: true}\n  session-start: {enabled: true, on_unjudged: deny}\n",
+            "colour: blue\nguardrails:\n  session-start: {enabled: true, on_unjudged: deny}\n",
         )
         .unwrap();
-        assert_eq!(h.problems.len(), 3, "{:?}", h.problems);
+        assert_eq!(h.problems.len(), 2, "{:?}", h.problems);
         assert!(h.problems.iter().any(|p| p.contains("'colour'")));
-        assert!(h.problems.iter().any(|p| p.contains("'teleport'")));
         assert!(h
             .problems
             .iter()
             .any(|p| p.contains("session-start") && p.contains("'on_unjudged'")));
+    }
+
+    #[test]
+    fn an_unknown_guardrail_name_is_a_load_error_suggesting_the_nearest_name_observed_failing() {
+        let e = parse("guardrails:\n  acceptence: {enabled: true}\n")
+            .unwrap_err()
+            .to_string();
+        assert!(e.contains("'acceptence'"), "{e}");
+        assert!(e.contains("did you mean 'acceptance'?"), "{e}");
+        let e = parse("guardrails:\n  editor-hok: {enabled: true}\n")
+            .unwrap_err()
+            .to_string();
+        assert!(e.contains("did you mean 'editor-hook'?"), "{e}");
+        // Nothing near it: no guess, but the valid names are listed.
+        let e = parse("guardrails:\n  teleport: {enabled: true}\n")
+            .unwrap_err()
+            .to_string();
+        assert!(!e.contains("did you mean"), "{e}");
+        assert!(e.contains("protected-paths"), "{e}");
     }
 
     #[test]

@@ -48,6 +48,15 @@ pub fn run(config_path: Option<PathBuf>, args: FixArgs) -> ExitCode {
         ));
     }
 
+    // `--force`, `--by` and `--actor` belong to a write; without `--apply` they
+    // would be silently ignored, so they are a usage error (`--ids` instead
+    // narrows the dry-run report).
+    if !apply && (force || by.is_some() || actor != urzua_core::fix::ActorKind::Unspecified) {
+        return emit(&CouldNotRun::from(
+            "urzua fix --force, --by and --actor belong to --apply: without it nothing is written, so they would be ignored (--ids alone narrows the dry-run report)",
+        ));
+    }
+
     if rebaseline && stdin_path.is_some() {
         return emit(&CouldNotRun::from(
             "urzua fix --rebaseline works on files in the tree: it cannot be combined with --stdin-path",
@@ -182,6 +191,13 @@ pub fn run(config_path: Option<PathBuf>, args: FixArgs) -> ExitCode {
     );
 
     if !apply {
+        let (repairs, unmatched) = narrow_to_ids(
+            repairs,
+            |r| r.record.display().to_string(),
+            &ids,
+            unmatched,
+            "matched no pending repair (an entry is a record's repo-relative path, e.g. docs/adr/ADR-1-title.md)",
+        );
         return emit(&build_fix_report(
             population,
             repairs,
@@ -462,6 +478,34 @@ fn build_report(
 /// lock and re-read-before-write are exactly Tier 1 apply's, so the two modes
 /// share one set of gates. A record is the selector (`--ids` takes its
 /// repo-relative path), and all of its stale pins move together.
+/// The dry-run counterpart of `--apply`'s `--ids` selection: keep only the
+/// entries an `--ids` value names, and report an `--ids` value that named none
+/// as a failure, as `--apply` does. No `--ids` keeps everything.
+fn narrow_to_ids<T>(
+    items: Vec<T>,
+    key: impl Fn(&T) -> String,
+    ids: &[String],
+    mut failed: Vec<(PathBuf, String)>,
+    unmatched_reason: &str,
+) -> (Vec<T>, Vec<(PathBuf, String)>) {
+    if ids.is_empty() {
+        return (items, failed);
+    }
+    for id in ids {
+        if !items.iter().any(|i| key(i) == *id) {
+            failed.push((
+                PathBuf::from(id),
+                format!("--ids entry '{id}' {unmatched_reason}"),
+            ));
+        }
+    }
+    let kept = items
+        .into_iter()
+        .filter(|i| ids.contains(&key(i)))
+        .collect();
+    (kept, failed)
+}
+
 #[allow(clippy::too_many_arguments)]
 fn run_rebaseline(
     repo_root: &std::path::Path,
@@ -483,6 +527,13 @@ fn run_rebaseline(
     let (population, found, failed_pins) =
         urzua_core::fix::detect_rebaselines(scoped, config, &read);
     if !apply {
+        let (found, unmatched) = narrow_to_ids(
+            found,
+            |r| r.record.display().to_string(),
+            ids,
+            unmatched,
+            "matched no record with a stale @sha256: pin (an entry is a record's repo-relative path; only pinned locators are re-baselined)",
+        );
         return emit(&build_report(
             population,
             Vec::new(),
