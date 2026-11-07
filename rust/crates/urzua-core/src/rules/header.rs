@@ -18,6 +18,11 @@ pub fn header_required_fields(
         let Some(required) = required_by_type.get(&record.record_type) else {
             continue;
         };
+        // A type that declares no required fields has no slot in this rule's
+        // population, so it is not judged here (ADR-55).
+        if required.is_empty() {
+            continue;
+        }
         // A `none`-shaped type has nowhere for a header to be (`ADR-50`): a
         // missing region here is the declared truth, not a defect to report.
         if config
@@ -197,26 +202,35 @@ pub fn header_field_set_consistency(
                     continue;
                 }
                 if !field_is_declared(&field.key, allowed) {
+                    // A key that differs from a declared one only in case is a
+                    // rename, never a removal: removing it would delete the value.
+                    let near = near_miss(&field.key, allowed);
+                    let source = match near {
+                        Some(declared) => ActionSource::new("undeclared-field-case")
+                            .field(field.key.as_str())
+                            .text(declared.as_str()),
+                        None => ActionSource::new("undeclared-field").field(field.key.as_str()),
+                    };
                     findings.push(Finding {
-                    rule: RULE_ID.to_string(),
-                    severity: FindingSeverity::Warning,
-                    file: record.path.clone(),
-                    line: Some(field.line),
-                    waived: None,
-                    declared_severity: None,
-                    suggested_action: None,
-                    action_source: ActionSource::new("undeclared-field").field(field.key.as_str()),
-                    message: match near_miss(&field.key, allowed) {
-                        Some(declared) => format!(
-                            "field '{}' is not declared for record type '{}' -- the type declares '{declared}', which differs only in case",
-                            field.key, record.record_type
-                        ),
-                        None => format!(
-                            "field '{}' is not declared (required_fields or known_fields) for record type '{}'",
-                            field.key, record.record_type
-                        ),
-                    },
-                });
+                        rule: RULE_ID.to_string(),
+                        severity: FindingSeverity::Warning,
+                        file: record.path.clone(),
+                        line: Some(field.line),
+                        waived: None,
+                        declared_severity: None,
+                        suggested_action: None,
+                        action_source: source,
+                        message: match near {
+                            Some(declared) => format!(
+                                "field '{}' is not declared for record type '{}' -- the type declares '{declared}', which differs only in case; rename it",
+                                field.key, record.record_type
+                            ),
+                            None => format!(
+                                "field '{}' is not declared (required_fields or known_fields) for record type '{}'",
+                                field.key, record.record_type
+                            ),
+                        },
+                    });
                 }
             }
             Outcome::Examined
@@ -411,6 +425,28 @@ mod tests {
             (1, 0),
             "the record is in the population and the rule never saw its fields"
         );
+    }
+
+    #[test]
+    fn a_case_only_near_miss_suggests_a_rename_never_a_removal_observed_failing() {
+        let (r, _) = yaml_record("docs/adr/ADR-1-x.md", "---\nstatus: Open\n---\n# 1 — X\n");
+        let config = config_for_known(vec![("adr", vec!["Status"])]);
+        let (_, findings) = header_field_set_consistency(&[r], &config);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        let src = &findings[0].action_source;
+        assert_eq!(src.variant, "undeclared-field-case");
+        assert_eq!(src.target.field.as_deref(), Some("status"));
+        assert!(matches!(&src.value, Some(crate::report::ActionValue::Text(t)) if t == "Status"));
+    }
+
+    #[test]
+    fn a_headerless_record_of_a_type_declaring_no_required_fields_is_not_judged_observed_failing() {
+        let a = record("docs/a/A-1-x.md", "a", "---\nStatus: Open\n---\n");
+        let b = record("docs/b/B-1-y.md", "b", "No header here.\n");
+        let config = config_for_required(vec![("a", vec!["Status"]), ("b", vec![])]);
+        let (exec, findings) = header_required_fields(&[a, b], &config);
+        assert_eq!(examined(&exec), 1);
+        assert!(findings.is_empty(), "{findings:?}");
     }
 
     #[test]
