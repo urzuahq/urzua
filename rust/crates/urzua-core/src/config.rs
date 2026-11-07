@@ -486,6 +486,15 @@ pub struct RuleSetting {
     /// `true` exempts prefixed keys from that rule and nothing else.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub allow_extension_prefix: Option<bool>,
+    /// Per-type extension prefix (`MILE-141`): a record type name mapped to the
+    /// prefix its extension header keys begin with, in place of the fixed `x-`.
+    /// Only meaningful to `header.field-set-consistency`. A type named here
+    /// admits keys beginning with its own prefix (any case) and no others; a
+    /// type left out falls back to `allow_extension_prefix`. Each prefix is
+    /// non-empty, holds no whitespace and is not the start of a field the type
+    /// declares, and each type must be a declared type with `known_fields`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub extension_prefixes: Option<BTreeMap<String, String>>,
     /// Treat a pending value as legitimate until the record reaches a status
     /// that requires the field (`MILE-169`). Only meaningful to `field.pending`,
     /// where omitted means `false`: a pending value is reported at every status.
@@ -1519,6 +1528,12 @@ pub enum ConfigError {
     InvalidFieldLevels { rule: String, reason: String },
     #[error("rule '{rule}' decision gate (`decision_types`, `fix_types`, `link_fields`) {reason}")]
     InvalidDecisionGate { rule: String, reason: String },
+    #[error("rule '{rule}' option 'extension_prefixes' entry '{record_type}' {reason}")]
+    InvalidExtensionPrefix {
+        rule: String,
+        record_type: String,
+        reason: String,
+    },
     #[error("rule '{rule}' requires the option '{option}' -- without it the rule {consequence}")]
     OptionRequired {
         rule: String,
@@ -2539,6 +2554,23 @@ pub fn parse_with_document_models(
                 option: "allow_extension_prefix".to_string(),
             });
         }
+        if let Some(prefixes) = &setting.extension_prefixes {
+            if !crate::rules::rule_accepts_option(name, "extension_prefixes") {
+                return Err(ConfigError::OptionNotApplicable {
+                    rule: name.clone(),
+                    option: "extension_prefixes".to_string(),
+                });
+            }
+            for (record_type, prefix) in prefixes {
+                if let Some(reason) = extension_prefix_problem(&config, record_type, prefix) {
+                    return Err(ConfigError::InvalidExtensionPrefix {
+                        rule: name.clone(),
+                        record_type: record_type.clone(),
+                        reason,
+                    });
+                }
+            }
+        }
 
         if setting.pending_until_required.is_some()
             && !crate::rules::rule_accepts_option(name, "pending_until_required")
@@ -3176,6 +3208,38 @@ fn default_provisional_level() -> ProvisionalLevel {
 
 /// Load-time checks for `companion_fields` (`BUG-41`): a pair that cannot run
 /// reads as a clean corpus, so every misdeclaration is refused.
+/// Why a per-type extension prefix cannot be used, if it cannot (`MILE-141`).
+/// The type must be declared with `known_fields` (the rule examines no other,
+/// so a prefix for one would be a silent no-op), and the prefix must be
+/// non-empty, hold no whitespace and not be the start of a field the type
+/// declares, case-insensitively, since the rule matches prefixes that way.
+fn extension_prefix_problem(config: &Config, record_type: &str, prefix: &str) -> Option<String> {
+    let Some(t) = config.record_types.get(record_type) else {
+        return Some(format!(
+            "names '{record_type}', which is not a declared record type"
+        ));
+    };
+    if t.known_fields.is_none() {
+        return Some(format!(
+            "names '{record_type}', which declares no `known_fields`, so the rule never examines its keys and the prefix would read nothing"
+        ));
+    }
+    if prefix.is_empty() {
+        return Some("has an empty prefix; it must be non-empty".to_string());
+    }
+    if prefix.chars().any(char::is_whitespace) {
+        return Some(format!("has the prefix '{prefix}', which holds whitespace"));
+    }
+    let lower = prefix.to_lowercase();
+    let clash = t
+        .declared_fields()
+        .into_iter()
+        .find(|f| f.as_str().to_lowercase().starts_with(&lower))?;
+    Some(format!(
+        "has the prefix '{prefix}', which collides with the declared field '{clash}'"
+    ))
+}
+
 fn validate_companion_fields(config: &Config) -> Result<(), ConfigError> {
     for (name, rt) in &config.record_types {
         let Some(pairs) = &rt.companion_fields else {
@@ -4503,6 +4567,50 @@ rules:
         assert!(err.contains("allow_extension_prefix"), "{err}");
     }
 
+    /// `MILE-141`: `extension_prefixes` loads on `header.field-set-consistency`
+    /// only, and every entry is validated at load.
+    fn prefix_cfg(entry: &str) -> String {
+        format!(
+            "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    known_fields: [\"Status\", \"ext-Owner\"]\n  spec:\n    dir: \"docs/specs\"\nrules:\n  header.field-set-consistency:\n    level: warn\n    extension_prefixes:\n{entry}"
+        )
+    }
+
+    #[test]
+    fn extension_prefixes_load_on_field_set_consistency_only() {
+        let config = parse(&prefix_cfg("      adr: \"xx-\"\n")).expect("a valid prefix loads");
+        let setting = &config.rules["header.field-set-consistency"];
+        assert_eq!(setting.extension_prefixes.as_ref().unwrap()["adr"], "xx-");
+
+        let err = parse(
+            "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    known_fields: [\"Status\"]\nrules:\n  header.required-fields:\n    level: warn\n    extension_prefixes:\n      adr: \"xx-\"\n",
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("header.required-fields"), "{err}");
+        assert!(err.contains("extension_prefixes"), "{err}");
+    }
+
+    #[test]
+    fn an_extension_prefix_must_be_non_empty_without_whitespace_and_clear_of_declared_fields() {
+        for (entry, needle) in [
+            ("      adr: \"\"\n", "non-empty"),
+            ("      adr: \"x y-\"\n", "whitespace"),
+            ("      adr: \" xx-\"\n", "whitespace"),
+            ("      adr: \"ext-\"\n", "ext-Owner"),
+            ("      adr: \"EXT-O\"\n", "ext-Owner"),
+            ("      adr: \"Sta\"\n", "Status"),
+            ("      nosuch: \"xx-\"\n", "nosuch"),
+            ("      spec: \"xx-\"\n", "known_fields"),
+        ] {
+            let err = parse(&prefix_cfg(entry)).unwrap_err();
+            assert!(
+                matches!(err, ConfigError::InvalidExtensionPrefix { .. }),
+                "{entry}: {err}"
+            );
+            assert!(err.to_string().contains(needle), "{entry}: {err}");
+        }
+    }
+
     #[test]
     fn an_option_on_a_rule_that_does_not_take_it_is_rejected() {
         let yaml = r#"
@@ -5770,6 +5878,7 @@ mod option_table_tests {
         "indexes",
         "issue_refs",
         "allow_extension_prefix",
+        "extension_prefixes",
         "pending_until_required",
         "template_placeholders",
         "skip_revision_log",

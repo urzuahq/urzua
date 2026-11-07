@@ -626,7 +626,12 @@ rules:
   # when they disagree.
   status.delivery-agreement: error
   header.required-fields: error
-  header.field-set-consistency: warn
+  # A condition's own extension prefix (MILE-141): `ext-` keys pass the closed
+  # key set on that type; every other type stays on the closed set.
+  header.field-set-consistency:
+    level: warn
+    extension_prefixes:
+      condition: "ext-"
   header.pointer-field-clean: warn
   type.no-declared-spec: warn
   type.dir-matches-nothing: warn

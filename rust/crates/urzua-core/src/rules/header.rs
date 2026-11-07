@@ -150,10 +150,12 @@ pub fn near_miss<'a>(
         .min()
 }
 
-/// `MILE-141`: a header key beginning `x-` in any case. Matched on the
-/// first two bytes only, so a multi-byte key never panics on a char boundary.
-fn is_extension_key(key: &str) -> bool {
-    key.get(..2).is_some_and(|p| p.eq_ignore_ascii_case("x-"))
+/// `MILE-141`: a header key beginning `prefix` in any case. Matched on the
+/// prefix's byte length only, so a multi-byte key never panics on a char
+/// boundary.
+fn is_extension_key(key: &str, prefix: &str) -> bool {
+    key.get(..prefix.len())
+        .is_some_and(|p| p.eq_ignore_ascii_case(prefix))
 }
 
 pub fn header_field_set_consistency(
@@ -166,11 +168,13 @@ pub fn header_field_set_consistency(
     let mut findings = Vec::new();
     // Off unless declared (`MILE-141`): without the option an `x-` key is an
     // undeclared key like any other, so existing corpora see no change.
-    let allow_extension_prefix = config
-        .rules
-        .get(RULE_ID)
+    let setting = config.rules.get(RULE_ID);
+    let allow_extension_prefix = setting
         .and_then(|s| s.allow_extension_prefix)
         .unwrap_or(false);
+    // A type that declares its own prefix uses it in place of `x-`; a type that
+    // does not falls back to the rule-level option exactly as before.
+    let type_prefixes = setting.and_then(|s| s.extension_prefixes.as_ref());
 
     // Eligible: records of a type declaring `known_fields`. An unparsed header
     // stays eligible and unexamined (BUG-78) rather than vanishing.
@@ -197,8 +201,12 @@ pub fn header_field_set_consistency(
                 return Outcome::Unreadable;
             }
 
+            let prefix = match type_prefixes.and_then(|m| m.get(&record.record_type)) {
+                Some(own) => Some(own.as_str()),
+                None => allow_extension_prefix.then_some("x-"),
+            };
             for field in &record.header.fields {
-                if allow_extension_prefix && is_extension_key(field.key.as_str()) {
+                if prefix.is_some_and(|p| is_extension_key(field.key.as_str(), p)) {
                     continue;
                 }
                 if !field_is_declared(&field.key, allowed) {
@@ -993,5 +1001,47 @@ mod tests {
             assert_eq!(findings.len(), 1, "allow={allow:?}: {findings:?}");
             assert!(findings[0].message.contains("'x-Local'"), "{findings:?}");
         }
+    }
+
+    /// `MILE-141` item 3: a per-type prefix. `adr` declares `ext-`, `spec` is
+    /// left on the rule-level default.
+    fn per_type_config(rule_level: Option<bool>) -> Config {
+        let option = match rule_level {
+            Some(v) => format!("    allow_extension_prefix: {v}\n"),
+            None => String::new(),
+        };
+        let yaml = format!(
+            "schema_version: 2\nrules:\n  header.field-set-consistency:\n    level: warn\n{option}    extension_prefixes:\n      adr: \"ext-\"\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n    known_fields: [\"Status\"]\n  spec:\n    dir: \"docs/specs\"\n    required_fields: []\n    known_fields: [\"Status\"]\n"
+        );
+        crate::config::parse(&yaml).expect("the fixture config loads")
+    }
+
+    #[test]
+    fn a_type_with_a_custom_prefix_admits_that_prefix_and_not_x() {
+        let r = record(
+            "docs/adr/0001-x.md",
+            "adr",
+            "---\nStatus: Accepted\next-Owner: a\nEXT-Team: b\nx-Local: c\nSponsor: d\n---\n",
+        );
+        let (exec, findings) = header_field_set_consistency(&[r], &per_type_config(None));
+        assert_eq!(examined(&exec), 1);
+        let msgs: Vec<_> = findings.iter().map(|f| f.message.clone()).collect();
+        assert_eq!(findings.len(), 2, "{msgs:?}");
+        assert!(msgs.iter().any(|m| m.contains("'x-Local'")), "{msgs:?}");
+        assert!(msgs.iter().any(|m| m.contains("'Sponsor'")), "{msgs:?}");
+    }
+
+    #[test]
+    fn a_type_left_on_the_default_keeps_the_rule_level_behaviour() {
+        let body = "---\nStatus: Accepted\next-Owner: a\nx-Local: c\n---\n";
+        // Rule-level option off: the undeclared type exempts nothing.
+        let r = record("docs/specs/SPEC-1-x.md", "spec", body);
+        let (_, off) = header_field_set_consistency(&[r], &per_type_config(None));
+        assert_eq!(off.len(), 2, "{off:?}");
+        // Rule-level option on: `x-` passes, `ext-` (another type's prefix) does not.
+        let r = record("docs/specs/SPEC-1-x.md", "spec", body);
+        let (_, on) = header_field_set_consistency(&[r], &per_type_config(Some(true)));
+        assert_eq!(on.len(), 1, "{on:?}");
+        assert!(on[0].message.contains("'ext-Owner'"), "{on:?}");
     }
 }

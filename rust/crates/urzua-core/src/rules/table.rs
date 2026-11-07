@@ -856,7 +856,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_HEADER_FIELD_SET_CONSISTENCY,
-        description: "Every header field belongs to its type's `required_fields` \u{222a} `known_fields`, when `known_fields` is declared (ADR-39). The optional `allow_extension_prefix` option (`MILE-141`), off unless declared `true`, exempts header keys beginning `x-` in any case; an unprefixed undeclared key is still a finding.",
+        description: "Every header field belongs to its type's `required_fields` \u{222a} `known_fields`, when `known_fields` is declared (ADR-39). The optional `allow_extension_prefix` option (`MILE-141`), off unless declared `true`, exempts header keys beginning `x-` in any case; an unprefixed undeclared key is still a finding. The optional `extension_prefixes` option (`MILE-141`) maps a record type to its own prefix, used for that type in place of `x-`; a type it does not name keeps the rule-level behaviour. A prefix is non-empty, holds no whitespace and does not start a field the type declares.",
         scope: Scope::Records,
         anchor: Anchor::Record,
         judges: Judges::OneRecord,
@@ -867,7 +867,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         requires_authority: false,
         reads_declaration: Some(Declaration::KnownFields),
         header_none: HeaderNone::OutOfScope,
-        options: &["allow_extension_prefix"],
+        options: &["allow_extension_prefix", "extension_prefixes"],
         population: PopulationUnit::Record,
         actions: &[
             VariantAction::new("undeclared-field", ActionDecl::FIELD_REMOVE),
