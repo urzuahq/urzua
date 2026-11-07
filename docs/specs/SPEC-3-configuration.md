@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.102'
+Version: '0.103'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs, test:rust/crates/urzua-cli/tests/field_levels_integration.rs
@@ -1875,9 +1875,12 @@ rules:
   an id with a changed record) are still examined by the rules that do not declare the option; for a rule
   that does, only the records the diff itself touches are judged. A change to the configuration file does
   not make a record changed.
-- Which rules take it is a column of the rule table (`urzua rules` prints it as `judges`). Only a rule
-  whose verdict on a record depends on that record alone (`one-record`) lists `scope`; today that is
-  `embodiment.locator-on-back-pointer-path`. A cross-record rule (id collision, reference resolution,
+- Which rules take it is a column of the rule table (`urzua rules` prints it as `judges`). A rule whose
+  verdict on a record depends on that record alone (`one-record`) lists `scope`; today that is
+  `embodiment.locator-on-back-pointer-path`. So does an `anchor-scoped` rule (`ADR-90` amendment,
+  2026-11-07): it reads other records as context but reports only advisory findings anchored on a changed
+  record, one finding per changed anchor; today that is `embodiment.locator-promotion-candidate`, which
+  emits a finding on each changed citer of a shared locator. A cross-record rule (id collision, reference resolution,
   reciprocity, sequencing, which can leave a defect in an unchanged record that a change caused), a rule
   that already judges only the changed set (`status.transition-allowed`,
   `revision-log.version-bump-required`) and a rule that is not record-level (configuration, files, diff,
@@ -2124,3 +2127,4 @@ proves this configuration produces the three findings.
 > | 2026-11-06 | Bumped to `0.100`. States that claim ages and every date comparison use UTC. **Why:** maintainer decision of 2026-11-05: UTC everywhere. | **substantive** |
 > | 2026-11-07 | Bumped to `0.101`. Documents the top-level `discovery` key (`include_untracked`, a boolean, default `false`): untracked, non-ignored record files directly under a declared directory join discovery, and an unknown key or a non-boolean value is a load error. **Why:** `MILE-206` / `ADR-92`. | **substantive** |
 > | 2026-11-07 | Bumped to `0.102`. Documents the top-level `new` key (`check_open_prs`, `pull_ref_patterns`, `remote`, `fetch_timeout_seconds`, `lock_timeout_seconds`) and its load errors. **Why:** `MILE-89` / `ADR-93`. | **substantive** |
+> | 2026-11-07 | Bumped to `0.103`. The rule table's `judges` column gains `anchor-scoped`, which with `one-record` is the only value that lists `scope` (`ADR-90` amendment); `embodiment.locator-promotion-candidate` is labelled with it and, under `scope: changed`, emits one finding per changed citer. **Why:** the accepted 2026-11-07 amendment to `ADR-90`, points 4 and 5. | **substantive** |

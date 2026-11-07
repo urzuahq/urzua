@@ -35,6 +35,10 @@ pub enum Judges {
     /// (`status.transition-allowed`, `revision-log.version-bump-required`):
     /// `scope` would do nothing. Does not list `scope`.
     ChangedSet,
+    /// A record-level rule that reads other records as context and reports
+    /// only advisory findings anchored on a record the diff changed, one per
+    /// changed anchor (`ADR-90` amendment, 2026-11-07). May list `scope`.
+    AnchorScoped,
     /// Not a record-level rule: it judges the configuration, files, changed
     /// paths, the run itself, or a directory. Does not list `scope`.
     NotRecordLevel,
@@ -46,6 +50,7 @@ impl Judges {
         match self {
             Judges::OneRecord => "one-record",
             Judges::CrossRecord => "cross-record",
+            Judges::AnchorScoped => "anchor-scoped",
             Judges::ChangedSet => "changed-set",
             Judges::NotRecordLevel => "not-record-level",
         }
@@ -766,7 +771,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         description: "The same locator cited by more than one record's `Realized-by` is a promotion candidate, surfaced as a finding, never auto-promoted (ADR-18). The optional `scope: changed` option (`ADR-90`) makes it a nudge for the moment someone touches a record that shares a locator: a locator is reported only when a record a `--base` diff adds or changes cites it, with the finding on that changed record and every citer (changed or not) named in the message; none on a plain `check`, and the slots it did not judge are counted in the population's `deferred_by_scope`, with one `info` notice saying why.",
         scope: Scope::Records,
         anchor: Anchor::Record,
-        judges: Judges::OneRecord,
+        judges: Judges::AnchorScoped,
         needs_identity_index: false,
         requires_relation_pairs: false,
         requires_acyclic_pair: false,
@@ -2022,7 +2027,10 @@ mod tests {
                 assert!(
                     matches!(
                         def.judges,
-                        Judges::OneRecord | Judges::CrossRecord | Judges::ChangedSet
+                        Judges::OneRecord
+                            | Judges::AnchorScoped
+                            | Judges::CrossRecord
+                            | Judges::ChangedSet
                     ),
                     "{} is record-level, so it is one-record, cross-record or changed-set",
                     def.id
@@ -2064,22 +2072,25 @@ mod tests {
             );
         }
         assert!(judged(Judges::OneRecord).contains(&RULE_EMBODIMENT_LOCATOR_ON_BACK_POINTER_PATH));
+        assert_eq!(
+            judged(Judges::AnchorScoped),
+            vec![RULE_EMBODIMENT_LOCATOR_PROMOTION_CANDIDATE]
+        );
     }
 
-    /// `ADR-90`: `scope` appears in `options` only for a rule whose verdict on
-    /// a record depends on that record alone, and the load-time check
+    /// `ADR-90` and its 2026-11-07 amendment: `scope` appears in `options` only
+    /// for a per-record rule or an anchor-scoped rule, and the load-time check
     /// (`rule_accepts_option`) reads the same list.
     #[test]
-    fn scope_is_listed_only_by_rules_that_judge_one_record() {
+    fn scope_is_listed_only_by_one_record_and_anchor_scoped_rules() {
         let mut listing = Vec::new();
         for def in RULE_TABLE {
             let lists = def.options.contains(&"scope");
             assert_eq!(rule_accepts_option(def.id, "scope"), lists, "{}", def.id);
             if lists {
-                assert_eq!(
-                    def.judges,
-                    Judges::OneRecord,
-                    "{} lists `scope` but its verdict reads more than its own record",
+                assert!(
+                    matches!(def.judges, Judges::OneRecord | Judges::AnchorScoped),
+                    "{} lists `scope` but is neither per-record nor anchor-scoped",
                     def.id
                 );
                 listing.push(def.id);

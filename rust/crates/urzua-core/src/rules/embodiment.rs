@@ -649,31 +649,35 @@ pub fn embodiment_locator_promotion_candidate(
             continue;
         }
         let names: Vec<String> = paths.iter().map(|p| p.display().to_string()).collect();
-        // Under `scope: changed` the finding sits on a changed citer, and a
-        // locator no changed record cites is not reported.
-        let first_path = if scope.is_some() {
-            match changed_citers.get(&locator).and_then(|c| c.iter().next()) {
-                Some(path) => path.clone(),
-                None => continue,
-            }
+        // Under `scope: changed` (`ADR-90` amendment, point 5) one finding sits on
+        // each changed citer, so `check <path>` and a file-scoped waiver see the
+        // finding on the record they examine; a locator no changed record cites
+        // is not reported. Without the option, one finding on the first citer.
+        let anchors: Vec<std::path::PathBuf> = if scope.is_some() {
+            changed_citers
+                .get(&locator)
+                .map(|c| c.iter().cloned().collect())
+                .unwrap_or_default()
         } else {
-            paths.iter().next().expect("checked len >= 2 above").clone()
+            vec![paths.iter().next().expect("checked len >= 2 above").clone()]
         };
-        findings.push(Finding {
-            rule: RULE_ID.to_string(),
-            severity: FindingSeverity::Warning,
-            file: first_path,
-            line: None,
-            waived: None,
-            declared_severity: None,
-            suggested_action: None,
-            action_source: ActionSource::new("locator-promotion-candidate"),
-            message: format!(
-                "locator '{locator}' is cited by {} records ({}) -- consider promoting to a shared claim record",
-                paths.len(),
-                names.join(", ")
-            ),
-        });
+        for anchor in anchors {
+            findings.push(Finding {
+                rule: RULE_ID.to_string(),
+                severity: FindingSeverity::Warning,
+                file: anchor,
+                line: None,
+                waived: None,
+                declared_severity: None,
+                suggested_action: None,
+                action_source: ActionSource::new("locator-promotion-candidate"),
+                message: format!(
+                    "locator '{locator}' is cited by {} records ({}) -- consider promoting to a shared claim record",
+                    paths.len(),
+                    names.join(", ")
+                ),
+            });
+        }
     }
 
     (
