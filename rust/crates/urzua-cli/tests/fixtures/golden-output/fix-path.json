@@ -1,0 +1,19 @@
+{
+  "args": [
+    "fix",
+    "docs/adr/ADR-2-second.md"
+  ],
+  "exit": 2,
+  "stdout": {
+    "failed": [],
+    "population": {
+      "eligible": 1,
+      "examined": 0,
+      "out_of_scope": 0,
+      "unit": "record",
+      "unreadable": 0
+    },
+    "repairs": [],
+    "status": "not-run"
+  }
+}

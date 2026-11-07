@@ -1,5 +1,5 @@
 ---
-Status: InProgress
+Status: Done
 Stable-Id: 01M1Y5JYB0J2X7P0AVRJKWJAJV
 Phase: '0'
 Track: schema-governance
@@ -38,3 +38,4 @@ RFC-6 versions records; nothing versions the schema those records are validated 
 > | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |
 > | 2026-11-07 | `Depends-on: MILE-171` removed; `Status` unchanged. **Why:** `MILE-171` is `InProgress` from its Done-means items (ADR-96, MILE-215) and a blocked milestone cannot claim progress (`sequence.status-agreement`). The part of `MILE-171` this milestone needed, the rule table running the declared cross-record model, is built and evidenced here by `rules/table.rs`; the unresolved `MILE-171` item (the output of `urzua check` unchanged by its refactor) is not something this milestone's Done means relies on. The dependency was real as an ordering (the table had to exist first) and that ordering is met; `Depends-on` is a whole-milestone gate and cannot say "needs the table, not the last item" (`ADR-96`, decisions on the open questions, 3: the wait is item-blind). Keeping it was tried: `Done` is refused by `sequence.status-agreement` and `InProgress` by `status.delivery-agreement`, because all five items resolve. Restore `Depends-on: MILE-171` once its item 5 has evidence. | **structural** |
 > | 2026-11-07 | `Depends-on: MILE-171` restored and `Status` Done -> InProgress. **Why:** the `ADR-96` amendment of 2026-11-07 (accepted by the maintainer) makes dependencies cap the status: all five items resolve, but `MILE-171` is unfinished (`InProgress`, item 5 has no evidence), so the status computes to `InProgress`, which both `status.delivery-agreement` and `sequence.status-agreement` accept. The removal of 2026-11-07 named this restore: `MILE-171`'s item 5 still has no evidence, so the dependency caps this milestone until it does. | **substantive** |
+> | 2026-11-07 | Tool-authored (by beauwilliams, identity: gh-verified, actor: agent): recomputed `Status` from `the Done means items (5 of 5 items resolved) computes to Implemented` -- stated `InProgress` disagreed with the computed value `Done`. | **structural** |
