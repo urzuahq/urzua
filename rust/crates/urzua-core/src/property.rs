@@ -219,6 +219,7 @@ mod tests {
                 block_on: None,
                 attestation: Default::default(),
                 new: Default::default(),
+                discovery: Default::default(),
                 harness: None,
                 authority: None,
                 rules: std::collections::BTreeMap::new(),
@@ -355,6 +356,7 @@ mod tests {
             block_on: None,
             attestation: Default::default(),
             new: Default::default(),
+            discovery: Default::default(),
             harness: None,
             authority: None,
             relation_pairs: vec![crate::config::RelationPair {
@@ -618,6 +620,7 @@ mod tests {
                 block_on: None,
                 attestation: Default::default(),
                 new: Default::default(),
+                discovery: Default::default(),
                 harness: None,
                 authority: None,
                 rules: std::collections::BTreeMap::new(),

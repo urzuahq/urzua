@@ -640,6 +640,12 @@ pub struct ScopeInfo {
     /// (SPEC-2).
     pub base: Option<String>,
     pub record_types: Vec<String>,
+    /// Whether the configuration set `discovery.include_untracked` (`ADR-92`).
+    /// Always present, so a consumer can tell the two corpora apart.
+    pub include_untracked: bool,
+    /// How many untracked records that option added to the run's files; `0`
+    /// with the option off. Always present.
+    pub untracked_included: usize,
     /// What a `git-diff` run examined and why; absent on every other source.
     #[serde(flatten)]
     pub diff: Option<DiffScope>,
@@ -1430,6 +1436,8 @@ mod tests {
                 source: ScopeSource::TrackedSweep,
                 base: None,
                 record_types: vec![],
+                include_untracked: false,
+                untracked_included: 0,
                 diff: None,
             },
             blocking: false,
@@ -1451,6 +1459,8 @@ mod tests {
                 source: ScopeSource::TrackedSweep,
                 base: None,
                 record_types: vec![],
+                include_untracked: false,
+                untracked_included: 0,
                 diff: None,
             },
             blocking: false,

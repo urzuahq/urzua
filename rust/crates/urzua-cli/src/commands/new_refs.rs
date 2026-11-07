@@ -184,6 +184,35 @@ fn process_alive(pid: u32) -> bool {
     }
 }
 
+/// Removes `path` if it still names the dead `holder` (or nobody), under a guard file
+/// that only one waiter can hold at a time. A waiter that cannot take the guard
+/// leaves the lock alone and retries.
+fn remove_if_stale(path: &Path, holder: Option<u32>) {
+    let guard = path.with_extension("lock.reap");
+    // A guard left by a crashed reaper is old; the work under it takes microseconds.
+    let old = std::fs::metadata(&guard)
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|t| t.elapsed().ok())
+        .is_some_and(|age| age > Duration::from_secs(5));
+    if old {
+        let _ = std::fs::remove_file(&guard);
+    }
+    let Ok(_file) = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&guard)
+    else {
+        return;
+    };
+    let text = std::fs::read_to_string(path).unwrap_or_default();
+    let unchanged = text.trim().parse::<u32>().ok() == holder;
+    if unchanged && holder.is_none_or(|pid| !process_alive(pid)) {
+        let _ = std::fs::remove_file(path);
+    }
+    let _ = std::fs::remove_file(&guard);
+}
+
 pub(crate) fn acquire_lock(repo_root: &Path, timeout_seconds: u32) -> LockOutcome {
     let dir = match git_common_dir(repo_root) {
         Ok(d) => d,
@@ -219,8 +248,12 @@ pub(crate) fn acquire_lock(repo_root: &Path, timeout_seconds: u32) -> LockOutcom
                     None => !young_and_empty,
                 };
                 if stale {
-                    // A lock whose owner is gone is removed (`ADR-93` clause 4).
-                    let _ = std::fs::remove_file(&path);
+                    // A lock whose owner is gone is removed (`ADR-93` clause 4). Two
+                    // waiters must not both remove it: the slower one would delete
+                    // the lock the faster one had just taken. So removal is guarded
+                    // by a second `create_new` file, and the lock is read again
+                    // under the guard; only a lock still stale is removed.
+                    remove_if_stale(&path, holder);
                     continue;
                 }
                 if started.elapsed() >= deadline {
@@ -280,4 +313,40 @@ pub(crate) fn sibling_worktrees(repo_root: &Path) -> Result<Vec<PathBuf>, String
     }
     flush(&mut current, &mut bare);
     Ok(siblings)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_lock_whose_owner_is_gone_is_taken_and_leaves_no_guard_behind() {
+        let dir = std::env::temp_dir().join(format!("urzua-lock-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        assert!(Command::new("git")
+            .arg("-C")
+            .arg(&dir)
+            .arg("init")
+            .arg("-q")
+            .status()
+            .unwrap()
+            .success());
+        let mut gone = Command::new("true").spawn().unwrap();
+        gone.wait().unwrap();
+        let lock = dir.join(".git/urzua-new.lock");
+        std::fs::write(&lock, format!("{}\n", gone.id())).unwrap();
+        match acquire_lock(&dir, 2) {
+            LockOutcome::Held(held) => {
+                assert_eq!(
+                    std::fs::read_to_string(&lock).unwrap().trim(),
+                    std::process::id().to_string()
+                );
+                drop(held);
+            }
+            _ => panic!("a lock held by a dead pid must be taken"),
+        }
+        assert!(!lock.exists());
+        assert!(!dir.join(".git/urzua-new.lock.reap").exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

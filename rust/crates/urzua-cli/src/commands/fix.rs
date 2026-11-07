@@ -476,7 +476,7 @@ fn run_rebaseline(
     actor: urzua_core::fix::ActorKind,
     reason: &str,
 ) -> ExitCode {
-    let texts = crate::file_texts::FileTexts::new(repo_root.to_path_buf());
+    let texts = crate::file_texts::FileTexts::new(repo_root.to_path_buf(), config);
     let read = |locator: &urzua_core::locator::Locator| {
         crate::pins::read_pin(repo_root, config, &texts, locator)
     };

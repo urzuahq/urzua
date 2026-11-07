@@ -1,10 +1,11 @@
 ---
 Stable-Id: 01M6SK9TM7F8FXEF7HCV4FD7AH
-Status: Planned
+Status: Done
 Phase: '0'
 Track: schema-governance
 Implements: ADR-92
 Blocked-on: null
+Realized-by: code:rust/crates/urzua-io/src/lib.rs, code:rust/crates/urzua-core/src/config.rs, code:rust/crates/urzua-core/src/report.rs, code:rust/crates/urzua-cli/src/discovery.rs, code:rust/crates/urzua-cli/src/commands/check.rs, code:rust/crates/urzua-cli/src/session.rs, code:rust/crates/urzua-cli/src/file_texts.rs, code:.urzua/config.yaml, test:rust/crates/urzua-cli/tests/discovery_untracked_integration.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs, spec:docs/specs/SPEC-2-urzua-check.md, spec:docs/specs/SPEC-3-configuration.md
 ---
 # 206 — Build the opt-in discovery.include_untracked option and the untracked-records notice
 
@@ -57,3 +58,4 @@ and the gate must not be clean about files it never read.
 > |---|---|---|
 > | 2026-11-06 | Initial milestone. **Why:** maintainer decision of 2026-11-06 to add an opt-in untracked-records discovery option in Phase 0; implements `ADR-92`. | **structural** |
 > | 2026-11-06 | Done means amended: `discover_tracked_files` changes signature and contract, and the `ADR-56` amendment is checked. `Status` unchanged. **Why:** independent review of 2026-11-06 of `ADR-92`, whose clauses 3 and 9 now state both. | **structural** |
+> | 2026-11-07 | Tool-authored (by beauwilliams, identity: gh-verified, actor: agent): recomputed `Status` from `Realized-by computes to Verified` -- stated `Planned` disagreed with the computed value `Done`. | **structural** |

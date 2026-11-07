@@ -110,6 +110,7 @@ mod tests {
             block_on: None,
             attestation: Default::default(),
             new: Default::default(),
+            discovery: Default::default(),
             harness: None,
             authority: None,
             rules: std::collections::BTreeMap::new(),

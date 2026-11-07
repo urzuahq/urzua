@@ -79,6 +79,10 @@ pub struct Config {
     /// took. Absent means it does not, and touches no remote.
     #[serde(default, skip_serializing_if = "NewDecl::is_default")]
     pub new: NewDecl,
+    /// Which files discovery reads beyond the tracked ones (`ADR-92`,
+    /// `MILE-206`, `SPEC-3`). Absent means the tracked and staged files only.
+    #[serde(default, skip_serializing_if = "DiscoveryDecl::is_default")]
+    pub discovery: DiscoveryDecl,
     /// The agent harness a repository installs (`ADR-89`, `MILE-198`): its
     /// adapters, the agent-instructions file and which guardrails are on.
     /// Absent installs and enables nothing.
@@ -149,6 +153,24 @@ impl Default for NewDecl {
             fetch_timeout_seconds: Self::default_fetch_timeout(),
             lock_timeout_seconds: Self::default_lock_timeout(),
         }
+    }
+}
+
+/// The `discovery` key (`ADR-92`, `SPEC-3`): a repository's choice to govern
+/// the record files it has written and not yet staged.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct DiscoveryDecl {
+    /// Include untracked, non-ignored files directly under a declared record
+    /// directory (`ADR-92` clause 1). Default `false`: a scratch file in a
+    /// working tree is not part of the corpus (`ADR-56`).
+    #[serde(default)]
+    pub include_untracked: bool,
+}
+
+impl DiscoveryDecl {
+    pub fn is_default(&self) -> bool {
+        *self == DiscoveryDecl::default()
     }
 }
 

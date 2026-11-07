@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.101'
+Version: '0.102'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs, test:rust/crates/urzua-cli/tests/field_levels_integration.rs
@@ -961,6 +961,31 @@ block_on: introduced   # the default
 - The engine reads no other meaning from the key: `urzua check` and `check --stdin-path` report the same
   findings under both values, and the Claude Code adapter passes the hook's verdict through unchanged.
   This repository declares `introduced` (`ADR-78` amendment, item 3).
+
+## Untracked records: `discovery`
+
+A top-level `discovery` sets which files discovery reads beyond the ones git tracks (`ADR-92`, `MILE-206`):
+
+```yaml
+discovery:
+  include_untracked: false   # the default
+```
+
+- **`include_untracked: true`** makes discovery include untracked, non-ignored files directly in a
+  declared record directory (`dir` or any `extra_dirs` of a type) that the type owns, under the same
+  filename rules the loader applies (`.md`, not an `exclude_files` entry, not underscore-prefixed). It is
+  the choice of a repository that wants a record read before it is staged: a malformed draft is found
+  before `git add`, and `files_examined` and `scope.untracked_included` count it. The price is that a
+  scratch file in a record directory that looks like a record is governed: the author moves it, ignores
+  it or finishes it. A file outside every declared directory is never included, and git's own rules
+  (`.gitignore`, `.git/info/exclude`, the global excludes) decide what is ignored. This repository sets it.
+- **`false`**, the default and what an absent key means, keeps the tracked-only corpus (`ADR-56`). A plain
+  `check` then names the untracked records it skipped in an info notice (`SPEC-2`).
+- Structured, not a string: the value is a boolean. An unknown key under `discovery`, or a value that is
+  not a boolean, is a load error (exit 2), as for any other configuration object.
+- It lives in committed configuration, not on the command line, so every checkout and CI agree on the
+  corpus. Two checkouts of one commit with different untracked files still disagree on `files_examined`,
+  as they already do for staged files.
 
 ## Numbering against open pull requests: `new`
 
@@ -2097,4 +2122,5 @@ proves this configuration produces the three findings.
 > | 2026-11-06 | Bumped to `0.98`. Documents the top-level `authority` table (`deciders` groups of `logins`, `evidence` defaulting to `pr-author`, `gates` by type and status and by path) with its load errors, the local refusal of an agent's edit-tool move to a gated status or write to a gated path (final, not liftable by the override), the rule option `require_evidence`, the actors file and the accepted risk; an enabled `acceptance` or `protected-paths` guardrail with no gate of its kind is a load error. **Why:** `MILE-200`, decided in `ADR-89` section 4, accepted by the maintainer. | **substantive** |
 > | 2026-11-06 | Bumped to `0.99`. The `authority` example's protected paths no longer list `scripts/hooks`, which this repository deleted. **Why:** `MILE-204`. | **substantive** |
 > | 2026-11-06 | Bumped to `0.100`. States that claim ages and every date comparison use UTC. **Why:** maintainer decision of 2026-11-05: UTC everywhere. | **substantive** |
-> | 2026-11-07 | Bumped to `0.101`. Documents the top-level `new` key (`check_open_prs`, `pull_ref_patterns`, `remote`, `fetch_timeout_seconds`, `lock_timeout_seconds`) and its load errors. **Why:** `MILE-89` / `ADR-93`. | **substantive** |
+> | 2026-11-07 | Bumped to `0.101`. Documents the top-level `discovery` key (`include_untracked`, a boolean, default `false`): untracked, non-ignored record files directly under a declared directory join discovery, and an unknown key or a non-boolean value is a load error. **Why:** `MILE-206` / `ADR-92`. | **substantive** |
+> | 2026-11-07 | Bumped to `0.102`. Documents the top-level `new` key (`check_open_prs`, `pull_ref_patterns`, `remote`, `fetch_timeout_seconds`, `lock_timeout_seconds`) and its load errors. **Why:** `MILE-89` / `ADR-93`. | **substantive** |

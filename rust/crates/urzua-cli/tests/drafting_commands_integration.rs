@@ -264,23 +264,57 @@ fn a_field_urzua_new_did_not_write_is_refused() {
     assert!(String::from_utf8_lossy(&out.stderr).contains("refusing"));
 }
 
-/// The reason the commands stage before checking (ADR-56): a sweep governs tracked
-/// files only, so a fresh scaffold is invisible to it until it is staged.
+fn sweep_examined(dir: &Path) -> u64 {
+    let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
+        .args(["check"])
+        .current_dir(dir)
+        .output()
+        .unwrap();
+    let report: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    report["files_examined"].as_u64().unwrap()
+}
+
+/// The reason the commands stage before checking (ADR-56): where a repository
+/// governs tracked files only, a sweep does not see a fresh scaffold until it is
+/// staged. Switching this repository's `discovery.include_untracked` off is that
+/// repository (ADR-92).
 #[test]
-fn a_sweep_examines_a_scaffold_only_once_it_is_staged() {
+fn without_include_untracked_a_sweep_examines_a_scaffold_only_once_it_is_staged() {
     let (dir, record, _) = scaffold("rfc.md", "Throwaway unstaged record");
-    let examined = |dir: &Path| -> u64 {
-        let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
-            .args(["check"])
-            .current_dir(dir)
-            .output()
-            .unwrap();
-        let report: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
-        report["files_examined"].as_u64().unwrap()
-    };
-    let before = examined(&dir);
+    let config = dir.join(".urzua/config.yaml");
+    let text = std::fs::read_to_string(&config).unwrap();
+    assert!(
+        text.contains("include_untracked: true"),
+        "this repository sets it"
+    );
+    std::fs::write(
+        &config,
+        text.replace("include_untracked: true", "include_untracked: false"),
+    )
+    .unwrap();
+    let before = sweep_examined(&dir);
     git(&dir, &["add", "--", &record]);
-    assert_eq!(examined(&dir), before + 1);
+    assert_eq!(sweep_examined(&dir), before + 1);
+}
+
+/// MILE-206, ADR-92: this repository includes untracked records, so a sweep
+/// examines a fresh scaffold before it is staged, and staging it changes nothing.
+#[test]
+fn with_include_untracked_a_sweep_examines_a_scaffold_before_it_is_staged() {
+    let (dir, record, _) = scaffold("rfc.md", "Throwaway unstaged record");
+    let included = sweep_examined(&dir);
+    // The same tree with the option off does not see the unstaged scaffold.
+    let config = dir.join(".urzua/config.yaml");
+    let text = std::fs::read_to_string(&config).unwrap();
+    std::fs::write(
+        &config,
+        text.replace("include_untracked: true", "include_untracked: false"),
+    )
+    .unwrap();
+    assert_eq!(sweep_examined(&dir) + 1, included);
+    std::fs::write(&config, text).unwrap();
+    git(&dir, &["add", "--", &record]);
+    assert_eq!(sweep_examined(&dir), included);
 }
 
 #[test]
