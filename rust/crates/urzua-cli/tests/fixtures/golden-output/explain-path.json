@@ -1,0 +1,30 @@
+{
+  "args": [
+    "explain",
+    "src/a.rs"
+  ],
+  "exit": 0,
+  "stdout": {
+    "governing_records": [
+      {
+        "record": "docs/adr/ADR-1-first.md",
+        "record_type": "adr",
+        "via": "code"
+      },
+      {
+        "record": "docs/adr/ADR-3-third.md",
+        "record_type": "adr",
+        "via": "code"
+      }
+    ],
+    "path": "src/a.rs",
+    "population": {
+      "eligible": 4,
+      "examined": 3,
+      "out_of_scope": 1,
+      "unit": "record",
+      "unreadable": 0
+    },
+    "status": "ok"
+  }
+}

@@ -620,3 +620,88 @@ fn an_override_that_cannot_be_recorded_is_not_allowed() {
         "{v}"
     );
 }
+
+/// A directory holding a `git` that appends one line per invocation to a log and
+/// then runs the real git, so a test counts process spawns.
+fn git_spawn_log(name: &str) -> (common::TempDir, PathBuf) {
+    use std::os::unix::fs::PermissionsExt;
+    let real = String::from_utf8(
+        Command::new("sh")
+            .args(["-c", "command -v git"])
+            .output()
+            .unwrap()
+            .stdout,
+    )
+    .unwrap();
+    let dir = common::TempDir::new(&format!("urzua-hook-shim-{name}"));
+    let log = dir.join("calls.log");
+    let shim = dir.join("git");
+    std::fs::write(
+        &shim,
+        format!(
+            "#!/bin/sh\necho \"$*\" >> '{}'\nexec '{}' \"$@\"\n",
+            log.display(),
+            real.trim()
+        ),
+    )
+    .unwrap();
+    std::fs::set_permissions(&shim, std::fs::Permissions::from_mode(0o755)).unwrap();
+    (dir, log)
+}
+
+/// MILE-178: a single-file judgement is cheap on a large corpus because its cost
+/// does not grow with the corpus. The test counts `git` process spawns, never
+/// time: judging one edit spawns the same git processes in a corpus of 1 record
+/// and in a corpus of 30, and at most two of them are a `git blame` (the proposal and the record on
+/// disk), each of the edited record alone.
+#[test]
+fn judging_one_edit_spawns_the_same_git_processes_whatever_the_corpus_size() {
+    let spawns = |records: usize| -> Vec<String> {
+        let root = fixture(&format!("spawns-{records}"), RECORD);
+        for n in 2..=records {
+            std::fs::write(
+                root.join(format!("docs/adr/ADR-{n}-r.md")),
+                format!(
+                    "---\nEmbodiment: Implemented\nRealized-by: code:src/a.rs\n---\n# ADR-{n}: T\n\nprose\n"
+                ),
+            )
+            .unwrap();
+        }
+        if records > 1 {
+            git(&root, &["add", "-A"]);
+            git(&root, &["commit", "-q", "-m", "records"]);
+        }
+        let (shim, log) = git_spawn_log(&format!("{records}"));
+        let path = format!(
+            "{}:{}",
+            shim.display(),
+            std::env::var("PATH").unwrap_or_default()
+        );
+        let (code, v) = core(&root, &["docs/adr/ADR-1-a.md"], &[("PATH", &path)], RECORD);
+        assert_eq!(code, 0, "{v}");
+        std::fs::read_to_string(&log)
+            .unwrap_or_default()
+            .lines()
+            .map(str::to_string)
+            .collect()
+    };
+    let small = spawns(1);
+    let large = spawns(30);
+    assert!(!small.is_empty(), "the judgement spawns git at all");
+    assert_eq!(
+        small.len(),
+        large.len(),
+        "git spawns grew with the corpus: {small:?} vs {large:?}"
+    );
+    let blames = |calls: &[String]| calls.iter().filter(|c| c.contains("blame")).count();
+    // One blame for the proposed content and one for the record on disk, which
+    // the hook compares it with; both name the edited record alone.
+    assert!(blames(&large) <= 2, "{large:?}");
+    assert!(
+        large
+            .iter()
+            .filter(|c| c.contains("blame"))
+            .all(|c| c.ends_with("docs/adr/ADR-1-a.md")),
+        "{large:?}"
+    );
+}
