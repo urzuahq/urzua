@@ -593,13 +593,16 @@ impl Report for InitReport {
 /// Never clobbers an existing config; `--dry-run` produces byte-identical
 /// output to the real run, differing only in whether the file is actually
 /// written.
-pub fn run(dry_run: bool) -> ExitCode {
+pub fn run(config: Option<PathBuf>, dry_run: bool) -> ExitCode {
     let repo_root = match find_repo_root(&[PathBuf::from(".")]) {
         Ok(root) => root,
         Err(e) => return emit(&CouldNotRun::from(e)),
     };
 
-    let config_path = crate::discovery::default_config_path(&repo_root);
+    // `--config X` names the file to write (SPEC-5); only the default location
+    // is derived from the repository, so only it is confined to it.
+    let explicit_config = config.is_some();
+    let config_path = config.unwrap_or_else(|| crate::discovery::default_config_path(&repo_root));
     let config_exists = config_path.exists();
     // `--dry-run` writes nothing, so an existing config is no reason to refuse
     // it: it shows what adopt would propose today.
@@ -722,8 +725,18 @@ pub fn run(dry_run: bool) -> ExitCode {
         });
     }
 
-    if let Err(e) = std::fs::create_dir_all(config_path.parent().unwrap()) {
-        return emit(&CouldNotRun::from(format!("could not create .urzua/: {e}")));
+    if !explicit_config {
+        if let Err(e) = urzua_io::confine_to_root(&repo_root, &config_path) {
+            return emit(&CouldNotRun::from(e));
+        }
+    }
+    if let Some(parent) = config_path.parent().filter(|p| !p.as_os_str().is_empty()) {
+        if let Err(e) = std::fs::create_dir_all(parent) {
+            return emit(&CouldNotRun::from(format!(
+                "could not create {}: {e}",
+                parent.display()
+            )));
+        }
     }
     if let Err(e) = urzua_io::write_atomic(&config_path, &rendered) {
         return emit(&CouldNotRun::from(format!(
