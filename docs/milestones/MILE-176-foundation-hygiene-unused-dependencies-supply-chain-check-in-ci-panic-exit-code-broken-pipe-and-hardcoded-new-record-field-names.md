@@ -5,7 +5,7 @@ Phase: '0'
 Track: schema-governance
 Implements: SPEC-22
 Blocked-on: —
-Realized-by: code:rust/deny.toml, code:.github/workflows/checks.yml, code:rust/crates/urzua-cli/src/main.rs, code:rust/crates/urzua-core/src/new_record.rs, test:rust/crates/urzua-cli/tests/process_exit_integration.rs, test:rust/crates/urzua-cli/tests/new_integration.rs
+Realized-by: code:rust/deny.toml, code:.github/workflows/checks.yml, code:rust/crates/urzua-cli/src/main.rs, code:rust/crates/urzua-core/src/new_record.rs, test:rust/crates/urzua-cli/tests/process_exit_integration.rs, test:rust/crates/urzua-cli/tests/new_integration.rs, code:.urzua/config.yaml
 ---
 # 176 — Foundation hygiene: unused dependencies, supply-chain check in CI, panic exit code, broken pipe and hardcoded new-record field names
 
@@ -36,3 +36,4 @@ No unused dependency remains and CI fails on one; a vulnerability check runs in 
 > | 2026-11-04 | Filed at Phase 0. **Why:** maintainer decision of 2026-11-04 pulled foundation work into Phase 0 (Phase 0 is parity on a solid codebase, `SPEC-1`'s Phase 0 exit); filed from the foundation review of the same date, whose evidence is cited above as read at that commit. | **substantive** |
 > | 2026-11-04 | Delivered in full, except `Realized-by` and `Status: Done`: the `milestone` type does not yet declare `Realized-by` in `.urzua/config.yaml`, so the evidence cannot be recorded here. Unused dependencies removed (`anyhow`, `serde`/`serde_json` in `urzua-agdr`, and the unused `urzua-agdr`, `urzua-core` and `serde` edges `cargo machete` found); `cargo machete` and `cargo deny check` run in CI and `make ci`; a panic exits 2; a closed stdout no longer panics; `urzua new` reads date and author field names from `relation_fields.date`/`author`. **Why:** the Done-when. | **substantive** |
 > | 2026-11-04 | Tool-authored (by beauwilliams): recomputed `Status` from `Realized-by computes to Verified` -- stated `Planned` disagreed with the computed value `Done`. | **structural** |
+> | 2026-11-07 | Added the exercise the Done means asks for. **Why:** the independent review of `ADR-96` found the clause "exercised by this repository's own config" vacuous: `.urzua/config.yaml` declared no `relation_fields.date` or `author` for `new` to read. The `adr`, `rfc` and `spec` types now declare them (`Date`, `Author`), and `Realized-by` gains the config locator. They name the same fields as the defaults, so the non-default case (a type calling them `Created` and `Owner`) stays covered by the fixture only; no type here uses other names. No reopen: every other Done means item is evidenced. | **substantive** |

@@ -32,41 +32,115 @@ The decision is the maintainer's, made on 2026-11-07: evidence per Done-means it
 
 ## Decision
 
-In the context of a milestone whose status is computed from evidence that never looks at its Done means, facing a record such as `MILE-165` that the engine forces to `Done` while an item is unmet, we decided that **a milestone's Done means is a list of items, each item names its own evidence, and the engine computes delivered only when every item that is not waived resolves**, to achieve a status that cannot claim more than the criteria were met, accepting a record syntax to maintain and a migration of every milestone's Done means.
+In the context of a milestone whose status is computed from evidence that never looks at its Done means, facing a record such as `MILE-165` that the engine forces to `Done` while an item is unmet, we decided that **a milestone's Done means is a list of items, each item names its own evidence, and the engine computes delivered only when every item that is not waived resolves**, to achieve a status that cannot claim more than the criteria were met and a guaranteed error whenever it does, accepting a record syntax to maintain and a migration of every milestone's Done means.
 
-**1. The item syntax.** In the section the type names, each list item is one criterion. Its evidence follows a declared marker, in the `Realized-by` grammar that `realized_by_entries` already splits (`locator.rs:256`), so a locator, a scoped symbol and a `@sha256:` pin mean exactly what they mean in the header (`locator.rs:13-19`):
+**1. The item syntax.** The syntax is specified here as a grammar and is carried into `SPEC-6` verbatim by `MILE-214`; it is not a "last occurrence" heuristic. It is structured text, not a string mini-language in the sense of `ADR-64`: the engine reads three declared words (the separator and the two markers, all in configuration), splits a line at the first occurrence of one declared sequence, and hands the clause to parsers that already exist (`realized_by_entries` for locators, the config vocabulary for waivers). Nothing in a clause is interpreted by position, regex or guess, and every deviation is a `status.done-items-shape` finding.
+
+```
+section   = { block } ;                  # the text of the type's declared section, fences skipped
+block     = item | other ;               # `other`: any non-list text; it is not an item and is never evidence
+item      = marker, line, { continuation | subitem | blank }, [ final ] ;
+marker    = ( "-" | "*" | "+" | digits ("." | ")") ), " " ;
+                                         # at the item indent: the indent of the first marker in the section
+subitem   = deeper-indented marker line   # belongs to its parent; never an item, never a clause
+line      = text, [ clauses ] ;
+clauses   = [ SEP, EV, locators ], [ SEP, WV, waiver ] ;     # at least one; evidence first
+final     = [ EV, locators ], [ WV, waiver ] ;               # one or two last lines, each starting at its marker
+locators  = locator, { ",", [ " " ], locator } ;             # the Realized-by comma rule (BUG-129)
+waiver    = category, [ " (", cite, [ ", ", date ], ")" ], " -- ", reason ;
+```
+
+`SEP` is `clause_separator` (` — `, space em dash space), `EV` is `evidence_marker` and `WV` is `waiver_marker`. The rules, each of which a worked example below exercises:
+
+1. **What is an item.** A list item at the item indent, whether the marker is `-`, `*`, `+`, `1.` or `1)`. A list item indented deeper than its predecessor at the item indent is a sub-item: it belongs to that parent, its text is part of the parent's item text, and it is never itself an item and never carries a clause. A marker indented less than the item indent is a shape finding. Items are numbered by position, from 1, in report messages. A section with no list item (prose only) has `n = 0`; on an opted-in type that is a shape finding, and under a `success` status it is also the delivery-agreement finding of section 2 (`r = 0`).
+2. **Where the clauses are.** In exactly one place per item: at the end of the item's first line, or on the item's final line or final two lines. The first line is split at the first occurrence of `SEP + EV` or `SEP + WV`; the text before it is the item text, and continuation lines and sub-items after the first line add to the item text. The final-line form exists for an item whose text runs over several lines or has sub-items: after the last sub-item or continuation line (a blank line between is allowed), the evidence clause is one line beginning with `EV` and the waiver clause is one line beginning with `WV`, in that order, each indented as a continuation. Clauses on the first line and on final lines at once are a shape finding. A marker anywhere else, including inside a continuation line or a sub-item, is plain text and is not parsed.
+3. **A marker inside prose.** The first-occurrence rule is why a marker word inside text is harmless. `evidence:` without the separator before it is text (an item may say "the report prints evidence: per item"); the clause begins only at `SEP + marker`. A waiver's reason runs to the end of its line and is free prose, so `waived: process-outcome -- see evidence: CI` has one reason, `see evidence: CI`, and `— evidence:` inside a reason is part of the reason. The converse is the one thing an author must avoid: item text that itself contains `SEP + EV` splits there, and the clause that follows then fails to parse as locators, which is a shape finding naming the item. It is loud, never silent.
+4. **Both clauses.** An item may carry an evidence clause and a waiver clause, evidence first. That is how a waiver stays honest: the item says what will evidence it, and the waiver excuses it until it does (section 3). A waiver without an evidence clause is valid.
+5. **Several locators.** The evidence clause is read by `realized_by_entries` (`locator.rs:256`): a comma separates two locators only when a `category:` prefix (`spec:`, `code:`, `test:`) follows it, optionally after one space; any other comma belongs to the path. Scoped symbols and `@sha256:` pins mean what they mean in the header (`locator.rs:13-19`). A locator is not wrapped in backticks, quotes or a link: such text before the first `category:` is "text that belongs to no entry" (`realized_by_unrecognised`) and is a shape finding. A locator holds no whitespace, so a trailing explanation after the last locator (`test:a.rs because it covers x`) is a shape finding naming the stray text rather than a path that is silently wrong. A path that itself contains `,<category>:` is the one ambiguous shape, as it already is in the header.
+6. **The waiver and its cite.** The waiver clause is `waived: <category>[ (<cite>[, <date>])] -- <reason>`. The category is in the declared vocabulary. The parenthesis, when present, is the cite: one record id in the type's identity form (`MILE-215`, `ADR-12`), then for a category declared `expires: required` an ISO date. The reason is required, non-empty prose after ` -- `. A category declared `cite: required` without a parenthesis, a cite that is not a record id, a date on a category that takes none, and a category declared `expires: required` without a date are shape findings. A pull request or an issue number is not a cite: it goes in the reason.
+7. **Leading checkbox.** `[x]` or `[ ]` at the start of item text is a shape finding (state is computed, option E).
+
+The shape findings are `status.done-items-shape`: a prose-only section, an item whose clause is not entirely locators, a misplaced or doubled clause, a leading checkbox, an unknown waiver category, an empty reason, a cite or date missing or malformed. A clause that does not parse is a finding, never skipped.
+
+Worked examples (each is a fixture `MILE-214` fails before the change):
 
 ```markdown
 ## Done means
 
-- A declared alias satisfies the section requirement and is reported as the alias used. evidence: code:rust/crates/urzua-core/src/rules/section.rs#section_required, test:rust/crates/urzua-cli/tests/section_rules_integration.rs#an_alias_satisfies_the_requirement
-- The capability is exercised by this repository's own config. evidence: code:.urzua/config.yaml#bug
-- The release notes name the change. waived: process-outcome -- the notes are written when the release PR is opened, #512
+- A declared alias satisfies the section requirement and is reported as the alias used. — evidence: code:rust/crates/urzua-core/src/rules/section.rs#section_required, test:rust/crates/urzua-cli/tests/section_rules_integration.rs#an_alias_satisfies_the_requirement
 ```
+Item 1: one item, two locators, the comma is followed by `test:` so it separates them.
 
-The item text is everything before the last occurrence of the marker on the item (continuation lines belong to it); the clause is the rest. The markers are configuration, not engine words. Justification: (a) a list item stays readable in a diff and on GitHub, and a reviewer sees the criterion and its evidence together; (b) the evidence grammar is the one every reader of `Realized-by` shares, so `embodiment.locator-exists`, scoped pins and drift read item locators with no second grammar; (c) no checkbox, because state is computed (option E); (d) it keeps the existing `## Done means` heading, so `section.required` and the template are unchanged in shape. A clause that does not parse is a finding, never skipped: `status.done-items-shape` reports a prose-only section on an opted-in type, a clause whose text after the marker is not entirely locators, a leading `[x]` or `[ ]`, an unknown waiver category, a waiver with an empty reason, and a category that requires a citation without one. Nothing is guessed (the no-silent-no-op principle).
+```markdown
+- Config is read from a directory whose name has a comma. — evidence: code:rust/tools/a,b/src/lib.rs, test:rust/tools/a,b/tests/t.rs
+```
+Item 2: the first comma is followed by `b/src`, not a category, so it stays in the path; the second is followed by ` test:` and separates.
 
-**2. Status follows the items.** For a type that declares the option, `judge_delivery` computes per item. An item is *resolved* when it has at least one locator, every locator exists (the `embodiment.locator-exists` check, extended to item clauses), and its tier, computed by the existing `compute_embodiment` over only that item's locators, is in the item tier set. The item tier set is `delivery.items.resolving_tiers`, default `delivered_tiers`. An item is *waived* when it carries a valid waiver. With `n` items, `w` waived and `r` resolved:
+```markdown
+- The report prints evidence: per item, with no separator before the word.
+```
+Item 3: plain text. No clause, so on an opted-in type it is unresolved (no evidence).
+
+```markdown
+- Every rule that reads a section reads it through one function.
+  - `section.required` calls it
+  - `section.order` calls it
+  - the harness text calls it
+
+  evidence: code:rust/crates/urzua-core/src/rules/section.rs#sections_of, test:rust/crates/urzua-core/src/rules/section.rs#every_reader_shares_one_function
+```
+Item 4: one item; the three sub-bullets are its text, not three items; the evidence is on the final line.
+
+```markdown
+1. The release notes name the change. — waived: process-outcome -- the notes are written when the release PR is opened, see evidence: CI and #512
+```
+Item 5: an ordered item. The reason is `the notes are written when the release PR is opened, see evidence: CI and #512`; the `evidence:` inside it is not a marker.
+
+```markdown
+- A second platform builds. — evidence: test:rust/crates/urzua-cli/tests/platform_windows.rs#builds — waived: deferred-to (MILE-230, 2027-01-31) -- the runner is not available until MILE-230 lands
+```
+Item 6: evidence and waiver together. The waiver holds while the test does not resolve; the day it does, the waiver is stale (section 3).
+
+```markdown
+- The reader accepts `code:` locators. — evidence: `code:rust/crates/urzua-core/src/locator.rs`
+- The reader is fast. — evidence: test:rust/crates/urzua-core/benches/read.rs because it measures it
+- [x] The doc names the command. — evidence: spec:docs/specs/SPEC-2-urzua-check.md
+```
+Items 7, 8 and 9 are each a shape finding: backticks before the first `category:`; whitespace in the locator, naming `because it measures it`; a leading checkbox.
+
+**2. Status follows the items.** For a type that declares the option, `judge_delivery` computes per item. An item is *resolved* when it has an evidence clause with at least one locator, every locator exists (the `embodiment.locator-exists` check, extended to item clauses), and its tier, computed by the existing `compute_embodiment` over only that item's locators, is in the item tier set `delivery.items.resolving_tiers` (default `delivered_tiers`). An item is *waived* when it carries a valid waiver clause and is not resolved. With `n` items, `r` resolved, `r_d` of them resolved at a tier in `delivered_tiers` (not merely `resolving_tiers`), and the *unresolved* items being the non-waived, non-resolved ones:
 
 | Items | Computed standing | Tier reported | Status it agrees with |
 |---|---|---|---|
-| `r >= 1` and every non-waived item resolved | delivered | the lowest tier among resolved items, so `Verified` only if every item is | the type's `set_status` (`Done`) |
-| `r >= 1` and some non-waived item unresolved | partial | the same lowest tier, with the unresolved items named | `delivery.items.partial_status` (`InProgress`); also correct under `InProgress` |
-| `r = 0` | none | the declared `embodiment.none` (`Not started`) | `Planned`; also correct under `InProgress` (work without evidence yet is legitimate) |
+| `r_d >= 1` and no unresolved item | delivered | the lowest tier among resolved items, so `Verified` only if every item is | the type's `set_status` (`Done`) |
+| `r_d >= 1` and some unresolved item | partial | the same lowest tier, with the unresolved items named | `delivery.items.partial_status` (`InProgress`); also correct under `InProgress` |
+| `r_d = 0` and `r >= 1` | specified only | the lowest resolved tier (`Specified`) | not forced either way: as a spec-only record is today, neither delivered nor unevidenced |
+| `r = 0` (including `n = 0` and every item waived) | none | the declared `embodiment.none` (`Not started`) | `Planned`; also correct under `InProgress` (work without evidence yet is legitimate) |
 
-A milestone with every item waived has `r = 0`: waivers excuse an item, they do not deliver one. The tier set decides what counts, exactly as `delivered_tiers` does in `ADR-84`; a repository that wants a documentation or decision item evidenced by a `spec:` locator lists `Specified` in `resolving_tiers` and gets that, one that does not lists nothing and those items resolve only with code or a test.
+Waivers excuse an item, they do not deliver one, so a milestone with every item waived has `r = 0`. `Specified` counts in `resolving_tiers` (decided, see Decisions below) so that a decision or documentation item is evidenced by a `spec:` locator, but the `r_d >= 1` guard keeps a `spec:` locator alone from computing a milestone delivered: an item such as "the capability is implemented" resolved by a `spec:` locator is exactly the false `Done` this ADR exists to stop. A spec-only milestone (a decision milestone) therefore behaves as it does today.
 
-The disagreements, extending `status.delivery-agreement` with variants (the rule table at `rules/table.rs:1418` gains them):
+The disagreements extend `status.delivery-agreement` with variants (the rule table definition, which starts at about `rules/table.rs:1403`, gains them; `table.rs:1418` is the existing `delivery-not-done` action entry):
 
 - delivered while the status is in `not_done`: reported, repaired by `fix` (unchanged in kind from `DeliveredButNotDone`, `status.rs:128-131`).
 - partial while the status is `Planned`: reported, repaired by `fix` to `partial_status`.
-- a `success` status with unresolved items or with none: reported as `SuccessWithoutEvidence` is today (`status.rs:184-186`), naming each unresolved item by number and text. **`fix` never downgrades it** (the `ADR-84` rule, unchanged: absence of evidence is sometimes legitimate and only a person can say which). The repair is evidence, a waiver, or reopening the milestone by hand (`Done` to `Planned` or `InProgress` is already allowed by the `SPEC-6` transitions).
+- **`DoneWithUnresolvedItems`, a guaranteed error (new variant).** A `success` status while any item is unresolved, whatever `r` and `r_d` are. It is distinct from `SuccessWithoutEvidence`, which fires only when the tier is in `unevidenced_tiers` (`status.rs:184-186`) and so cannot see an item. The message contract is `<ID> is <Status> but Done means item <n> "<text>" is unresolved: <cause>` once per unresolved item, in item order, where `<cause>` is one of `no evidence clause`, `locator <path> does not exist`, `locator <path> resolves only to <tier>, which is not in resolving_tiers`. A milestone with `n = 0` or every item waived has no unresolved item and is reported by `SuccessWithoutEvidence` as `r = 0`.
+  - *Severity.* The variant's severity is declared `error` on its entry in the rule table and is a floor: a repository's severity setting for `status.delivery-agreement` applies to the rule's other variants and cannot lower this one, and `urzua explain` prints the floor. An `error` finding fails `check` under any `fail_on`. Config load also rejects `items` on a type whose `status.delivery-agreement` rule is `off`.
+  - *Not waivable by a rule-level waiver.* Waivers match findings by rule and scope, and the rule table now marks this variant `waivable: false`. A dated `WAIVER` record whose `Rule` is `status.delivery-agreement` does not match a finding of this variant, and the `permanent` declaration for that rule (`.urzua/config.yaml:412`, whose categories describe why a defect has no test) is not consulted for it. The waiver still matches the rule's other variants, so existing waivers keep their meaning (`WAIVER-0051` covers a delivered-while-`InProgress` finding and is unaffected). A waiver with no match is reported by `waiver.matches-nothing` as before. Only evidence (a resolving locator) or an inline item waiver (section 3) clears the finding, because those are the only things that change the item.
+  - *Suggested actions (`ADR-73`).* The variant declares two, not the `Exempt` entry of `delivery-without-evidence` (`rules/table.rs:1419`), which would leave the finding with no action: `edit_field` on the type's status field with the value `partial_status` when `r_d >= 1` (otherwise the first declared status that is neither a `success`, `failure` nor `progress` status, `Planned` here, so a derived-blocked record is not offered a status `sequence.status-agreement` would refuse), the reopen; and `edit_section` on the Done means item, to add the evidence. Both are offered. Neither is applied by `fix`.
+  - *`fix` never downgrades.* The `ADR-84` rule is unchanged: `fix` does not reopen a `Done` milestone, because absence of evidence is sometimes legitimate and only a person can say which. What changes is that this is now safe: `check` always fails on the variant, so the false `Done` is never silent. The repair is evidence, an inline waiver, or reopening by hand (`Done` to `Planned` or `InProgress` is already allowed by the `SPEC-6` transitions).
 
 This maps onto `ADR-84` without new meaning: `delivered_tiers`, `unevidenced_tiers`, `not_done` and `set_status` keep their roles (`status_model.rs:95-113`), and the engine hardcodes no status name; `partial_status` is declared like `set_status`.
 
-**3. Waiving an item.** An item is waived with `waived: <category> -- <reason>` (the markers are declared). The categories are a declared vocabulary with the shape `ADR-86` gave the permanent waiver (`name`, optional `cite: required`, validated at load), and the reason is required prose. This repository declares four, none borrowed from `ADR-86`, because those describe why a defect has no test and none describes a missing criterion: `not-applicable` (the criterion no longer applies); `superseded-by-decision` (cite required: an ADR or RFC removed it); `deferred-to` (cite required: the milestone that now carries it, so the work is not lost); `process-outcome` (a result no file can evidence, such as a green CI run; the reason names the PR). A cited record is a pointer, checked by the existing pointer rules.
+**3. Waiving an item.** An item is waived with the waiver clause of section 1. The categories are a declared vocabulary with the shape `ADR-86` gave the permanent waiver (`name`, optional `cite: required`, validated at load), plus an optional `expires: required` flag, and the reason is required prose. This repository declares four, none borrowed from `ADR-86`, because those describe why a defect has no test and none describes a missing criterion: `not-applicable` (the criterion no longer applies); `superseded-by-decision` (cite required: an ADR or RFC removed it); `deferred-to` (cite and expiry date required: the milestone that now carries it, so the work is not lost, and the day by which it must be re-checked); `process-outcome` (a result no file can evidence, such as a green CI run; the reason names the PR).
 
-Why inline and not a separate waiver record: `ADR-86` rejected an exemption "written by the same hand, in the same file, as the claim it excuses" (its option C), and that argument is weaker here because the item is the claim and its line is reviewed in the PR that writes it. The record is the only place the criterion lives, so a waiver that lives elsewhere has nothing to point at: a `Scope` is one file path (`SPEC-10`), and a waiver scoped to the milestone would excuse every item at once (`ADR-86` option E's objection). Two safeguards replace the separate record. Every waived item is listed in the report, never omitted, and counted by category, as `ADR-86` counts permanent waivers. And a `Done` milestone with a waived item is an informational notice on every run. The cost, an author excusing their own item, is a review risk the report makes visible; open question 1 asks the maintainer to confirm it.
+Why inline and not a separate waiver record: `ADR-86` rejected an exemption "written by the same hand, in the same file, as the claim it excuses" (its option C), and that argument is weaker here because the item is the claim and its line is reviewed in the PR that writes it. The record is the only place the criterion lives, so a waiver that lives elsewhere has nothing to point at: a `Scope` is one file path (`SPEC-10`), and a waiver scoped to the milestone would excuse every item at once (`ADR-86` option E's objection). Three safeguards replace the separate record. Every waived item is listed in the report, never omitted, and counted by category, as `ADR-86` counts permanent waivers. A `Done` milestone with a waived item is an informational notice on every run. And an inline waiver is as honest as `ADR-86`'s: it is checked every run by the stale check below, the counterpart of `waiver.matches-nothing`.
+
+**The stale check, `status.waived-item-stale`** (a new rule, warning by default, so it fails this repository's CI under `fail_on: warning`; an ordinary `WAIVER` record can waive it like any warning). It reports, naming the record, item number and text, each waived item for which:
+
+- *its evidence now resolves.* The item carries an evidence clause (section 1, rule 4) and that clause resolves as in section 2: the waiver excused an item that is now evidenced, so remove the waiver. This is how a waived item that later gains its locator is found, and why the waiver clause is allowed to sit beside the evidence it is waiting for.
+- *its `deferred-to` target is gone or finished.* The cited record does not exist, or its status is in the target type's `success` or `failure` set (`Done`, `WontDo`, or the equivalent for another type). The work was either delivered there, in which case this item is evidenced by a locator here, or it was not carried, in which case the deferral was false; either way a person re-points the cite, evidences the item or reopens the milestone. A target that is open is a pointer the existing pointer rules already resolve; this check adds that it must also be unfinished. The ADR does not try to verify that the target's own items cover this one; that is a reviewer's reading, and the `MILE-215` migration list records it.
+- *its expiry has passed.* A category declared `expires: required` carries a date, and the finding fires from that date on. `deferred-to` is inherently temporary, so it is never permanent: when the date comes the author either extends it with a new date (a diff a reviewer sees) or resolves it. This is the `Expires` of an `ADR-86` waiver, placed on the clause.
+`superseded-by-decision` is held by the existing pointer rules (the cite must resolve). `not-applicable` and `process-outcome` have no machine-checkable staleness and are reported in the waived-items listing for a reviewer; the categories are few on purpose.
 
 **4. Opt-in.** The option is `statuses.delivery.items` on a type. Absent, `judge_delivery` runs the code it runs today and every existing config is unchanged byte for byte in behaviour:
 
@@ -78,6 +152,7 @@ delivery:
   set_status: "Done"
   items:
     section: "Done means"            # must be a section the type requires
+    clause_separator: " — "
     evidence_marker: "evidence:"
     waiver_marker: "waived:"
     partial_status: "InProgress"     # in values and not_done
@@ -85,25 +160,25 @@ delivery:
     waiver_categories:
       - {name: not-applicable}
       - {name: superseded-by-decision, cite: required}
-      - {name: deferred-to, cite: required}
+      - {name: deferred-to, cite: required, expires: required}
       - {name: process-outcome}
 ```
 
-Config load errors, not inert rules (`BUG-44`): `items` on a type without `delivery`; a `section` the type does not declare; a `partial_status` outside `values` or `not_done`, or one with no declared transition from the statuses it repairs; a `resolving_tiers` entry that is not a declared embodiment state; a duplicate or empty marker or category. This repository turns it on for `milestone` and no other type; the `bug` type, whose evidence is one regression test, is not itemised.
+Config load errors, not inert rules (`BUG-44`): `items` on a type without `delivery`; a `section` the type does not declare; a `partial_status` outside `values` or `not_done`, or one with no declared transition from the statuses it repairs; a `resolving_tiers` entry that is not a declared embodiment state; a duplicate or empty separator, marker or category; a marker that is a prefix of the other; `items` on a type whose `status.delivery-agreement` rule is `off`; an `expires: required` category without `cite: required` (a deferral needs a target). This repository turns it on for `milestone` and no other type; the `bug` type, whose evidence is one regression test, is not itemised.
 
 **5. The evidence field.** Item locators are evidence for every reader, not only for status. `Embodiment`, drift, `embodiment.locator-exists`, `fix --rebaseline` and the graph read one function that returns the union of the `Realized-by` field and the item clauses (`fix.rs`, `status.rs`, `embodiment.rs` and `diff_scope.rs` each parse the field today; the shared parser is the single seam, `embodiment.rs:48`). `Realized-by` stays valid for record-level evidence tied to no single criterion. Delivery is judged from the items only, so a record-level locator never makes a milestone delivered.
 
 **6. `/done` and `fix --apply`.** Both compute from the items and neither writes a status the engine did not compute. `/done` (`.claude/hooks/urzua-record.sh:133-138`) adds evidence to the items the change delivered, then runs `urzua fix --apply --ids <record>`. If the engine computes nothing, the message now names the unresolved items instead of only "add the evidence" (the hook already stops when no `computed_value` is printed, `urzua-record.sh:139-143`). An agent that has finished three of five items runs `/done` and gets `InProgress`, not `Done`; it does not get to choose. `fix --apply` writes `Done` only when all non-waived items resolve, `InProgress` when some do, and its revision row records the counts ("3 of 5 items resolved"), so the attribution is the evidence. `fix --rebaseline` rewrites pins inside item clauses the way it rewrites them in the header (`MILE-181`). The `ADR-70` amendment holds unchanged: the status is computed from evidence, and the evidence is now finer.
 
-**7. Partially delivered records, the roadmap and blocked.** Blocked stays derived from the written `Status` of the dependency (`sequence.rs:575-580`, `roadmap.rs:278-296`, `roadmap.rs:535`): a dependency is satisfied only in a `success` status, so a partly delivered milestone keeps its dependents blocked. The wait is item-blind on purpose; because `Status` is held to the items by `status.delivery-agreement` at error level, the two cannot disagree. No per-item dependency (`Depends-on: MILE-9#2`) is added (open question 3). The roadmap reads a partial record as open work: it stays in its wave and in the ready set if nothing it depends on is open, and the critical path does not change, since the roadmap weights nothing. `RoadmapRecord` (`roadmap.rs:101-116`) gains an optional `items` object, `{total, resolved, waived}`, present only for an opted-in type, so a reader sees "3 of 5" without a status the engine would have to know. One interaction needs a rule: `partial_status` is a `progress` status (`ADR-83`), so repairing a `Planned` milestone that depends on an open record to `InProgress` would create a `sequence.status-agreement` error. `fix` therefore does not write `partial_status` to a record that is derived-blocked; the finding stays and names the open dependency, because evidence landing ahead of its dependency is a fact the author should see.
+**7. Partially delivered records, the roadmap and blocked.** Blocked stays derived from the written `Status` of the dependency (`sequence.rs:575-580`, `roadmap.rs:278-296`, `roadmap.rs:535`): a dependency is satisfied only in a `success` status, so a partly delivered milestone keeps its dependents blocked. The wait is item-blind on purpose; because `Status` is held to the items by `status.delivery-agreement` at error level, the two cannot disagree. No per-item dependency (`Depends-on: MILE-9#2`) is added (decided, question 3). The roadmap reads a partial record as open work: it stays in its wave and in the ready set if nothing it depends on is open, and the critical path does not change, since the roadmap weights nothing. `RoadmapRecord` (`roadmap.rs:101-116`) gains an optional `items` object, `{total, resolved, waived}`, present only for an opted-in type, so a reader sees "3 of 5" without a status the engine would have to know. One interaction needs a rule: `partial_status` is a `progress` status (`ADR-83`), so repairing a `Planned` milestone that depends on an open record to `InProgress` would create a `sequence.status-agreement` error. `fix` therefore does not write `partial_status` to a record that is derived-blocked; the finding stays and names the open dependency, because evidence landing ahead of its dependency is a fact the author should see.
 
-**8. Migration of every milestone.** The syntax is backwards compatible: an old rule ignores an item clause as text. So the conversion lands in batches, and the opt-in is switched on in the last PR only when `urzua check` is clean over every milestone. For each of the 127 Phase 0 `Done` milestones (and the 16 `Done` milestones of later phases, which the switch also covers; 143 in all):
+**8. Migration of every milestone.** Built and landed separately from the engine: `MILE-214` is the engine and `MILE-215` (Phase 0, depends on `MILE-214`) is the migration, so the engine can land first and the opt-in is switched on only by the migration. The syntax is backwards compatible: an old rule ignores an item clause as text. So the conversion lands in batches, and the opt-in is switched on in the last PR only when `urzua check` is clean over every milestone. For each of the 127 Phase 0 `Done` milestones (and the 16 `Done` milestones of later phases, which the switch also covers; 143 in all):
 
 1. Split the Done means into items, by hand with tool assistance (a split on semicolons and `and` is a draft, not the result; 105 are prose and 22 are lists).
 2. Give each item the locators that evidence it, from the record's `Realized-by`, the merged PR (`git log -S`) and the repository.
 3. Run `urzua check`. An item that does not resolve is verified against the repository by reading, then exactly one of: the claim is true and a locator is missing, so add it; the claim is not true, so reopen the milestone (`Done` to `InProgress`, a revision row naming the item and why); the claim is true and no file can evidence it, so waive it with a category and a reason.
 4. A milestone is never kept `Done` for a false claim, and there is no blanket waiver. `WAIVER-0051` stays until the switch-on PR, which removes it: `MILE-165`, rewritten into items, computes `InProgress` from the engine.
-5. Reviewed, not scripted: a reviewer reads each reopen and each waiver.
+5. Reviewed, not scripted: a reviewer reads each reopen and each waiver. Each migration PR carries a list of its reopens and its waivers, with the item and the reason, for that reader, and for each `deferred-to` whether the target's own items cover the deferred one.
 
 Sizing, from 20 Phase 0 `Done` milestones (every sixth in filename order, so not chosen by hand; read against their `Realized-by` and, for every "exercised in our own config" clause, checked in `.urzua/config.yaml`):
 
@@ -123,7 +198,7 @@ Moderate. The option is opt-in and an undeclared config is unchanged, so the eng
 ## Consequences
 
 - `judge_delivery` gains an item input. `urzua-core` never opens a file and a `Record` has no body, so the caller reads each opted-in record's section and passes the parsed items beside `BackPointerEvidence`, the way back-pointers are passed (`status.rs:140-145`). `fix.rs:133` and `fix.rs:189` use the same judgement, so `check` and `fix` cannot disagree.
-- `SPEC-3` documents `statuses.delivery.items` and its load checks; `SPEC-2` the `status.done-items-shape` rule and the new `status.delivery-agreement` variants; `SPEC-6` the item syntax in its Required sections and its `Realized-by` row; `SPEC-8` the repairs (`Done`, `InProgress`) and that a `success` status is never downgraded. Each gets a revision row. The CLI changeset is minor (a new capability).
+- `SPEC-3` documents `statuses.delivery.items` and its load checks; `SPEC-2` the `status.done-items-shape` and `status.waived-item-stale` rules and the new `status.delivery-agreement` variants, `DoneWithUnresolvedItems` among them (error floor, `waivable: false`); `SPEC-6` the item grammar of section 1 verbatim, with its worked examples as fixtures, in its Required sections and its `Realized-by` row; `SPEC-8` the repairs (`Done`, `InProgress`) and that a `success` status is never downgraded. Each gets a revision row. The CLI changeset is minor (a new capability).
 - The `milestone` template changes: `Done means` carries an example item line instead of "one or more bullets".
 - `/done` and `/milestone` text (generated by `urzua harness`) says to name evidence per item; `urzua harness status` then reports drift until `harness update` is run.
 - The report gains the waived items by category and a per-milestone item count; the roadmap gains the optional `items` object.
@@ -131,12 +206,14 @@ Moderate. The option is opt-in and an undeclared config is unchanged, so the eng
 - A milestone cannot be finished by its last PR alone if an earlier item had no evidence: that is the intended friction.
 - Not decided here: per-item dependencies, weighting the critical path by items, itemising `bug` or other types, and a stable item id (items are numbered by position in reports, which breaks if an item is inserted).
 
-## Open questions
+## Decisions on the open questions
 
-1. Inline waivers or a separate record per waived item? Recommended: inline, as above, with the report listing every waived item and a notice on a `Done` milestone that has one. Switch to a record with an `Item` field only if waivers are abused in review.
-2. Should `fix` reopen a `Done` milestone whose items do not all resolve? Recommended: no. Reported only, as `ADR-84` already holds; reopening is a person's act.
-3. Per-item dependencies? Recommended: not now; the wait is item-blind and a milestone that needs another's third item should be split.
-4. Should `resolving_tiers` include `Specified` here? Recommended: yes, so a decision or documentation item is evidenced by a `spec:` or ADR locator without a waiver; `delivered_tiers` stays as it is.
+Answered on 2026-11-07 from the independent review of this ADR, as decided. The ADR itself stays Proposed.
+
+1. **Inline waivers, with a stale check.** Decided: inline, on the conditions of sections 1 and 3: a cite grammar, an expiry on `deferred-to`, a `deferred-to` target that must exist and be unfinished, and `status.waived-item-stale` reporting a waived item that now resolves. Without those conditions it would have been a separate record.
+2. **No auto-reopen.** Decided: `fix` never downgrades a `success` status. This stands because of the guaranteed error finding of section 2 (`DoneWithUnresolvedItems`), which `check` always fails on, which no rule-level waiver can clear and which offers the reopen as an action; the maintainer's intent is that nothing stays `Done` when it is not done, and the finding, not `fix`, is what holds that.
+3. **No per-item dependencies.** Decided: the wait stays item-blind; a milestone that needs another's third item is split.
+4. **`Specified` counts in `resolving_tiers`, with a guard.** Decided: a `spec:` locator resolves an item, but at least one item must resolve at a `delivered_tiers` tier (`r_d >= 1`) for the milestone to compute delivered or partial. A spec-only milestone stays as it is today.
 
 ## References
 
@@ -144,10 +221,11 @@ Moderate. The option is opt-in and an undeclared config is unchanged, so the eng
 - `ADR-70` and its amendment of 2026-11-05 -- a lifecycle command sets a status only when the engine computes it from evidence; `ADR-89` -- lifecycle commands and `authority` gates.
 - `ADR-64` -- structured in, structured out; `ADR-74` -- locator resolvers and pins; `ADR-82` -- the roadmap.
 - `SPEC-2`, `SPEC-3`, `SPEC-6`, `SPEC-8`, `SPEC-10`.
-- `MILE-165`, `WAIVER-0051` -- the instance; `MILE-183` -- the delivery model this refines; `MILE-181` -- re-pinning; `MILE-214` -- the milestone that builds this.
+- `MILE-165`, `WAIVER-0051` -- the instance; `MILE-183` -- the delivery model this refines; `MILE-181` -- re-pinning; `MILE-214` -- the milestone that builds the engine; `MILE-215` -- the migration of the corpus, which depends on it.
 
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-07 | Drafted as Proposed. **Why:** maintainer decision of 2026-11-07, after confirming as an engine defect that `judge_delivery` computes delivered from the evidence tier alone, so a milestone with one item of five evidenced is forced to `Done`; the maintainer approves before it is Accepted. | **substantive** |
+> | 2026-11-07 | Amended while Proposed, from the independent review of the same day (three blockers). **Why:** (1) the ADR now names the guaranteed error finding `DoneWithUnresolvedItems`, gives its message contract, an error floor, `waivable: false` (the rule-level `permanent` category does not apply to it) and two ADR-73 actions in place of `Exempt`; (2) the item syntax is a grammar with worked examples: nested lists, a single separator-plus-marker form, the Realized-by comma rule, the waiver cite; (3) inline waivers get ADR-86's honesty: `status.waived-item-stale`, a checked and expiring `deferred-to`. The four open questions are recorded as decided (inline waivers with the stale check; no auto-reopen; no per-item dependencies; `Specified` in `resolving_tiers` with an `r_d >= 1` guard), and the migration is split out as `MILE-215`. Status stays Proposed; the maintainer approves before it is Accepted. | **substantive** |
