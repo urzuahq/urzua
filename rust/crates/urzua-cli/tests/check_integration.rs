@@ -4094,6 +4094,28 @@ fn repo_root() -> std::path::PathBuf {
         .unwrap()
 }
 
+/// `doctor` run in a repository wired the way `make hooks-install` wires this
+/// one (`core.hooksPath` set to the committed `.git-hooks`) reports both hooks
+/// as installed and running urzua. The hooks are this repository's own files,
+/// copied byte for byte, so a change to a hook that stops it running urzua, or
+/// to `doctor`'s reading of how a hook runs it, fails here.
+#[test]
+fn doctor_reports_this_repositorys_committed_hooks_as_wired() {
+    let dir = hook_fixture("hook-committed");
+    for layer in ["pre-commit", "pre-push"] {
+        let body = std::fs::read_to_string(repo_root().join(".git-hooks").join(layer)).unwrap();
+        plant_hook(&dir.join(".git-hooks").join(layer), &body, true);
+    }
+    git(&dir, &["config", "core.hooksPath", ".git-hooks"]);
+    for layer in ["pre-commit", "pre-push"] {
+        assert_eq!(
+            hook_state(&dir, layer),
+            ("installed-running-urzua".into(), "ok".into()),
+            "{layer}"
+        );
+    }
+}
+
 /// Runs this repository's pre-commit hook in a fixture whose `rust/target`
 /// holds `bin` (or nothing).
 fn run_pre_commit(name: &str, bin: Option<&str>) -> std::process::Output {

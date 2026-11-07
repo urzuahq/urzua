@@ -1,0 +1,28 @@
+{
+  "args": [
+    "fix"
+  ],
+  "exit": 0,
+  "stdout": {
+    "failed": [],
+    "population": {
+      "eligible": 4,
+      "examined": 2,
+      "out_of_scope": 0,
+      "unit": "record",
+      "unreadable": 0
+    },
+    "repairs": [
+      {
+        "computed_value": "Implemented",
+        "current_value": "Verified",
+        "evidence": "Realized-by: code:src/a.rs",
+        "field": "Embodiment",
+        "line": 3,
+        "record": "docs/adr/ADR-3-third.md",
+        "tier": 1
+      }
+    ],
+    "status": "repairs-available"
+  }
+}

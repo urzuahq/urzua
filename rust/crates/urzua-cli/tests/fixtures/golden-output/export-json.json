@@ -1,0 +1,118 @@
+{
+  "args": [
+    "export",
+    "--format",
+    "json"
+  ],
+  "exit": 0,
+  "stdout": {
+    "record_count": 4,
+    "records": [
+      {
+        "header": [
+          {
+            "line": 2,
+            "name": "Status",
+            "value": "Accepted"
+          },
+          {
+            "line": 3,
+            "name": "Embodiment",
+            "value": "Implemented"
+          },
+          {
+            "line": 4,
+            "name": "Realized-by",
+            "value": "code:src/a.rs"
+          }
+        ],
+        "header_readable": true,
+        "id": "ADR-1",
+        "path": "docs/adr/ADR-1-first.md",
+        "preamble": null,
+        "raw_text": "---\nStatus: Accepted\nEmbodiment: Implemented\nRealized-by: code:src/a.rs\n---\n# 1 — First\n\nClean record.\n\nA later edit.\n\nA later edit.\n",
+        "sections": null,
+        "stable_id": null,
+        "type": "adr"
+      },
+      {
+        "header": [
+          {
+            "line": 2,
+            "name": "Status",
+            "value": "Accepted"
+          },
+          {
+            "line": 3,
+            "name": "Bogus",
+            "value": "yes"
+          }
+        ],
+        "header_readable": true,
+        "id": "ADR-2",
+        "path": "docs/adr/ADR-2-second.md",
+        "preamble": null,
+        "raw_text": "---\nStatus: Accepted\nBogus: yes\n---\n# 2 — Second\n\nMissing Embodiment, an undeclared key.\n",
+        "sections": null,
+        "stable_id": null,
+        "type": "adr"
+      },
+      {
+        "header": [
+          {
+            "line": 2,
+            "name": "Status",
+            "value": "Accepted"
+          },
+          {
+            "line": 3,
+            "name": "Embodiment",
+            "value": "Verified"
+          },
+          {
+            "line": 4,
+            "name": "Realized-by",
+            "value": "code:src/a.rs"
+          },
+          {
+            "line": 5,
+            "name": "Parent",
+            "value": "ADR-99"
+          }
+        ],
+        "header_readable": true,
+        "id": "ADR-3",
+        "path": "docs/adr/ADR-3-third.md",
+        "preamble": null,
+        "raw_text": "---\nStatus: Accepted\nEmbodiment: Verified\nRealized-by: code:src/a.rs\nParent: ADR-99\n---\n# 3 — Not the filename title\n\nClaims more than the evidence.\n",
+        "sections": null,
+        "stable_id": null,
+        "type": "adr"
+      },
+      {
+        "header": [],
+        "header_readable": true,
+        "id": "NOTE-1",
+        "path": "docs/note/NOTE-1-plain.md",
+        "preamble": null,
+        "raw_text": "# 1 — A plain note\n\nNo header at all; the type declares none.\n",
+        "sections": null,
+        "stable_id": null,
+        "type": "note"
+      }
+    ],
+    "status": "ok",
+    "types": [
+      {
+        "dir": "docs/adr",
+        "records": 3,
+        "type": "adr"
+      },
+      {
+        "dir": "docs/note",
+        "records": 1,
+        "type": "note"
+      }
+    ]
+  }
+}
