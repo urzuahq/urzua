@@ -138,6 +138,11 @@ fn judge(config: Option<PathBuf>) -> PostVerdict {
             return PostVerdict::unjudged(&format!("the request's cwd '{cwd}' cannot be entered"));
         }
     }
+    // A command that ran inside a nested repository (`git init sub && cd sub`)
+    // is still the governed repository's session.
+    if config.is_none() {
+        super::run::enter_governed_cwd();
+    }
 
     // The commit the last check saw, and the files committed since: a command
     // that committed its own change leaves a clean tree, so the working tree
@@ -174,10 +179,14 @@ fn judge_changes(
     committed: Vec<String>,
 ) -> PostVerdict {
     // The gate: git's own view of the working tree, before any configuration.
-    let tree = match changed_paths() {
+    let mut tree = match changed_paths() {
         Ok(c) => c,
         Err(why) => return PostVerdict::unjudged(&why),
     };
+    // A file git was told to stop looking at is not in `git status` at all.
+    tree.extend(top.map(hidden_changes).unwrap_or_default());
+    tree.sort();
+    tree.dedup();
     if tree.is_empty() && committed.is_empty() && protected_unchanged(top, config.as_deref()) {
         forget_all(top);
         return PostVerdict::quiet(format!("{P}: git shows no changed file; nothing to check"));
@@ -631,6 +640,108 @@ fn changed_paths() -> Result<Vec<(String, bool)>, String> {
         ));
     }
     Ok(parse_porcelain_all(&out.stdout))
+}
+
+/// The files whose change `git status` cannot show because the index says to
+/// ignore it (`git update-index --assume-unchanged` or `--skip-worktree`), found
+/// by comparing the working file with the blob the index holds, with whether
+/// each is gone. A file that is not on disk and is only skip-worktree is not a
+/// change (a sparse checkout leaves such files out). Empty when git cannot say.
+fn hidden_changes(top: &Path) -> Vec<(String, bool)> {
+    use std::io::Write;
+    use std::process::Stdio;
+    let git = |args: &[&str]| {
+        Command::new("git")
+            .current_dir(top)
+            .arg("--no-optional-locks")
+            .args(args)
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+    };
+    let Some(listed) = git(&["ls-files", "-v", "-z"]) else {
+        return Vec::new();
+    };
+    // `git ls-files -v`: a lowercase tag is assume-unchanged, `S` is skip-worktree.
+    let flagged: Vec<(String, bool)> = listed
+        .stdout
+        .split(|b| *b == 0)
+        .filter(|e| e.len() > 2 && e[1] == b' ' && (e[0] == b'S' || e[0].is_ascii_lowercase()))
+        .map(|e| {
+            (
+                String::from_utf8_lossy(&e[2..]).to_string(),
+                e[0] != b'S' && e[0] != b's',
+            )
+        })
+        .collect();
+    if flagged.is_empty() {
+        return Vec::new();
+    }
+    let Some(staged) = git(&["ls-files", "-s", "-z"]) else {
+        return Vec::new();
+    };
+    // `<mode> <oid> <stage>\t<path>`
+    let index: BTreeMap<String, String> = staged
+        .stdout
+        .split(|b| *b == 0)
+        .filter_map(|e| {
+            let text = String::from_utf8_lossy(e).to_string();
+            let (meta, path) = text.split_once('\t')?;
+            Some((path.to_string(), meta.split(' ').nth(1)?.to_string()))
+        })
+        .collect();
+    let mut changes = Vec::new();
+    let mut present: Vec<&String> = Vec::new();
+    for (path, absent_is_change) in &flagged {
+        if path.contains('\n') {
+            continue;
+        }
+        if std::fs::symlink_metadata(top.join(path)).is_ok() {
+            present.push(path);
+        } else if *absent_is_change {
+            changes.push((path.clone(), true));
+        }
+    }
+    if present.is_empty() {
+        return changes;
+    }
+    let spawned = Command::new("git")
+        .current_dir(top)
+        .args(["--no-optional-locks", "hash-object", "--stdin-paths"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn();
+    let Ok(mut child) = spawned else {
+        // It cannot be compared: treat each as changed, the safe direction.
+        changes.extend(present.into_iter().map(|p| (p.clone(), false)));
+        return changes;
+    };
+    if let Some(mut stdin) = child.stdin.take() {
+        let _ = stdin.write_all(
+            present
+                .iter()
+                .map(|p| p.as_str())
+                .collect::<Vec<_>>()
+                .join("\n")
+                .as_bytes(),
+        );
+    }
+    let hashed = child.wait_with_output().ok().filter(|o| o.status.success());
+    let oids: Vec<String> = hashed
+        .map(|o| {
+            String::from_utf8_lossy(&o.stdout)
+                .lines()
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default();
+    for (i, path) in present.iter().enumerate() {
+        if oids.len() != present.len() || index.get(*path) != oids.get(i) {
+            changes.push(((*path).clone(), false));
+        }
+    }
+    changes
 }
 
 /// Parses `git status --porcelain=v1 -z --no-renames`: `XY path` entries ended

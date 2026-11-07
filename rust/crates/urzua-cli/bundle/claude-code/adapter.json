@@ -4,6 +4,7 @@
   "provides": ["editor-hook", "post-command", "session-start", "acceptance", "protected-paths"],
   "settings_file": ".claude/settings.json",
   "commands_dir": ".claude/commands",
+  "kill_switches": ["disableAllHooks"],
   "requires": {
     "interpreters": ["python3"],
     "env": ["CLAUDE_PROJECT_DIR"]

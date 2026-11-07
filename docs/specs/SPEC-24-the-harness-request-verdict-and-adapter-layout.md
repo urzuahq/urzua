@@ -2,7 +2,7 @@
 Stable-Id: 01M6Q32HB672E7RB57RFQ9QEB3
 Status: Draft
 Date: 2026-11-06
-Version: '0.8'
+Version: '0.9'
 Author: beauwilliams
 Subject: 'The neutral request and verdict `urzua harness run` speaks, the adapter directory layout of the embedded bundle, and the lock file.'
 Implements: ADR-89
@@ -29,7 +29,7 @@ unreadable one is not a crash: it is a stated verdict (below).
 | `paths` | list of strings | `edit` requires exactly one path, absolute or relative to `cwd`. `post-command` reads none: git names the changed paths. |
 | `content` | string or null | `edit`: the full proposed content of the file. The adapter computes it from the agent's edit. |
 | `actor` | `agent` or `human` | Who is acting. Absent means `agent`. Only `on_unjudged: deny` reads it. |
-| `cwd` | string or null | The directory the engine enters before it finds the repository. For `edit` with an absolute path, the repository that holds the file is used when it differs, so a `cwd` outside the repository still finds it. |
+| `cwd` | string or null | The directory the engine enters before it finds the repository. The repository is the outermost git working tree with `.urzua/config.yaml` that holds the file the edit writes (symlinks followed), else the one that holds `cwd`, so a `cwd` outside the repository, or inside a nested repository that has no configuration of its own, still finds the governed one. A relative path is made absolute against `cwd` first. |
 | `adapter_error` | string or absent | `edit`: set by a translator that could not build a request (an unreadable payload, an edit it could not place). The engine builds no judgement from it. With no `paths` (an unreadable payload) it refuses the call for an agent when `acceptance` or `protected-paths` is enabled with `on_unjudged: deny` (read from the raw configuration). With a path (an edit the translator could not place, such as an `old_string` that is not in the file) it refuses only when that path is a protected path, the configuration, or a record of a type a status gate names (matched as for the gates), judged as written and as resolved. For any other file it returns `allow-unjudged` with a message: the edit tool's own failure handles an absent `old_string`. |
 | `override` | `{name, reason}` or absent | A named override of the editor hook (`ADR-78`). The environment variables `URZUA_HOOK_OVERRIDE` and `URZUA_HOOK_REASON` mean the same when the field is absent. |
 
@@ -37,7 +37,11 @@ unreadable one is not a crash: it is a stated verdict (below).
 
 One JSON object on stdout. `findings` carries the findings the verdict is about (the blocked, the
 overridden or the shown ones, as `urzua check` prints them); for `session-start` it carries the
-readiness problems, each `{check, message}`.
+readiness problems, each `{check, message}`. The session-start `check` values are `config`, `binary`,
+`lock`, `version`, `adapter`, `interpreter`, `environment`, `file` (an installed file that is gone, or whose
+hash differs from the lock's; the adapter's commands directory is exempt from the second, since a person may
+customise a drafting command), `hook-entry` (an entry that is not wired, or whose hash differs from the
+lock's), `kill-switch` (a manifest `kill_switches` key set to true in the settings file) and `git-hook`.
 
 | `verdict` | Exit | Meaning |
 |---|---|---|
@@ -67,7 +71,7 @@ Gate matching (`acceptance`, `protected-paths`) compares paths with Unicode case
 character upper-cased then lower-cased, so `ß` folds to `ss`; names are not Unicode-normalised), judges an edit
 through a symlink as the file it resolves to, and on Unix judges an edit through a hard link (a file with another
 link, found by device and inode among the files under a protected path and the directories of a gated record type)
-as that protected or gated file. Off Unix a hard link is judged by its own name. The engine names no agent: how an
+as that protected or gated file. Off Unix a hard link is judged by its own name. A symlink is followed to the end, a link whose target does not exist yet included (the parent is resolved and the name joined, up to 40 links): a write through a dangling link is a write to the file it would create. While `protected-paths` is on, the edit tools are also refused for the files the harness keeps (`.urzua/cache`, `.urzua/harness.lock`, the file `override_log` names, `.git/hooks` and `.git/config`); they are not in the `authority` table, and the override path writes the log from the engine. The engine names no agent: how an
 agent's tools become a request is the adapter's.
 
 ### The post-command verdict
@@ -76,7 +80,9 @@ agent's tools become a request is the adapter's.
 reports; it never blocks and always exits 0. It does not read the command: it lists the changed files with
 `git status --porcelain=v1 -z --no-renames --untracked-files=all` (modified, added and untracked files; a
 deleted file is dropped from the records it checks but kept for protected paths) together with the files
-that differ between the commit the last post-command check saw and `HEAD` (so a command that committed its
+that differ between the commit the last post-command check saw and `HEAD`, and the files the index tells git
+to ignore (`git update-index --assume-unchanged`, `--skip-worktree`, found by `git ls-files -v`) whose content
+differs from the blob the index holds, a missing assume-unchanged file included (so a command that committed its
 own change is covered), keeps those a record type governs, drops those whose content hash is the one last
 reported, and runs `check PATHS` once over the rest, in process, staging nothing. Its verdict carries these
 extra fields:
@@ -109,7 +115,7 @@ laid out so that it could also be published as a release asset without a second 
 bundle/
   instructions.md                    the agent-instructions block, adapter-independent
   <adapter>/
-    adapter.json                     name, description, provides, settings_file, commands_dir, requires
+    adapter.json                     name, description, provides, settings_file, commands_dir, kill_switches, requires
     settings.fragment.json           the hook entries to merge into the agent's project settings
     commands/draft.md                the drafting command, rendered once per declared record type
     commands/<name>.md               a lifecycle command, installed as it is
@@ -124,14 +130,15 @@ bundle/
 | `provides` | The guardrails the adapter can wire (`editor-hook`, `post-command`, `session-start`, ...). A guardrail the repository turns on that no chosen adapter provides is reported at install, by `status` and by `doctor`, never skipped. |
 | `commands_dir` | Where the agent looks for slash commands. Absent: the adapter installs none. The install writes `<commands_dir>/<type>.md` for every record type the configuration declares (`{{type}}` and `{{dir}}` of `commands/draft.md` filled in) and `<commands_dir>/<name>.md` for every other file of `commands/`. A record type named like one of those lifecycle commands is refused. |
 | `settings_file` | The agent's project settings file the fragment is merged into. A local settings file and user-level settings are neither read nor written. |
+| `kill_switches` | Keys of the settings file whose truthy value switches every hook off (`disableAllHooks`). Absent: none. `session-start` reports one that is set. |
 | `requires.interpreters` | Programs the translator runs under; `session-start` reports one that is not on `PATH`. |
-| `requires.env` | Variables the agent sets for its hook commands; `session-start` reports one that is unset. The adapter's commands do not depend on them. |
+| `requires.env` | Variables the agent sets for its hook commands; `session-start` reports one that is unset. The adapter's commands read them and, when unset, fall back to the outermost directory above the current one that holds `.urzua/config.yaml`. |
 
 The settings fragment holds hook entries, each a command that runs `urzua harness run <handler>`; that
 text is how an entry is recognised as urzua's, and an entry is keyed by event, matcher and handler. A
 translator is a file under `files/`. It turns the agent's hook payload into the request, runs the engine
 command it is given after `--`, and turns the verdict into the agent's output; when the engine cannot be
-run it prints a stated message and lets the call proceed.
+run it prints a stated message and lets the call proceed. A command for an `edit` event that cannot run the translator may instead refuse the edit, reading `.urzua/config.yaml` as text, where `acceptance` or `protected-paths` is enabled and not set to `on_unjudged: allow`.
 
 ## The lock
 
@@ -178,3 +185,4 @@ out of the shared files, and deletes the lock last.
 > | 2026-11-06 | Bumped to `0.6`. Adds the request field `adapter_error` and the adapter-failure rule for `on_unjudged: deny` (`acceptance`, `protected-paths`), the post-command verdict field `protected_changes`, the commit range and `post-command-head` memory, and the case-insensitive and symlink-resolving gate matching. **Why:** the second-pass review of the harness. | **substantive** |
 > | 2026-11-06 | Bumped to `0.7`. An edit the translator cannot place is refused under `on_unjudged: deny` only when its file is a protected path or a gated record; any other file is allowed with a notice. An unreadable payload, which names no file, is still refused. **Why:** review of pull request 378: refusing every unplaceable edit overreached onto files no gate covers, where the edit tool fails by itself. | **substantive** |
 > | 2026-11-06 | Bumped to `0.8`. Gate matching uses Unicode case folding and resolves a hard link (Unix); `protected_changes` includes gitignored protected files by content hash, kept in `.urzua/cache/protected-hashes.json`; an adapter may send several `paths` with `adapter_error` (the call is refused when any is a protected path or gated record). **Why:** the maintainer's decision of 2026-11-06 to close the guardrail gaps left by pull request 378, under `ADR-89`. | **substantive** |
+> | 2026-11-07 | Bumped to `0.9`. The repository is the outermost governed one that holds the file the edit writes, symlinks followed, and a dangling symlink is judged as the file it would create; the edit tools are refused for the files the harness keeps (`.urzua/cache`, the lock, the override log, `.git/hooks`, `.git/config`); the session-start check compares installed files and hook entries with the lock and reports a manifest `kill_switches` key (new manifest key); the post-command check lists files hidden with `--assume-unchanged` or `--skip-worktree`; the command an adapter wires reads `CLAUDE_PROJECT_DIR` and may refuse an edit it cannot hand to the translator. **Why:** the third review of the harness, `ADR-89` amendment of 2026-11-07. | **substantive** |

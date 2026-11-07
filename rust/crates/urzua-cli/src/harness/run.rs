@@ -303,7 +303,9 @@ fn targeted_guardrail(config: Option<&Path>, root: &Path, path: &Path) -> Option
     let config_rel = crate::discovery::relative_to_root(root, &config_path).ok();
     let lexical = crate::discovery::relative_to_root(root, path).ok();
     let resolved = resolved_rel(root, path);
-    let linked = gate::hardlink_aliases(root, path, &raw.paths, &raw.gated_dirs);
+    let mut entries = raw.paths.clone();
+    entries.extend(raw.owned.iter().cloned());
+    let linked = gate::hardlink_aliases(root, path, &entries, &raw.gated_dirs);
     lexical
         .iter()
         .chain(resolved.iter())
@@ -311,28 +313,146 @@ fn targeted_guardrail(config: Option<&Path>, root: &Path, path: &Path) -> Option
         .find_map(|rel| raw.covers(rel, config_rel.as_deref()))
 }
 
-/// Enters the repository that holds the file being edited when the request
-/// names it by an absolute path: an agent working in an added directory has a
-/// `cwd` outside the repository, and the edit is still the repository's.
-fn enter_file_repo(request: &Request) {
-    let [path] = request.paths.as_slice() else {
+/// Enters the repository an edit is judged against. A path is judged by the
+/// outermost governed repository (a git working tree with `.urzua/config.yaml`)
+/// that holds the file the edit really writes, with symlinks followed (a link
+/// can land somewhere its own place does not suggest), else the one that holds
+/// the session's directory, else the one that holds the path as written. A
+/// nested repository that has no configuration of its own (`git init sub`, a
+/// vendored clone or a submodule) is therefore never the one chosen over the
+/// governed repository around it: judging the edit in it would find no gates,
+/// and a link from inside it to a protected file would go unjudged. An agent
+/// working in an added directory has a `cwd` outside the repository, and the
+/// edit is still the repository's.
+///
+/// A relative path is made absolute first, because the directory it is
+/// relative to is left.
+fn enter_file_repo(request: &mut Request, config: Option<&Path>) {
+    let Some(first) = request.paths.first() else {
         return;
     };
-    let path = Path::new(path);
-    if !path.is_absolute() {
-        return;
-    }
-    let Some(dir) = path.ancestors().skip(1).find(|d| d.is_dir()) else {
+    let Ok(cwd) = std::env::current_dir() else {
         return;
     };
-    if let Ok(root) = crate::discovery::find_repo_root(&[dir.to_path_buf()]) {
-        let _ = std::env::set_current_dir(root);
+    let abs = |p: &str| {
+        let p = Path::new(p);
+        if p.is_absolute() {
+            p.to_path_buf()
+        } else {
+            cwd.join(p)
+        }
+    };
+    let first = abs(first);
+    // An explicit configuration path names the repository's file itself.
+    let governed = if config.is_some() {
+        None
+    } else {
+        resolve_links(&first)
+            .as_deref()
+            .and_then(governed_root)
+            .or_else(|| governed_root(&cwd))
+            .or_else(|| governed_root(&first))
+    };
+    let root = governed.or_else(|| {
+        // Not inside a governed repository: the repository that holds the file.
+        if !Path::new(&request.paths[0]).is_absolute() {
+            return None;
+        }
+        let dir = first.ancestors().skip(1).find(|d| d.is_dir())?;
+        crate::discovery::find_repo_root(&[dir.to_path_buf()]).ok()
+    });
+    let Some(root) = root else { return };
+    if root.canonicalize().ok() != cwd.canonicalize().ok() {
+        request.paths = request
+            .paths
+            .iter()
+            .map(|p| abs(p).to_string_lossy().to_string())
+            .collect();
     }
+    let _ = std::env::set_current_dir(root);
+}
+
+/// The outermost directory at or above `start` that is a git working tree and
+/// holds `.urzua/config.yaml`: the repository whose gates apply. `start` may be
+/// a file, or a path that does not exist yet (its nearest existing directory is
+/// used).
+pub(super) fn governed_root(start: &Path) -> Option<PathBuf> {
+    let mut dir = start;
+    while !dir.is_dir() {
+        dir = dir.parent()?;
+    }
+    let dir = dir.canonicalize().ok()?;
+    dir.ancestors()
+        .filter(|d| d.join(".git").exists() && crate::discovery::default_config_path(d).is_file())
+        .last()
+        .map(Path::to_path_buf)
+}
+
+/// One step of walking a path.
+enum Step {
+    /// A root (`/`, or a drive prefix and root): start again from it.
+    Reset(PathBuf),
+    Parent,
+    Name(std::ffi::OsString),
+}
+
+fn steps(path: &Path) -> Vec<Step> {
+    use std::path::Component;
+    let mut head = PathBuf::new();
+    let mut rest = Vec::new();
+    for c in path.components() {
+        match c {
+            Component::Prefix(_) | Component::RootDir => head.push(c.as_os_str()),
+            Component::CurDir => {}
+            Component::ParentDir => rest.push(Step::Parent),
+            Component::Normal(n) => rest.push(Step::Name(n.to_owned())),
+        }
+    }
+    if !head.as_os_str().is_empty() {
+        rest.insert(0, Step::Reset(head));
+    }
+    rest
+}
+
+/// `abs` with every symbolic link followed, including a link whose target does
+/// not exist yet: a write through it creates the target, so the target is the
+/// file written. `canonicalize` cannot do that, because it fails on a dangling
+/// link and the fallback of resolving the parent only then keeps the link's own
+/// name. `None` after more than 40 links (a loop).
+fn resolve_links(abs: &Path) -> Option<PathBuf> {
+    let mut queue: std::collections::VecDeque<Step> = steps(abs).into();
+    let mut cur = PathBuf::new();
+    let mut followed = 0;
+    while let Some(step) = queue.pop_front() {
+        match step {
+            Step::Reset(root) => cur = root,
+            Step::Parent => {
+                cur.pop();
+            }
+            Step::Name(name) => {
+                let next = cur.join(&name);
+                if std::fs::symlink_metadata(&next).is_ok_and(|m| m.file_type().is_symlink()) {
+                    followed += 1;
+                    if followed > 40 {
+                        return None;
+                    }
+                    let target = std::fs::read_link(&next).ok()?;
+                    for step in steps(&target).into_iter().rev() {
+                        queue.push_front(step);
+                    }
+                } else {
+                    cur = next;
+                }
+            }
+        }
+    }
+    Some(cur)
 }
 
 /// `path` relative to the repository root with symlinks resolved, so an edit
-/// through a link is judged as the file it writes. `None` when the path cannot
-/// be resolved or resolves outside the repository.
+/// through a link is judged as the file it writes, a link to a file that does
+/// not exist yet included. `None` when the path cannot be resolved or resolves
+/// outside the repository.
 fn resolved_rel(repo_root: &Path, path: &Path) -> Option<PathBuf> {
     let cwd = std::env::current_dir().ok()?;
     let abs = if path.is_absolute() {
@@ -341,21 +461,11 @@ fn resolved_rel(repo_root: &Path, path: &Path) -> Option<PathBuf> {
         cwd.join(path)
     };
     let root = repo_root.canonicalize().ok()?;
-    let mut tail = Vec::new();
-    let mut cur = abs.as_path();
-    loop {
-        if let Ok(mut full) = cur.canonicalize() {
-            for part in tail.iter().rev() {
-                full.push(part);
-            }
-            return full.strip_prefix(&root).ok().map(PathBuf::from);
-        }
-        tail.push(cur.file_name()?.to_owned());
-        cur = cur.parent()?;
-    }
+    let full = resolve_links(&abs)?;
+    full.strip_prefix(&root).ok().map(PathBuf::from)
 }
 
-fn judge_edit(config: Option<PathBuf>, request: Request) -> Verdict {
+fn judge_edit(config: Option<PathBuf>, mut request: Request) -> Verdict {
     let actor = request.actor();
     if let Some(cwd) = &request.cwd {
         let on = on_unreadable_request(config.as_deref());
@@ -368,7 +478,7 @@ fn judge_edit(config: Option<PathBuf>, request: Request) -> Verdict {
             );
         }
     }
-    enter_file_repo(&request);
+    enter_file_repo(&mut request, config.as_deref());
     if let Some(why) = &request.adapter_error {
         return adapter_failure(config.as_deref(), &request, why);
     }
@@ -408,10 +518,12 @@ fn judge_edit(config: Option<PathBuf>, request: Request) -> Verdict {
             let lexical = crate::discovery::relative_to_root(&repo_root, Path::new(path)).ok();
             let resolved = resolved_rel(&repo_root, Path::new(path));
             // A hard link is the file it shares an inode with (Unix).
+            let mut entries = gate::protected_entries(&loaded);
+            entries.extend(gate::engine_owned(loaded.override_log.as_deref()));
             let linked = gate::hardlink_aliases(
                 &repo_root,
                 Path::new(path),
-                &gate::protected_entries(&loaded),
+                &entries,
                 &gate::gated_record_dirs(&loaded),
             );
             for rel in lexical
@@ -809,10 +921,26 @@ fn on_path(name: &str) -> bool {
     })
 }
 
+/// Moves into the outermost governed repository above the current directory,
+/// when there is one: a session whose directory is inside a nested repository
+/// still belongs to the governed repository around it.
+pub(super) fn enter_governed_cwd() {
+    if let Some(root) = std::env::current_dir()
+        .ok()
+        .as_deref()
+        .and_then(governed_root)
+    {
+        let _ = std::env::set_current_dir(root);
+    }
+}
+
 pub fn run_session_start(config: Option<PathBuf>) -> ExitCode {
     let request = read_request().unwrap_or_default();
     if let Some(cwd) = &request.cwd {
         let _ = std::env::set_current_dir(cwd);
+    }
+    if config.is_none() {
+        enter_governed_cwd();
     }
     emit(&session_start(config))
 }
@@ -894,6 +1022,7 @@ fn session_start(config: Option<PathBuf>) -> Verdict {
         });
     }
 
+    let mut command_dirs: Vec<String> = Vec::new();
     for name in &lock.adapters {
         let Some(adapter) = super::bundle::adapter(name) else {
             problems.push(Problem {
@@ -905,6 +1034,9 @@ fn session_start(config: Option<PathBuf>) -> Verdict {
             continue;
         };
         let manifest = adapter.manifest();
+        if let Some(dir) = &manifest.commands_dir {
+            command_dirs.push(format!("{}/", dir.trim_end_matches('/')));
+        }
         for interpreter in &manifest.requires.interpreters {
             if !on_path(interpreter) {
                 problems.push(Problem {
@@ -917,7 +1049,7 @@ fn session_start(config: Option<PathBuf>) -> Verdict {
             if std::env::var_os(var).is_none_or(|v| v.is_empty()) {
                 problems.push(Problem {
                     check: "environment",
-                    message: format!("{var} is not set in this session; the {name} adapter's commands do not depend on it, so the hooks still run and find the project from the request, but the agent was expected to set it"),
+                    message: format!("{var} is not set in this session. The {name} adapter's hook commands find the project from it; without it they fall back to the outermost directory above the current one that holds .urzua/config.yaml, which is the same project only while the session was started inside it"),
                 });
             }
         }
@@ -931,15 +1063,74 @@ fn session_start(config: Option<PathBuf>) -> Verdict {
                 .ok()
                 .and_then(|s| s.text.map(|_| s.doc))
         });
-        let wired = doc
+        let found = doc
             .as_ref()
-            .and_then(|d| settings::find(d, &e.event, &e.matcher, &e.handler))
-            .is_some();
-        if !wired {
-            problems.push(Problem {
+            .and_then(|d| settings::find(d, &e.event, &e.matcher, &e.handler));
+        match found {
+            None => problems.push(Problem {
                 check: "hook-entry",
                 message: format!("the hook entry '{}' is not wired in {}: the guardrail does not run (run `urzua harness status`, then `urzua harness install`)", e.key(), e.file),
-            });
+            }),
+            Some(hook) if lock::hash(&hook.compact()) != e.hash => problems.push(Problem {
+                check: "hook-entry",
+                message: format!("the hook entry '{}' in {} is not the one the install wrote (its hash differs from {}): it may no longer run the guardrail (run `urzua harness status`, then `urzua harness update --force`)", e.key(), e.file, lock::LOCK_PATH),
+            }),
+            Some(_) => {}
+        }
+    }
+
+    // The files the install owns are the ones it wrote: a translator that was
+    // neutered or deleted passes every other check here and judges nothing.
+    for (path, locked) in &lock.files {
+        let customisable = command_dirs.iter().any(|d| path.starts_with(d.as_str()));
+        match super::read(&ws.repo_root, path) {
+            Ok(None) => problems.push(Problem {
+                check: "file",
+                message: format!("{path} is missing: it is part of the installed harness and the guardrail that uses it cannot run (run `urzua harness status`, then `urzua harness update`)"),
+            }),
+            Ok(Some(text)) if !customisable && lock::hash(&text) != *locked => {
+                problems.push(Problem {
+                    check: "file",
+                    message: format!("{path} is not the file the install wrote (its hash differs from {}): it may judge nothing (run `urzua harness status`, then `urzua harness update --force` to restore it)", lock::LOCK_PATH),
+                })
+            }
+            Err(m) => problems.push(Problem {
+                check: "file",
+                message: format!("{m}, so the installed harness file cannot be checked"),
+            }),
+            Ok(Some(_)) => {}
+        }
+    }
+
+    // A setting that switches every hook off, which no hook entry can show.
+    for name in &lock.adapters {
+        let Some(adapter) = super::bundle::adapter(name) else {
+            continue;
+        };
+        let manifest = adapter.manifest();
+        let Some(doc) = docs
+            .entry(manifest.settings_file.clone())
+            .or_insert_with(|| {
+                super::load_settings(&ws.repo_root, &manifest.settings_file)
+                    .ok()
+                    .and_then(|s| s.text.map(|_| s.doc))
+            })
+            .as_ref()
+        else {
+            continue;
+        };
+        for key in &manifest.kill_switches {
+            let on = match doc.get(key) {
+                Some(super::json::J::Bool(b)) => *b,
+                Some(super::json::J::Str(s)) => s.trim().eq_ignore_ascii_case("true"),
+                _ => false,
+            };
+            if on {
+                problems.push(Problem {
+                    check: "kill-switch",
+                    message: format!("{} sets \"{key}\" to true: every hook of the {name} adapter is switched off, so no guardrail runs in this session (remove the setting)", manifest.settings_file),
+                });
+            }
         }
     }
 
