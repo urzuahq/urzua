@@ -87,6 +87,11 @@ struct Context<'a> {
     untracked_records: rules::UntrackedRecords,
     live_paths: Vec<PathBuf>,
     changed_paths: Option<Vec<PathBuf>>,
+    /// The changed paths that did not exist at the merge base; `None` without `--base`.
+    added_paths: Option<Vec<PathBuf>>,
+    /// The fetched pull-request refs' holders of the ids this diff adds
+    /// (`identity.open-pr-collision`); empty unless that rule is enabled.
+    pull_ref_claims: rules::PullRefClaims,
     committed_statuses: Option<HashMap<PathBuf, rules::CommittedStatus>>,
     /// The identities from `--actors` (`MILE-200`).
     actors: Option<urzua_core::authority::Actors>,
@@ -247,6 +252,8 @@ impl<'a> Context<'a> {
             claim_ages: &self.claim_ages,
             base_text: &self.base_text,
             changed_paths: self.changed_paths.as_deref(),
+            added_paths: self.added_paths.as_deref(),
+            pull_ref_claims: &self.pull_ref_claims,
             committed_statuses: self.committed_statuses.as_ref(),
             actors: self.actors.as_ref(),
             refs_snapshot: &self.refs_snapshot,
@@ -883,6 +890,12 @@ fn load_context<'a>(
         .map(|p| head_changes_for(repo_root, &p.path));
     let changes = scope.changed.as_ref().or(head_changes.as_ref());
     let base_text = load_base_text(session, changes, &mut notices)?;
+    let added_paths: Option<Vec<PathBuf>> = changes.map(|c| {
+        let mut added: Vec<PathBuf> = c.added.iter().cloned().collect();
+        added.sort();
+        added
+    });
+    let pull_ref_claims = load_pull_ref_claims(session, added_paths.as_deref(), &mut notices);
     let templates = load_templates(repo_root, config, &mut notices)?;
 
     Ok((
@@ -915,6 +928,8 @@ fn load_context<'a>(
                 .collect(),
             // The diff rules judge the changed set itself; `None` without `--base`.
             changed_paths: changes.map(|c| c.changed.iter().cloned().collect()),
+            added_paths,
+            pull_ref_claims,
             committed_statuses: changes.map(|c| {
                 // The types an authority status gate names are read too, but only
                 // when `diff.decider-required` will use them.
@@ -946,6 +961,58 @@ fn load_context<'a>(
         },
         notices,
     ))
+}
+
+/// The refs `identity.open-pr-collision` compares against (`ADR-93` clause 7): read
+/// only when the rule is enabled and the run has a diff, from what is already in
+/// `refs/urzua/pr`. `check` never fetches (clause 8); with no refs the rule's
+/// notice says how to fetch them, so a run over nothing is not read as clean.
+fn load_pull_ref_claims(
+    session: &Session,
+    added: Option<&[PathBuf]>,
+    notices: &mut Vec<Notice>,
+) -> rules::PullRefClaims {
+    let (Some(added), Some(_)) = (
+        added,
+        enabled_setting(&session.config, rules::RULE_IDENTITY_OPEN_PR_COLLISION),
+    ) else {
+        return Default::default();
+    };
+    let added: HashSet<&PathBuf> = added.iter().collect();
+    let ids: HashSet<urzua_core::values::RecordId> = session
+        .records
+        .iter()
+        .filter(|r| added.contains(&r.path))
+        .filter_map(rules::record_id)
+        .map(|id| urzua_core::values::RecordId::new(&id))
+        .collect();
+    match crate::discovery::read_pull_ref_claims(&session.repo_root, &session.config, &ids) {
+        Ok(claims) => {
+            if claims.refs.is_empty() {
+                let pattern = session
+                    .config
+                    .new
+                    .pull_ref_patterns
+                    .first()
+                    .map_or("refs/pull/*/head", String::as_str);
+                notices.push(rules::open_pr_missing_refs_notice(
+                    &session.config.new.remote,
+                    pattern,
+                ));
+            }
+            claims
+        }
+        Err(e) => {
+            notices.push(Notice {
+                severity: NoticeSeverity::Warning,
+                subject: rules::RULE_IDENTITY_OPEN_PR_COLLISION.to_string(),
+                message: format!(
+                    "could not read the fetched pull request refs ({e}), so the rule compared against nothing"
+                ),
+            });
+            Default::default()
+        }
+    }
 }
 
 /// Reads the actors file the gate action writes (`MILE-200`): JSON,

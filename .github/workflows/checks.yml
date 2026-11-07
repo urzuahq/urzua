@@ -118,6 +118,12 @@ jobs:
       # checkout fails with a reason instead of reading clean (ADR-71).
       # base-ref is empty outside pull requests (publish-release calls this
       # workflow on a tag), where only the whole-tree check runs.
+      # identity.open-pr-collision (ADR-93) compares an added record with the
+      # pull-request head refs `urzua new` fetches; `check` never fetches, so the
+      # gate does, with plain git, into the same private namespace.
+      - name: fetch pull request refs (identity.open-pr-collision)
+        working-directory: .
+        run: git fetch --no-tags --quiet origin '+refs/pull/*/head:refs/urzua/pr/origin/*'
       - name: urzua gate (SPEC-0002 Phase A exit criterion -- self-hosting)
         uses: ./.github/actions/urzua-gate
         with:

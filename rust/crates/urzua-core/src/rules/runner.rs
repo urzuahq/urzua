@@ -76,6 +76,12 @@ pub struct RuleCtx<'a> {
     pub base_text: &'a HashMap<PathBuf, String>,
     /// `None` on a run with no `--base`.
     pub changed_paths: Option<&'a [PathBuf]>,
+    /// The subset of `changed_paths` that did not exist at the merge base; `None`
+    /// on a run with no `--base`.
+    pub added_paths: Option<&'a [PathBuf]>,
+    /// What the fetched pull-request refs hold that matters to this diff; empty
+    /// unless `identity.open-pr-collision` is enabled on a `--base` run.
+    pub pull_ref_claims: &'a PullRefClaims,
     /// Each changed record's `Status` at the merge base, for the types that
     /// declare `transitions`; `None` on a run with no `--base` (`ADR-72`).
     pub committed_statuses: Option<&'a HashMap<PathBuf, CommittedStatus>>,

@@ -225,6 +225,174 @@ pub fn changed_paths_since(repo_root: &Path, base: &str) -> Result<GitChanges, D
     })
 }
 
+/// The files directly in each of `dirs` at each of `commits`, as repository-relative
+/// paths (`dir/name`), keyed by commit. One `git cat-file --batch-check` process
+/// resolves every `commit:dir` to a tree, and `git ls-tree` then runs once per
+/// *distinct* tree: the pull-request heads of a large repository mostly share a
+/// directory's tree with `main`, so listing each tip separately (hundreds of
+/// processes) is what made the open-pull-request check slow. A commit with no such
+/// directory has no entry for it.
+pub fn files_in_dirs_at_commits(
+    repo_root: &Path,
+    commits: &[String],
+    dirs: &[String],
+) -> Result<std::collections::HashMap<String, Vec<String>>, String> {
+    use std::collections::HashMap;
+    use std::io::Write;
+    let mut wanted: Vec<(&String, &String)> = Vec::new();
+    for commit in commits {
+        for dir in dirs {
+            wanted.push((commit, dir));
+        }
+    }
+    let mut child = Command::new("git")
+        .arg("-C")
+        .arg(repo_root)
+        .args(["cat-file", "--batch-check"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("could not run git: {e}"))?;
+    let mut stdin = child.stdin.take().expect("piped stdin");
+    let input: String = wanted
+        .iter()
+        .map(|(c, d)| format!("{c}:{}\n", d.trim_end_matches('/')))
+        .collect();
+    // Written on its own thread: a full output pipe must not block the input.
+    let writer = std::thread::spawn(move || {
+        let _ = stdin.write_all(input.as_bytes());
+    });
+    let out = child
+        .wait_with_output()
+        .map_err(|e| format!("could not read git: {e}"))?;
+    let _ = writer.join();
+    if !out.status.success() {
+        return Err(format!(
+            "git cat-file failed: {}",
+            String::from_utf8_lossy(&out.stderr).trim()
+        ));
+    }
+    let text = String::from_utf8_lossy(&out.stdout);
+    let answers: Vec<&str> = text.lines().collect();
+    if answers.len() != wanted.len() {
+        return Err("git cat-file answered a different number of lines than asked".to_string());
+    }
+    // The distinct trees, in first-seen order.
+    let mut distinct: Vec<&str> = Vec::new();
+    let mut seen: std::collections::HashSet<&str> = std::collections::HashSet::new();
+    let mut tree_of: Vec<Option<&str>> = Vec::with_capacity(wanted.len());
+    for answer in &answers {
+        let mut parts = answer.split(' ');
+        match (parts.next(), parts.next()) {
+            (Some(oid), Some("tree")) => {
+                if seen.insert(oid) {
+                    distinct.push(oid);
+                }
+                tree_of.push(Some(oid));
+            }
+            _ => tree_of.push(None),
+        }
+    }
+    let listed = list_trees(repo_root, &distinct)?;
+    let mut result: HashMap<String, Vec<String>> = HashMap::new();
+    for ((commit, dir), tree) in wanted.iter().zip(tree_of) {
+        let Some(oid) = tree else {
+            continue;
+        };
+        let dir = dir.trim_end_matches('/');
+        result
+            .entry((*commit).clone())
+            .or_default()
+            .extend(listed[oid].iter().map(|n| format!("{dir}/{n}")));
+    }
+    Ok(result)
+}
+
+/// The names of the files (not directories or submodules) directly in each tree,
+/// read in one `git cat-file --batch` process: a repository with hundreds of pull
+/// requests has over a thousand distinct trees, and a `git ls-tree` process for
+/// each took longer than the rest of a `check` run.
+fn list_trees<'a>(
+    repo_root: &Path,
+    oids: &[&'a str],
+) -> Result<std::collections::HashMap<&'a str, Vec<String>>, String> {
+    use std::io::Write;
+    let width = match run_git(repo_root, &["rev-parse", "--show-object-format"])
+        .map_err(|e| e.to_string())?
+        .trim()
+    {
+        "sha256" => 32,
+        _ => 20,
+    };
+    let mut child = Command::new("git")
+        .arg("-C")
+        .arg(repo_root)
+        .args(["cat-file", "--batch"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("could not run git: {e}"))?;
+    let mut stdin = child.stdin.take().expect("piped stdin");
+    let input: String = oids.iter().map(|o| format!("{o}\n")).collect();
+    let writer = std::thread::spawn(move || {
+        let _ = stdin.write_all(input.as_bytes());
+    });
+    let out = child
+        .wait_with_output()
+        .map_err(|e| format!("could not read git: {e}"))?;
+    let _ = writer.join();
+    if !out.status.success() {
+        return Err(format!(
+            "git cat-file failed: {}",
+            String::from_utf8_lossy(&out.stderr).trim()
+        ));
+    }
+    let bytes = out.stdout;
+    let bad = || "git cat-file --batch printed an object this tool cannot read".to_string();
+    let mut listed = std::collections::HashMap::new();
+    let mut at = 0usize;
+    for oid in oids {
+        // `<oid> tree <size>\n`, then <size> bytes, then `\n`.
+        let eol = bytes[at..]
+            .iter()
+            .position(|b| *b == b'\n')
+            .ok_or_else(bad)?;
+        let header = std::str::from_utf8(&bytes[at..at + eol]).map_err(|_| bad())?;
+        let size: usize = header
+            .rsplit(' ')
+            .next()
+            .and_then(|n| n.parse().ok())
+            .ok_or_else(bad)?;
+        if !header.contains(" tree ") {
+            return Err(bad());
+        }
+        let body = bytes
+            .get(at + eol + 1..at + eol + 1 + size)
+            .ok_or_else(bad)?;
+        at += eol + 1 + size + 1;
+        let mut names = Vec::new();
+        let mut i = 0;
+        while i < body.len() {
+            // `<mode> <name>\0<raw oid>`
+            let space = body[i..].iter().position(|b| *b == b' ').ok_or_else(bad)?;
+            let mode = &body[i..i + space];
+            let nul = body[i + space..]
+                .iter()
+                .position(|b| *b == 0)
+                .ok_or_else(bad)?;
+            let name = String::from_utf8_lossy(&body[i + space + 1..i + space + nul]).into_owned();
+            i += space + nul + 1 + width;
+            if mode != b"40000" && mode != b"160000" {
+                names.push(name);
+            }
+        }
+        listed.insert(*oid, names);
+    }
+    Ok(listed)
+}
+
 /// A file as it was at `commit`: how a deleted record is read once it is
 /// gone from the tree.
 pub fn read_at_commit(

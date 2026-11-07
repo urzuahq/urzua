@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.100'
+Version: '0.101'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs, test:rust/crates/urzua-cli/tests/field_levels_integration.rs
@@ -961,6 +961,34 @@ block_on: introduced   # the default
 - The engine reads no other meaning from the key: `urzua check` and `check --stdin-path` report the same
   findings under both values, and the Claude Code adapter passes the hook's verdict through unchanged.
   This repository declares `introduced` (`ADR-78` amendment, item 3).
+
+## Numbering against open pull requests: `new`
+
+A top-level `new` sets whether `urzua new` fetches pull-request head refs before numbering a record, so it skips
+the numbers open pull requests already took (`ADR-93`, `MILE-89`; the mechanism is in `SPEC-12`):
+
+```yaml
+new:
+  check_open_prs: false                    # the default; true makes new fetch and scan
+  pull_ref_patterns: ["refs/pull/*/head"]  # the default, GitHub's layout
+  remote: origin                           # the default
+  fetch_timeout_seconds: 30                # the default
+  lock_timeout_seconds: 10                 # the default
+```
+
+- **`check_open_prs: true`** is the first network step outside `refs refresh`, so it is opt-in: absent or
+  `false`, `new` touches no remote and behaves as before. With it, `new` fetches, takes a lock and also reads
+  the trees of the repository's other worktrees. A later command that wants the network needs its own opt-in.
+- **`pull_ref_patterns`** is a non-empty list of ref patterns, each starting `refs/` and holding exactly one
+  `*`, which stands for the pull request number. A repository on another host names its own (GitLab's is
+  `refs/merge-requests/*/head`). Each pattern is fetched into its own namespace, `refs/urzua/pr/<segment>/*`.
+- **`remote`** is a remote's name; a value that is empty, holds whitespace or starts with `-` is refused.
+- **`fetch_timeout_seconds`** and **`lock_timeout_seconds`** are whole seconds, at least 1.
+- **Load errors** (exit 2), never a silent default: an unknown key under `new`, a `check_open_prs` that is not a
+  boolean, an empty `pull_ref_patterns` or an entry that is not a pattern as above, a `remote` as above, and a
+  timeout of 0.
+- **`identity.open-pr-collision`** (`SPEC-2`) is the opt-in `check` rule that reads the refs this fetches; it
+  takes no option of its own and is a warning at its default level.
 
 ## Attestation identity: `attestation`
 
@@ -2069,3 +2097,4 @@ proves this configuration produces the three findings.
 > | 2026-11-06 | Bumped to `0.98`. Documents the top-level `authority` table (`deciders` groups of `logins`, `evidence` defaulting to `pr-author`, `gates` by type and status and by path) with its load errors, the local refusal of an agent's edit-tool move to a gated status or write to a gated path (final, not liftable by the override), the rule option `require_evidence`, the actors file and the accepted risk; an enabled `acceptance` or `protected-paths` guardrail with no gate of its kind is a load error. **Why:** `MILE-200`, decided in `ADR-89` section 4, accepted by the maintainer. | **substantive** |
 > | 2026-11-06 | Bumped to `0.99`. The `authority` example's protected paths no longer list `scripts/hooks`, which this repository deleted. **Why:** `MILE-204`. | **substantive** |
 > | 2026-11-06 | Bumped to `0.100`. States that claim ages and every date comparison use UTC. **Why:** maintainer decision of 2026-11-05: UTC everywhere. | **substantive** |
+> | 2026-11-07 | Bumped to `0.101`. Documents the top-level `new` key (`check_open_prs`, `pull_ref_patterns`, `remote`, `fetch_timeout_seconds`, `lock_timeout_seconds`) and its load errors. **Why:** `MILE-89` / `ADR-93`. | **substantive** |

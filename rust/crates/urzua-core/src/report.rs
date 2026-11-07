@@ -343,6 +343,9 @@ pub enum PopulationUnit {
     File,
     /// One path in the changed set of a `--base` run.
     ChangedPath,
+    /// One fetched pull-request head ref under `refs/urzua/pr` (`ADR-93`): zero
+    /// means nothing was fetched, which a clean run must not be mistaken for.
+    PullRef,
     /// One entry of a declared header field's list (`MILE-186`, `ADR-75`
     /// clause 3): an id a record names without citing it as a reference. The
     /// entry exists because the record declares it, so an uncited or malformed
@@ -1033,8 +1036,36 @@ pub struct NewReport {
     /// `null` when the type's closed field set does not declare `Stable-Id`, so
     /// none was written (`BUG-182`).
     pub stable_id: Option<String>,
+    /// What the numbering consulted beyond the working tree (`ADR-93` clause 6).
+    pub pull_refs: PullRefsReport,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub notices: Vec<Notice>,
+}
+
+/// The pull-request refs and sibling worktrees `urzua new` consulted
+/// (`ADR-93` clause 6, `SPEC-12`). Always present, so a run that did not fetch
+/// says why instead of being silent.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct PullRefsReport {
+    /// Whether this run fetched pull-request head refs.
+    pub fetched: bool,
+    /// Why it did not: `disabled` (`new.check_open_prs` is off), `offline` (the
+    /// remote is missing or the fetch failed) or `timeout`; `null` when it did.
+    pub reason: Option<String>,
+    /// The remote fetched from; `null` when the option is off.
+    pub remote: Option<String>,
+    /// How many refs under `refs/urzua/pr` were read, fetched now or earlier.
+    pub refs: usize,
+    /// How many other worktrees of this repository were read.
+    pub worktrees_scanned: usize,
+    /// The numbers numbering skipped, with the refs or worktrees holding each.
+    pub skipped_numbers: Vec<SkippedNumber>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct SkippedNumber {
+    pub number: u32,
+    pub held_by: Vec<String>,
 }
 
 impl Report for NewReport {

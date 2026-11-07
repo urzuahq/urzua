@@ -1234,3 +1234,99 @@ pub(crate) fn read_override_log(
         content,
     }))
 }
+
+/// What the fetched pull-request refs hold for the ids `added_ids` names
+/// (`ADR-93`, `identity.open-pr-collision`): every ref under `refs/urzua/pr`, and,
+/// for each file directly in a declared record directory on one whose id is in
+/// `added_ids`, its path and `Stable-Id`. One `for-each-ref` and one `ls-tree` per
+/// distinct tip, then a read only of the files that can collide. `check` never
+/// fetches, so this reads what is already there.
+pub(crate) fn read_pull_ref_claims(
+    repo_root: &Path,
+    config: &Config,
+    added_ids: &HashSet<urzua_core::values::RecordId>,
+) -> Result<rules::PullRefClaims, String> {
+    let git = |args: &[&str]| -> Result<Vec<u8>, String> {
+        let out = std::process::Command::new("git")
+            .arg("-C")
+            .arg(repo_root)
+            .args(args)
+            .output()
+            .map_err(|e| format!("could not run git: {e}"))?;
+        if out.status.success() {
+            Ok(out.stdout)
+        } else {
+            Err(format!(
+                "git {} failed: {}",
+                args[0],
+                String::from_utf8_lossy(&out.stderr).trim()
+            ))
+        }
+    };
+    let listed = git(&[
+        "for-each-ref",
+        "--format=%(objectname) %(refname)",
+        "refs/urzua/pr",
+    ])?;
+    let mut by_commit: std::collections::BTreeMap<String, Vec<String>> = Default::default();
+    let mut refs = Vec::new();
+    for line in String::from_utf8_lossy(&listed).lines() {
+        if let Some((sha, name)) = line.split_once(' ') {
+            by_commit
+                .entry(sha.to_string())
+                .or_default()
+                .push(name.to_string());
+            refs.push(name.to_string());
+        }
+    }
+    refs.sort();
+    let mut dirs: Vec<String> = config
+        .record_types
+        .values()
+        .flat_map(|t| t.all_dirs().map(str::to_string))
+        .collect();
+    dirs.sort();
+    dirs.dedup();
+    let commits: Vec<String> = by_commit.keys().cloned().collect();
+    let listing = urzua_io::files_in_dirs_at_commits(repo_root, &commits, &dirs)?;
+    let mut holders = Vec::new();
+    let mut ids: HashMap<PathBuf, Option<urzua_core::values::RecordId>> = HashMap::new();
+    for (sha, names) in &by_commit {
+        for path in listing.get(sha).into_iter().flatten() {
+            let path = PathBuf::from(path);
+            // The id comes from the filename under the type's own identity grammar,
+            // as it does for a record on disk; the content is read only on a match.
+            // Most paths repeat across hundreds of tips, and building the grammar is
+            // not free, so each path is resolved once.
+            let id = ids
+                .entry(path.clone())
+                .or_insert_with(|| {
+                    if !is_governed(config, &path) {
+                        return None;
+                    }
+                    let shell = parse_prospective_record(config, &path, "").ok()?;
+                    rules::record_id(&shell).map(|id| urzua_core::values::RecordId::new(&id))
+                })
+                .clone();
+            let Some(id) = id.filter(|id| added_ids.contains(id)) else {
+                continue;
+            };
+            let Ok(content) = urzua_io::read_at_commit(repo_root, sha, &path) else {
+                continue;
+            };
+            let stable_id = parse_prospective_record(config, &path, &content)
+                .ok()
+                .and_then(|r| r.header.get("Stable-Id").map(|v| v.trim().to_string()));
+            for name in names {
+                holders.push(rules::PullRefHolder {
+                    id: id.clone(),
+                    reference: name.clone(),
+                    path: path.display().to_string(),
+                    stable_id: stable_id.clone(),
+                });
+            }
+        }
+    }
+    holders.sort_by(|a, b| (&a.reference, &a.path).cmp(&(&b.reference, &b.path)));
+    Ok(rules::PullRefClaims { refs, holders })
+}
