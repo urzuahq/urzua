@@ -96,6 +96,59 @@ pub(crate) fn is_governed(config: &Config, rel_path: &Path) -> bool {
         .any(|t| type_governs(t, rel_path))
 }
 
+/// Every directory some record type declares, sorted, once each.
+fn record_dirs(config: &Config) -> Vec<PathBuf> {
+    let mut dirs: Vec<PathBuf> = config
+        .record_types
+        .values()
+        .flat_map(|t| t.all_dirs().map(PathBuf::from))
+        .collect();
+    dirs.sort();
+    dirs.dedup();
+    dirs
+}
+
+/// The files a run reads (`ADR-92`): the tracked and staged files, plus, when
+/// the configuration sets `discovery.include_untracked`, the untracked,
+/// non-ignored record files directly under a declared record directory. The one
+/// call every command makes, so `check`, `file_texts` and `session` cannot see
+/// different corpora.
+pub(crate) fn discover_files(
+    repo_root: &Path,
+    config: &Config,
+) -> Result<urzua_io::DiscoveredFiles, urzua_io::DiscoveryError> {
+    if !config.discovery.include_untracked {
+        return urzua_io::discover_tracked_files(repo_root, None);
+    }
+    let dirs = record_dirs(config);
+    let governs = |p: &Path| is_governed(config, p);
+    urzua_io::discover_tracked_files(
+        repo_root,
+        Some(&urzua_io::UntrackedInclusion {
+            dirs: &dirs,
+            governs: &governs,
+        }),
+    )
+}
+
+/// The untracked, non-ignored files under a declared record directory that a
+/// record type governs: what the option would include (`ADR-92` clause 2),
+/// listed so a run that did not include them can name them (clause 4).
+pub(crate) fn untracked_record_files(
+    repo_root: &Path,
+    config: &Config,
+) -> Result<Vec<PathBuf>, urzua_io::DiscoveryError> {
+    let dirs = record_dirs(config);
+    let governs = |p: &Path| is_governed(config, p);
+    urzua_io::untracked_governed_files(
+        repo_root,
+        &urzua_io::UntrackedInclusion {
+            dirs: &dirs,
+            governs: &governs,
+        },
+    )
+}
+
 pub(crate) fn load_records(
     repo_root: &Path,
     discovered: &[PathBuf],
@@ -423,6 +476,11 @@ pub(crate) struct DriftedRecords {
     /// The repository is a shallow clone, detected once per run: the history
     /// drift reads is truncated, so a zero here proves nothing (`MILE-159`).
     pub(crate) shallow: bool,
+    /// Records that carry a `Realized-by` locator and have no git history (an
+    /// untracked or staged-new file, or an unborn `HEAD`), so there is no date
+    /// to judge their locator against (`ADR-92` clause 7). Not drift, and not
+    /// "no drift": disclosed by [`no_history_notice`].
+    pub(crate) no_history: HashSet<PathBuf>,
 }
 
 /// Notice subject for git trouble in the drift computation (`MILE-159`).
@@ -464,6 +522,71 @@ pub(crate) fn drift_notices(shallow: bool, problems: &[String]) -> Vec<urzua_cor
         });
     }
     out
+}
+
+/// Notice subject for the records drift could not judge for want of history
+/// (`ADR-92` clause 7).
+pub(crate) const NOTICE_UNTRACKED_NOT_DRIFT_JUDGED: &str = "discovery.untracked-not-drift-judged";
+
+/// Notice subject for the untracked records a run did not examine (`ADR-92`
+/// clause 4).
+pub(crate) const NOTICE_UNTRACKED_SKIPPED: &str = "discovery.untracked-skipped";
+
+/// The most untracked paths the skipped notice names; the count says the rest.
+const SKIPPED_SHOWN: usize = 20;
+
+/// The info notice for records with a locator and no history, which drift did
+/// not judge (`ADR-92` clause 7). Present only when there are some, so it is
+/// the count and not a standing line.
+pub(crate) fn no_history_notice(
+    no_history: &HashSet<PathBuf>,
+) -> Option<urzua_core::report::Notice> {
+    if no_history.is_empty() {
+        return None;
+    }
+    let n = no_history.len();
+    Some(urzua_core::report::Notice {
+        severity: urzua_core::report::NoticeSeverity::Info,
+        subject: NOTICE_UNTRACKED_NOT_DRIFT_JUDGED.to_string(),
+        message: format!(
+            "{n} record{} with a Realized-by locator {} no git history (untracked or not yet committed), so embodiment drift did not judge {}: a record is judged once it has a commit",
+            if n == 1 { "" } else { "s" },
+            if n == 1 { "has" } else { "have" },
+            if n == 1 { "it" } else { "them" },
+        ),
+    })
+}
+
+/// The info notice naming the untracked records a run skipped (`ADR-92`
+/// clause 4): at most [`SKIPPED_SHOWN`] paths, and the count. `None` when there
+/// are none.
+pub(crate) fn skipped_untracked_notice(skipped: &[PathBuf]) -> Option<urzua_core::report::Notice> {
+    if skipped.is_empty() {
+        return None;
+    }
+    let n = skipped.len();
+    let shown: Vec<String> = skipped
+        .iter()
+        .take(SKIPPED_SHOWN)
+        .map(|p| p.display().to_string())
+        .collect();
+    let more = n.saturating_sub(SKIPPED_SHOWN);
+    Some(urzua_core::report::Notice {
+        severity: urzua_core::report::NoticeSeverity::Info,
+        subject: NOTICE_UNTRACKED_SKIPPED.to_string(),
+        message: format!(
+            "{n} untracked record{} under a declared record directory {} not examined: {}{}; `git add` {} or set `discovery.include_untracked: true` to examine untracked records",
+            if n == 1 { "" } else { "s" },
+            if n == 1 { "was" } else { "were" },
+            shown.join(", "),
+            if more > 0 {
+                format!(" (and {more} more)")
+            } else {
+                String::new()
+            },
+            if n == 1 { "it" } else { "them" },
+        ),
+    })
 }
 
 /// `git blame` for many (path, line) pairs at once, on a few threads: blame
@@ -519,6 +642,7 @@ pub(crate) fn compute_drifted_records_at(
 ) -> DriftedRecords {
     let mut drifted = HashSet::new();
     let mut fresh_records = HashSet::new();
+    let mut no_history = HashSet::new();
     let mut problems: Vec<String> = Vec::new();
     let note = |problems: &mut Vec<String>, e: String| {
         if !problems.contains(&e) {
@@ -543,7 +667,7 @@ pub(crate) fn compute_drifted_records_at(
         .and_then(|s| s.drift_audit_field.as_deref())
         .map(str::trim);
     let mut commit_times: HashMap<String, Option<i64>> = HashMap::new();
-    let texts = crate::file_texts::FileTexts::new(repo_root.to_path_buf());
+    let texts = crate::file_texts::FileTexts::new(repo_root.to_path_buf(), config);
     let locator_opts: rules::LocatorExistsOpts =
         config.rule_opts(rules::RULE_EMBODIMENT_LOCATOR_EXISTS);
     // Implements: ADR-67 (the grace window)
@@ -615,6 +739,12 @@ pub(crate) fn compute_drifted_records_at(
             Some(Ok(Some(c))) => c,
             Some(Err(e)) => {
                 note(&mut problems, e);
+                continue;
+            }
+            // No history for the line: nothing to judge, and said so
+            // (`ADR-92` clause 7).
+            Some(Ok(None)) => {
+                no_history.insert(record.path.clone());
                 continue;
             }
             _ => continue,
@@ -759,6 +889,7 @@ pub(crate) fn compute_drifted_records_at(
         fresh: fresh_records,
         git_problems: problems,
         shallow,
+        no_history,
     }
 }
 

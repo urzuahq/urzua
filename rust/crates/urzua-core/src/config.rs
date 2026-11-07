@@ -74,6 +74,10 @@ pub struct Config {
     /// today's behaviour.
     #[serde(default, skip_serializing_if = "AttestationDecl::is_default")]
     pub attestation: AttestationDecl,
+    /// Which files discovery reads beyond the tracked ones (`ADR-92`,
+    /// `MILE-206`, `SPEC-3`). Absent means the tracked and staged files only.
+    #[serde(default, skip_serializing_if = "DiscoveryDecl::is_default")]
+    pub discovery: DiscoveryDecl,
     /// The agent harness a repository installs (`ADR-89`, `MILE-198`): its
     /// adapters, the agent-instructions file and which guardrails are on.
     /// Absent installs and enables nothing.
@@ -91,6 +95,24 @@ pub struct Config {
         skip_serializing_if = "Option::is_none"
     )]
     pub authority: Option<crate::authority::AuthorityDecl>,
+}
+
+/// The `discovery` key (`ADR-92`, `SPEC-3`): a repository's choice to govern
+/// the record files it has written and not yet staged.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct DiscoveryDecl {
+    /// Include untracked, non-ignored files directly under a declared record
+    /// directory (`ADR-92` clause 1). Default `false`: a scratch file in a
+    /// working tree is not part of the corpus (`ADR-56`).
+    #[serde(default)]
+    pub include_untracked: bool,
+}
+
+impl DiscoveryDecl {
+    pub fn is_default(&self) -> bool {
+        *self == DiscoveryDecl::default()
+    }
 }
 
 /// The `attestation` key (`ADR-89` section 5, `SPEC-3`).

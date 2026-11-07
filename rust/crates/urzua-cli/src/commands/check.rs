@@ -399,6 +399,7 @@ fn execute(config_path: Option<PathBuf>, args: CheckArgs) -> Result<CheckReport,
         opened.prospective,
     )?;
     let (mut context, mut notices) = load_context(session, &scope, selection.as_deref())?;
+    notices.extend(untracked_notices(session, &scope, &context.drift));
     notices.extend(actors_notices(
         &session.config,
         actors.is_some(),
@@ -460,6 +461,8 @@ fn execute(config_path: Option<PathBuf>, args: CheckArgs) -> Result<CheckReport,
             },
             base,
             record_types: session.config.record_types.keys().cloned().collect(),
+            include_untracked: session.config.discovery.include_untracked,
+            untracked_included: session.discovered.untracked_included.len(),
             diff: scope.diff,
         },
         blocking,
@@ -468,6 +471,47 @@ fn execute(config_path: Option<PathBuf>, args: CheckArgs) -> Result<CheckReport,
         // The flag wins over the configuration; either only moves the exit code.
         fail_on: fail_on.unwrap_or(session.config.fail_on),
     })
+}
+
+/// What the untracked-records option owes the reader (`ADR-92`). Without it, one
+/// info notice naming the untracked records under a declared directory that the
+/// run did not examine; with it, one counting the included records whose
+/// `Realized-by` locator drift could not judge for want of history. Neither is
+/// emitted for a proposed record (`--stdin-path`), which is judged alone.
+fn untracked_notices(
+    session: &Session,
+    scope: &ReportScope,
+    drift: &crate::discovery::DriftedRecords,
+) -> Vec<Notice> {
+    if scope.prospective.is_some() {
+        return Vec::new();
+    }
+    if session.config.discovery.include_untracked {
+        return crate::discovery::no_history_notice(&drift.no_history)
+            .into_iter()
+            .collect();
+    }
+    let skipped =
+        match crate::discovery::untracked_record_files(&session.repo_root, &session.config) {
+            Ok(listed) => listed,
+            Err(e) => {
+                return vec![Notice {
+                    severity: NoticeSeverity::Warning,
+                    subject: crate::discovery::NOTICE_UNTRACKED_SKIPPED.to_string(),
+                    message: format!("could not list the untracked records: {e}"),
+                }]
+            }
+        };
+    // A record named on argv was examined, and one outside the requested paths
+    // was never in question.
+    let skipped: Vec<PathBuf> = skipped
+        .into_iter()
+        .filter(|p| !session.discovered.paths.contains(p))
+        .filter(|p| scope.requested.is_empty() || scope.requested.iter().any(|r| p.starts_with(r)))
+        .collect();
+    crate::discovery::skipped_untracked_notice(&skipped)
+        .into_iter()
+        .collect()
 }
 
 // ADR-90: a rule that declares scope: changed says how many slots it did not judge, and why.
@@ -539,15 +583,26 @@ fn open_session(
     let session = Session::open_with(paths, config_path, |repo_root, _config, discovered| {
         requested_scopes = crate::discovery::relative_scopes(repo_root, paths)?;
         if !requested_scopes.is_empty() {
-            let extra = crate::discovery::resolve_argv_overrides(
-                repo_root,
-                &requested_scopes,
-                &discovered.paths,
-            )?;
-            if !extra.is_empty() && base.is_some() {
-                // The diff lists tracked paths only, so a named file outside the
-                // tracked set could never be examined: refusing is the alternative
-                // to dropping it in silence (`BUG-24`'s failure shape).
+            // What git tracks or has staged. A record the option included is
+            // not in it, so a file named on argv keeps its `BUG-24` treatment
+            // whatever the option (`ADR-92` clause 5).
+            let tracked: Vec<PathBuf> = discovered
+                .paths
+                .iter()
+                .filter(|p| !discovered.untracked_included.contains(*p))
+                .cloned()
+                .collect();
+            let extra =
+                crate::discovery::resolve_argv_overrides(repo_root, &requested_scopes, &tracked)?;
+            // The diff lists tracked paths, and the included untracked records
+            // are added to it below, so only a named file the option would not
+            // include could never be examined: refusing is the alternative to
+            // dropping it in silence (`BUG-24`'s failure shape).
+            if base.is_some()
+                && extra
+                    .iter()
+                    .any(|p| !discovered.untracked_included.contains(p))
+            {
                 return Err(
                     "--base cannot be combined with a named file git does not track; \
                  drop --base or track the file"
@@ -562,8 +617,13 @@ fn open_session(
             }
         }
         if let Some(base) = base {
-            changed =
-                Some(urzua_io::changed_paths_since(repo_root, base).map_err(|e| e.to_string())?);
+            let mut changes =
+                urzua_io::changed_paths_since(repo_root, base).map_err(|e| e.to_string())?;
+            // An included untracked record has no merge-base copy: it is new
+            // by definition, so the diff rules judge it as an addition
+            // (`ADR-92` clause 6).
+            changes.add_untracked(&discovered.untracked_included);
+            changed = Some(changes);
             discovered.source = urzua_io::DiscoverySource::GitDiff;
         }
         Ok(())
@@ -1042,7 +1102,8 @@ fn refs_notice(snapshot_path: &str, snapshot: &RefsSnapshot) -> Notice {
 /// answerable once every other rule has reported.
 fn run_rules(context: &Context) -> (Vec<RuleExecution>, Vec<Finding>) {
     let (may_exist, dir_exists) = probes(&context.repo_root);
-    let texts = crate::file_texts::FileTexts::new(context.repo_root.clone());
+    let texts =
+        crate::file_texts::FileTexts::new(context.repo_root.clone(), &context.session.config);
     let read_text = |p: &str| texts.get(p);
     let mut executions = Vec::new();
     let mut findings = Vec::new();
@@ -1155,7 +1216,8 @@ fn run_after_scoping(
     findings: &mut Vec<Finding>,
 ) {
     let (may_exist, dir_exists) = probes(&context.repo_root);
-    let texts = crate::file_texts::FileTexts::new(context.repo_root.clone());
+    let texts =
+        crate::file_texts::FileTexts::new(context.repo_root.clone(), &context.session.config);
     let read_text = |p: &str| texts.get(p);
     let whole_corpus = scope.whole_corpus();
     let reached = |p: &Path| whole_corpus || scope.in_scope.contains(p);

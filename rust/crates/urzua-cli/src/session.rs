@@ -76,7 +76,7 @@ impl Session {
             config,
         } = workspace;
         let mut discovered =
-            urzua_io::discover_tracked_files(&repo_root).map_err(|e| e.to_string())?;
+            crate::discovery::discover_files(&repo_root, &config).map_err(|e| e.to_string())?;
         adjust(&repo_root, &config, &mut discovered)?;
         let (records, full_text) = load_records(
             &repo_root,

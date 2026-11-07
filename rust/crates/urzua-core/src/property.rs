@@ -218,6 +218,7 @@ mod tests {
                 override_log: None,
                 block_on: None,
                 attestation: Default::default(),
+                discovery: Default::default(),
                 harness: None,
                 authority: None,
                 rules: std::collections::BTreeMap::new(),
@@ -353,6 +354,7 @@ mod tests {
             override_log: None,
             block_on: None,
             attestation: Default::default(),
+            discovery: Default::default(),
             harness: None,
             authority: None,
             relation_pairs: vec![crate::config::RelationPair {
@@ -615,6 +617,7 @@ mod tests {
                 override_log: None,
                 block_on: None,
                 attestation: Default::default(),
+                discovery: Default::default(),
                 harness: None,
                 authority: None,
                 rules: std::collections::BTreeMap::new(),
