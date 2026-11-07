@@ -101,3 +101,30 @@ fn explain_refuses_an_absolute_path_to_a_real_outside_file() {
     assert_eq!(out.status.code(), Some(2), "{parsed}");
     assert!(!parsed.to_string().contains("top secret"), "{parsed}");
 }
+
+#[test]
+fn new_does_not_write_a_record_through_a_symlinked_record_directory() {
+    let (dir, outside) = fixture("new", "docs/adr/README.md");
+    // Point the record type's directory at the tracked symlink out of the repo.
+    let cfg = std::fs::read_to_string(dir.join(".urzua/config.yaml")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        cfg.replace("dir: \"docs/adr\"", "dir: \"out\""),
+    )
+    .unwrap();
+    let (out, parsed) = run(&dir, &["new", "adr", "Escapes", "--by", "t"]);
+    assert_ne!(out.status.code(), Some(0), "{parsed}");
+    assert!(
+        parsed.to_string().contains("outside the repository"),
+        "{parsed}"
+    );
+    let written: Vec<_> = std::fs::read_dir(&*outside)
+        .unwrap()
+        .map(|e| e.unwrap().file_name())
+        .collect();
+    assert_eq!(
+        written.len(),
+        1,
+        "wrote outside the repository: {written:?}"
+    );
+}
