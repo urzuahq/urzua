@@ -644,8 +644,20 @@ fn status(env: &Env, lock: &Lock) -> HarnessReport {
     }
     // A file the bundle now wants that the lock does not know yet (a command for
     // a record type added since the install) is missing until `update` writes it.
-    for path in want.files.keys().filter(|p| !lock.files.contains_key(*p)) {
-        mark(&mut report, "file", path, None, "missing");
+    // One that exists is a person's file under the bundle's name (`update` kept
+    // it): it is not missing, and it is not the install's until `update --force`.
+    for (path, bundle) in want
+        .files
+        .iter()
+        .filter(|(p, _)| !lock.files.contains_key(*p))
+    {
+        let state = match read(&env.root, path) {
+            Err(m) => return report.refuse(m),
+            Ok(None) => "missing",
+            Ok(Some(t)) if t == *bundle => "out-of-date",
+            Ok(Some(_)) => "modified",
+        };
+        mark(&mut report, "file", path, None, state);
     }
     let mut cache: BTreeMap<String, Option<J>> = BTreeMap::new();
     for e in &lock.entries {

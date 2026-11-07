@@ -144,6 +144,7 @@ pub fn parse(text: &str) -> Result<J, String> {
     let mut p = Parser {
         chars: text.chars().collect(),
         at: 0,
+        depth: 0,
     };
     p.skip_ws();
     let value = p.value()?;
@@ -157,9 +158,15 @@ pub fn parse(text: &str) -> Result<J, String> {
     Ok(value)
 }
 
+/// How deep an array or object may nest. The parser, the writer and the drop of
+/// the tree all recurse, so a file nested a hundred thousand levels deep would
+/// overflow the stack; a settings file never nests anywhere near this.
+const MAX_DEPTH: usize = 128;
+
 struct Parser {
     chars: Vec<char>,
     at: usize,
+    depth: usize,
 }
 
 impl Parser {
@@ -185,10 +192,23 @@ impl Parser {
         Ok(v)
     }
 
+    fn nested(&mut self, open: impl FnOnce(&mut Self) -> Result<J, String>) -> Result<J, String> {
+        if self.depth >= MAX_DEPTH {
+            return Err(format!(
+                "the document nests deeper than {MAX_DEPTH} levels at offset {}",
+                self.at
+            ));
+        }
+        self.depth += 1;
+        let value = open(self);
+        self.depth -= 1;
+        value
+    }
+
     fn value(&mut self) -> Result<J, String> {
         match self.chars.get(self.at) {
-            Some('{') => self.object(),
-            Some('[') => self.array(),
+            Some('{') => self.nested(Self::object),
+            Some('[') => self.nested(Self::array),
             Some('"') => Ok(J::Str(self.string()?)),
             Some('t') => self.word("true", J::Bool(true)),
             Some('f') => self.word("false", J::Bool(false)),
@@ -338,5 +358,20 @@ mod tests {
         for bad in ["", "{", "{\"a\":}", "[1,]", "{\"a\":1} x", "tru", "{'a':1}"] {
             assert!(parse(bad).is_err(), "{bad}");
         }
+    }
+
+    #[test]
+    fn a_document_nested_past_the_cap_is_refused_not_a_stack_overflow() {
+        let deep = |n: usize| format!("{}{}", "[".repeat(n), "]".repeat(n));
+        assert!(parse(&deep(MAX_DEPTH)).is_ok());
+        let err = parse(&deep(MAX_DEPTH + 1)).unwrap_err();
+        assert!(err.contains("nests deeper"), "{err}");
+        assert!(parse(&deep(100_000)).is_err());
+        assert!(parse(&format!(
+            "{}1{}",
+            "{\"a\":".repeat(100_000),
+            "}".repeat(100_000)
+        ))
+        .is_err());
     }
 }

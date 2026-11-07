@@ -170,6 +170,42 @@ pub(super) fn walk_entries(root: &Path, entries: &[String]) -> (Vec<String>, boo
     (found.into_iter().collect(), truncated)
 }
 
+/// The files and directories the harness maintains itself, which an agent's
+/// edit tools must not write while the `protected-paths` guardrail is on: the
+/// post-command baselines under `.urzua/cache` (a baseline written ahead of a
+/// change disarms the report), the lock, the declared override log (its
+/// `Reviewed-by` column is a person's review, and a row is appended only by the
+/// override path of the editor hook, which writes it from the engine, not
+/// through an edit tool), and the git hooks and configuration (a
+/// `core.hooksPath` turns the commit layer off). They are not in the authority
+/// table, so CI's `diff.decider-required` does not ask a decider for the
+/// override rows an ordinary override appends.
+pub(super) fn engine_owned(override_log: Option<&str>) -> Vec<String> {
+    let mut owned: Vec<String> = [
+        ".urzua/cache",
+        super::lock::LOCK_PATH,
+        ".git/hooks",
+        ".git/config",
+    ]
+    .iter()
+    .map(|p| p.to_string())
+    .collect();
+    if let Some(log) = override_log.map(|l| l.trim().trim_end_matches('/')) {
+        if !log.is_empty() {
+            owned.push(log.to_string());
+        }
+    }
+    owned
+}
+
+/// The engine-owned entry that covers `rel`, compared with Unicode case folding.
+fn owned_entry(config: &Config, rel: &Path) -> Option<String> {
+    let folded = fold_path(&rel.to_string_lossy());
+    engine_owned(config.override_log.as_deref())
+        .into_iter()
+        .find(|e| rules::path_matches_entry(Path::new(&folded), &fold_path(e)))
+}
+
 /// The path-gate entries of the table (every protected path).
 pub(super) fn protected_entries(config: &Config) -> Vec<String> {
     let Some(authority) = config.authority.as_ref() else {
@@ -274,6 +310,17 @@ pub(super) fn judge(
             });
         }
     }
+    if harness.enabled("protected-paths") {
+        if let Some(entry) = owned_entry(config, rel) {
+            return Some(Denial {
+                guardrail: "protected-paths",
+                reason: format!(
+                    "{} is kept by urzua itself ({entry}: the post-command baselines, the harness lock, the override log, the git hooks and configuration); an agent's edit through the edit tools is refused, because a change there would disarm a report or a review. urzua writes it; a person edits it outside the agent harness",
+                    rel.display()
+                ),
+            });
+        }
+    }
     if harness.enabled("acceptance") && authority.has_status_gate() {
         let folded = fold_to_declared_dir(config, rel);
         let rel = folded.as_path();
@@ -374,8 +421,11 @@ pub(super) struct RawGates {
     /// The acceptance guardrail, when enabled and set to deny.
     pub acceptance: bool,
     pub paths: Vec<String>,
-    /// The directories of the types a status gate names.
+    /// The directories (the directory and every extra directory) of the types
+    /// a status gate names.
     pub gated_dirs: Vec<String>,
+    /// The files the harness maintains itself (`engine_owned`).
+    pub owned: Vec<String>,
 }
 
 pub(super) fn raw_gates(config_text: &str) -> Option<RawGates> {
@@ -403,6 +453,7 @@ pub(super) fn raw_gates(config_text: &str) -> Option<RawGates> {
         acceptance: guardrail("acceptance"),
         paths: Vec::new(),
         gated_dirs: Vec::new(),
+        owned: engine_owned(value.get("override_log").and_then(|l| l.as_str())),
     };
     for gate in &gates {
         if let Some(paths) = gate.get("paths").and_then(|p| p.as_sequence()) {
@@ -410,12 +461,20 @@ pub(super) fn raw_gates(config_text: &str) -> Option<RawGates> {
                 .extend(paths.iter().filter_map(|p| p.as_str().map(str::to_string)));
         }
         if let Some(t) = gate.get("type").and_then(|t| t.as_str()) {
-            if let Some(dir) = value
-                .get("record_types")
-                .and_then(|r| r.get(t))
+            let declared = value.get("record_types").and_then(|r| r.get(t));
+            let dirs = declared
                 .and_then(|r| r.get("dir"))
                 .and_then(|d| d.as_str())
-            {
+                .into_iter()
+                .chain(
+                    declared
+                        .and_then(|r| r.get("extra_dirs"))
+                        .and_then(|d| d.as_sequence())
+                        .into_iter()
+                        .flatten()
+                        .filter_map(|d| d.as_str()),
+                );
+            for dir in dirs {
                 raw.gated_dirs.push(dir.trim_end_matches('/').to_string());
             }
         }
@@ -436,16 +495,62 @@ impl RawGates {
                 || self
                     .paths
                     .iter()
+                    .any(|e| rules::path_matches_entry(folded, &fold_path(e)))
+                || self
+                    .owned
+                    .iter()
                     .any(|e| rules::path_matches_entry(folded, &fold_path(e))))
         {
             return Some("protected-paths");
         }
         if self.acceptance {
-            let parent = rel.parent().map(|p| fold_path(&p.to_string_lossy()));
-            if parent.is_some_and(|p| self.gated_dirs.iter().any(|d| fold_path(d) == p)) {
+            // Anywhere under a gated type's directory, not only a direct child.
+            let under = |d: &String| rules::path_matches_entry(folded, &fold_path(d));
+            if self.gated_dirs.iter().any(under) {
                 return Some("acceptance");
             }
         }
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const RAW: &str = "override_log: .urzua/log.md\nrecord_types:\n  adr:\n    dir: docs/adr\n    extra_dirs: [docs/old/adr]\nharness:\n  guardrails:\n    acceptance: {enabled: true}\n    protected-paths: {enabled: true}\nauthority:\n  gates:\n    - {type: adr, to: [Accepted], by: m}\n    - {paths: [.hooks], by: m}\n";
+
+    #[test]
+    fn an_unreadable_configuration_still_covers_extra_dirs_subdirectories_and_what_the_harness_keeps(
+    ) {
+        let raw = raw_gates(RAW).expect("the raw configuration reads");
+        for rel in [
+            "docs/adr/ADR-1-a.md",
+            "docs/adr/nested/ADR-1-a.md",
+            "docs/old/adr/ADR-2-b.md",
+            "docs/old/adr/deeper/ADR-2-b.md",
+        ] {
+            assert_eq!(
+                raw.covers(Path::new(rel), None),
+                Some("acceptance"),
+                "{rel}"
+            );
+        }
+        for rel in [
+            ".urzua/cache/post-command.json",
+            ".urzua/harness.lock",
+            ".urzua/log.md",
+            ".git/hooks/pre-commit",
+            ".git/config",
+            ".hooks/settings.json",
+        ] {
+            assert_eq!(
+                raw.covers(Path::new(rel), None),
+                Some("protected-paths"),
+                "{rel}"
+            );
+        }
+        assert_eq!(raw.covers(Path::new("docs/other/x.md"), None), None);
+        assert_eq!(raw.covers(Path::new("docs/adrx/x.md"), None), None);
     }
 }
