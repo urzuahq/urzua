@@ -34,6 +34,9 @@ fn run_inner(config_path: Option<PathBuf>, path: String) -> Result<ExitCode, Fai
         )
         .into());
     }
+    crate::file_texts::FileTexts::new(repo_root.clone(), &config)
+        .confined(&parsed.path)
+        .map_err(|e| format!("'{path}': {e}"))?;
     let governing_records = urzua_core::graph::explain(&records, &parsed.path, &config);
     let (population, notice) = urzua_core::graph::read_population(&records, &config, "explain");
     let mut notices: Vec<Notice> = notice.into_iter().collect();
