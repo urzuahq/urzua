@@ -4,7 +4,7 @@ Status: Planned
 Phase: '0'
 Track: schema-governance
 Implements: ADR-96
-Blocked-on: ADR-96 is Proposed; build after the maintainer accepts it.
+Blocked-on: —
 ---
 # 214 — Done means items carry their own evidence and a milestone's status is computed from the items
 
@@ -36,3 +36,4 @@ Build the engine of `ADR-96`: a type can declare `statuses.delivery.items`, its 
 > |---|---|---|
 > | 2026-11-07 | Filed. **Why:** maintainer decision of 2026-11-07 (evidence per Done-means item), recorded as `ADR-96`; this milestone builds it and migrates the milestone corpus. | **substantive** |
 > | 2026-11-07 | Narrowed to the engine. **Why:** the independent review of `ADR-96` asked that the engine land before the corpus migration, which is `MILE-215`; the Done means gains the guaranteed `DoneWithUnresolvedItems` finding and its actions, the grammar fixtures, the stale check and the `Specified` guard that the review and its answers to the open questions added, and loses the repository switch-on and the 143-record migration. | **substantive** |
+> | 2026-11-07 | Cleared `Blocked-on`: ADR-96 is Accepted. **Why:** the wait it named is over. | **structural** |
