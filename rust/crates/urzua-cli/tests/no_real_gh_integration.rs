@@ -66,8 +66,7 @@ fn a_test_that_hands_the_binary_to_a_script_also_stubs_gh() {
             continue;
         }
         let hands_over = code_lines(&source).any(|(_, t)| {
-            t.contains(".env(\"URZUA\", env!(\"CARGO_BIN_EXE_urzua\"))")
-                && !t.contains("URZUA_BIN")
+            t.contains(".env(\"URZUA\", env!(\"CARGO_BIN_EXE_urzua\"))") && !t.contains("URZUA_BIN")
         });
         if hands_over && !source.contains("path_with_stub_gh") {
             offenders.push(name);

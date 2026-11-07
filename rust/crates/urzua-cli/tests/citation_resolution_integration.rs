@@ -172,7 +172,7 @@ fn an_external_id_under_no_declared_prefix_fails_the_config_load() {
         "{ citation.resolution: { level: error, external_ids: [\"FOO-1\"] } }",
         &[("ADR-1-x.md", "---\nStatus: Accepted\n---\n# 1 — X\n")],
     );
-    let output = std::process::common::urzua()
+    let output = common::urzua()
         .args(["check", "docs/"])
         .current_dir(&dir)
         .output()

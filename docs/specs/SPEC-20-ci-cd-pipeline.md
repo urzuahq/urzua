@@ -2,9 +2,9 @@
 Stable-Id: 01M25Z28TWN477D6XASYT4TKW7
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:.github/workflows/ci.yml, code:.github/workflows/checks.yml, code:.github/workflows/prepare-release.yml, code:.github/workflows/publish-release.yml, test:.github/scripts/release-guard.test.sh, test:.github/scripts/release-invariants.test.sh, test:.github/scripts/test-no-leak.test.sh, test:.github/actions/urzua-gate/test.sh
+Realized-by: code:.github/workflows/ci.yml, code:.github/workflows/checks.yml, code:.github/workflows/prepare-release.yml, code:.github/workflows/publish-release.yml, code:.github/actions/install-knope/action.yml, test:.github/scripts/knope-pin.test.sh, test:.github/scripts/release-guard.test.sh, test:.github/scripts/release-invariants.test.sh, test:.github/scripts/test-no-leak.test.sh, test:.github/actions/urzua-gate/test.sh
 Date: 2026-09-10
-Version: '0.9'
+Version: '0.10'
 Author: beauwilliams
 Subject: 'This repo''s own CI/CD pipeline -- gating, release cutting, and distribution, as one buildable reference.'
 Implements: ADR-13, ADR-45
@@ -42,7 +42,8 @@ nested inside a called workflow have unstable names (`ADR-95`).
   an error):
   - `cargo fmt --check`, `cargo clippy -- -D warnings`;
   - `cargo machete` and `cargo deny check`, pinned prebuilt binaries verified by checksum;
-  - the pinned, checksummed knope install and `knope-closes-compat.test.sh` (the release tool must
+  - the pinned, checksummed knope install (the `install-knope` action, below), `knope-pin.test.sh` (no
+    workflow carries a knope pin of its own) and `knope-closes-compat.test.sh` (the release tool must
     tolerate a fragment's `closes` key);
   - `cargo build --release --locked`;
   - the planted-violation cases of `release-guard.test.sh` and `release-invariants.test.sh`, then
@@ -54,8 +55,10 @@ nested inside a called workflow have unstable names (`ADR-95`).
     reads (`ADR-93`; `check` never fetches);
   - the **urzua gate** action over the binary just built: `urzua check`, and on a pull request
     `urzua check --base origin/<base>` with the author and approvers as `--actors`, reported as
-    annotations and one updating comment. `base-ref` is empty outside a pull request (a push, a tag),
-    where only the whole-tree check runs;
+    annotations and one updating comment. `base-ref` is the base branch on a pull request and the branch
+    a queued commit will land on in a merge queue (`merge_group`), so the diff rules run for the commit
+    about to merge; it is empty on a push and on a tag, where only the whole-tree check runs. The
+    workflow's `comment` input (default `"true"`) lets a caller keep the gate from commenting;
   - `urzua harness status` (the installed hooks and commands have not drifted).
 - **`changeset`** (`changeset required`): requires a `.changeset/*.md` fragment added in the diff, or
   the `no-changeset` label (`ADR-29`) — never a silent skip. Runs on `pull_request` only, and **only asks
@@ -81,6 +84,12 @@ nested inside a called workflow have unstable names (`ADR-95`).
 Concurrency is workflow-level, so a new commit cancels the whole superseded run, including on a PR title
 or body edit (`edited`).
 
+**`make ci`** runs the checks of this section that can run on a laptop, including `check --base
+origin/main` (after fetching the pull-request refs) and the knope pin test. It does not run the changeset
+label gate, the pinned-release gate (a download with an attestation check) or the `--actors` file, which
+need the GitHub API; CI runs all three, and the target says so rather than claiming to be everything CI
+runs.
+
 ## `prepare-release.yml` / `publish-release.yml` — the two-step release (`ADR-45`)
 
 - **`prepare-release.yml`** runs on every push to `main`, guarded against re-triggering on its own
@@ -101,10 +110,13 @@ or body edit (`edited`).
 - **The release PR is opened by a GitHub App, not `GITHUB_TOKEN`** (`ADR-95`, which builds part of `RFC-30`;
   the ADR is `Proposed` and `RFC-30` stays `Draft`). GitHub starts no workflow run from a `GITHUB_TOKEN`
   event, so a PR opened that way never gets its `ci` run, and `ci` could not be a required check on `main`.
-  The job mints an installation token with `actions/create-github-app-token` from the App's
-  identifier and private key (two repository secrets), fails with an explicit error when either is unset (there is
-  deliberately **no fallback** to `GITHUB_TOKEN`), and uses the token for the checkout, the `release`
-  branch push, `CreatePullRequest` and the label. The release PR is therefore an ordinary pull request: its
+  The job mints an installation token with `actions/create-github-app-token` from the App's client id
+  (`RELEASE_APP_CLIENT_ID`) and private key (`RELEASE_APP_PRIVATE_KEY`), both repository secrets, requesting
+  only `contents: write` and `pull-requests: write`, and fails with an explicit error when either secret is
+  unset (there is deliberately **no fallback** to `GITHUB_TOKEN`). It uses the token for the checkout, the
+  `release` branch push, `CreatePullRequest` and the label. The job holds no write grant on its own
+  `GITHUB_TOKEN`, because nothing uses one, and the token is narrower than the App's installation because the
+  job runs repository code (`cargo check`, `harness update`) with it in `.git/config`. The release PR is therefore an ordinary pull request: its
   `ci` run executes without approval and is the same required check every other PR meets. The App, the
   secrets and the ruleset on `main` are repository settings, not files in this repository.
 - The `cargo check` step exists because `PrepareRelease` only regex-bumps `Cargo.toml`'s
@@ -123,6 +135,11 @@ or body edit (`edited`).
   by the `no-changeset` label: it consumes fragments, it doesn't add one.
 - **`publish-release.yml`** runs when that specific PR (head branch `release`) merges into `main`,
   and owns the entire publish — tag, GitHub Release, binaries, upload. Detailed below.
+- **One knope pin.** `prepare-release.yml`, `publish-release.yml` and `checks.yml` install knope through the
+  `.github/actions/install-knope` composite action, the only place the version, URL and checksum are
+  written. `knope-pin.test.sh` fails when any workflow carries a download of its own or stops using the
+  action, and `knope-closes-compat.test.sh` reads the pin from the action, so a knope upgrade is one file
+  and re-runs the compat test against the new version.
 
 ## `publish-release.yml` — the whole publish, in one workflow
 
@@ -136,7 +153,10 @@ error. `release.yml` previously held the last three jobs and is deleted.
   released is the tree that was just checked. It runs only for a merged PR whose head branch is `release`
   in this repository. It does not ask whether a `ci` run happened elsewhere: a cross-workflow query
   could only report whether someone approved a held run, and the merge commit's own `ci` run races this
-  workflow. `release` `needs` it, so a red `verify` publishes nothing.
+  workflow. `release` `needs` it, so a red `verify` publishes nothing. The gate's pull-request comment is
+  switched off here (`comment: "false"`): the event is the merged release PR, whose comment would be
+  rewritten for a tree nobody is reviewing, and the job still holds `pull-requests: write` because the
+  called job asks for it.
 - **`release`**: runs knope's `release` workflow (just the `Release` step) — tags the now-current
   version and creates the GitHub Release, with the compiled changelog as its notes since `[github]`
   config is present. Outputs the resolved tag, read from the same anchored `rust/Cargo.toml` line
@@ -145,7 +165,7 @@ error. `release.yml` previously held the last three jobs and is deleted.
   `macos-14` arm64 runner — a dedicated Intel runner queues indefinitely as GitHub winds down that
   capacity), and `x86_64-unknown-linux-gnu`. Checks out the **tag**, not a branch head, so a push
   landing on `main` mid-publish cannot produce binaries that disagree with their release.
-- **`upload`**: `gh release upload` against the release `knope release` already created — never
+- **`upload`**: `gh release upload --clobber` against the release `knope release` already created — never
   `gh release create`, which would collide with an existing release object. Then **asserts the
   result**: reads the release back and fails if fewer than three archives are attached. A release
   object existing is not the same as a release being installable.
@@ -228,3 +248,4 @@ replays the original payload.
 > | 2026-11-05 | Bumped to `0.7`. Status changed from Accepted to Shipped. **Why:** Maintainer decision, 2026-11-05: its Realized-by evidence computes Verified and an independent review judged it sound. | **substantive** |
 > | 2026-11-05 | Bumped to `0.8`. The `rust` job runs the tests through `.github/scripts/test-no-leak.sh`, under a fresh `TMPDIR`, and fails when a run leaves any `urzua-*` entry behind; `make ci` does the same (`make test-no-leak`). **Why:** `BUG-193` -- fixture directories accumulated on every run until the disk filled, and nothing measured it. | **substantive** |
 > | 2026-11-07 | Bumped to `0.9`. Rewrote the pipeline sections to match the workflows: the gate is `checks.yml`, called by `ci.yml`'s `rust` job and by `publish-release.yml`'s `verify` job (there is no `verify-ci` job; `ADR-47` deleted it); `ci.yml` also has `release-invariants`, `gate-action`, `gate-released` and the aggregate `ci` job, the one required check; the release PR is opened by a GitHub App token, so its `ci` run executes (the claim that it never runs, and that `RFC-30` was the only mitigation, is removed); added the recovery when `verify` fails after the release PR merged. `Realized-by` gains `checks.yml` and `prepare-release.yml`. **Why:** the maintainer decided on 2026-11-05 to protect `main` with `ci` required and open the release PR with an App token (`ADR-95`), and the spec still described a deleted job and a run that never executes, which would mislead anyone debugging a red release PR or setting the ruleset. | **substantive** |
+> | 2026-11-07 | Bumped to `0.10`. Documents the follow-up hardening of the release workflows: the App token is minted from the client id and requests only `contents` and `pull-requests` write, with no write grant on the job's own `GITHUB_TOKEN`; knope is installed through one `install-knope` action that `knope-pin.test.sh` guards, instead of a pin copied into three workflows and checked in one; the gate takes the queued commit's base branch in a merge queue, so the diff rules run there; `checks.yml` takes a `comment` input that `publish-release.yml` sets to `"false"`; `upload` passes `--clobber` so a re-run after a partial upload completes; `make ci` runs `check --base` and the knope pin test and names the three checks it leaves to CI. `Realized-by` gains the action and the pin test. **Why:** an independent review found the App token broader than its job, the knope pin copied into three workflows and checked in one, and a required check that ran no diff rules in a merge queue; `make ci` claimed to be everything CI runs. | **substantive** |
