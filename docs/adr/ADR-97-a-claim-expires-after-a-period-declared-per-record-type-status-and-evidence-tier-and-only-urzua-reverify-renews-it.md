@@ -1,6 +1,7 @@
 ---
 Stable-Id: 01M6V2J0H6WNAVSFWECX801SSC
-Status: Proposed
+Status: Accepted
+Accepted-on: 2026-11-07
 Date: 2026-11-07
 Author: beauwilliams
 Deciders: beauwilliams
@@ -518,4 +519,5 @@ The open questions of the first draft are settled in this revision, after the in
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-07 | Filed as Proposed. **Why:** maintainer direction of 2026-11-07 on `MILE-129`: improve the engine, make claim expiry configurable, and make a refresh a recorded re-verification with refreshed pins. | **substantive** |
+> | 2026-11-07 | Status changed from Proposed to Accepted. **Why:** Maintainer decision, 2026-11-07. | **substantive** |
 | 2026-11-07 | Amended after the independent review of PR 425 (still Proposed): a renewal requires a pin on every `code:` and `test:` locator (`require_pin`), written by `reverify` or `reverify --pin-only` under the attestation rules, with spec locators left unpinned; the first expiry is spread by a deterministic `spread_days` offset from the `Stable-Id`; agent renewal, pin-before-renewal and a capped batch with one shared reason are decided, no longer open; the corpus pin run (164 records, 502 locators) and the new first-cycle distribution are measured; the 30-day count and the two-act hash refresh are worded exactly. **Why:** the review found that unpinned locators made a renewal only as strong as the git-history heuristic and that `rebaseline` could not clear their drift (blocker), and that 258 of 339 first expiries fell on two days (should fix). | **substantive** |
