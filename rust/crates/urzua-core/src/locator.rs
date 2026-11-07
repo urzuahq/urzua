@@ -273,6 +273,29 @@ pub fn realized_by_entries(value: &str) -> Vec<(&str, &str)> {
     out
 }
 
+/// The non-blank text of a `Realized-by` value that belongs to no recognised
+/// entry: everything before the first `spec:`/`code:`/`test:` prefix, or the
+/// whole value when it holds none (a bare path, `Code:`, `tests:`). The shared
+/// splitter drops it; `embodiment.locator-exists` reports it.
+pub fn realized_by_unrecognised(value: &str) -> Option<&str> {
+    let mut first = None;
+    if starts_entry(value) {
+        first = Some(0);
+    } else {
+        for (i, _) in value.match_indices(',') {
+            if starts_entry(&value[i + 1..]) {
+                first = Some(i);
+                break;
+            }
+        }
+    }
+    let lead = value[..first.unwrap_or(value.len())]
+        .trim()
+        .trim_end_matches(',')
+        .trim();
+    (!lead.is_empty()).then_some(lead)
+}
+
 /// What a locator path names among the tracked files (`BUG-176`): its kind and
 /// the files it covers, sorted. `kind` is `None` when the path names nothing
 /// (no tracked file, no tracked file below it, and not a glob).
