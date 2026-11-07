@@ -4,7 +4,7 @@ Status: Shipped
 Embodiment: Verified
 Realized-by: code:.github/workflows/ci.yml, code:.github/workflows/checks.yml, code:.github/workflows/prepare-release.yml, code:.github/workflows/publish-release.yml, code:.github/actions/install-knope/action.yml, test:.github/scripts/knope-pin.test.sh, test:.github/scripts/release-guard.test.sh, test:.github/scripts/release-invariants.test.sh, test:.github/scripts/test-no-leak.test.sh, test:.github/actions/urzua-gate/test.sh
 Date: 2026-09-10
-Version: '0.10'
+Version: '0.11'
 Author: beauwilliams
 Subject: 'This repo''s own CI/CD pipeline -- gating, release cutting, and distribution, as one buildable reference.'
 Implements: ADR-13, ADR-45
@@ -116,9 +116,13 @@ runs.
   unset (there is deliberately **no fallback** to `GITHUB_TOKEN`). It uses the token for the checkout, the
   `release` branch push, `CreatePullRequest` and the label. The job holds no write grant on its own
   `GITHUB_TOKEN`, because nothing uses one, and the token is narrower than the App's installation because the
-  job runs repository code (`cargo check`, `harness update`) with it in `.git/config`. The release PR is therefore an ordinary pull request: its
-  `ci` run executes without approval and is the same required check every other PR meets. The App, the
-  secrets and the ruleset on `main` are repository settings, not files in this repository.
+  job runs repository code (`cargo check`, `harness update`) with it in `.git/config`. Once the App and secrets
+  are set, the release PR is an ordinary pull request whose `ci` run executes without approval. The App, the
+  secrets and the ruleset on `main` are repository settings, not files in this repository, and the steps to
+  set them are in `docs/reference/release-app-setup.md`. **The ruleset is required and not yet applied:**
+  nothing yet makes `ci` a required check on `main`. It will target `main` only (not `release`, not `v*`
+  tags), require a pull request with 0 approvals and the `ci` check, block force pushes and deletions, and have
+  an empty bypass list. Until the secrets are set, `prepare release` fails on every push to `main`.
 - The `cargo check` step exists because `PrepareRelease` only regex-bumps `Cargo.toml`'s
   version line — it has no knowledge of `Cargo.lock`, which independently records each workspace
   member's resolved version and goes stale the instant `Cargo.toml` changes without it (`BUG-14`,
@@ -249,3 +253,4 @@ replays the original payload.
 > | 2026-11-05 | Bumped to `0.8`. The `rust` job runs the tests through `.github/scripts/test-no-leak.sh`, under a fresh `TMPDIR`, and fails when a run leaves any `urzua-*` entry behind; `make ci` does the same (`make test-no-leak`). **Why:** `BUG-193` -- fixture directories accumulated on every run until the disk filled, and nothing measured it. | **substantive** |
 > | 2026-11-07 | Bumped to `0.9`. Rewrote the pipeline sections to match the workflows: the gate is `checks.yml`, called by `ci.yml`'s `rust` job and by `publish-release.yml`'s `verify` job (there is no `verify-ci` job; `ADR-47` deleted it); `ci.yml` also has `release-invariants`, `gate-action`, `gate-released` and the aggregate `ci` job, the one required check; the release PR is opened by a GitHub App token, so its `ci` run executes (the claim that it never runs, and that `RFC-30` was the only mitigation, is removed); added the recovery when `verify` fails after the release PR merged. `Realized-by` gains `checks.yml` and `prepare-release.yml`. **Why:** the maintainer decided on 2026-11-05 to protect `main` with `ci` required and open the release PR with an App token (`ADR-95`), and the spec still described a deleted job and a run that never executes, which would mislead anyone debugging a red release PR or setting the ruleset. | **substantive** |
 > | 2026-11-07 | Bumped to `0.10`. Documents the follow-up hardening of the release workflows: the App token is minted from the client id and requests only `contents` and `pull-requests` write, with no write grant on the job's own `GITHUB_TOKEN`; knope is installed through one `install-knope` action that `knope-pin.test.sh` guards, instead of a pin copied into three workflows and checked in one; the gate takes the queued commit's base branch in a merge queue, so the diff rules run there; `checks.yml` takes a `comment` input that `publish-release.yml` sets to `"false"`; `upload` passes `--clobber` so a re-run after a partial upload completes; `make ci` runs `check --base` and the knope pin test and names the three checks it leaves to CI. `Realized-by` gains the action and the pin test. **Why:** an independent review found the App token broader than its job, the knope pin copied into three workflows and checked in one, and a required check that ran no diff rules in a merge queue; `make ci` claimed to be everything CI runs. | **substantive** |
+> | 2026-11-07 | Bumped to `0.11`. The release-App paragraph no longer reads as though the ruleset on `main` is applied: it says the ruleset is required and not yet applied, states its scope (`main` only, 0 approvals, `ci` required, empty bypass list), says `prepare release` is red on every push until the secrets are set, and points to `docs/reference/release-app-setup.md`. **Why:** an independent review of `ADR-95` could not see a ruleset on the repository, and the spec said the merge was gated by it. | **substantive** |

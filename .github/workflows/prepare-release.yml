@@ -42,7 +42,7 @@ jobs:
           APP_KEY: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
         run: |
           if [ -z "$APP_CLIENT_ID" ] || [ -z "$APP_KEY" ]; then
-            echo "::error::RELEASE_APP_CLIENT_ID and RELEASE_APP_PRIVATE_KEY must be set as repository secrets so the release PR is opened by a GitHub App and CI runs on it; see the maintainer setup steps for branch protection"
+            echo "::error::RELEASE_APP_CLIENT_ID and RELEASE_APP_PRIVATE_KEY must be set as repository secrets so the release PR is opened by a GitHub App and CI runs on it; see docs/reference/release-app-setup.md"
             exit 1
           fi
       - id: app-token
