@@ -611,7 +611,7 @@ fn cells(line: &str) -> Vec<&str> {
     t.split('|').map(str::trim).collect()
 }
 
-fn is_delimiter_row(line: &str) -> bool {
+pub(crate) fn is_delimiter_row(line: &str) -> bool {
     line.contains('-')
         && cells(line).iter().all(|c| {
             let c = c.strip_prefix(':').unwrap_or(c);
