@@ -19,12 +19,14 @@ The adopter second pass (M8) found `fix --apply --by some-person` recorded as th
 ## Done means
 
 - `urzua fix --help` explains the replacement, the `asserted` alternative and `require_verified`, and every option of `fix` has help text.
-- The report names a replaced `--by` in a field in every path that writes a row; a test covers `--apply` and `--rebaseline --apply`.
+- The report names a replaced `--by` in a field in every path that writes a row, and a test covers `--apply` and `--rebaseline --apply`.
 - The `fix` help no longer says "Only Tier 1" where more is applied.
-- `SPEC-8` states it with a revision row; a patch changeset.
+- `SPEC-8` states it with a revision row.
+- A patch changeset names the change.
 
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-07 | Initial record. **Why:** deferred during Phase 0 hardening and tracked by no record. | **structural** |
+> | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |

@@ -18,8 +18,10 @@ The gate action and the README pin `v0.3.0`, which cannot read the current confi
 
 ## Done means
 
-- `.github/actions/urzua-gate/action.yml` and its self-test workflow default to `v0.4.0`, and the `gate (pinned release)` job passes against it.
-- Every `v0.3.0` pin in `README.md` reads `v0.4.0`, and the config example is fenced `yaml`.
+- `.github/actions/urzua-gate/action.yml` and its self-test workflow default to `v0.4.0`.
+- The `gate (pinned release)` job passes against `v0.4.0`.
+- Every `v0.3.0` pin in `README.md` reads `v0.4.0`.
+- The `README.md` config example is fenced `yaml`.
 - `.urzua/known-refs.json` is regenerated and the record count is recorded in the revision row.
 - `urzua check` and `check --base origin/main` report 0 unwaived findings.
 
@@ -28,3 +30,4 @@ The gate action and the README pin `v0.3.0`, which cannot read the current confi
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-07 | Initial record. **Why:** deferred during Phase 0 hardening and tracked by no record. | **structural** |
+> | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |

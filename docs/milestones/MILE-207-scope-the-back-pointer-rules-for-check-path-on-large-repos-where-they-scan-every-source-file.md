@@ -25,15 +25,11 @@ it does not block the Phase 0 exit.
 
 ## Done means
 
-- A path-scoped `urzua check <path>` on a repository with the back-pointer rules enabled reads only the
-  source files it needs for the records in scope, and reports the same findings for those records as a
-  whole-corpus `check` does. A test with a source file that cites a record outside the scope shows it is not
-  read, and one that cites a record inside the scope shows it is.
+- A path-scoped `urzua check <path>` on a repository with the back-pointer rules enabled reads only the source files it needs for the records in scope, and reports the same findings for those records as a whole-corpus `check` does.
+- A test with a source file that cites a record outside the scope shows it is not read, and one that cites a record inside the scope shows it is.
 - A whole-corpus `check` and a `--base` run are unchanged: the same findings, the same populations.
-- The rule population still says what was examined, so a scoped run is distinguishable from one that read
-  nothing (`ADR-55`).
-- The saving is measured on a repository of the size that costs about 4.6 s today, and the before and after
-  times are recorded in this record's revision log.
+- The rule population still says what was examined, so a scoped run is distinguishable from one that read nothing (`ADR-55`).
+- The saving is measured on a repository of the size that costs about 4.6 s today, and the before and after times are recorded in this record's revision log.
 - `SPEC-2` states the scoped read, with a revision row.
 
 > **Revision log**
@@ -41,3 +37,4 @@ it does not block the Phase 0 exit.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-07 | Initial milestone. **Why:** found while scoping `check <path>` on a large repository, where the back-pointer rules scan every source file and the run takes about 4.6 s; the maintainer placed it in Phase 1 on 2026-11-06. | **structural** |
+> | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |
