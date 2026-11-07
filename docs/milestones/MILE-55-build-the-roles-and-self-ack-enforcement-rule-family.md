@@ -17,7 +17,12 @@ SPEC-1, SPEC-2, and SPEC-3 all already reference self-ack/role semantics as part
 
 ## Done means
 
-A rule family reports a record whose sole Reviewer or Decider is its Author (self-acknowledgement) and applies the blank, placeholder and pending distinction of `field.quality` to role fields, declared per type in `.urzua/config.yaml`; a planted self-acknowledged record is reported and one with an independent approver is not, and the family is exercised in urzua's own config and ADRs; the requirement of Deciders on an accepted record is carried by `MILE-132` and not repeated here.
+- A rule family reports a record whose sole Reviewer or Decider is its Author (self-acknowledgement).
+- The rule family applies the blank, placeholder and pending distinction of `field.quality` to role fields, declared per type in `.urzua/config.yaml`.
+- A planted self-acknowledged record is reported and one with an independent approver is not.
+- The family is exercised in urzua's own config and ADRs.
+
+The requirement of Deciders on an accepted record is carried by `MILE-132` and not repeated here.
 
 > **Revision log**
 >
@@ -29,3 +34,4 @@ A rule family reports a record whose sole Reviewer or Decider is its Author (sel
 > | 2026-11-04 | Re-phased from Phase 0 to Phase 1; `Status` unchanged. The part of this milestone that requires Deciders on an accepted record is carried by `MILE-132` (status-dependent required fields) and stays Phase 0; what remains here, the self-acknowledgement and roles family, is not needed to replace the adopter's linter, which has its own self-review check switched off. **Why:** maintainer decision of 2026-11-04 setting the Phase 0 exit (urzua governs its own repo in CI with zero standing warnings, and replaces one adopter's hand-written linter, which is then deleted); the exit is the adopter's linter deleted and urzua's own repo clean in CI, and this work is on neither path, so it moves out of Phase 0. | **substantive** |
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |
 > | 2026-11-04 | `Blocked-on` cleared: `MILE-98` is Done (declared `identity`, `fields` and `sections`, including `###` headings read through `sections.depth`). `Status` unchanged. **Why:** `narrative-field.stale` flagged a blocker that reached a terminal status; the dependency no longer holds. | **substantive** |
+> | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |

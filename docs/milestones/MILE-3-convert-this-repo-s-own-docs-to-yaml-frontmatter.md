@@ -5,7 +5,7 @@ Phase: '0'
 Track: header-format
 Implements: ADR-33
 Blocked-on: —
-Realized-by: code:.urzua/config.yaml
+Realized-by: code:.urzua/config.yaml, code:.github/workflows/checks.yml
 ---
 # 3 — Convert this repo's own docs to yaml-frontmatter
 
@@ -21,7 +21,9 @@ The actual dogfooding step ADR-33 named as the real forcing function for this wo
 
 ## Done means
 
-Every record type configured in this repository's `.urzua/config.yaml` declares `header_shape: yaml-frontmatter`, every ADR, RFC, spec, milestone and bug record parses under it, and `urzua check` over this repository reports no unreadable header; the conversion was a one-time pass that shipped no tool, and nothing below the header changed.
+- Every record type configured in this repository's `.urzua/config.yaml` declares `header_shape: yaml-frontmatter`. — evidence: code:.urzua/config.yaml
+- Every ADR, RFC, spec, milestone and bug record parses under it, and `urzua check` over this repository reports no unreadable header. — evidence: code:.github/workflows/checks.yml
+- The conversion was a one-time pass that shipped no tool, and nothing below the header changed. — waived: process-outcome -- a property of the one-time conversion of 2026-09-08, verified at the time by a before/after field-set comparison against every file (see the revision log); the scratch tool was never committed, so no file can evidence it now
 
 > **Revision log**
 >
@@ -31,3 +33,4 @@ Every record type configured in this repository's `.urzua/config.yaml` declares 
 > | 2026-09-08 | `Status: Done`; scope corrected from "~35 ADR/RFC/Spec/Bug/Milestone" to the actual 166 files across all six configured types (ADR-33's amendment). Migrated via a scratch, uncommitted Rust tool reusing `header::parse_with_shape` -- not shipped, per ADR-33's explicit "not a new public subcommand" requirement. Verified by a real before/after field-set-equality comparison against every file (zero mismatches), `check docs/` (zero blocking findings, `header.deprecated-shape`/`type.no-declared-spec` both silent), `graph` (zero dangling edges), and a dashboard regeneration confirming real field values render instead of `—`. | **substantive** |
 > | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-183`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. The criteria are those the delivered work met, checked against `Realized-by` and the code; `Status` stays Done. | **structural** |
+> | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |

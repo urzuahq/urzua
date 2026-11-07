@@ -18,7 +18,11 @@ Staged intentionally: ships once a real multi-part-AND case is found needing it,
 
 ## Done means
 
-The claim graph supports AND and OR composite claims with weakest-link confidence, reports a cycle, and promotes a shared node, each with a planted-violation fixture; it is built only once a real multi-part-AND case in a corpus needs it, and that case is cited here before work starts.
+- The claim graph supports AND and OR composite claims with weakest-link confidence.
+- The claim graph reports a cycle.
+- The claim graph promotes a shared node.
+- Each of these has a planted-violation fixture.
+- It is built only once a real multi-part-AND case in a corpus needs it, and that case is cited here before work starts.
 
 > **Revision log**
 >
@@ -26,3 +30,4 @@ The claim graph supports AND and OR composite claims with weakest-link confidenc
 > |---|---|---|
 
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |
+> | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |

@@ -19,7 +19,9 @@ Explicitly deferred by the project lead: resolve Q2 first.
 
 ## Done means
 
-`RFC-9` question 2 is resolved by the maintainer and recorded; the agentic repair tier is then either decided in an ADR (an unreliable generator behind a mechanical verifier, with the verifier's acceptance as the only write path) or rejected with the reason, and this record's `Blocked-on` is cleared by that decision.
+- `RFC-9` question 2 is resolved by the maintainer and recorded.
+- The agentic repair tier is then either decided in an ADR (an unreliable generator behind a mechanical verifier, with the verifier's acceptance as the only write path) or rejected with the reason.
+- This record's `Blocked-on` is cleared by that decision.
 
 > **Revision log**
 >
@@ -29,3 +31,4 @@ Explicitly deferred by the project lead: resolve Q2 first.
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |
 > | 2026-11-05 | `Status` Blocked -> Planned; `Blocked-on` unchanged. **Why:** `Blocked` is derived only (`RFC-48`, `ADR-83`) and this repository no longer writes it as a status. Nothing has started, so the status that matches the progress is `Planned`. What it waits on (RFC-9's own Q2) is a fact or a decision, not a record, so there is no `Depends-on` to state; `Blocked-on` keeps the wait until the `condition` record type exists (`RFC-48`). | **substantive** |
 > | 2026-11-05 | `Depends-on: COND-1` added; `Blocked-on` now an explanatory note. `Status` unchanged. **Why:** `MILE-187`: the wait on `RFC-9`'s question 2 was prose, invisible to `urzua roadmap` and the derived `blocked` value; it is now one `Open` condition, COND-1, whose `Signal` states what counts as met. A person moves the condition to `Met`, not this change. | **substantive** |
+> | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |

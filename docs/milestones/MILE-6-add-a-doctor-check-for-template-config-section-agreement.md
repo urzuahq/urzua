@@ -18,7 +18,9 @@ Nothing today checks that a template and its config haven't drifted apart -- the
 
 ## Done means
 
-`urzua doctor` reports, per record type, each section the config declares required that the type's template has no heading for; a fixture with a template missing one reports it and a matching template reports clean; the check runs against urzua's own `.urzua/config.yaml` and `.urzua/templates/` and finds no disagreement.
+- `urzua doctor` reports, per record type, each section the config declares required that the type's template has no heading for.
+- A fixture with a template missing one reports it, and a matching template reports clean.
+- The check runs against urzua's own `.urzua/config.yaml` and `.urzua/templates/` and finds no disagreement.
 
 > **Revision log**
 >
@@ -32,3 +34,4 @@ Nothing today checks that a template and its config haven't drifted apart -- the
 > | 2026-11-04 | `Blocked-on` now reads `MILE-98`. **Why:** `narrative-field.stale` flagged a blocker that reached `Done`, and the delivery backfill of `MILE-183` set it; the remaining blocker is still open. `Status` unchanged. | **substantive** |
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |
 > | 2026-11-04 | `Blocked-on` cleared: `MILE-98` is Done (declared `identity`, `fields` and `sections`, including `###` headings read through `sections.depth`). `Status` unchanged. **Why:** `narrative-field.stale` flagged a blocker that reached a terminal status; the dependency no longer holds. | **substantive** |
+> | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |
