@@ -6,14 +6,14 @@
 
 use std::process::ExitCode;
 
-use urzua_core::report::{ActionKind, ActionOp, Notice, Report};
-use urzua_core::rules::{ActionDecl, RULE_TABLE};
+use urzua_core::report::{ActionKind, ActionOp, Notice, PopulationUnit, Report};
+use urzua_core::rules::{ActionDecl, RuleDef, VariantAction, RULE_SPEC, RULE_TABLE};
 
 /// One finding variant: the action it offers (`kind`, and `op` where the kind
 /// has them) or, for an exemption, the reason there is none.
 #[derive(serde::Serialize)]
-struct ActionEntry {
-    variant: String,
+pub(crate) struct ActionEntry {
+    pub(crate) variant: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     kind: Option<ActionKind>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -30,21 +30,72 @@ struct ActionEntry {
     waivable: bool,
 }
 
+impl ActionEntry {
+    pub(crate) fn of(a: &VariantAction) -> ActionEntry {
+        let (kind, op, exempt) = match a.action {
+            ActionDecl::Act { kind, op } => (Some(kind), op, None),
+            ActionDecl::Exempt(reason) => (None, None, Some(reason.to_string())),
+        };
+        ActionEntry {
+            variant: a.variant.to_string(),
+            kind,
+            op,
+            exempt,
+            severity_floor: a.severity_floor,
+            waivable: a.waivable,
+        }
+    }
+}
+
 fn is_true(b: &bool) -> bool {
     *b
 }
 
+/// What one rule is, apart from its options: the part `urzua rules` and
+/// `urzua explain --rule` print identically.
 #[derive(serde::Serialize)]
-struct RuleEntry {
-    id: String,
-    description: String,
+pub(crate) struct RuleFacts {
+    pub(crate) id: String,
+    pub(crate) description: String,
+    /// Where the rule looks (`records`, `config`, `files`, `diff`, `run`).
+    pub(crate) scope: &'static str,
     /// What the rule's verdict on a record depends on (`ADR-90`): whether it
     /// may list the `scope` option.
-    judges: &'static str,
+    pub(crate) judges: &'static str,
+    /// What one candidate in the rule's population is, as `check` reports it
+    /// in `rules_executed`.
+    pub(crate) population_unit: PopulationUnit,
+    /// The unit of a second population the rule judges under the same id
+    /// (`MILE-186`); omitted when it has none.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) companion_population_unit: Option<PopulationUnit>,
+    /// The spec that documents the rule.
+    pub(crate) spec: &'static str,
+    pub(crate) actions: Vec<ActionEntry>,
+}
+
+impl RuleFacts {
+    pub(crate) fn of(d: &RuleDef) -> RuleFacts {
+        RuleFacts {
+            id: d.id.to_string(),
+            description: d.description.to_string(),
+            scope: d.scope.as_str(),
+            judges: d.judges.as_str(),
+            population_unit: d.population,
+            companion_population_unit: d.companion.map(|(unit, _)| unit),
+            spec: RULE_SPEC,
+            actions: d.actions.iter().map(ActionEntry::of).collect(),
+        }
+    }
+}
+
+#[derive(serde::Serialize)]
+struct RuleEntry {
+    #[serde(flatten)]
+    facts: RuleFacts,
     /// The options the rule accepts, by name; omitted when it takes none.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     options: Vec<&'static str>,
-    actions: Vec<ActionEntry>,
 }
 
 #[derive(serde::Serialize)]
@@ -67,32 +118,8 @@ pub fn run() -> ExitCode {
     let rules = RULE_TABLE
         .iter()
         .map(|d| RuleEntry {
-            id: d.id.to_string(),
-            description: d.description.to_string(),
-            judges: d.judges.as_str(),
+            facts: RuleFacts::of(d),
             options: d.options.to_vec(),
-            actions: d
-                .actions
-                .iter()
-                .map(|a| match a.action {
-                    ActionDecl::Act { kind, op } => ActionEntry {
-                        variant: a.variant.to_string(),
-                        kind: Some(kind),
-                        op,
-                        exempt: None,
-                        severity_floor: a.severity_floor,
-                        waivable: a.waivable,
-                    },
-                    ActionDecl::Exempt(reason) => ActionEntry {
-                        variant: a.variant.to_string(),
-                        kind: None,
-                        op: None,
-                        exempt: Some(reason.to_string()),
-                        severity_floor: a.severity_floor,
-                        waivable: a.waivable,
-                    },
-                })
-                .collect(),
         })
         .collect();
     crate::emit(&RulesReport {

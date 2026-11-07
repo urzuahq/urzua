@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5GM1RYRRX2XVMZ0ZAK
-Version: '0.119'
+Version: '0.120'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs, code:rust/crates/urzua-core/src/rules.rs, test:rust/crates/urzua-cli/tests/check_integration.rs, test:rust/crates/urzua-cli/tests/fail_on_integration.rs
@@ -414,7 +414,7 @@ repository's level for the rule applies to the rule's other variants and cannot 
 `WAIVER` record matches a finding of this variant, whatever its `Rule` and `Scope`, and the rule's
 `permanent` categories are not consulted for it; the waiver still matches the rule's other variants, and
 a waiver that matches nothing is reported by `waiver.matches-nothing` as before. Only evidence (a
-resolving locator) or an inline item waiver clears it. `urzua rules` prints the floor
+resolving locator) or an inline item waiver clears it. `urzua rules` and `urzua explain --rule status.delivery-agreement` print the floor
 (`severity_floor`) and `waivable: false` on the variant. The variant declares two actions, `edit-field`
 on the status field with the computed value (`partial_status` when `r_d >= 1` and the record is not
 derived-blocked, else the first declared status that is neither a `success`, `failure` nor `progress`
@@ -557,7 +557,7 @@ naming `scope: changed`, the number of slots not judged and why (`no --base`, `u
 Dependents are not changed: only the records the diff itself touches are judged. `waiver.matches-nothing`
 leaves a waiver on such a rule eligible and unexamined. `urzua rules` lists each rule's `options` and a
 `judges` value (`one-record`, `anchor-scoped`, `cross-record`, `changed-set`, `not-record-level`) saying whether it may
-take the option.
+take the option. It also lists each rule's `scope`, its `population_unit` (and a `companion_population_unit` for a rule with a second population), and its `spec`; `urzua explain --rule <id>` (`SPEC-13`) prints one rule's entry with the level and option values this repository sets.
 
 A rule has one population per entry, and a second unit is a second entry: `citation.resolution` with
 `non_reference_field` set (`ADR-75` clause 3, `MILE-186`) appears twice in `rules_executed`, first
@@ -1099,3 +1099,4 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-07 | Bumped to `0.117`. `identity.open-pr-collision` names the remedy that works: rename the file and its H1 to the next free number, or waive the finding when the other pull request is abandoned (`urzua migrate ids` cannot renumber); the `open-pr-collision` action reason says the same. An unknown `harness.guardrails` name is a load error, so `check` exits 2 on it. **Why:** `ADR-93` and `ADR-89` amendments of 2026-11-07. | **substantive** |
 > | 2026-11-07 | Bumped to `0.118`. Documents the status computed from Done-means items for a type that declares `statuses.delivery.items`: the new `status.delivery-agreement` variants, among them the guaranteed `DoneWithUnresolvedItems` error (severity floor, unwaivable by a rule-level waiver, two declared actions); the new rules `status.done-items-shape` and `status.waived-item-stale`; the `item-locator-defect` variant of `embodiment.locator-exists`; the `severity_floor` and `waivable` keys of `urzua rules`; the roadmap's `items` object. **Why:** `MILE-214`, the engine of `ADR-96`; an undeclared config is unchanged. | **substantive** |
 > | 2026-11-07 | Bumped to `0.119`. `revision-log.change-class-required` accepts the classes a type declares in `revision_log.classes` (default `substantive` and `structural`) and lists them in its finding, and reads the class and date from the columns `class_column` and `date_column` name; a header lacking a declared column or repeating it is the new variant `revision-log-column-unreadable`, offering `edit-section` `set`, with no row judged. `revision-log.version-bump-required` reports a record with such a log, now or at the merge base, as unreadable and no longer reads an unreadable base log as empty. The rule-table and action-table rows are regenerated. **Why:** `MILE-213`, the build of `ADR-94`; an undeclared config is unchanged. | **substantive** |
+> | 2026-11-07 | Bumped to `0.120`. `urzua rules` also prints each rule's `scope`, `population_unit` and `spec`, so `urzua explain --rule` (`SPEC-13`) can state them; additive fields. **Why:** maintainer decision of 2026-11-07 (the `ADR-96` amendment of that date). | **substantive** |
