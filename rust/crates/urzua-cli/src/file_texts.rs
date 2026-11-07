@@ -68,3 +68,32 @@ impl FileTexts {
         shared
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A failed file listing is reported, not read as "every locator names
+    /// nothing" (which would call each existing path missing).
+    #[test]
+    fn locator_files_reports_a_discovery_failure() {
+        let dir =
+            std::env::temp_dir().join(format!("urzua-filetexts-nogit-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("a.rs"), "x\n").unwrap();
+        // A `.git` file that is not a gitfile makes every git command fail here.
+        std::fs::write(dir.join(".git"), "not a gitfile\n").unwrap();
+        let config = urzua_core::config::parse("schema_version: 2\nrecord_types:\n  adr:\n    dir: docs/adr\n    required_fields: [Status]\n").unwrap();
+        let texts = FileTexts::new(dir.clone(), &config);
+        let result = texts.locator_files("a.rs");
+        let _ = std::fs::remove_dir_all(&dir);
+        let err = result
+            .err()
+            .expect("a directory that is not a git checkout cannot be listed");
+        assert!(
+            err.contains("could not list the repository's files"),
+            "{err}"
+        );
+    }
+}
