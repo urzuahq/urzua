@@ -47,18 +47,29 @@ impl FileTexts {
         })
     }
 
+    /// `Err` with the reason when `path` resolves outside the repository.
+    pub fn confined(&self, path: &str) -> Result<(), String> {
+        urzua_io::confine_to_root(&self.root, std::path::Path::new(path)).map(|_| ())
+    }
+
     /// The text of the repo-relative `path`; a file that is not valid UTF-8 is
     /// reported as such, and one that cannot be read as missing.
     pub fn get(&self, path: &str) -> SharedText {
         if let Some(hit) = self.cache.borrow().get(path) {
             return Rc::clone(hit);
         }
-        let read = match std::fs::read(self.root.join(path)) {
-            Ok(bytes) => match String::from_utf8(bytes) {
+        // A path that resolves outside the repository (absolute, `..`, or a
+        // symlink out) is never read: it reads as missing.
+        let read = match self
+            .confined(path)
+            .ok()
+            .map(|_| std::fs::read(self.root.join(path)))
+        {
+            Some(Ok(bytes)) => match String::from_utf8(bytes) {
                 Ok(text) => FileText::Text(text),
                 Err(_) => FileText::NotUtf8,
             },
-            Err(_) => FileText::Missing,
+            _ => FileText::Missing,
         };
         let shared = Rc::new(read);
         self.cache

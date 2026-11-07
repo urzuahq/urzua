@@ -235,3 +235,20 @@ fn init_proposes_loadable_names_for_awkward_directory_names() {
     let checked = json(&run_urzua(&dir, &["check"]));
     assert_ne!(checked["status"], "not-run", "{checked}");
 }
+
+/// SPEC-5: `init` takes the global `--config`, and writes there.
+#[test]
+fn init_writes_the_file_named_by_config() {
+    let dir = realistic_repo("init-config");
+    let target = dir.join("conf/alt.yaml");
+    let out = run_urzua(&dir, &["--config", target.to_str().unwrap(), "init"]);
+    let parsed = json(&out);
+    assert_eq!(out.status.code(), Some(0), "{parsed}");
+    assert_eq!(parsed["written"], true, "{parsed}");
+    assert!(target.exists(), "{parsed}");
+    assert!(!dir.join(".urzua/config.yaml").exists(), "{parsed}");
+
+    // The named file is the one checked for "already exists".
+    let again = run_urzua(&dir, &["--config", target.to_str().unwrap(), "init"]);
+    assert_eq!(again.status.code(), Some(2));
+}

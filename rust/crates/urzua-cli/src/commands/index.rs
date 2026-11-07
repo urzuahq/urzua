@@ -75,13 +75,17 @@ pub fn run(config_path: Option<PathBuf>, apply: bool) -> ExitCode {
             (None, false) => IndexOutcome::Missing,
             (current, true) => {
                 let full = repo_root.join(&spec.path);
+                if let Err(e) = urzua_io::confine_to_root(&repo_root, &full) {
+                    results.push(fail(e));
+                    continue;
+                }
                 if let Some(parent) = full.parent() {
                     if let Err(e) = std::fs::create_dir_all(parent) {
                         results.push(fail(format!("could not create {}: {e}", parent.display())));
                         continue;
                     }
                 }
-                match urzua_io::write_atomic(&full, &wanted) {
+                match urzua_io::write_atomic_in(&repo_root, &full, &wanted) {
                     Ok(()) if current.is_some() => IndexOutcome::Written,
                     Ok(()) => IndexOutcome::Created,
                     Err(e) => {
