@@ -99,4 +99,5 @@ This directory holds urzua's ADRs, one `ADR-N-slug.md` file each. This index is 
 - [Discovery can include untracked record files, opt in, and a plain check names the ones it skipped](ADR-92-discovery-can-include-untracked-record-files-opt-in-and-a-plain-check-names-the-ones-it-skipped.md)
 - [urzua new skips a number an open pull request already took, from fetched pull refs, opt in, and check flags a shared id](ADR-93-urzua-new-skips-a-number-an-open-pull-request-already-took-from-fetched-pull-refs-opt-in-and-check-flags-a-shared-id.md)
 - [The revision log declares its class vocabulary and its class column on the record type](ADR-94-the-revision-log-declares-its-class-vocabulary-and-its-class-column-on-the-record-type.md)
+- [The release pull request is opened by a GitHub App token, and main is protected with ci required](ADR-95-the-release-pull-request-is-opened-by-a-github-app-token-and-main-is-protected-with-ci-required.md)
 <!-- urzua:index:end -->
