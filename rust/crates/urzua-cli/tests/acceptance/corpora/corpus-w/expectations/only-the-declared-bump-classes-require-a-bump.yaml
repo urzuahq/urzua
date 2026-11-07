@@ -1,0 +1,15 @@
+id: only-the-declared-bump-classes-require-a-bump
+corpus: corpus-w
+# SPEC-5 adds a cosmetic row, a declared class that is not in version_bump.classes,
+# and needs no bump. SPEC-6 adds a major row and leaves Version at 0.1. The class
+# is read from the Class column, which sits second here, not from the last cell.
+commits:
+  - write:
+      docs/specs/SPEC-5-cosmetic-on-change.md: "---\nStatus: Accepted\nVersion: '0.1'\n---\n# 5 - Cosmetic on change\n\nBody.\n\n> **Revision log**\n>\n> | Change | Class | Date |\n> |---|---|---|\n> | Initial. | **major** | 2026-11-01 |\n> | Typo. | cosmetic | 2026-11-04 |\n"
+      docs/specs/SPEC-6-major-on-change.md: "---\nStatus: Accepted\nVersion: '0.1'\n---\n# 6 - Major on change\n\nBody.\n\n> **Revision log**\n>\n> | Change | Class | Date |\n> |---|---|---|\n> | Initial. | **major** | 2026-11-01 |\n> | Rewrote it. | **major** | 2026-11-04 |\n"
+invocation: [check, --base, base]
+expect_exit: 1
+expect_findings:
+  - {rule: revision-log.version-bump-required, severity: error, file: docs/specs/SPEC-6-major-on-change.md, message_contains: 'adds a major change'}
+expect_no_findings:
+  - {rule: revision-log.version-bump-required, file: docs/specs/SPEC-5-cosmetic-on-change.md}

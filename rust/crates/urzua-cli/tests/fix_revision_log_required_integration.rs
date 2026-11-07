@@ -115,3 +115,26 @@ fn a_non_boolean_required_is_a_config_error() {
     let out = run_urzua(&dir, &["fix"]);
     assert_eq!(out.status.code(), Some(2), "{out:?}");
 }
+
+/// MILE-213 (ADR-94): `fix --apply` writes the type's `tool_class`, laid out by
+/// the log's own header, so a repository whose vocabulary has no `structural`
+/// never gets a row its own rule rejects.
+#[test]
+fn apply_writes_the_declared_tool_class_into_the_declared_columns() {
+    let record = "---\nEmbodiment: Not started\nRealized-by: code:src/a.rs\n---\n# ADR-1: T\n\n> **Revision log**\n>\n> | Class | Date | Change |\n> |---|---|---|\n> | **major** | 2026-01-01 | Initial. |\n";
+    let dir = fixture(
+        "tool-class",
+        "    revision_log:\n      marker: \"**Revision log**\"\n      classes: [major, minor]\n      class_column: Class\n      date_column: Date\n      tool_class: minor\n",
+        record,
+    );
+    let out = run_urzua(&dir, &["fix", "--apply", "--force", "--by", "me"]);
+    let v = json(&out);
+    assert_eq!(v["status"], "applied", "{v}");
+    let after = std::fs::read_to_string(dir.join(PATH)).unwrap();
+    let row = after
+        .lines()
+        .find(|l| l.contains("Tool-authored"))
+        .unwrap_or_else(|| panic!("no tool row in {after}"));
+    assert!(row.starts_with("> | **minor** | "), "{row}");
+    assert!(!after.contains("**structural**"), "{after}");
+}

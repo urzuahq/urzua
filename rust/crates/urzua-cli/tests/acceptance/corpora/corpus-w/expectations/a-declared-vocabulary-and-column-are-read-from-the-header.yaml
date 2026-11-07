@@ -1,0 +1,28 @@
+id: a-declared-vocabulary-and-column-are-read-from-the-header
+corpus: corpus-w
+# The type declares its own classes (major, minor, cosmetic) and names its class
+# and date columns. SPEC-1 puts the Class column first and passes. SPEC-2 uses a
+# class the vocabulary lacks. SPEC-3's header has no Class cell and SPEC-4's has
+# two: each is one finding on the record, not a silent pass and not a guess at
+# the first match.
+invocation: [check]
+expect_exit: 1
+expect_findings:
+  - rule: revision-log.change-class-required
+    severity: error
+    file: docs/specs/SPEC-2-class-outside-the-vocabulary.md
+    message_contains: 'expected "major", "minor" or "cosmetic"'
+  - rule: revision-log.change-class-required
+    severity: error
+    file: docs/specs/SPEC-3-column-missing.md
+    message_contains: 'no column named "Class"'
+    suggested_action: {kind: edit-section, target: {section: "**Revision log**"}}
+  - rule: revision-log.change-class-required
+    severity: error
+    file: docs/specs/SPEC-4-column-repeated.md
+    message_contains: 'more than once, at cells 1 and 3'
+    suggested_action: {kind: edit-section, target: {section: "**Revision log**"}}
+expect_no_findings:
+  - {rule: revision-log.change-class-required, file: docs/specs/SPEC-1-reordered-and-valid.md}
+  - {rule: revision-log.change-class-required, file: docs/specs/SPEC-5-cosmetic-on-change.md}
+  - {rule: revision-log.change-class-required, file: docs/specs/SPEC-6-major-on-change.md}
