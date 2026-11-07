@@ -5,7 +5,7 @@ Phase: '0'
 Track: roadmap-tracking
 Implements: SPEC-1
 Blocked-on: —
-Realized-by: code:.urzua/templates/spec.md, test:rust/crates/urzua-cli/tests/new_integration.rs
+Realized-by: code:.urzua/templates/spec.md, test:rust/crates/urzua-cli/tests/own_config_integration.rs#new_opens_a_spec_title_with_its_declared_prefix_and_other_types_with_the_bare_number@sha256:0680736422297fcaf5d3546bba11345d9e102a325d1c28b438954a204af48876, test:rust/crates/urzua-cli/tests/new_integration.rs#new_emits_yaml_frontmatter_when_configured_even_with_a_blockquote_template_present@sha256:abbf083803b8a4fe62e6e7b933ffdec9e9964180b452f0a00334eaca302cfbd0, code:.urzua/config.yaml
 Non-reference-ids: SPEC-7
 ---
 # 74 — Add a spec template so urzua new spec works
@@ -37,7 +37,10 @@ this project is built around -- can't be created through `urzua new` at all.
 
 ## Done means
 
-`.urzua/templates/spec.md` exists and `urzua new spec` writes a record that passes `check` (it exits 0 rather than failing for want of a template); the canonical spec field set the template carries is decided, with `Author` required, and `new_integration.rs` covers it.
+- `.urzua/templates/spec.md` exists. — evidence: code:.urzua/templates/spec.md
+- `urzua new spec` writes a record rather than failing for want of a template. — evidence: test:rust/crates/urzua-cli/tests/own_config_integration.rs#new_opens_a_spec_title_with_its_declared_prefix_and_other_types_with_the_bare_number@sha256:0680736422297fcaf5d3546bba11345d9e102a325d1c28b438954a204af48876, test:rust/crates/urzua-cli/tests/new_integration.rs#new_emits_yaml_frontmatter_when_configured_even_with_a_blockquote_template_present@sha256:abbf083803b8a4fe62e6e7b933ffdec9e9964180b452f0a00334eaca302cfbd0
+- The record `urzua new spec` writes passes `check`.
+- The canonical spec field set the template carries is decided, with `Author` required. — evidence: code:.urzua/config.yaml, code:.urzua/templates/spec.md
 
 > **Revision log**
 >
@@ -47,3 +50,4 @@ this project is built around -- can't be created through `urzua new` at all.
 > | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-183`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. The criteria are those the delivered work met, checked against `Realized-by` and the code; `Status` stays Done. | **structural** |
 > | 2026-11-05 | Added the `Non-reference-ids` header field declaring `SPEC-7`. **Why:** the text names this id as history or illustration, not as citations of a record; the declaration states that on the record itself, so a new unresolved citation in this file is reported, where a file-wide `citation.resolution` waiver had silenced every one (`BUG-190`, `ADR-75`). The field carries no decision; the milestone is unchanged. | **structural** |
+> | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |

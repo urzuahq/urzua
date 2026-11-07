@@ -29,7 +29,9 @@ response instead of forcing the caller to synthesize one from several.
 
 ## Done means
 
-Every command's JSON output carries a top-level `next_action` (a string or `null`) beside `status` and `findings`, naming the single most useful next command given the whole response, `null` when there is nothing better than reading the findings; a test asserts it on each command and a mixed fixable and judgment `check` suggests `urzua fix`; `SPEC-2` documents it and it appears in urzua's own `check` output.
+- Every command's JSON output carries a top-level `next_action` (a string or `null`) beside `status` and `findings`, naming the single most useful next command given the whole response, `null` when there is nothing better than reading the findings.
+- A test asserts `next_action` on each command, and a mixed fixable and judgment `check` suggests `urzua fix`.
+- `SPEC-2` documents `next_action` and it appears in urzua's own `check` output.
 
 > **Revision log**
 >
@@ -37,3 +39,4 @@ Every command's JSON output carries a top-level `next_action` (a string or `null
 > |---|---|---|
 
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |
+> | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |

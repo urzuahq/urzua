@@ -5,7 +5,7 @@ Phase: '1'
 Track: release-process
 Implements: ADR-45
 Blocked-on: —
-Realized-by: code:.github/workflows/publish-release.yml
+Realized-by: code:CHANGELOG.md, code:rust/Cargo.toml, code:.github/workflows/prepare-release.yml, code:.github/workflows/publish-release.yml, code:knope.toml
 ---
 # 40 — Cut a release consuming the pending changesets
 
@@ -31,7 +31,8 @@ unilaterally.
 
 ## Done means
 
-A release past `v0.1.0` was cut that consumed the pending `.changeset/*.md` fragments, bumped `rust/Cargo.toml`'s version and compiled `CHANGELOG.md` entries for the work shipped since (`CHANGELOG.md` carries `0.2.0`, `0.2.1` and `0.3.0`), through the release mechanism `ADR-45` decided (`prepare-release.yml` then `publish-release.yml`), not the `workflow_dispatch` path first planned.
+- A release past `v0.1.0` was cut that consumed the pending `.changeset/*.md` fragments, bumped `rust/Cargo.toml`'s version and compiled `CHANGELOG.md` entries for the work shipped since (`CHANGELOG.md` carries `0.2.0`, `0.2.1` and `0.3.0`). — evidence: code:CHANGELOG.md, code:rust/Cargo.toml
+- The release went through the release mechanism `ADR-45` decided (`prepare-release.yml` then `publish-release.yml`), not the `workflow_dispatch` path first planned. — evidence: code:.github/workflows/prepare-release.yml, code:.github/workflows/publish-release.yml, code:knope.toml
 
 > **Revision log**
 >
@@ -43,3 +44,4 @@ A release past `v0.1.0` was cut that consumed the pending `.changeset/*.md` frag
 > | 2026-11-02 | Labelled the body as the original `ADR-29`-era plan. **Why:** review found the body still described a release flow `ADR-45` replaced. | **structural** |
 > | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-183`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. The criteria are those the delivered work met, checked against `Realized-by` and the code; `Status` stays Done. | **structural** |
+> | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |

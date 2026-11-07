@@ -5,7 +5,7 @@ Phase: '0'
 Track: roadmap-tracking
 Implements: ADR-36
 Blocked-on: —
-Realized-by: spec:docs/adr/ADR-36-filenames-carry-the-type-prefix-going-forward.md
+Realized-by: spec:docs/adr/ADR-36-filenames-carry-the-type-prefix-going-forward.md, test:rust/crates/urzua-core/src/rules/filename.rs#filename_title_consistency_skips_a_legacy_shaped_filename@sha256:fcc933b49ab9893dec737244c2cfb1d39b1fefd85463a1e70d512f5769b3b825, code:rust/crates/urzua-core/src/rules/filename.rs
 ---
 # 10 — Decide the filename convention: type prefix, zero-padding, and whether to keep slugs
 
@@ -19,7 +19,9 @@ Raised directly; explicitly not decided yet -- BUG-2 already removed the actual 
 
 ## Done means
 
-`ADR-36` is Accepted and states the filename convention (the type prefix in the filename going forward, zero-padding and slugs both kept, legacy filenames never renamed and never stopping working); a legacy-shaped filename is skipped rather than reported by `filename_title_consistency` (`filename_title_consistency_skips_a_legacy_shaped_filename`), and the helpers that rule uses no longer assume a fixed number width (the second instance of the `BUG-2` defect class).
+- `ADR-36` is Accepted and states the filename convention (the type prefix in the filename going forward, zero-padding and slugs both kept, legacy filenames never renamed and never stopping working). — evidence: spec:docs/adr/ADR-36-filenames-carry-the-type-prefix-going-forward.md
+- A legacy-shaped filename is skipped rather than reported by `filename_title_consistency` (`filename_title_consistency_skips_a_legacy_shaped_filename`). — evidence: test:rust/crates/urzua-core/src/rules/filename.rs#filename_title_consistency_skips_a_legacy_shaped_filename@sha256:fcc933b49ab9893dec737244c2cfb1d39b1fefd85463a1e70d512f5769b3b825
+- The helpers that rule uses no longer assume a fixed number width (the second instance of the `BUG-2` defect class). — evidence: code:rust/crates/urzua-core/src/rules/filename.rs
 
 > **Revision log**
 >
@@ -28,3 +30,4 @@ Raised directly; explicitly not decided yet -- BUG-2 already removed the actual 
 > | 2026-09-07 | Decided (ADR-36): type prefix in the filename going forward, zero-padding and slugs both kept, legacy filenames never renamed and never stop working. Also caught and fixed a second independent instance of BUG-2's defect class in filename_title_consistency's own helpers. | **substantive** |
 > | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-183`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. The criteria are those the delivered work met, checked against `Realized-by` and the code; `Status` stays Done. | **structural** |
+> | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |

@@ -18,7 +18,10 @@ Today every Decider is implicitly assumed to be someone who can author a commit;
 
 ## Done means
 
-A Decider with no git identity can record approval through a flow urzua verifies (a signed or otherwise attributable artifact that `check` reads), the approval is attributed in the record without hand-editing, and a fixture shows an unattributed approval refused; the identity model is decided in an ADR first.
+- A Decider with no git identity can record approval through a flow urzua verifies (a signed or otherwise attributable artifact that `check` reads).
+- The approval is attributed in the record without hand-editing.
+- A fixture shows an unattributed approval refused.
+- The identity model is decided in an ADR first.
 
 > **Revision log**
 >
@@ -26,3 +29,4 @@ A Decider with no git identity can record approval through a flow urzua verifies
 > |---|---|---|
 
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |
+> | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |

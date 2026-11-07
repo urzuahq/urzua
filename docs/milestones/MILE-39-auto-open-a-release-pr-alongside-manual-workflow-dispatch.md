@@ -5,7 +5,7 @@ Phase: '1'
 Track: release-process
 Implements: ADR-45
 Blocked-on: —
-Realized-by: code:.github/workflows/prepare-release.yml
+Realized-by: code:.github/workflows/prepare-release.yml, code:knope.toml, code:.github/scripts/release-guard.sh
 ---
 # 39 — Auto-open a release PR alongside manual workflow_dispatch
 
@@ -30,7 +30,9 @@ that opens itself is a standing, visible reminder instead of a step nobody's wat
 
 ## Done means
 
-`prepare-release.yml` triggers on push to `main` and, when unreleased changesets exist, opens or updates a release pull request carrying the staged version bump and compiled `CHANGELOG.md`, so a maintainer reviews and merges a normal PR; it has no trigger that pushes a release straight to `main` (`ADR-45` replaced the `workflow_dispatch` path this milestone first planned to keep).
+- `prepare-release.yml` triggers on push to `main`. — evidence: code:.github/workflows/prepare-release.yml
+- When unreleased changesets exist, `prepare-release.yml` opens or updates a release pull request carrying the staged version bump and compiled `CHANGELOG.md`, so a maintainer reviews and merges a normal PR. — evidence: code:.github/workflows/prepare-release.yml, code:knope.toml, code:.github/scripts/release-guard.sh
+- `prepare-release.yml` has no trigger that pushes a release straight to `main` (`ADR-45` replaced the `workflow_dispatch` path this milestone first planned to keep). — evidence: code:.github/workflows/prepare-release.yml
 
 > **Revision log**
 >
@@ -42,3 +44,4 @@ that opens itself is a standing, visible reminder instead of a step nobody's wat
 > | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-183`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |
 > | 2026-11-04 | Superseded in part by `ADR-45`; `Status` stays Done. **Why:** the closure audit of #234 found that the instruction to keep `workflow_dispatch` working no longer holds: `prepare-release.yml` has only a `push` trigger on `main`, the release PR being the mechanism `ADR-45` decided. What this milestone delivered, the release PR opened or updated automatically on push to `main`, is unchanged. | **structural** |
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. The criteria are those the delivered work met, checked against `Realized-by` and the code; `Status` stays Done. | **structural** |
+> | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |

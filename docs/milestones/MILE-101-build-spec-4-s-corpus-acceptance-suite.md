@@ -52,7 +52,11 @@ so the format has never met a real case. Expect the spec to change on contact --
 
 ## Done means
 
-Every fixture corpus under `urzua-cli/tests/acceptance/corpora/` has a `manifest.yaml` recording each irregularity it was built to exhibit, every irregularity the manifests list has a case file pairing the corpus, a config, an invocation and an expected result, and `tests/acceptance.rs` runs all of them in `cargo test --workspace`; a case whose expectation is removed fails the run, bug-reproduction coverage is complete for the bugs `SPEC-4` names, and the harness half (mutation proof, coverage report) delivered by `MILE-170` is not repeated here.
+- Every fixture corpus under `urzua-cli/tests/acceptance/corpora/` has a `manifest.yaml` recording each irregularity it was built to exhibit.
+- Every irregularity the manifests list has a case file pairing the corpus, a config, an invocation and an expected result.
+- `tests/acceptance.rs` runs all of them in `cargo test --workspace`.
+- A case whose expectation is removed fails the run.
+- Bug-reproduction coverage is complete for the bugs `SPEC-4` names, and the harness half (mutation proof, coverage report) delivered by `MILE-170` is not repeated here.
 
 > **Revision log**
 >
@@ -66,3 +70,4 @@ Every fixture corpus under `urzua-cli/tests/acceptance/corpora/` has a `manifest
 > | 2026-11-04 | Evidence so far, no `Realized-by` yet. **Why:** the runner (`acceptance.rs`) and two corpora with manifests exist (merged in #146) and a property slice (`property.rs`, #97); the full suite `SPEC-4` specifies, every irregularity per manifest, is not. `Status` stays Planned. | **substantive** |
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |
 > | 2026-11-05 | `Depends-on: MILE-170` added. **Why:** the What says the harness half moved to `MILE-170` and Done means relies on it (Done). Proposed for maintainer review; `Status` unchanged. | **structural** |
+> | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |

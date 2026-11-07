@@ -38,7 +38,10 @@ this milestone originally described as not yet existing, has since shipped in fu
 
 ## Done means
 
-`urzua edit` writes a human- or agent-supplied value to one field or section of a record through the write path `fix --apply` uses (`apply_repair`'s find, replace and append-revision-log-row, `FixLock` and `resolve_identity`), not a second one; it refuses a rewrite that would change `Stable-Id` or overwrite a resolved `Author` or `Deciders`, appends a correctly dated and classed revision-log row from a supplied Why, and runs `check` on the record afterwards, reporting its findings; tests cover the refusals and the row, and the command is documented in a spec.
+- `urzua edit` writes a human- or agent-supplied value to one field or section of a record through the write path `fix --apply` uses (`apply_repair`'s find, replace and append-revision-log-row, `FixLock` and `resolve_identity`), not a second one.
+- `urzua edit` refuses a rewrite that would change `Stable-Id` or overwrite a resolved `Author` or `Deciders`.
+- `urzua edit` appends a correctly dated and classed revision-log row from a supplied Why, and runs `check` on the record afterwards, reporting its findings.
+- Tests cover the refusals and the row, and the command is documented in a spec.
 
 > **Revision log**
 >
@@ -46,3 +49,4 @@ this milestone originally described as not yet existing, has since shipped in fu
 > |---|---|---|
 > | 2026-09-07 | Rescoped: `Implements` corrected from `ADR-15, ADR-19` to `ADR-14, ADR-20` (`fix --apply`'s write path has shipped, not deferred); `Why` corrected to attribute the ADR-38 incident to `field_state`'s placeholder-token gap (BUG-5, fixed separately), not a missing write primitive. **Why:** found live while planning this milestone in detail -- building `edit` as originally framed would not have prevented the incident it was justified by, and its `Implements` list cited a stale premise. Left `Status: Planned`; the command itself is still real, separate, unbuilt work. | **structural** |
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |
+> | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |

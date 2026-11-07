@@ -5,7 +5,7 @@ Phase: '1'
 Track: governance-process
 Implements: RFC-6, ADR-14
 Blocked-on: —
-Realized-by: spec:docs/adr/ADR-14-an-append-only-revision-log-not-edit-in-place.md
+Realized-by: spec:docs/adr/ADR-14-an-append-only-revision-log-not-edit-in-place.md, spec:docs/specs/SPEC-1-cli.md
 Non-reference-ids: SPEC-7
 ---
 # 73 — Decide when a spec needs a new spec instead of an in-place revision
@@ -29,7 +29,9 @@ inconsistent precedent one spec at a time.
 
 ## Done means
 
-`ADR-14` is amended to say when a spec gets a new number and when it is revised in place: a spec's number is permanent per subject, a substantive or structural change is a `Version` bump plus a revision-log entry on the same spec, and a new number is reserved for a genuinely distinct subject; `RFC-6`'s open question points at it, and the spec minted for this case was retracted.
+- `ADR-14` is amended to say when a spec gets a new number and when it is revised in place: a spec's number is permanent per subject, a substantive or structural change is a `Version` bump plus a revision-log entry on the same spec, and a new number is reserved for a genuinely distinct subject. — evidence: spec:docs/adr/ADR-14-an-append-only-revision-log-not-edit-in-place.md
+- `RFC-6`'s open question points at the amended `ADR-14` rule.
+- The spec minted for this case was retracted. — evidence: spec:docs/adr/ADR-14-an-append-only-revision-log-not-edit-in-place.md, spec:docs/specs/SPEC-1-cli.md
 
 > **Revision log**
 >
@@ -39,3 +41,4 @@ inconsistent precedent one spec at a time.
 > | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-183`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. The criteria are those the delivered work met, checked against `Realized-by` and the code; `Status` stays Done. | **structural** |
 > | 2026-11-05 | Added the `Non-reference-ids` header field declaring `SPEC-7`. **Why:** the text names this id as history or illustration, not as citations of a record; the declaration states that on the record itself, so a new unresolved citation in this file is reported, where a file-wide `citation.resolution` waiver had silenced every one (`BUG-190`, `ADR-75`). The field carries no decision; the milestone is unchanged. | **structural** |
+> | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |

@@ -17,7 +17,9 @@ Embodiment (RFC-5) verifies after the fact; an executable rule prevents at commi
 
 ## Done means
 
-An RFC decides whether urzua interoperates with an executable-rule tier as a complement to Embodiment or declines to build one, and names which of the three positions (fallback for what cannot be executable, direct competition, or ceding the ground) it takes with the reasoning; it is filed under `docs/rfc/` and passes `urzua check`.
+- An RFC decides whether urzua interoperates with an executable-rule tier as a complement to Embodiment or declines to build one.
+- The RFC names which of the three positions (fallback for what cannot be executable, direct competition, or ceding the ground) it takes, with the reasoning.
+- The RFC is filed under `docs/rfc/` and passes `urzua check`.
 
 > **Revision log**
 >
@@ -25,3 +27,4 @@ An RFC decides whether urzua interoperates with an executable-rule tier as a com
 > |---|---|---|
 
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |
+> | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |

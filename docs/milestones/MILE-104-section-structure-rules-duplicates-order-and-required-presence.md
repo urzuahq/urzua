@@ -66,7 +66,11 @@ which no rule can enforce.
 
 ## Done means
 
-Opt-in rules report a record in which a section heading appears twice, a heading level is skipped (relative to the type's declared `sections.depth`, not an absolute `##`), and sections appear out of the order the type's template gives; a fixture per case and a clean record show each, the rules are declared in urzua's own `.urzua/config.yaml`, and `check` over urzua's own records reports none unwaived; it builds on `MILE-98`'s sections and leaves `MILE-4`'s required-presence policy where it is.
+- Opt-in rules report a record in which a section heading appears twice.
+- Opt-in rules report a record in which a heading level is skipped (relative to the type's declared `sections.depth`, not an absolute `##`).
+- Opt-in rules report a record whose sections appear out of the order the type's template gives.
+- A fixture per case and a clean record show each; the rules are declared in urzua's own `.urzua/config.yaml`; and `check` over urzua's own records reports none unwaived.
+- The rules build on `MILE-98`'s sections and leave `MILE-4`'s required-presence policy where it is.
 
 > **Revision log**
 >
@@ -78,3 +82,4 @@ Opt-in rules report a record in which a section heading appears twice, a heading
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |
 > | 2026-11-04 | `Blocked-on` cleared: `MILE-98` is Done (declared `identity`, `fields` and `sections`, including `###` headings read through `sections.depth`). `Status` unchanged. **Why:** `narrative-field.stale` flagged a blocker that reached a terminal status; the dependency no longer holds. | **substantive** |
 > | 2026-11-05 | `Depends-on: MILE-98` added. **Why:** the section 'Blocked on MILE-98' says sections are not addressable until the document model declares them (Done). Proposed for maintainer review; `Status` unchanged. | **structural** |
+> | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |

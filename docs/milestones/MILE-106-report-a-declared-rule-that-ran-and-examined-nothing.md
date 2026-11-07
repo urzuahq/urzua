@@ -3,7 +3,7 @@ Stable-Id: 01M2YMFN53X5QB064ZV60ZSQJT
 Status: Done
 Phase: '0'
 Track: schema-governance
-Realized-by: code:rust/crates/urzua-core/src/report.rs, test:rust/crates/urzua-cli/tests/check_integration.rs
+Realized-by: test:rust/crates/urzua-core/src/rules/type_scope.rs#a_scope_reaching_nothing_is_reported_observed_failing@sha256:6aa76d4b05ffe2115bf2fbd6081fba0061b319485748e8b945a2932bc43fec77, code:rust/crates/urzua-core/src/rules/type_scope.rs#config_scope_matches_nothing@sha256:25f8c409bcd77b555bb9b8ba2097279aedd9d0c7acd1f10bad244134ba29052a, test:rust/crates/urzua-cli/tests/check_integration.rs#a_config_level_finding_names_a_repository_relative_config_path_observed_failing@sha256:c99cb628975b7ba8dffc0118b9eea84b33feae5372ce8480f6e68ab27f4681d2, test:rust/crates/urzua-core/src/rules/type_scope.rs#a_rule_with_nothing_written_yet_is_not_reported@sha256:9f41325bad3978ef05716e507d35f03755a352167e33ad526299ea77857d2770, code:.urzua/config.yaml, code:.github/workflows/checks.yml
 ---
 # 106 — Report a declared rule that ran and examined nothing
 
@@ -121,7 +121,9 @@ round 6 wrote to fix two others.
 
 ## Done means
 
-The opt-in rule `config.scope-matches-nothing` reports a declared rule whose configuration cannot reach its candidates (the `out_of_scope` state) and stays silent when the corpus simply holds nothing the rule addresses (a declared type not yet used); a fixture covers both, and the rule is declared at `warn` in urzua's own `.urzua/config.yaml` and reports nothing on this repository.
+- The opt-in rule `config.scope-matches-nothing` reports a declared rule whose configuration cannot reach its candidates (the `out_of_scope` state); a fixture covers it. — evidence: test:rust/crates/urzua-core/src/rules/type_scope.rs#a_scope_reaching_nothing_is_reported_observed_failing@sha256:6aa76d4b05ffe2115bf2fbd6081fba0061b319485748e8b945a2932bc43fec77, code:rust/crates/urzua-core/src/rules/type_scope.rs#config_scope_matches_nothing@sha256:25f8c409bcd77b555bb9b8ba2097279aedd9d0c7acd1f10bad244134ba29052a, test:rust/crates/urzua-cli/tests/check_integration.rs#a_config_level_finding_names_a_repository_relative_config_path_observed_failing@sha256:c99cb628975b7ba8dffc0118b9eea84b33feae5372ce8480f6e68ab27f4681d2
+- `config.scope-matches-nothing` stays silent when the corpus simply holds nothing the rule addresses (a declared type not yet used); a fixture covers it. — evidence: test:rust/crates/urzua-core/src/rules/type_scope.rs#a_rule_with_nothing_written_yet_is_not_reported@sha256:9f41325bad3978ef05716e507d35f03755a352167e33ad526299ea77857d2770
+- The rule is declared at `warn` in urzua's own `.urzua/config.yaml` and reports nothing on this repository. — evidence: code:.urzua/config.yaml, code:.github/workflows/checks.yml
 
 > **Revision log**
 >
@@ -132,3 +134,4 @@ The opt-in rule `config.scope-matches-nothing` reports a declared rule whose con
 > | 2026-09-21 | Restated the Why as configuration feedback, and recorded that the discriminator was specified and dropped. **Why:** designing the rule stalled because every candidate predicate felt arbitrary, and the reason is that `Outcome` collapsed the plan's four states into two, so the milestone was trying to answer with two states a question the design said needed four. Reframing also corrects the scope: this is not only `ADR-55` self-detection, it is the diagnostic an engine owes an adopter who can misconfigure it -- the failure mode `BUG-61` found and the one a compiled-in linter cannot have. | **substantive** |
 > | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-183`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. The criteria are those the delivered work met, checked against `Realized-by` and the code; `Status` stays Done. | **structural** |
+> | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |

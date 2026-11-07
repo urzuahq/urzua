@@ -5,7 +5,7 @@ Phase: '0'
 Track: schema-governance
 Implements: —
 Blocked-on: —
-Realized-by: code:rust/crates/urzua-cli/src/commands/rules.rs, code:scripts/generate-rule-table.py, test:rust/crates/urzua-cli/tests/check_integration.rs
+Realized-by: test:rust/crates/urzua-cli/tests/check_integration.rs#the_declared_level_overrides_the_rule_body_s_own_severity@sha256:8f67f94ecf327ba3c3ae071f21b729f97fe1637d2b178f8f8ab6adb1cb8b95d8, test:rust/crates/urzua-cli/tests/check_integration.rs#an_undeclared_rule_is_reported_as_not_enabled_never_omitted@sha256:6517650418cd37bce81e8fc012fdecdc11c176e43f3d1167fb1e4bc1f1248ff7, code:rust/crates/urzua-core/src/rules/table.rs, code:rust/crates/urzua-core/src/rules/pointer.rs, code:scripts/generate-rule-table.py, code:rust/crates/urzua-cli/src/commands/rules.rs, code:.github/workflows/checks.yml, code:.urzua/config.yaml
 ---
 # 80 — Configurable rule severity, per SPEC-1's own unbuilt promise
 
@@ -52,7 +52,11 @@ since drift is usually a signal to review. What is missing is any way for this r
 
 ## Done means
 
-A `rules` table in config declares each rule's `level` and that level replaces whatever the rule chose, every rule is opt-in, and an undeclared rule is reported `not-enabled` rather than omitted; `pointer.resolution` was split so one id carries one question; the rule list in `SPEC-2` is generated from the shipped set (`scripts/generate-rule-table.py`, `urzua rules`) and urzua's own `.urzua/config.yaml` declares every rule's level.
+- A `rules` table in config declares each rule's `level`, and that level replaces whatever the rule chose. — evidence: test:rust/crates/urzua-cli/tests/check_integration.rs#the_declared_level_overrides_the_rule_body_s_own_severity@sha256:8f67f94ecf327ba3c3ae071f21b729f97fe1637d2b178f8f8ab6adb1cb8b95d8
+- Every rule is opt-in, and an undeclared rule is reported `not-enabled` rather than omitted. — evidence: test:rust/crates/urzua-cli/tests/check_integration.rs#an_undeclared_rule_is_reported_as_not_enabled_never_omitted@sha256:6517650418cd37bce81e8fc012fdecdc11c176e43f3d1167fb1e4bc1f1248ff7
+- `pointer.resolution` was split so one id carries one question. — evidence: code:rust/crates/urzua-core/src/rules/table.rs, code:rust/crates/urzua-core/src/rules/pointer.rs
+- The rule list in `SPEC-2` is generated from the shipped set (`scripts/generate-rule-table.py`, `urzua rules`). — evidence: code:scripts/generate-rule-table.py, code:rust/crates/urzua-cli/src/commands/rules.rs, code:.github/workflows/checks.yml
+- Urzua's own `.urzua/config.yaml` declares every rule's level. — evidence: code:.urzua/config.yaml
 
 > **Revision log**
 >
@@ -64,3 +68,4 @@ A `rules` table in config declares each rule's `level` and that level replaces w
 > | 2026-09-17 | Recorded `BUG-38`: the `field.quality` flattening this change accepted is not acceptable. **Why:** `Blank` and `Placeholder` mean someone forgot; `Pending` means someone declared work unfinished. Two questions, one rule id, so no declared level is correct for both -- `error` blocks a deliberate marker and `warn` unblocks a genuinely empty required field. Same defect as `pointer.resolution`, which this change split; missed on the first pass because the grading read as one question's degrees until `Pending`'s own definition was checked. | **substantive** |
 > | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-183`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. The criteria are those the delivered work met, checked against `Realized-by` and the code; `Status` stays Done. | **structural** |
+> | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |

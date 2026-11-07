@@ -18,7 +18,9 @@ They are nits from the adopter end-to-end second pass (N8, M5 rest) and the firs
 ## Done means
 
 - `fix --help` describes what `fix` applies today.
-- `templates/bug.md` lists the statuses the `bug` type declares, and `templates/spec.md` has no toml block; the harness lock is refreshed.
+- `templates/bug.md` lists the statuses the `bug` type declares.
+- `templates/spec.md` has no toml block.
+- The harness lock is refreshed.
 - `urzua new` prints one line naming the skipped range, not one per number; a test fails before the change.
 - `doctor` warns only for a hook the repository's configuration says it wires, and a repository wiring only pre-commit gets no pre-push warning.
 - A patch changeset names the CLI changes.
@@ -28,3 +30,4 @@ They are nits from the adopter end-to-end second pass (N8, M5 rest) and the firs
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-07 | Initial record. **Why:** deferred during Phase 0 hardening and tracked by no record. | **structural** |
+> | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |

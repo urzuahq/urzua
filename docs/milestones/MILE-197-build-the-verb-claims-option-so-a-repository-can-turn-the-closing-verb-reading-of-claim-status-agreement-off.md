@@ -1,7 +1,7 @@
 ---
 Stable-Id: 01M6NW0AXBH6FNEBXF1DQT25T2
 Status: Done
-Realized-by: code:rust/crates/urzua-core/src/rules/claim.rs, code:rust/crates/urzua-core/src/rules/options.rs, code:rust/crates/urzua-core/src/config.rs, code:.urzua/config.yaml, spec:docs/specs/SPEC-3-configuration.md, spec:docs/specs/SPEC-2-urzua-check.md, test:rust/crates/urzua-cli/tests/claim_field_integration.rs
+Realized-by: test:rust/crates/urzua-cli/tests/claim_field_integration.rs#verb_claims_false_turns_the_prose_reading_off_and_keeps_the_field_observed_failing@sha256:86872e7977f42be0a61d3f86d310d0fbeb11bd1944a3e088667cdc8837903bb4, test:rust/crates/urzua-cli/tests/claim_field_integration.rs#verb_claims_needs_closes_whether_true_or_false_observed_failing@sha256:731bfb82bc43e7299e25f5f96f1b9f279a09ad5038bbc4b03e7ecdd8663ed508, code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/claim_field_integration.rs#verb_claims_on_another_rule_is_not_applicable_observed_failing@sha256:f109b5b270401cd1c805ce25a8ee7b4c039f9c5cae37bf4c2dbce17e43f0d1a7, code:rust/crates/urzua-core/src/rules/options.rs, test:rust/crates/urzua-cli/tests/claim_field_integration.rs#verb_claims_absent_or_true_is_the_reading_as_it_was_observed_failing@sha256:93d41cae1113d83eae873f2a581b39e370d823212ea1fcacb1ed99aea3f9d214, code:.urzua/config.yaml, code:Makefile, code:.github/workflows/checks.yml, spec:docs/specs/SPEC-3-configuration.md, spec:docs/specs/SPEC-2-urzua-check.md, code:scripts/generate-rule-table.py, code:.changeset/claim-verb-claims-option.md, test:rust/crates/urzua-cli/tests/claim_field_integration.rs#verb_claims_false_without_strict_carries_a_notice_observed_failing@sha256:df4b1a04cdebe2cd2656719a5fb325dce6a88719ec4bdb9f57636c6643b8e08b
 Phase: '0'
 Track: governance-process
 Implements: ADR-88
@@ -32,21 +32,20 @@ for prose, which is what the Phase 1 adopters do, so it sits with them.
 
 ## Done means
 
-- `verb_claims: false` on `claim.status-agreement` loads when `closes` is declared. Without `closes` it
-  is refused at load with a `ConfigError::InvalidClaimField` naming `verb_claims` and `closes`, whether
-  the value is `true` or `false`; on any other rule it is refused as `OptionNotApplicable`. Tests pin all
-  three and fail before the change.
-- With the option off, a fragment whose body says `Fixes BUG-n` for an open record raises no finding and
-  counts no verb claim, while the same fragment's `closes: [BUG-n]` is `claim-closes-open`; with it
-  absent or `true` the result is byte-identical to before (a test pins both). The notice states that the
-  reading is off rather than printing a count.
-- `.urzua/config.yaml` sets `verb_claims: false`, and `urzua check` and `urzua check --base origin/main`
-  report 0 unwaived errors or warnings, with the `claim.status-agreement` notice showing the reading off.
-- `SPEC-3` documents the option, default and load error, and `SPEC-2` the rule description and notice,
-  each with a revision row; `make rule-table-check` passes. A CLI changeset is not needed if no
-  user-facing CLI behaviour outside the config changes; otherwise a minor changeset with `closes: []`.
-- With `verb_claims: false` and `strict` off, the run carries a notice that fragments without the key carry no claim, with a test.
-- Removing the reading from the engine is not part of this milestone; it stays a separate later decision.
+- `verb_claims: false` on `claim.status-agreement` loads when `closes` is declared. — evidence: test:rust/crates/urzua-cli/tests/claim_field_integration.rs#verb_claims_false_turns_the_prose_reading_off_and_keeps_the_field_observed_failing@sha256:86872e7977f42be0a61d3f86d310d0fbeb11bd1944a3e088667cdc8837903bb4
+- Without `closes`, `verb_claims` is refused at load with a `ConfigError::InvalidClaimField` naming `verb_claims` and `closes`, whether the value is `true` or `false`. — evidence: test:rust/crates/urzua-cli/tests/claim_field_integration.rs#verb_claims_needs_closes_whether_true_or_false_observed_failing@sha256:731bfb82bc43e7299e25f5f96f1b9f279a09ad5038bbc4b03e7ecdd8663ed508, code:rust/crates/urzua-core/src/config.rs
+- On any other rule `verb_claims` is refused as `OptionNotApplicable`. — evidence: test:rust/crates/urzua-cli/tests/claim_field_integration.rs#verb_claims_on_another_rule_is_not_applicable_observed_failing@sha256:f109b5b270401cd1c805ce25a8ee7b4c039f9c5cae37bf4c2dbce17e43f0d1a7, code:rust/crates/urzua-core/src/rules/options.rs
+- With the option off, a fragment whose body says `Fixes BUG-n` for an open record raises no finding and counts no verb claim, while the same fragment's `closes: [BUG-n]` is `claim-closes-open`. — evidence: test:rust/crates/urzua-cli/tests/claim_field_integration.rs#verb_claims_false_turns_the_prose_reading_off_and_keeps_the_field_observed_failing@sha256:86872e7977f42be0a61d3f86d310d0fbeb11bd1944a3e088667cdc8837903bb4
+- With the option absent or `true` the result is byte-identical to before (a test pins both). — evidence: test:rust/crates/urzua-cli/tests/claim_field_integration.rs#verb_claims_absent_or_true_is_the_reading_as_it_was_observed_failing@sha256:93d41cae1113d83eae873f2a581b39e370d823212ea1fcacb1ed99aea3f9d214
+- The notice states that the reading is off rather than printing a count. — evidence: test:rust/crates/urzua-cli/tests/claim_field_integration.rs#verb_claims_false_turns_the_prose_reading_off_and_keeps_the_field_observed_failing@sha256:86872e7977f42be0a61d3f86d310d0fbeb11bd1944a3e088667cdc8837903bb4
+- `.urzua/config.yaml` sets `verb_claims: false`. — evidence: code:.urzua/config.yaml
+- `urzua check` and `urzua check --base origin/main` report 0 unwaived errors or warnings. — evidence: code:Makefile, code:.github/workflows/checks.yml
+- `SPEC-3` documents the option, default and load error, and `SPEC-2` the rule description and notice, each with a revision row. — evidence: spec:docs/specs/SPEC-3-configuration.md, spec:docs/specs/SPEC-2-urzua-check.md
+- `make rule-table-check` passes. — evidence: code:scripts/generate-rule-table.py, spec:docs/specs/SPEC-2-urzua-check.md
+- A minor changeset is added. — evidence: code:.changeset/claim-verb-claims-option.md
+- With `verb_claims: false` and `strict` off, the run carries a notice that fragments without the key carry no claim, with a test. — evidence: test:rust/crates/urzua-cli/tests/claim_field_integration.rs#verb_claims_false_without_strict_carries_a_notice_observed_failing@sha256:df4b1a04cdebe2cd2656719a5fb325dce6a88719ec4bdb9f57636c6643b8e08b
+
+Removing the reading from the engine is not part of this milestone; it stays a separate later decision.
 
 > **Revision log**
 >
@@ -55,3 +54,4 @@ for prose, which is what the Phase 1 adopters do, so it sits with them.
 > | 2026-11-05 | Filed. **Why:** `ADR-88` (Proposed) decides the option on a maintainer decision of 2026-11-05 and no milestone builds it; blocked on the maintainer accepting it. | **substantive** |
 > | 2026-11-05 | `Phase` 1 -> 0, and Done means gains the notice when `verb_claims: false` is set without `strict`. **Why:** maintainer decision, 2026-11-05, on accepting `ADR-88`: it sets this repository's own config, which Phase 0 covers. | **substantive** |
 > | 2026-11-05 | `Status` Planned -> Done; `Realized-by` added. **Why:** Done means is met and `ADR-88` is Accepted. `verb_claims: false` on `claim.status-agreement` loads with `closes`; without `closes` it is an `InvalidClaimField` load error naming `verb_claims` and `closes` for `true` as well as `false`, and on another rule `OptionNotApplicable`; with it off a body saying `Fixes BUG-n` raises no finding and counts nothing while the same fragment's `closes: [BUG-n]` is `claim-closes-open`, and the notice says the reading is off; absent or `true` is byte-identical (a test compares the reports); set without `strict` a second notice says a fragment without the key carries no claim. This repository sets `verb_claims: false`. `SPEC-2` and `SPEC-3` have revision rows and the rule table is regenerated. Removing the reading from the engine stays a separate decision. | **substantive** |
+> | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |

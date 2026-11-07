@@ -5,7 +5,7 @@ Phase: '1'
 Track: schema-governance
 Implements: ADR-39
 Blocked-on: —
-Realized-by: code:rust/crates/urzua-core/src/rules/header.rs, test:rust/crates/urzua-cli/tests/check_integration.rs
+Realized-by: code:rust/crates/urzua-core/src/config.rs#RecordTypeConfig::known_fields@sha256:4c4719ddeff5537ae842caa5b6911e864ab3e0e2d89e46f875bc4f22f95058b7, test:rust/crates/urzua-core/src/rules/header.rs#an_undeclared_field_is_a_finding@sha256:fc7ebd114cb827cc50c039abed0f3ab3f27921106992f5a65a58909833f9a2ac, code:rust/crates/urzua-core/src/rules/header.rs#header_field_set_consistency@sha256:c8120dc6ffdad9fde0d1372995277e258f5feb73215aae42df21c5f0305963ff, test:rust/crates/urzua-core/src/rules/header.rs#a_known_field_produces_no_finding@sha256:348305a02d6f1de9b3284afe7c6b07bc0f1c86df9fd522b5c8078efdae91462b, code:.urzua/config.yaml
 ---
 # 81 — A field-set consistency rule: undeclared fields per type
 
@@ -35,7 +35,10 @@ check `spec` yet, the same additive-skip shape as every undeclared type.
 
 ## Done means
 
-A type declares `known_fields` additively to `required_fields`, and the opt-in rule `header.field-set-consistency` reports a header field present on some records of the type that the declaration does not name, without flagging fields legitimately common but not required (`Stable-Id`, `Realized-by`, `Derives-from`); a fixture covers an undeclared field and a declared one, and urzua's own types declare `known_fields`.
+- A type declares `known_fields` additively to `required_fields`. — evidence: code:rust/crates/urzua-core/src/config.rs#RecordTypeConfig::known_fields@sha256:4c4719ddeff5537ae842caa5b6911e864ab3e0e2d89e46f875bc4f22f95058b7
+- The opt-in rule `header.field-set-consistency` reports a header field present on some records of the type that the declaration does not name; a fixture covers an undeclared field. — evidence: test:rust/crates/urzua-core/src/rules/header.rs#an_undeclared_field_is_a_finding@sha256:fc7ebd114cb827cc50c039abed0f3ab3f27921106992f5a65a58909833f9a2ac, code:rust/crates/urzua-core/src/rules/header.rs#header_field_set_consistency@sha256:c8120dc6ffdad9fde0d1372995277e258f5feb73215aae42df21c5f0305963ff
+- `header.field-set-consistency` does not flag fields legitimately common but not required (`Stable-Id`, `Realized-by`, `Derives-from`); a fixture covers a declared field. — evidence: test:rust/crates/urzua-core/src/rules/header.rs#a_known_field_produces_no_finding@sha256:348305a02d6f1de9b3284afe7c6b07bc0f1c86df9fd522b5c8078efdae91462b
+- Urzua's own types declare `known_fields`. — evidence: code:.urzua/config.yaml
 
 > **Revision log**
 >
@@ -44,3 +47,4 @@ A type declares `known_fields` additively to `required_fields`, and the opt-in r
 > | 2026-09-07 | Fixed and shipped (ADR-39): a `known_fields` config field, additive to `required_fields`, checked by a new `header.field-set-consistency` rule. **Why:** majority-vote inference was rejected for the same reason ADR-38 rejected it for the layout axis -- it would ratify existing drift instead of catching it. Declared `known_fields` for `adr`/`rfc`/`milestone`/`bug`/`waiver`; `spec` deliberately left undeclared pending MILE-74. Verified against a planted violation in an isolated scratch corpus, not only unit tests. | **substantive** |
 > | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-183`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. The criteria are those the delivered work met, checked against `Realized-by` and the code; `Status` stays Done. | **structural** |
+> | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |

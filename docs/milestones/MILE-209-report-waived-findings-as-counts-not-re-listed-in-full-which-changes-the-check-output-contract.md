@@ -18,13 +18,15 @@ On an adopter with 465 ADRs the report is 133 KB for 21 live findings, because t
 ## Done means
 
 - By default the report carries waived findings as a count per rule and the waiver that covers them; a documented option lists them in full.
-- The unwaived findings, the populations, the exit code and `status` are unchanged. A test pins both shapes.
+- The unwaived findings, the populations, the exit code and `status` are unchanged, and a test pins both shapes.
 - The gate action, the editor hook and `harness` consume the new default and still report every live finding.
 - A decision on the contract change is recorded before the build (an ADR needing the maintainer's acceptance).
-- `SPEC-2` and `SPEC-8` state the output with revision rows; a changeset names the change.
+- `SPEC-2` and `SPEC-8` state the output with revision rows.
+- A changeset names the change.
 
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-07 | Initial record. **Why:** deferred during Phase 0 hardening and tracked by no record. | **structural** |
+> | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |

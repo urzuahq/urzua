@@ -28,7 +28,10 @@ actually fires on real content, rather than a synthetic fixture.
 
 ## Done means
 
-An RFC decides what "amended" means for staleness and how a code comment declares the revision of the record it assumed; once Accepted, `check` reports a comment citing a record (`ADR-29` style) whose record was amended after the comment last changed, a planted amendment fixture is reported and an untouched record is not, and the rule is exercised on the citations in urzua's own workflows and config.
+- An RFC decides what "amended" means for staleness and how a code comment declares the revision of the record it assumed.
+- Once the RFC is Accepted, `check` reports a comment citing a record (`ADR-29` style) whose record was amended after the comment last changed.
+- A planted amendment fixture is reported and an untouched record is not.
+- The rule is exercised on the citations in urzua's own workflows and config.
 
 > **Revision log**
 >
@@ -36,3 +39,4 @@ An RFC decides what "amended" means for staleness and how a code comment declare
 > |---|---|---|
 
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |
+> | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |

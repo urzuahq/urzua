@@ -5,7 +5,7 @@ Phase: '1'
 Track: schema-governance
 Implements: RFC-10, ADR-38
 Blocked-on: —
-Realized-by: code:rust/crates/urzua-core/src/rules/header.rs, test:rust/crates/urzua-cli/tests/check_integration.rs
+Realized-by: code:rust/crates/urzua-core/src/header.rs#parse_with_shape@sha256:0684a0aa75d67805845cf344098f4076eb775d807219f0a18a524a5e8b40ecde, test:rust/crates/urzua-core/src/config.rs#a_removed_header_shape_is_a_clear_error_naming_the_form@sha256:3704ea8e26e1ead03470812212cd819ec5538a8d7452bbf58096c48dff815e80, code:rust/crates/urzua-core/src/config.rs#RecordTypeConfig::header_shape@sha256:a8cbdc7195689ce5ad34e2ec96b67345dabbb480c565097ec2fce90a44b9ba67
 ---
 # 75 — Header sub-format consistency within a record type
 
@@ -33,7 +33,9 @@ implementation only checks required-field presence per a declared shape, not sub
 
 ## Done means
 
-A type's records agree on one header layout and `check` reports one that does not: `ADR-38` decided the `header_layout` option and the `header.layout-consistency` rule for this when blockquote sub-formats were interchangeable. `MILE-85` deleted the option, the rule and the sub-formats together with the shapes they policed, so what remains true is that `yaml-frontmatter` is the only shape and a type cannot mix layouts.
+- A type's records agree on one header layout and `check` reports one that does not (the `header_layout` option and `header.layout-consistency` rule of `ADR-38`). — waived: not-applicable -- MILE-85 deleted the option, the rule and the sub-formats together with the shapes they policed, so no layout can differ; the criterion holds by construction (items 2 and 3)
+- `yaml-frontmatter` is the only header shape. — evidence: code:rust/crates/urzua-core/src/header.rs#parse_with_shape@sha256:0684a0aa75d67805845cf344098f4076eb775d807219f0a18a524a5e8b40ecde, test:rust/crates/urzua-core/src/config.rs#a_removed_header_shape_is_a_clear_error_naming_the_form@sha256:3704ea8e26e1ead03470812212cd819ec5538a8d7452bbf58096c48dff815e80
+- A type cannot mix layouts. — evidence: code:rust/crates/urzua-core/src/config.rs#RecordTypeConfig::header_shape@sha256:a8cbdc7195689ce5ad34e2ec96b67345dabbb480c565097ec2fce90a44b9ba67
 
 > **Revision log**
 >
@@ -43,3 +45,4 @@ A type's records agree on one header layout and `check` reports one that does no
 > | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-183`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |
 > | 2026-11-04 | Superseded by `MILE-85`; `Status` stays Done. **Why:** the closure audit of #234 swept the Done milestones for later removals. `header.layout-consistency`, the `header_layout` option and the sub-formats they policed were deleted by `MILE-85` together with the blockquote and bold-list shapes. The milestone delivered the rule when it shipped; the rule no longer exists. | **structural** |
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. The criteria are those the delivered work met, checked against `Realized-by` and the code; `Status` stays Done. | **structural** |
+> | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |

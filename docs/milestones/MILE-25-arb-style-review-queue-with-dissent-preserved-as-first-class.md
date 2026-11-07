@@ -18,7 +18,11 @@ Flagged as a strong steal-candidate pattern; no RFC covers a review-queue projec
 
 ## Done means
 
-A review queue projection lists records awaiting review ordered by tier and SLA, an objection to a decision is kept as a record with its author and date when overruled and never deleted, and `check` reports an overdue item; a fixture covers an overruled objection surviving, and the queue is exercised against urzua's own records.
+- A review queue projection lists records awaiting review ordered by tier and SLA.
+- An objection to a decision is kept as a record with its author and date when overruled, and never deleted.
+- `check` reports an overdue item.
+- A fixture covers an overruled objection surviving.
+- The queue is exercised against urzua's own records.
 
 > **Revision log**
 >
@@ -26,3 +30,4 @@ A review queue projection lists records awaiting review ordered by tier and SLA,
 > |---|---|---|
 
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |
+> | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |

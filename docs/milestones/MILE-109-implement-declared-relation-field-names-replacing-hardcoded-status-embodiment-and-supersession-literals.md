@@ -5,7 +5,7 @@ Phase: '1'
 Track: schema-governance
 Implements: RFC-42
 Blocked-on: —
-Realized-by: code:rust/crates/urzua-core/src/config.rs, code:rust/crates/urzua-core/src/rules/embodiment.rs, test:rust/crates/urzua-cli/tests/relation_field_literals.rs
+Realized-by: code:rust/crates/urzua-core/src/config.rs#RelationFields@sha256:6d687d622ad1de8c0260b98af074910c332517538e744b82c0781605e9f337e0, code:rust/crates/urzua-core/src/rules/embodiment.rs#relation_field_name@sha256:1fad8037a10bc178cd7f95acd3d41fb9ab7fd598abcc82a822828c4edbf3fcec, code:rust/crates/urzua-core/src/rules/pointer.rs, code:rust/crates/urzua-core/src/rules/narrative.rs, code:rust/crates/urzua-core/src/fix.rs, test:rust/crates/urzua-cli/tests/relation_field_literals.rs#no_relation_field_literal_escapes_config_rs@sha256:ecbcb243a3aa835749ec347d6fe2de73f75b40c2b00f95c31cb18e3cf1c44856, test:rust/crates/urzua-core/src/rules/embodiment.rs#a_type_declaring_custom_embodiment_field_names_is_read_by_those_names_observed_failing@sha256:986cd228ed1bebab023b1166a234cd4fbefaccd0a92980fcc5d13d1445582778, test:rust/crates/urzua-core/src/rules/pointer.rs#a_type_declaring_a_custom_status_field_name_is_read_by_that_name_observed_failing@sha256:6d06c500ec1f6e147218f3b24423adc38291c17f26e4feb2b37eace2723f0505, test:rust/crates/urzua-core/src/rules/narrative.rs#narrative_field_stale_reads_a_custom_status_field_name_observed_failing@sha256:473d192beed6c03642571c3fc5486c501e88d2f364b3c4d2782298843df1bc15
 ---
 # 109 — Implement declared relation field names replacing hardcoded status embodiment and supersession literals
 
@@ -39,7 +39,10 @@ making every finding message report the resolved field name instead of the pre-`
 
 ## Done means
 
-A per-type `relation_fields` map declares the `status`, `embodiment_state`, `embodiment_locator` and `supersession` field names, each defaulting to its pre-`RFC-42` literal (`Status`, `Embodiment`, `Realized-by`, `Supersedes / Superseded-by`), the seven call sites that hardcoded them read the map, `relation_field_literals.rs` fails when a rule restates one, and a fixture with renamed fields passes the same rules.
+- A per-type `relation_fields` map declares the `status`, `embodiment_state`, `embodiment_locator` and `supersession` field names, each defaulting to its pre-`RFC-42` literal (`Status`, `Embodiment`, `Realized-by`, `Supersedes / Superseded-by`). — evidence: code:rust/crates/urzua-core/src/config.rs#RelationFields@sha256:6d687d622ad1de8c0260b98af074910c332517538e744b82c0781605e9f337e0
+- The seven call sites that hardcoded those names read the map. — evidence: code:rust/crates/urzua-core/src/rules/embodiment.rs#relation_field_name@sha256:1fad8037a10bc178cd7f95acd3d41fb9ab7fd598abcc82a822828c4edbf3fcec, code:rust/crates/urzua-core/src/rules/pointer.rs, code:rust/crates/urzua-core/src/rules/narrative.rs, code:rust/crates/urzua-core/src/fix.rs
+- `relation_field_literals.rs` fails when a rule restates one. — evidence: test:rust/crates/urzua-cli/tests/relation_field_literals.rs#no_relation_field_literal_escapes_config_rs@sha256:ecbcb243a3aa835749ec347d6fe2de73f75b40c2b00f95c31cb18e3cf1c44856
+- A fixture with renamed fields passes the same rules. — evidence: test:rust/crates/urzua-core/src/rules/embodiment.rs#a_type_declaring_custom_embodiment_field_names_is_read_by_those_names_observed_failing@sha256:986cd228ed1bebab023b1166a234cd4fbefaccd0a92980fcc5d13d1445582778, test:rust/crates/urzua-core/src/rules/pointer.rs#a_type_declaring_a_custom_status_field_name_is_read_by_that_name_observed_failing@sha256:6d06c500ec1f6e147218f3b24423adc38291c17f26e4feb2b37eace2723f0505, test:rust/crates/urzua-core/src/rules/narrative.rs#narrative_field_stale_reads_a_custom_status_field_name_observed_failing@sha256:473d192beed6c03642571c3fc5486c501e88d2f364b3c4d2782298843df1bc15
 
 > **Revision log**
 >
@@ -48,3 +51,4 @@ A per-type `relation_fields` map declares the `status`, `embodiment_state`, `emb
 > | 2026-09-23 | Filed and implemented in one round. **Why:** `RFC-42`/`ADR-61` decided the design the same day a round-18 review surfaced the recurring defect shape; scheduled and built together so the gap didn't sit open for a later release. | **substantive** |
 > | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-183`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. The criteria are those the delivered work met, checked against `Realized-by` and the code; `Status` stays Done. | **structural** |
+> | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |

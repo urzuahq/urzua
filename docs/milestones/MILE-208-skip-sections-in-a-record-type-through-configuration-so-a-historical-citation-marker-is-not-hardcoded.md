@@ -17,14 +17,17 @@ An adopter with several hundred records cites files that were later deleted or r
 
 ## Done means
 
-- A record type can name sections that rules skip, in `.urzua/config.yaml`, as structured config and not a string mini-language (`ADR-64`). An unknown section name, or one that matches no heading in the type, is reported and never a silent no-op.
+- A record type can name sections that rules skip, in `.urzua/config.yaml`, as structured config and not a string mini-language (`ADR-64`).
+- An unknown section name, or one that matches no heading in the type, is reported and never a silent no-op.
 - `citation.path-exists` does not report a citation inside a skipped section, and reports the same citation outside one. A test fails before the change.
 - `skip_revision_log` keeps its result byte for byte.
 - This repository exercises the option in `.urzua/config.yaml` on a record that cites a removed path.
-- `SPEC-3` documents the option with a revision row; a minor changeset names it.
+- `SPEC-3` documents the option with a revision row.
+- A minor changeset names the option.
 
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-07 | Initial record. **Why:** deferred during Phase 0 hardening and tracked by no record. | **structural** |
+> | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |

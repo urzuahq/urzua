@@ -19,7 +19,11 @@ Named in research as the single biggest adoption unlock, and explicitly out of s
 
 ## Done means
 
-A backfill command reconstructs decision records from git and pull request history, scores each with a confidence, writes them as drafts that stay in a draft status until a human confirms, and a second run is a no-op; a fixture history yields the expected drafts with their confidence and none with a decided status.
+- A backfill command reconstructs decision records from git and pull request history.
+- It scores each with a confidence.
+- It writes them as drafts that stay in a draft status until a human confirms.
+- A second run is a no-op.
+- A fixture history yields the expected drafts with their confidence and none with a decided status.
 
 > **Revision log**
 >
@@ -28,3 +32,4 @@ A backfill command reconstructs decision records from git and pull request histo
 
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |
 > | 2026-11-05 | `Depends-on: MILE-52` added. **Why:** `MILE-52` states the concurrency design for the backfill engine is settled before the engine's execution model is built. Proposed for maintainer review; `Status` unchanged. | **structural** |
+> | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |

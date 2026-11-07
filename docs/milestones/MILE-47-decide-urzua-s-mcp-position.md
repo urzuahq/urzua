@@ -17,7 +17,9 @@ MILE-29 already names "a read-only MCP server" as a build target, but no RFC or 
 
 ## Done means
 
-An RFC states urzua's MCP position: whether to ship an MCP server, why read-only if so, and which data it exposes (rejected and superseded decisions); it is filed under `docs/rfc/`, passes `urzua check`, and `MILE-29` cites it in `Implements` so the build milestone no longer rests on an unrecorded stance.
+- An RFC states urzua's MCP position: whether to ship an MCP server, why read-only if so, and which data it exposes (rejected and superseded decisions).
+- The RFC is filed under `docs/rfc/` and passes `urzua check`.
+- `MILE-29` cites it in `Implements`, so the build milestone no longer rests on an unrecorded stance.
 
 > **Revision log**
 >
@@ -25,3 +27,4 @@ An RFC states urzua's MCP position: whether to ship an MCP server, why read-only
 > |---|---|---|
 
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |
+> | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |
