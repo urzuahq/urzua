@@ -147,8 +147,20 @@ enum Command {
     },
 
     /// Which records govern `path` -- every record whose `Realized-by`
-    /// names it as evidence (ADR-0024).
-    Explain { path: String },
+    /// names it as evidence (ADR-0024). With `--rule <rule-id>`, what one rule
+    /// is instead: its scope, the level this repository sets, its severity
+    /// floor and waivable flag, its options with their current values, its
+    /// action variants, its population unit and its spec (ADR-96).
+    #[command(override_usage = "urzua explain <PATH>\n       urzua explain --rule <RULE_ID>")]
+    Explain {
+        /// A file, directory, glob or `path#scope`. Always a path, even when
+        /// it spells a rule id; use `--rule` for a rule.
+        #[arg(required_unless_present = "rule", conflicts_with = "rule")]
+        path: Option<String>,
+        /// A rule id, as `urzua rules` lists them.
+        #[arg(long, value_name = "RULE_ID")]
+        rule: Option<String>,
+    },
 
     /// The full record-relationship graph: every `Implements`/
     /// `Derives-from`/`Supersedes` edge, as data (ADR-0024).
@@ -464,7 +476,7 @@ fn main() -> ExitCode {
                 ..Default::default()
             },
         ),
-        Command::Explain { path } => commands::explain::run(cli.config, path),
+        Command::Explain { path, rule } => commands::explain::run(cli.config, path, rule),
         Command::Graph => commands::graph::run(cli.config),
         Command::Roadmap => commands::roadmap::run(cli.config),
         Command::New {

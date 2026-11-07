@@ -2,22 +2,125 @@
 //! record whose `Realized-by` names `path` as evidence (ADR-0024). Given
 //! `path#scope` it also resolves the scope and prints the span and its hash,
 //! the authoring route for a scoped pin (ADR-74).
+//!
+//! `urzua explain --rule <rule-id>` is the other mode (`ADR-96` amendment of
+//! 2026-11-07): what one rule is, as data, read from the same rule table
+//! `urzua rules` prints. It is a flag and not a second positional form because
+//! a path and a rule id cannot be told apart by their spelling: `status.x` is a
+//! legal file name and a rule id may be a path.
 
 use std::path::PathBuf;
 use std::process::ExitCode;
 
 use urzua_core::config::LocatorKind;
+use urzua_core::harness::nearest_name;
 use urzua_core::locator::{self, FileText};
 use urzua_core::report::{
-    CoverageExplanation, ExplainReport, Notice, NoticeSeverity, ReportStatus, ScopeExplanation,
+    CoverageExplanation, ExplainReport, FindingSeverity, Notice, NoticeSeverity, Report,
+    ReportStatus, ScopeExplanation,
 };
+use urzua_core::rules::{rule_def, RULE_TABLE};
+
+use super::rules::RuleFacts;
 
 use crate::emit;
 use crate::session::{emit_or_not_run, Session};
 use urzua_core::report::Failure;
 
-pub fn run(config_path: Option<PathBuf>, path: String) -> ExitCode {
-    emit_or_not_run(run_inner(config_path, path))
+pub fn run(config_path: Option<PathBuf>, path: Option<String>, rule: Option<String>) -> ExitCode {
+    match (path, rule) {
+        (Some(path), None) => emit_or_not_run(run_inner(config_path, path)),
+        (None, Some(rule)) => emit_or_not_run(run_rule(config_path, &rule)),
+        // clap rejects both and neither before this is reached.
+        _ => emit_or_not_run(Err("give a path, or --rule <rule-id>".to_string().into())),
+    }
+}
+
+/// One rule as `explain --rule` prints it: what `urzua rules` prints for it,
+/// plus what this repository's configuration does with it.
+#[derive(serde::Serialize)]
+struct RuleExplanation {
+    #[serde(flatten)]
+    facts: RuleFacts,
+    /// The level this repository sets; `off` when its configuration does not
+    /// name the rule.
+    level: &'static str,
+    /// The strictest floor among the rule's variants: no level lowers a
+    /// finding below it (`ADR-96`). Omitted when no variant has one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    severity_floor: Option<FindingSeverity>,
+    /// `false` when at least one variant cannot be waived by a rule-level
+    /// waiver; the variants say which.
+    waivable: bool,
+    /// Every option the rule accepts, with the value this repository sets, or
+    /// `null` when it sets none.
+    options: serde_json::Map<String, serde_json::Value>,
+}
+
+#[derive(serde::Serialize)]
+struct ExplainRuleReport {
+    status: ReportStatus,
+    rule: RuleExplanation,
+}
+
+impl Report for ExplainRuleReport {
+    fn notices(&self) -> &[Notice] {
+        &[]
+    }
+    fn exit_code(&self) -> ExitCode {
+        ExitCode::SUCCESS
+    }
+}
+
+fn run_rule(config_path: Option<PathBuf>, id: &str) -> Result<ExitCode, Failure> {
+    let Some(def) = rule_def(id) else {
+        let hint = nearest_name(id, RULE_TABLE.iter().map(|d| d.id))
+            .map(|valid| format!("; did you mean '{valid}'?"))
+            .unwrap_or_default();
+        return Err(format!(
+            "'{id}' is not a rule this build ships{hint} (`urzua rules` lists them)"
+        )
+        .into());
+    };
+    let Session { config, .. } = Session::open(config_path)?;
+    let setting = config.rules.get(def.id);
+    let configured = setting
+        .and_then(|s| serde_json::to_value(s).ok())
+        .and_then(|v| match v {
+            serde_json::Value::Object(map) => Some(map),
+            _ => None,
+        })
+        .unwrap_or_default();
+    let options = def
+        .options
+        .iter()
+        .map(|name| {
+            (
+                (*name).to_string(),
+                configured
+                    .get(*name)
+                    .cloned()
+                    .unwrap_or(serde_json::Value::Null),
+            )
+        })
+        .collect();
+    let facts = RuleFacts::of(def);
+    let severity_floor = def
+        .actions
+        .iter()
+        .filter_map(|a| a.severity_floor)
+        .max_by_key(|f| f.rank());
+    let waivable = def.actions.iter().all(|a| a.waivable);
+    Ok(emit(&ExplainRuleReport {
+        status: ReportStatus::Ok,
+        rule: RuleExplanation {
+            facts,
+            level: setting.map_or("off", |s| s.level.as_str()),
+            severity_floor,
+            waivable,
+            options,
+        },
+    }))
 }
 
 fn run_inner(config_path: Option<PathBuf>, path: String) -> Result<ExitCode, Failure> {
