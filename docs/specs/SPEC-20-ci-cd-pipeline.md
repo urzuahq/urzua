@@ -2,9 +2,9 @@
 Stable-Id: 01M25Z28TWN477D6XASYT4TKW7
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:.github/workflows/ci.yml, code:.github/workflows/publish-release.yml, test:.github/scripts/release-guard.test.sh, test:.github/scripts/release-invariants.test.sh, test:.github/scripts/test-no-leak.test.sh, test:.github/actions/urzua-gate/test.sh
+Realized-by: code:.github/workflows/ci.yml, code:.github/workflows/checks.yml, code:.github/workflows/prepare-release.yml, code:.github/workflows/publish-release.yml, test:.github/scripts/release-guard.test.sh, test:.github/scripts/release-invariants.test.sh, test:.github/scripts/test-no-leak.test.sh, test:.github/actions/urzua-gate/test.sh
 Date: 2026-09-10
-Version: '0.8'
+Version: '0.9'
 Author: beauwilliams
 Subject: 'This repo''s own CI/CD pipeline -- gating, release cutting, and distribution, as one buildable reference.'
 Implements: ADR-13, ADR-45
@@ -18,41 +18,75 @@ This repo's own continuous integration and release pipeline, governed as one coh
 (ADR-41's own "coherent feature area, decided editorially" principle applied here for the first
 time to infrastructure rather than a record type): what gates a PR, how a release is cut, and how
 binaries reach a user. Previously spread across several ADRs (`ADR-13`, `ADR-28`, `ADR-29`, `ADR-45`)
-and three workflow files with no single document naming the whole shape. Not a schema spec — nothing
+and four workflow files with no single document naming the whole shape. Not a schema spec — nothing
 here is a `record_type`; this is process, realized entirely in `.github/workflows/*.yml` and
 `knope.toml`.
 
-## `ci.yml` — the PR/push gate
+## `ci.yml` and `checks.yml` — the PR/push gate
 
-Deliberately unfiltered (no `branches:`/`paths:` restriction) — a filtered required check can fail
-to report on a PR that doesn't touch the filtered paths, deadlocking a merge that requires it.
+`ci.yml` runs on `pull_request` (`opened`, `synchronize`, `reopened`, `labeled`, `unlabeled`, `edited`),
+`merge_group`, `push` to `main` and `workflow_dispatch`. It is deliberately unfiltered (no
+`branches:`/`paths:` restriction) — a filtered required check can fail to report on a PR that doesn't
+touch the filtered paths, deadlocking a merge that requires it. Its concurrency group is per ref and
+cancels a superseded run, except on a push to `main`, whose run always finishes.
 
-- **`rust` job**: `cargo fmt --check`, `cargo clippy -- -D warnings`, `cargo machete`, `cargo deny check`, `cargo build --release
-  --locked`, `cargo test --locked` (through `.github/scripts/test-no-leak.sh`: a fresh `TMPDIR` that must be empty of `urzua-*` entries afterwards), then `urzua check docs/` against this repo's own corpus — the
-  literal self-hosting exit criterion (`SPEC-1`). Checkout uses `fetch-depth: 0`:
-  `embodiment.consistency`'s drift check (`ADR-32`) reads git blame/log history on locators, and a
-  shallow checkout makes it silently unable to detect anything, not an error.
-- **`changeset` job**: requires a `.changeset/*.md` fragment added in the diff, or the `no-changeset`
-  label (`ADR-29`) — never a silent skip. Runs on `pull_request` only, and **only asks at all when the
-  PR touches a path declared in `.github/release-paths`** (`rust/`, `README.md`, `LICENSE` — `ADR-49`).
-  A PR touching none of them cannot affect what an installer receives, so it is not asked for a
-  judgement the repository's structure already determines; it passes with a log line saying so. That
-  set is deliberately not `publish-release.yml`'s packaging list: this names paths whose *change* can
-  affect the archive, that one names files copied *into* it. When the gate does apply, the label is
-  read from **the PR's current state, not from `github.event`** (`BUG-34`): a payload is a snapshot taken when the
-  event fired, and a PR opened by automation is labelled in a later step, so the payload never
-  carries it and a re-run replays the same stale snapshot. The job therefore always starts and
-  reports why it skipped, rather than being skipped by a job-level `if:`. The `pull_request:` trigger
-  still lists `[opened, synchronize, reopened, labeled, unlabeled]` (`BUG-15`) — no longer
-  load-bearing for correctness, but it starts a fresh run promptly when a human labels a PR after
+The required check is the aggregate job **`ci`**. It `needs` every other job, runs `if: always()`, and
+fails when any of them failed or was cancelled. It is the only name a ruleset should require; the jobs
+nested inside a called workflow have unstable names (`ADR-95`).
+
+- **`rust`** calls the reusable workflow `checks.yml` (`ADR-47`), with `pull-requests: write` so the gate
+  can post its one updating comment. `publish-release.yml` calls the same workflow against the commit it is
+  about to tag, so there is one definition of the gate rather than two that can drift. `checks.yml` runs,
+  in order, with `fetch-depth: 0` (`embodiment.consistency`'s drift check (`ADR-32`) reads git
+  blame/log history on locators, and a shallow checkout makes it silently unable to detect anything, not
+  an error):
+  - `cargo fmt --check`, `cargo clippy -- -D warnings`;
+  - `cargo machete` and `cargo deny check`, pinned prebuilt binaries verified by checksum;
+  - the pinned, checksummed knope install and `knope-closes-compat.test.sh` (the release tool must
+    tolerate a fragment's `closes` key);
+  - `cargo build --release --locked`;
+  - the planted-violation cases of `release-guard.test.sh` and `release-invariants.test.sh`, then
+    `release-invariants.sh` on the ref being checked;
+  - `make rule-table-check` (the `SPEC-2` rule table is current);
+  - the tests through `.github/scripts/test-no-leak.sh` (a fresh `TMPDIR` that must be empty of `urzua-*`
+    entries afterwards), after the guard's own planted-violation cases;
+  - a fetch of the pull-request head refs into a private namespace, which `identity.open-pr-collision`
+    reads (`ADR-93`; `check` never fetches);
+  - the **urzua gate** action over the binary just built: `urzua check`, and on a pull request
+    `urzua check --base origin/<base>` with the author and approvers as `--actors`, reported as
+    annotations and one updating comment. `base-ref` is empty outside a pull request (a push, a tag),
+    where only the whole-tree check runs;
+  - `urzua harness status` (the installed hooks and commands have not drifted).
+- **`changeset`** (`changeset required`): requires a `.changeset/*.md` fragment added in the diff, or
+  the `no-changeset` label (`ADR-29`) — never a silent skip. Runs on `pull_request` only, and **only asks
+  at all when the PR touches a path declared in `.github/release-paths`** (`rust/`, `README.md`,
+  `LICENSE` — `ADR-49`). A PR touching none of them cannot affect what an installer receives, so it is
+  not asked for a judgement the repository's structure already determines; it passes with a log line
+  saying so. That set is deliberately not `publish-release.yml`'s packaging list: this names paths whose
+  *change* can affect the archive, that one names files copied *into* it. When the gate does apply, the
+  label is read from **the PR's current state, not from `github.event`** (`BUG-34`): a payload is a
+  snapshot taken when the event fired, and a re-run replays the same stale snapshot. The job therefore
+  always starts and reports why it skipped, rather than being skipped by a job-level `if:`. The
+  `labeled`/`unlabeled` triggers (`BUG-15`) start a fresh run promptly when a human labels a PR after
   opening it.
+- **`release-invariants`**: the planted-violation cases and the invariants themselves, on a full-history
+  checkout with tags (`BUG-93`). A manifest version ahead of the newest tag while fragments are pending
+  fails, and so does a non-`major` fragment that opens a line with `Breaking:`.
+- **`gate-action`**: the gate action's own tests (`.github/actions/urzua-gate/test.sh`): recorded-fixture
+  rendering, update-in-place commenting, the history precondition and the installer's refusals.
+- **`gate-released`** (`gate (pinned release)`): the pinned release, installed through the same unit an
+  adopter uses (checksum and attestation verified), run over this repository's corpus as of that release
+  tag. Its version, sha256 and ref are bumped together by hand when a release is cut.
+
+Concurrency is workflow-level, so a new commit cancels the whole superseded run, including on a PR title
+or body edit (`edited`).
 
 ## `prepare-release.yml` / `publish-release.yml` — the two-step release (`ADR-45`)
 
 - **`prepare-release.yml`** runs on every push to `main`, guarded against re-triggering on its own
   release-prep commit message. It force-pushes a `release` branch built from `main`, running knope's
-  `prepare-release` workflow (`PrepareRelease` → `cargo check` → commit → push →
-  `CreatePullRequest`), which compiles every accumulated `.changeset/*.md` fragment into a version
+  `prepare-release` workflow (`PrepareRelease` → `cargo check` → `harness update` → commit → push →
+  `CreatePullRequest` → label), which compiles every accumulated `.changeset/*.md` fragment into a version
   bump and `CHANGELOG.md` section. **Fragments are the only trigger** — `ignore_conventional_commits`
   is set, because a commit prefix infers "releasable" from a message with no knowledge of which tree
   changed, and only `rust/` produces the released artifact (`ADR-48`, `BUG-35`). The job
@@ -60,9 +94,19 @@ to report on a PR that doesn't touch the filtered paths, deadlocking a merge tha
   (`BUG-27`). **No `continue-on-error`**: swallowing every failure hid a six-day release outage once.
   Instead the step tolerates **one documented error by name** — knope's `releases::no_release`, which
   a merge carrying no changeset legitimately produces (`BUG-33`) — emits a `::notice::` saying so,
-  and fails on anything else with its original exit code. Tolerating the error by name rather than
-  counting fragments up front also survives `ADR-48`: the count and the trigger now agree, but the
+  and fails on anything else with its original exit code, except that `release-guard.sh` turns a
+  `no_release` with fragments still present into a failure (`BUG-48`). Tolerating the error by name rather
+  than counting fragments up front also survives `ADR-48`: the count and the trigger now agree, but the
   step does not depend on their agreeing.
+- **The release PR is opened by a GitHub App, not `GITHUB_TOKEN`** (`ADR-95`, which builds part of `RFC-30`;
+  the ADR is `Proposed` and `RFC-30` stays `Draft`). GitHub starts no workflow run from a `GITHUB_TOKEN`
+  event, so a PR opened that way never gets its `ci` run, and `ci` could not be a required check on `main`.
+  The job mints an installation token with `actions/create-github-app-token` from the repository secrets
+  `RELEASE_APP_ID` and `RELEASE_APP_PRIVATE_KEY`, fails with an explicit error when either is unset (there is
+  deliberately **no fallback** to `GITHUB_TOKEN`), and uses the token for the checkout, the `release`
+  branch push, `CreatePullRequest` and the label. The release PR is therefore an ordinary pull request: its
+  `ci` run executes without approval and is the same required check every other PR meets. The App, the
+  secrets and the ruleset on `main` are repository settings, not files in this repository.
 - The `cargo check` step exists because `PrepareRelease` only regex-bumps `Cargo.toml`'s
   version line — it has no knowledge of `Cargo.lock`, which independently records each workspace
   member's resolved version and goes stale the instant `Cargo.toml` changes without it (`BUG-14`,
@@ -71,7 +115,9 @@ to report on a PR that doesn't touch the filtered paths, deadlocking a merge tha
   the release job doesn't have on a cold cache, and fails resolving external deps rather than doing
   the local-only refresh it was meant to (`BUG-27`). Not `--locked` either — the lockfile is stale by
   construction at that point, which is the whole reason the step exists. The committed `Cargo.lock`
-  still pins every external version, so the check rewrites workspace members and nothing else.
+  still pins every external version, so the check rewrites workspace members and nothing else. The
+  `harness update` step re-pins `.urzua/harness.lock` to the bumped version in the same commit, so
+  `urzua harness status` does not go red on the release PR.
 - The resulting PR **is** the reviewable release artifact — the actual version bump and compiled
   changelog, visible as a real diff, not trusted sight-unseen inside a single dispatched job. Covered
   by the `no-changeset` label: it consumes fragments, it doesn't add one.
@@ -85,12 +131,12 @@ with `GITHUB_TOKEN`, and GitHub never triggers a workflow from a `GITHUB_TOKEN` 
 tag-triggered build workflow silently never runs — publishing a release with no binaries and no
 error. `release.yml` previously held the last three jobs and is deleted.
 
-- **`verify-ci`**: refuses to publish unless the `ci` check-run concluded `success` for the tree
-  being released. Checks the release PR's **head sha**, not the merge commit, because `ci` on the
-  merge commit races this workflow. It does **not** work because the head "gated the merge" — `main`
-  has no branch protection, so nothing gates any merge, and the release PR is mergeable with no
-  checks at all. In practice this gate asks whether a human approved the held `ci` run: merging
-  before that approval publishes nothing and leaves `main` bumped with no tag.
+- **`verify`**: calls `checks.yml` (`ADR-47`) against the merge commit (`merge_commit_sha`: for a
+  squash merge, the commit created on `main`, which is the commit knope tags below), so the tree being
+  released is the tree that was just checked. It runs only for a merged PR whose head branch is `release`
+  in this repository. It does not ask whether a `ci` run happened elsewhere: a cross-workflow query
+  could only report whether someone approved a held run, and the merge commit's own `ci` run races this
+  workflow. `release` `needs` it, so a red `verify` publishes nothing.
 - **`release`**: runs knope's `release` workflow (just the `Release` step) — tags the now-current
   version and creates the GitHub Release, with the compiled changelog as its notes since `[github]`
   config is present. Outputs the resolved tag, read from the same anchored `rust/Cargo.toml` line
@@ -107,16 +153,19 @@ error. `release.yml` previously held the last three jobs and is deleted.
   this reason (a binary, not a library other crates depend on).
 
 **No manual step remains** beyond merging the release PR, which is `ADR-45`'s deliberate act. The
-release PR's own `ci` run never executes — `GITHUB_TOKEN` created the PR, so GitHub declines to run
-it — and reports as **`failure` with zero jobs**. That is cosmetic: `publish-release.yml`'s `verify`
-job checks the exact commit being tagged, and nothing reads the PR's run. It is also unavoidable
-today; `RFC-30` (reopened `Draft`) is the only mitigation that would make the check honest rather
-than explained.
+release PR's own `ci` run executes, because a GitHub App opened it (`ADR-95`), and the merge into `main`
+is gated by the ruleset's required `ci`. `verify` still re-runs the checks against the merge commit, so
+nothing relies on the pull request's run having happened.
 
-This was two steps until `BUG-34`: approving the run replayed the **stale `opened` payload**, taken
-before knope's own labelling step, so the changeset job ran when it should have skipped. The gate now
-reads the PR's current labels at run time rather than from the payload, which makes staleness
-unrepresentable — including on a re-run, which replays the original payload.
+**If `verify` fails after the release PR has merged**, `main` carries the bumped version (for example
+0.4.0) with no tag. `release-invariants.sh` then fails every later pull request that has pending fragments,
+because the manifest leads the newest tag (`BUG-92`), until the publish run succeeds. Fix the cause, then
+re-run the failed `publish release` workflow run; do not tag by hand.
+
+The changeset gate once failed on the release PR because a re-run replayed the **stale `opened` payload**,
+taken before knope's own labelling step (`BUG-34`). The gate now reads the PR's current labels at run time
+rather than from the payload, which makes staleness unrepresentable — including on a re-run, which
+replays the original payload.
 
 ## `knope.toml` / `.changeset/*.md` — the fragment format (`ADR-29`)
 
@@ -140,7 +189,8 @@ unrepresentable — including on a re-run, which replays the original payload.
 
 - **A hosted knope GitHub App** (`bot.releases`) — knope offers this as an alternative to running the
   CLI directly in a workflow; not adopted here, since the existing pinned-checksum CLI install
-  already works and adding a hosted app is a new external dependency with no evidenced need.
+  already works. The App that does exist is this repository's own, minted per run for the release PR
+  (`ADR-95`), not a hosted knope service.
 - **Per-workspace-member versioning** — one version covers the whole product (`[package]`, not
   Cargo-workspace auto-detection); a multi-package release is not a shape this repo's binary-only
   distribution model needs.
@@ -158,6 +208,10 @@ unrepresentable — including on a re-run, which replays the original payload.
   single-dispatched-job sequencing only by `ADR-45`.
 - ADR-32 — the git-blame drift detection `ci.yml`'s `fetch-depth: 0` exists to support.
 - ADR-45 — the two-step `prepare-release`/`publish-release` split this spec documents.
+- ADR-47 — `publish-release.yml` verifies the tree it ships through the shared `checks.yml`.
+- ADR-95 — the release PR is opened by a GitHub App token and `main` requires `ci` (`Proposed`).
+- RFC-30 — the proposal `ADR-95` builds part of; still `Draft`.
+- ADR-93 — the pull-request refs fetch and `identity.open-pr-collision`.
 
 > **Revision log**
 >
@@ -173,3 +227,4 @@ unrepresentable — including on a re-run, which replays the original payload.
 > | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:.github/workflows/ci.yml, code:.github/workflows/publish-release.yml, test:.github/scripts/release-guard.test.sh, test:.github/scripts/release-invariants.test.sh, test:.github/actions/urzua-gate/test.sh` -- stated `Not started` disagreed with the computed value `Verified`. | **structural** |
 > | 2026-11-05 | Bumped to `0.7`. Status changed from Accepted to Shipped. **Why:** Maintainer decision, 2026-11-05: its Realized-by evidence computes Verified and an independent review judged it sound. | **substantive** |
 > | 2026-11-05 | Bumped to `0.8`. The `rust` job runs the tests through `.github/scripts/test-no-leak.sh`, under a fresh `TMPDIR`, and fails when a run leaves any `urzua-*` entry behind; `make ci` does the same (`make test-no-leak`). **Why:** `BUG-193` -- fixture directories accumulated on every run until the disk filled, and nothing measured it. | **substantive** |
+> | 2026-11-07 | Bumped to `0.9`. Rewrote the pipeline sections to match the workflows: the gate is `checks.yml`, called by `ci.yml`'s `rust` job and by `publish-release.yml`'s `verify` job (there is no `verify-ci` job; `ADR-47` deleted it); `ci.yml` also has `release-invariants`, `gate-action`, `gate-released` and the aggregate `ci` job, the one required check; the release PR is opened by a GitHub App token, so its `ci` run executes (the claim that it never runs, and that `RFC-30` was the only mitigation, is removed); added the recovery when `verify` fails after the release PR merged. `Realized-by` gains `checks.yml` and `prepare-release.yml`. **Why:** the maintainer decided on 2026-11-05 to protect `main` with `ci` required and open the release PR with an App token (`ADR-95`), and the spec still described a deleted job and a run that never executes, which would mislead anyone debugging a red release PR or setting the ruleset. | **substantive** |
