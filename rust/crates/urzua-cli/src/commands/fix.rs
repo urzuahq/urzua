@@ -312,6 +312,9 @@ pub fn run(config_path: Option<PathBuf>, args: FixArgs) -> ExitCode {
         let log_id = record_type
             .map(|t| config.revision_log_id(t))
             .unwrap_or_default();
+        let log_shape = record_type
+            .map(|t| config.revision_log_shape(t))
+            .unwrap_or_default();
         let log_required = record_type.is_none_or(|t| config.revision_log_required(t));
         match urzua_core::fix::apply_repair(
             &fresh_content,
@@ -319,6 +322,7 @@ pub fn run(config_path: Option<PathBuf>, args: FixArgs) -> ExitCode {
             &today,
             &identity.attestation,
             &log_id,
+            &log_shape,
             log_required,
         ) {
             Ok(new_content) => {
@@ -623,6 +627,11 @@ fn run_rebaseline(
             .find(|r| r.path == rb.record)
             .map(|r| config.revision_log_id(&r.record_type))
             .unwrap_or_default();
+        let log_shape = records
+            .iter()
+            .find(|r| r.path == rb.record)
+            .map(|r| config.revision_log_shape(&r.record_type))
+            .unwrap_or_default();
         match urzua_core::fix::apply_rebaseline(
             &fresh,
             &rb,
@@ -630,6 +639,7 @@ fn run_rebaseline(
             &identity.attestation,
             reason,
             &log_id,
+            &log_shape,
         ) {
             Ok(new) => match urzua_io::write_atomic_in(repo_root, &full_path, &new) {
                 Ok(()) => applied.push(rb),

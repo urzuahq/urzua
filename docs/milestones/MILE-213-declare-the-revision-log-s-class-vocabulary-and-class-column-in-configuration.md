@@ -1,10 +1,11 @@
 ---
 Stable-Id: 01M6SVM9AAVXSGR3VDCQB18KH4
-Status: Planned
+Status: Done
 Phase: '0'
 Track: schema-governance
 Implements: ADR-94
 Blocked-on: —
+Realized-by: code:rust/crates/urzua-core/src/config.rs, code:rust/crates/urzua-core/src/rules/revision_log.rs, code:rust/crates/urzua-core/src/fix.rs, code:rust/crates/urzua-cli/src/commands/fix.rs, test:rust/crates/urzua-cli/tests/acceptance/corpora/corpus-w/expectations/a-declared-vocabulary-and-column-are-read-from-the-header.yaml, test:rust/crates/urzua-cli/tests/acceptance/corpora/corpus-w/expectations/only-the-declared-bump-classes-require-a-bump.yaml, test:rust/crates/urzua-cli/tests/fix_revision_log_required_integration.rs, spec:docs/specs/SPEC-3-configuration.md, spec:docs/specs/SPEC-2-urzua-check.md, spec:docs/specs/SPEC-4-the-corpus-acceptance-suite.md, spec:docs/specs/SPEC-8-urzua-fix.md
 ---
 # 213 — Declare the revision log's class vocabulary and class column in configuration
 
@@ -43,4 +44,6 @@ not hardcode its vocabulary, and Phase 0 is capability parity exercised in urzua
 > |---|---|---|
 > | 2026-11-07 | Filed. **Why:** maintainer decision of 2026-11-07 (`ADR-94`, Proposed): the revision-log rule must not hardcode its class vocabulary or its class column; this repository declares today's values and an undeclared config keeps today's behaviour. | **substantive** |
 > | 2026-11-07 | Done means updated for the accepted `ADR-94` review changes: optional `date_column`, exact header matching, duplicate header cells, an unreadable base log is unreadable, the new finding's `suggested_action`. **Why:** maintainer decision, 2026-11-07, accepting `ADR-94` with the review's changes (`#391`). | **substantive** |
+> | 2026-11-07 | Done: built as `ADR-94` decides. Realized-by names the config keys and their load errors, the rule and parser, the fix writer, the `corpus-w` acceptance corpus and the specs; this repository declares today's values on all seven types. **Why:** every Done-means line is delivered and exercised, in the unit tests, the integration test and `corpus-w`, and by `urzua check` and `check --base` on this repository. | **substantive** |
+> | 2026-11-07 | Independent review: a row wider than its header is no longer read by a last-column guess, which misread any declared class column that was not last. A `\|` now stays inside its cell, and under a declared column a wider row is one finding naming it; six unescaped pipes in existing revision-log rows are escaped. **Why:** the guess could pass or fail a row by luck, and a finding that names the cause is more honest than a parse that hides it. | **substantive** |
 > | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |

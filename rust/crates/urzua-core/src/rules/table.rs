@@ -537,7 +537,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_REVISION_LOG_CHANGE_CLASS_REQUIRED,
-        description: "Every revision-log entry carries a `change_class` (ADR-14); missing or unclassified is blocking. A record of a type that declares `revision_log: {required: true}` with no revision-log section is a finding too (`BUG-50`); a type that does not declare it, or declares `false`, is not held to a log and its records without one stay unexamined. The log is the section a type's `revision_log` identity (default the line `**Revision log**`) opens, found as that line and never by a line that mentions the text (`MILE-167`).",
+        description: "Every revision-log entry carries a `change_class` (ADR-14) from the type's declared vocabulary, by default `substantive` or `structural`; missing or unclassified is blocking, and the finding lists the accepted classes. A type may declare the vocabulary (`classes`) and the header names of its class and date columns (`class_column`, `date_column`) in `revision_log`; undeclared, the class is the last cell and the date the first (`ADR-94`). A log whose header lacks a declared column, or repeats it, is one finding on the record (`revision-log-column-unreadable`) and none of its rows is judged. A record of a type that declares `revision_log: {required: true}` with no revision-log section is a finding too (`BUG-50`); a type that does not declare it, or declares `false`, is not held to a log and its records without one stay unexamined. The log is the section a type's `revision_log` identity (default the line `**Revision log**`) opens, found as that line and never by a line that mentions the text (`MILE-167`).",
         scope: Scope::Records,
         anchor: Anchor::Record,
         judges: Judges::OneRecord,
@@ -552,6 +552,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         actions: &[
             VariantAction::new("change-class-missing", ActionDecl::SECTION_SET),
             VariantAction::new("revision-log-missing", ActionDecl::SECTION_ADD),
+            VariantAction::new("revision-log-column-unreadable", ActionDecl::SECTION_SET),
         ],
         phase: Phase::Main,
         companion: None,
@@ -559,7 +560,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_REVISION_LOG_VERSION_BUMP_REQUIRED,
-        description: "A changed record that adds a revision-log row of a class its type declares must also change its version (`BUG-51`, `SPEC-18`: a substantive or structural change is a `Version` bump plus a revision-log entry). A type declares it as `revision_log: {version_bump: {field: Version, classes: [substantive, structural]}}`: a field name and the classes that require a bump, and no type has it by default. Judged against the merge base's copy of the record, so it reports `not-applicable` on a run with no `--base`, never clean; a record new in the diff, including one renamed in it, has nothing to bump from and stays unexamined. A row counts as added when its cells appear in the current log and not in the merge base's. Enabling the rule when no type declares a bump is a config load error.",
+        description: "A changed record that adds a revision-log row of a class its type declares must also change its version (`BUG-51`, `SPEC-18`: a substantive or structural change is a `Version` bump plus a revision-log entry). A type declares it as `revision_log: {version_bump: {field: Version, classes: [substantive, structural]}}`: a field name and the classes that require a bump (each one in the type's declared `classes` when it declares them), and no type has it by default. Judged against the merge base's copy of the record, so it reports `not-applicable` on a run with no `--base`, never clean; a record new in the diff, including one renamed in it, has nothing to bump from and stays unexamined. A row counts as added when its cells appear in the current log and not in the merge base's. A record whose log has a declared column missing or repeated, now or at the merge base, is reported unreadable in the rule's population, never clean and never read as an empty log (`ADR-94`). Enabling the rule when no type declares a bump is a config load error.",
         scope: Scope::Records,
         anchor: Anchor::Record,
         judges: Judges::ChangedSet,

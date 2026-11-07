@@ -1,0 +1,21 @@
+schema_version: 2
+rules:
+  header.required-fields: error
+  revision-log.change-class-required: error
+  revision-log.version-bump-required: error
+record_types:
+  spec:
+    dir: docs/specs
+    prefix: SPEC
+    required_fields: [Status, Version]
+    header_shape: yaml-frontmatter
+    revision_log:
+      marker: "**Revision log**"
+      required: true
+      classes: [major, minor, cosmetic]
+      class_column: Class
+      date_column: Date
+      tool_class: minor
+      version_bump:
+        field: Version
+        classes: [major, minor]

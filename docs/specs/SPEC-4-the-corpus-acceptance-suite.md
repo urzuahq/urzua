@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5N2PD9ZYBJPZHN05W7
-Version: '0.15'
+Version: '0.16'
 Date: 2026-08-20
 Status: Shipped
 Embodiment: Verified
@@ -362,6 +362,11 @@ Failing cases for rules that had only a clean run or no case, each with a mutati
   type with no declared spec (`type.no-declared-spec`).
 - **`corpus-t` (locators).** A locator naming a file that does not exist (`embodiment.locator-exists`)
   and an embodiment stated before the record is accepted (`embodiment.requires-accepted-status`).
+- **`corpus-w` (revision-log vocabulary and columns).** A type that declares its own classes and
+  names its class and date columns, with a reordered `Class | Date | Change` table; a class outside
+  the vocabulary, a header lacking the declared column and one repeating it
+  (`revision-log.change-class-required`), and a version bump that follows the declared class column
+  (`revision-log.version-bump-required`).
 
 ## Success criteria
 
@@ -409,3 +414,4 @@ Failing cases for rules that had only a clean run or no case, each with a mutati
 > | 2026-11-07 | Bumped to `0.13`. Status changed from Accepted to Shipped. **Why:** Maintainer decision, 2026-11-07: its `Realized-by` evidence computes `Verified`, and each section was checked against the built code and tests. | **substantive** |
 > | 2026-11-07 | Bumped to `0.14`. The coverage report keeps three tiers apart: rules with a failing case, rules that ran clean only (`ran-only`) and rules with no case (`uncovered`), and no longer adds them into one figure; the "Coverage" claim that every rule has a case and none is uncovered is replaced by the count, and the seven rules without a failing acceptance case are named. Scratch repositories and mutated configs are named by corpus as well as case, and the runner fails a run in which two cases would share one. `corpus-m` to `corpus-t` add failing cases for 23 rules. **Why:** the report said 57 of 65 rules were proven, but 22 of them were counted from `expect_rules_ran` or `proves`, which show a rule runs and not that it can fire, so the figure overstated the proof and the spec claimed more than the suite showed; and a case id shared by two corpora made concurrent cases delete each other's repository. | **substantive** |
 > | 2026-11-07 | Bumped to `0.15`. The coverage report is now a gate: an unfiltered run fails when a rule has no failing case and is not on the committed allow-list, each entry carrying a rule id and a reason, and the list may only shrink (an entry outside a fixed ceiling is refused, and an entry for a rule that gained a case or left the table is stale). The allow-list holds the five rules still without a failing case; `corpus-u` adds failing cases for `narrative-field.stale` and `waiver.matches-nothing`. **Why:** maintainer decision, 2026-11-07: the report only reported, so a rule could be added with no failing case and CI stayed green. | **substantive** |
+> | 2026-11-07 | Bumped to `0.16`. `corpus-w` (revision-log vocabulary and columns) is added: a type declaring its own classes and a reordered `Class \| Date \| Change` table, a class outside the vocabulary, a header lacking or repeating the declared column, and a version bump read from the declared class column. **Why:** `MILE-213`, the build of `ADR-94`; this repository's own config declares today's values, so only a corpus with another vocabulary exercises the declared path. | **substantive** |

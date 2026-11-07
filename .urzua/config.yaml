@@ -126,7 +126,13 @@ record_types:
     # (also the default) makes `urzua fix --apply` refuse a record with no log
     # to record the write in; `required: false` would apply without a row
     # (MILE-159).
-    revision_log: {marker: "**Revision log**", required: true}
+    revision_log:
+      marker: "**Revision log**"
+      required: true
+      classes: [substantive, structural]
+      class_column: Class
+      date_column: Date
+      tool_class: structural
     # A type declares Embodiment and Realized-by together (BUG-41); this checks the type, not each record.
     companion_fields:
       - [embodiment_state, embodiment_locator]
@@ -184,7 +190,13 @@ record_types:
     spec: "SPEC-17"
     # An RFC carries a revision log (BUG-50): a record without one is a finding
     # of revision-log.change-class-required, which is opt-in per type.
-    revision_log: {marker: "**Revision log**", required: true}
+    revision_log:
+      marker: "**Revision log**"
+      required: true
+      classes: [substantive, structural]
+      class_column: Class
+      date_column: Date
+      tool_class: structural
     pointer_fields:
       - "Implements"
       - "Amends"
@@ -247,9 +259,14 @@ record_types:
     # A substantive or structural revision-log row on a changed spec means its
     # Version moves (BUG-51, SPEC-18): `revision-log.version-bump-required`
     # compares against the merge base's copy.
+    # The vocabulary, columns and tool class are today's values, declared (ADR-94, MILE-213).
     revision_log:
       marker: "**Revision log**"
       required: true
+      classes: [substantive, structural]
+      class_column: Class
+      date_column: Date
+      tool_class: structural
       version_bump: {field: "Version", classes: ["substantive", "structural"]}
     pointer_fields:
       - "Derives-from"
@@ -263,7 +280,13 @@ record_types:
   milestone:
     dir: "docs/milestones"
     # A record of this type carries a revision log (BUG-50); opt-in per type.
-    revision_log: {marker: "**Revision log**", required: true}
+    revision_log:
+      marker: "**Revision log**"
+      required: true
+      classes: [substantive, structural]
+      class_column: Class
+      date_column: Date
+      tool_class: structural
     prefix: "MILE"
     required_fields:
       - "Status"
@@ -328,7 +351,13 @@ record_types:
   bug:
     dir: "docs/bugs"
     # A record of this type carries a revision log (BUG-50); opt-in per type.
-    revision_log: {marker: "**Revision log**", required: true}
+    revision_log:
+      marker: "**Revision log**"
+      required: true
+      classes: [substantive, structural]
+      class_column: Class
+      date_column: Date
+      tool_class: structural
     required_fields:
       - "Status"
       - "Found-in"
@@ -387,7 +416,13 @@ record_types:
   waiver:
     dir: "docs/waiver"
     # A record of this type carries a revision log (BUG-50); opt-in per type.
-    revision_log: {marker: "**Revision log**", required: true}
+    revision_log:
+      marker: "**Revision log**"
+      required: true
+      classes: [substantive, structural]
+      class_column: Class
+      date_column: Date
+      tool_class: structural
     # The suppression type (BUG-74): the engine reads this declaration, not the
     # type name, so the records here suppress findings whatever the type is called.
     role: suppression
@@ -437,7 +472,13 @@ record_types:
     dir: "docs/conditions"
     prefix: "COND"
     identity: {from: filename, pattern: '^(?P<prefix>COND)-(?P<number>\d{4})-(?P<slug>.+)$'}
-    revision_log: {marker: "**Revision log**", required: true}
+    revision_log:
+      marker: "**Revision log**"
+      required: true
+      classes: [substantive, structural]
+      class_column: Class
+      date_column: Date
+      tool_class: structural
     required_fields:
       - "Status"
       - "Stable-Id"
