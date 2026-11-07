@@ -2,7 +2,6 @@
 Stable-Id: 01M2PCCC1HH2K67J9WRATN8BQP
 Status: Accepted
 Embodiment: Not started
-Realized-by: —
 Date: 2026-09-16
 Accepted-on: 2026-09-17
 Author: beauwilliams
@@ -101,3 +100,4 @@ which is a loud failure rather than a silent behaviour change. No data format ch
 > |---|---|---|
 > | 2026-09-16 | Initial decision. **Why:** decided before building, because the obvious implementation (`header.deprecated-shape`'s negative test) would have flagged the new variant as deprecated on its first run -- found by reading the rule while writing this, not while debugging it. | **structural** |
 > | 2026-11-04 | Backfilled `Accepted-on` from git history, commit 2de0e51f2. | **structural** |
+> | 2026-11-07 | Removed the placeholder `Realized-by: —` line: the field is optional and `embodiment.locator-exists` now reports text that is not a `spec:`, `code:` or `test:` entry. Nothing is realized-by yet. | **structural** |

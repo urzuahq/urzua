@@ -498,7 +498,7 @@ fn main() -> ExitCode {
             format: ExportFormat::Agdr,
         } => not_implemented("export"),
         Command::Import { .. } => not_implemented("import"),
-        Command::Init { dry_run } => commands::init::run(dry_run),
+        Command::Init { dry_run } => commands::init::run(cli.config, dry_run),
         Command::Harness { target } => match target {
             HarnessTarget::Install { adapter, dry_run } => {
                 harness::run_install(cli.config, adapter, dry_run)
@@ -558,6 +558,6 @@ fn main() -> ExitCode {
 /// nothing," per SPEC-0001's exit-code contract.
 fn not_implemented(name: &str) -> ExitCode {
     emit(&CouldNotRun::from(format!(
-        "`urzua {name}` is not implemented yet -- see docs/specs/0001-v0-cli.md"
+        "`urzua {name}` is not implemented yet -- see docs/specs/SPEC-1-cli.md"
     )))
 }

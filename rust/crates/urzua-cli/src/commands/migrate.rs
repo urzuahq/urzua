@@ -180,7 +180,7 @@ fn run_ids_inner(config_path: Option<PathBuf>, apply: bool) -> Result<ExitCode, 
                 continue;
             }
         }
-        match urzua_io::write_atomic(&full_path, &new_content) {
+        match urzua_io::write_atomic_in(&repo_root, &full_path, &new_content) {
             Ok(()) => results.push(MigrateIdsResult {
                 record: r.path.clone(),
                 outcome: MigrateIdsOutcome::Applied,

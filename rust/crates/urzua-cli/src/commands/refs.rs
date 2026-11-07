@@ -76,7 +76,7 @@ pub fn run_refresh(config_path: Option<PathBuf>) -> ExitCode {
         None => RefsRefreshOutcome::Created,
     };
     if outcome != RefsRefreshOutcome::Current {
-        if let Err(e) = write_atomically(&path, &text) {
+        if let Err(e) = write_atomically(&repo_root, &path, &text) {
             return emit(&CouldNotRun::from(format!(
                 "could not write {}: {e}",
                 refs.snapshot
@@ -106,7 +106,13 @@ pub fn run_refresh(config_path: Option<PathBuf>) -> ExitCode {
 
 /// Replace `path` only once the whole text exists, so a failed write never
 /// leaves half a snapshot that a later `check` would read as a stale one.
-fn write_atomically(path: &std::path::Path, text: &str) -> std::io::Result<()> {
+fn write_atomically(
+    repo_root: &std::path::Path,
+    path: &std::path::Path,
+    text: &str,
+) -> std::io::Result<()> {
+    urzua_io::confine_to_root(repo_root, path)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::PermissionDenied, e))?;
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }

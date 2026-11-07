@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5BCRKD027XA81J0Q8Q
-Version: '0.12'
+Version: '0.13'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -74,8 +74,8 @@ that isn't already implied by the date.
 
 A waiver **covers** a finding when `Rule` matches the finding's rule id exactly, and either `Scope`
 is `*` or matches the finding's file path exactly (`urzua-core::waiver::Waiver::covers`). A waiver
-with a passed `Expires` is treated as though it doesn't exist (`is_active`) — comparison is a plain
-ISO-8601 string comparison against wall-clock "today," which RFC-15 §1 notes as the first place this
+with a passed `Expires` is treated as though it doesn't exist (`is_active`) — `Expires` must be a real calendar date (`YYYY-MM-DD`; `2026-99-99` and `2026-02-30` are not) and is
+compared as a date against wall-clock "today," which RFC-15 §1 notes as the first place this
 schema reads real time rather than only corpus content. "Today" is the current date in UTC, whatever
 the machine's time zone, so a waiver lapses at the same instant for every contributor and in CI; a
 waiver whose `Expires` is today's UTC date is still in force.
@@ -151,3 +151,4 @@ record is edited later.
 > | 2026-11-05 | Bumped to `0.10`. The type may declare `effective_requires` (`SPEC-3`): a waiver missing a listed field, or holding a blank, placeholder or pending value, does not suppress, its target finding is reported again, and `waiver.matches-nothing` reports the waiver (`waiver-ineffective`). Off unless declared; this repository requires `Reason`. **Why:** `BUG-177`, maintainer decision of 2026-11-05: the `Reason` is the whole reviewability point and was enforced only by the opt-in `header.required-fields`. | **substantive** |
 > | 2026-11-05 | Bumped to `0.11`. The type may declare `permanent` (`SPEC-3`): a waiver without `Expires` takes effect only for a listed rule, under a declared category and, where the category requires it, a resolving `Justified-by`; declaring it closes permanence for unlisted rules, and `check` counts permanent waivers by category. Added the `Category` and `Justified-by` fields; the statement that the type has no relationship fields is amended, `Justified-by` being declared in `pointer_fields`. **Why:** `MILE-193` / `ADR-86`. | **substantive** |
 > | 2026-11-06 | Bumped to `0.12`. States that `Expires` is compared against the current UTC date, not the machine's local date. **Why:** maintainer decision of 2026-11-05: every date comparison uses UTC; the engine had read local time here and UTC for the claim-age clock. | **substantive** |
+> | 2026-11-07 | Bumped to `0.13`. `Expires` is validated as a real calendar date and compared as a date; a month 13-99 or day 32-99 no longer sorts above every real date, and a value that is not a calendar date expires immediately, the finding saying it is not a calendar date. **Why:** hardening review: `Expires: 2026-99-99` kept a waiver active forever. | **substantive** |

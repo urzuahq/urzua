@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5Q0XVK27P5T8FN72BN
-Version: '0.28'
+Version: '0.29'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -262,7 +262,9 @@ the same `PATHS` scoping.
 - **Apply** (`--rebaseline --apply`): the gates of Tier 1 apply hold unchanged (`--ids` or `--force`,
   never implied; an `--ids` entry matching nothing fails; identity as above; lock; re-read before
   write; a missing revision log refuses that record). `--reason <text>` is required too: one line
-  without `|`, because an attestation with no reason is the rubber stamp `RFC-2` set out to prevent.
+  without `|` or a line break (`\n` or `\r`), because an attestation with no reason is the rubber stamp
+  `RFC-2` set out to prevent. The pin hashes are computed after the lock is taken, so evidence edited
+  while the command started is pinned as it is then.
 - **What is written.** For each chosen record, every stale pin on the `Realized-by` line becomes the
   current hash and nothing else on the line, in the file or in any other record, moves. One
   `structural` revision row names who attested (`RFC-25`: attribution, not cryptographic
@@ -361,3 +363,4 @@ asserted by test, not assumed by convention.
 > | 2026-11-06 | Bumped to `0.26`. `--apply` and `--rebaseline --apply` resolve identity under the configuration's `attestation` (`SPEC-3`): `require_verified` makes a missing `gh` answer `not-run` with nothing written, `asserted` takes `--by` as given beside the verified login; the report gains `identity` (name, source, actor, the replaced `--by`); `--actor agent\|human` is accepted; and every tool-authored row names the identity source and the actor kind. **Why:** `MILE-201`, `ADR-89` section 5. | **substantive** |
 > | 2026-11-06 | Bumped to `0.27`. `fix --apply` refuses to write a status an `authority` gate names for the record's type and reports it in `failed`. **Why:** `MILE-199`, the `ADR-70` amendment of 2026-11-05: a lifecycle command sets a status only when the engine computes it, never one reserved to a decider. | **substantive** |
 > | 2026-11-06 | Bumped to `0.28`. The record-edit hook section describes the engine core `urzua harness run edit` and the installed translator, not the deleted `scripts/hooks` shell and Python chain; the verdicts are unchanged. **Why:** `MILE-204` deletes the scripts, `ADR-89` section 6. | **substantive** |
+> | 2026-11-07 | Bumped to `0.29`. `--reason` also refuses a carriage return; `--rebaseline --apply` reads the evidence after taking the lock, and every record write is confined to the repository. **Why:** a Phase 0 hardening review found a `\r` reaching the revision-log row, evidence hashed before the lock, and writes that followed a symlink out of the repository. | **substantive** |

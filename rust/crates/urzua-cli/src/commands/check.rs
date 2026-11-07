@@ -1410,6 +1410,7 @@ fn load_refs_snapshot(
         return Err("not enabled".to_string());
     };
     let path = repo_root.join(&refs.snapshot);
+    urzua_io::confine_to_root(repo_root, &path)?;
     let text = std::fs::read_to_string(&path).map_err(|e| {
         if e.kind() == std::io::ErrorKind::NotFound {
             format!("{} does not exist", refs.snapshot)

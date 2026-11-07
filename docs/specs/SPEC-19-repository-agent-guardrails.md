@@ -2,7 +2,7 @@
 Stable-Id: 01M20SH9CXA18HFPABZJQY795D
 Status: Accepted
 Date: 2026-09-08
-Version: '0.21'
+Version: '0.22'
 Author: beauwilliams
 Subject: 'Repository agent guardrails -- mechanisms that constrain or guide an AI agent working in this repo; today, `AGENTS.md` and the drafting commands in `.claude/commands/`.'
 Implements: MILE-36
@@ -119,7 +119,9 @@ the engine and an adapter per agent that only translates. The contract is `SPEC-
   verdicts the engine or the translator states. `urzua harness run session-start` reports, at the start of a
   session, a binary that is not on `PATH`, a bundle older or newer than the binary, a translator
   interpreter that is not on `PATH`, an unset project-directory variable the adapter expects, a hook entry
-  that is not wired and a git hook that is not wired (`urzua doctor`, `MILE-179`).
+  that is not wired or is not the one the install wrote, an installed file (the translator) that is gone or
+  differs from the lock, a settings key that switches every hook off (`disableAllHooks`) and a git hook that
+  is not wired (`urzua doctor`, `MILE-179`).
 - **The post-command check.** `urzua harness run post-command`, wired by the adapter as a `PostToolUse` hook on
   `Bash` and on only when `harness.guardrails.post-command` is named (`ADR-78` amendment, `MILE-202`), runs
   `check` on the records `git status` shows as changed after any Bash command, untracked ones included, and
@@ -136,9 +138,13 @@ the engine and an adapter per agent that only translates. The contract is `SPEC-
   run is stated as NOT judged. The request, verdict and memory are in `SPEC-24`. This repository enables it in
   `.urzua/config.yaml` and has the bundle installed.
 - **An unset project-directory variable is a stated verdict.** The adapter's command finds the translator
-  from the repository root and the translator takes the project directory from the request's `cwd`, so the
-  command no longer becomes `python3 -I "/scripts/hooks/..."` and exits 2, which blocks every edit with no
-  reason.
+  from `CLAUDE_PROJECT_DIR`, else from the outermost directory above the current one that holds
+  `.urzua/config.yaml` (never from the nearest git repository: the hook's directory follows a Bash `cd`, and a
+  `git init` below the project would hide the translator), and the translator takes the project directory from
+  the request's `cwd`, so the command no longer becomes `python3 -I "/scripts/hooks/..."` and exits 2, which
+  blocks every edit with no reason. When `python3` or the translator is missing, the editor hook's command
+  reads `.urzua/config.yaml` as text and refuses the edit where `acceptance` or `protected-paths` is enabled
+  and not set to `on_unjudged: allow`; otherwise it states that the edit was not judged.
 - **Vendor neutrality.** The engine source names no agent vendor. A test scans every `src/` directory for
   vendor names; the bundle directory, where an adapter names its vendor by design, is outside `src/`.
 - **Commands (`MILE-199`).** The install generates `.claude/commands/<type>.md` for every record type the
@@ -173,8 +179,8 @@ and this section claims only what each place does.
   `Accepted`, `Rejected` or `Superseded` (an ADR also `Retired`), or that writes `.claude`, `.git-hooks`, `.github/workflows`,
   `.urzua/config.yaml` or `.urzua/templates` (the templates shape every new record). Paths match case-insensitively with Unicode case folding (`Straße` and `STRASSE` are one name; names are not Unicode-normalised), always, on every
   filesystem, so `.Claude/settings.json` is the protected file on a case-insensitive one; an edit through a symlink is judged as
-  the file it resolves to, and on Unix an edit through a hard link is judged as the protected path or gated record it shares an inode with (elsewhere by its own name); and the repository is the one that holds the file being edited, so an edit made from a `cwd` outside it is
-  still judged. The deny cannot be overridden: the override of `ADR-78` is a name in an environment
+  the file it resolves to (a link whose target does not exist yet is the target it would create), and on Unix an edit through a hard link is judged as the protected path or gated record it shares an inode with (elsewhere by its own name); and the repository is the outermost governed one (a git working tree with `.urzua/config.yaml`) that holds the file being edited, so an edit made from a `cwd` outside it, or from a nested repository with no configuration, is
+  still judged. The edit tools are also refused for the files the harness keeps (`.urzua/cache`, `.urzua/harness.lock`, the override log, `.git/hooks`, `.git/config`). The deny cannot be overridden: the override of `ADR-78` is a name in an environment
   variable the agent controls, so it is not accepted for this verdict, and the output says so. A person
   edits outside the agent harness and is not affected; that is also the escape hatch when a denying
   guardrail cannot judge (a broken `authority` table, a missing binary), and `urzua doctor` and the verdict
@@ -182,7 +188,7 @@ and this section claims only what each place does.
   translator cannot place, an engine that cannot be run) is refused the same way when `acceptance` or
   `protected-paths` is on with `on_unjudged: deny`, and only then; where the configuration allows, it is allowed with a
   stated notice. An edit whose text the translator cannot place is refused only when its file is a protected path or
-  a gated record; for any other file it is allowed with the notice, because the edit tool fails by itself. The Claude Code adapter hands the engine a NotebookEdit as the notebook after the edit, and any MCP tool (`mcp__*`) whose input has a path field and a content field as a write of that content; an MCP call with a path that looks like an edit, a move or a delete, or whose notebook cannot be read, is an edit that was not judged and `on_unjudged` applies only when its file is a protected path or a gated record (an MCP call with no path, or a read, is left alone). This repository declares both gates and has the Claude Code bundle installed, so the refusal is
+  a gated record; for any other file it is allowed with the notice, because the edit tool fails by itself. The Claude Code adapter hands the engine a NotebookEdit as the notebook after the edit, and any MCP tool (`mcp__*`) as the writes it names: every string that can name a file is read, at any depth and in any list (`from`, `source`, `uri`, `files[]`, a `file://` URI), and an object with one path field and a content field is a write of that content; a path of a call that looks like an edit, a move or a delete, or whose notebook cannot be read, is an edit that was not judged and `on_unjudged` applies only when its file is a protected path or a gated record (a tool named for reading, or a call with no string that names a file, is left alone). This repository declares both gates and has the Claude Code bundle installed, so the refusal is
   wired into an agent session here.
 - **In CI, the evidence is authorship.** `diff.decider-required` (`SPEC-2`), fed an `--actors` file the gate
   action (`.github/actions/urzua-gate`, input `actors: "true"`) writes from the GitHub API, requires the pull
@@ -196,13 +202,19 @@ and this section claims only what each place does.
   which the post-command check reports and cannot stop. The report covers a gated status move, a changed
   protected path including a gitignored one (a content hash of every file under a protected path is kept in
   `.urzua/cache/protected-hashes.json`, seeded at session start) and a commit the same command made, and it
-  reports a change once: a repeat of a change already reported is silent, by design; (2) `git commit
+  reports a change once: a repeat of a change already reported is silent, by design; it also lists a record hidden with `git update-index --assume-unchanged` or `--skip-worktree`; (2) `git commit
   --no-verify`; (3) a pull request that changes its own workflow, since the gate runs from the head commit's
   workflow, which only `CODEOWNERS` and branch protection (the host's settings) could stop; (4) an agent acting
   as the maintainer, since CI cannot tell them apart; (5) the limits of the editor hook's reading: a hard link
-  is resolved on Unix only, names are not Unicode-normalised, an MCP call that names no file path is not seen
-  as an edit, a change made before the session's baseline was taken is not reported, and the agent's
-  user-level settings outside the repository are not protected. The required status check, branch
+  is resolved on Unix only, names are not Unicode-normalised, an MCP call that names no string a path can be
+  read from is not seen as an edit (and a server that resolves a relative path against its own directory is
+  judged against the session's), a change made before the session's baseline was taken is not reported, the
+  agent's user-level and local settings files are neither protected nor read (a hook or `disableAllHooks`
+  set only there is not seen), and a link swapped between the judgement and the write is not seen; (6) a Bash
+  command can write what the edit tools cannot: `.urzua/cache`, the lock, the override log, `.git/hooks`
+  and `.git/config`, and that is not reported; (7) without `python3` or the translator, the editor hook's
+  command reads the configuration as text, and a configuration that scan misreads is read as not closed;
+  (8) a nested repository with its own configuration is judged by the outermost one. The required status check, branch
   protection and `CODEOWNERS` are the host's: `urzua doctor` says so and does not verify them. A distinct
   agent identity with `CODEOWNERS` on the protected paths is a future option and is not configured.
   `AGENTS.md` and the bundle's instructions block carry the same statement.
@@ -268,3 +280,4 @@ and this section claims only what each place does.
 > | 2026-11-06 | Bumped to `0.19`. An edit the translator cannot place is refused only on a protected path or a gated record; any other file is allowed with a notice (`SPEC-24`). **Why:** review of pull request 378: the refusal overreached onto ungated files. | **substantive** |
 > | 2026-11-06 | Bumped to `0.20`. `harness install` reports a refused install honestly (every item `would-create`, `would-merge` or `would-write`, nothing `created`, `merged` or `written`) and no longer advises `update --force`, which needs an install; `install` and `doctor` (`harness-legacy-hook`) warn on a settings entry whose command names a hand-copied first-generation editor hook (a script with `record-edit` in its name). **Why:** Phase 0 hardening from a second adopter switchover -- a conflict reported success states for nothing written, and the old and new editor hooks both stayed wired. | **substantive** |
 > | 2026-11-06 | Bumped to `0.21`. The editor hook also covers NotebookEdit and any MCP tool whose input carries a file path and content (an MCP call it cannot read is refused under `on_unjudged: deny` only on a protected path or a gated record); gate matching uses Unicode case folding and resolves a hard link to the protected or gated file it shares an inode with (Unix); the post-command check reports a change to a gitignored protected file by content hash. The accepted-risk list is rewritten to what remains, and says a change is reported once. **Why:** the maintainer's decision of 2026-11-06 to close the guardrail gaps left by pull request 378 in Phase 0, under `ADR-89`. | **substantive** |
+> | 2026-11-07 | Bumped to `0.22`. The third review of the harness (`ADR-89` amendment of 2026-11-07): the settings command finds the project from `CLAUDE_PROJECT_DIR` or the outermost configuration, not the nearest git repository, and refuses an edit under `on_unjudged: deny` when it cannot run the translator; an edit is judged by the outermost governed repository with symlinks followed to the end, a dangling link included; MCP calls are read for every path-like string; the edit tools are refused for `.urzua/cache`, the lock, the override log and the git hooks; session-start compares the installed files, hook entries and `disableAllHooks` with the lock; the post-command check lists a record hidden with `--assume-unchanged`; the accepted-risk statement gains the Bash write to the harness's own files, the unreadable configuration in the shell fallback and the nested repository with its own configuration. **Why:** the third review found the wrapper failing open outside the project root, a dangling link and a nested repository escaping the gates, and several silent routes. | **substantive** |
