@@ -5,7 +5,7 @@ Phase: '0'
 Track: schema-governance
 Implements: ADR-94
 Blocked-on: —
-Realized-by: code:rust/crates/urzua-core/src/config.rs, code:rust/crates/urzua-core/src/rules/revision_log.rs, code:rust/crates/urzua-core/src/fix.rs, code:rust/crates/urzua-cli/src/commands/fix.rs, test:rust/crates/urzua-cli/tests/acceptance/corpora/corpus-w, test:rust/crates/urzua-cli/tests/fix_revision_log_required_integration.rs, spec:docs/specs/SPEC-3-configuration.md, spec:docs/specs/SPEC-2-urzua-check.md, spec:docs/specs/SPEC-4-the-corpus-acceptance-suite.md, spec:docs/specs/SPEC-8-urzua-fix.md
+Realized-by: code:rust/crates/urzua-core/src/config.rs, code:rust/crates/urzua-core/src/rules/revision_log.rs, code:rust/crates/urzua-core/src/fix.rs, code:rust/crates/urzua-cli/src/commands/fix.rs, test:rust/crates/urzua-cli/tests/acceptance/corpora/corpus-w/expectations/a-declared-vocabulary-and-column-are-read-from-the-header.yaml, test:rust/crates/urzua-cli/tests/acceptance/corpora/corpus-w/expectations/only-the-declared-bump-classes-require-a-bump.yaml, test:rust/crates/urzua-cli/tests/fix_revision_log_required_integration.rs, spec:docs/specs/SPEC-3-configuration.md, spec:docs/specs/SPEC-2-urzua-check.md, spec:docs/specs/SPEC-4-the-corpus-acceptance-suite.md, spec:docs/specs/SPEC-8-urzua-fix.md
 ---
 # 213 — Declare the revision log's class vocabulary and class column in configuration
 
