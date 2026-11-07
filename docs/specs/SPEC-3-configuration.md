@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.111'
+Version: '0.112'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs, test:rust/crates/urzua-cli/tests/field_levels_integration.rs
@@ -509,6 +509,13 @@ Two details carry weight:
     `not_done` status is an error, and so is a `success` status whose evidence computes to an
     unevidenced tier. `urzua fix --apply` writes `set_status` for the first (`SPEC-8`); the second has
     no single correct value and is repaired by adding evidence.
+  - `header.field-set-consistency`: the optional boolean `allow_extension_prefix` (`MILE-141`, `false`
+    by default) exempts header keys beginning `x-`, in any case. The optional map `extension_prefixes`
+    (`MILE-141`) names a record type and the prefix its extension keys begin with, used for that type
+    in place of `x-`, in any case. A type the map does not name keeps the rule-level behaviour. Load
+    refuses a prefix that is empty, holds whitespace or starts a field the type declares (compared
+    in any case), and a type that is not declared or declares no `known_fields`, since the rule would
+    read nothing for it. Either option is refused on any other rule at load.
   - `field.pending`: when `pending` is declared, a field is pending when its whole value (trimmed,
     case-insensitive) equals one of the whole-value entries or matches one of the pattern entries. It **replaces** the compiled-in match, which treats
     a value containing `pending` as a whole word as pending (`BUG-65`); `spending` and a path such as
@@ -2232,4 +2239,5 @@ proves this configuration produces the three findings.
 > | 2026-11-07 | Bumped to `0.108`. Documents `statuses.delivery.items` (`ADR-96`, `MILE-214`): the opt-in per-item evidence for a type's Done means, its keys, its load errors and how the standing is computed from the items. **Why:** `MILE-214`, the engine of `ADR-96`; an undeclared config is unchanged. | **substantive** |
 > | 2026-11-07 | Bumped to `0.109`. Documents the optional `revision_log` keys `classes`, `class_column`, `date_column` and `tool_class` (`ADR-94`, `MILE-213`): the class vocabulary, the header names of the class and date columns, and the class `urzua fix` writes, their engine defaults, and their load errors. A `\|` inside a log cell stays in its cell, and a row wider than its header is a finding when a column is declared. No `schema_version` bump. **Why:** `MILE-213`, the build of `ADR-94`; an undeclared config behaves as before. | **substantive** |
 > | 2026-11-07 | Bumped to `0.110`. Documents that a dependency caps the standing computed from `statuses.delivery.items` (a record whose items all resolve beside an unfinished dependency computes `partial_status`) and that `sequence.status-agreement` skips such a record with an info notice, so `partial_status` may stay a `progress` status. No new key; no `schema_version` bump. **Why:** the `ADR-96` amendment of 2026-11-07, accepted by the maintainer; a configuration without `items` or a sequencing pair is unchanged. | **substantive** |
-> | 2026-11-07 | Bumped to `0.111`. `relation_fields.title` names the field `urzua new` fills with the record's title, and `revision_log.version_bump.initial` the version it writes into the `version_bump` field; both are optional and leave the field blank when undeclared. A status listed in `sections.exempt_statuses` that no record of the type holds is reported by `type.dir-matches-nothing`. **Why:** `MILE-74` -- a scaffolded spec failed `check` on a blank `Version` and `Subject` that `new` could have filled; `MILE-7` -- an exemption that sets nothing aside was silent. | **substantive** |
+> | 2026-11-07 | Bumped to `0.111`. Documents `extension_prefixes` on `header.field-set-consistency` (`MILE-141`): the per-type extension prefix, its fallback to `allow_extension_prefix` for a type it does not name, and its load errors (empty or whitespace prefix, a collision with a declared field, an undeclared type or one without `known_fields`). **Why:** `MILE-141` Done means item 3, built on the maintainer's decision of 2026-11-07. | **substantive** |
+> | 2026-11-07 | Bumped to `0.112`. `relation_fields.title` names the field `urzua new` fills with the record's title, and `revision_log.version_bump.initial` the version it writes into the `version_bump` field; both are optional and leave the field blank when undeclared. A status listed in `sections.exempt_statuses` that no record of the type holds is reported by `type.dir-matches-nothing`. **Why:** `MILE-74` -- a scaffolded spec failed `check` on a blank `Version` and `Subject` that `new` could have filled; `MILE-7` -- an exemption that sets nothing aside was silent. | **substantive** |
