@@ -25,7 +25,7 @@ ruleset that requires the `ci` check, and to open the release PR with a GitHub A
 the two halves stand or fall together; `RFC-30` already said to decide them together.
 
 The workflow side is built: `prepare-release.yml` mints a token with `actions/create-github-app-token` from
-the repository secrets `RELEASE_APP_ID` and `RELEASE_APP_PRIVATE_KEY`, fails the job when either is unset,
+the App's identifier and private key, held as repository secrets, fails the job when either is unset,
 and uses the token for the checkout, the `release` branch push, knope's `CreatePullRequest` and the
 `no-changeset` label. That is the proposal of `RFC-30`, which is still `Draft`. The rule in `AGENTS.md` and
 `docs/rfc/README.md` is that when part of an RFC is built, that decision gets its own ADR. No ADR recorded
@@ -55,8 +55,8 @@ token that runs repository code inside the release job.*
 1. **Identity and scope.** One GitHub App owned by the maintainer, installed on this repository only, with the
    repository permissions Contents and Pull requests (read and write) and no webhook. The workflow requests
    an installation token narrowed to those two permissions, not every permission the App holds.
-2. **Who holds the key.** The maintainer. The private key lives only in the repository secret
-   `RELEASE_APP_PRIVATE_KEY` (the App id in `RELEASE_APP_ID`); the local copy is deleted after it is stored.
+2. **Who holds the key.** The maintainer. The private key lives only in a repository secret
+   (the App's identifier is the other secret); the local copy is deleted after it is stored.
    The workflow has no fallback to `GITHUB_TOKEN`: with either secret unset the job fails with a message
    saying so, so the release PR is never quietly opened by an identity whose events start no run.
 3. **Rotation.** Not decided here. A rotation is a new key generated in the App settings and stored in the

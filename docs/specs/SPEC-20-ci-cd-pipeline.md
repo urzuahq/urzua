@@ -101,8 +101,8 @@ or body edit (`edited`).
 - **The release PR is opened by a GitHub App, not `GITHUB_TOKEN`** (`ADR-95`, which builds part of `RFC-30`;
   the ADR is `Proposed` and `RFC-30` stays `Draft`). GitHub starts no workflow run from a `GITHUB_TOKEN`
   event, so a PR opened that way never gets its `ci` run, and `ci` could not be a required check on `main`.
-  The job mints an installation token with `actions/create-github-app-token` from the repository secrets
-  `RELEASE_APP_ID` and `RELEASE_APP_PRIVATE_KEY`, fails with an explicit error when either is unset (there is
+  The job mints an installation token with `actions/create-github-app-token` from the App's
+  identifier and private key (two repository secrets), fails with an explicit error when either is unset (there is
   deliberately **no fallback** to `GITHUB_TOKEN`), and uses the token for the checkout, the `release`
   branch push, `CreatePullRequest` and the label. The release PR is therefore an ordinary pull request: its
   `ci` run executes without approval and is the same required check every other PR meets. The App, the
