@@ -75,7 +75,7 @@ pub fn waiver_matches_nothing(
                     "Expires",
                     format!(
                     "waiver ({claimed}) is expired: Expires '{expires}' has passed or is not a \
-                     YYYY-MM-DD date, so it covers nothing; remove it or set a new date"
+                     calendar date in YYYY-MM-DD form, so it covers nothing; remove it or set a new date"
                 ),
                 );
             }
