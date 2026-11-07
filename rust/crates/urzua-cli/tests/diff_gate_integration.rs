@@ -64,7 +64,7 @@ fn edit(dir: &Path, rel: &str) {
 }
 
 fn check(dir: &Path, args: &[&str]) -> (i32, serde_json::Value) {
-    let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
+    let out = common::urzua()
         .arg("check")
         .args(args)
         .current_dir(dir)
@@ -563,7 +563,7 @@ fn a_gate_declaration_that_can_never_match_is_a_config_error() {
     for (case, options, needle) in cases {
         let rule = format!("  diff.source-requires-record:\n    level: error\n{options}");
         let dir = gate_fixture("bad-config", &rule);
-        let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
+        let out = common::urzua()
             .args(["check", "--base", "base"])
             .current_dir(&dir)
             .output()
@@ -579,7 +579,7 @@ fn a_gate_declaration_that_can_never_match_is_a_config_error() {
 fn the_gate_options_are_refused_on_a_rule_that_does_not_take_them() {
     let rule = format!("{MIXED}    decision_types:\n      adr: [Accepted]\n");
     let dir = gate_fixture("wrong-rule", &rule);
-    let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
+    let out = common::urzua()
         .args(["check", "--base", "base"])
         .current_dir(&dir)
         .output()

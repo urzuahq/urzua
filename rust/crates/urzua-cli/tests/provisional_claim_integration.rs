@@ -23,7 +23,7 @@ fn run_with_own_config(name: &str, files: &[(&str, &str)]) -> serde_json::Value 
             .unwrap()
             .success());
     }
-    let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
+    let out = common::urzua()
         .args(["check", "docs/"])
         .current_dir(&dir)
         .output()

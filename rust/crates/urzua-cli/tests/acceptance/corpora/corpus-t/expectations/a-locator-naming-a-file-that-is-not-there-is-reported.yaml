@@ -1,0 +1,10 @@
+id: a-locator-naming-a-file-that-is-not-there-is-reported
+corpus: corpus-t
+invocation: [check]
+# ADR-2 cites code:src/stream.rs, and the file does not exist in the working tree;
+# ADR-1 cites a file that does.
+expect_exit: 1
+expect_findings:
+  - {rule: embodiment.locator-exists, severity: error, file: docs/adr/ADR-2-missing-locator.md, message_contains: src/stream.rs}
+expect_no_findings:
+  - {rule: embodiment.locator-exists, file: docs/adr/ADR-1-real-locator.md}

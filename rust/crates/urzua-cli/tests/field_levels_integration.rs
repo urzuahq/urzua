@@ -8,7 +8,7 @@ use std::path::Path;
 use std::process::Command;
 
 fn run_check(dir: &Path) -> (i32, serde_json::Value) {
-    let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
+    let out = common::urzua()
         .args(["check", "docs/"])
         .current_dir(dir)
         .output()

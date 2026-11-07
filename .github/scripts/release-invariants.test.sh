@@ -67,6 +67,19 @@ manifest "0.3.0" "$nonbreaking/Cargo.toml"
 expect 0 "an ordinary patch fragment" \
   "$guard" "$nonbreaking/.changeset" "$nonbreaking/Cargo.toml" "v0.3.0"
 
+# The level is read by key, not from a fixed line: `closes` may come first.
+reordered=$tmp/reordered; mkdir -p "$reordered/.changeset"
+printf -- '---\ncloses: []\ndefault: minor\n---\n\n**Breaking: the config is now YAML.**\n' > "$reordered/.changeset/a.md"
+manifest "0.3.0" "$reordered/Cargo.toml"
+expect 1 "a breaking change declaring minor, with closes listed before default" \
+  "$guard" "$reordered/.changeset" "$reordered/Cargo.toml" "v0.3.0"
+
+reordered_ok=$tmp/reordered_ok; mkdir -p "$reordered_ok/.changeset"
+printf -- '---\ncloses: []\ndefault: major\n---\n\n**Breaking: the config is now YAML.**\n' > "$reordered_ok/.changeset/a.md"
+manifest "0.3.0" "$reordered_ok/Cargo.toml"
+expect 0 "a breaking change declaring major, with closes listed before default" \
+  "$guard" "$reordered_ok/.changeset" "$reordered_ok/Cargo.toml" "v0.3.0"
+
 # The guard fired on its own changeset, which described breaking changes
 # without declaring one. A mention is not a declaration.
 mention=$tmp/mention; mkdir -p "$mention/.changeset"

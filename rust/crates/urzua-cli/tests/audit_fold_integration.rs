@@ -16,7 +16,7 @@ fn git(dir: &Path, args: &[&str]) {
 }
 
 fn urzua(dir: &Path, args: &[&str]) -> (i32, serde_json::Value) {
-    let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
+    let out = common::urzua()
         .args(args)
         .current_dir(dir)
         .output()
@@ -257,7 +257,7 @@ fn audit_on_the_config_init_writes_for_a_prefixless_corpus_matches_check() {
     )
     .unwrap();
     commit(&dir);
-    let init = Command::new(env!("CARGO_BIN_EXE_urzua"))
+    let init = common::urzua()
         .arg("init")
         .current_dir(&dir)
         .output()

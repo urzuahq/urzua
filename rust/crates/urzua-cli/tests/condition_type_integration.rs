@@ -155,7 +155,7 @@ fn scenario(name: &str, prefix: &str, dir: &str) -> common::TempDir {
 }
 
 fn urzua(dir: &Path, args: &[&str]) -> serde_json::Value {
-    let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
+    let out = common::urzua()
         .args(args)
         .current_dir(dir)
         .output()

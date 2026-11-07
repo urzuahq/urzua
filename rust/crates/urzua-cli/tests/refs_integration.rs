@@ -46,7 +46,7 @@ fn fixture(name: &str, rules: &str, body: &str, snapshot: Option<&str>) -> commo
 }
 
 fn urzua(dir: &Path, args: &[&str], envs: &[(&str, &str)]) -> (i32, serde_json::Value, String) {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_urzua"));
+    let mut command = common::urzua();
     command
         .args(args)
         .current_dir(dir)

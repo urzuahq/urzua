@@ -21,7 +21,7 @@ fn git(dir: &Path, args: &[&str]) {
 }
 
 fn urzua(dir: &Path, args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_urzua"))
+    common::urzua()
         .args(args)
         .current_dir(dir)
         .output()
@@ -74,6 +74,7 @@ fn helper(dir: &Path, args: &[&str]) -> Output {
         .arg(dir.join(HELPER))
         .args(args)
         .env("URZUA", env!("CARGO_BIN_EXE_urzua"))
+        .env("PATH", common::path_with_stub_gh())
         .env_remove("URZUA_BY")
         .current_dir(dir)
         .output()
@@ -183,6 +184,7 @@ fn done_sets_the_status_only_through_the_engines_computation() {
         .arg(dir.join(HELPER))
         .args(["done", "docs/milestones/MILE-1-x.md"])
         .env("URZUA", env!("CARGO_BIN_EXE_urzua"))
+        .env("PATH", common::path_with_stub_gh())
         .env("URZUA_BY", "tester")
         .current_dir(&dir)
         .output()
@@ -215,6 +217,7 @@ fn done_refuses_when_the_engine_computes_no_status() {
         .arg(dir.join(HELPER))
         .args(["done", path])
         .env("URZUA", env!("CARGO_BIN_EXE_urzua"))
+        .env("PATH", common::path_with_stub_gh())
         .env("URZUA_BY", "tester")
         .current_dir(&dir)
         .output()
@@ -247,6 +250,7 @@ fn a_status_an_authority_gate_names_is_never_written_by_fix_or_done() {
         .arg(dir.join(HELPER))
         .args(["done", path])
         .env("URZUA", env!("CARGO_BIN_EXE_urzua"))
+        .env("PATH", common::path_with_stub_gh())
         .env("URZUA_BY", "tester")
         .current_dir(&dir)
         .output()
@@ -279,6 +283,7 @@ fn repin(dir: &Path, reason: &str) -> Output {
         .arg(dir.join(HELPER))
         .args(["repin", "docs/milestones/MILE-1-x.md", reason])
         .env("URZUA", env!("CARGO_BIN_EXE_urzua"))
+        .env("PATH", common::path_with_stub_gh())
         .env("URZUA_BY", "tester")
         .current_dir(dir)
         .output()

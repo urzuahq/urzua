@@ -93,7 +93,7 @@ fn waiver(dir: &Path, extra: &str) {
 }
 
 fn run(dir: &Path) -> (bool, serde_json::Value) {
-    let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
+    let out = common::urzua()
         .arg("check")
         .current_dir(dir)
         .output()
@@ -368,7 +368,7 @@ fn a_permanent_declaration_that_is_not_well_formed_is_refused_at_load() {
     ];
     for (i, (permanent, expected)) in bad.iter().enumerate() {
         let dir = corpus(&format!("bad-{i}"), &config(permanent));
-        let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
+        let out = common::urzua()
             .arg("check")
             .current_dir(&dir)
             .output()

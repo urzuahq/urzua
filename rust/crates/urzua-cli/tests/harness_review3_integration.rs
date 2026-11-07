@@ -74,7 +74,7 @@ fn json(out: &Output) -> serde_json::Value {
 }
 
 fn urzua() -> Command {
-    Command::new(env!("CARGO_BIN_EXE_urzua"))
+    common::urzua()
 }
 
 /// Installs the claude-code adapter into the fixture (the translator, the

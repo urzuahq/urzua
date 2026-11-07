@@ -1,0 +1,15 @@
+fixtures:
+  - path: .urzua/config.yaml
+    irregularity: the config the corpus is validated under, declaring an acyclic Depends-on/Blocks pair and the three sequencing rules at error; not a record.
+  - path: docs/milestones/MILE-1-loop-a.md
+    irregularity: depends on MILE-2, which depends on MILE-3, which depends on MILE-1 -- a three-record cycle in an acyclic pair.
+  - path: docs/milestones/MILE-2-loop-b.md
+    irregularity: the second record of the cycle (depends on MILE-3).
+  - path: docs/milestones/MILE-3-loop-c.md
+    irregularity: the third record of the cycle (depends on MILE-1).
+  - path: docs/milestones/MILE-4-names-nothing.md
+    irregularity: depends on MILE-90, which no record in the corpus carries.
+  - path: docs/milestones/MILE-5-started-early.md
+    irregularity: states InProgress while MILE-6, which it depends on, is still Planned, so it is blocked by the derived rule.
+  - path: docs/milestones/MILE-6-not-done.md
+    irregularity: none -- the unfinished dependency MILE-5 is blocked by; a regular Planned record.

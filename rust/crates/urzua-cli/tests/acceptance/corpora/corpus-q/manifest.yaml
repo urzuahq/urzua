@@ -1,0 +1,21 @@
+fixtures:
+  - path: records/NOTE-1-first.md
+    irregularity: none -- the one regular record every config below is run over.
+  - path: bare/0001-bare.md
+    irregularity: a bare numbered file with no NOTE- prefix, so the configuration declares a directory whose record has no identity the rules can resolve.
+  - path: .urzua/companion.yaml
+    irregularity: a config for a type declaring one field of a companion pair without the other; not a record.
+  - path: .urzua/relation-field.yaml
+    irregularity: a config for a relation role renamed to a field the type does not declare; not a record.
+  - path: .urzua/header-none.yaml
+    irregularity: a config for a type with no header that still requires a field; not a record.
+  - path: .urzua/known-fields.yaml
+    irregularity: a config for a type that never declares known_fields; not a record.
+  - path: .urzua/pointer-not-known.yaml
+    irregularity: a config for a pointer field the type does not declare; not a record.
+  - path: .urzua/pointer-missing.yaml
+    irregularity: a config for a type declaring pointer_fields without narrative_fields; not a record.
+  - path: .urzua/pointer-overlap.yaml
+    irregularity: a config for a field in both pointer_fields and narrative_fields; not a record.
+  - path: .urzua/scope.yaml
+    irregularity: a config whose declared note directory holds only a file the prefix does not match; not a record.

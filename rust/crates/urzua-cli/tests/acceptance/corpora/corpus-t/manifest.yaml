@@ -1,0 +1,11 @@
+fixtures:
+  - path: .urzua/config.yaml
+    irregularity: the config the corpus is validated under; the adr type names Accepted as its success status; not a record.
+  - path: src/queue.rs
+    irregularity: none -- the source file ADR-1 and ADR-3 cite; not a record.
+  - path: docs/adr/ADR-1-real-locator.md
+    irregularity: none -- Accepted, Implemented, and its locator resolves.
+  - path: docs/adr/ADR-2-missing-locator.md
+    irregularity: Realized-by names src/stream.rs, which the corpus does not contain.
+  - path: docs/adr/ADR-3-built-before-accepted.md
+    irregularity: Status Proposed with Embodiment Implemented.

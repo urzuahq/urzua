@@ -34,7 +34,7 @@ fn fixture_repo(name: &str, config: &str, files: &[(&str, &str)]) -> common::Tem
 }
 
 fn run(dir: &Path, args: &[&str]) -> std::process::Output {
-    Command::new(env!("CARGO_BIN_EXE_urzua"))
+    common::urzua()
         .args(args)
         .current_dir(dir)
         .output()

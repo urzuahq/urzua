@@ -46,7 +46,7 @@ fn fixture(name: &str, config: &str, realized_by: &str) -> common::TempDir {
 }
 
 fn check(dir: &Path) -> (i32, serde_json::Value) {
-    let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
+    let out = common::urzua()
         .arg("check")
         .current_dir(dir)
         .output()

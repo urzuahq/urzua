@@ -22,7 +22,7 @@ fn commit_all(dir: &Path) {
 }
 
 fn run_urzua(dir: &Path, args: &[&str]) -> std::process::Output {
-    Command::new(env!("CARGO_BIN_EXE_urzua"))
+    common::urzua()
         .args(args)
         .current_dir(dir)
         .output()
@@ -46,7 +46,7 @@ fn run_urzua_with_gh(dir: &Path, args: &[&str], login: Option<&str>) -> std::pro
         stub.display(),
         std::env::var("PATH").unwrap_or_default()
     );
-    Command::new(env!("CARGO_BIN_EXE_urzua"))
+    common::urzua()
         .args(args)
         .env("PATH", path)
         .current_dir(dir)

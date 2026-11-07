@@ -1,0 +1,21 @@
+schema_version: 2
+relation_pairs:
+  - {name: sequencing, forward: Depends-on, inverse: Blocks, reciprocity: none, acyclic: true, cross_type: true}
+roadmap:
+  pairs: [sequencing]
+rules:
+  sequence.cycle: error
+  sequence.unresolved-blocker: error
+  sequence.status-agreement: error
+record_types:
+  milestone:
+    dir: docs/milestones
+    prefix: MILE
+    required_fields: [Status]
+    known_fields: [Depends-on, Blocks]
+    pointer_fields: [Depends-on, Blocks]
+    statuses:
+      values: [Planned, InProgress, Done, WontDo]
+      success: [Done]
+      failure: [WontDo]
+      progress: [InProgress, Done]

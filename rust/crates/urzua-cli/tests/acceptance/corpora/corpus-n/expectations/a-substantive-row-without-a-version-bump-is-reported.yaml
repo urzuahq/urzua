@@ -1,0 +1,15 @@
+id: a-substantive-row-without-a-version-bump-is-reported
+corpus: corpus-n
+# Two records change after the base commit. Both add a substantive revision row;
+# SPEC-1 leaves Version at 0.1 and SPEC-2 raises it to 0.2. The rule judges the
+# change against the base copy, so it names only the one that did not bump.
+commits:
+  - write:
+      docs/specs/SPEC-1-queue.md: "---\nStatus: Accepted\nVersion: '0.1'\n---\n# 1 - Queue\n\nBody.\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-11-01 | Initial. | **substantive** |\n> | 2026-11-04 | Rewrote the intro. | **substantive** |\n"
+      docs/specs/SPEC-2-stream.md: "---\nStatus: Accepted\nVersion: '0.2'\n---\n# 2 - Stream\n\nBody.\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-11-01 | Initial. | **substantive** |\n> | 2026-11-04 | Rewrote the intro. | **substantive** |\n"
+invocation: [check, --base, base]
+expect_exit: 1
+expect_findings:
+  - {rule: revision-log.version-bump-required, severity: error, file: docs/specs/SPEC-1-queue.md}
+expect_no_findings:
+  - {rule: revision-log.version-bump-required, file: docs/specs/SPEC-2-stream.md}

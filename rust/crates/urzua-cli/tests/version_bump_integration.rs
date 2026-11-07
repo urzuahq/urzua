@@ -61,7 +61,7 @@ fn fixture(name: &str, decl: &str) -> common::TempDir {
 }
 
 fn run(dir: &Path, args: &[&str]) -> serde_json::Value {
-    let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
+    let out = common::urzua()
         .arg("check")
         .args(args)
         .current_dir(dir)

@@ -1,0 +1,19 @@
+schema_version: 2
+rules:
+  header.required-fields: error
+  embodiment.locator-exists: error
+  embodiment.requires-accepted-status:
+    level: error
+record_types:
+  adr:
+    dir: docs/adr
+    prefix: ADR
+    header_shape: yaml-frontmatter
+    required_fields: [Status]
+    known_fields: [Status, Embodiment, Realized-by]
+    pointer_fields: []
+    narrative_fields: []
+    spec: SPEC-1
+    statuses:
+      values: [Proposed, Accepted]
+      success: [Accepted]

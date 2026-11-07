@@ -1,0 +1,9 @@
+id: a-rule-handed-records-the-configuration-does-not-reach-is-reported
+corpus: corpus-q
+invocation: [--config, .urzua/scope.yaml, check]
+# The configuration declares `bare/` as the note directory with prefix NOTE, but the
+# one file in it is `0001-bare.md`, which carries no NOTE- identity. identity.collision
+# is handed it and cannot apply, so the configuration is said not to reach it.
+expect_exit: 0
+expect_findings:
+  - {rule: config.scope-matches-nothing, severity: warning, file: .urzua/scope.yaml, message_contains: identity.collision}

@@ -11,6 +11,52 @@
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::OnceLock;
+
+/// The directory holding a `gh` that always fails, as a `gh` that is not logged
+/// in does. `urzua fix --apply` and `urzua new` ask `gh api user` who is
+/// attesting, and a logged-in `gh` on the machine running the tests would make a
+/// live API call (up to the engine's five second wait when offline) and replace
+/// the `--by` a test passed with its own login. Every test that runs the binary
+/// puts this directory first on `PATH`, through [`urzua`] or
+/// [`path_with_stub_gh`], so no test depends on the machine's `gh` or network.
+///
+/// It lives under `CARGO_TARGET_TMPDIR`, not the system temp dir, so the leak
+/// check (`.github/scripts/test-no-leak.sh`) never sees it.
+pub fn stub_gh_dir() -> &'static Path {
+    static DIR: OnceLock<PathBuf> = OnceLock::new();
+    DIR.get_or_init(|| {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("stub-gh");
+        std::fs::create_dir_all(&dir).expect("create the stub gh directory");
+        // Written under a per-process name and renamed into place, so test
+        // binaries running at once never see a half-written script.
+        let tmp = dir.join(format!("gh.{}", std::process::id()));
+        std::fs::write(&tmp, "#!/bin/sh\nexit 1\n").expect("write the stub gh");
+        std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o755))
+            .expect("make the stub gh executable");
+        std::fs::rename(&tmp, dir.join("gh")).expect("install the stub gh");
+        dir
+    })
+}
+
+/// `PATH` with [`stub_gh_dir`] in front of the caller's own.
+pub fn path_with_stub_gh() -> std::ffi::OsString {
+    let mut paths = vec![stub_gh_dir().to_path_buf()];
+    if let Some(existing) = std::env::var_os("PATH") {
+        paths.extend(std::env::split_paths(&existing));
+    }
+    std::env::join_paths(paths).expect("join PATH")
+}
+
+/// A command that runs the `urzua` binary with no reachable `gh`. Use this, never
+/// `Command::new(env!("CARGO_BIN_EXE_urzua"))`: `no_real_gh_integration` fails
+/// the build of a test that does.
+pub fn urzua() -> std::process::Command {
+    let mut command = std::process::Command::new(env!("CARGO_BIN_EXE_urzua"));
+    command.env("PATH", path_with_stub_gh());
+    command
+}
 
 /// A fresh, empty directory under the system temp dir, removed when dropped.
 ///

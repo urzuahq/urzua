@@ -38,6 +38,7 @@ sha256_of() {
 }
 
 work="$(mktemp -d)"
+trap 'rm -rf "$work"' EXIT
 archive="$work/urzua-$target.tar.gz"
 url="$base_url/$repo/releases/download/$version/urzua-$target.tar.gz"
 curl -fsSL -o "$archive" "$url" || fail "could not download $url"

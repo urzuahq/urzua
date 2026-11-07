@@ -1,0 +1,10 @@
+id: an-override-nobody-reviewed-is-reported-on-the-log
+corpus: corpus-p
+invocation: [check]
+# alice recorded an override and no one reviewed it; bob's carries a reviewer. The
+# finding is on the log's row, a warning, and names who overrode and why.
+expect_exit: 0
+expect_findings:
+  - {rule: override.unreviewed, severity: warning, file: .urzua/override-log.md, message_contains: draft ahead of the code}
+expect_no_findings:
+  - {rule: override.unreviewed, message_contains: fixture}

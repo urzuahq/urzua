@@ -36,7 +36,7 @@ fn commit_all(dir: &Path) {
 }
 
 fn run(dir: &Path, args: &[&str]) -> (i32, serde_json::Value, String) {
-    let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
+    let out = common::urzua()
         .args(args)
         .current_dir(dir)
         .output()

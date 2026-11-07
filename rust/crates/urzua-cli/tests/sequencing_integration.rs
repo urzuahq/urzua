@@ -45,7 +45,7 @@ fn repo(name: &str, config: &str, milestones: &[(&str, &str)]) -> common::TempDi
 }
 
 fn check(dir: &Path) -> (i32, serde_json::Value) {
-    let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
+    let out = common::urzua()
         .args(["check", "docs/"])
         .current_dir(dir)
         .output()
@@ -150,7 +150,7 @@ fn a_sequence_rule_with_no_acyclic_pair_declared_fails_to_load() {
         &config,
         &[("MILE-1-a.md", "Depends-on: MILE-2")],
     );
-    let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
+    let out = common::urzua()
         .args(["check", "docs/"])
         .current_dir(&dir)
         .output()
@@ -292,7 +292,7 @@ fn a_roadmap_pair_that_is_not_acyclic_fails_check_to_load() {
         "{name: gating, forward: Gated-by, inverse: Gates, reciprocity: none}",
     );
     let dir = repo("cross-nonacyclic", &config, CROSS_PAIR_LOOP);
-    let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
+    let out = common::urzua()
         .args(["check", "docs/"])
         .current_dir(&dir)
         .output()

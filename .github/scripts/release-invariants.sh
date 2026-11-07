@@ -49,7 +49,14 @@ fi
 # config that does not load, with nothing in the release notes saying so.
 for fragment in "$changeset_dir"/*.md; do
   [ -e "$fragment" ] || continue
-  level=$(sed -n '2s/^default: \(.*\)$/\1/p' "$fragment")
+  # By key, inside the frontmatter block: a fragment that lists `closes` before
+  # `default` declares its level just the same, and reading only line 2 took
+  # that for "no level" and skipped the check without a word.
+  level=$(awk '
+    NR == 1 { if ($0 != "---") exit; next }
+    $0 == "---" { exit }
+    /^default:[ \t]*/ { sub(/^default:[ \t]*/, ""); sub(/[ \t]+$/, ""); print; exit }
+  ' "$fragment")
   [ -n "$level" ] || continue
   [ "$level" = "major" ] && continue
   # A *declaration*, not a mention: `**Breaking: ...` or `Breaking: ...` at the

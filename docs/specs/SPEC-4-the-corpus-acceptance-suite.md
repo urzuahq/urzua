@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5N2PD9ZYBJPZHN05W7
-Version: '0.13'
+Version: '0.14'
 Date: 2026-08-20
 Status: Shipped
 Embodiment: Verified
@@ -226,9 +226,21 @@ built, and where it differs from the sketch:
   with neither is rejected. `expect_rules_ran` asserts the same thing for each rule it lists (status
   `ran` over a non-empty population), so only its first rule is switched off; the others count once that
   held, which keeps a case over corpus zero to two runs.
-- **Coverage report.** An unfiltered run prints how many rules in `ALL_RULES` have a case whose
-  mutation proof held and lists every rule that has none (`uncovered  <rule>`). It reports and does
-  not fail: a rule added by another change has no case yet, and the list is where that is seen.
+- **Coverage report.** An unfiltered run states, for every rule in `ALL_RULES`, how far the suite
+  proves it, in three tiers that are never added together. A rule has a **failing case** when a case
+  names it in `expect_findings` and fails with the rule off: the suite shows the rule can fire. A rule
+  **ran clean only** (`ran-only  <rule>`) when its sole proof is `expect_rules_ran` or `proves`: a case
+  shows the rule executes over a population, and none expects it to report anything, so the suite does
+  not show it can fire. A rule with **no case** is listed as `uncovered  <rule>`. The count of rules with
+  a failing case is the number the suite proves; the other two are what it does not. It reports and does
+  not fail: a rule added by another change has no case yet, and the lists are where that is seen. A rule
+  with no failing case here may still have a unit or integration test that plants its violation; this
+  report is about the acceptance layer only.
+- **Scratch names.** A case's temporary repository and its mutated config are named by process, corpus
+  and case id. Cases run on several threads, and two corpora (a private one merged in through
+  `URZUA_ACCEPTANCE_EXTRA`, say) may each declare a case with one id, so a name keyed on the id alone would
+  be a directory the second case deletes from under the first. The runner fails a run in which two queued
+  cases would share one, and `corpus-c` and `corpus-m` carry a case of the same id to exercise it.
 - **More expectations.** `expect_rules_ran`, `expect_mirrored` (two path prefixes whose findings name
   the same non-empty set of rules), and `message_contains` on a finding matcher. Cases run on a few
   threads and an identical read-only run over `@repo` is made once.
@@ -277,12 +289,17 @@ built, and where it differs from the sketch:
   with no identity in the extra directory, a declared extra directory that does not exist, and
   `urzua new` numbering past the highest id in either (`MILE-130`). urzua's own `.urzua/config.yaml`
   has no type spanning directories, so no natural own-config use exists and the corpus is the exercise.
-- **Coverage.** The report is the measure, and it is not claimed complete: an unfiltered run prints how many
-  rules in `ALL_RULES` have a case whose mutation proof holds and names each rule that has none. Rules without such
-  a case exist (for example the `sequence.*` rules, which have no acceptance case); the counts and the list are
-  the run's output and are not restated here, so they cannot drift from it. `corpus-l` runs `urzua roadmap`,
-  which applies no rule, so its cases give `mutation_exempt` instead of naming one. The list is printed on every
-  unfiltered run and does not fail it.
+- **Coverage.** Every rule in `ALL_RULES` had a case whose mutation proof held when `MILE-170` finished,
+  but 22 of them held it through `expect_rules_ran` or `proves` alone, so the count of 57 of 65 overstated what the
+  suite showed: it counted a rule that ran as a rule that can fire. Later rules were added with no case at
+  all. The report now keeps the tiers apart (see "Coverage report"). Rules with a failing case grew from 35
+  of 65 to 58 with `corpus-m` to `corpus-t` (see "Added by the hardening of CI and release tests"). Seven
+  rules still have no failing acceptance case: `claim.status-agreement`,
+  `embodiment.back-pointer-decision-accepted`, `narrative-field.stale`, `index.freshness` and
+  `waiver.matches-nothing` ran clean only; `config.schema-version-outdated` has a failing case that cannot be
+  mutated, because a version-1 config has no `rules` table to switch the rule off in; and
+  `identity.open-pr-collision` has none, because a case cannot create the pull-request refs it reads. Each
+  of the seven has a planted-violation test at the integration or unit level. The counts are the run's output when this was written; the coverage report is authoritative.
 
 ### Added since
 
@@ -306,6 +323,36 @@ built, and where it differs from the sketch:
 Not built: mutation of a defect reintroduced into the source rather than a rule switched off, and the
 "silent zeros" cases whose defect lives in a git query this build does not make (the rename case is covered
 through the record's blame history; the `-S`/`-G` case through the value-only edit).
+
+### Added by the hardening of CI and release tests
+
+Failing cases for rules that had only a clean run or no case, each with a mutation proof that holds:
+
+- **`corpus-m` (sequencing).** A three-record cycle in an acyclic `Depends-on` pair (`sequence.cycle`),
+  a dependency on a record that does not exist (`sequence.unresolved-blocker`) and an `InProgress`
+  record blocked by an unfinished dependency (`sequence.status-agreement`).
+- **`corpus-n` (version bump).** Two specs each gain a substantive revision row after the base commit;
+  only the one that leaves `Version` alone is reported (`revision-log.version-bump-required`).
+- **`corpus-o` (who decides).** A move to `Accepted` authored outside the deciders group, read from an
+  actors file in the corpus, is reported, and the same move authored by a decider is not
+  (`diff.decider-required`).
+- **`corpus-p` (override log).** An override row with no reviewer is reported on the log
+  (`override.unreviewed`).
+- **`corpus-q` (configuration declarations).** One config per rule, each selected with `--config`:
+  a companion pair with one side undeclared, a relation role naming an undeclared field, a header-less
+  type with required fields, a type with no `known_fields`, a pointer field the type does not know, a
+  pointer list without a narrative list, a field in both lists, and a declared directory whose only file
+  carries no identity (`config.scope-matches-nothing`).
+- **`corpus-r` (field values and dates).** A value starting with a reserved YAML indicator
+  (`field.leading-reserved-indicator`) and an acceptance dated before the record
+  (`date.field-order`).
+- **`corpus-s` (relations and pointers).** A supersession claim the other record does not return
+  (`relation.pair-reciprocity`), a pointer to a record in a status the rule rejects
+  (`pointer.target-status`), a pointer to a record whose type declares no status
+  (`relation.target-status-undeclared`), prose in a pointer field (`header.pointer-field-clean`) and a
+  type with no declared spec (`type.no-declared-spec`).
+- **`corpus-t` (locators).** A locator naming a file that does not exist (`embodiment.locator-exists`)
+  and an embodiment stated before the record is accepted (`embodiment.requires-accepted-status`).
 
 ## Success criteria
 
@@ -351,3 +398,4 @@ through the record's blame history; the `-S`/`-G` case through the value-only ed
 > | 2026-11-07 | Bumped to `0.12`. Realized-by names the implementing code and tests, ready for `Shipped` (`MILE-7`). **Why:** Maintainer decision, 2026-11-07: moving this spec to `Shipped` requires `Embodiment` and `Realized-by`. | **structural** |
 > | 2026-11-07 | Tool-authored (by beauwilliams, identity: gh-verified, actor: agent): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-cli/tests/acceptance.rs, test:rust/crates/urzua-cli/tests/acceptance_property.rs` -- stated `Not started` disagreed with the computed value `Verified`. | **structural** |
 > | 2026-11-07 | Bumped to `0.13`. Status changed from Accepted to Shipped. **Why:** Maintainer decision, 2026-11-07: its `Realized-by` evidence computes `Verified`, and each section was checked against the built code and tests. | **substantive** |
+> | 2026-11-07 | Bumped to `0.14`. The coverage report keeps three tiers apart: rules with a failing case, rules that ran clean only (`ran-only`) and rules with no case (`uncovered`), and no longer adds them into one figure; the "Coverage" claim that every rule has a case and none is uncovered is replaced by the count, and the seven rules without a failing acceptance case are named. Scratch repositories and mutated configs are named by corpus as well as case, and the runner fails a run in which two cases would share one. `corpus-m` to `corpus-t` add failing cases for 23 rules. **Why:** the report said 57 of 65 rules were proven, but 22 of them were counted from `expect_rules_ran` or `proves`, which show a rule runs and not that it can fire, so the figure overstated the proof and the spec claimed more than the suite showed; and a case id shared by two corpora made concurrent cases delete each other's repository. | **substantive** |

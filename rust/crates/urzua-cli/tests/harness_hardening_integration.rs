@@ -82,7 +82,7 @@ fn json(out: &Output) -> serde_json::Value {
 }
 
 fn urzua() -> Command {
-    Command::new(env!("CARGO_BIN_EXE_urzua"))
+    common::urzua()
 }
 
 /// `urzua harness run <event>` with a request for `dir`.
