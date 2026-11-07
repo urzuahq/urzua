@@ -644,6 +644,184 @@ fn partial_evidence_on_a_derived_blocked_planned_record_is_not_repaired() {
     assert_eq!(fix["repairs"].as_array().unwrap().len(), 0, "{fix}");
 }
 
+// ------------------------------------------- dependencies cap the status
+
+/// The fixture config with `InProgress` no longer a status a blocked record
+/// cannot claim (only `Done` is), and `sequence.status-agreement` on, so both
+/// rules judge the same record (`ADR-96`, amendment of 2026-11-07).
+fn capped_config(delivery: &str) -> String {
+    config(delivery, "error")
+        .replace("progress: [InProgress, Done]", "progress: [Done]")
+        .replace("rules:\n", "rules:\n  sequence.status-agreement: error\n")
+}
+
+fn capped_repo(name: &str, status: &str, dependency_status: &str) -> common::TempDir {
+    repo(
+        name,
+        &capped_config(ITEMS),
+        &[
+            (3, milestone(dependency_status, "", "- Later.\n")),
+            (2, milestone(status, "Depends-on: MILE-3\n", BOTH_EVIDENCED)),
+        ],
+    )
+}
+
+#[test]
+fn all_items_resolved_with_an_unfinished_dependency_computes_in_progress() {
+    let dir = capped_repo("cap-in-progress", "InProgress", "Planned");
+    let out = run(&dir, &["check"]);
+    let report = parsed(&out);
+    // Neither rule rejects it: not `DoneWithUnresolvedItems`, not the
+    // delivery disagreement, not the derived blocked value.
+    assert!(
+        findings(&report, "status.delivery-agreement")
+            .iter()
+            .all(|f| !f["file"].as_str().unwrap().contains("MILE-2-m.md")),
+        "{report}"
+    );
+    assert!(
+        findings(&report, "sequence.status-agreement").is_empty(),
+        "{report}"
+    );
+    // `fix` agrees: nothing to write, and the notice names the capping dependency.
+    let fix = parsed(&run(&dir, &["fix"]));
+    assert_eq!(fix["repairs"].as_array().unwrap().len(), 0, "{fix}");
+    let notices = fix["notices"].to_string();
+    assert!(
+        notices.contains("MILE-3 (Planned)") && notices.contains("InProgress"),
+        "{fix}"
+    );
+}
+
+#[test]
+fn a_planned_record_whose_items_all_resolve_is_set_to_in_progress_not_done() {
+    let dir = capped_repo("cap-planned", "Planned", "InProgress");
+    let report = parsed(&run(&dir, &["check"]));
+    let found = findings(&report, "status.delivery-agreement");
+    let finding = on(&found, "MILE-2-m.md").expect("the disagreement is reported");
+    let message = finding["message"].as_str().unwrap();
+    assert!(
+        message.contains("set Status to 'InProgress'")
+            && message.contains("MILE-3 (InProgress)")
+            && !message.contains("'Done'"),
+        "{message}"
+    );
+    let fix = parsed(&run(&dir, &["fix"]));
+    let repairs = fix["repairs"].as_array().unwrap();
+    assert_eq!(repairs.len(), 1, "{fix}");
+    assert_eq!(repairs[0]["computed_value"], "InProgress", "{fix}");
+}
+
+#[test]
+fn a_done_record_with_an_unfinished_dependency_is_not_downgraded_and_the_notice_names_it() {
+    let dir = capped_repo("cap-done", "Done", "Planned");
+    let before = std::fs::read_to_string(dir.join("docs/milestones/MILE-2-m.md")).unwrap();
+    let fix = parsed(&run(&dir, &["fix"]));
+    assert_eq!(fix["repairs"].as_array().unwrap().len(), 0, "{fix}");
+    let notices = fix["notices"].to_string();
+    assert!(
+        notices.contains("MILE-3 (Planned)") && notices.contains("not downgraded"),
+        "{fix}"
+    );
+    run(&dir, &["fix", "--apply", "--force", "--by", "tester"]);
+    let after = std::fs::read_to_string(dir.join("docs/milestones/MILE-2-m.md")).unwrap();
+    assert_eq!(before, after);
+    // The derived blocked value still refuses `Done`, naming the dependency.
+    let report = parsed(&run(&dir, &["check"]));
+    let found = findings(&report, "sequence.status-agreement");
+    assert!(
+        on(&found, "MILE-2-m.md")
+            .is_some_and(|f| f["message"].as_str().unwrap().contains("MILE-3")),
+        "{report}"
+    );
+}
+
+#[test]
+fn a_finished_dependency_does_not_cap_the_status() {
+    let dir = capped_repo("cap-finished", "Planned", "Done");
+    let fix = parsed(&run(&dir, &["fix"]));
+    let repairs = fix["repairs"].as_array().unwrap();
+    let mile2 = repairs
+        .iter()
+        .find(|r| {
+            r["record"]
+                .as_str()
+                .unwrap_or_default()
+                .contains("MILE-2-m.md")
+        })
+        .unwrap_or_else(|| panic!("{fix}"));
+    assert_eq!(mile2["computed_value"], "Done", "{fix}");
+}
+
+#[test]
+fn a_dependency_in_a_failure_status_or_with_no_status_caps_like_an_unfinished_one() {
+    let dir = capped_repo("cap-wontdo", "Planned", "WontDo");
+    let report = parsed(&run(&dir, &["check"]));
+    let found = findings(&report, "status.delivery-agreement");
+    let message = on(&found, "MILE-2-m.md").unwrap()["message"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert!(
+        message.contains("'InProgress'") && message.contains("MILE-3 (WontDo)"),
+        "{message}"
+    );
+}
+
+#[test]
+fn a_config_without_items_is_not_capped() {
+    // `Realized-by` makes the record delivered; the open dependency does not
+    // change what the delivery rule computes when `items` is not declared.
+    let dir = repo(
+        "cap-no-items",
+        &config(NO_ITEMS, "error"),
+        &[
+            (3, milestone("Planned", "", "- Later.\n")),
+            (
+                2,
+                milestone(
+                    "Planned",
+                    "Depends-on: MILE-3\nRealized-by: code:src/a.rs\n",
+                    BOTH_EVIDENCED,
+                ),
+            ),
+        ],
+    );
+    let report = parsed(&run(&dir, &["check"]));
+    let found = findings(&report, "status.delivery-agreement");
+    let message = on(&found, "MILE-2-m.md").unwrap()["message"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert!(message.contains("set Status to 'Done'"), "{message}");
+}
+
+#[test]
+fn without_declared_dependencies_the_items_alone_decide() {
+    // The derived blocked value needs a declared pair, so its rule goes too.
+    let config = capped_config(ITEMS)
+        .replace("roadmap:\n  pairs: [sequencing]\n", "")
+        .replace("  sequence.status-agreement: error\n", "");
+    let dir = repo(
+        "cap-no-pairs",
+        &config,
+        &[
+            (3, milestone("Planned", "", "- Later.\n")),
+            (
+                2,
+                milestone("Planned", "Depends-on: MILE-3\n", BOTH_EVIDENCED),
+            ),
+        ],
+    );
+    let report = parsed(&run(&dir, &["check"]));
+    let found = findings(&report, "status.delivery-agreement");
+    let message = on(&found, "MILE-2-m.md").unwrap()["message"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert!(message.contains("set Status to 'Done'"), "{message}");
+}
+
 // --------------------------------------------------------- shape findings
 
 fn shape(name: &str, body: &str) -> Vec<serde_json::Value> {

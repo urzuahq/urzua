@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5QF32RM76Y50THPQEG
-Version: '0.16'
+Version: '0.17'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -35,7 +35,7 @@ record_types:
       values: ["Planned", "InProgress", "Done", "WontDo"]
       success: ["Done"]
       failure: ["WontDo"]
-      progress: ["InProgress", "Done"]
+      progress: ["Done"]
       implementable: ["Planned", "InProgress", "Done"]
       initial: ["Planned", "Done"]
       transitions:
@@ -58,7 +58,7 @@ record_types:
 ```
 
 The `statuses` block is what makes `Status` a closed, checked vocabulary: `success` and `failure` say which
-values finish a milestone, `progress` which claim work has started, `implementable` at which values code
+values finish a milestone, `progress` which claim work a blocked milestone cannot have (`Done`; a blocked milestone may be `InProgress`), `implementable` at which values code
 may cite the milestone, `initial` the values a milestone may be filed with, and `transitions` the moves
 between values. `delivery` holds `Status` to the evidence (`MILE-183`, below). `Depends-on` and `Blocks`
 are the two ends of the repository's `sequencing` relation pair (`relation_pairs` and `roadmap` in the
@@ -109,9 +109,13 @@ the repository's own configuration and records, not only by unit tests. A `WontD
 
 A type may declare `statuses.delivery.items` (`SPEC-3`). Its `## Done means` is then a list whose items
 each name their own evidence, and the milestone's `Status` is computed from the items. This repository
-does not declare it yet (`MILE-215` migrates the milestones and switches it on); the grammar below is the
+declares it (`MILE-215` migrated the milestones and switched it on); the grammar below is the
 one the engine implements. It is structured text, not a mini-language: the engine reads three declared
 words and hands each clause to the `Realized-by` and waiver parsers.
+
+A dependency caps the status the items compute (`ADR-96`, amendment of 2026-11-07): a milestone whose items all
+resolve but whose `Depends-on` target is unfinished (not `Done`) computes `InProgress`, not `Done`, and the
+findings name the dependency.
 
 ```
 section   = { block } ;                  # the text of the type's declared section, fences skipped
@@ -304,3 +308,4 @@ to another record — nothing to check for resolution, no cycle risk, no new rul
 > | 2026-11-05 | Bumped to `0.14`. `Blocked` is removed from the `Status` value set: it is derived from `Depends-on` and surfaced by `check` and the roadmap, never written. A waiting milestone is `Planned`, with the wait in `Depends-on` (a record) and `Blocked-on` (the explanation). **Why:** `RFC-48` ("accepting this RFC includes amending `SPEC-6`'s `Status` value set to remove `Blocked`"), decided for this repository in `ADR-83`. | **substantive** |
 > | 2026-11-05 | Bumped to `0.15`. The schema excerpt now shows the type as configured: `Depends-on`, `Blocks`, `Non-reference-ids`, `statuses` (with `initial`, `transitions` and `delivery`), `sections` and the three pointer fields. The Status paragraph no longer says `Status` is not validated, and "What's deliberately not built" no longer lists `Depends-on` and a generated roadmap, both built. **Why:** the spec described a config and an engine that had since moved on (`status.undeclared-value`, `status.transition-allowed`, the sequencing pair, `urzua roadmap`); a reader following it would have rebuilt what exists. `Phase` and `Track` are still plain tags. | **substantive** |
 > | 2026-11-07 | Bumped to `0.16`. Adds "Done means as items": the item grammar of `ADR-96` verbatim with its nine worked examples, for a type that declares `statuses.delivery.items`; the `Realized-by` row notes that delivery is then judged from the items. **Why:** `MILE-214`; this repository does not declare the option until `MILE-215`. | **substantive** |
+> | 2026-11-07 | Bumped to `0.17`. The schema excerpt lists `progress: ["Done"]`: a blocked milestone may be `InProgress`, and `Done` is the status it cannot claim. "Done means as items" says this repository declares the option and that an unfinished `Depends-on` target caps a milestone whose items all resolve at `InProgress`. **Why:** the `ADR-96` amendment of 2026-11-07, accepted by the maintainer; `MILE-34` and `MILE-215` regain their `Depends-on`. | **substantive** |

@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5GM1RYRRX2XVMZ0ZAK
-Version: '0.119'
+Version: '0.120'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs, code:rust/crates/urzua-core/src/rules.rs, test:rust/crates/urzua-cli/tests/check_integration.rs, test:rust/crates/urzua-cli/tests/fail_on_integration.rs
@@ -390,7 +390,8 @@ reads each record's declared section into its parsed items and `status.delivery-
 
 | Items | Standing | Tier reported | Status it agrees with |
 |---|---|---|---|
-| `r_d >= 1` and no unresolved item | delivered | the lowest tier among the resolved items | the type's `set_status` |
+| `r_d >= 1` and no unresolved item, and no unfinished dependency | delivered | the lowest tier among the resolved items | the type's `set_status` |
+| `r_d >= 1` and no unresolved item, and an unfinished dependency | partial (capped) | the lowest tier among the resolved items, with the capping dependency named | `delivery.items.partial_status` |
 | `r_d >= 1` and some unresolved item | partial | the same, with the unresolved items named | `delivery.items.partial_status`; also correct under any progress status |
 | `r_d = 0` and `r >= 1` | specified only | the lowest resolved tier | not forced either way, as a spec-only record is today |
 | `r = 0` (including `n = 0` and every item waived) | none | the declared `embodiment.none` | a not-done status |
@@ -399,8 +400,22 @@ Waivers excuse an item, they do not deliver one. The rule's variants for such a 
 `delivery-not-done` (delivered while not done), `delivery-without-evidence` (a `success` status with `r = 0`),
 and two new ones: `delivery-partial-not-started` (partial while the status is a not-done status short of
 `partial_status`; `urzua fix --apply` writes `partial_status`) and `delivery-partial-blocked` (the same on a
-derived-blocked record, where `fix` writes nothing because a `progress` status would contradict
-`sequence.status-agreement`, and the finding names why).
+derived-blocked record whose `partial_status` is a `progress` status, where `fix` writes nothing because it
+would contradict `sequence.status-agreement`, and the finding names why).
+
+**Dependencies cap the status** (`ADR-96`, amendment of 2026-11-07). The computed status is the lower of the
+item result and the dependency result. A record whose items all resolve but which has an unfinished
+dependency over a pair `roadmap.pairs` declares (`ADR-83`, `ADR-76`) computes the partial standing and
+`partial_status`, not delivered: it agrees with `partial_status`, and neither `DoneWithUnresolvedItems`
+(no item is unresolved) nor `delivery-not-done` is reported for it. A dependency is unfinished exactly as
+`sequence.status-agreement` reads it: its `Status` is not a value its own type declares `success`, so one in a
+`failure` status, one with no `Status` and one whose type declares no `success` all cap. The cap only lowers
+a delivered standing, and applies only where the type declares `delivery.items` and the repository declares a
+sequencing pair, so a configuration without either is unchanged. Under `delivery-partial-not-started` the
+message names the capping dependency, as `MILE-171 (InProgress)`; `fix` prints a notice naming it for a record
+the cap holds below its items, and does not downgrade a `success` status the cap contradicts (the derived
+blocked value, `sequence.status-agreement`, reports that status). For the two rules to agree, `partial_status`
+must not be one of the type's `progress` statuses.
 
 **`DoneWithUnresolvedItems`** (action variant `done-with-unresolved-items`) is a guaranteed error: a
 `success` status while any item is unresolved, whatever `r` and `r_d` are. The message is
@@ -742,7 +757,7 @@ declares `known_fields` keeps the `append` variant.
 | `status.delivery-agreement` | `delivery-not-done` | `run-command` |
 | `status.delivery-agreement` | `delivery-without-evidence` | exempt: no single correct value exists and `urzua fix` writes nothing for it; the repair is adding evidence, which may be a locator or a source back-pointer |
 | `status.delivery-agreement` | `delivery-partial-not-started` | `run-command` |
-| `status.delivery-agreement` | `delivery-partial-blocked` | exempt: the record is derived-blocked, and `urzua fix` writes no `progress` status to it because `sequence.status-agreement` would refuse it; the repair is finishing the open dependency |
+| `status.delivery-agreement` | `delivery-partial-blocked` | exempt: the record is derived-blocked and the type's `partial_status` is a `progress` status, which `urzua fix` does not write because `sequence.status-agreement` would refuse it; the repair is finishing the open dependency |
 | `status.delivery-agreement` | `done-with-unresolved-items` | `edit-field` `set`; severity floor `error`; not waivable by a rule-level waiver |
 | `status.delivery-agreement` | `done-with-unresolved-items-evidence` | `edit-section` `set`; severity floor `error`; not waivable by a rule-level waiver |
 | `status.done-items-shape` | `done-items-shape` | `edit-section` `set` |
@@ -1099,3 +1114,4 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-07 | Bumped to `0.117`. `identity.open-pr-collision` names the remedy that works: rename the file and its H1 to the next free number, or waive the finding when the other pull request is abandoned (`urzua migrate ids` cannot renumber); the `open-pr-collision` action reason says the same. An unknown `harness.guardrails` name is a load error, so `check` exits 2 on it. **Why:** `ADR-93` and `ADR-89` amendments of 2026-11-07. | **substantive** |
 > | 2026-11-07 | Bumped to `0.118`. Documents the status computed from Done-means items for a type that declares `statuses.delivery.items`: the new `status.delivery-agreement` variants, among them the guaranteed `DoneWithUnresolvedItems` error (severity floor, unwaivable by a rule-level waiver, two declared actions); the new rules `status.done-items-shape` and `status.waived-item-stale`; the `item-locator-defect` variant of `embodiment.locator-exists`; the `severity_floor` and `waivable` keys of `urzua rules`; the roadmap's `items` object. **Why:** `MILE-214`, the engine of `ADR-96`; an undeclared config is unchanged. | **substantive** |
 > | 2026-11-07 | Bumped to `0.119`. `revision-log.change-class-required` accepts the classes a type declares in `revision_log.classes` (default `substantive` and `structural`) and lists them in its finding, and reads the class and date from the columns `class_column` and `date_column` name; a header lacking a declared column or repeating it is the new variant `revision-log-column-unreadable`, offering `edit-section` `set`, with no row judged. `revision-log.version-bump-required` reports a record with such a log, now or at the merge base, as unreadable and no longer reads an unreadable base log as empty. The rule-table and action-table rows are regenerated. **Why:** `MILE-213`, the build of `ADR-94`; an undeclared config is unchanged. | **substantive** |
+> | 2026-11-07 | Bumped to `0.120`. Documents that a dependency caps the status computed from Done-means items: a record whose items all resolve beside an unfinished dependency agrees with `partial_status`, the finding and the `fix` notice name the capping dependency, and `delivery-partial-blocked` applies only when `partial_status` is a `progress` status. **Why:** the `ADR-96` amendment of 2026-11-07, accepted by the maintainer, after `sequence.status-agreement` and `status.delivery-agreement` left no status that passed; a configuration without `delivery.items` or a sequencing pair is unchanged. | **substantive** |

@@ -1425,7 +1425,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("delivery-not-done", ActionDecl::RUN_COMMAND),
             VariantAction::new("delivery-without-evidence", ActionDecl::Exempt("no single correct value exists and `urzua fix` writes nothing for it; the repair is adding evidence, which may be a locator or a source back-pointer")),
             VariantAction::new("delivery-partial-not-started", ActionDecl::RUN_COMMAND),
-            VariantAction::new("delivery-partial-blocked", ActionDecl::Exempt("the record is derived-blocked, and `urzua fix` writes no `progress` status to it because `sequence.status-agreement` would refuse it; the repair is finishing the open dependency")),
+            VariantAction::new("delivery-partial-blocked", ActionDecl::Exempt("the record is derived-blocked and the type's `partial_status` is a `progress` status, which `urzua fix` does not write because `sequence.status-agreement` would refuse it; the repair is finishing the open dependency")),
             // `DoneWithUnresolvedItems` (`ADR-96`): a guaranteed error. Its
             // severity is a floor no setting lowers and no rule-level waiver
             // matches. It offers two actions, the reopen first and then the
