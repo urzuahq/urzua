@@ -814,6 +814,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         options: &["allow_extension_prefix"],
         actions: &[
             VariantAction::new("undeclared-field", ActionDecl::FIELD_REMOVE),
+            VariantAction::new("undeclared-field-case", ActionDecl::FIELD_RENAME),
         ],
         phase: Phase::Main,
         companion: None,

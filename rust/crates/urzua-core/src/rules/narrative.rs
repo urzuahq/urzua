@@ -6,11 +6,10 @@ use super::*;
 /// signal, distinct from `pointer_resolution`'s generic "resolves; target
 /// Status = X" noise -- a blocker (or any other narrative-tolerant
 /// relationship) that has actually cleared deserves its own actionable
-/// finding, not one more line among many routine ones. Terminal-status sets
-/// are a small, hardcoded MVP per record type (ADR-18's own "ship the MVP,
-/// extend once a real case demands more" precedent), not a config surface --
-/// nothing has asked for one yet. A dangling reference is deliberately not
-/// this rule's job; that's `pointer_resolution`'s error case, reused rather
+/// finding, not one more line among many routine ones. Terminal statuses are
+/// declared: a type's declared status terminals when it has them, otherwise
+/// the rule's `terminal_statuses` option. A dangling reference is deliberately
+/// not this rule's job; that's `pointer_resolution`'s error case, reused rather
 /// than duplicated here.
 pub fn narrative_field_stale(
     records: &[Record],

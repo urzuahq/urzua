@@ -183,6 +183,16 @@ pub fn embodiment_locator_exists(
                     message,
                 });
             };
+            // Text the splitter drops is evidence that does not exist; say so.
+            if let Some(lead) = locator::realized_by_unrecognised(value) {
+                report(
+                    "locator-malformed",
+                    format!(
+                        "{field} holds '{lead}', which is not a recognised entry and counts as no evidence (grammar: {})",
+                        locator::GRAMMAR
+                    ),
+                );
+            }
             for entry in locator::realized_by_locators(value) {
                 let l = match &entry.parsed {
                     Ok(l) => l,
@@ -1093,6 +1103,36 @@ end: brace_balanced
             .unwrap();
         assert_eq!(gone.action_source.variant, "locator-missing");
         assert!(gone.message.contains("not in the working tree"));
+    }
+
+    #[test]
+    fn realized_by_text_outside_a_recognised_entry_is_reported_observed_failing() {
+        for value in [
+            "src/a.rs",
+            "Code:src/a.rs",
+            "tests:src/a.rs",
+            "src/a.rs, code:src/real.rs",
+        ] {
+            let r = record(
+                "docs/adr/ADR-1-x.md",
+                "adr",
+                &format!("---\nRealized-by: {value}\n---\n"),
+            );
+            let (_, findings) = embodiment_locator_exists(
+                std::slice::from_ref(&r),
+                &embodiment_config(),
+                &[],
+                &|p: &str| p == "src/real.rs",
+                &crate::locator::no_file_text,
+                &|_| false,
+            );
+            assert_eq!(findings.len(), 1, "{value}: {findings:?}");
+            assert_eq!(findings[0].action_source.variant, "locator-malformed");
+            assert!(
+                findings[0].message.contains("not a recognised entry"),
+                "{value}"
+            );
+        }
     }
 
     #[test]
