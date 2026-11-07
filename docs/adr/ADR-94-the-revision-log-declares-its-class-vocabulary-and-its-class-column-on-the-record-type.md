@@ -1,6 +1,7 @@
 ---
 Stable-Id: 01M6SVM84PY8AW2N8VS8XQV0TV
-Status: Proposed
+Status: Accepted
+Accepted-on: 2026-11-07
 Date: 2026-11-07
 Author: beauwilliams
 Deciders: beauwilliams
@@ -198,3 +199,4 @@ loud and its fix is one line in the config.
 > |---|---|---|
 > | 2026-11-07 | Drafted as Proposed. **Why:** Maintainer decision, 2026-11-07: the revision-log rule must not hardcode its vocabulary; the class names and the class column (by header name) are declared on the record type, this repository declares today's values, and an undeclared config keeps today's behaviour. The maintainer accepts it in a later change. | **substantive** |
 > | 2026-11-07 | Folded in the independent review of `#391`, accepted by the maintainer on 2026-11-07: an optional `date_column` declared by header name; exact header matching; a duplicate header cell is a finding, not resolved; "distinct" in `classes` is after stripping, case-sensitive; an unreadable base log makes the record `Unreadable`; the missing-column finding carries an `edit-section` `suggested_action`; `fix`'s row layout noted; `ADR-14` is amended alongside `ADR-15`; the Why rule stays a separate opt-in decision. **Why:** the review found the base-side `unwrap_or_default` would raise false bump findings, the new finding variant needs an `ADR-73` action, and a reordered table makes the first-cell date the class; maintainer decision, 2026-11-07. `Status` is unchanged here; acceptance is recorded separately. | **substantive** |
+> | 2026-11-07 | Status changed from Proposed to Accepted, with the independent review's changes folded in (#396). **Why:** Maintainer decision, 2026-11-07. | **substantive** |
