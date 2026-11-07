@@ -1,0 +1,77 @@
+   Compiling urzua-cli v0.3.0 (/tmp/claude-0/-home-user/1e4d20c9-755b-5755-8896-3764dc00103f/scratchpad/rr1107/b/rust/crates/urzua-cli)
+    Finished `test` profile [unoptimized] target(s) in 15.86s
+     Running tests/new_integration.rs (target/debug/deps/new_integration-1a50845c8db713c1)
+
+running 13 tests
+test new_falls_back_to_the_working_tree_and_says_so_when_git_cannot_read_refs ... FAILED
+test new_always_writes_a_stable_id_and_warns_when_the_closed_field_set_omits_it_observed_failing ... ok
+test new_emits_yaml_frontmatter_when_configured_even_with_a_blockquote_template_present ... ok
+test new_creates_the_type_directory_for_its_first_record ... ok
+test new_fills_differently_named_date_and_author_fields_from_the_declaration ... ok
+test new_numbers_from_the_declared_pattern ... ok
+test new_keeps_the_templates_declared_non_required_header_fields_observed_failing ... ok
+test new_numbers_across_every_directory_of_a_type ... ok
+test new_over_a_padded_identity_pattern_passes_check_with_no_edit_observed_failing ... ok
+test new_refuses_when_the_declared_pattern_cannot_name_the_file ... ok
+test new_refuses_a_title_with_no_slug_and_writes_nothing ... ok
+test new_reports_an_empty_skipped_list_when_nothing_was_skipped ... FAILED
+test new_skips_a_number_claimed_on_another_branch_and_reports_it_in_json ... FAILED
+
+failures:
+
+---- new_falls_back_to_the_working_tree_and_says_so_when_git_cannot_read_refs stdout ----
+
+thread 'new_falls_back_to_the_working_tree_and_says_so_when_git_cannot_read_refs' panicked at crates/urzua-cli/tests/new_integration.rs:196:28:
+no new.numbering notice: {"display_number":2,"notices":[{"message":"--by 't' differs from the authenticated gh login 'beauwilliams' -- using 'beauwilliams'","severity":"warning","subject":"identity"}],"path":"docs/bug/BUG-2-fresh.md","pull_refs":{"fetched":false,"reason":"disabled","refs":0,"remote":null,"skipped_numbers":[],"worktrees_scanned":0},"stable_id":"01M6SW98BF7N2RQ104XZVZ8EX8","status":"ok"}
+stack backtrace:
+   0: __rustc::rust_begin_unwind
+   1: core::panicking::panic_fmt
+   2: new_integration::new_falls_back_to_the_working_tree_and_says_so_when_git_cannot_read_refs::{{closure}}
+   3: core::option::Option<T>::unwrap_or_else
+   4: new_integration::new_falls_back_to_the_working_tree_and_says_so_when_git_cannot_read_refs
+   5: new_integration::new_falls_back_to_the_working_tree_and_says_so_when_git_cannot_read_refs::{{closure}}
+   6: core::ops::function::FnOnce::call_once
+note: Some details are omitted, run with `RUST_BACKTRACE=full` for a verbose backtrace.
+
+---- new_reports_an_empty_skipped_list_when_nothing_was_skipped stdout ----
+
+thread 'new_reports_an_empty_skipped_list_when_nothing_was_skipped' panicked at crates/urzua-cli/tests/new_integration.rs:167:5:
+assertion `left == right` failed: {"display_number":1,"notices":[{"message":"--by 't' differs from the authenticated gh login 'beauwilliams' -- using 'beauwilliams'","severity":"warning","subject":"identity"}],"path":"docs/bug/BUG-1-fresh.md","pull_refs":{"fetched":false,"reason":"disabled","refs":0,"remote":null,"skipped_numbers":[],"worktrees_scanned":0},"stable_id":"01M6SW9B4KC6PAQ7RHX96ZF5GM","status":"ok"}
+  left: Null
+ right: Array []
+stack backtrace:
+   0: __rustc::rust_begin_unwind
+   1: core::panicking::panic_fmt
+   2: core::panicking::assert_failed_inner
+   3: core::panicking::assert_failed
+   4: new_integration::new_reports_an_empty_skipped_list_when_nothing_was_skipped
+   5: new_integration::new_reports_an_empty_skipped_list_when_nothing_was_skipped::{{closure}}
+   6: core::ops::function::FnOnce::call_once
+note: Some details are omitted, run with `RUST_BACKTRACE=full` for a verbose backtrace.
+
+---- new_skips_a_number_claimed_on_another_branch_and_reports_it_in_json stdout ----
+
+thread 'new_skips_a_number_claimed_on_another_branch_and_reports_it_in_json' panicked at crates/urzua-cli/tests/new_integration.rs:143:5:
+assertion `left == right` failed: {"display_number":3,"path":"docs/bug/BUG-3-fresh.md","pull_refs":{"fetched":false,"reason":"disabled","refs":0,"remote":null,"skipped_numbers":[{"held_by":["other-pr"],"number":2}],"worktrees_scanned":0},"stable_id":"01M6SW9BF58X07WPT7M2W9FEFQ","status":"ok"}
+  left: Null
+ right: Array [Object {"number": Number(2), "reason": String("local")}]
+stack backtrace:
+   0: __rustc::rust_begin_unwind
+   1: core::panicking::panic_fmt
+   2: core::panicking::assert_failed_inner
+   3: core::panicking::assert_failed
+   4: new_integration::new_skips_a_number_claimed_on_another_branch_and_reports_it_in_json
+   5: new_integration::new_skips_a_number_claimed_on_another_branch_and_reports_it_in_json::{{closure}}
+   6: core::ops::function::FnOnce::call_once
+note: Some details are omitted, run with `RUST_BACKTRACE=full` for a verbose backtrace.
+
+
+failures:
+    new_falls_back_to_the_working_tree_and_says_so_when_git_cannot_read_refs
+    new_reports_an_empty_skipped_list_when_nothing_was_skipped
+    new_skips_a_number_claimed_on_another_branch_and_reports_it_in_json
+
+test result: FAILED. 10 passed; 3 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.78s
+
+error: test failed, to rerun pass `-p urzua-cli --test new_integration`
+done

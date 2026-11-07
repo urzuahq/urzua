@@ -10,6 +10,7 @@ use std::process::ExitCode;
 use urzua_core::config::NewDecl;
 use urzua_core::report::{
     CouldNotRun, NewReport, Notice, NoticeSeverity, PullRefsReport, ReportStatus, SkippedNumber,
+    SkippedReason,
 };
 
 use super::new_refs::{self, FetchFailure, LockOutcome};
@@ -164,6 +165,7 @@ pub fn run(
             None => urzua_core::new_record::parse_record_filename(name).map(|(_, n)| n),
         }
     };
+    let mut skipped: Vec<SkippedReason> = Vec::new();
     let display_number = match assign_display_number(
         &repo_root,
         &type_config.all_dirs().collect::<Vec<_>>(),
@@ -171,6 +173,7 @@ pub fn run(
         &number_of,
         opts.check_open_prs.then_some(opts),
         &mut pull,
+        &mut skipped,
         &mut notices,
     ) {
         Ok(n) => n,
@@ -363,6 +366,7 @@ pub fn run(
         display_number,
         stable_id: Some(stable_id.as_str().to_string()),
         pull_refs: pull,
+        skipped,
         notices,
     })
 }
@@ -371,7 +375,9 @@ pub fn run(
 /// remote-tracking ref already uses (`MILE-89`). With `scan` (`new.check_open_prs`,
 /// `ADR-93`) it also reads the refs under `refs/urzua/pr` and the trees of every
 /// sibling worktree, untracked files included. Git only. A git failure falls back
-/// to the working-tree-only number and says so on stderr.
+/// to the working-tree-only number and says so in a notice. The numbers it
+/// skipped are returned in `skipped`, never printed (`ADR-93`, Amendment of
+/// 2026-11-07).
 fn assign_display_number(
     repo_root: &std::path::Path,
     dirs: &[&str],
@@ -379,6 +385,7 @@ fn assign_display_number(
     number_of: &dyn Fn(&str) -> Option<u32>,
     scan: Option<&NewDecl>,
     pull: &mut PullRefsReport,
+    skipped: &mut Vec<SkippedReason>,
     notices: &mut Vec<Notice>,
 ) -> Result<u32, String> {
     let mut prefixes = vec!["refs/heads", "refs/remotes"];
@@ -388,10 +395,14 @@ fn assign_display_number(
     let mut claims = match other_ref_claims(repo_root, dirs, &prefixes) {
         Ok(c) => c,
         Err(reason) => {
-            eprintln!(
-                "urzua: numbering from the working tree only; could not read other refs ({reason}). \
-                 A number claimed on an unmerged branch will not be seen."
-            );
+            notices.push(Notice {
+                severity: NoticeSeverity::Warning,
+                subject: NOTICE_NUMBERING.to_string(),
+                message: format!(
+                    "numbering from the working tree only; could not read other refs ({reason}). \
+                     A number claimed on an unmerged branch will not be seen."
+                ),
+            });
             return urzua_core::new_record::next_display_number_by(filenames, number_of);
         }
     };
@@ -435,19 +446,7 @@ fn assign_display_number(
     }
     let got =
         urzua_core::new_record::next_display_number_with_claims_by(filenames, &claims, number_of)?;
-    for (number, refs) in &got.skipped {
-        if scan.is_some() {
-            eprintln!(
-                "urzua: skipped {number}: already used on {}",
-                refs.join(", ")
-            );
-        } else {
-            eprintln!(
-                "urzua: skipped {number}: already used on {} (local git refs only; unfetched remotes are not checked)",
-                refs.join(", ")
-            );
-        }
-    }
+    *skipped = skipped_reasons(&got.skipped);
     pull.skipped_numbers = got
         .skipped
         .iter()
@@ -461,6 +460,55 @@ fn assign_display_number(
 
 /// Subject of the notices about the pull-request refs, the lock and the worktrees.
 const NOTICE_PULL_REFS: &str = "new.pull-refs";
+
+/// Subject of the notice that numbering used the working tree alone.
+const NOTICE_NUMBERING: &str = "new.numbering";
+
+/// The reason a holder of a number is named in `skipped`: `open-pr <ref>` for a
+/// ref under `refs/urzua/pr`, `worktree <path>` for a sibling worktree's tree,
+/// and `local` for any local branch or remote-tracking ref.
+fn skip_reason(holder: &str) -> String {
+    if holder.starts_with("worktree ") {
+        holder.to_string()
+    } else if holder
+        .strip_prefix(new_refs::PR_NAMESPACE)
+        .is_some_and(|rest| rest.starts_with('/'))
+    {
+        format!("open-pr {holder}")
+    } else {
+        "local".to_string()
+    }
+}
+
+/// One entry per skipped number and distinct reason, in a fixed order: by
+/// number, then open pull requests, worktrees and `local`, then by text. Many
+/// local refs holding one number are one `local` entry; `pull_refs.skipped_numbers`
+/// keeps the refs themselves.
+fn skipped_reasons(skipped: &[(u32, Vec<String>)]) -> Vec<SkippedReason> {
+    let rank = |reason: &str| {
+        if reason.starts_with("open-pr ") {
+            0
+        } else if reason.starts_with("worktree ") {
+            1
+        } else {
+            2
+        }
+    };
+    let mut out: Vec<SkippedReason> = skipped
+        .iter()
+        .flat_map(|(number, holders)| {
+            holders.iter().map(|h| SkippedReason {
+                number: *number,
+                reason: skip_reason(h),
+            })
+        })
+        .collect();
+    out.sort_by(|a, b| {
+        (a.number, rank(&a.reason), &a.reason).cmp(&(b.number, rank(&b.reason), &b.reason))
+    });
+    out.dedup();
+    out
+}
 
 fn git_output(repo_root: &std::path::Path, args: &[&str]) -> Result<Vec<u8>, String> {
     let out = std::process::Command::new("git")
@@ -530,4 +578,52 @@ fn other_ref_claims(
         }
     }
     Ok(claims)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn held(number: u32, holders: &[&str]) -> (u32, Vec<String>) {
+        (number, holders.iter().map(|h| h.to_string()).collect())
+    }
+
+    #[test]
+    fn a_holder_is_classified_as_an_open_pr_a_worktree_or_local() {
+        assert_eq!(
+            skip_reason("refs/urzua/pr/origin/7"),
+            "open-pr refs/urzua/pr/origin/7"
+        );
+        assert_eq!(skip_reason("worktree /w/side"), "worktree /w/side");
+        assert_eq!(skip_reason("other-pr"), "local");
+        assert_eq!(skip_reason("origin/main"), "local");
+        // A branch that only starts with the namespace's text is not a pull ref.
+        assert_eq!(skip_reason("refs/urzua/prx"), "local");
+    }
+
+    #[test]
+    fn skipped_reasons_are_one_per_number_and_reason_in_a_fixed_order() {
+        let got = skipped_reasons(&[
+            held(5, &["b-branch", "worktree /w/side", "a-branch"]),
+            held(
+                2,
+                &["refs/urzua/pr/origin/9", "refs/urzua/pr/origin/3", "x"],
+            ),
+        ]);
+        let text: Vec<String> = got
+            .iter()
+            .map(|s| format!("{} {}", s.number, s.reason))
+            .collect();
+        assert_eq!(
+            text,
+            [
+                "2 open-pr refs/urzua/pr/origin/3",
+                "2 open-pr refs/urzua/pr/origin/9",
+                "2 local",
+                "5 worktree /w/side",
+                "5 local",
+            ]
+        );
+        assert!(skipped_reasons(&[]).is_empty());
+    }
 }
