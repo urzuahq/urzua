@@ -212,7 +212,7 @@ pub fn run_phase_with(
             continue;
         }
         out.push(run_rule(d, ctx));
-        if let Some(companion) = d.companion {
+        if let Some((_, companion)) = d.companion {
             // Never called for a rule the repository has not enabled.
             let enabled = ctx
                 .config

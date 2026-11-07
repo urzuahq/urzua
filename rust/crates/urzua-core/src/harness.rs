@@ -79,13 +79,8 @@ pub fn guardrail_info(name: &str) -> Option<&'static GuardrailInfo> {
 /// The load error for a `harness.guardrails` name this build does not ship,
 /// suggesting the nearest valid name when one is close.
 fn unknown_guardrail_message(name: &str) -> String {
-    let nearest = GUARDRAILS
-        .iter()
-        .map(|g| (edit_distance(name, g.name), g.name))
-        .min()
-        .filter(|(distance, _)| *distance <= (name.chars().count() / 3).max(2));
-    let hint = nearest
-        .map(|(_, valid)| format!("; did you mean '{valid}'?"))
+    let hint = nearest_name(name, GUARDRAILS.iter().map(|g| g.name))
+        .map(|valid| format!("; did you mean '{valid}'?"))
         .unwrap_or_default();
     format!(
         "harness.guardrails names '{name}', which this build does not know{hint} (it ships: {})",
@@ -95,6 +90,17 @@ fn unknown_guardrail_message(name: &str) -> String {
             .collect::<Vec<_>>()
             .join(", ")
     )
+}
+
+/// The candidate closest to `name` by edit distance, when one is close enough
+/// to be a likely misspelling: within a third of the name's length, and at
+/// least two edits. Ties go to the alphabetically first candidate.
+pub fn nearest_name<'a>(name: &str, candidates: impl Iterator<Item = &'a str>) -> Option<&'a str> {
+    candidates
+        .map(|c| (edit_distance(name, c), c))
+        .min()
+        .filter(|(distance, _)| *distance <= (name.chars().count() / 3).max(2))
+        .map(|(_, c)| c)
 }
 
 /// Levenshtein distance between two short names.

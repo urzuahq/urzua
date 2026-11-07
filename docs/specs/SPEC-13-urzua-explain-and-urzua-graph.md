@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5DB4YPSWZ6MQV85PQ7
-Version: '0.10'
+Version: '0.11'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -48,6 +48,38 @@ citing `src` is found by querying `src` and not by querying a file below it. A c
 different relative path than the one queried finds nothing. Coverage is only as complete as
 `Realized-by` adoption — a record that genuinely governs a file but never had a `Realized-by` field
 added is invisible to `explain`, the same limitation `embodiment.consistency` already has.
+
+## `urzua explain --rule <rule-id>`
+
+What one rule is, as data (`ADR-96` amendment of 2026-11-07). The rule id is the value of `--rule`, and
+only of `--rule`: a bare argument is always a path, even when it spells a rule id. A path and a rule id
+cannot be told apart by their spelling (`status.delivery-agreement` is a legal file name, and a rule id
+may be a path), so no heuristic is used and no argument is ever read as the other. Giving both a path and
+`--rule`, or neither, is `not-run` with the usage message.
+
+The report is `{"status": "ok", "rule": {...}}`. `rule` carries:
+
+- `id`, `description`, `scope` (where the rule looks: `records`, `config`, `files`, `diff` or `run`) and
+  `judges` (`SPEC-2`), exactly as `urzua rules` prints them: one rule table feeds both commands.
+- `level`: the level this repository sets (`off`, `info`, `warn`, `error`); `off` when its configuration
+  does not name the rule.
+- `severity_floor`: the strictest floor among the rule's variants, the lowest severity a finding of that
+  variant has whatever the level (`ADR-96`); omitted when no variant has one.
+- `waivable`: `false` when at least one variant cannot be cleared by a rule-level waiver, `true`
+  otherwise. The variants below say which.
+- `options`: an object with every option the rule accepts, by name, and the value this repository sets, or
+  `null` when it sets none. `{}` for a rule with no options.
+- `actions`: the rule's `ADR-73` suggested-action variants, one entry per finding variant, as
+  `urzua rules` prints them: `variant`, then `kind` and `op`, or `exempt` with the reason there is no
+  action; `severity_floor` and `waivable: false` on a variant that has them.
+- `population_unit`: what one candidate in the rule's population is (`record`, `field`, `path` and the
+  other units `check` reports in `rules_executed`), and `companion_population_unit` for a rule that judges
+  a second population under its id. A test compares each declared unit with the one `check` reports.
+- `spec`: the spec that documents the rule. Every rule is documented by `SPEC-2`'s generated rule table.
+
+An id that is not a rule this build ships is `not-run` with the id, the nearest valid id when one is close
+(`did you mean 'status.delivery-agreement'?`) and a pointer to `urzua rules`. Nothing is read from the
+corpus: the report is the build's rule table and the repository's configuration.
 
 ## `urzua graph`
 
@@ -122,3 +154,4 @@ Both are stdout-JSON-always (ADR-23) and never write. `graph` reads `pointer_fie
 > | 2026-11-05 | Status changed from Accepted to Shipped and bumped to `0.8`. **Why:** maintainer decision of 2026-11-05 to ship the specs whose implementation is verified; `Embodiment: Verified` with `Realized-by` naming the implementing code and tests. | **structural** |
 > | 2026-11-05 | Bumped to `0.9`. `explain <directory-or-glob>` prints `coverage`: the kind, the covered files, the hash and the pin to paste, when the repository declares that locator kind; otherwise a notice names `locator_kinds`. **Why:** `BUG-176` -- a pin on a directory or glob needs the reviewer to see which files it covers. | **substantive** |
 > | 2026-11-07 | Bumped to `0.10`. `explain` refuses a path that resolves outside the repository (absolute, `..`, or a symlink out), and the other file readers and writers share the check. **Why:** a Phase 0 hardening review found `explain '/etc/hostname#L1'` printing the file and a ready-to-paste pin. | **substantive** |
+> | 2026-11-07 | Bumped to `0.11`. Added `urzua explain --rule <rule-id>`: the rule's scope, level here, severity floor and waivable flag, options with current values, `ADR-73` action variants, population unit and spec, from the same rule table `urzua rules` prints. An unknown id is `not-run` and names the nearest valid id. **Why:** maintainer decision of 2026-11-07, recorded in the `ADR-96` amendment of that date: `ADR-96` says `explain` prints the floor, and the maintainer chose to build the rule mode rather than redirect to `urzua rules`. It is a flag so a path and a rule id are never confused. | **substantive** |
