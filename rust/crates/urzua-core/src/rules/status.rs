@@ -157,7 +157,7 @@ pub enum DeliveryDisagreement {
 pub struct DeliveryContext<'a> {
     pub back_pointed: &'a BackPointerEvidence,
     pub env: &'a LocatorEnv<'a>,
-    pub blocked: &'a HashSet<PathBuf>,
+    pub blocked: &'a HashMap<PathBuf, Vec<String>>,
 }
 
 /// Judges one record of a type that declares `statuses.delivery`. `Err` is the
@@ -184,14 +184,27 @@ pub fn judge_delivery(
     // section 5).
     if delivery.items.is_some() {
         let empty = crate::done_items::DoneItems::default();
-        let judged = judge_items(
+        let mut judged = judge_items(
             record.items.as_ref().unwrap_or(&empty),
             config,
             delivery,
             ctx.env,
         );
         let items_decl = delivery.items.as_ref().expect("checked above");
-        let blocked = ctx.blocked.contains(&record.path);
+        let open = ctx.blocked.get(&record.path);
+        let blocked = open.is_some();
+        // Dependencies cap the status (`ADR-96`, amendment of 2026-11-07): the
+        // computed status is the lower of the item result and the dependency
+        // result, so items that all resolve beside an unfinished dependency are
+        // partial work, not delivered. It lowers `Delivered` only, and only
+        // where items and dependencies are both declared (`blocked` is empty
+        // without a sequencing pair).
+        if let Some(open) = open {
+            if judged.standing == Standing::Delivered {
+                judged.standing = Standing::Partial;
+                judged.capped_by = open.clone();
+            }
+        }
         let unresolved = !judged.unresolved.is_empty();
         let disagreement = if in_list(&decl.success, status) && unresolved {
             let to_partial = judged.resolved_delivered >= 1
@@ -217,7 +230,14 @@ pub fn judge_delivery(
         {
             Some(DeliveryDisagreement::PartialButNotStarted {
                 partial_status: items_decl.partial_status.clone(),
-                blocked,
+                // `fix` holds back only a status the derived blocked value
+                // would refuse for the record. `sequence.status-agreement`
+                // accepts `partial_status` on a capped record (every item
+                // resolves, only a dependency is open), so a capped record is
+                // not held back; one with unresolved items is.
+                blocked: blocked
+                    && judged.capped_by.is_empty()
+                    && decl.is_progress_status(&items_decl.partial_status),
             })
         } else if in_list(&decl.success, status)
             && in_list(&delivery.unevidenced_tiers, &judged.tier)
@@ -310,7 +330,7 @@ pub fn status_delivery_agreement(
     let blocked = if any_items {
         derived_blocked_records(records, config)
     } else {
-        HashSet::new()
+        HashMap::new()
     };
     let ctx = DeliveryContext {
         back_pointed,
@@ -358,8 +378,8 @@ pub fn status_delivery_agreement(
                 ),
                 Some(DeliveryDisagreement::PartialButNotStarted { partial_status, blocked: false }) => (
                     format!(
-                        "{} is '{}', but {} resolve, from {}: the work has begun; set {} to '{partial_status}' (`urzua fix --apply` does)",
-                        judged.status_field, judged.status, judged.evidence_counts(), judged.evidence, judged.status_field
+                        "{} is '{}', but {} resolve, from {}: the work has begun{}; set {} to '{partial_status}' (`urzua fix --apply` does)",
+                        judged.status_field, judged.status, judged.evidence_counts(), judged.evidence, judged.cap_note(partial_status), judged.status_field
                     ),
                     ActionSource::new("delivery-partial-not-started").argv([
                         "urzua",
@@ -435,6 +455,19 @@ pub fn status_delivery_agreement(
 }
 
 impl DeliveryJudgement {
+    /// For a record whose items all resolve but whose dependency is unfinished,
+    /// the clause naming the dependency that caps the status at `capped_at`;
+    /// else empty (`ADR-96`, amendment of 2026-11-07).
+    pub fn cap_note(&self, capped_at: &str) -> String {
+        match self.items.as_ref().map(|i| i.capped_by.as_slice()) {
+            Some(open) if !open.is_empty() => format!(
+                " (every item resolves, but {} is unfinished, which caps the status at '{capped_at}')",
+                open.join(", ")
+            ),
+            _ => String::new(),
+        }
+    }
+
     /// "3 of 5 items" for an item judgement, else the evidence tier.
     fn evidence_counts(&self) -> String {
         match &self.items {
