@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.103'
+Version: '0.104'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs, test:rust/crates/urzua-cli/tests/field_levels_integration.rs
@@ -905,7 +905,9 @@ authority:
   `by` names a declared group. A gate that names a type no record type declares, a status that type does not
   declare (or a type that declares no statuses), a group `deciders` does not declare, or that mixes the two
   forms, is a load error naming `authority.gates[N]`. A key that is present but empty is refused, not read
-  as absent.
+  as absent. A `paths` entry is read in the same canonical form as `published_paths` (a leading `./` and a
+  trailing `/` dropped), so `./.agent` gates what `.agent` does; an entry that is absolute, has a `..`
+  component or a backslash, or names no path (`.`), is a load error, since it could match nothing.
 - **Locally, the edit tools are refused.** With the guardrail enabled under `harness.guardrails`
   (`acceptance` reads the gates by type and status, `protected-paths` the gates by path; an enabled
   guardrail with no gate of its kind is a load error), `urzua harness run edit` denies an `agent` actor's
@@ -2128,3 +2130,4 @@ proves this configuration produces the three findings.
 > | 2026-11-07 | Bumped to `0.101`. Documents the top-level `discovery` key (`include_untracked`, a boolean, default `false`): untracked, non-ignored record files directly under a declared directory join discovery, and an unknown key or a non-boolean value is a load error. **Why:** `MILE-206` / `ADR-92`. | **substantive** |
 > | 2026-11-07 | Bumped to `0.102`. Documents the top-level `new` key (`check_open_prs`, `pull_ref_patterns`, `remote`, `fetch_timeout_seconds`, `lock_timeout_seconds`) and its load errors. **Why:** `MILE-89` / `ADR-93`. | **substantive** |
 > | 2026-11-07 | Bumped to `0.103`. The rule table's `judges` column gains `anchor-scoped`, which with `one-record` is the only value that lists `scope` (`ADR-90` amendment); `embodiment.locator-promotion-candidate` is labelled with it and, under `scope: changed`, emits one finding per changed citer. **Why:** the accepted 2026-11-07 amendment to `ADR-90`, points 4 and 5. | **substantive** |
+> | 2026-11-07 | Bumped to `0.104`. An `authority.gates` `paths` entry is normalised like `published_paths`, and one that could match nothing (`.`, a backslash) is a load error. **Why:** hardening review: `./.agent` loaded and gated nothing, for `diff.decider-required` and the `protected-paths` guardrail alike. | **substantive** |

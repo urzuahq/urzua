@@ -34,13 +34,14 @@ impl FileTexts {
     /// What the locator path `path` names among the tracked files that are on
     /// disk: its kind and the files it covers, sorted.
     pub fn locator_files(&self, path: &str) -> Result<urzua_core::locator::LocatorFiles, String> {
-        let (list, set) = self.tracked.get_or_init(|| {
+        if self.tracked.get().is_none() {
             let list = crate::discovery::discover_files(&self.root, &self.config)
-                .map(|d| d.paths)
-                .unwrap_or_default();
+                .map_err(|e| format!("could not list the repository's files: {e}"))?
+                .paths;
             let set = list.iter().cloned().collect();
-            (list, set)
-        });
+            let _ = self.tracked.set((list, set));
+        }
+        let (list, set) = self.tracked.get().expect("set above");
         urzua_core::locator::match_locator_files(path, list, &|p| {
             let p = std::path::Path::new(p);
             set.contains(p) && self.root.join(p).is_file()
