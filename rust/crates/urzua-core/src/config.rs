@@ -1097,6 +1097,10 @@ pub struct VersionBumpDecl {
     /// The change classes (the revision log's Class column, without emphasis)
     /// that require a bump.
     pub classes: Vec<String>,
+    /// The version `urzua new` writes into `field` on a new record. Unset, the
+    /// field starts blank for a human, as every field `new` cannot fill does.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub initial: Option<String>,
 }
 
 /// The default marker line: what every repository used before the identity
@@ -1375,6 +1379,10 @@ pub struct RelationFields {
     pub date: Option<String>,
     /// The field `urzua new` fills with the author (`MILE-176`).
     pub author: Option<String>,
+    /// The field `urzua new` fills with the record's title, for a required field
+    /// that restates what the record is about (a spec's `Subject`, `MILE-74`).
+    /// Unset, no field takes the title.
+    pub title: Option<String>,
 }
 
 impl RelationFields {
@@ -1387,6 +1395,7 @@ impl RelationFields {
             .filter_map(|role| self.get(role).map(|field| (role.config_key(), field)))
             .chain(self.date.as_deref().map(|f| ("date", f)))
             .chain(self.author.as_deref().map(|f| ("author", f)))
+            .chain(self.title.as_deref().map(|f| ("title", f)))
             .collect()
     }
 
@@ -1451,6 +1460,21 @@ impl RecordTypeConfig {
             .as_ref()
             .and_then(|r| r.author.as_deref())
             .unwrap_or("Author")
+    }
+
+    /// The field `urzua new` fills with the record's title, when the type
+    /// declares one under `relation_fields.title` (`MILE-74`).
+    pub fn title_field(&self) -> Option<&str> {
+        self.relation_fields
+            .as_ref()
+            .and_then(|r| r.title.as_deref())
+    }
+
+    /// The field and starting value `urzua new` writes for the version, when the
+    /// type declares `revision_log.version_bump.initial` (`MILE-74`).
+    pub fn initial_version(&self) -> Option<(&str, &str)> {
+        let bump = self.version_bump()?;
+        Some((bump.field.as_str(), bump.initial.as_deref()?))
     }
 
     /// The field name this type uses for `role`, declared or defaulted
@@ -1684,6 +1708,11 @@ fn revision_log_problem(decl: &RevisionLogDecl) -> Option<String> {
             return Some("a `version_bump` with no `classes` -- it would require nothing".into());
         } else if bump.classes.iter().any(|c| c.trim().is_empty()) {
             return Some("a `version_bump` with a blank class -- it would match no row".into());
+        } else if bump.initial.as_deref().is_some_and(|v| v.trim().is_empty()) {
+            return Some(
+                "a `version_bump` with a blank `initial` -- it would start every record blank"
+                    .into(),
+            );
         }
     }
     let mut seen: Vec<&str> = Vec::new();

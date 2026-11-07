@@ -860,6 +860,7 @@ mod tests {
             version_bump: Some(crate::config::VersionBumpDecl {
                 field: "Version".into(),
                 classes: vec!["major".into()],
+                initial: None,
             }),
             ..decl
         })
