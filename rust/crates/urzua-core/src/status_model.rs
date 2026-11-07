@@ -111,6 +111,22 @@ pub struct DeliveryDecl {
     /// evidence field alone.
     #[serde(default = "back_pointer_evidence_default")]
     pub back_pointer_evidence: bool,
+    /// Opt-in per-item evidence (`ADR-96`, `MILE-214`): the Done-means section
+    /// becomes a list whose items each name their evidence, and the status is
+    /// computed from the items. Omitted keeps today's behaviour byte for byte.
+    #[serde(default)]
+    pub items: Option<crate::done_items::ItemsDecl>,
+}
+
+impl DeliveryDecl {
+    /// The tiers at which an item's own locators resolve it: the declared
+    /// `items.resolving_tiers`, else `delivered_tiers`.
+    pub fn resolving_tiers(&self) -> &[String] {
+        self.items
+            .as_ref()
+            .and_then(|i| i.resolving_tiers.as_deref())
+            .unwrap_or(&self.delivered_tiers)
+    }
 }
 
 fn back_pointer_evidence_default() -> bool {
@@ -562,6 +578,121 @@ fn validate_delivery(
             ));
         }
     }
+    if let Some(items) = &delivery.items {
+        validate_items(rt, d, delivery, items, embodiment)?;
+    }
+    Ok(())
+}
+
+/// `statuses.delivery.items` is refused at load when it would be inert or
+/// ambiguous (`ADR-96` section 4, `BUG-44`): every error names the key.
+fn validate_items(
+    rt: &RecordTypeConfig,
+    d: &StatusDecl,
+    delivery: &DeliveryDecl,
+    items: &crate::done_items::ItemsDecl,
+    embodiment: &EmbodimentDecl,
+) -> Result<(), String> {
+    let key = "delivery.items";
+    if items.section.trim().is_empty() {
+        return Err(format!("`{key}.section` is blank"));
+    }
+    let required: Vec<String> = crate::document_model::declared_model("", rt)
+        .ok()
+        .flatten()
+        .and_then(|m| m.sections)
+        .map(|s| s.required.into_iter().map(|r| r.name).collect())
+        .unwrap_or_default();
+    if !required.contains(&items.section) {
+        return Err(format!(
+            "`{key}.section` names '{}', which the type does not require: declare it under `sections.required` (required: {})",
+            items.section,
+            if required.is_empty() { "none".to_string() } else { required.join(", ") }
+        ));
+    }
+    for (what, value) in [
+        ("clause_separator", &items.clause_separator),
+        ("evidence_marker", &items.evidence_marker),
+        ("waiver_marker", &items.waiver_marker),
+    ] {
+        if value.trim().is_empty() {
+            return Err(format!("`{key}.{what}` is blank"));
+        }
+    }
+    if items.evidence_marker == items.waiver_marker {
+        return Err(format!(
+            "`{key}.evidence_marker` and `{key}.waiver_marker` are both '{}'",
+            items.evidence_marker
+        ));
+    }
+    if items.evidence_marker.starts_with(&items.waiver_marker)
+        || items.waiver_marker.starts_with(&items.evidence_marker)
+    {
+        return Err(format!(
+            "`{key}`: one of the markers '{}' and '{}' is a prefix of the other, so a clause could not be told apart",
+            items.evidence_marker, items.waiver_marker
+        ));
+    }
+    if !d.declares(&items.partial_status) {
+        return Err(format!(
+            "`{key}.partial_status` names '{}', which is not in `values`",
+            items.partial_status
+        ));
+    }
+    if !delivery.not_done.contains(&items.partial_status) {
+        return Err(format!(
+            "`{key}.partial_status` names '{}', which is not in `delivery.not_done`",
+            items.partial_status
+        ));
+    }
+    if d.has_transitions() {
+        if let Some(from) = delivery
+            .not_done
+            .iter()
+            .find(|s| **s != items.partial_status && !d.allows(s, &items.partial_status))
+        {
+            return Err(format!(
+                "`{key}.partial_status` names '{}', which `transitions` does not allow from '{from}': `fix` could not repair a record at '{from}' to it",
+                items.partial_status
+            ));
+        }
+    }
+    if let Some(tiers) = &items.resolving_tiers {
+        check_list(&format!("{key}.resolving_tiers"), tiers, false)?;
+        let known: Vec<&str> = embodiment.tiers.iter().map(|t| t.state.as_str()).collect();
+        if let Some(t) = tiers.iter().find(|t| !known.contains(&t.as_str())) {
+            return Err(format!(
+                "`{key}.resolving_tiers` names '{t}', which is not a declared embodiment tier (one of: {})",
+                known.join(", ")
+            ));
+        }
+    }
+    let mut seen = std::collections::BTreeSet::new();
+    for c in &items.waiver_categories {
+        if c.name.trim().is_empty() {
+            return Err(format!("`{key}.waiver_categories` has a blank name"));
+        }
+        if c.name
+            .contains(|ch: char| ch.is_whitespace() || "(),".contains(ch))
+        {
+            return Err(format!(
+                "`{key}.waiver_categories` name '{}' holds whitespace, a parenthesis or a comma, which the waiver clause cannot carry",
+                c.name
+            ));
+        }
+        if !seen.insert(c.name.as_str()) {
+            return Err(format!(
+                "`{key}.waiver_categories` lists '{}' twice",
+                c.name
+            ));
+        }
+        if c.expires_required() && !c.cite_required() {
+            return Err(format!(
+                "`{key}.waiver_categories` '{}' requires an expiry but no cite: a deferral needs a target (`cite: required`)",
+                c.name
+            ));
+        }
+    }
     Ok(())
 }
 
@@ -587,6 +718,33 @@ pub(crate) fn validate(
         out.insert(name.clone(), decl);
     }
     Ok(out)
+}
+
+/// A type that declares `delivery.items` needs `status.delivery-agreement`
+/// on: the guaranteed `DoneWithUnresolvedItems` finding is that rule's, so with
+/// it off the declaration would compute a status nothing holds the record to
+/// (`ADR-96` section 4, `BUG-44`).
+pub(crate) fn validate_items_rule(
+    types: &BTreeMap<String, RecordTypeConfig>,
+    decls: &BTreeMap<String, StatusDecl>,
+    rules: &BTreeMap<String, crate::config::RuleSetting>,
+) -> Result<(), ConfigError> {
+    let rule = crate::rules::RULE_STATUS_DELIVERY_AGREEMENT;
+    let on = rules
+        .get(rule)
+        .is_some_and(|s| s.level != crate::config::RuleLevel::Off);
+    for (name, decl) in decls {
+        let declares = decl.delivery.as_ref().is_some_and(|d| d.items.is_some());
+        if declares && !on && types.contains_key(name) {
+            return Err(invalid(
+                name,
+                format!(
+                    "`delivery.items` is declared, but `{rule}` is off or absent: its `DoneWithUnresolvedItems` finding is what holds a status to the items, so turn the rule on"
+                ),
+            ));
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]

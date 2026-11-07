@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5QF32RM76Y50THPQEG
-Version: '0.15'
+Version: '0.16'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -78,7 +78,7 @@ Per-record-type, not global — any type can shorten its own prefix without affe
 | `Depends-on` | comma-separated, optional | Records that must finish before this milestone can: milestones, or conditions (`SPEC-23`). A pointer field, so each value must resolve (`sequence.unresolved-blocker`) and the relation must not loop (`sequence.cycle`). A milestone with an unfinished `Depends-on` target is blocked; `Blocked` is derived and never written as a `Status`, and `sequence.status-agreement` reports a blocked milestone whose `Status` claims progress. `urzua roadmap` orders the backlog by it. |
 | `Blocks` | comma-separated, optional | The inverse of `Depends-on`, declared so a record that writes it still takes part; it is otherwise computed from the records and never written. |
 | `Implements` | comma-separated, optional | Already-generic field (RFC-1) — points at whichever RFC(s)/ADR(s) this milestone realizes. **Not required**: a milestone can exist before a decision does (e.g. "decide whether this needs an RFC"). Declared as this type's one `pointer_fields` entry (MILE-90/ADR-44) — clean, comma-separated references only, format-enforced by `header.pointer-field-clean`. |
-| `Realized-by` | `spec:`, `code:`, `test:` locators; set by the delivering PR | Delivery evidence (`MILE-183`). The PR that fully delivers a milestone sets it and `Status: Done` together; `status.delivery-agreement` fails when the evidence computes to `Implemented` or `Verified` under `Planned` or `InProgress`, and when `Done` has no evidence. A decision milestone's evidence is the record of the decision (a `spec:` locator), which is neither. Leave it off a milestone that is only partly delivered. |
+| `Realized-by` | `spec:`, `code:`, `test:` locators; set by the delivering PR | Delivery evidence (`MILE-183`). Under `statuses.delivery.items` (`ADR-96`) delivery is judged from the Done-means items instead, and this field holds only record-level evidence. The PR that fully delivers a milestone sets it and `Status: Done` together; `status.delivery-agreement` fails when the evidence computes to `Implemented` or `Verified` under `Planned` or `InProgress`, and when `Done` has no evidence. A decision milestone's evidence is the record of the decision (a `spec:` locator), which is neither. Leave it off a milestone that is only partly delivered. |
 | `Blocked-on` | free text, optionally citing a record ID; optional | What has to be true before this milestone can move. Free text with no reference token stays legal ("a decision not yet made"); a real ID (`BUG-3`) is checked by `pointer.resolution` for resolution and by `narrative-field.stale` (ADR-42, generalized by MILE-90/ADR-44) for whether the target has since reached a terminal status. Declared as this type's one `narrative_fields` entry (MILE-90/ADR-44) — prose-tolerant, unlike `Implements`. Was a body section (`## Blocked on`) before this version — moved into the header (ADR-42) since it's the one field-shaped exception in the schema that hadn't been. |
 
 `Status` is mechanically validated against the declared `statuses`: `status.undeclared-value` reports a
@@ -104,6 +104,135 @@ reopened rather than left `Done`. Where it fits, the criteria include that the c
 the repository's own configuration and records, not only by unit tests. A `WontDo` milestone is exempt
 (`exempt_statuses`): it will never be done, so it has no criteria to meet. The template
 (`.urzua/templates/milestone.md`) carries the section, and `/milestone` fills it.
+
+## Done means as items (`ADR-96`, `MILE-214`)
+
+A type may declare `statuses.delivery.items` (`SPEC-3`). Its `## Done means` is then a list whose items
+each name their own evidence, and the milestone's `Status` is computed from the items. This repository
+does not declare it yet (`MILE-215` migrates the milestones and switches it on); the grammar below is the
+one the engine implements. It is structured text, not a mini-language: the engine reads three declared
+words and hands each clause to the `Realized-by` and waiver parsers.
+
+```
+section   = { block } ;                  # the text of the type's declared section, fences skipped
+block     = item | other ;               # `other`: any non-list text; it is not an item and is never evidence
+item      = marker, line, { continuation | subitem | blank }, [ final ] ;
+marker    = ( "-" | "*" | "+" | digits ("." | ")") ), " " ;
+                                         # at the item indent: the indent of the first marker in the section
+subitem   = deeper-indented marker line   # belongs to its parent; never an item, never a clause
+line      = text, [ clauses ] ;
+clauses   = [ SEP, EV, locators ], [ SEP, WV, waiver ] ;     # at least one; evidence first
+final     = [ EV, locators ], [ WV, waiver ] ;               # one or two last lines, each starting at its marker
+locators  = locator, { ",", [ " " ], locator } ;             # the Realized-by comma rule (BUG-129)
+waiver    = category, [ " (", cite, [ ", ", date ], ")" ], " -- ", reason ;
+```
+
+`SEP` is `clause_separator` (` — `, space em dash space), `EV` is `evidence_marker` and `WV` is
+`waiver_marker`. The rules:
+
+1. **What is an item.** A list item at the item indent, whether the marker is `-`, `*`, `+`, `1.` or
+   `1)`. A list item indented deeper than its predecessor at the item indent is a sub-item: it belongs
+   to that parent, its text is part of the parent's item text, and it is never itself an item and never
+   carries a clause. A marker indented less than the item indent is a shape finding. Items are numbered
+   by position, from 1, in report messages. A section with no list item (prose only) has `n = 0`; on an
+   opted-in type that is a shape finding, and under a `success` status it is also the
+   delivery-agreement finding (`r = 0`).
+2. **Where the clauses are.** In exactly one place per item: at the end of the item's first line, or on
+   the item's final line or final two lines. The first line is split at the first occurrence of
+   `SEP + EV` or `SEP + WV`; the text before it is the item text, and continuation lines and sub-items
+   after the first line add to the item text. The final-line form exists for an item whose text runs
+   over several lines or has sub-items: after the last sub-item or continuation line (a blank line
+   between is allowed), the evidence clause is one line beginning with `EV` and the waiver clause is one
+   line beginning with `WV`, in that order, each indented as a continuation. Clauses on the first line
+   and on final lines at once are a shape finding. A marker anywhere else, including inside a
+   continuation line or a sub-item, is plain text and is not parsed.
+3. **A marker inside prose.** `evidence:` without the separator before it is text (an item may say "the
+   report prints evidence: per item"); the clause begins only at `SEP + marker`. A waiver's reason runs
+   to the end of its line and is free prose, so `waived: process-outcome -- see evidence: CI` has one
+   reason, `see evidence: CI`, and `— evidence:` inside a reason is part of the reason. The converse is
+   the one thing an author must avoid: item text that itself contains `SEP + EV` splits there, and the
+   clause that follows then fails to parse as locators, which is a shape finding naming the item. It is
+   loud, never silent.
+4. **Both clauses.** An item may carry an evidence clause and a waiver clause, evidence first. That is
+   how a waiver stays honest: the item says what will evidence it, and the waiver excuses it until it
+   does. A waiver without an evidence clause is valid.
+5. **Several locators.** The evidence clause is read by the `Realized-by` splitter: a comma separates
+   two locators only when a `category:` prefix (`spec:`, `code:`, `test:`) follows it, optionally after
+   one space; any other comma belongs to the path. Scoped symbols and `@sha256:` pins mean what they
+   mean in the header. A locator is not wrapped in backticks, quotes or a link: such text before the
+   first `category:` is text that belongs to no entry and is a shape finding. A locator holds no
+   whitespace, so a trailing explanation after the last locator (`test:a.rs because it covers x`) is a
+   shape finding naming the stray text. A path that itself contains `,<category>:` is the one ambiguous
+   shape, as it already is in the header.
+6. **The waiver and its cite.** The waiver clause is `waived: <category>[ (<cite>[, <date>])] -- <reason>`.
+   The category is in the declared vocabulary. The parenthesis, when present, is the cite: one record id
+   in the type's identity form (`MILE-215`, `ADR-12`), then for a category declared `expires: required`
+   an ISO date. The reason is required, non-empty prose after ` -- `. A category declared
+   `cite: required` without a parenthesis, a cite that is not a record id, a date on a category that
+   takes none, and a category declared `expires: required` without a date are shape findings. A pull
+   request or an issue number is not a cite: it goes in the reason.
+7. **Leading checkbox.** `[x]` or `[ ]` at the start of item text is a shape finding: state is computed.
+
+Worked examples, each a fixture (`done_items/tests.rs` and `done_items_integration.rs`):
+
+```markdown
+## Done means
+
+- A declared alias satisfies the section requirement and is reported as the alias used. — evidence: code:rust/crates/urzua-core/src/rules/section.rs#section_required, test:rust/crates/urzua-cli/tests/section_rules_integration.rs#an_alias_satisfies_the_requirement
+```
+
+Item 1: one item, two locators, the comma is followed by `test:` so it separates them.
+
+```markdown
+- Config is read from a directory whose name has a comma. — evidence: code:rust/tools/a,b/src/lib.rs, test:rust/tools/a,b/tests/t.rs
+```
+
+Item 2: the first comma is followed by `b/src`, not a category, so it stays in the path; the second is
+followed by ` test:` and separates.
+
+```markdown
+- The report prints evidence: per item, with no separator before the word.
+```
+
+Item 3: plain text. No clause, so on an opted-in type it is unresolved (no evidence).
+
+```markdown
+- Every rule that reads a section reads it through one function.
+  - `section.required` calls it
+  - `section.order` calls it
+  - the harness text calls it
+
+  evidence: code:rust/crates/urzua-core/src/rules/section.rs#sections_of, test:rust/crates/urzua-core/src/rules/section.rs#every_reader_shares_one_function
+```
+
+Item 4: one item; the three sub-bullets are its text, not three items; the evidence is on the final line.
+
+```markdown
+1. The release notes name the change. — waived: process-outcome -- the notes are written when the release PR is opened, see evidence: CI and #512
+```
+
+Item 5: an ordered item. The reason is `the notes are written when the release PR is opened, see evidence: CI and #512`;
+the `evidence:` inside it is not a marker.
+
+```markdown
+- A second platform builds. — evidence: test:rust/crates/urzua-cli/tests/platform_windows.rs#builds — waived: deferred-to (MILE-230, 2027-01-31) -- the runner is not available until MILE-230 lands
+```
+
+Item 6: evidence and waiver together. The waiver holds while the test does not resolve; the day it does,
+the waiver is stale (`status.waived-item-stale`, `SPEC-2`).
+
+```markdown
+- The reader accepts `code:` locators. — evidence: `code:rust/crates/urzua-core/src/locator.rs`
+- The reader is fast. — evidence: test:rust/crates/urzua-core/benches/read.rs because it measures it
+- [x] The doc names the command. — evidence: spec:docs/specs/SPEC-2-urzua-check.md
+```
+
+Items 7, 8 and 9 are each a shape finding: backticks before the first `category:`; whitespace in the
+locator, naming `because it measures it`; a leading checkbox.
+
+The `Realized-by` field stays valid for record-level evidence tied to no single criterion. For an
+opted-in type its locators are evidence for `Embodiment` and drift beside the item locators, but never
+make the milestone delivered.
 
 ## Phase vocabulary
 
@@ -174,3 +303,4 @@ to another record — nothing to check for resolution, no cycle risk, no new rul
 > | 2026-11-05 | Status changed from Accepted to Shipped and bumped to `0.13`. **Why:** maintainer decision of 2026-11-05 to ship the specs whose implementation is verified; `Embodiment: Verified` with `Realized-by` naming the implementing code and tests. | **structural** |
 > | 2026-11-05 | Bumped to `0.14`. `Blocked` is removed from the `Status` value set: it is derived from `Depends-on` and surfaced by `check` and the roadmap, never written. A waiting milestone is `Planned`, with the wait in `Depends-on` (a record) and `Blocked-on` (the explanation). **Why:** `RFC-48` ("accepting this RFC includes amending `SPEC-6`'s `Status` value set to remove `Blocked`"), decided for this repository in `ADR-83`. | **substantive** |
 > | 2026-11-05 | Bumped to `0.15`. The schema excerpt now shows the type as configured: `Depends-on`, `Blocks`, `Non-reference-ids`, `statuses` (with `initial`, `transitions` and `delivery`), `sections` and the three pointer fields. The Status paragraph no longer says `Status` is not validated, and "What's deliberately not built" no longer lists `Depends-on` and a generated roadmap, both built. **Why:** the spec described a config and an engine that had since moved on (`status.undeclared-value`, `status.transition-allowed`, the sequencing pair, `urzua roadmap`); a reader following it would have rebuilt what exists. `Phase` and `Track` are still plain tags. | **substantive** |
+> | 2026-11-07 | Bumped to `0.16`. Adds "Done means as items": the item grammar of `ADR-96` verbatim with its nine worked examples, for a type that declares `statuses.delivery.items`; the `Realized-by` row notes that delivery is then judged from the items. **Why:** `MILE-214`; this repository does not declare the option until `MILE-215`. | **substantive** |

@@ -20,6 +20,18 @@ struct ActionEntry {
     op: Option<ActionOp>,
     #[serde(skip_serializing_if = "Option::is_none")]
     exempt: Option<String>,
+    /// The lowest severity a finding of this variant has, whatever level the
+    /// repository sets for the rule (`ADR-96`); omitted when there is none.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    severity_floor: Option<urzua_core::report::FindingSeverity>,
+    /// `false` when no rule-level waiver matches this variant (`ADR-96`);
+    /// omitted when one can.
+    #[serde(skip_serializing_if = "is_true")]
+    waivable: bool,
+}
+
+fn is_true(b: &bool) -> bool {
+    *b
 }
 
 #[derive(serde::Serialize)]
@@ -68,12 +80,16 @@ pub fn run() -> ExitCode {
                         kind: Some(kind),
                         op,
                         exempt: None,
+                        severity_floor: a.severity_floor,
+                        waivable: a.waivable,
                     },
                     ActionDecl::Exempt(reason) => ActionEntry {
                         variant: a.variant.to_string(),
                         kind: None,
                         op: None,
                         exempt: Some(reason.to_string()),
+                        severity_floor: a.severity_floor,
+                        waivable: a.waivable,
                     },
                 })
                 .collect(),

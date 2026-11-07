@@ -33,10 +33,9 @@ fn display(paths: impl IntoIterator<Item = impl AsRef<Path>>) -> Vec<String> {
 fn cited_locators(config: &Config, record: &Record) -> Vec<String> {
     let field =
         rules::relation_field_name(config, &record.record_type, RelationRole::EmbodimentLocator);
-    record
-        .header
-        .get(field)
-        .map(rules::realized_by_locator_paths)
+    // `Realized-by` plus the Done-means item clauses (`ADR-96`).
+    rules::evidence_text(record, field)
+        .map(|value| rules::realized_by_locator_paths(&value))
         .unwrap_or_default()
 }
 

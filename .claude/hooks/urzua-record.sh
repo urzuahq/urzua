@@ -138,7 +138,7 @@ done)
   out="$("$bin" fix --apply --ids "$path" --by "$by" --actor agent)" && rc=0 || rc=$?
   printf '%s\n' "$out"
   if ! printf '%s\n' "$out" | grep -q '"computed_value"'; then
-    echo "urzua-record: the engine computed no value for $path from its evidence, so nothing was set (add the evidence first; this command never writes a value itself)" >&2
+    echo "urzua-record: the engine computed no value for $path from its evidence, so nothing was set (add the evidence first, on each item of the record's completion criteria that the change delivered; the notices above name any item still unresolved; this command never writes a value itself)" >&2
     exit 1
   fi
   [ "$rc" -eq 0 ] || exit "$rc"

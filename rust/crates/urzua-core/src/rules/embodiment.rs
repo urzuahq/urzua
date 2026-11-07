@@ -141,11 +141,17 @@ pub fn embodiment_locator_exists(
     read: &dyn Fn(&str) -> crate::locator::SharedText,
     untracked_on_disk: &dyn Fn(&str) -> bool,
 ) -> (RuleExecution, Vec<Finding>) {
-    use crate::config::LocatorKind;
-    use crate::locator::{self, Anchor, FileText, ScopeError};
+    use crate::locator;
     const RULE_ID: &str = RULE_EMBODIMENT_LOCATOR_EXISTS;
     let mut findings = Vec::new();
-    let opts: LocatorExistsOpts = config.rule_opts(RULE_ID);
+    let env = LocatorEnv {
+        config,
+        opts: config.rule_opts(RULE_ID),
+        tracked,
+        present,
+        read,
+        untracked_on_disk,
+    };
 
     // One candidate per declared slot, not per locator: the population is the
     // rule's input, not its work count.
@@ -166,173 +172,74 @@ pub fn embodiment_locator_exists(
                 &record.record_type,
                 crate::config::RelationRole::EmbodimentLocator,
             );
+            // A Done-means item clause (`ADR-96`) is evidence too, held to the
+            // same test; a record with item clauses and no `Realized-by` is
+            // still examined.
+            let clauses: Vec<&crate::done_items::Clause> = record
+                .items
+                .iter()
+                .flat_map(|i| i.items.iter())
+                .filter_map(|i| i.evidence.as_ref())
+                .filter(|c| c.valid)
+                .collect();
             let value = match declared_value(record, field) {
-                Ok(v) => v,
+                Ok(v) => Some(v),
+                Err(Outcome::Absent) if !clauses.is_empty() => None,
                 Err(outcome) => return outcome,
             };
-            let mut report = |variant: &'static str, message: String| {
-                findings.push(Finding {
-                    rule: RULE_ID.to_string(),
-                    severity: FindingSeverity::Error,
-                    file: record.path.clone(),
-                    line: None,
-                    waived: None,
-                    declared_severity: None,
-                    suggested_action: None,
-                    action_source: ActionSource::new(variant).field(field),
-                    message,
-                });
-            };
-            // Text the splitter drops is evidence that does not exist; say so.
-            if let Some(lead) = locator::realized_by_unrecognised(value) {
-                report(
-                    "locator-malformed",
-                    format!(
-                        "{field} holds '{lead}', which is not a recognised entry and counts as no evidence (grammar: {})",
-                        locator::GRAMMAR
-                    ),
-                );
-            }
-            for entry in locator::realized_by_locators(value) {
-                let l = match &entry.parsed {
-                    Ok(l) => l,
-                    Err(e) => {
-                        report(
-                            "locator-malformed",
-                            format!(
-                                "{field} names '{}', which does not parse: {e} (grammar: {})",
-                                entry.raw,
-                                locator::GRAMMAR
-                            ),
-                        );
-                        continue;
-                    }
+            if let Some(value) = value {
+                let mut report = |variant: &'static str, message: String| {
+                    findings.push(Finding {
+                        rule: RULE_ID.to_string(),
+                        severity: FindingSeverity::Error,
+                        file: record.path.clone(),
+                        line: None,
+                        waived: None,
+                        declared_severity: None,
+                        suggested_action: None,
+                        action_source: ActionSource::new(variant).field(field),
+                        message,
+                    });
                 };
-                // An empty locator joins to the repository root, which exists --
-                // so it would pass while still computing to `Implemented`.
-                if l.path.trim().is_empty() {
-                    report("locator-empty", format!("{field} has an empty locator"));
-                    continue;
-                }
-                let matched = match locator::match_locator_files(&l.path, tracked, present) {
-                    Ok(m) => m,
-                    Err(e) => {
-                        report(
-                            "locator-malformed",
-                            format!(
-                                "{field} names '{}', whose glob {e} (grammar: {})",
-                                l.path,
-                                locator::GRAMMAR
-                            ),
-                        );
-                        continue;
-                    }
-                };
-                let Some(kind) = matched.kind else {
-                    // A `#` that did not parse as a scope stayed in the path: it
-                    // is a malformed scope, not a file missing from the tree.
-                    if l.path.contains('#') {
-                        report("locator-malformed", format!(
-                            "{field} names '{}', whose text after `#` is not a scope and which is not a file in the working tree (grammar: {})",
-                            l.path,
+                // Text the splitter drops is evidence that does not exist; say so.
+                if let Some(lead) = locator::realized_by_unrecognised(value) {
+                    report(
+                        "locator-malformed",
+                        format!(
+                            "{field} holds '{lead}', which is not a recognised entry and counts as no evidence (grammar: {})",
                             locator::GRAMMAR
-                        ));
-                    } else if untracked_on_disk(&l.path) {
-                        report(
-                            "locator-untracked",
-                            format!(
-                                "{field} names '{}', which exists on disk but is not tracked by git",
-                                l.path
-                            ),
-                        );
-                    } else {
-                        report(
-                            "locator-missing",
-                            format!(
-                                "{field} names '{}', which is not in the working tree",
-                                l.path
-                            ),
-                        );
+                        ),
+                    );
+                }
+                for entry in locator::realized_by_locators(value) {
+                    if let Some((variant, message)) = locator_defect(&entry, field, &env) {
+                        report(variant, message);
                     }
-                    continue;
-                };
-                // BUG-176: which kinds are legal, and which can be pinned, is config
-                if !opts.locator_kinds.contains(&kind) {
-                    report(
-                        "locator-kind-undeclared",
-                        format!(
-                            "{field} names '{}', a {kind} locator, and `{RULE_ID}` does not accept that kind: add `{kind}` to its `locator_kinds` option, or name a file",
-                            l.path
-                        ),
-                    );
-                    continue;
                 }
-                if kind != LocatorKind::File && matched.files.is_empty() {
-                    report(
-                        "locator-missing",
-                        format!(
-                            "{field} names '{}', a glob that matches no tracked file in the working tree",
-                            l.path
-                        ),
-                    );
-                    continue;
-                }
-                if matches!(l.anchor, Some(Anchor::Commit(_))) {
-                    report(
-                        "locator-commit-anchor",
-                        format!(
-                            "{field} names '{}': {}",
-                            l.display(),
-                            ScopeError::CommitAnchor
-                        ),
-                    );
-                    continue;
-                }
-                if matches!(l.anchor, Some(Anchor::Pin(_))) && !opts.pinnable.contains(&kind) {
-                    report(
-                        "locator-kind-unpinnable",
-                        format!(
-                            "{field} names '{}' with a pin, and `{RULE_ID}` does not allow a {kind} locator to be pinned: add `{kind}` to its `pinnable` option, or remove the pin",
-                            l.display()
-                        ),
-                    );
-                    continue;
-                }
-                let Some(scope) = &l.scope else { continue };
-                if kind != LocatorKind::File {
-                    report(
-                        "locator-scope-unresolved",
-                        format!(
-                            "{field} names '{}', whose scope does not resolve: {}",
-                            l.display(),
-                            ScopeError::Unsupported(format!(
-                                "a scope applies to one file, and this locator names a {kind}"
-                            ))
-                        ),
-                    );
-                    continue;
-                }
-                let resolved = match &*read(&l.path) {
-                    FileText::Text(text) => {
-                        locator::select_resolver(&config.locator_resolvers, &l.path)
-                            .and_then(|resolver| locator::resolve_scope(text, resolver, scope))
+            }
+            let section = if clauses.is_empty() {
+                String::new()
+            } else {
+                items_section(config, &record.record_type)
+            };
+            for clause in clauses {
+                let place = format!("a Done means item (line {})", clause.line);
+                for entry in locator::realized_by_locators(&clause.text) {
+                    if let Some((_, message)) = locator_defect(&entry, &place, &env) {
+                        findings.push(Finding {
+                            rule: RULE_ID.to_string(),
+                            severity: FindingSeverity::Error,
+                            file: record.path.clone(),
+                            line: Some(clause.line),
+                            waived: None,
+                            declared_severity: None,
+                            suggested_action: None,
+                            action_source: ActionSource::new("item-locator-defect")
+                                .section(section.clone())
+                                .line(clause.line),
+                            message,
+                        });
                     }
-                    FileText::NotUtf8 => Err(ScopeError::NotUtf8),
-                    FileText::Missing => Err(ScopeError::NotFound(
-                        "the file could not be read".to_string(),
-                    )),
-                };
-                match resolved {
-                    Err(e) => report("locator-scope-unresolved", format!(
-                        "{field} names '{}', whose scope does not resolve: {e}",
-                        l.display()
-                    )),
-                    Ok(_) if l.anchor.is_none() => report("locator-scope-unpinned", format!(
-                        "{field} names '{}': scope given without a pin; drift is judged on the whole file (add `@sha256:` from `urzua explain {}`)",
-                        l.display(),
-                        l.display()
-                    )),
-                    Ok(_) => {}
                 }
             }
             Outcome::Examined
@@ -348,6 +255,194 @@ pub fn embodiment_locator_exists(
         },
         findings,
     )
+}
+
+/// What a locator is checked against: the tracked files, the working tree and
+/// the repository's declared `locator_kinds` and `pinnable` (`BUG-176`). Core
+/// touches no filesystem; the caller supplies each lookup.
+pub struct LocatorEnv<'a> {
+    pub config: &'a Config,
+    pub opts: LocatorExistsOpts,
+    pub tracked: &'a [PathBuf],
+    pub present: &'a dyn Fn(&str) -> bool,
+    pub read: &'a dyn Fn(&str) -> crate::locator::SharedText,
+    pub untracked_on_disk: &'a dyn Fn(&str) -> bool,
+}
+
+impl<'a> LocatorEnv<'a> {
+    /// Runs `f` over a working tree with no file in it: for a caller with no
+    /// filesystem (a unit test, a property test).
+    pub fn without_files<R>(config: &'a Config, f: impl FnOnce(&LocatorEnv<'_>) -> R) -> R {
+        let present = |_: &str| false;
+        let env = LocatorEnv {
+            config,
+            opts: config.rule_opts(RULE_EMBODIMENT_LOCATOR_EXISTS),
+            tracked: &[],
+            present: &present,
+            read: &crate::locator::no_file_text,
+            untracked_on_disk: &present,
+        };
+        f(&env)
+    }
+}
+
+/// Why one `Realized-by`-grammar locator does not point at anything: the
+/// finding variant and message `embodiment.locator-exists` reports, or `None`
+/// when it resolves. `field` names the place it was written, for the message.
+/// Shared with the Done-means items (`ADR-96`), whose locators are held to the
+/// same test.
+pub(crate) fn locator_defect(
+    entry: &crate::locator::LocatorEntry,
+    field: &str,
+    env: &LocatorEnv<'_>,
+) -> Option<(&'static str, String)> {
+    use crate::config::LocatorKind;
+    use crate::locator::{self, Anchor, FileText, ScopeError};
+    const RULE_ID: &str = RULE_EMBODIMENT_LOCATOR_EXISTS;
+    let LocatorEnv {
+        config,
+        opts,
+        tracked,
+        present,
+        read,
+        untracked_on_disk,
+    } = env;
+    macro_rules! defect {
+        ($variant:expr, $message:expr $(,)?) => {
+            return Some(($variant, $message))
+        };
+    }
+    let l = match &entry.parsed {
+        Ok(l) => l,
+        Err(e) => {
+            defect!(
+                "locator-malformed",
+                format!(
+                    "{field} names '{}', which does not parse: {e} (grammar: {})",
+                    entry.raw,
+                    locator::GRAMMAR
+                ),
+            );
+        }
+    };
+    // An empty locator joins to the repository root, which exists --
+    // so it would pass while still computing to `Implemented`.
+    if l.path.trim().is_empty() {
+        defect!("locator-empty", format!("{field} has an empty locator"));
+    }
+    let matched = match locator::match_locator_files(&l.path, tracked, present) {
+        Ok(m) => m,
+        Err(e) => {
+            defect!(
+                "locator-malformed",
+                format!(
+                    "{field} names '{}', whose glob {e} (grammar: {})",
+                    l.path,
+                    locator::GRAMMAR
+                ),
+            );
+        }
+    };
+    let Some(kind) = matched.kind else {
+        // A `#` that did not parse as a scope stayed in the path: it
+        // is a malformed scope, not a file missing from the tree.
+        if l.path.contains('#') {
+            defect!("locator-malformed", format!(
+                    "{field} names '{}', whose text after `#` is not a scope and which is not a file in the working tree (grammar: {})",
+                    l.path,
+                    locator::GRAMMAR
+                ));
+        } else if untracked_on_disk(&l.path) {
+            defect!(
+                "locator-untracked",
+                format!(
+                    "{field} names '{}', which exists on disk but is not tracked by git",
+                    l.path
+                ),
+            );
+        } else {
+            defect!(
+                "locator-missing",
+                format!(
+                    "{field} names '{}', which is not in the working tree",
+                    l.path
+                ),
+            );
+        }
+    };
+    // BUG-176: which kinds are legal, and which can be pinned, is config
+    if !opts.locator_kinds.contains(&kind) {
+        defect!(
+                "locator-kind-undeclared",
+                format!(
+                    "{field} names '{}', a {kind} locator, and `{RULE_ID}` does not accept that kind: add `{kind}` to its `locator_kinds` option, or name a file",
+                    l.path
+                ),
+            );
+    }
+    if kind != LocatorKind::File && matched.files.is_empty() {
+        defect!(
+            "locator-missing",
+            format!(
+                "{field} names '{}', a glob that matches no tracked file in the working tree",
+                l.path
+            ),
+        );
+    }
+    if matches!(l.anchor, Some(Anchor::Commit(_))) {
+        defect!(
+            "locator-commit-anchor",
+            format!(
+                "{field} names '{}': {}",
+                l.display(),
+                ScopeError::CommitAnchor
+            ),
+        );
+    }
+    if matches!(l.anchor, Some(Anchor::Pin(_))) && !opts.pinnable.contains(&kind) {
+        defect!(
+                "locator-kind-unpinnable",
+                format!(
+                    "{field} names '{}' with a pin, and `{RULE_ID}` does not allow a {kind} locator to be pinned: add `{kind}` to its `pinnable` option, or remove the pin",
+                    l.display()
+                ),
+            );
+    }
+    let Some(scope) = &l.scope else { return None };
+    if kind != LocatorKind::File {
+        defect!(
+            "locator-scope-unresolved",
+            format!(
+                "{field} names '{}', whose scope does not resolve: {}",
+                l.display(),
+                ScopeError::Unsupported(format!(
+                    "a scope applies to one file, and this locator names a {kind}"
+                ))
+            ),
+        );
+    }
+    let resolved = match &*read(&l.path) {
+        FileText::Text(text) => locator::select_resolver(&config.locator_resolvers, &l.path)
+            .and_then(|resolver| locator::resolve_scope(text, resolver, scope)),
+        FileText::NotUtf8 => Err(ScopeError::NotUtf8),
+        FileText::Missing => Err(ScopeError::NotFound(
+            "the file could not be read".to_string(),
+        )),
+    };
+    match resolved {
+            Err(e) => defect!("locator-scope-unresolved", format!(
+                "{field} names '{}', whose scope does not resolve: {e}",
+                l.display()
+            )),
+            Ok(_) if l.anchor.is_none() => defect!("locator-scope-unpinned", format!(
+                "{field} names '{}': scope given without a pin; drift is judged on the whole file (add `@sha256:` from `urzua explain {}`)",
+                l.display(),
+                l.display()
+            )),
+            Ok(_) => {}
+        }
+
+    None
 }
 
 /// Rule (ADR-0018/ADR-0032): a record's stated `Embodiment` must agree with
@@ -453,7 +548,7 @@ pub fn embodiment_consistency(
             // evidence of either kind supports (`MILE-161`); one stating no
             // tier stays unexamined, and an unreadable header is never judged.
             let claims_a_tier = config.embodiment.claims_built(stated.trim());
-            let realized_by_value = match declared_value(record, locator_field) {
+            let realized_by_value = match evidence_value(record, locator_field) {
                 Ok(v) => Some(v),
                 Err(Outcome::Absent) if cited_by_code || cited_by_test || claims_a_tier => None,
                 Err(outcome) => return outcome,
@@ -461,7 +556,10 @@ pub fn embodiment_consistency(
 
             let computed = compute_embodiment(
                 &config.embodiment,
-                &realized_by_value.map(parse_realized_by).unwrap_or_default(),
+                &realized_by_value
+                    .as_deref()
+                    .map(parse_realized_by)
+                    .unwrap_or_default(),
                 drifted.contains(&record.path),
                 cited_by_code,
                 cited_by_test,
@@ -618,12 +716,12 @@ pub fn embodiment_locator_promotion_candidate(
                 &record.record_type,
                 crate::config::RelationRole::EmbodimentLocator,
             );
-            let realized_by_value = match declared_value(record, field) {
+            let realized_by_value = match evidence_value(record, field) {
                 Ok(v) => v,
                 Err(outcome) => return outcome,
             };
 
-            let parsed = parse_realized_by(realized_by_value);
+            let parsed = parse_realized_by(&realized_by_value);
             for locator in parsed
                 .spec
                 .iter()

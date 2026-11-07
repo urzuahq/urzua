@@ -31,6 +31,11 @@ pub struct Record {
     /// (RFC-33 layer 1, MILE-98). `None` when the type declares none, in
     /// which case `record_id` reads the `TYPE-N-slug.md` convention as always.
     pub identity: Option<DeclaredIdentity>,
+    /// The parsed Done-means items (`ADR-96`), attached by the caller for a
+    /// record whose type declares `statuses.delivery.items` (the core opens no
+    /// file, so it cannot read the section itself). `None` otherwise: an
+    /// undeclared type behaves exactly as before.
+    pub items: Option<crate::done_items::DoneItems>,
 }
 
 impl Record {
@@ -66,6 +71,7 @@ impl Record {
             type_prefix,
             header: header::parse_with_shape(content, shape),
             identity: None,
+            items: None,
         }
     }
 
@@ -104,6 +110,7 @@ impl Record {
             type_prefix,
             header,
             identity,
+            items: None,
         }
     }
 }

@@ -1,0 +1,45 @@
+schema_version: 2
+roadmap:
+  pairs: [sequencing]
+relation_pairs:
+  - {name: sequencing, forward: Depends-on, inverse: Blocks, reciprocity: none, cross_type: true, acyclic: true}
+rules:
+  header.required-fields: error
+  embodiment.locator-exists: error
+  status.delivery-agreement: error
+  status.done-items-shape: error
+  status.waived-item-stale: warn
+record_types:
+  milestone:
+    dir: docs/milestones
+    prefix: MILE
+    header_shape: yaml-frontmatter
+    required_fields: [Status]
+    known_fields: [Realized-by, Depends-on, Blocks]
+    pointer_fields: [Depends-on, Blocks]
+    sections:
+      from: headings
+      required:
+        - {name: Done means}
+    statuses:
+      values: [Planned, InProgress, Done, WontDo]
+      success: [Done]
+      failure: [WontDo]
+      progress: [InProgress, Done]
+      delivery:
+        delivered_tiers: [Implemented, Verified]
+        unevidenced_tiers: ["Not started"]
+        not_done: [Planned, InProgress]
+        set_status: Done
+        items:
+          section: "Done means"
+          clause_separator: " — "
+          evidence_marker: "evidence:"
+          waiver_marker: "waived:"
+          partial_status: "InProgress"
+          resolving_tiers: [Specified, Implemented, Verified]
+          waiver_categories:
+            - {name: not-applicable}
+            - {name: superseded-by-decision, cite: required}
+            - {name: deferred-to, cite: required, expires: required}
+            - {name: process-outcome}

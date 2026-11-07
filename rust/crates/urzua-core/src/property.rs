@@ -261,6 +261,7 @@ mod tests {
                 type_prefix: "NOTE".to_string(),
                 header: crate::header::parse(&body),
                 identity: None,
+                items: None,
             };
 
             // The parser must recover the key before the rule can be held to
@@ -328,6 +329,7 @@ mod tests {
             type_prefix: "NOTE".to_string(),
             header: crate::header::parse(body),
             identity: None,
+            items: None,
         };
         let records = [record];
         let record_index = rules::build_normalized_index(&records);
@@ -465,7 +467,9 @@ mod tests {
             ),
             (
                 "status.delivery-agreement",
-                rules::status_delivery_agreement(&records, &config, &Default::default()),
+                rules::LocatorEnv::without_files(&config, |env| {
+                    rules::status_delivery_agreement(&records, &config, &Default::default(), env)
+                }),
             ),
             (
                 "identity.collision",

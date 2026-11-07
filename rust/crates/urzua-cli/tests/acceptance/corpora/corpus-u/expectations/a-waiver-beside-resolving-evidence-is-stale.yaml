@@ -1,0 +1,11 @@
+id: a-waiver-beside-resolving-evidence-is-stale
+corpus: corpus-u
+invocation: [check]
+expect_exit: 1
+expect_findings:
+  - rule: status.waived-item-stale
+    severity: warning
+    file: docs/milestones/MILE-5-stale-waiver.md
+    message_contains: its evidence now resolves
+expect_notices:
+  - {subject: docs/milestones/MILE-5-stale-waiver.md, message_contains: not-applicable}

@@ -820,6 +820,7 @@ mod tests {
                 parse_error: None,
             },
             identity: None,
+            items: None,
         }
     }
 

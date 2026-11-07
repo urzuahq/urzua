@@ -20,6 +20,15 @@ pub enum FindingSeverity {
 }
 
 impl FindingSeverity {
+    /// This severity, raised to `floor` when it is lower.
+    pub fn at_least(self, floor: FindingSeverity) -> FindingSeverity {
+        match (floor, self) {
+            (FindingSeverity::Error, _) => FindingSeverity::Error,
+            (FindingSeverity::Warning, FindingSeverity::Info) => FindingSeverity::Warning,
+            _ => self,
+        }
+    }
+
     /// Strictness, for choosing the higher of two: `Info` below `Warning`
     /// below `Error`.
     pub fn rank(self) -> u8 {

@@ -224,6 +224,9 @@ pub(crate) fn load_records(
         ));
     }
 
+    // The core opens no file, so the Done-means items of an opted-in type are
+    // read here and handed to it on each record (`ADR-96`).
+    urzua_core::rules::attach_done_items(&mut records, config, &full_text);
     Ok((records, full_text))
 }
 
@@ -328,14 +331,16 @@ pub(crate) fn parse_prospective_record(
             .prefix
             .clone()
             .unwrap_or_else(|| type_name.to_ascii_uppercase());
-        return Ok(Record::parse_with_model(
+        let mut record = Record::parse_with_model(
             rel_path.to_path_buf(),
             type_name.clone(),
             content,
             type_config.header_shape,
             type_prefix,
             &model,
-        ));
+        );
+        urzua_core::rules::attach_done_items_to(&mut record, config, content);
+        return Ok(record);
     }
     Err(format!(
         "no record type governs {} (a record type governs the .md files directly in its `dir`, other than excluded and underscore-prefixed names)",
@@ -712,37 +717,55 @@ pub(crate) fn compute_drifted_records_at(
     let mut last_commit_for_path: HashMap<PathBuf, Option<String>> = HashMap::new();
     let mut strictly_before: HashMap<(String, String), bool> = HashMap::new();
 
-    // One blame per record that carries a locator field, run up front on a
-    // few threads (the per-record loop below stays sequential and cheap).
-    let locator_line = |record: &Record| -> Option<usize> {
+    // One blame per claim -- a record's evidence field line and each Done-means
+    // item clause (`ADR-96` section 5) -- run up front on a few threads (the
+    // per-record loop below stays sequential and cheap). A claim's locators
+    // drift against the commit that last touched the claim's own line.
+    let claims_of = |record: &Record| -> Vec<(usize, String)> {
         let locator_field = rules::relation_field_name(
             config,
             &record.record_type,
             urzua_core::config::RelationRole::EmbodimentLocator,
         );
-        record.header.get(locator_field)?;
-        record
-            .header
-            .fields
-            .iter()
-            .find(|f| f.key.as_str() == locator_field)
-            .map(|f| f.line)
+        let mut claims = Vec::new();
+        if let (Some(value), Some(line)) = (
+            record.header.get(locator_field),
+            record
+                .header
+                .fields
+                .iter()
+                .find(|f| f.key.as_str() == locator_field)
+                .map(|f| f.line),
+        ) {
+            claims.push((line, value.to_string()));
+        }
+        if let Some(items) = &record.items {
+            for clause in items
+                .items
+                .iter()
+                .filter_map(|i| i.evidence.as_ref())
+                .filter(|c| c.valid)
+            {
+                claims.push((clause.line, clause.text.clone()));
+            }
+        }
+        claims
     };
     let work: Vec<(PathBuf, usize)> = records
         .iter()
-        .filter_map(|r| locator_line(r).map(|l| (r.path.clone(), l)))
+        .flat_map(|r| {
+            claims_of(r)
+                .into_iter()
+                .map(move |(line, _)| (r.path.clone(), line))
+        })
         .collect();
     let mut blames = blame_lines_parallel(repo_root, &work, proposed).into_iter();
 
     for record in records {
-        let locator_field = rules::relation_field_name(
-            config,
-            &record.record_type,
-            urzua_core::config::RelationRole::EmbodimentLocator,
-        );
-        let Some(realized_by_value) = record.header.get(locator_field) else {
+        let claims = claims_of(record);
+        if claims.is_empty() {
             continue;
-        };
+        }
         // Implements: ADR-67 (the audit anchor)
         // A declared, well-formed last-audit date replaces the cited file's
         // last change as where the window counts from; a malformed one is
@@ -754,151 +777,156 @@ pub(crate) fn compute_drifted_records_at(
             (Some(t), Some(grace)) => now_unix - t < grace,
             _ => within_grace(commit),
         };
-        if locator_line(record).is_none() {
-            continue;
-        }
-        let reference_commit = match blames.next() {
-            Some(Ok(Some(c))) => c,
-            Some(Err(e)) => {
-                note(&mut problems, e);
-                continue;
-            }
-            // No history for the line: nothing to judge, and said so
-            // (`ADR-92` clause 7).
-            Some(Ok(None)) => {
-                no_history.insert(record.path.clone());
-                continue;
-            }
-            _ => continue,
-        };
-        // An all-zero hash is a line the proposed content changed or added: it
-        // is touched now, so no locator can have moved since (`MILE-159`).
-        if reference_commit.bytes().all(|b| b == b'0') {
-            continue;
-        }
-
-        for entry in urzua_core::locator::realized_by_locators(realized_by_value) {
-            // A locator that does not parse is `embodiment.locator-exists`' finding.
-            let Ok(parsed) = entry.parsed else { continue };
-            // A commit anchor is reserved for MILE-84 and is reported by
-            // `embodiment.locator-exists` as unsupported; it is not judged
-            // for drift on the file's history either.
-            if matches!(parsed.anchor, Some(urzua_core::locator::Anchor::Commit(_))) {
-                continue;
-            }
-            let locator = parsed.path.clone();
-            let locator_path = PathBuf::from(&locator);
-            // BUG-176: a directory or glob locator the config accepts
-            // The files such a locator covers. A kind the config does not
-            // declare is not judged this way: `embodiment.locator-exists`
-            // reports it and drift is read from the path's history as before.
-            let covered: Option<(LocatorKind, Vec<String>)> = if parsed.scope.is_none() {
-                texts
-                    .locator_files(&parsed.path)
-                    .ok()
-                    .and_then(|m| Some((m.kind?, m.files)))
-                    .filter(|(kind, _)| {
-                        *kind != LocatorKind::File && locator_opts.locator_kinds.contains(kind)
-                    })
-            } else {
-                None
-            };
-            if let Some((kind, files)) = &covered {
-                // Nothing matched, or a pin the config does not allow on this
-                // kind, is `embodiment.locator-exists`' finding.
-                if files.is_empty()
-                    || (parsed.anchor.is_some() && !locator_opts.pinnable.contains(kind))
-                {
+        // Every claim's blame is consumed, in order, whether or not an earlier
+        // claim already drifted the record.
+        let references: Vec<_> = claims.iter().map(|_| blames.next()).collect();
+        'claims: for ((_, realized_by_value), reference) in claims.iter().zip(references) {
+            let reference_commit = match reference {
+                Some(Ok(Some(c))) => c,
+                Some(Err(e)) => {
+                    note(&mut problems, e);
                     continue;
                 }
-            }
-            if let (Some(urzua_core::locator::Anchor::Pin(pinned)), true) =
-                (&parsed.anchor, parsed.scope.is_some() || covered.is_some())
-            {
-                // Implements: ADR-74 (a scoped pin drifts on its span's hash)
-                // The file's last commit says nothing about the scope, so there
-                // is no file-based grace window: only a declared audit date can
-                // hold a scoped pin back. A directory or glob pin is held back
-                // the same way (`BUG-176`).
-                let urzua_core::fix::PinRead::Current { hash, .. } =
-                    crate::pins::read_pin(repo_root, config, &texts, &parsed)
-                else {
-                    // A scope that does not resolve is reported by the rule and
-                    // not also judged for drift.
+                // No history for the line: nothing to judge, and said so
+                // (`ADR-92` clause 7).
+                Some(Ok(None)) => {
+                    no_history.insert(record.path.clone());
                     continue;
+                }
+                _ => continue,
+            };
+            // An all-zero hash is a line the proposed content changed or added: it
+            // is touched now, so no locator can have moved since (`MILE-159`).
+            if reference_commit.bytes().all(|b| b == b'0') {
+                continue;
+            }
+
+            for entry in urzua_core::locator::realized_by_locators(realized_by_value) {
+                // A locator that does not parse is `embodiment.locator-exists`' finding.
+                let Ok(parsed) = entry.parsed else { continue };
+                // A commit anchor is reserved for MILE-84 and is reported by
+                // `embodiment.locator-exists` as unsupported; it is not judged
+                // for drift on the file's history either.
+                if matches!(parsed.anchor, Some(urzua_core::locator::Anchor::Commit(_))) {
+                    continue;
+                }
+                let locator = parsed.path.clone();
+                let locator_path = PathBuf::from(&locator);
+                // BUG-176: a directory or glob locator the config accepts
+                // The files such a locator covers. A kind the config does not
+                // declare is not judged this way: `embodiment.locator-exists`
+                // reports it and drift is read from the path's history as before.
+                let covered: Option<(LocatorKind, Vec<String>)> = if parsed.scope.is_none() {
+                    texts
+                        .locator_files(&parsed.path)
+                        .ok()
+                        .and_then(|m| Some((m.kind?, m.files)))
+                        .filter(|(kind, _)| {
+                            *kind != LocatorKind::File && locator_opts.locator_kinds.contains(kind)
+                        })
+                } else {
+                    None
                 };
-                if hash != *pinned {
-                    let audited_fresh = matches!((audit_time, grace_secs), (Some(t), Some(grace)) if now_unix - t < grace);
-                    if audited_fresh {
-                        fresh_records.insert(record.path.clone());
-                    } else {
-                        drifted.insert(record.path.clone());
-                        break;
+                if let Some((kind, files)) = &covered {
+                    // Nothing matched, or a pin the config does not allow on this
+                    // kind, is `embodiment.locator-exists`' finding.
+                    if files.is_empty()
+                        || (parsed.anchor.is_some() && !locator_opts.pinnable.contains(kind))
+                    {
+                        continue;
                     }
                 }
-                continue;
-            }
-            if let Some(urzua_core::locator::Anchor::Pin(pinned)) = &parsed.anchor {
-                // Implements: ADR-67 (a pin drifts on its content hash)
-                // A pin replaces the git-history heuristic for this locator.
-                let current = urzua_io::sha256_hex_of_file(&repo_root.join(&locator_path));
-                let changed = current.is_some_and(|c| c != *pinned);
-                let fresh = changed
-                    && last_commit_for_path
-                        .entry(locator_path.clone())
-                        .or_insert_with(|| {
-                            urzua_io::last_commit_for_path(repo_root, &locator_path).unwrap_or_else(
-                                |e| {
-                                    note(&mut problems, e);
-                                    None
-                                },
-                            )
-                        })
-                        .as_deref()
-                        .is_some_and(&mut held_back);
-                if changed && !fresh {
-                    drifted.insert(record.path.clone());
-                    break;
-                }
-                if fresh {
-                    fresh_records.insert(record.path.clone());
-                }
-                continue;
-            }
-            let Some(locator_commit) = last_commit_for_path
-                .entry(locator_path.clone())
-                .or_insert_with(|| {
-                    let commit = match &covered {
-                        // The newest commit among the matched files.
-                        Some((_, files)) => {
-                            let files: Vec<PathBuf> = files.iter().map(PathBuf::from).collect();
-                            urzua_io::last_commit_for_paths(repo_root, &files)
-                        }
-                        None => urzua_io::last_commit_for_path(repo_root, &locator_path),
+                if let (Some(urzua_core::locator::Anchor::Pin(pinned)), true) =
+                    (&parsed.anchor, parsed.scope.is_some() || covered.is_some())
+                {
+                    // Implements: ADR-74 (a scoped pin drifts on its span's hash)
+                    // The file's last commit says nothing about the scope, so there
+                    // is no file-based grace window: only a declared audit date can
+                    // hold a scoped pin back. A directory or glob pin is held back
+                    // the same way (`BUG-176`).
+                    let urzua_core::fix::PinRead::Current { hash, .. } =
+                        crate::pins::read_pin(repo_root, config, &texts, &parsed)
+                    else {
+                        // A scope that does not resolve is reported by the rule and
+                        // not also judged for drift.
+                        continue;
                     };
-                    commit.unwrap_or_else(|e| {
-                        note(&mut problems, e);
-                        None
+                    if hash != *pinned {
+                        let audited_fresh = matches!((audit_time, grace_secs), (Some(t), Some(grace)) if now_unix - t < grace);
+                        if audited_fresh {
+                            fresh_records.insert(record.path.clone());
+                        } else {
+                            drifted.insert(record.path.clone());
+                            break 'claims;
+                        }
+                    }
+                    continue;
+                }
+                if let Some(urzua_core::locator::Anchor::Pin(pinned)) = &parsed.anchor {
+                    // Implements: ADR-67 (a pin drifts on its content hash)
+                    // A pin replaces the git-history heuristic for this locator.
+                    let current = urzua_io::sha256_hex_of_file(&repo_root.join(&locator_path));
+                    let changed = current.is_some_and(|c| c != *pinned);
+                    let fresh = changed
+                        && last_commit_for_path
+                            .entry(locator_path.clone())
+                            .or_insert_with(|| {
+                                urzua_io::last_commit_for_path(repo_root, &locator_path)
+                                    .unwrap_or_else(|e| {
+                                        note(&mut problems, e);
+                                        None
+                                    })
+                            })
+                            .as_deref()
+                            .is_some_and(&mut held_back);
+                    if changed && !fresh {
+                        drifted.insert(record.path.clone());
+                        break 'claims;
+                    }
+                    if fresh {
+                        fresh_records.insert(record.path.clone());
+                    }
+                    continue;
+                }
+                let Some(locator_commit) = last_commit_for_path
+                    .entry(locator_path.clone())
+                    .or_insert_with(|| {
+                        let commit = match &covered {
+                            // The newest commit among the matched files.
+                            Some((_, files)) => {
+                                let files: Vec<PathBuf> = files.iter().map(PathBuf::from).collect();
+                                urzua_io::last_commit_for_paths(repo_root, &files)
+                            }
+                            None => urzua_io::last_commit_for_path(repo_root, &locator_path),
+                        };
+                        commit.unwrap_or_else(|e| {
+                            note(&mut problems, e);
+                            None
+                        })
                     })
-                })
-            else {
-                continue;
-            };
-            let drifted_pair = *strictly_before
-                .entry((reference_commit.clone(), locator_commit.clone()))
-                .or_insert_with(|| {
-                    urzua_io::commit_strictly_before(repo_root, &reference_commit, locator_commit)
+                else {
+                    continue;
+                };
+                let drifted_pair = *strictly_before
+                    .entry((reference_commit.clone(), locator_commit.clone()))
+                    .or_insert_with(|| {
+                        urzua_io::commit_strictly_before(
+                            repo_root,
+                            &reference_commit,
+                            locator_commit,
+                        )
                         .unwrap_or_else(|e| {
                             note(&mut problems, e);
                             false
                         })
-                });
-            if drifted_pair {
-                if held_back(locator_commit) {
-                    fresh_records.insert(record.path.clone());
-                } else {
-                    drifted.insert(record.path.clone());
-                    break;
+                    });
+                if drifted_pair {
+                    if held_back(locator_commit) {
+                        fresh_records.insert(record.path.clone());
+                    } else {
+                        drifted.insert(record.path.clone());
+                        break 'claims;
+                    }
                 }
             }
         }

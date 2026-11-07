@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.107'
+Version: '0.108'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs, test:rust/crates/urzua-cli/tests/field_levels_integration.rs
@@ -1901,6 +1901,52 @@ rules:
 - A rule with the option is silent on a plain `check` by design, so it cannot be a gate over the whole
   corpus. Remove the option to see the full backlog.
 
+### Done-means items: `statuses.delivery.items` (`ADR-96`, `MILE-214`)
+
+`statuses.delivery.items` (optional) makes a type's Done means a list of items that each name their own
+evidence, and computes the `Status` from the items instead of from the record-level evidence field:
+
+```yaml
+statuses:
+  delivery:
+    delivered_tiers: ["Implemented", "Verified"]
+    unevidenced_tiers: ["Not started"]
+    not_done: ["Planned", "InProgress"]
+    set_status: "Done"
+    items:
+      section: "Done means"            # must be a section the type requires
+      clause_separator: " — "
+      evidence_marker: "evidence:"
+      waiver_marker: "waived:"
+      partial_status: "InProgress"     # in values and in not_done
+      resolving_tiers: ["Specified", "Implemented", "Verified"]   # default: delivered_tiers
+      waiver_categories:
+        - {name: not-applicable}
+        - {name: superseded-by-decision, cite: required}
+        - {name: deferred-to, cite: required, expires: required}
+        - {name: process-outcome}
+```
+
+Absent, the type behaves exactly as before. Declared, the grammar of the item lines is `SPEC-6`'s, and
+the engine reads only the three declared words (the separator and the two markers), never a position or a
+guess. The keys are load-time errors when they would be inert or ambiguous: a `section` the type does
+not declare under `sections.required`; a blank separator, marker or category name; the two markers equal
+or one a prefix of the other; a `partial_status` outside `values`, outside `not_done`, or one the
+type's `transitions` do not allow from a `not_done` status; a `resolving_tiers` entry that is not a
+declared embodiment tier; a duplicate category or one whose name holds whitespace, a parenthesis or a
+comma; an `expires: required` category without `cite: required` (a deferral needs a target); and
+`items` on a type whose `status.delivery-agreement` is off or not declared in `rules`, because that
+rule's `DoneWithUnresolvedItems` finding is what holds a status to the items.
+
+The standing is computed per item and per record (`SPEC-2`): an item is resolved when its evidence
+clause names at least one locator, every locator exists (the `embodiment.locator-exists` test) and the
+tier computed over only that item's locators is in `resolving_tiers`; it is waived when it carries a
+valid waiver clause and is not resolved. `Specified` counts in `resolving_tiers`, but a record needs at
+least one item resolved at a `delivered_tiers` tier to compute delivered or partial. Delivery is judged
+from the items only: a record-level `Realized-by` locator never makes an opted-in record delivered,
+though item locators are evidence for `Embodiment`, drift, `embodiment.locator-exists` and
+`fix --rebaseline` as `Realized-by` locators are.
+
 ### Sticky Embodiment states (`MILE-148`)
 
 Some `Embodiment` values are a human's decision that no evidence can reproduce, such as
@@ -2140,3 +2186,4 @@ proves this configuration produces the three findings.
 > | 2026-11-07 | Bumped to `0.105`. An `authority.gates` `paths` entry is normalised like `published_paths`, and one that could match nothing (`.`, a backslash) is a load error. **Why:** hardening review: `./.agent` loaded and gated nothing, for `diff.decider-required` and the `protected-paths` guardrail alike. | **substantive** |
 > | 2026-11-07 | Bumped to `0.106`. A `harness.guardrails` name the build does not ship is a config load error for every command, suggesting the nearest valid name; unknown keys elsewhere in `harness` are still kept and reported. **Why:** `ADR-89` amendment of 2026-11-07, maintainer decision from the core-model review. | **substantive** |
 > | 2026-11-07 | Bumped to `0.107`. The `sequence.cycle` bullet "One graph per pair" no longer says a loop across two acyclic pairs is never detected: it is reported when both pairs are named in `roadmap.pairs`. **Why:** the bullet contradicted `ADR-82`, `MILE-192` and the `roadmap.pairs` bullet below it; `ADR-76`'s matching Decision text carries a proposed amendment. | **substantive** |
+> | 2026-11-07 | Bumped to `0.108`. Documents `statuses.delivery.items` (`ADR-96`, `MILE-214`): the opt-in per-item evidence for a type's Done means, its keys, its load errors and how the standing is computed from the items. **Why:** `MILE-214`, the engine of `ADR-96`; an undeclared config is unchanged. | **substantive** |

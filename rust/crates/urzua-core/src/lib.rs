@@ -12,6 +12,7 @@
 pub mod authority;
 pub mod config;
 pub mod document_model;
+pub mod done_items;
 pub mod embodiment_model;
 pub mod field_state;
 pub mod fix;

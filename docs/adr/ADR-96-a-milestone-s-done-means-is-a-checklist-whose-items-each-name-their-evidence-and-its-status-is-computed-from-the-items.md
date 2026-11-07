@@ -5,7 +5,7 @@ Accepted-on: 2026-11-07
 Date: 2026-11-07
 Author: beauwilliams
 Deciders: beauwilliams
-Embodiment: null
+Embodiment: Implemented
 Supersedes / Superseded-by: null
 ---
 # 96 — A milestone's Done means is a checklist whose items each name their evidence, and its status is computed from the items
@@ -231,3 +231,4 @@ Answered on 2026-11-07 from the independent review of this ADR, as decided. The 
 > | 2026-11-07 | Drafted as Proposed. **Why:** maintainer decision of 2026-11-07, after confirming as an engine defect that `judge_delivery` computes delivered from the evidence tier alone, so a milestone with one item of five evidenced is forced to `Done`; the maintainer approves before it is Accepted. | **substantive** |
 > | 2026-11-07 | Amended while Proposed, from the independent review of the same day (three blockers). **Why:** (1) the ADR now names the guaranteed error finding `DoneWithUnresolvedItems`, gives its message contract, an error floor, `waivable: false` (the rule-level `permanent` category does not apply to it) and two ADR-73 actions in place of `Exempt`; (2) the item syntax is a grammar with worked examples: nested lists, a single separator-plus-marker form, the Realized-by comma rule, the waiver cite; (3) inline waivers get ADR-86's honesty: `status.waived-item-stale`, a checked and expiring `deferred-to`. The four open questions are recorded as decided (inline waivers with the stale check; no auto-reopen; no per-item dependencies; `Specified` in `resolving_tiers` with an `r_d >= 1` guard), and the migration is split out as `MILE-215`. Status stays Proposed; the maintainer approves before it is Accepted. | **substantive** |
 > | 2026-11-07 | Status changed from Proposed to Accepted. **Why:** Maintainer decision, 2026-11-07. | **substantive** |
+> | 2026-11-07 | Tool-authored (by beauwilliams, identity: gh-verified, actor: agent): recomputed `Embodiment` from `no Realized-by field; cited by source back-pointers` -- stated no value disagreed with the computed value `Implemented`. | **structural** |

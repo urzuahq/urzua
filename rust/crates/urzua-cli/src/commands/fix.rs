@@ -187,18 +187,31 @@ pub fn run(config_path: Option<PathBuf>, args: FixArgs) -> ExitCode {
             Ok(None) => Default::default(),
             Err(e) => return emit(&CouldNotRun::from(e)),
         };
-    drift_notices.extend(urzua_core::fix::unevidenced_successes(
-        &scoped,
-        &config,
-        &back_pointed,
-    ));
-    let (population, repairs) = urzua_core::fix::detect_repairs(
-        &scoped,
-        &config,
-        &drift.drifted,
-        &drift.fresh,
-        &back_pointed,
-    );
+    // The derived-blocked records (`ADR-96` section 7): `fix` writes no
+    // `progress` status to one. Computed only when a type is opted in.
+    let blocked = if scoped.iter().any(|r| r.items.is_some()) {
+        urzua_core::rules::derived_blocked_records(&records, &config)
+    } else {
+        Default::default()
+    };
+    let (population, repairs, unevidenced) =
+        crate::file_texts::with_locator_env(&repo_root, &config, &discovered.paths, |env| {
+            let ctx = urzua_core::rules::DeliveryContext {
+                back_pointed: &back_pointed,
+                env,
+                blocked: &blocked,
+            };
+            let notices = urzua_core::fix::unevidenced_successes(&scoped, &config, &ctx);
+            let (population, repairs) = urzua_core::fix::detect_repairs(
+                &scoped,
+                &config,
+                &drift.drifted,
+                &drift.fresh,
+                &ctx,
+            );
+            (population, repairs, notices)
+        });
+    drift_notices.extend(unevidenced);
 
     if !apply {
         let (repairs, unmatched) = narrow_to_ids(

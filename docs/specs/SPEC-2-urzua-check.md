@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5GM1RYRRX2XVMZ0ZAK
-Version: '0.117'
+Version: '0.118'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs, code:rust/crates/urzua-core/src/rules.rs, test:rust/crates/urzua-cli/tests/check_integration.rs, test:rust/crates/urzua-cli/tests/fail_on_integration.rs
@@ -361,6 +361,8 @@ which stays only for what genuinely isn't built yet.
 | `status.transition-allowed` | A changed record's `Status` moved along an edge its type's `statuses.transitions` does not list, comparing the status the merge base committed with the one in the change under check, or a record new in the change starts at a status outside `statuses.initial` (`MILE-144`, `ADR-72`). Needs `--base`: a whole-repo run reports it not-applicable, not a pass. A type declaring no `transitions` is not examined, a record the diff did not change is eligible and not examined, and a record whose committed status cannot be read or is no longer declared is counted unreadable. A path the merge base lacks reads as new; a base copy that exists but cannot be read (not UTF-8, a missing object) is not new: it is counted unreadable and a warning notice names the error, so a read failure cannot skip the transition check. A record added at a path the merge base lacks is matched by `Stable-Id` to a record the diff deleted, so a renamed record is judged against the status it had before and not called new (`BUG-191`); one with no `Stable-Id` or no match reads as new, and one matching several deleted records is counted unreadable. A repository whose ADRs and RFCs enter at `Proposed` or `Draft` and are accepted in a later change declares that as `initial`, so a record filed already accepted is reported; this repository does so. |
 | `status.unreachable-state` | A status a type declares in `statuses.values` that no path of its `statuses.transitions` reaches from `statuses.initial` (`MILE-144`, `ADR-72`): no record can legitimately hold it. Judges the declaration, not a record, so it needs no `--base`. A type declaring no `transitions` is not examined. Enable it at `warn` for the informational reading. |
 | `status.delivery-agreement` | A record's `Status` agrees with its delivery evidence, in both directions (`MILE-183`): the tier computed from its `Realized-by` locators and source back-pointers (drift ignored) is one of the type's `statuses.delivery.delivered_tiers` while the `Status` is one of its `not_done` statuses, so a built record still reads as unbuilt; and a `success` status whose evidence computes to one of its `unevidenced_tiers`, so a record claims to be done with nothing behind it. The mapping is the type's own declaration (`delivered_tiers`, `unevidenced_tiers`, `not_done`, `set_status`); the rule knows no status or type by name. `urzua fix --apply` writes `set_status` for the first direction; the second has no single correct value and is repaired by adding evidence. `unevidenced_tiers` may be empty, and the type then never reports the second direction. `back_pointer_evidence: false` (default true) makes a source or test back-pointer that cites the record not count as evidence, so only the type's evidence field is read (`ADR-84`). The rule applies to any type that declares `delivery`, whatever the type is called. A type declaring no `delivery` is not examined. The population counts the records of types that declare it. |
+| `status.done-items-shape` | A Done-means section that does not follow the item grammar of `ADR-96` section 1, on a type that declares `statuses.delivery.items`: a prose-only section (no list item), a list marker indented less than the item indent, a clause on a line that belongs to no item, clauses on the first line and on final lines at once, a waiver clause before the evidence clause, an evidence clause that is not entirely locators (backticks or quotes before the first `category:`, whitespace inside a locator, no locator at all), a leading `[x]` or `[ ]` checkbox, and a waiver clause with an unknown category, an empty or missing reason, a missing, malformed or unneeded cite or date. A clause that does not parse is a finding, never skipped, and its item reads as unresolved. A marker word with no clause separator before it is plain text. A type declaring no `delivery.items` is not examined. The population counts the records of types that declare it. |
+| `status.waived-item-stale` | A waived Done-means item whose waiver has outlived its reason (`ADR-96` section 3), on a type that declares `statuses.delivery.items`: the item also carries an evidence clause that now resolves (remove the waiver), the record its waiver cites does not exist, a `deferred-to` (a category declared `expires: required`) whose cited record is finished, or an expiry date that has come (from that date on). Every waived item is also listed by category in the report's notices, never omitted. A dated `WAIVER` record can waive this rule like any warning. A type declaring no `delivery.items` is not examined. The population counts the records of types that declare it. |
 | `date.field-valid` | A value in a declared date field (`date_fields`) that is not a well-formed `YYYY-MM-DD` date, or is well-formed but not a real calendar date such as `2026-02-30`, is an error (`MILE-137`). A blank, placeholder or pending value is not a date value and is left to `field.quality` and `status.required-field-missing`. Needs `date_fields`. The population counts the date values examined. |
 | `date.field-order` | Within one record, a date field that is later than the field `date_order` says must not be later is an error: `Date <= Accepted-on` reports a record accepted before it was written (`MILE-157`). Equal dates pass. A value that is blank, a placeholder, pending or not a real `YYYY-MM-DD` date is not compared and is left to `date.field-valid`, `field.quality` and `status.required-field-missing`, which own those states. Applies to every record type that declares both fields of an entry. Needs `date_order`. The population counts one slot per record and entry; a record missing either date is eligible and unexamined. |
 | `citation.resolution` | A decision ID cited anywhere in a record's prose (`ADR-12`, with a configured type prefix, standing alone) resolves to an existing record, compared numerically so zero-padding does not matter (`MILE-136`). The header, which `pointer.resolution` governs, and fenced code blocks are not read; an inline code span is. Opt-in. The optional `external_ids` option (`MILE-156`) lists ids that share a record prefix but are not records, each an exact id (`RFC-4122`) or an inclusive numeric range written `PREFIX-LOW..HIGH` under a declared prefix; a matching citation is counted as eligible and unexamined, never resolved or reported, and not as out of scope, so `config.scope-matches-nothing` does not read a declared id as a misconfiguration. An entry under no declared prefix is a config error. Its population counts the citations, so a run over none is distinguishable from a clean one, and external citations are visible as eligible and unexamined. The optional `skip_revision_log` option, when `true`, leaves each record's revision log (the table under its type's declared `revision_log` identity) unread, so append-only history that cites an id as it was is not reported; it is `false` by default (`MILE-156`). The optional `non_reference_field` option (`BUG-190`, `ADR-75`) names a header field in which a record lists, as comma-separated exact ids (`ADR-72`; no ranges, compared by value), the ids it names without citing as a reference: a citation of a listed id in that record only is counted as eligible and unexamined, neither resolved nor reported, with `external_ids` taking precedence. A listed id the record never cites in the prose the rule reads, and an entry that is not an exact id of a declared prefix, are findings on the record naming the field and its line. With the option set, those declared entries are judged in a population of their own (`MILE-186`, `ADR-75` clause 3): a second `rules_executed` entry for this rule whose unit is `field-entry`, with one candidate per entry a record declares (valid, uncited and malformed alike, all examined, none out of scope), and zero eligible when no record declares any; the uncited and malformed findings are counted there and not in the citation population. The field must be listed in a record type's `known_fields` and must not be a pointer, narrative or relation-role field, or the config does not load. `check` prints one aggregated Info notice naming declared ids that now match a real record; a notice never changes the exit code. |
@@ -378,6 +380,59 @@ which stays only for what genuinely isn't built yet.
 | `config.scope-matches-nothing` | Judges the run itself, not the corpus: whether the configuration's declared rules reached what they were handed, from the other rules' own executions (`MILE-106`). |
 | `waiver.matches-nothing` | A waiver that does nothing is reported on the waiver record, naming the rule and scope it claimed (`MILE-168`). Four cases: the waiver is expired (its `Expires` has passed or is not a `YYYY-MM-DD` date, so it already covers nothing); it is not in effect (it lacks a field the suppression type's `effective_requires` names, or holds a blank, placeholder or pending value there; or, when the type declares `permanent`, it has no `Expires` and its rule has no `permanent` entry, its category is absent or outside the entry's vocabulary, or a category that requires a citation has none that resolves; either way it suppresses nothing and its finding is reported again, naming the unmet requirement); it names a rule this build does not ship; or it is active, its rule ran, and no finding of that rule falls in its scope. A waiver matching a finding is not reported, and an expired waiver is reported once, as expired; an ineffective one is reported once, as ineffective. The unmatched case is judged only on a whole-corpus run in which the target rule ran: under a path scope or `--base`, or with the target rule off, an absent finding proves nothing, so the waiver is counted as eligible and unexamined (never out of scope). The expired and unknown-rule cases need only the waiver record to have been examined. Opt-in. The population counts waiver records. |
 <!-- rule-table:end -->
+
+### Status computed from Done-means items (`ADR-96`, `MILE-214`)
+
+For a type that declares `statuses.delivery.items` (`SPEC-3`; the grammar is `SPEC-6`'s), the caller
+reads each record's declared section into its parsed items and `status.delivery-agreement` judges the
+`Status` from the items alone. With `n` items, `r` resolved, `r_d` of them resolved at a
+`delivered_tiers` tier, and the unresolved items being the non-waived, non-resolved ones:
+
+| Items | Standing | Tier reported | Status it agrees with |
+|---|---|---|---|
+| `r_d >= 1` and no unresolved item | delivered | the lowest tier among the resolved items | the type's `set_status` |
+| `r_d >= 1` and some unresolved item | partial | the same, with the unresolved items named | `delivery.items.partial_status`; also correct under any progress status |
+| `r_d = 0` and `r >= 1` | specified only | the lowest resolved tier | not forced either way, as a spec-only record is today |
+| `r = 0` (including `n = 0` and every item waived) | none | the declared `embodiment.none` | a not-done status |
+
+Waivers excuse an item, they do not deliver one. The rule's variants for such a type are the existing
+`delivery-not-done` (delivered while not done), `delivery-without-evidence` (a `success` status with `r = 0`),
+and two new ones: `delivery-partial-not-started` (partial while the status is a not-done status short of
+`partial_status`; `urzua fix --apply` writes `partial_status`) and `delivery-partial-blocked` (the same on a
+derived-blocked record, where `fix` writes nothing because a `progress` status would contradict
+`sequence.status-agreement`, and the finding names why).
+
+**`DoneWithUnresolvedItems`** (action variant `done-with-unresolved-items`) is a guaranteed error: a
+`success` status while any item is unresolved, whatever `r` and `r_d` are. The message is
+`<ID> is <Status> but Done means item <n> "<text>" is unresolved: <cause>` once per unresolved item, in
+item order, joined by `; ` in one finding anchored on the first unresolved item's line, where `<cause>` is
+`no evidence clause`, `locator <path> does not exist`, or
+`locator <path> resolves only to <tier>, which is not in resolving_tiers` (a clause that is not entirely
+locators is reported by `status.done-items-shape` and reads as unresolved). Its severity is a floor: a
+repository's level for the rule applies to the rule's other variants and cannot lower this one, so
+`check` exits 1 on it under every `fail_on` and every level, `info` included. It is also unwaivable: no
+`WAIVER` record matches a finding of this variant, whatever its `Rule` and `Scope`, and the rule's
+`permanent` categories are not consulted for it; the waiver still matches the rule's other variants, and
+a waiver that matches nothing is reported by `waiver.matches-nothing` as before. Only evidence (a
+resolving locator) or an inline item waiver clears it. `urzua rules` prints the floor
+(`severity_floor`) and `waivable: false` on the variant. The variant declares two actions, `edit-field`
+on the status field with the computed value (`partial_status` when `r_d >= 1` and the record is not
+derived-blocked, else the first declared status that is neither a `success`, `failure` nor `progress`
+status) and `edit-section` on the Done means item (`done-with-unresolved-items-evidence`); a finding
+carries one `suggested_action` (`ADR-73`), so it carries the first and the table lists both. `fix` never
+downgrades a `success` status (`SPEC-8`).
+
+**`status.done-items-shape`** reports each deviation from the grammar, anchored on its line, with an
+`edit-section` action. **`status.waived-item-stale`** (a warning by default, which a dated `WAIVER` record
+can waive) reports a waived item whose evidence clause now resolves, whose cited record does not exist,
+whose `deferred-to` target (a category declared `expires: required`) is finished (its status in the target
+type's `success` or `failure`), or whose expiry date has come (from that date on). Every waived item is
+listed in the report's `notices` at `info`, one per item and a summary by category, never omitted.
+
+Item locators are evidence for every reader of the evidence field: `embodiment.locator-exists` checks
+them (variant `item-locator-defect`, an `edit-section` action on the item), `embodiment.consistency`
+and drift read them with the commit that last touched the clause's own line, and `fix --rebaseline` re-pins
+them (`SPEC-8`).
 
 ### Not yet built
 
@@ -646,6 +701,7 @@ declares `known_fields` keeps the `append` variant.
 | `embodiment.locator-exists` | `locator-commit-anchor` | `edit-field` `set` |
 | `embodiment.locator-exists` | `locator-kind-undeclared` | `edit-field` `set` |
 | `embodiment.locator-exists` | `locator-kind-unpinnable` | `edit-field` `set` |
+| `embodiment.locator-exists` | `item-locator-defect` | `edit-section` `set` |
 | `embodiment.locator-promotion-candidate` | `locator-promotion-candidate` | exempt: an advisory nudge that is never auto-promoted |
 | `header.field-set-consistency` | `undeclared-field` | `edit-field` `remove` |
 | `header.field-set-consistency` | `undeclared-field-case` | `edit-field` `rename` |
@@ -684,6 +740,12 @@ declares `known_fields` keeps the `append` variant.
 | `status.unreachable-state` | `status-unreachable` | `edit-config` `set` |
 | `status.delivery-agreement` | `delivery-not-done` | `run-command` |
 | `status.delivery-agreement` | `delivery-without-evidence` | exempt: no single correct value exists and `urzua fix` writes nothing for it; the repair is adding evidence, which may be a locator or a source back-pointer |
+| `status.delivery-agreement` | `delivery-partial-not-started` | `run-command` |
+| `status.delivery-agreement` | `delivery-partial-blocked` | exempt: the record is derived-blocked, and `urzua fix` writes no `progress` status to it because `sequence.status-agreement` would refuse it; the repair is finishing the open dependency |
+| `status.delivery-agreement` | `done-with-unresolved-items` | `edit-field` `set`; severity floor `error`; not waivable by a rule-level waiver |
+| `status.delivery-agreement` | `done-with-unresolved-items-evidence` | `edit-section` `set`; severity floor `error`; not waivable by a rule-level waiver |
+| `status.done-items-shape` | `done-items-shape` | `edit-section` `set` |
+| `status.waived-item-stale` | `waived-item-stale` | `edit-section` `set` |
 | `date.field-valid` | `date-invalid` | `edit-field` `set` |
 | `date.field-order` | `date-order` | `edit-field` `set` |
 | `citation.resolution` | `citation-unresolved` | exempt: the fix edits prose located by line, and no action kind addresses a line in prose yet |
@@ -772,6 +834,8 @@ note. An edge `A Depends-on B` runs `B -> A`: blocker first.
 | `waiting_on` | Present only when `roadmap.work_types` is declared: `{record, type, status, blocks}` per non-work record not in a `success` status (a `Dropped` one included, since someone must re-point its dependents), in natural id order. `blocks` lists the work records that transitively depend on it. An empty array when every non-work record is finished. |
 | `cycles` | Each strongly connected component of more than one record, or a record with an edge to itself, once, members ascending. |
 | `notes` | `{kind, record, pair, field, message}` from a closed set. |
+
+**Items.** A record of a type that declares `statuses.delivery.items` (`SPEC-3`) also carries `items: {total, resolved, waived}`, so a reader sees "3 of 5" without a status the engine would have to know; no other record has the key. A partially delivered record is open work: it stays in its wave and in the ready set when nothing it depends on is open, and its dependents stay blocked, because blocked is derived from the written `Status` of the dependency, which `status.delivery-agreement` holds to the items.
 
 **Open.** A record is open when its status is in neither `success` nor `failure` of its own type. A
 record whose type declares no status vocabulary, or that states no `Status`, is open and draws a
@@ -1032,3 +1096,4 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-07 | Bumped to `0.115`. `urzua rules` prints a fifth `judges` value, `anchor-scoped`, for a rule that reads other records as context and reports only on changed ones; `embodiment.locator-promotion-candidate` carries it and, under `scope: changed`, emits one finding per changed citer, so `check <path>`, `--stdin-path` and a file-scoped waiver each see the finding on their own record. **Why:** the accepted 2026-11-07 amendment to `ADR-90`, points 4 and 5. | **substantive** |
 > | 2026-11-07 | Bumped to `0.116`. Documents that `embodiment.locator-exists` reports `Realized-by` text outside a recognised entry as `locator-malformed`; the `undeclared-field-case` variant of `header.field-set-consistency` (rename, never remove); that `revision-log.change-class-required` reads an alignment row as a delimiter; and that `header.required-fields` leaves a type with no `required_fields` out of its population. **Why:** Phase 0 hardening review of the core rules. | **substantive** |
 > | 2026-11-07 | Bumped to `0.117`. `identity.open-pr-collision` names the remedy that works: rename the file and its H1 to the next free number, or waive the finding when the other pull request is abandoned (`urzua migrate ids` cannot renumber); the `open-pr-collision` action reason says the same. An unknown `harness.guardrails` name is a load error, so `check` exits 2 on it. **Why:** `ADR-93` and `ADR-89` amendments of 2026-11-07. | **substantive** |
+> | 2026-11-07 | Bumped to `0.118`. Documents the status computed from Done-means items for a type that declares `statuses.delivery.items`: the new `status.delivery-agreement` variants, among them the guaranteed `DoneWithUnresolvedItems` error (severity floor, unwaivable by a rule-level waiver, two declared actions); the new rules `status.done-items-shape` and `status.waived-item-stale`; the `item-locator-defect` variant of `embodiment.locator-exists`; the `severity_floor` and `waivable` keys of `urzua rules`; the roadmap's `items` object. **Why:** `MILE-214`, the engine of `ADR-96`; an undeclared config is unchanged. | **substantive** |
