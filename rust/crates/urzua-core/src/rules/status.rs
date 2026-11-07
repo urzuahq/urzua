@@ -231,8 +231,13 @@ pub fn judge_delivery(
             Some(DeliveryDisagreement::PartialButNotStarted {
                 partial_status: items_decl.partial_status.clone(),
                 // `fix` holds back only a status the derived blocked value
-                // would refuse for the record.
-                blocked: blocked && decl.is_progress_status(&items_decl.partial_status),
+                // would refuse for the record. `sequence.status-agreement`
+                // accepts `partial_status` on a capped record (every item
+                // resolves, only a dependency is open), so a capped record is
+                // not held back; one with unresolved items is.
+                blocked: blocked
+                    && judged.capped_by.is_empty()
+                    && decl.is_progress_status(&items_decl.partial_status),
             })
         } else if in_list(&decl.success, status)
             && in_list(&delivery.unevidenced_tiers, &judged.tier)

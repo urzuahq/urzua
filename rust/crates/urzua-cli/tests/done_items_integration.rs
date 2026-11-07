@@ -646,13 +646,11 @@ fn partial_evidence_on_a_derived_blocked_planned_record_is_not_repaired() {
 
 // ------------------------------------------- dependencies cap the status
 
-/// The fixture config with `InProgress` no longer a status a blocked record
-/// cannot claim (only `Done` is), and `sequence.status-agreement` on, so both
-/// rules judge the same record (`ADR-96`, amendment of 2026-11-07).
+/// The fixture config (`InProgress` and `Done` both `progress` statuses a blocked
+/// record cannot claim) with `sequence.status-agreement` on, so both rules judge
+/// the same record (`ADR-96`, amendment of 2026-11-07).
 fn capped_config(delivery: &str) -> String {
-    config(delivery, "error")
-        .replace("progress: [InProgress, Done]", "progress: [Done]")
-        .replace("rules:\n", "rules:\n  sequence.status-agreement: error\n")
+    config(delivery, "error").replace("rules:\n", "rules:\n  sequence.status-agreement: error\n")
 }
 
 fn capped_repo(name: &str, status: &str, dependency_status: &str) -> common::TempDir {
@@ -672,17 +670,25 @@ fn all_items_resolved_with_an_unfinished_dependency_computes_in_progress() {
     let out = run(&dir, &["check"]);
     let report = parsed(&out);
     // Neither rule rejects it: not `DoneWithUnresolvedItems`, not the
-    // delivery disagreement, not the derived blocked value.
+    // delivery disagreement, not the derived blocked value (`ADR-83`).
     assert!(
         findings(&report, "status.delivery-agreement")
             .iter()
             .all(|f| !f["file"].as_str().unwrap().contains("MILE-2-m.md")),
         "{report}"
     );
+    let sequence = findings(&report, "sequence.status-agreement");
+    assert!(sequence.iter().all(|f| f["severity"] == "info"), "{report}");
+    // It says why it skipped the record, as an info notice naming the dependency.
+    let notice = on(&sequence, "MILE-2-m.md").expect("an info notice");
     assert!(
-        findings(&report, "sequence.status-agreement").is_empty(),
-        "{report}"
+        notice["message"]
+            .as_str()
+            .unwrap()
+            .contains("all items proven ahead of dependency MILE-3 (Planned)"),
+        "{notice}"
     );
+    assert_eq!(out.status.code(), Some(0), "{report}");
     // `fix` agrees: nothing to write, and the notice names the capping dependency.
     let fix = parsed(&run(&dir, &["fix"]));
     assert_eq!(fix["repairs"].as_array().unwrap().len(), 0, "{fix}");
@@ -691,6 +697,47 @@ fn all_items_resolved_with_an_unfinished_dependency_computes_in_progress() {
         notices.contains("MILE-3 (Planned)") && notices.contains("InProgress"),
         "{fix}"
     );
+}
+
+#[test]
+fn an_in_progress_record_genuinely_out_of_order_is_still_flagged() {
+    // One item is unresolved, so `InProgress` is real progress made while the
+    // dependency is unfinished, not the cap: `sequence.status-agreement` flags it.
+    let dir = repo(
+        "cap-out-of-order",
+        &capped_config(ITEMS),
+        &[
+            (3, milestone("Planned", "", "- Later.\n")),
+            (
+                2,
+                milestone(
+                    "InProgress",
+                    "Depends-on: MILE-3\n",
+                    TWO_ITEMS_ONE_EVIDENCED,
+                ),
+            ),
+        ],
+    );
+    let out = run(&dir, &["check"]);
+    let report = parsed(&out);
+    let sequence = findings(&report, "sequence.status-agreement");
+    let finding = on(&sequence, "MILE-2-m.md").expect("flagged");
+    assert_eq!(finding["severity"], "error", "{report}");
+    assert!(
+        finding["message"]
+            .as_str()
+            .unwrap()
+            .contains("claims progress"),
+        "{finding}"
+    );
+    assert!(
+        !finding["message"]
+            .as_str()
+            .unwrap()
+            .contains("proven ahead"),
+        "{finding}"
+    );
+    assert_eq!(out.status.code(), Some(1), "{report}");
 }
 
 #[test]

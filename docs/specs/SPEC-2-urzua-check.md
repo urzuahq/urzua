@@ -691,6 +691,7 @@ declares `known_fields` keeps the `append` variant.
 | `sequence.unresolved-blocker` | `blocker-not-a-reference` | `edit-field` `set` |
 | `sequence.status-agreement` | `status-blocked-unblocked` | `edit-field` `set` |
 | `sequence.status-agreement` | `status-blocked-derived` | `edit-field` `set` |
+| `sequence.status-agreement` | `status-blocked-capped` | exempt: an info notice, not a defect: the record's `partial_status` comes from the dependency cap (every Done means item resolves, only an unfinished dependency holds it back), so there is nothing to repair |
 | `relation.target-status-undeclared` | `target-status-undeclared` | `edit-config` `append` |
 | `relation.target-status-undeclared` | `target-status-undeclared-declare-set` | `edit-config` `set` |
 | `revision-log.change-class-required` | `change-class-missing` | `edit-section` `set` |
@@ -757,7 +758,7 @@ declares `known_fields` keeps the `append` variant.
 | `status.delivery-agreement` | `delivery-not-done` | `run-command` |
 | `status.delivery-agreement` | `delivery-without-evidence` | exempt: no single correct value exists and `urzua fix` writes nothing for it; the repair is adding evidence, which may be a locator or a source back-pointer |
 | `status.delivery-agreement` | `delivery-partial-not-started` | `run-command` |
-| `status.delivery-agreement` | `delivery-partial-blocked` | exempt: the record is derived-blocked and the type's `partial_status` is a `progress` status, which `urzua fix` does not write because `sequence.status-agreement` would refuse it; the repair is finishing the open dependency |
+| `status.delivery-agreement` | `delivery-partial-blocked` | exempt: the record is derived-blocked with an unresolved item, and `urzua fix` writes no `progress` `partial_status` to it because `sequence.status-agreement` would refuse it; the repair is finishing the open dependency |
 | `status.delivery-agreement` | `done-with-unresolved-items` | `edit-field` `set`; severity floor `error`; not waivable by a rule-level waiver |
 | `status.delivery-agreement` | `done-with-unresolved-items-evidence` | `edit-section` `set`; severity floor `error`; not waivable by a rule-level waiver |
 | `status.done-items-shape` | `done-items-shape` | `edit-section` `set` |

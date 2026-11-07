@@ -531,7 +531,15 @@ mod tests {
             ),
             (
                 "sequence.status-agreement",
-                rules::sequence_status_agreement(&records, &config, &record_index),
+                rules::LocatorEnv::without_files(&config, |env| {
+                    rules::sequence_status_agreement(
+                        &records,
+                        &config,
+                        &record_index,
+                        &Default::default(),
+                        env,
+                    )
+                }),
             ),
             (
                 "embodiment.consistency",

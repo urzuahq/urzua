@@ -514,10 +514,20 @@ fn shortest_cycle(
 /// or when a record that may write an inverse claim has an unreadable header.
 /// This holds for a type declaring only `progress` as for one that also writes
 /// `blocked` (`ADR-83`).
+///
+/// One blocked record is not reported (`ADR-83`, amendment of 2026-11-07): a
+/// record whose `partial_status` comes from the dependency cap of `ADR-96`,
+/// that is, whose Done means items all resolve and which only an unfinished
+/// dependency holds back. It has not made progress out of order; its items were
+/// proven ahead of the dependency. It gets an info finding saying so, naming the
+/// dependency. A record genuinely in that status with an unresolved item is
+/// still reported.
 pub fn sequence_status_agreement(
     records: &[Record],
     config: &Config,
     index: &RecordIndex,
+    back_pointed: &BackPointerEvidence,
+    env: &LocatorEnv<'_>,
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_SEQUENCE_STATUS_AGREEMENT;
     let mut findings = Vec::new();
@@ -607,6 +617,41 @@ pub fn sequence_status_agreement(
             };
             if blocked {
                 if decl.is_progress_status(status) {
+                    // A status that comes from the dependency cap is not out of
+                    // order: say so, and report nothing else for the record.
+                    let one_blocked = HashMap::from([(record.path.clone(), open.clone())]);
+                    let ctx = DeliveryContext {
+                        back_pointed,
+                        env,
+                        blocked: &one_blocked,
+                    };
+                    let capped = judge_delivery(record, config, decl, &ctx)
+                        .ok()
+                        .and_then(|judged| judged.items)
+                        .filter(|items| !items.capped_by.is_empty())
+                        .filter(|_| {
+                            decl.delivery
+                                .as_ref()
+                                .and_then(|d| d.items.as_ref())
+                                .is_some_and(|i| i.partial_status == status)
+                        });
+                    if let Some(items) = capped {
+                        findings.push(Finding {
+                            rule: RULE_ID.to_string(),
+                            severity: FindingSeverity::Info,
+                            file: record.path.clone(),
+                            line: None,
+                            waived: None,
+                            declared_severity: Some(FindingSeverity::Info),
+                            suggested_action: None,
+                            action_source: ActionSource::new("status-blocked-capped"),
+                            message: format!(
+                                "{id} is {status_field} '{status}', not out of order: all items proven ahead of dependency {}, which caps the status",
+                                items.capped_by.join(", ")
+                            ),
+                        });
+                        return Outcome::Examined;
+                    }
                     let mut source =
                         ActionSource::new("status-blocked-derived").field(status_field);
                     // The computed answer, only when one status is declared for it

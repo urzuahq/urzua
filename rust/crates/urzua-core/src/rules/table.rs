@@ -508,10 +508,15 @@ pub const RULE_TABLE: &[RuleDef] = &[
         actions: &[
             VariantAction::new("status-blocked-unblocked", ActionDecl::FIELD_SET),
             VariantAction::new("status-blocked-derived", ActionDecl::FIELD_SET),
+            VariantAction::new("status-blocked-capped", ActionDecl::Exempt("an info notice, not a defect: the record's `partial_status` comes from the dependency cap (every Done means item resolves, only an unfinished dependency holds it back), so there is nothing to repair")),
         ],
         phase: Phase::Main,
         companion: None,
-        run: |c| sequence_status_agreement(c.records, c.config, c.index),
+        run: |c| {
+            with_locator_env(c, |env| {
+                sequence_status_agreement(c.records, c.config, c.index, c.back_pointed, env)
+            })
+        },
     },
     RuleDef {
         id: RULE_RELATION_TARGET_STATUS_UNDECLARED,
@@ -1425,7 +1430,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("delivery-not-done", ActionDecl::RUN_COMMAND),
             VariantAction::new("delivery-without-evidence", ActionDecl::Exempt("no single correct value exists and `urzua fix` writes nothing for it; the repair is adding evidence, which may be a locator or a source back-pointer")),
             VariantAction::new("delivery-partial-not-started", ActionDecl::RUN_COMMAND),
-            VariantAction::new("delivery-partial-blocked", ActionDecl::Exempt("the record is derived-blocked and the type's `partial_status` is a `progress` status, which `urzua fix` does not write because `sequence.status-agreement` would refuse it; the repair is finishing the open dependency")),
+            VariantAction::new("delivery-partial-blocked", ActionDecl::Exempt("the record is derived-blocked with an unresolved item, and `urzua fix` writes no `progress` `partial_status` to it because `sequence.status-agreement` would refuse it; the repair is finishing the open dependency")),
             // `DoneWithUnresolvedItems` (`ADR-96`): a guaranteed error. Its
             // severity is a floor no setting lowers and no rule-level waiver
             // matches. It offers two actions, the reopen first and then the

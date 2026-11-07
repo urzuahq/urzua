@@ -307,12 +307,9 @@ record_types:
       failure: ["WontDo"]
       # Blocked is derived only (RFC-48, ADR-83): a milestone is blocked when a
       # Depends-on target is not Done, and no milestone writes it as a status.
-      # A blocked milestone may be Planned or InProgress; Done claims progress
-      # a blocked milestone cannot have (sequence.status-agreement). Dependencies
-      # cap the status (ADR-96, Amendment of 2026-11-07): items that all resolve
-      # beside an unfinished dependency compute InProgress, so InProgress is not
-      # a status a blocked milestone is refused.
-      progress: ["Done"]
+      # A blocked milestone may be Planned; InProgress and Done claim progress
+      # a blocked milestone cannot have (sequence.status-agreement).
+      progress: ["InProgress", "Done"]
       # Done is implementable: code that implements a delivered milestone keeps
       # citing it (MILE-133), so a back-pointer to a Done milestone is not a
       # change landing ahead of its decision.

@@ -1969,9 +1969,10 @@ rule's `DoneWithUnresolvedItems` finding is what holds a status to the items.
 A dependency caps the standing (`ADR-96`, amendment of 2026-11-07): where `items` is declared and
 `roadmap.pairs` names a sequencing pair, a record whose items all resolve but which has an unfinished
 dependency computes `partial_status`, not `set_status`. Nothing is added to the configuration for this; a
-repository that omits `items` or `roadmap.pairs` is unchanged. For `status.delivery-agreement` and
-`sequence.status-agreement` to agree on the capped record, `partial_status` must not be listed in the type's
-`statuses.progress`, which is the list of statuses a blocked record is refused.
+repository that omits `items` or `roadmap.pairs` is unchanged. `sequence.status-agreement` skips a blocked
+record whose `partial_status` comes from the cap (every item resolves) and emits an info notice naming the
+dependency, so `partial_status` may stay listed in `statuses.progress`; a record with an unresolved item in
+that status is still reported.
 
 The standing is computed per item and per record (`SPEC-2`): an item is resolved when its evidence
 clause names at least one locator, every locator exists (the `embodiment.locator-exists` test) and the
@@ -2223,4 +2224,4 @@ proves this configuration produces the three findings.
 > | 2026-11-07 | Bumped to `0.107`. The `sequence.cycle` bullet "One graph per pair" no longer says a loop across two acyclic pairs is never detected: it is reported when both pairs are named in `roadmap.pairs`. **Why:** the bullet contradicted `ADR-82`, `MILE-192` and the `roadmap.pairs` bullet below it; `ADR-76`'s matching Decision text carries a proposed amendment. | **substantive** |
 > | 2026-11-07 | Bumped to `0.108`. Documents `statuses.delivery.items` (`ADR-96`, `MILE-214`): the opt-in per-item evidence for a type's Done means, its keys, its load errors and how the standing is computed from the items. **Why:** `MILE-214`, the engine of `ADR-96`; an undeclared config is unchanged. | **substantive** |
 > | 2026-11-07 | Bumped to `0.109`. Documents the optional `revision_log` keys `classes`, `class_column`, `date_column` and `tool_class` (`ADR-94`, `MILE-213`): the class vocabulary, the header names of the class and date columns, and the class `urzua fix` writes, their engine defaults, and their load errors. A `\|` inside a log cell stays in its cell, and a row wider than its header is a finding when a column is declared. No `schema_version` bump. **Why:** `MILE-213`, the build of `ADR-94`; an undeclared config behaves as before. | **substantive** |
-> | 2026-11-07 | Bumped to `0.110`. Documents that a dependency caps the standing computed from `statuses.delivery.items` (a record whose items all resolve beside an unfinished dependency computes `partial_status`) and that `partial_status` must not be a `progress` status for the two status rules to agree. No new key; no `schema_version` bump. **Why:** the `ADR-96` amendment of 2026-11-07, accepted by the maintainer; a configuration without `items` or a sequencing pair is unchanged. | **substantive** |
+> | 2026-11-07 | Bumped to `0.110`. Documents that a dependency caps the standing computed from `statuses.delivery.items` (a record whose items all resolve beside an unfinished dependency computes `partial_status`) and that `sequence.status-agreement` skips such a record with an info notice, so `partial_status` may stay a `progress` status. No new key; no `schema_version` bump. **Why:** the `ADR-96` amendment of 2026-11-07, accepted by the maintainer; a configuration without `items` or a sequencing pair is unchanged. | **substantive** |
