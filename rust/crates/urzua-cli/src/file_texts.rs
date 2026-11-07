@@ -88,9 +88,7 @@ mod tests {
         let texts = FileTexts::new(dir.clone(), &config);
         let result = texts.locator_files("a.rs");
         let _ = std::fs::remove_dir_all(&dir);
-        let err = result
-            .err()
-            .expect("a directory that is not a git checkout cannot be listed");
+        let err = result.expect_err("a directory that is not a git checkout cannot be listed");
         assert!(
             err.contains("could not list the repository's files"),
             "{err}"
