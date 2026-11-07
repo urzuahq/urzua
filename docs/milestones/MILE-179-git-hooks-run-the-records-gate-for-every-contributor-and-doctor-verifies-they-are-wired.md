@@ -27,7 +27,7 @@ Whether a hook fails or warns when the binary is absent. Failing makes a fresh c
 - This repository's hooks install in one documented step and run `urzua check --base HEAD` on commit. — evidence: code:Makefile, code:.git-hooks/pre-commit
 - A planted bad header is stopped by the commit hook in a test. — evidence: test:rust/crates/urzua-cli/tests/check_integration.rs#pre_commit_hook_stops_a_planted_bad_header_with_the_real_binary@sha256:f03f66432bb514351d60746417d4f56fa1fe0c4359a793cac582bb0d4e41a6d9
 - The absent-binary behaviour is the decided one and is visible in the commit output. — evidence: test:rust/crates/urzua-cli/tests/check_integration.rs#pre_commit_hook_says_loudly_when_the_binary_is_absent@sha256:db7f73009f144a4b6a3876dcb9983248788cfd252e76f153bbc2e66c5754c9e5, code:.git-hooks/pre-commit
-- `urzua doctor` run in this repository reports its own hooks as wired. — waived: process-outcome -- the result depends on a clone's local `core.hooksPath`, which `make hooks-install` sets; no committed file can evidence a local git setting
+- `urzua doctor` run in this repository reports its own hooks as wired.
 
 > **Revision log**
 >

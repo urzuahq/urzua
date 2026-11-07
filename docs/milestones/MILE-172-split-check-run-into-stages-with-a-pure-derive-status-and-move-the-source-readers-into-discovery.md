@@ -25,7 +25,7 @@ Ordering: after `MILE-171`, which removes the 51 closures this function holds; d
 - No function in `check.rs` exceeds a stated size bound.
 - `derive_status` is pure, lives where unit tests reach it, and has a table test for each branch. — evidence: code:rust/crates/urzua-cli/src/gate.rs, test:rust/crates/urzua-cli/src/gate.rs#derives_each_branch@sha256:e08a23fce48a80f1981b5ffb29c4637ae07a5fbadef16aa0ff379667de8732b6
 - The readers live in discovery with the symlink-policy tests (`BUG-69`, `BUG-75`, `BUG-85`, `BUG-117`) moved with them. — evidence: code:rust/crates/urzua-cli/src/discovery.rs, test:rust/crates/urzua-cli/tests/check_integration.rs#a_symlink_cycle_inside_a_claim_path_terminates_and_reads_each_claim_once@sha256:ea2178098d2da4779e8fc9820e50aac8c422e0d939cb7f2203be21ccb4e38c5b, test:rust/crates/urzua-cli/tests/check_integration.rs#a_symlink_resolving_to_the_prefix_root_itself_is_deduped_not_rejected@sha256:93db1bfdbb0a32a6e160c578aab274a70c446e830a62bfb8c023a068cef5870a, test:rust/crates/urzua-cli/tests/check_integration.rs#a_symlink_cycle_that_stays_inside_the_prefix_terminates@sha256:c71e96e2560adea2ad6a1bb7baf4be17ee44862e1d3aa383c2f758bb30118a8a
-- Command output is unchanged. — waived: process-outcome -- a one-time byte comparison of `urzua check` output (full, path-scoped, `--base`) and every acceptance corpus before and after, recorded in the revision log; no file can evidence a before/after comparison
+- Command output is unchanged.
 - The acceptance suite passes. — evidence: test:rust/crates/urzua-cli/tests/acceptance.rs
 
 > **Revision log**

@@ -22,7 +22,7 @@ Build test fixtures for `RecordTypeConfig` through `Default`: derive `Default` o
 - The three fixtures name only the fields a test varies. — evidence: code:rust/crates/urzua-core/src/rules.rs#type_config@sha256:c96d5d3383645125728e292398a7f9dd8da9923f195334480be022026e80322d, code:rust/crates/urzua-core/src/rules.rs#type_config_with_shape@sha256:49dce2e0bf525ef61ca820bc9ee8c45fe0e28abeae839f822456b16b7dd051cc, code:rust/crates/urzua-core/src/rules.rs#type_config_pointer@sha256:4f6dc84d1ead46d358fcdc0e0a380d8ea1e5deda9ae61dd58986f580275e2ccb
 - Adding a field to `RecordTypeConfig` does not touch a fixture. — evidence: code:rust/crates/urzua-core/src/config.rs#RecordTypeConfig@sha256:a152d1cb2640dc8765b4b7a47685d9ada657d5cde188282a81c615bd630617ab
 - The stale comment is corrected. — waived: not-applicable -- the stale "two seed rules" comment was already gone when the milestone was built (the file was reorganised by MILE-171), so there is nothing to correct
-- `cargo test --workspace` is unchanged in result. — waived: process-outcome -- a one-time before/after comparison of the workspace test run during the refactor; no file can evidence a before/after comparison
+- `cargo test --workspace` is unchanged in result.
 
 > **Revision log**
 >
