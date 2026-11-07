@@ -66,6 +66,12 @@ def render_action_table(rules: list[dict]) -> str:
                 declared = f"`{action['kind']}` `{action['op']}`"
             else:
                 declared = f"`{action['kind']}`"
+            # ADR-96: a variant may carry a severity floor no setting lowers and
+            # may be unwaivable by a rule-level waiver.
+            if "severity_floor" in action:
+                declared += f"; severity floor `{action['severity_floor']}`"
+            if action.get("waivable") is False:
+                declared += "; not waivable by a rule-level waiver"
             lines.append(f"| `{rule['id']}` | `{action['variant']}` | {declared} |")
     lines.append(ACTION_END_MARKER)
     return "\n".join(lines)

@@ -199,6 +199,11 @@ impl Suppression {
         if self.rule != finding.rule {
             return false;
         }
+        // A variant its rule declares `unwaivable` is cleared by evidence, not
+        // by a rule-level waiver (`ADR-96`).
+        if !crate::rules::finding_is_waivable(finding) {
+            return false;
+        }
         self.scope == "*" || finding.file.to_string_lossy() == self.scope
     }
 }
@@ -334,9 +339,14 @@ fn judge_permanence(
     }
 }
 
+/// Whether `value` is a real `YYYY-MM-DD` calendar date.
+pub(crate) fn is_calendar_date(value: &str) -> bool {
+    calendar_date(value).is_some()
+}
+
 /// A `YYYY-MM-DD` string as (year, month, day), or `None` when it is not a
 /// real calendar date (month 13, 31 April, 29 February in a common year).
-fn calendar_date(value: &str) -> Option<(u32, u32, u32)> {
+pub(crate) fn calendar_date(value: &str) -> Option<(u32, u32, u32)> {
     let bytes = value.as_bytes();
     let shaped = bytes.len() == 10
         && bytes[4] == b'-'

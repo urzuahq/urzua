@@ -145,6 +145,12 @@ pub fn gate_and_run(
                     (_, Some(declared)) => declared,
                     (_, None) => severity,
                 };
+                // A variant's declared floor outranks every setting above: the
+                // repository's level applies to the rule's other variants, and
+                // cannot lower this one (`ADR-96`).
+                if let Some(floor) = variant_declaration(f).and_then(|v| v.severity_floor) {
+                    f.severity = f.severity.at_least(floor);
+                }
             }
             (exec, findings)
         }

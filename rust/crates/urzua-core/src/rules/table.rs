@@ -77,6 +77,8 @@ pub enum Declaration {
     VersionBump,
     /// `statuses.blocked` or `statuses.progress` (`MILE-144`).
     BlockedOrProgress,
+    /// `statuses.delivery.items` (`ADR-96`).
+    DeliveryItems,
 }
 
 impl Declaration {
@@ -88,6 +90,7 @@ impl Declaration {
             Declaration::PointerFields => "pointer_fields",
             Declaration::VersionBump => "revision_log.version_bump",
             Declaration::BlockedOrProgress => "statuses.blocked or statuses.progress",
+            Declaration::DeliveryItems => "statuses.delivery.items",
         }
     }
 }
@@ -730,6 +733,9 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("locator-commit-anchor", ActionDecl::FIELD_SET),
             VariantAction::new("locator-kind-undeclared", ActionDecl::FIELD_SET),
             VariantAction::new("locator-kind-unpinnable", ActionDecl::FIELD_SET),
+            // A locator in a Done-means item clause (`ADR-96`), whichever of
+            // the defects above it has: the repair is an edit of the item.
+            VariantAction::new("item-locator-defect", ActionDecl::SECTION_SET),
         ],
         phase: Phase::Main,
         companion: None,
@@ -1417,11 +1423,70 @@ pub const RULE_TABLE: &[RuleDef] = &[
         actions: &[
             VariantAction::new("delivery-not-done", ActionDecl::RUN_COMMAND),
             VariantAction::new("delivery-without-evidence", ActionDecl::Exempt("no single correct value exists and `urzua fix` writes nothing for it; the repair is adding evidence, which may be a locator or a source back-pointer")),
+            VariantAction::new("delivery-partial-not-started", ActionDecl::RUN_COMMAND),
+            VariantAction::new("delivery-partial-blocked", ActionDecl::Exempt("the record is derived-blocked, and `urzua fix` writes no `progress` status to it because `sequence.status-agreement` would refuse it; the repair is finishing the open dependency")),
+            // `DoneWithUnresolvedItems` (`ADR-96`): a guaranteed error. Its
+            // severity is a floor no setting lowers and no rule-level waiver
+            // matches. It offers two actions, the reopen first and then the
+            // evidence; a finding carries one `suggested_action` (`ADR-73`), so
+            // it carries the reopen, or the evidence edit when the type's `transitions` do not allow the reopen, and `urzua rules` lists both.
+            VariantAction::new("done-with-unresolved-items", ActionDecl::FIELD_SET)
+                .floored(FindingSeverity::Error)
+                .unwaivable(),
+            VariantAction::new("done-with-unresolved-items-evidence", ActionDecl::SECTION_SET)
+                .floored(FindingSeverity::Error)
+                .unwaivable(),
         ],
         phase: Phase::Main,
         companion: None,
         run: |c| {
-            status_delivery_agreement(c.records, c.config, c.back_pointed)
+            with_locator_env(c, |env| status_delivery_agreement(c.records, c.config, c.back_pointed, env))
+        },
+    },
+    RuleDef {
+        id: RULE_STATUS_DONE_ITEMS_SHAPE,
+        description: "A Done-means section that does not follow the item grammar of `ADR-96` section 1, on a type that declares `statuses.delivery.items`: a prose-only section (no list item), a list marker indented less than the item indent, a clause on a line that belongs to no item, clauses on the first line and on final lines at once, a waiver clause before the evidence clause, an evidence clause that is not entirely locators (backticks or quotes before the first `category:`, whitespace inside a locator, no locator at all), a leading `[x]` or `[ ]` checkbox, and a waiver clause with an unknown category, an empty or missing reason, a missing, malformed or unneeded cite or date. A clause that does not parse is a finding, never skipped, and its item reads as unresolved. A marker word with no clause separator before it is plain text. A type declaring no `delivery.items` is not examined. The population counts the records of types that declare it.",
+        scope: Scope::Records,
+        anchor: Anchor::Record,
+        judges: Judges::OneRecord,
+        needs_identity_index: false,
+        requires_relation_pairs: false,
+        requires_acyclic_pair: false,
+        requires_override_log: false,
+        requires_authority: false,
+        reads_declaration: Some(Declaration::DeliveryItems),
+        header_none: HeaderNone::Exempt("judges only a type that declares `statuses.delivery.items`, which needs a `Status` header a `header_shape: none` type does not have"),
+        options: &[],
+        actions: &[
+            VariantAction::new("done-items-shape", ActionDecl::SECTION_SET),
+        ],
+        phase: Phase::Main,
+        companion: None,
+        run: |c| {
+            status_done_items_shape(c.records, c.config)
+        },
+    },
+    RuleDef {
+        id: RULE_STATUS_WAIVED_ITEM_STALE,
+        description: "A waived Done-means item whose waiver has outlived its reason (`ADR-96` section 3), on a type that declares `statuses.delivery.items`: the item also carries an evidence clause that now resolves (remove the waiver), the record its waiver cites does not exist, a `deferred-to` (a category declared `expires: required`) whose cited record is finished, or an expiry date that has come (from that date on). Every waived item is also listed by category in the report's notices, never omitted. A dated `WAIVER` record can waive this rule like any warning. A type declaring no `delivery.items` is not examined. The population counts the records of types that declare it.",
+        scope: Scope::Records,
+        anchor: Anchor::Record,
+        judges: Judges::CrossRecord,
+        needs_identity_index: true,
+        requires_relation_pairs: false,
+        requires_acyclic_pair: false,
+        requires_override_log: false,
+        requires_authority: false,
+        reads_declaration: Some(Declaration::DeliveryItems),
+        header_none: HeaderNone::Exempt("judges only a type that declares `statuses.delivery.items`, which needs a `Status` header a `header_shape: none` type does not have"),
+        options: &[],
+        actions: &[
+            VariantAction::new("waived-item-stale", ActionDecl::SECTION_SET),
+        ],
+        phase: Phase::Main,
+        companion: None,
+        run: |c| {
+            with_locator_env(c, |env| status_waived_item_stale(c.records, c.config, c.index, env, c.run.today))
         },
     },
     RuleDef {
@@ -2012,6 +2077,8 @@ mod tests {
                 ),
                 (RULE_HEADER_FIELD_SET_CONSISTENCY, Declaration::KnownFields),
                 (RULE_HEADER_POINTER_FIELD_CLEAN, Declaration::PointerFields),
+                (RULE_STATUS_DONE_ITEMS_SHAPE, Declaration::DeliveryItems),
+                (RULE_STATUS_WAIVED_ITEM_STALE, Declaration::DeliveryItems),
             ]
         );
     }

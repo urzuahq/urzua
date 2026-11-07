@@ -113,6 +113,61 @@ pub struct RoadmapRecord {
     pub blocked_by: Vec<String>,
     /// Every open record that transitively depends on this one.
     pub blocks: Vec<String>,
+    /// The Done-means items of a record whose type declares
+    /// `statuses.delivery.items` (`ADR-96` section 7): "3 of 5" without a status
+    /// the engine would have to know. Absent for every other record. A
+    /// partially delivered record stays open work, in its wave, and its
+    /// dependents stay blocked: blocked is derived from its written `Status`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub items: Option<RoadmapItems>,
+}
+
+/// `RoadmapRecord.items`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct RoadmapItems {
+    pub total: usize,
+    pub resolved: usize,
+    pub waived: usize,
+}
+
+/// Fills `items` on each roadmap record whose type declares
+/// `statuses.delivery.items`. The roadmap itself reads no file; the caller
+/// supplies the working tree the item locators resolve in.
+pub fn add_item_counts(
+    roadmap: &mut Roadmap,
+    records: &[Record],
+    config: &Config,
+    env: &LocatorEnv<'_>,
+) {
+    let declared = statuses_by_type(config);
+    let by_id: HashMap<String, &Record> = records
+        .iter()
+        .filter_map(|r| record_id(r).map(|id| (id, r)))
+        .collect();
+    for (id, entry) in roadmap.records.0.iter_mut() {
+        let Some(record) = by_id.get(id) else {
+            continue;
+        };
+        let Some(delivery) = declared
+            .get(&record.record_type)
+            .and_then(|d| d.delivery.as_ref())
+            .filter(|d| d.items.is_some())
+        else {
+            continue;
+        };
+        let empty = crate::done_items::DoneItems::default();
+        let judged = judge_items(
+            record.items.as_ref().unwrap_or(&empty),
+            config,
+            delivery,
+            env,
+        );
+        entry.items = Some(RoadmapItems {
+            total: judged.total(),
+            resolved: judged.resolved,
+            waived: judged.waived,
+        });
+    }
 }
 
 /// One bucket of `roadmap.group_by`. A bucket of a non-final field holds
@@ -553,6 +608,7 @@ pub fn compute_roadmap(records: &[Record], config: &Config) -> Roadmap {
                 blocked,
                 blocked_by,
                 blocks: blocked_work(id),
+                items: None,
             },
         ));
     }

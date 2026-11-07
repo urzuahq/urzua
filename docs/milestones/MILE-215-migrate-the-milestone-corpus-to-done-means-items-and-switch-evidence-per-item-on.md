@@ -5,7 +5,7 @@ Phase: '0'
 Track: schema-governance
 Implements: ADR-96
 Depends-on: MILE-214
-Blocked-on: MILE-214 builds the engine, and ADR-96 is Proposed; migrate after the maintainer accepts it.
+Blocked-on: —
 ---
 # 215 — Migrate the milestone corpus to Done means items and switch evidence per item on
 
@@ -30,3 +30,4 @@ Migrate every `Done` milestone's Done means into the item list of `ADR-96`, give
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-07 | Filed. **Why:** split out of `MILE-214` on the independent review of `ADR-96`, so the engine can land before the corpus is migrated and switched on. | **substantive** |
+> | 2026-11-07 | Cleared `Blocked-on`: `MILE-214` is Done and `ADR-96` is Accepted. **Why:** the wait it named is over; `Depends-on` still orders the two. | **structural** |

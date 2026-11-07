@@ -944,6 +944,14 @@ fn load_context<'a>(
         ));
     }
 
+    // Every waived Done-means item is listed, by category, never omitted
+    // (`ADR-96` section 3), whenever a rule that judges them is on.
+    if enabled_setting(config, rules::RULE_STATUS_WAIVED_ITEM_STALE).is_some()
+        || enabled_setting(config, rules::RULE_STATUS_DELIVERY_AGREEMENT).is_some()
+    {
+        notices.extend(rules::waived_item_notices(&session.records, config));
+    }
+
     // A declared non-reference id that now matches a real record is disclosed
     // (`ADR-75`), only when `citation.resolution` is on.
     if enabled_setting(config, rules::RULE_CITATION_RESOLUTION).is_some() {
@@ -1222,11 +1230,17 @@ fn run_rules(context: &Context) -> (Vec<RuleExecution>, Vec<Finding>) {
     let read_text = |p: &str| texts.get(p);
     let mut executions = Vec::new();
     let mut findings = Vec::new();
+    // `status.waived-item-stale` judges an expiry date against the run's day
+    // (`ADR-96` section 3).
+    let today = urzua_io::today();
     let main = context.rule_ctx(
         &may_exist,
         &dir_exists,
         &read_text,
-        rules::RunState::empty(),
+        rules::RunState {
+            today: &today,
+            ..rules::RunState::empty()
+        },
     );
     for (exec, rule_findings) in run_phase(context, rules::Phase::Main, &main) {
         executions.push(exec);

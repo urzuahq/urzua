@@ -51,12 +51,56 @@ impl ActionDecl {
 pub struct VariantAction {
     pub variant: &'static str,
     pub action: ActionDecl,
+    /// The lowest severity a finding of this variant can have, whatever the
+    /// repository's setting for the rule says (`ADR-96`: a floor).
+    pub severity_floor: Option<FindingSeverity>,
+    /// Whether a `WAIVER` record can excuse a finding of this variant. `false`
+    /// means no rule-level waiver matches it, and the rule's `permanent`
+    /// categories are not consulted for it (`ADR-96`).
+    pub waivable: bool,
 }
 
 impl VariantAction {
     pub const fn new(variant: &'static str, action: ActionDecl) -> Self {
-        VariantAction { variant, action }
+        VariantAction {
+            variant,
+            action,
+            severity_floor: None,
+            waivable: true,
+        }
     }
+
+    /// The variant's severity is at least `severity`, whatever the rule's
+    /// declared level.
+    pub const fn floored(mut self, severity: FindingSeverity) -> Self {
+        self.severity_floor = Some(severity);
+        self
+    }
+
+    /// No rule-level waiver matches a finding of this variant.
+    pub const fn unwaivable(mut self) -> Self {
+        self.waivable = false;
+        self
+    }
+}
+
+/// The declaration of the variant a finding is, when its rule's table entry
+/// has one.
+pub fn variant_declaration(finding: &Finding) -> Option<&'static VariantAction> {
+    let variant = finding.action_source.variant;
+    if variant.is_empty() {
+        return None;
+    }
+    rule_def(&finding.rule)?
+        .actions
+        .iter()
+        .find(|a| a.variant == variant)
+}
+
+/// Whether a rule-level waiver can match `finding`: `false` only for a variant
+/// its table entry declares `unwaivable`.
+pub fn finding_is_waivable(finding: &Finding) -> bool {
+    variant_declaration(finding).is_none_or(|v| v.waivable)
 }
 
 /// The `target` keys a kind requires (`ADR-73`'s table). `file` is filled from

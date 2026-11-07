@@ -87,10 +87,11 @@ pub fn explain(records: &[Record], path: &str, config: &Config) -> Vec<Governing
     for record in records {
         let locator_field =
             relation_field_name(config, &record.record_type, RelationRole::EmbodimentLocator);
-        let Some(realized_by_value) = record.header.get(locator_field) else {
+        // `Realized-by` plus the Done-means item clauses (`ADR-96`).
+        let Some(realized_by_value) = crate::rules::evidence_text(record, locator_field) else {
             continue;
         };
-        for entry in crate::locator::realized_by_locators(realized_by_value) {
+        for entry in crate::locator::realized_by_locators(&realized_by_value) {
             let Ok(locator) = entry.parsed else { continue };
             if locator.path != path {
                 continue;

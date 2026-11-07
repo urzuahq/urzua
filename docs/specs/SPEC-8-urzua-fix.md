@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5Q0XVK27P5T8FN72BN
-Version: '0.30'
+Version: '0.31'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -176,6 +176,18 @@ locators and source back-pointers, drift ignored) computes to a declared deliver
 with no evidence is not downgraded: `fix` reports it as a notice naming the record, since the repair is
 adding evidence. `fix` computes no drift for this repair, so it runs when only
 `status.delivery-agreement` is enabled.
+
+A type that declares `statuses.delivery.items` (`SPEC-3`, `ADR-96`) has its `Status` computed from the
+Done-means items, and `fix` writes only what the engine computes: `set_status` when every item that is
+not waived resolves (and at least one at a delivered tier), and the declared `partial_status` when some
+resolve and the record sits at a not-done status short of it. The repair's revision row cites the
+counts ("recomputed `Status` from `the Done means items (3 of 5 items resolved)`"), so the attribution is
+the evidence. `fix` never downgrades a `success` status: a finished record with an unresolved item is
+`status.delivery-agreement`'s `DoneWithUnresolvedItems` error, which `check` always fails on, and `fix`
+reports a notice naming the unresolved items; the repair is evidence, an inline waiver, or reopening by
+hand. `fix` does not write `partial_status` to a record that is derived-blocked (a `progress` status
+would contradict `sequence.status-agreement`): the finding stays and names the open dependency. A pin
+inside an item's evidence clause is re-pinned by `--rebaseline` as one in the header is.
 
 ### How `check` points at these repairs (`ADR-73`, `MILE-44`)
 
@@ -370,3 +382,4 @@ asserted by test, not assumed by convention.
 > | 2026-11-06 | Bumped to `0.28`. The record-edit hook section describes the engine core `urzua harness run edit` and the installed translator, not the deleted `scripts/hooks` shell and Python chain; the verdicts are unchanged. **Why:** `MILE-204` deletes the scripts, `ADR-89` section 6. | **substantive** |
 > | 2026-11-07 | Bumped to `0.29`. `--reason` also refuses a carriage return; `--rebaseline --apply` reads the evidence after taking the lock, and every record write is confined to the repository. **Why:** a Phase 0 hardening review found a `\r` reaching the revision-log row, evidence hashed before the lock, and writes that followed a symlink out of the repository. | **substantive** |
 > | 2026-11-07 | Bumped to `0.30`. Detect mode (no `--apply`) honours `--ids`: the report lists only the named records and an `--ids` entry that matches no pending repair (no stale pin, under `--rebaseline`) is a `partial-failure`, as under `--apply`; `--force`, `--by` and `--actor` without `--apply` are usage errors (exit 2) instead of being ignored. **Why:** maintainer decision of 2026-11-07, from the CLI review. | **substantive** |
+> | 2026-11-07 | Bumped to `0.31`. The `Status` repair for a type that declares `statuses.delivery.items`: `fix` computes from the Done-means items, writes `set_status` or `partial_status` with the item counts in the row, never downgrades a `success` status, writes no `progress` status to a derived-blocked record, and `--rebaseline` re-pins a pin inside an item clause. **Why:** `MILE-214`, `ADR-96`. | **substantive** |

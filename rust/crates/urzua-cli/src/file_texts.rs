@@ -80,6 +80,39 @@ impl FileTexts {
     }
 }
 
+/// Runs `f` with the lookups a locator is judged by: a path is present when git
+/// tracks it and it is on disk, as `embodiment.locator-exists` judges it. Used
+/// by the commands that judge a Done-means item outside `check` (`fix`,
+/// `roadmap`, `ADR-96`).
+pub(crate) fn with_locator_env<R>(
+    root: &std::path::Path,
+    config: &urzua_core::config::Config,
+    tracked: &[PathBuf],
+    f: impl FnOnce(&urzua_core::rules::LocatorEnv<'_>) -> R,
+) -> R {
+    let texts = FileTexts::new(root.to_path_buf(), config);
+    let set: HashSet<&std::path::Path> = tracked.iter().map(|p| p.as_path()).collect();
+    let exists = |p: &std::path::Path| root.join(p).try_exists().unwrap_or(true);
+    let present = |p: &str| {
+        let path = std::path::Path::new(p);
+        set.contains(path) && exists(path)
+    };
+    let untracked = |p: &str| {
+        let path = std::path::Path::new(p);
+        !set.contains(path) && exists(path)
+    };
+    let read = |p: &str| texts.get(p);
+    let env = urzua_core::rules::LocatorEnv {
+        config,
+        opts: config.rule_opts(urzua_core::rules::RULE_EMBODIMENT_LOCATOR_EXISTS),
+        tracked,
+        present: &present,
+        read: &read,
+        untracked_on_disk: &untracked,
+    };
+    f(&env)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

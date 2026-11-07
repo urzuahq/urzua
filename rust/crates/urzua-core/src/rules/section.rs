@@ -363,7 +363,7 @@ pub(super) fn record_sections(record: &Record, text: &str) -> Vec<Section> {
 
 /// The record's sections down to the type's declared `depth`, nested ones
 /// included, with file-relative line numbers.
-fn record_section_tree(record: &Record, text: &str, depth: u8) -> Vec<Section> {
+pub(super) fn record_section_tree(record: &Record, text: &str, depth: u8) -> Vec<Section> {
     let skip = record.header.region.map_or(0, |(_, end)| end);
     parse_sections_to_depth(&after_header(text, skip), skip + 1, depth)
 }
@@ -377,7 +377,7 @@ fn after_header(text: &str, skip: usize) -> String {
 
 /// The section satisfying `required`, with the heading it was found under:
 /// the `name` first, then each alias in the order declared.
-fn find_section<'a>(
+pub(super) fn find_section<'a>(
     sections: &'a [Section],
     required: &'a RequiredSection,
 ) -> Option<(&'a Section, &'a str)> {

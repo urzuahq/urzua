@@ -12,8 +12,8 @@ use crate::line_edit::{table_row_prefix, LineDoc};
 use crate::record::Record;
 use crate::report::{census, Outcome, Population, PopulationUnit};
 use crate::rules::{
-    compute_embodiment, find_revision_log_entries, parse_realized_by, relation_field_name,
-    BackPointerEvidence,
+    compute_embodiment, evidence_text, find_revision_log_entries, parse_realized_by,
+    relation_field_name, DeliveryContext,
 };
 
 /// One mechanically-detected disagreement between a record's stated value
@@ -58,8 +58,9 @@ pub fn detect_repairs(
     config: &Config,
     drifted: &HashSet<PathBuf>,
     fresh_drift: &HashSet<PathBuf>,
-    back_pointed: &BackPointerEvidence,
+    ctx: &DeliveryContext<'_>,
 ) -> (Population, Vec<Repair>) {
+    let back_pointed = ctx.back_pointed;
     let mut repairs = Vec::new();
     let sticky = crate::rules::sticky_states(config);
 
@@ -79,7 +80,10 @@ pub fn detect_repairs(
         let cited_by_test = back_pointed.test.contains(&record.path);
         // No `Realized-by` is repaired only when a back-pointer cites the
         // record, as `embodiment.consistency` judges it (`MILE-149`).
-        let realized_by_value = record.header.get(locator_field);
+        // The union of `Realized-by` and the Done-means item clauses
+        // (`ADR-96` section 5).
+        let realized_by_text = evidence_text(record, locator_field);
+        let realized_by_value = realized_by_text.as_deref();
         if realized_by_value.is_none() && !(cited_by_code || cited_by_test) {
             return Outcome::Absent;
         }
@@ -130,12 +134,23 @@ pub fn detect_repairs(
         // single correct value is repaired; the reverse is `unevidenced_successes`.
         let status = match delivery_types.get(&record.record_type) {
             Some(decl) if decl.delivery.is_some() => {
-                match crate::rules::judge_delivery(record, config, decl, back_pointed) {
+                match crate::rules::judge_delivery(record, config, decl, ctx) {
                     Ok(judged) => {
-                        if let Some(crate::rules::DeliveryDisagreement::DeliveredButNotDone {
-                            set_status,
-                        }) = judged.disagreement
-                        {
+                        // `fix` never downgrades a `success` status
+                        // (`DoneWithUnresolvedItems` is reported, not written),
+                        // and writes `partial_status` only to a record that is
+                        // not derived-blocked (`ADR-96` sections 2 and 7).
+                        let repaired = match judged.disagreement.clone() {
+                            Some(crate::rules::DeliveryDisagreement::DeliveredButNotDone {
+                                set_status,
+                            }) => Some(set_status),
+                            Some(crate::rules::DeliveryDisagreement::PartialButNotStarted {
+                                partial_status,
+                                blocked: false,
+                            }) => Some(partial_status),
+                            _ => None,
+                        };
+                        if let Some(set_status) = repaired {
                             repairs.push(Repair {
                                 record: record.path.clone(),
                                 field: judged.status_field.clone(),
@@ -179,25 +194,41 @@ pub fn detect_repairs(
 pub fn unevidenced_successes(
     records: &[Record],
     config: &Config,
-    back_pointed: &BackPointerEvidence,
+    ctx: &DeliveryContext<'_>,
 ) -> Vec<crate::report::Notice> {
     let declared = crate::rules::statuses_by_type(config);
     records
         .iter()
         .filter_map(|record| {
             let decl = declared.get(&record.record_type)?;
-            let judged = crate::rules::judge_delivery(record, config, decl, back_pointed).ok()?;
-            matches!(
-                judged.disagreement,
-                Some(crate::rules::DeliveryDisagreement::SuccessWithoutEvidence)
-            )
-            .then(|| crate::report::Notice {
-                severity: crate::report::NoticeSeverity::Warning,
-                subject: record.path.display().to_string(),
-                message: format!(
+            let judged = crate::rules::judge_delivery(record, config, decl, ctx).ok()?;
+            let message = match &judged.disagreement {
+                Some(crate::rules::DeliveryDisagreement::SuccessWithoutEvidence) => format!(
                     "{} is '{}' with no delivery evidence (computes to '{}'); not downgraded -- add the evidence that delivered it",
                     judged.status_field, judged.status, judged.tier
                 ),
+                // `ADR-96`: `fix` never reopens a finished record; it names
+                // what keeps the status from being right.
+                Some(crate::rules::DeliveryDisagreement::DoneWithUnresolvedItems {
+                    unresolved,
+                    reopen_to,
+                }) => format!(
+                    "{} is '{}' but {} item(s) are unresolved ({}); not downgraded -- add the evidence, waive the item, or reopen it to '{reopen_to}' by hand",
+                    judged.status_field,
+                    judged.status,
+                    unresolved.len(),
+                    unresolved
+                        .iter()
+                        .map(|u| format!("item {} \"{}\": {}", u.n, u.text, u.cause))
+                        .collect::<Vec<_>>()
+                        .join("; ")
+                ),
+                _ => return None,
+            };
+            Some(crate::report::Notice {
+                severity: crate::report::NoticeSeverity::Warning,
+                subject: record.path.display().to_string(),
+                message,
             })
         })
         .collect()
@@ -458,8 +489,13 @@ pub struct FailedPin {
 pub struct Rebaseline {
     pub record: PathBuf,
     pub field: String,
+    /// The 1-based line of the evidence field; `0` when the record has none and
+    /// its pins sit only in Done-means item clauses (`ADR-96`).
     pub line: usize,
     pub pins: Vec<PinDrift>,
+    /// The lines of the Done-means item clauses a stale pin sits on.
+    #[serde(skip)]
+    pub item_lines: Vec<usize>,
 }
 
 // Implements: ADR-67 (attributed re-baselining of a pin)
@@ -479,11 +515,13 @@ pub fn detect_rebaselines(
     let population = census(PopulationUnit::Record, records.iter().collect(), |record| {
         let locator_field =
             relation_field_name(config, &record.record_type, RelationRole::EmbodimentLocator);
-        let Some(value) = record.header.get(locator_field) else {
+        // `Realized-by` plus the Done-means item clauses (`ADR-96`): a pin in an
+        // item clause is re-pinned as one in the header is.
+        let Some(value) = evidence_text(record, locator_field) else {
             return Outcome::Absent;
         };
         let mut pins: Vec<PinDrift> = Vec::new();
-        for entry in crate::locator::realized_by_locators(value) {
+        for entry in crate::locator::realized_by_locators(&value) {
             let Ok(locator) = entry.parsed else { continue };
             let Some(crate::locator::Anchor::Pin(recorded)) = locator.anchor.clone() else {
                 continue;
@@ -537,7 +575,22 @@ pub fn detect_rebaselines(
             }
         }
         if !pins.is_empty() {
+            let item_lines: Vec<usize> = record
+                .items
+                .iter()
+                .flat_map(|i| i.items.iter())
+                .filter_map(|i| i.evidence.as_ref())
+                .filter(|c| c.valid)
+                .filter(|c| {
+                    pins.iter().any(|p| {
+                        c.text
+                            .contains(&format!("{}@sha256:{}", p.spelling, p.recorded_hash))
+                    })
+                })
+                .map(|c| c.line)
+                .collect();
             found.push(Rebaseline {
+                item_lines,
                 record: record.path.clone(),
                 field: locator_field.to_string(),
                 line: record
@@ -599,30 +652,39 @@ pub fn apply_rebaseline(
 ) -> Result<String, String> {
     let mut doc = LineDoc::parse(content);
     let prefix_key = format!("{}:", rebaseline.field);
-    let field_line = doc
-        .find_line(|l| l.trim_start().starts_with(&prefix_key))
-        .ok_or_else(|| {
-            format!(
-                "could not find the '{}' line to edit -- the record may have changed since detect ran",
-                rebaseline.field
-            )
-        })?;
-    let mut line = doc.line(field_line).unwrap_or_default().to_string();
+    // The evidence field's line, when the record has one, and the Done-means
+    // item clause lines a stale pin sits on (`ADR-96`).
+    let mut lines: Vec<usize> = Vec::new();
+    if rebaseline.line != 0 || rebaseline.item_lines.is_empty() {
+        let field_line = doc
+            .find_line(|l| l.trim_start().starts_with(&prefix_key))
+            .ok_or_else(|| {
+                format!(
+                    "could not find the '{}' line to edit -- the record may have changed since detect ran",
+                    rebaseline.field
+                )
+            })?;
+        lines.push(field_line);
+    }
+    lines.extend(&rebaseline.item_lines);
     for pin in &rebaseline.pins {
         let old = format!("{}@sha256:{}", pin.spelling, pin.recorded_hash);
-        let Some(replaced) = replace_exact_pin(
-            &line,
-            &old,
-            &format!("{}@sha256:{}", pin.spelling, pin.current_hash),
-        ) else {
+        let new = format!("{}@sha256:{}", pin.spelling, pin.current_hash);
+        let mut replaced_anywhere = false;
+        for &at in &lines {
+            let line = doc.line(at).unwrap_or_default().to_string();
+            if let Some(replaced) = replace_exact_pin(&line, &old, &new) {
+                doc.replace_line(at, replaced);
+                replaced_anywhere = true;
+            }
+        }
+        if !replaced_anywhere {
             return Err(format!(
-                "the pin on '{}' is no longer on the '{}' line -- the record may have changed since detect ran",
+                "the pin on '{}' is no longer on the '{}' line or in a Done means item clause -- the record may have changed since detect ran",
                 pin.locator, rebaseline.field
             ));
-        };
-        line = replaced;
+        }
     }
-    doc.replace_line(field_line, line);
 
     let edited = doc.to_string();
     let entries = find_revision_log_entries(&edited, log_id).ok_or_else(|| {
@@ -675,6 +737,26 @@ mod tests {
     use super::*;
     use std::path::PathBuf;
 
+    /// `detect_repairs` over a tree with no files, no blocked record and the
+    /// given back-pointers.
+    fn detect(
+        records: &[Record],
+        config: &Config,
+        drifted: &HashSet<PathBuf>,
+        fresh: &HashSet<PathBuf>,
+        back_pointed: &crate::rules::BackPointerEvidence,
+    ) -> (Population, Vec<Repair>) {
+        crate::rules::LocatorEnv::without_files(config, |env| {
+            let blocked = HashSet::new();
+            let ctx = DeliveryContext {
+                back_pointed,
+                env,
+                blocked: &blocked,
+            };
+            detect_repairs(records, config, drifted, fresh, &ctx)
+        })
+    }
+
     fn record(path: &str, content: &str) -> Record {
         Record::parse(PathBuf::from(path), "adr".to_string(), content)
     }
@@ -708,6 +790,7 @@ mod tests {
     fn a_rebaseline_row_carries_the_source_and_the_actor_kind() {
         let content = "---\nEmbodiment: Implemented\nRealized-by: 'code:src/a.rs@sha256:aaaaaaaaaaaaaaaaaaaaaaaa'\n---\n# 1\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Initial. | **structural** |\n";
         let rb = Rebaseline {
+            item_lines: Vec::new(),
             record: PathBuf::from("docs/adr/ADR-1-a.md"),
             field: "Realized-by".to_string(),
             line: 3,
@@ -745,6 +828,7 @@ mod tests {
         let h = "aaaaaaaaaaaaaaaaaaaaaaaa";
         let content = format!("---\nRealized-by: 'lib/a.rs@sha256:{h}, a.rs@sha256:{h}'\n---\n# 1\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Initial. | **structural** |\n");
         let rb = Rebaseline {
+            item_lines: Vec::new(),
             record: PathBuf::from("docs/adr/ADR-1-a.md"),
             field: "Realized-by".to_string(),
             line: 2,
@@ -804,7 +888,7 @@ mod tests {
             "docs/adr/0002-y.md",
             "---\nEmbodiment: Verified\nRealized-by: spec:docs/x.md\n---\n",
         );
-        let (population, repairs) = detect_repairs(
+        let (population, repairs) = detect(
             &[sticky, neighbour],
             &config,
             &HashSet::new(),
@@ -823,12 +907,12 @@ mod tests {
             "---\nEmbodiment: Specified\nRealized-by: spec:docs/x.md\n---\n",
         );
         let cited: HashSet<PathBuf> = [PathBuf::from("docs/adr/0001-x.md")].into();
-        let (_, repairs) = detect_repairs(
+        let (_, repairs) = detect(
             &[r],
             &no_relation_field_overrides(),
             &HashSet::new(),
             &HashSet::new(),
-            &BackPointerEvidence {
+            &crate::rules::BackPointerEvidence {
                 code: cited.clone(),
                 ..Default::default()
             },
@@ -843,7 +927,7 @@ mod tests {
             "docs/adr/0001-x.md",
             "---\nEmbodiment: Not started\nRealized-by: code:src/lib.rs\n---\n",
         );
-        let (population, repairs) = detect_repairs(
+        let (population, repairs) = detect(
             &[r],
             &no_relation_field_overrides(),
             &HashSet::new(),
@@ -865,7 +949,7 @@ mod tests {
             "---\nEmbodiment: Implemented\nRealized-by: code:src/lib.rs\n---\n",
         );
         let drifted: HashSet<PathBuf> = [PathBuf::from("docs/adr/0001-x.md")].into();
-        let (_, repairs) = detect_repairs(
+        let (_, repairs) = detect(
             &[r],
             &no_relation_field_overrides(),
             &drifted,
@@ -882,7 +966,7 @@ mod tests {
             "docs/adr/0001-x.md",
             "---\nEmbodiment: Implemented\nRealized-by: code:src/lib.rs\n---\n",
         );
-        let (population, repairs) = detect_repairs(
+        let (population, repairs) = detect(
             &[r],
             &no_relation_field_overrides(),
             &HashSet::new(),
@@ -948,7 +1032,7 @@ mod tests {
             .into_iter()
             .collect(),
         };
-        let (population, repairs) = detect_repairs(
+        let (population, repairs) = detect(
             &[r],
             &config,
             &HashSet::new(),
@@ -967,7 +1051,7 @@ mod tests {
         // function and reached no verdict, which is what `eligible() > 0`
         // says and a bare examined-count could not.
         let r = record("docs/adr/0001-x.md", "---\nEmbodiment: Not started\n---\n");
-        let (population, repairs) = detect_repairs(
+        let (population, repairs) = detect(
             &[r],
             &no_relation_field_overrides(),
             &HashSet::new(),
@@ -1179,7 +1263,7 @@ mod tests {
             "---\nEmbodiment: Drift detected\nRealized-by: code:src/lib.rs\n---\n",
         );
         let fresh: HashSet<PathBuf> = [PathBuf::from("docs/adr/0001-x.md")].into();
-        let (_, repairs) = detect_repairs(
+        let (_, repairs) = detect(
             &[r],
             &no_relation_field_overrides(),
             &HashSet::new(),

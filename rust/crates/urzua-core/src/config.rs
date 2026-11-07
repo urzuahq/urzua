@@ -2076,7 +2076,8 @@ pub fn parse_with_document_models(
         .map_err(|reason| ConfigError::InvalidEmbodiment { reason })?;
     crate::locator::validate_resolvers(&config.locator_resolvers)
         .map_err(|reason| ConfigError::InvalidLocatorResolvers { reason })?;
-    crate::status_model::validate(&config.record_types, &config.embodiment)?;
+    let status_decls = crate::status_model::validate(&config.record_types, &config.embodiment)?;
+    crate::status_model::validate_items_rule(&config.record_types, &status_decls, &config.rules)?;
     validate_relation_pairs(&config)?;
     validate_roadmap(&config)?;
     validate_companion_fields(&config)?;

@@ -1,0 +1,18 @@
+id: done-with-an-unresolved-item-is-a-guaranteed-error
+corpus: corpus-v
+invocation: [check]
+# MILE-1 is Done while items 2 and 3 are unresolved: an error that names each
+# item and its cause and offers the reopen, whatever the rule's level.
+expect_exit: 1
+expect_findings:
+  - rule: status.delivery-agreement
+    severity: error
+    file: docs/milestones/MILE-1-done-with-an-unresolved-item.md
+    message_contains: 'Done means item 2 "The queue pops in order." is unresolved: locator tests/missing.rs does not exist'
+    suggested_action: {kind: edit-field, target: {field: Status}, value: InProgress}
+  - rule: status.delivery-agreement
+    file: docs/milestones/MILE-1-done-with-an-unresolved-item.md
+    message_contains: 'Done means item 3 "The queue is documented." is unresolved: no evidence clause'
+expect_no_findings:
+  - {rule: status.delivery-agreement, file: docs/milestones/MILE-6-every-item-resolved-and-done.md}
+mutation_exempt: the rule cannot be switched off under a config that declares delivery.items (the config is refused at load), so the mutation proves nothing; the findings are asserted by message and action.

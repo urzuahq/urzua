@@ -1,0 +1,13 @@
+id: the-status-follows-the-items
+corpus: corpus-v
+invocation: [fix]
+# MILE-2 has every item resolved under Planned: the repair is Done. MILE-3 has
+# one of two resolved under Planned: the repair is InProgress. A Done milestone
+# with an unresolved item (MILE-1) is never downgraded, so it has no repair.
+expect_exit: 0
+expect_json:
+  - {at: /repairs/0/record, equals: docs/milestones/MILE-2-every-item-resolved.md}
+  - {at: /repairs/0/computed_value, equals: Done}
+  - {at: /repairs/1/record, equals: docs/milestones/MILE-3-partly-delivered.md}
+  - {at: /repairs/1/computed_value, equals: InProgress}
+mutation_exempt: the rule cannot be switched off under a config that declares delivery.items (the config is refused at load), so the mutation proves nothing; the repairs are asserted by value.

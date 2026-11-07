@@ -59,6 +59,8 @@ pub const RULE_STATUS_FORBIDDEN_FIELD_PRESENT: &str = "status.forbidden-field-pr
 pub const RULE_STATUS_DELIVERY_AGREEMENT: &str = "status.delivery-agreement";
 pub const RULE_STATUS_TRANSITION_ALLOWED: &str = "status.transition-allowed";
 pub const RULE_STATUS_UNREACHABLE: &str = "status.unreachable-state";
+pub const RULE_STATUS_DONE_ITEMS_SHAPE: &str = "status.done-items-shape";
+pub const RULE_STATUS_WAIVED_ITEM_STALE: &str = "status.waived-item-stale";
 
 pub const RULE_INDEX_FRESHNESS: &str = "index.freshness";
 pub const RULE_EMBODIMENT_BACK_POINTER_RESOLUTION: &str = "embodiment.back-pointer-resolution";
