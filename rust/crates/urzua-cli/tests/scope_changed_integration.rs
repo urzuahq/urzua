@@ -486,3 +486,46 @@ fn the_promotion_nudge_with_scope_changed_does_not_fire_for_a_locator_with_one_c
     let (_, v) = urzua(&dir, &["check", "--base", "HEAD"]);
     assert!(promo_findings(&v).is_empty(), "{v}");
 }
+
+#[test]
+fn the_promotion_nudge_with_scope_changed_fires_on_every_changed_citer() {
+    let mut cfg = promo_config("    scope: changed\n");
+    cfg.push_str("  waiver:\n    dir: docs/waiver\n    role: suppression\n    effective_requires: [Reason]\n    required_fields: [Rule, Scope, Reason]\n    known_fields: [Expires]\n    header_shape: yaml-frontmatter\n");
+    let dir = fixture("promo-two-changed", &cfg);
+    // ADR-1 (already citing src/a.rs) and ADR-2 (newly citing it) both change.
+    for (path, n, loc) in [(PATH_1, 1, "code:src/a.rs"), (PATH_2, 2, "code:src/a.rs")] {
+        std::fs::write(dir.join(path), format!("{}\nMore.\n", record(n, Some(loc)))).unwrap();
+    }
+    let (_, v) = urzua(&dir, &["check", "--base", "HEAD"]);
+    let found = promo_findings(&v);
+    let mut files: Vec<_> = found.iter().map(|f| f["file"].as_str().unwrap()).collect();
+    files.sort();
+    assert_eq!(files, vec![PATH_1, PATH_2], "{v}");
+    let p = &execution(&v, PROMO)["population"];
+    assert_eq!(p["examined"], 2, "{p}");
+    assert_eq!(p["deferred_by_scope"], 1, "{p}");
+
+    // `check <path>` on each citer sees its own finding.
+    for path in [PATH_1, PATH_2] {
+        let (_, v) = urzua(&dir, &["check", "--base", "HEAD", path]);
+        let found = promo_findings(&v);
+        assert_eq!(found.len(), 1, "{path}: {v}");
+        assert_eq!(found[0]["file"], path, "{v}");
+    }
+
+    // A file-scoped waiver on one citer does not hide the other.
+    std::fs::create_dir_all(dir.join("docs/waiver")).unwrap();
+    std::fs::write(
+        dir.join("docs/waiver/W-1.md"),
+        format!("---\nRule: {PROMO}\nScope: {PATH_1}\nReason: tracked elsewhere\n---\n# Waiver\n"),
+    )
+    .unwrap();
+    git(&dir, &["add", "-A"]);
+    let (_, v) = urzua(&dir, &["check", "--base", "HEAD"]);
+    let found = promo_findings(&v);
+    assert_eq!(found.len(), 2, "{v}");
+    for f in found {
+        let waived = !f["waived"].is_null();
+        assert_eq!(waived, f["file"] == PATH_1, "{f}");
+    }
+}

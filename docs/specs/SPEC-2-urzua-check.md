@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5GM1RYRRX2XVMZ0ZAK
-Version: '0.112'
+Version: '0.113'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs, code:rust/crates/urzua-core/src/rules.rs, test:rust/crates/urzua-cli/tests/check_integration.rs, test:rust/crates/urzua-cli/tests/fail_on_integration.rs
@@ -472,7 +472,7 @@ naming `scope: changed`, the number of slots not judged and why (`no --base`, `u
 `not the proposed record` for `--stdin-path`, which treats the proposed record as the one changed record).
 Dependents are not changed: only the records the diff itself touches are judged. `waiver.matches-nothing`
 leaves a waiver on such a rule eligible and unexamined. `urzua rules` lists each rule's `options` and a
-`judges` value (`one-record`, `cross-record`, `changed-set`, `not-record-level`) saying whether it may
+`judges` value (`one-record`, `anchor-scoped`, `cross-record`, `changed-set`, `not-record-level`) saying whether it may
 take the option.
 
 A rule has one population per entry, and a second unit is a second entry: `citation.resolution` with
@@ -991,3 +991,4 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-06 | Bumped to `0.110`. `relation.target-status-undeclared` and `config.companion-declaration-missing` follow the same rule as the two field-not-known rules: for a type declaring no `known_fields` the suggested `edit-config` is a `set` of the full list the type's records use plus the field(s) in question (`-declare-set` variants), not an `append` that would create a one-item list. **Why:** review of the same-day change found the same one-field append in these two rules. | **substantive** |
 > | 2026-11-06 | Bumped to `0.111`. `embodiment.locator-promotion-candidate` lists the `scope` option (`ADR-90`, `MILE-203`): with `scope: changed` a locator is reported only when a record the `--base` diff adds or changes cites it, the finding sits on that changed record and names every citer, a plain `check` reports none, and the unchanged citers are counted in `deferred_by_scope`. The rule's table row is regenerated. **Why:** a repository that enables the nudge at `info` should not see it on records nobody edited; ADR-90 permits the option on a record-level rule. | **substantive** |
 > | 2026-11-06 | Bumped to `0.112`. A tracked record missing from the working tree and not staged for deletion is judged as removed and named in a `missing-record` warning notice, where it made the whole run `not-run`; a `--rules` selection reads the back-pointer sources and published boundary files only for the rules that read them. **Why:** Phase 0 hardening from a second adopter switchover -- one `rm` stopped every check and the editor hook could not judge, and a header-only rule paid for scanning every source file. | **substantive** |
+> | 2026-11-07 | Bumped to `0.113`. `urzua rules` prints a fifth `judges` value, `anchor-scoped`, for a rule that reads other records as context and reports only on changed ones; `embodiment.locator-promotion-candidate` carries it and, under `scope: changed`, emits one finding per changed citer, so `check <path>`, `--stdin-path` and a file-scoped waiver each see the finding on their own record. **Why:** the accepted 2026-11-07 amendment to `ADR-90`, points 4 and 5. | **substantive** |
