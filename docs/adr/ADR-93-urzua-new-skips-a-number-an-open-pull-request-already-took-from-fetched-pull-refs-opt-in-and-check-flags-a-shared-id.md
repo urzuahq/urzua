@@ -1,6 +1,7 @@
 ---
 Stable-Id: 01M6SK9SN0VEYEP14T6W8MQC3D
-Status: Proposed
+Status: Accepted
+Accepted-on: 2026-11-06
 Date: 2026-11-06
 Author: beauwilliams
 Deciders: beauwilliams
@@ -197,3 +198,4 @@ the report shape (`pull_refs`) and the config key names.
 > |---|---|---|
 > | 2026-11-06 | Drafted as Proposed. **Why:** Maintainer decision, 2026-11-06: move `MILE-89` to Phase 0; fetch pull-request head refs with plain git (no `gh`, no GraphQL), opt in; skip numbers taken there or on any fetched branch; add a local lock; fall back to local refs offline; add an opt-in `check` rule under `--base`. The maintainer accepts it in a later change. | **substantive** |
 > | 2026-11-06 | Amended before acceptance; stays Proposed. Clause 4 scans the trees of `git worktree list` for claimed numbers, untracked files included, and discloses separate clones as the remaining limit; clause 2 gives each `pull_ref_patterns` entry its own `refs/urzua/pr/<segment>/*` namespace; new clause 9 cites `ADR-27`'s never-reuse rule and amendments and states compliance; clause 7 defaults `identity.open-pr-collision` to warning and documents the waiver for a closed unmerged head; the cite `new.rs:313-319` is corrected to `314-319`; the review's answers to the six open questions are recorded as decided, with the measured gap of 0. **Why:** independent review of 2026-11-06 found four blockers (the lock did not cover worktrees, patterns shared one namespace, `ADR-27` was uncited, an error rule could fire forever against a closed head). | **substantive** |
+> | 2026-11-06 | Status changed from Proposed to Accepted. **Why:** Maintainer decision, 2026-11-06. | **substantive** |
