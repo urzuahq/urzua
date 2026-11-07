@@ -1,21 +1,13 @@
 fixtures:
   - path: .urzua/config.yaml
-    irregularity: the config the corpus is validated under; the milestone type declares statuses.delivery.items; not a record.
-  - path: src/queue.rs
-    irregularity: none -- the source file the items cite; not a record.
-  - path: tests/queue.rs
-    irregularity: none -- the test file the items cite; not a record.
-  - path: docs/milestones/MILE-1-done-with-an-unresolved-item.md
-    irregularity: Status Done while item 2 cites a test that does not exist and item 3 has no evidence clause (DoneWithUnresolvedItems).
-  - path: docs/milestones/MILE-2-every-item-resolved.md
-    irregularity: every item resolves while the Status is Planned, so the status computes to Done.
-  - path: docs/milestones/MILE-3-partly-delivered.md
-    irregularity: one item resolves and one does not while the Status is Planned, so the status computes to InProgress.
-  - path: docs/milestones/MILE-4-malformed-clauses.md
-    irregularity: item 1 wraps its locator in backticks and item 2 starts with a checkbox, each a shape finding.
-  - path: docs/milestones/MILE-5-stale-waiver.md
-    irregularity: item 1 carries a waiver beside an evidence clause that now resolves.
-  - path: docs/milestones/MILE-6-every-item-resolved-and-done.md
-    irregularity: none -- every item resolves and the Status is Done.
-  - path: docs/milestones/MILE-7-depends-on-partial.md
-    irregularity: depends on MILE-3, which is partly delivered, so it stays blocked.
+    irregularity: the config the corpus is validated under; Fixed is terminal for narrative-field.stale; not a record.
+  - path: docs/bug/BUG-1-already-fixed.md
+    irregularity: none -- a Fixed bug the first milestone is blocked on.
+  - path: docs/bug/BUG-2-still-open.md
+    irregularity: none -- an Open bug, so a milestone blocked on it is not stale.
+  - path: docs/milestone/MILE-1-blocked-on-fixed.md
+    irregularity: Blocked-on names BUG-1, which is Fixed.
+  - path: docs/milestone/MILE-2-blocked-on-open.md
+    irregularity: none -- Blocked-on names BUG-2, which is still Open.
+  - path: docs/waiver/WAIVER-1-unknown-rule.md
+    irregularity: names the rule not.a.rule, which no build ships.

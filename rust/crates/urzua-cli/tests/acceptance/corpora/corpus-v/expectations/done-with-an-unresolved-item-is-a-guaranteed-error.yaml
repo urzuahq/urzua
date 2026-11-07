@@ -1,5 +1,5 @@
 id: done-with-an-unresolved-item-is-a-guaranteed-error
-corpus: corpus-u
+corpus: corpus-v
 invocation: [check]
 # MILE-1 is Done while items 2 and 3 are unresolved: an error that names each
 # item and its cause and offers the reopen, whatever the rule's level.

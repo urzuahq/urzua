@@ -1,5 +1,5 @@
 id: the-roadmap-reports-items-and-keeps-dependents-blocked
-corpus: corpus-u
+corpus: corpus-v
 invocation: [roadmap]
 # A partly delivered milestone is open work in wave 0 with its counts; the
 # milestone that depends on it stays blocked.

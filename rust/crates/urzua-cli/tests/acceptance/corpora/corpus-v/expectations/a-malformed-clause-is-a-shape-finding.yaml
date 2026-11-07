@@ -1,5 +1,5 @@
 id: a-malformed-clause-is-a-shape-finding
-corpus: corpus-u
+corpus: corpus-v
 invocation: [check]
 expect_exit: 1
 expect_findings:

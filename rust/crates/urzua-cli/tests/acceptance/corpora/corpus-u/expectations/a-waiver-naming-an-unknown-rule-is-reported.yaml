@@ -1,0 +1,7 @@
+id: a-waiver-naming-an-unknown-rule-is-reported
+corpus: corpus-u
+invocation: [check]
+# The waiver names a rule no build ships, so it can never match anything.
+expect_exit: 0
+expect_findings:
+  - {rule: waiver.matches-nothing, severity: warning, file: docs/waiver/WAIVER-1-unknown-rule.md, message_contains: not.a.rule}

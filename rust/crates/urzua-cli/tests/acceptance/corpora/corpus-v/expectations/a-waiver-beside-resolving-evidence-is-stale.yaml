@@ -1,5 +1,5 @@
 id: a-waiver-beside-resolving-evidence-is-stale
-corpus: corpus-u
+corpus: corpus-v
 invocation: [check]
 expect_exit: 1
 expect_findings:
