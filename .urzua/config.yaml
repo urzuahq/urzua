@@ -79,6 +79,9 @@ record_types:
       - "Deciders"
       - "Stable-Id"
     header_shape: "yaml-frontmatter"
+    # The fields `urzua new` fills with today and the author (MILE-176). Named here so the
+    # declaration is read from this repository's config; they equal the defaults.
+    relation_fields: {date: "Date", author: "Author"}
     known_fields:
       - "Embodiment"
       - "Realized-by"
@@ -149,6 +152,9 @@ record_types:
       - "Author"
       - "Stable-Id"
     header_shape: "yaml-frontmatter"
+    # The fields `urzua new` fills with today and the author (MILE-176). Named here so the
+    # declaration is read from this repository's config; they equal the defaults.
+    relation_fields: {date: "Date", author: "Author"}
     known_fields:
       - "Accepted-on"
       - "Supersedes / Superseded-by"
@@ -208,6 +214,9 @@ record_types:
       - "Subject"
       - "Stable-Id"
     header_shape: "yaml-frontmatter"
+    # The fields `urzua new` fills with today and the author (MILE-176). Named here so the
+    # declaration is read from this repository's config; they equal the defaults.
+    relation_fields: {date: "Date", author: "Author"}
     known_fields:
       - "Embodiment"
       - "Realized-by"
