@@ -77,7 +77,9 @@ and the rule that checks it. Candidates surfaced by the above, not a settled lis
 
 ## Done means
 
-A load-bearing claim a record makes about the code moves out of prose into a checked field, and `check` reports a field whose claim the code contradicts; the mechanism is decided in an ADR, applied to the five stale-claim cases that prompted this record in urzua's own records, and a planted contradiction between a record's field and the code is reported while the corrected one passes.
+- A load-bearing claim a record makes about the code moves out of prose into a checked field, and `check` reports a field whose claim the code contradicts.
+- The mechanism is decided in an ADR and applied to the five stale-claim cases that prompted this record in urzua's own records.
+- A planted contradiction between a record's field and the code is reported while the corrected one passes.
 
 ## References
 
@@ -92,3 +94,4 @@ A load-bearing claim a record makes about the code moves out of prose into a che
 > |---|---|---|
 > | 2026-09-16 | Initial record, `Status: Planned`. **Why:** five stale claims merged into `main` in one session with every check green, because no rule reads prose. Filed as a named gap rather than five corrections, since correcting them individually leaves the mechanism that permitted them untouched -- and this project's own `RFC-7` already ruled that the instruction meant to prevent it is unenforced by construction. | **structural** |
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |
+> | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |

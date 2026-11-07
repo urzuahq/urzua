@@ -57,7 +57,9 @@ how that gap gets demonstrated**, rather than a reason to assume it now. `rfc-82
 
 ## Done means
 
-A working configuration reads and checks the Python PEP corpus (about 600 records) end to end with no code change specific to it: `urzua init` and `check` run, every rule either examines records or reports that it is not applicable, and the primitives the corpus needed are built as general config rather than special cases; a written account lists which parts fought back, and the run is recorded with its commit of the corpus.
+- A working configuration reads and checks the Python PEP corpus (about 600 records) end to end with no code change specific to it: `urzua init` and `check` run, and every rule either examines records or reports that it is not applicable.
+- The primitives the corpus needed are built as general config rather than special cases.
+- A written account lists which parts fought back, and the run is recorded with its commit of the corpus.
 
 > **Revision log**
 >
@@ -65,3 +67,4 @@ A working configuration reads and checks the Python PEP corpus (about 600 record
 > |---|---|---|
 > | 2026-09-17 | Filed. **Why:** a third corpus had been framed as a gate before the document model could be built. It is not -- `ADR-53` decided the principle without it and left only the function vocabulary open. Refiled as the exercise it actually is: read a foreign corpus end to end, and let that demonstrate which primitives are needed rather than assuming them, per `RFC-34`'s admission rule. | **substantive** |
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |
+> | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |

@@ -37,7 +37,11 @@ compounding.
 
 ## Done means
 
-A `claim` record type exists in `.urzua/config.yaml` with its own directory, template and required fields (a single locator and the records that cite it), a record's `Realized-by` can point at a claim instead of a raw locator, `embodiment.locator-promotion-candidate`'s findings have a real record to be promoted to, `urzua new claim` works, and AND/OR composites, weakest-link confidence and cycle detection stay out (`MILE-16`); urzua's own repeated locators are promoted and the rule reports none left.
+- A `claim` record type exists in `.urzua/config.yaml` with its own directory, template and required fields (a single locator and the records that cite it).
+- A record's `Realized-by` can point at a claim instead of a raw locator.
+- `embodiment.locator-promotion-candidate`'s findings have a real record to be promoted to, and `urzua new claim` works.
+- AND/OR composites, weakest-link confidence and cycle detection stay out (`MILE-16`).
+- Urzua's own repeated locators are promoted and the rule reports none left.
 
 > **Revision log**
 >
@@ -45,3 +49,4 @@ A `claim` record type exists in `.urzua/config.yaml` with its own directory, tem
 > |---|---|---|
 > | 2026-09-10 | Initial milestone, `Status: Planned`. Not yet scoped into a concrete schema for `claim`'s own required fields (the locator itself, which records cite it, and how `Realized-by` on a citing record points at a `claim` instead of a raw locator) -- that design decision comes before implementation starts. | **structural** |
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |
+> | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |

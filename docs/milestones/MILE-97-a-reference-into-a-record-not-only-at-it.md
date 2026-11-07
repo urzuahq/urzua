@@ -41,7 +41,10 @@ resolvable reference plus prose beats prose alone, and `BUG-39` is the cheaper h
 
 ## Done means
 
-A reference can name part of a record (`RFC-9#open-questions`), the form is parsed by one shared reference reader that `pointer.resolution` and `narrative-field.stale` use, a reference to a section that does not exist is reported, and `MILE-13`'s `Blocked-on` is rewritten as `RFC-9#...` instead of prose around a reference; it builds on `MILE-98`'s sections and is exercised in urzua's own milestones.
+- A reference can name part of a record (`RFC-9#open-questions`).
+- The form is parsed by one shared reference reader that `pointer.resolution` and `narrative-field.stale` use, and a reference to a section that does not exist is reported.
+- `MILE-13`'s `Blocked-on` is rewritten as `RFC-9#...` instead of prose around a reference.
+- The feature builds on `MILE-98`'s sections and is exercised in urzua's own milestones.
 
 > **Revision log**
 >
@@ -53,3 +56,4 @@ A reference can name part of a record (`RFC-9#open-questions`), the form is pars
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |
 > | 2026-11-04 | `Blocked-on` cleared: `MILE-98` is Done (declared `identity`, `fields` and `sections`, including `###` headings read through `sections.depth`). `Status` unchanged. **Why:** `narrative-field.stale` flagged a blocker that reached a terminal status; the dependency no longer holds. | **substantive** |
 > | 2026-11-05 | `Depends-on: MILE-98` added. **Why:** the section 'Blocked on the document model' says a reference into a record is meaningless until sections are declared, which `MILE-98` built (Done). Proposed for maintainer review; `Status` unchanged. | **structural** |
+> | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |

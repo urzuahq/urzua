@@ -5,7 +5,7 @@ Phase: '1'
 Track: schema-governance
 Implements: ADR-42
 Blocked-on: —
-Realized-by: code:rust/crates/urzua-core/src/rules/narrative.rs, test:rust/crates/urzua-cli/tests/check_integration.rs
+Realized-by: code:.urzua/config.yaml, code:rust/crates/urzua-core/src/rules/pointer.rs, test:rust/crates/urzua-core/src/rules/narrative.rs#a_blocked_on_pointer_to_a_terminal_bug_is_a_stale_finding@sha256:6a29cc6cc16f6aa9b5b2ac71337ca9514d6e800f1ee8593067ed50ba0fb72265, code:rust/crates/urzua-core/src/rules/narrative.rs, test:rust/crates/urzua-core/src/rules/narrative.rs#a_blocked_on_pointer_to_a_non_terminal_record_is_not_stale@sha256:0ab576c334c88153e9f5dcb7fbbd8fbe88c9fd7a1a0b41ad035d6e9bca42633a
 ---
 # 83 — A staleness drift rule for Blocked-on and similar prose pointers
 
@@ -30,7 +30,11 @@ the blocker at all.
 
 ## Done means
 
-`Blocked-on` is a checked header field of the milestone type, declared a narrative field in config, `pointer.resolution` reports a `Blocked-on` reference that does not resolve, and the opt-in rule `narrative-field.stale` reports a resolved reference whose target has reached a terminal status; a fixture covers a stale and a live blocker, and urzua's own milestones carry `Blocked-on` in the header and run the rule.
+- `Blocked-on` is a checked header field of the milestone type, declared a narrative field in config. — evidence: code:.urzua/config.yaml
+- `pointer.resolution` reports a `Blocked-on` reference that does not resolve. — evidence: code:rust/crates/urzua-core/src/rules/pointer.rs
+- The opt-in rule `narrative-field.stale` reports a resolved reference whose target has reached a terminal status; a fixture covers a stale blocker. — evidence: test:rust/crates/urzua-core/src/rules/narrative.rs#a_blocked_on_pointer_to_a_terminal_bug_is_a_stale_finding@sha256:6a29cc6cc16f6aa9b5b2ac71337ca9514d6e800f1ee8593067ed50ba0fb72265, code:rust/crates/urzua-core/src/rules/narrative.rs
+- `narrative-field.stale` is silent on a live blocker; a fixture covers one. — evidence: test:rust/crates/urzua-core/src/rules/narrative.rs#a_blocked_on_pointer_to_a_non_terminal_record_is_not_stale@sha256:0ab576c334c88153e9f5dcb7fbbd8fbe88c9fd7a1a0b41ad035d6e9bca42633a
+- Urzua's own milestones carry `Blocked-on` in the header and run the rule. — evidence: code:.urzua/config.yaml
 
 > **Revision log**
 >
@@ -39,3 +43,4 @@ the blocker at all.
 > | 2026-09-07 | Fixed and shipped (ADR-42): `Blocked-on` moved from a body section into `milestone`'s header (all 84 files migrated); `pointer.resolution` gained `Blocked-on` for dangling-reference checking; a new `blocked_on_stale` rule flags a resolved `Blocked-on` reference whose target reached a terminal status. **Why:** design review found `Blocked on` was the one field-shaped exception across the entire schema still living as unchecked prose, not just this one field's problem in isolation -- moving it into the header was more consistent than building a second, body-text-specific checking path. Verified against the real, live MILE-2/3 case: the rule was confirmed firing before the actual fix was applied, not only against synthetic fixtures. | **substantive** |
 > | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-183`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. The criteria are those the delivered work met, checked against `Realized-by` and the code; `Status` stays Done. | **structural** |
+> | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |

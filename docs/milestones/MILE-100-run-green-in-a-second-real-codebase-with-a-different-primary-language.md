@@ -45,7 +45,9 @@ can read a shape this project did not invent -- `MILE-98`.
 
 ## Done means
 
-`urzua check` runs green in a second real codebase whose primary language differs from this repository's Rust, through both its pre-push hook and its CI, with zero host-repo runtime added to it (the `SPEC-1` Phase 1 exit criterion); the codebase is named in this record, the run is recorded with the commit, and it is a codebase adoption, not a foreign corpus (`MILE-51`, `MILE-96`).
+- `urzua check` runs green in a second real codebase whose primary language differs from this repository's Rust, through both its pre-push hook and its CI, with zero host-repo runtime added to it (the `SPEC-1` Phase 1 exit criterion).
+- The codebase is named in this record, and the run is recorded with the commit.
+- The run is a codebase adoption, not a foreign corpus (`MILE-51`, `MILE-96`).
 
 > **Revision log**
 >
@@ -57,3 +59,4 @@ can read a shape this project did not invent -- `MILE-98`.
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |
 > | 2026-11-04 | `Blocked-on` cleared: `MILE-98` is Done (declared `identity`, `fields` and `sections`, including `###` headings read through `sections.depth`). `Status` unchanged. **Why:** `narrative-field.stale` flagged a blocker that reached a terminal status; the dependency no longer holds. | **substantive** |
 > | 2026-11-05 | `Depends-on: MILE-98` added. **Why:** the section 'Blocked on the document model' says a second codebase cannot run green until the engine reads a shape this project did not invent, which is `MILE-98` (Done). Proposed for maintainer review; `Status` unchanged. | **structural** |
+> | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |

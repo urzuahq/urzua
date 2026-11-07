@@ -28,7 +28,11 @@ ships.
 
 ## Done means
 
-The public documentation set exists beyond the README, contributing guide and changelog: a command reference for every shipped command, the config schema (record types, header shapes, required fields), the adoption walkthrough and the record-type model; a feature's documentation lands in the change that ships it, and a command with no reference page is reported by a check or listed here; the format and hosting are decided in an ADR first.
+- The public documentation set exists beyond the README, contributing guide and changelog: a command reference for every shipped command.
+- The public documentation set includes the config schema (record types, header shapes, required fields).
+- The public documentation set includes the adoption walkthrough and the record-type model.
+- A feature's documentation lands in the change that ships it, and a command with no reference page is reported by a check or listed here.
+- The format and hosting are decided in an ADR first.
 
 > **Revision log**
 >
@@ -36,3 +40,4 @@ The public documentation set exists beyond the README, contributing guide and ch
 > |---|---|---|
 
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |
+> | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |

@@ -5,7 +5,7 @@ Phase: '1'
 Track: schema-governance
 Implements: RFC-39
 Blocked-on: —
-Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/relation_field_literals.rs
+Realized-by: code:rust/crates/urzua-core/src/values.rs#FieldName@sha256:2439138e335e66b788ca09228afc9d65f6b905c134ff3e4f6be3a92ef7259146, code:rust/crates/urzua-core/src/values.rs#RecordId@sha256:69ee1d61e1cbdd00c6ef7cd7d39e6f216164d47f5bc8849f37ac26635d2f6856, test:rust/crates/urzua-core/src/values.rs#field_name_compares_exactly@sha256:f6081fa549c6345549f582e86b3a32d772c63e97e2ae4268c3c141d54d9b7d1c, test:rust/crates/urzua-core/src/values.rs#record_id_compares_by_numeric_value@sha256:2e7b3ad606e780cf911ea4ca968583e6965edd3139e656283974644fb202a570, code:rust/crates/urzua-core/src/rules/header.rs, code:rust/crates/urzua-core/src/rules/narrative.rs, code:rust/crates/urzua-core/src/rules/pointer.rs, code:rust/crates/urzua-core/src/rules/field.rs, spec:docs/adr/ADR-59-domain-values-the-adopter-declares-are-types-not-bare-strings.md, test:rust/crates/urzua-cli/tests/relation_field_literals.rs#no_relation_field_literal_escapes_config_rs@sha256:ecbcb243a3aa835749ec347d6fe2de73f75b40c2b00f95c31cb18e3cf1c44856, test:rust/crates/urzua-cli/tests/relation_field_literals.rs#the_check_is_observed_failing_on_a_planted_violation@sha256:b257e0b6f38cccc990203d5420fb60339398c743e17e21e2994697b98bccf356, code:.github/workflows/checks.yml, code:Makefile
 ---
 # 107 — Make the engine's declared vocabulary and its projections unmistakable at compile time
 
@@ -69,7 +69,11 @@ pinning present behaviour **before** the type is introduced.
 
 ## Done means
 
-`FieldName` and `RecordId` exist as types whose `Eq` and `Hash` state the comparison rule once, the ten rule signatures that took a bare collection derived from configuration take `&Config`, and `StatusValue` was decided against in `ADR-59`, not deferred; `relation_field_literals.rs` fails when a rule restates a literal, and the full test suite, `make ci` and `check` over a real corpus pass.
+- `FieldName` and `RecordId` exist as types whose `Eq` and `Hash` state the comparison rule once. — evidence: code:rust/crates/urzua-core/src/values.rs#FieldName@sha256:2439138e335e66b788ca09228afc9d65f6b905c134ff3e4f6be3a92ef7259146, code:rust/crates/urzua-core/src/values.rs#RecordId@sha256:69ee1d61e1cbdd00c6ef7cd7d39e6f216164d47f5bc8849f37ac26635d2f6856, test:rust/crates/urzua-core/src/values.rs#field_name_compares_exactly@sha256:f6081fa549c6345549f582e86b3a32d772c63e97e2ae4268c3c141d54d9b7d1c, test:rust/crates/urzua-core/src/values.rs#record_id_compares_by_numeric_value@sha256:2e7b3ad606e780cf911ea4ca968583e6965edd3139e656283974644fb202a570
+- The ten rule signatures that took a bare collection derived from configuration take `&Config`. — evidence: code:rust/crates/urzua-core/src/rules/header.rs, code:rust/crates/urzua-core/src/rules/narrative.rs, code:rust/crates/urzua-core/src/rules/pointer.rs, code:rust/crates/urzua-core/src/rules/field.rs
+- `StatusValue` was decided against in `ADR-59`, not deferred. — evidence: spec:docs/adr/ADR-59-domain-values-the-adopter-declares-are-types-not-bare-strings.md
+- `relation_field_literals.rs` fails when a rule restates a literal. — evidence: test:rust/crates/urzua-cli/tests/relation_field_literals.rs#no_relation_field_literal_escapes_config_rs@sha256:ecbcb243a3aa835749ec347d6fe2de73f75b40c2b00f95c31cb18e3cf1c44856, test:rust/crates/urzua-cli/tests/relation_field_literals.rs#the_check_is_observed_failing_on_a_planted_violation@sha256:b257e0b6f38cccc990203d5420fb60339398c743e17e21e2994697b98bccf356
+- The full test suite, `make ci` and `check` over a real corpus pass. — evidence: code:.github/workflows/checks.yml, code:Makefile
 
 > **Revision log**
 >
@@ -80,3 +84,4 @@ pinning present behaviour **before** the type is introduced.
 > | 2026-09-22 | `Status: Planned` → `Done`. **Why:** `ADR-59` decided the scope precisely (`FieldName` and `RecordId` built; the `&Config` convergence done for all ten signatures; `StatusValue` decided against, not deferred) and both were implemented and verified: full test suite, `make ci`, and a real-corpus `check` run reporting the same 70 findings before and after. `RecordTypeConfig`'s own fields stay `Vec<String>` -- narrower than this record's original "Values" section proposed, corrected in `ADR-59` before implementation once counting construction sites found over ninety of them, almost all test fixtures never implicated in a comparison bug. | **substantive** |
 > | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-183`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. The criteria are those the delivered work met, checked against `Realized-by` and the code; `Status` stays Done. | **structural** |
+> | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |
