@@ -51,6 +51,10 @@ pub struct Manifest {
     /// Where the agent looks for slash commands. Absent: this adapter installs none.
     #[serde(default)]
     pub commands_dir: Option<String>,
+    /// Keys of the settings file whose truthy value switches every hook off. The
+    /// session-start check reports one that is set: no hook entry can show it.
+    #[serde(default)]
+    pub kill_switches: Vec<String>,
     pub requires: Requires,
 }
 

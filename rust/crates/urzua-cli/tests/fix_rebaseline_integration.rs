@@ -359,3 +359,28 @@ fn a_git_user_name_with_a_pipe_is_refused_for_the_row_too() {
     assert_eq!(parsed["status"], "not-run", "{parsed}");
     assert_eq!(std::fs::read_to_string(dir.join(A)).unwrap(), before);
 }
+
+#[test]
+fn a_carriage_return_in_the_reason_is_refused_like_a_newline() {
+    let dir = fixture("reason-cr");
+    let before = std::fs::read_to_string(dir.join(A)).unwrap();
+    for reason in ["line one\rline two", "line one\nline two"] {
+        let out = run_urzua(
+            &dir,
+            &[
+                "fix",
+                "--rebaseline",
+                "--apply",
+                "--ids",
+                A,
+                "--by",
+                "ana",
+                "--reason",
+                reason,
+            ],
+        );
+        assert_eq!(out.status.code(), Some(2), "{reason:?}: {out:?}");
+        assert!(json(&out).to_string().contains("one line"), "{reason:?}");
+    }
+    assert_eq!(std::fs::read_to_string(dir.join(A)).unwrap(), before);
+}

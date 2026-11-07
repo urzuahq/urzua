@@ -20,8 +20,9 @@ pub fn identity_collision(
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_IDENTITY_COLLISION;
 
-    // A record whose filename yields no identifier is eligible and unexamined:
-    // it was handed to the rule, and the rule has no identity to collide.
+    // A record whose filename yields no identifier is outside this rule's
+    // population: it has no identity to collide, and `filename.identity-pattern`
+    // is the rule that reports the missing identifier.
     let (population, examined_records) = census_records(
         PopulationUnit::Record,
         records.iter().collect(),

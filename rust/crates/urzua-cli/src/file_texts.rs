@@ -34,17 +34,23 @@ impl FileTexts {
     /// What the locator path `path` names among the tracked files that are on
     /// disk: its kind and the files it covers, sorted.
     pub fn locator_files(&self, path: &str) -> Result<urzua_core::locator::LocatorFiles, String> {
-        let (list, set) = self.tracked.get_or_init(|| {
+        if self.tracked.get().is_none() {
             let list = crate::discovery::discover_files(&self.root, &self.config)
-                .map(|d| d.paths)
-                .unwrap_or_default();
+                .map_err(|e| format!("could not list the repository's files: {e}"))?
+                .paths;
             let set = list.iter().cloned().collect();
-            (list, set)
-        });
+            let _ = self.tracked.set((list, set));
+        }
+        let (list, set) = self.tracked.get().expect("set above");
         urzua_core::locator::match_locator_files(path, list, &|p| {
             let p = std::path::Path::new(p);
             set.contains(p) && self.root.join(p).is_file()
         })
+    }
+
+    /// `Err` with the reason when `path` resolves outside the repository.
+    pub fn confined(&self, path: &str) -> Result<(), String> {
+        urzua_io::confine_to_root(&self.root, std::path::Path::new(path)).map(|_| ())
     }
 
     /// The text of the repo-relative `path`; a file that is not valid UTF-8 is
@@ -53,17 +59,50 @@ impl FileTexts {
         if let Some(hit) = self.cache.borrow().get(path) {
             return Rc::clone(hit);
         }
-        let read = match std::fs::read(self.root.join(path)) {
-            Ok(bytes) => match String::from_utf8(bytes) {
+        // A path that resolves outside the repository (absolute, `..`, or a
+        // symlink out) is never read: it reads as missing.
+        let read = match self
+            .confined(path)
+            .ok()
+            .map(|_| std::fs::read(self.root.join(path)))
+        {
+            Some(Ok(bytes)) => match String::from_utf8(bytes) {
                 Ok(text) => FileText::Text(text),
                 Err(_) => FileText::NotUtf8,
             },
-            Err(_) => FileText::Missing,
+            _ => FileText::Missing,
         };
         let shared = Rc::new(read);
         self.cache
             .borrow_mut()
             .insert(path.to_string(), Rc::clone(&shared));
         shared
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A failed file listing is reported, not read as "every locator names
+    /// nothing" (which would call each existing path missing).
+    #[test]
+    fn locator_files_reports_a_discovery_failure() {
+        let dir =
+            std::env::temp_dir().join(format!("urzua-filetexts-nogit-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("a.rs"), "x\n").unwrap();
+        // A `.git` file that is not a gitfile makes every git command fail here.
+        std::fs::write(dir.join(".git"), "not a gitfile\n").unwrap();
+        let config = urzua_core::config::parse("schema_version: 2\nrecord_types:\n  adr:\n    dir: docs/adr\n    required_fields: [Status]\n").unwrap();
+        let texts = FileTexts::new(dir.clone(), &config);
+        let result = texts.locator_files("a.rs");
+        let _ = std::fs::remove_dir_all(&dir);
+        let err = result.expect_err("a directory that is not a git checkout cannot be listed");
+        assert!(
+            err.contains("could not list the repository's files"),
+            "{err}"
+        );
     }
 }

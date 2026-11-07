@@ -22,30 +22,39 @@ the translator looks for the same two settings in .urzua/config.yaml as text.
 An adapter failure never blocks when the configuration allows.
 
 The editor hook covers Write, Edit, MultiEdit and NotebookEdit, and any MCP tool
-(`mcp__*`) whose input carries a file path. An MCP tool with a path field and a
-content field is judged as a write of that content to that path. One that has a
-path and looks like an edit, a move or a delete (an `edits` list, `old_string`,
-a tool name such as `edit_file` or `delete_file`) cannot be turned into the
-file's new text, so it is an edit that was not judged: refused only where the
-target is a gated record or a protected path and the configuration says deny.
-An MCP call with no path, or a path and nothing that writes, is not an edit and
-is left alone.
+(`mcp__*`). For an MCP call it reads every path-like field, at any depth and in
+any list (`path`, `file`, `from`, `source`, `destination`, `uri` and the like, a
+`file://` URI included), and judges each one. An object with one path field and
+a content field is judged as a write of that content to that path. A path that
+belongs to a call that looks like an edit, a move or a delete (an `edits` list,
+`old_string`, a tool name such as `edit_file`, `move_file` or `delete_file`) or
+that sits where the translator cannot place it cannot be turned into the file's
+new text, so it is an edit that was not judged: refused only where the target is
+a gated record or a protected path and the configuration says deny. A call to a
+tool named for reading (`read_file`, `list_directory`) is left alone, and so is
+a call with no string that names a file.
 """
 import json
 import os
 import re
 import subprocess
 import sys
+from urllib.parse import unquote, urlparse
 
 EDIT_TOOLS = ("Write", "Edit", "MultiEdit", "NotebookEdit")
 
 # How an MCP tool names the file it writes and the text it writes. None of this
-# is rule knowledge: it only finds the path and the content in a payload.
-MCP_PATH_KEYS = ("file_path", "filePath", "filepath", "path", "file", "filename", "fileName", "notebook_path", "target_path", "targetPath", "destination", "dest")
+# is rule knowledge: it only finds the paths and the content in a payload.
 MCP_CONTENT_KEYS = ("content", "contents", "file_text", "fileText", "text", "new_source")
 MCP_EDIT_KEYS = ("edits", "old_string", "new_string", "old_str", "new_str", "old_text", "new_text", "oldText", "newText", "patch", "diff", "changes", "operations", "insert_text", "replacement", "append")
-MCP_PARTIAL_WORDS = {"append", "insert", "patch", "edit", "replace", "modify", "update", "move", "rename", "delete", "remove"}
-MCP_WRITE_WORDS = MCP_PARTIAL_WORDS | {"write", "create", "save", "put", "overwrite"}
+# A key names a path when one of its words is one of these (`filePath`, `from`,
+# `source_path`, `destination`, `uri`).
+MCP_PATH_WORDS = {"path", "paths", "file", "files", "filepath", "filename", "source", "src", "dest", "destination", "target", "from", "to", "uri", "url", "dir", "directory", "folder", "old", "new"}
+MCP_PARTIAL_WORDS = {"append", "insert", "patch", "edit", "replace", "modify", "update", "move", "rename", "delete", "remove", "copy"}
+MCP_WRITE_WORDS = MCP_PARTIAL_WORDS | {"write", "create", "save", "put", "overwrite", "mv", "rm", "touch", "mkdir", "set", "upload"}
+MCP_READ_WORDS = {"read", "get", "list", "search", "find", "stat", "view", "show", "cat", "head", "tail", "fetch", "query", "describe", "info", "tree", "grep", "glob", "exists", "diff", "status", "log", "count", "check", "lookup", "browse", "inspect"}
+MCP_MAX_DEPTH = 24
+MCP_MAX_LOOSE = 64
 
 
 def out(obj):
@@ -97,23 +106,45 @@ def closed_by_config_text(cwd):
     return False
 
 
-def unjudged_edit(message, argv, cwd, path, engine_failed):
+def unjudged_result(message, argv, cwd, path, engine_failed, loud=True):
+    """An edit the translator could not judge, as (kind, message): the engine
+    says whether the configuration refuses it (acceptance or protected-paths
+    with on_unjudged: deny); the engine being unrunnable falls back to the
+    config text. A call that is not `loud` (one that may not be an edit at all)
+    says nothing unless it is refused."""
     paths = path if isinstance(path, list) else ([path] if path else [])
-    """An edit the translator could not judge: the engine says whether the
-    configuration refuses it (acceptance or protected-paths with
-    on_unjudged: deny); the engine being unrunnable falls back to the config text."""
     if not engine_failed and argv:
         request = {"event": "edit", "tool": None, "paths": paths, "content": None, "actor": "agent", "cwd": cwd, "adapter_error": message}
         try:
             verdict = engine(argv, request, cwd)
             if verdict.get("verdict") == "block":
-                return deny(verdict.get("message", message))
-            return stated(verdict.get("message") or message, "edit")
-        except (OSError, ValueError):
+                return ("block", verdict.get("message", message))
+            return ("stated", verdict.get("message") or message) if loud else ("allow", "")
+        except (OSError, ValueError, AttributeError):
             pass
-    if closed_by_config_text(cwd):
-        return deny(message + " The configuration sets on_unjudged: deny for acceptance or protected-paths, so an agent's edit that was not judged is refused. A person edits outside the agent harness, or sets on_unjudged: allow in .urzua/config.yaml.")
-    return stated(message, "edit")
+    if loud and closed_by_config_text(cwd):
+        return ("block", message + " The configuration sets on_unjudged: deny for acceptance or protected-paths, so an agent's edit that was not judged is refused. A person edits outside the agent harness, or sets on_unjudged: allow in .urzua/config.yaml.")
+    return ("stated", message) if loud else ("allow", "")
+
+
+def decide(results):
+    """Prints one answer for the edit judgements in `results`, (kind, message)
+    pairs: any block refuses the call, the other messages are shown."""
+    blocks = [m for k, m in results if k == "block"]
+    if blocks:
+        return deny("\n".join(blocks))
+    stated_notes = [m for k, m in results if k == "stated" and m]
+    notes = [m for k, m in results if k == "note" and m]
+    if stated_notes:
+        return stated("\n".join(stated_notes + notes), "edit")
+    if notes:
+        message = "\n".join(notes)
+        out({"systemMessage": message, "hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": message}})
+    return 0
+
+
+def unjudged_edit(message, argv, cwd, path, engine_failed):
+    return decide([unjudged_result(message, argv, cwd, path, engine_failed)])
 
 
 def notebook_proposed(inp, path):
@@ -157,26 +188,105 @@ def notebook_proposed(inp, path):
     return json.dumps(nb, indent=1, ensure_ascii=False) + "\n"
 
 
-def mcp_write(tool, inp):
-    """For an MCP tool call: None when it is not a file edit, else (paths,
-    content). content is None when the call cannot be turned into the file's
-    new text (it is an edit that was not judged)."""
-    paths = []
-    for k in MCP_PATH_KEYS:
-        v = inp.get(k)
-        if isinstance(v, str) and v.strip() and v not in paths:
-            paths.append(v)
-    if not paths:
+def words_of(text):
+    return [w.lower() for w in re.findall(r"[A-Z]?[a-z]+|[A-Z]+(?![a-z])|[0-9]+", text)]
+
+
+def as_path(value):
+    """The file a string names, or None when it does not name one: a `file://`
+    URI is the path it carries; any other URL, a string with a newline and one
+    of an absurd length are not paths."""
+    if not isinstance(value, str) or not value.strip() or len(value) > 4096 or "\n" in value or "\0" in value:
         return None
-    # The words of the tool's own name: write_file, writeFile, edit-file.
-    words = {w.lower() for w in re.findall(r"[A-Z]?[a-z]+|[A-Z]+(?![a-z])", tool.rsplit("__", 1)[-1])}
-    content = next((inp[k] for k in MCP_CONTENT_KEYS if isinstance(inp.get(k), str)), None)
-    partial = any(k in inp for k in MCP_EDIT_KEYS) or bool(words & MCP_PARTIAL_WORDS)
-    if content is not None and len(paths) == 1 and not partial:
-        return paths, content
-    if partial or content is not None or words & MCP_WRITE_WORDS:
-        return paths, None
-    return None
+    if value.startswith("file://"):
+        return unquote(urlparse(value).path) or None
+    if re.match(r"^[A-Za-z][A-Za-z0-9+.-]*://", value):
+        return None
+    return value
+
+
+def mcp_scan(inp):
+    """Every path-like string in an MCP tool's input, at any depth. Returns
+    (records, loose, deep): one record per object, (paths, content, partial)
+    with the path fields of that object, its content text if any and whether it
+    carries an edit-shaped field; `loose` is every other short string, which may
+    still name a file; `deep` is whether the input nests beyond what is read."""
+    records, loose, state = [], [], {"deep": False}
+
+    def add(target, value):
+        p = as_path(value)
+        if p is not None and p not in target:
+            target.append(p)
+
+    def walk(node, depth, keyed):
+        if depth > MCP_MAX_DEPTH:
+            state["deep"] = True
+            return
+        if isinstance(node, dict):
+            paths, content, partial = [], None, False
+            for k, v in node.items():
+                if not isinstance(k, str):
+                    continue
+                if k in MCP_CONTENT_KEYS:
+                    if isinstance(v, str) and content is None:
+                        content = v
+                    continue
+                if k in MCP_EDIT_KEYS:
+                    partial = True
+                    if isinstance(v, (dict, list)):
+                        walk(v, depth + 1, False)
+                    continue
+                if set(words_of(k)) & MCP_PATH_WORDS:
+                    if isinstance(v, str):
+                        add(paths, v)
+                    elif isinstance(v, list):
+                        for item in v:
+                            if isinstance(item, str):
+                                add(paths, item)
+                            else:
+                                walk(item, depth + 1, False)
+                    else:
+                        walk(v, depth + 1, False)
+                elif isinstance(v, str):
+                    add(loose, v)
+                else:
+                    walk(v, depth + 1, False)
+            records.append((paths, content, partial))
+        elif isinstance(node, list):
+            for item in node:
+                if isinstance(item, str):
+                    add(loose, item)
+                else:
+                    walk(item, depth + 1, False)
+
+    walk(inp, 0, False)
+    return records, loose[:MCP_MAX_LOOSE], state["deep"]
+
+
+def mcp_write(tool, inp):
+    """For an MCP tool call: None when it is not a file edit, else a dict with
+    `items` (path, content) pairs that are whole-file writes urzua can judge as
+    they are, `rest` the paths of the call that cannot be turned into a file's
+    new text, `loose` other strings to look at only for a refusal, `loud`
+    whether not judging `rest` is worth saying, and `deep`."""
+    name = tool.rsplit("__", 1)[-1]
+    words = set(words_of(name))
+    write_like = bool(words & MCP_WRITE_WORDS)
+    if words & MCP_READ_WORDS and not write_like:
+        return None
+    records, loose, deep = mcp_scan(inp)
+    tool_partial = bool(words & MCP_PARTIAL_WORDS)
+    items, rest = [], []
+    for paths, content, partial in records:
+        if len(paths) == 1 and content is not None and not partial and not tool_partial:
+            items.append((paths[0], content))
+        else:
+            rest.extend(p for p in paths if p not in rest)
+    keyed = bool(items or rest)
+    if not (keyed or loose or deep):
+        return None
+    writes = write_like or tool_partial or any(c is not None or p for _, c, p in records)
+    return {"items": items, "rest": rest, "loose": [p for p in loose if p not in rest], "loud": keyed and writes, "deep": deep}
 
 
 def proposed(tool, inp, path):
@@ -214,6 +324,31 @@ def engine(argv, request, cwd):
     return verdict
 
 
+def judge_mcp(tool, target, argv, cwd):
+    results = []
+    for path, content in target["items"]:
+        request = {"event": "edit", "tool": tool, "paths": [path], "content": content, "actor": "agent", "cwd": cwd}
+        try:
+            verdict = engine(argv, request, cwd)
+        except (OSError, ValueError, AttributeError):
+            message = "urzua harness: urzua did NOT judge this call (the engine command `%s` could not be run or answered with something that is not a verdict). It is allowed unless the configuration refuses an edit that was not judged; run `urzua harness status`." % " ".join(argv)
+            results.append(unjudged_result(message, argv, cwd, path, True))
+            continue
+        kind, message = verdict.get("verdict"), verdict.get("message", "")
+        if kind == "block":
+            results.append(("block", message))
+        elif kind in ("allow-unjudged", "allow-override", "allow-with-warnings"):
+            results.append(("note", message))
+    if target["deep"]:
+        results.append(unjudged_result("urzua harness: urzua did NOT judge this edit (%s: its input nests deeper than the translator reads). It is allowed unless the configuration refuses an edit that was not judged; run 'urzua check' before committing." % tool, argv, cwd, [], False))
+    candidates = target["rest"] + target["loose"]
+    if candidates:
+        shown = ", ".join(target["rest"]) or "an unparsed path"
+        message = "urzua harness: urzua did NOT judge this edit (%s on %s: the call is not a whole-file write urzua can read). It is allowed unless the configuration refuses an edit that was not judged; run 'urzua check' before committing." % (tool, shown)
+        results.append(unjudged_result(message, argv, cwd, candidates, False, loud=target["loud"] and bool(target["rest"])))
+    return decide(results)
+
+
 def main():
     args = sys.argv[1:]
     if not args or "--" not in args[1:]:
@@ -248,10 +383,7 @@ def main():
             target = mcp_write(tool, inp)
             if target is None:
                 return 0
-            paths, content = target
-            if content is None:
-                return unjudged_edit("urzua harness: urzua did NOT judge this edit (%s on %s: the call is not a whole-file write urzua can read). It is allowed unless the configuration refuses an edit that was not judged; run 'urzua check' before committing." % (tool, ", ".join(paths)), argv, cwd, paths, False)
-            path = paths[0]
+            return judge_mcp(tool, target, argv, cwd)
         else:
             path = inp.get("notebook_path") if tool == "NotebookEdit" else inp.get("file_path")
             if tool not in EDIT_TOOLS or not path:

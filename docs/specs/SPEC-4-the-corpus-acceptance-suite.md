@@ -277,13 +277,12 @@ built, and where it differs from the sketch:
   with no identity in the extra directory, a declared extra directory that does not exist, and
   `urzua new` numbering past the highest id in either (`MILE-130`). urzua's own `.urzua/config.yaml`
   has no type spanning directories, so no natural own-config use exists and the corpus is the exercise.
-- **Coverage.** The report is the measure, and it is not yet complete: 57 of the 65 rules in `ALL_RULES`
-  have a case whose mutation proof holds, and the report lists the other eight as uncovered
-  (`sequence.cycle`, `sequence.unresolved-blocker`, `sequence.status-agreement`,
-  `revision-log.version-bump-required`, `identity.open-pr-collision`, `config.companion-declaration-missing`,
-  `diff.decider-required` and `override.unreviewed`). `corpus-l` runs `urzua roadmap`, which applies no rule, so its cases give
-  `mutation_exempt` instead of naming one, and the three `sequence.*` rules have no acceptance case. The list is
-  printed on every unfiltered run and does not fail it.
+- **Coverage.** The report is the measure, and it is not claimed complete: an unfiltered run prints how many
+  rules in `ALL_RULES` have a case whose mutation proof holds and names each rule that has none. Rules without such
+  a case exist (for example the `sequence.*` rules, which have no acceptance case); the counts and the list are
+  the run's output and are not restated here, so they cannot drift from it. `corpus-l` runs `urzua roadmap`,
+  which applies no rule, so its cases give `mutation_exempt` instead of naming one. The list is printed on every
+  unfiltered run and does not fail it.
 
 ### Added since
 
@@ -347,7 +346,7 @@ through the record's blame history; the `-S`/`-G` case through the value-only ed
 > | 2026-11-04 | Bumped to `0.7`. `corpus-i` (one type over two directories) added: pointer resolution, collision, identity filename and missing-directory cases, and `urzua new` numbering across both. **Why:** `MILE-130` -- urzua's own repository has no type spanning directories, so the corpus is where the feature is exercised. | **substantive** |
 > | 2026-11-05 | Bumped to `0.8`. `corpus-h` gains the declared-boundary cases: a published boundary whose declared severity beats the rule's level, a back-pointer inside a generated boundary (and a plain id there that is not reported), a vendored boundary that prohibits nothing, an ignore marker that suppresses nothing, and an exclude and a boundary path that match nothing. **Why:** `MILE-125`; each case names `boundary.published-path-reference` and its mutation proof holds. | **substantive** |
 > | 2026-11-05 | Bumped to `0.9`. `corpus-h` gains the decision-gate cases of `diff.source-requires-record`: a source change beside a Proposed decision is held, and one beside an Accepted decision, a milestone implementing one or a bug record is released. **Why:** `MILE-133`. | **substantive** |
-> | 2026-11-07 | Bumped to `0.10`. Checked against `acceptance.rs`, `acceptance_property.rs` and the corpora, and corrected: the example case uses the matcher fields the runner reads (it had `line`, which the runner rejects) and a real case; the catalog tables say where each bug class is built and which are not, so success criterion 1 no longer claims every catalog entry is a case; the corpus zero section no longer lists two seed cases that cannot exist on a corpus held at zero findings; the coverage statement says 57 of 65 rules have a proof and names the eight that do not, where it claimed none were missing; `corpus-j`, `corpus-k`, `corpus-l` and the other matcher fields are documented. **Why:** the maintainer approved moving this spec to `Shipped` (2026-11-07), which required verifying each section against the built suite. | **substantive** |
+> | 2026-11-07 | Bumped to `0.10`. Checked against `acceptance.rs`, `acceptance_property.rs` and the corpora, and corrected: the example case uses the matcher fields the runner reads (it had `line`, which the runner rejects) and a real case; the catalog tables say where each bug class is built and which are not, so success criterion 1 no longer claims every catalog entry is a case; the corpus zero section no longer lists two seed cases that cannot exist on a corpus held at zero findings; the coverage statement says rules without a mutation-proof case exist and that the run's report, not the spec, holds the count and the list, where it claimed none were missing; `corpus-j`, `corpus-k`, `corpus-l` and the other matcher fields are documented. **Why:** the maintainer approved moving this spec to `Shipped` (2026-11-07), which required verifying each section against the built suite. | **substantive** |
 > | 2026-11-07 | Bumped to `0.11`. Status changed from Draft to Accepted. **Why:** Maintainer decision, 2026-11-07: the maintainer approved moving this spec to `Shipped`, and the lifecycle moves one step at a time (`Draft` to `Accepted` to `Shipped`). | **substantive** |
 > | 2026-11-07 | Bumped to `0.12`. Realized-by names the implementing code and tests, ready for `Shipped` (`MILE-7`). **Why:** Maintainer decision, 2026-11-07: moving this spec to `Shipped` requires `Embodiment` and `Realized-by`. | **structural** |
 > | 2026-11-07 | Tool-authored (by beauwilliams, identity: gh-verified, actor: agent): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-cli/tests/acceptance.rs, test:rust/crates/urzua-cli/tests/acceptance_property.rs` -- stated `Not started` disagreed with the computed value `Verified`. | **structural** |

@@ -1535,6 +1535,12 @@ pub enum ConfigError {
         entry: String,
         reason: String,
     },
+    #[error("rule '{rule}' option 'date_fields' entry '{entry}' {reason}")]
+    InvalidDateFields {
+        rule: String,
+        entry: String,
+        reason: String,
+    },
     #[error("rule '{rule}' option 'non_reference_field' {reason}")]
     InvalidNonReferenceField { rule: String, reason: String },
     #[error("rule '{rule}' option '{option}' {reason}")]
@@ -1986,7 +1992,7 @@ pub fn normalize_published_path(entry: &str) -> String {
 }
 
 /// Why a `published_paths` entry cannot name a path inside the repository.
-fn published_path_problem(entry: &str) -> Option<&'static str> {
+pub(crate) fn published_path_problem(entry: &str) -> Option<&'static str> {
     let trimmed = entry.trim();
     if trimmed.contains('\\') {
         return Some("contains a backslash; write the path with forward slashes");
@@ -2391,6 +2397,28 @@ pub fn parse_with_document_models(
             });
         }
 
+        if let (Some(fields), true) = (&setting.date_fields, setting.level != RuleLevel::Off) {
+            for entry in fields {
+                let bad = |reason: &str| ConfigError::InvalidDateFields {
+                    rule: name.clone(),
+                    entry: entry.clone(),
+                    reason: reason.to_string(),
+                };
+                let field = entry.trim();
+                if field.is_empty() {
+                    return Err(bad("names a blank field"));
+                }
+                let declared = config
+                    .record_types
+                    .values()
+                    .any(|t| t.declared_fields().iter().any(|f| f.as_str() == field));
+                if !declared {
+                    return Err(bad(
+                        "names a field that is not declared (required_fields or known_fields) by any record type, so it could never be examined",
+                    ));
+                }
+            }
+        }
         if let (Some(orders), true) = (&setting.date_order, setting.level != RuleLevel::Off) {
             for entry in orders {
                 let bad = |reason: String| ConfigError::InvalidDateOrder {
