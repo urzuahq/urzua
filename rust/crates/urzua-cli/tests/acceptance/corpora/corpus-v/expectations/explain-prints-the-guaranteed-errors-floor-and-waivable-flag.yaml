@@ -1,0 +1,21 @@
+id: explain-prints-the-guaranteed-errors-floor-and-waivable-flag
+corpus: corpus-v
+invocation: [explain, --rule, status.delivery-agreement]
+# `explain --rule` over the corpus whose config declares `items`: the rule is
+# at error here, its done-with-unresolved-items variant carries the error floor
+# and is not waivable, and both of its ADR-73 actions (the reopen and the
+# evidence edit) are listed (ADR-96 section 2 and its amendment of 2026-11-07).
+expect_exit: 0
+expect_json:
+  - {at: /status, equals: ok}
+  - {at: /rule/id, equals: status.delivery-agreement}
+  - {at: /rule/level, equals: error}
+  - {at: /rule/severity_floor, equals: error}
+  - {at: /rule/waivable, equals: false}
+  - {at: /rule/actions/4/variant, equals: done-with-unresolved-items}
+  - {at: /rule/actions/4/kind, equals: edit-field}
+  - {at: /rule/actions/4/severity_floor, equals: error}
+  - {at: /rule/actions/4/waivable, equals: false}
+  - {at: /rule/actions/5/variant, equals: done-with-unresolved-items-evidence}
+  - {at: /rule/actions/5/kind, equals: edit-section}
+mutation_exempt: the rule cannot be switched off under a config that declares delivery.items (the config is refused at load), and explain reads the rule table, not a finding, so there is no absence to prove.

@@ -1,0 +1,17 @@
+id: explain-names-the-milestones-whose-items-cite-a-file
+corpus: corpus-v
+invocation: [explain, src/queue.rs]
+# The item locators of an opted-in type are evidence like a header's
+# Realized-by: the five milestones whose items cite src/queue.rs govern it,
+# and MILE-4, whose item locators are malformed, does not.
+expect_exit: 0
+expect_json:
+  - {at: /status, equals: ok}
+  - {at: /governing_records/0/record, equals: docs/milestones/MILE-1-done-with-an-unresolved-item.md}
+  - {at: /governing_records/0/via, equals: code}
+  - {at: /governing_records/1/record, equals: docs/milestones/MILE-2-every-item-resolved.md}
+  - {at: /governing_records/2/record, equals: docs/milestones/MILE-3-partly-delivered.md}
+  - {at: /governing_records/3/record, equals: docs/milestones/MILE-5-stale-waiver.md}
+  - {at: /governing_records/4/record, equals: docs/milestones/MILE-6-every-item-resolved-and-done.md}
+  - {at: /population/examined, equals: 7}
+mutation_exempt: explain names the records that cite a path; it runs no rule, so there is no rule to switch off.

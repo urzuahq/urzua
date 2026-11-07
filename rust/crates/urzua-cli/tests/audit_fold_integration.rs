@@ -274,3 +274,44 @@ fn audit_on_the_config_init_writes_for_a_prefixless_corpus_matches_check() {
     assert_eq!(audit_code, check_code);
     assert_eq!(without_the_audit_notice(audit), check);
 }
+
+/// MILE-190: the fold is exercised against this repository's own corpus and
+/// config, not only against fixtures. `audit` is `check` over everything this
+/// repository declares plus the one notice, and `check --rules` restricts the
+/// run to the named declared rules and computes the exit code over them.
+#[test]
+fn this_repositorys_own_corpus_is_audited_and_checked_with_rules() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+
+    // `audit` owns no rule set: it runs every rule this repository declares.
+    let (audit_code, audit) = urzua(&root, &["audit"]);
+    assert_eq!(audit_code, 0, "this repository audits clean: {audit}");
+    assert!(audit["rules_selected"].is_null(), "{audit}");
+    let notices = audit["notices"].as_array().expect("notices");
+    assert!(
+        notices.iter().any(|n| n["subject"] == "audit"),
+        "the deprecation notice: {audit}"
+    );
+    let all = executed(&audit);
+    assert!(all.len() > 20, "only {} rules ran", all.len());
+
+    // `check --rules` over two rules this repository declares.
+    let selected = ["status.delivery-agreement", "pointer.resolution"];
+    for rule in &selected {
+        assert!(all.iter().any(|r| r == rule), "{rule} is declared here");
+    }
+    let (code, v) = urzua(&root, &["check", "--rules", &selected.join(",")]);
+    assert_eq!(code, 0, "{v}");
+    assert_eq!(v["rules_selected"], serde_json::json!(selected), "{v}");
+    assert_eq!(v["status"], "ok", "{v}");
+    let mut ran = executed(&v);
+    ran.sort();
+    let mut expected: Vec<String> = selected.iter().map(|s| s.to_string()).collect();
+    expected.sort();
+    assert_eq!(ran, expected, "the other rules are omitted");
+
+    // A rule this repository does not declare is an invocation error here too.
+    let (bad, report) = urzua(&root, &["check", "--rules", "no.such-rule"]);
+    assert_eq!(bad, 2, "{report}");
+    assert_eq!(report["status"], "not-run", "{report}");
+}

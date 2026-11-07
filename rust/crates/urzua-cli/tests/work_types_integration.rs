@@ -469,3 +469,95 @@ fn sequence_cycle_and_status_agreement_give_the_same_findings_with_and_without_w
     let r = roadmap(&repo("chk-c", &config(WORK), records));
     assert_eq!(r["cycles"], serde_json::json!([["FACT-1", "TASK-1"]]));
 }
+
+// ---- this repository: the key absent changes nothing
+
+fn copy_tree(from: &Path, to: &Path) {
+    std::fs::create_dir_all(to).unwrap();
+    for entry in std::fs::read_dir(from).unwrap().flatten() {
+        let target = to.join(entry.file_name());
+        if entry.file_type().unwrap().is_dir() {
+            copy_tree(&entry.path(), &target);
+        } else {
+            std::fs::copy(entry.path(), target).unwrap();
+        }
+    }
+}
+
+/// `text` without the `"waiting_on": []` entry the declared key adds, and the
+/// comma that led to it.
+fn without_empty_waiting_on(text: &str) -> String {
+    let entry = "\"waiting_on\": []";
+    assert_eq!(text.matches(entry).count(), 1, "one empty waiting_on");
+    let at = text.find(entry).unwrap();
+    let head = text[..at].trim_end();
+    let head = head.strip_suffix(',').expect("a comma before the entry");
+    format!("{head}{}", &text[at + entry.len()..])
+}
+
+/// MILE-196: with `roadmap.work_types` absent, every record type is work, which
+/// is what the roadmap read before the key existed. On this repository's own
+/// corpus the key-absent `roadmap` and `export --format json` are byte for byte
+/// the output of a config that lists every record type (the same reading,
+/// spelled out), less the one `waiting_on` entry that declaring the key adds.
+/// A byte that moved with the key absent would show here; the comparison runs
+/// over the 400 records this repository holds, not over a fixture.
+#[test]
+fn on_this_repository_the_absent_key_is_byte_identical_to_every_type_being_work() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let dir = common::TempDir::new("urzua-worktypes-own-corpus");
+    copy_tree(&root.join("docs"), &dir.join("docs"));
+    copy_tree(&root.join(".urzua"), &dir.join(".urzua"));
+    assert!(Command::new("git")
+        .args(["init", "-q"])
+        .current_dir(&dir)
+        .status()
+        .unwrap()
+        .success());
+
+    let own = std::fs::read_to_string(dir.join(".urzua/config.yaml")).unwrap();
+    let parsed: yaml_serde::Value = yaml_serde::from_str(&own).unwrap();
+    let types: Vec<String> = parsed["record_types"]
+        .as_mapping()
+        .expect("record_types")
+        .keys()
+        .map(|k| k.as_str().unwrap().to_string())
+        .collect();
+    assert!(types.len() > 3, "{types:?}");
+
+    // The same config twice: the key removed, and the key naming every type.
+    let absent: String = own
+        .lines()
+        .filter(|l| !l.trim_start().starts_with("work_types:"))
+        .map(|l| format!("{l}\n"))
+        .collect();
+    let all = absent.replacen(
+        "\nroadmap:\n",
+        &format!("\nroadmap:\n  work_types: [{}]\n", types.join(", ")),
+        1,
+    );
+    assert_ne!(absent, all, "the roadmap block was found");
+
+    let mut outputs = Vec::new();
+    for config in [&absent, &all] {
+        std::fs::write(dir.join(".urzua/config.yaml"), config).unwrap();
+        let mut pair = Vec::new();
+        for args in [&["roadmap"][..], &["export", "--format", "json"][..]] {
+            let (code, text) = run(&dir, args);
+            assert_eq!(code, 0, "{args:?}: {}", &text[..text.len().min(400)]);
+            pair.push(text);
+        }
+        outputs.push(pair);
+    }
+    for (i, what) in ["roadmap", "export --format json"].iter().enumerate() {
+        let (without_key, with_key) = (&outputs[0][i], &outputs[1][i]);
+        assert!(
+            !without_key.contains("\"waiting_on\": ["),
+            "{what}: no waiting_on with the key absent"
+        );
+        assert!(
+            without_empty_waiting_on(with_key) == *without_key,
+            "{what}: the key absent differs from every type being work"
+        );
+    }
+}
