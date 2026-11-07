@@ -1014,13 +1014,28 @@ fn run_with_stdin(c: &mut Command, stdin: &str) -> Output {
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     let mut child = c.spawn().unwrap();
-    child
-        .stdin
-        .take()
-        .unwrap()
-        .write_all(stdin.as_bytes())
-        .unwrap();
+    let write = child.stdin.take().unwrap().write_all(stdin.as_bytes());
+    // A hook that cannot judge (no engine, no interpreter) states so and exits
+    // without reading its input, so the child may be gone before the write
+    // lands: a broken pipe then means "not read", which the callers assert on
+    // through the output. Any other write error is a real failure.
+    if let Err(e) = write {
+        assert_eq!(e.kind(), std::io::ErrorKind::BrokenPipe, "{e}");
+    }
     child.wait_with_output().unwrap()
+}
+
+/// A command that exits without reading its input is not a failure of the
+/// helper that fed it. The input is larger than a pipe's buffer, so the write
+/// can only end in a broken pipe once the child is gone, whichever side wins
+/// the race; the helper must return the child's output either way.
+#[test]
+fn feeding_a_command_that_never_reads_its_input_returns_its_output() {
+    let mut c = Command::new("sh");
+    c.args(["-c", "echo done"]);
+    let out = run_with_stdin(&mut c, &"x".repeat(4 << 20));
+    assert_eq!(out.status.code(), Some(0), "{out:?}");
+    assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), "done");
 }
 
 /// The hook command the installed settings carry for `handler`, run the way

@@ -1,0 +1,50 @@
+{
+  "args": [
+    "doctor"
+  ],
+  "exit": 0,
+  "stdout": {
+    "checks": [
+      {
+        "check": "config-exists",
+        "message": "<ROOT>/.urzua/config.yaml exists",
+        "status": "ok"
+      },
+      {
+        "check": "config-parses",
+        "message": "config parses (no unrecognized keys)",
+        "status": "ok"
+      },
+      {
+        "check": "record-type-dir",
+        "message": "record type 'adr' -> docs/adr exists",
+        "status": "ok"
+      },
+      {
+        "check": "record-type-dir",
+        "message": "record type 'note' -> docs/note exists",
+        "status": "ok"
+      },
+      {
+        "check": "ci-wired",
+        "message": "no workflow in <ROOT>/.github/workflows invokes `urzua check` or the urzua-gate action -- a check that exists but is never run reports nothing to anyone",
+        "status": "warn"
+      },
+      {
+        "check": "hook-wired",
+        "layer": "pre-commit",
+        "message": "no pre-commit hook at <ROOT>/.git/hooks/pre-commit -- add one that runs `urzua check`; CI remains the guarantee (ADR-71)",
+        "state": "not-installed",
+        "status": "warn"
+      },
+      {
+        "check": "hook-wired",
+        "layer": "pre-push",
+        "message": "no pre-push hook at <ROOT>/.git/hooks/pre-push -- add one that runs `urzua check`; CI remains the guarantee (ADR-71)",
+        "state": "not-installed",
+        "status": "warn"
+      }
+    ],
+    "status": "warn"
+  }
+}

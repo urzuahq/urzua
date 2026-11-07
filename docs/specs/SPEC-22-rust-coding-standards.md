@@ -1,5 +1,5 @@
 ---
-Version: '0.8'
+Version: '0.9'
 Date: 2026-09-23
 Status: Accepted
 Author: beauwilliams
@@ -199,6 +199,21 @@ not a membership in a second list, and no command names a rule id to treat it di
 an unregistered rule. Putting the property beside the rule is this spec's extract-on-the-second-
 occurrence rule applied to the registry (`MILE-171`).
 
+### A command's run is a composition of short stages
+
+A function in `urzua-cli/src/commands/check.rs` is at most 100 lines, counted from its signature to
+its closing brace. `check` is built as stages (`open_session`, `narrow`, `load_context`, `run_rules`,
+`scope_findings`, `status_and_examined`), and a stage that outgrows the bound is split into named
+helpers that each do one read or one disclosure, the way `load_context` composes
+`read_source_inputs`, `index_with_disclosures` and `read_diff_inputs`. A split keeps the order in
+which notices are emitted, because the report lists them in that order. The bound is measured, not
+reviewed: `size_tests` in `check.rs` reads the file's own source and fails on any function over it.
+
+**Why:** `check::run` once held repo and config discovery, scope merging, every read, every rule and
+the report in about 700 lines, so any change to one concern conflicted with every other and no stage
+could be tested alone (`MILE-172`). A bound that a test reads is the only form of it that survives
+the next feature.
+
 ## What this spec does not do
 
 - **It does not introduce a new lint policy.** `make ci`'s `cargo clippy --all-targets -- -D warnings`
@@ -242,3 +257,4 @@ occurrence rule applied to the registry (`MILE-171`).
 > | 2026-11-04 | Bumped to `0.6`. The convention names the anchor and the scope filter the runner owns. **Why:** `MILE-171` step 3: `check` named two rule ids to scope their findings; the anchor on the rule's entry replaces them. | **substantive** |
 > | 2026-11-04 | Bumped to `0.7`. The convention names the options a rule accepts as a table field. **Why:** `MILE-171` step 4: the config loader kept its own list of which rule owns which option. | **substantive** |
 > | 2026-11-04 | Bumped to `0.8`. The I/O-in-discovery convention names the claim and index readers and the symlink policy as living there, and a command's verdict as a pure function (`derive_status`). **Why:** `MILE-172`: `check::run` held the filesystem walkers and a five-branch status derivation testable only end to end. | **substantive** |
+> | 2026-11-07 | Bumped to `0.9`. Added "A command's run is a composition of short stages": no function in `check.rs` exceeds 100 lines, enforced by a test that reads the file. **Why:** `MILE-172` asked for "a stated size bound" and none was stated; `load_context` was 205 lines and `execute` 130, so the bound is stated here and the two are split under it with no change to what `check` prints. | **substantive** |

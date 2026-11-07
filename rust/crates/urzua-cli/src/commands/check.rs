@@ -366,7 +366,79 @@ pub(crate) fn check_paths(
     )
 }
 
+/// Why the rules that judge a change were deferred on a run with no diff.
+fn why_deferred(scope: &ReportScope, base: Option<&str>) -> String {
+    if scope.prospective.is_some() {
+        "not the proposed record".to_string()
+    } else {
+        base.map_or("no --base".to_string(), |b| format!("unchanged since {b}"))
+    }
+}
+
+/// The report's account of what the run covered.
+fn scope_info(session: &Session, scope: ReportScope, base: Option<String>) -> ScopeInfo {
+    ScopeInfo {
+        source: if scope.prospective.is_some() {
+            urzua_core::report::ScopeSource::Stdin
+        } else {
+            crate::discovery::scope_source(session.discovered.source)
+        },
+        base,
+        record_types: session.config.record_types.keys().cloned().collect(),
+        include_untracked: session.config.discovery.include_untracked,
+        untracked_included: session.discovered.untracked_included.len(),
+        diff: scope.diff,
+    }
+}
+
+/// The flag combinations `check` refuses, before anything is read.
+fn reject_flag_conflicts(args: &CheckArgs) -> Result<(), Failure> {
+    if args.stdin_path.is_some() && (!args.paths.is_empty() || args.base.is_some()) {
+        return Err(
+            "urzua check --stdin-path judges one record's proposed content and reports on it alone: it cannot be combined with PATHS or --base"
+                .into(),
+        );
+    }
+    if args.stdin_path.is_some() && args.actors.is_some() {
+        return Err(
+            "urzua check --actors names who made a --base change: it cannot be combined with --stdin-path"
+                .into(),
+        );
+    }
+    Ok(())
+}
+
+/// The waivers in the records, and the notices reading them owes: an unreadable
+/// waiver template and the count of permanent waivers.
+fn load_waivers(
+    session: &Session,
+    notices: &mut Vec<Notice>,
+) -> Vec<urzua_core::waiver::Suppression> {
+    let mut suppression_type = urzua_core::waiver::SuppressionType::from_config(&session.config);
+    // The suppression type's template says what its placeholder text is.
+    let template_path = session
+        .repo_root
+        .join(".urzua/templates")
+        .join(format!("{}.md", suppression_type.name));
+    match urzua_io::read_to_string(&template_path) {
+        Ok(text) => suppression_type = suppression_type.with_template(&text),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => notices.push(Notice {
+            severity: NoticeSeverity::Warning,
+            subject: "waiver.template".to_string(),
+            message: format!(
+                "the waiver template '{}' could not be read ({e}); a Reason still holding the template's text is not recognised as a placeholder",
+                template_path.display()
+            ),
+        }),
+    }
+    let waivers = urzua_core::waiver::load_suppressions(&session.records, &suppression_type);
+    notices.extend(permanent_waivers_notice(&suppression_type, &waivers));
+    waivers
+}
+
 fn execute(config_path: Option<PathBuf>, args: CheckArgs) -> Result<CheckReport, Failure> {
+    reject_flag_conflicts(&args)?;
     let CheckArgs {
         paths,
         base,
@@ -377,18 +449,6 @@ fn execute(config_path: Option<PathBuf>, args: CheckArgs) -> Result<CheckReport,
         actors: actors_path,
         extra_notices,
     } = args;
-    if stdin_path.is_some() && (!paths.is_empty() || base.is_some()) {
-        return Err(
-            "urzua check --stdin-path judges one record's proposed content and reports on it alone: it cannot be combined with PATHS or --base"
-                .into(),
-        );
-    }
-    if stdin_path.is_some() && actors_path.is_some() {
-        return Err(
-            "urzua check --actors names who made a --base change: it cannot be combined with --stdin-path"
-                .into(),
-        );
-    }
     let actors = actors_path.as_deref().map(read_actors).transpose()?;
     let opened = open_session(
         &paths,
@@ -416,34 +476,12 @@ fn execute(config_path: Option<PathBuf>, args: CheckArgs) -> Result<CheckReport,
     context.actors = actors;
     notices.extend(extra_notices);
     let (mut executions, mut findings) = run_rules(&context);
-    let why_deferred = if scope.prospective.is_some() {
-        "not the proposed record".to_string()
-    } else {
-        base.as_deref()
-            .map_or("no --base".to_string(), |b| format!("unchanged since {b}"))
-    };
-    notices.extend(scope_changed_notices(&executions, &why_deferred));
+    notices.extend(scope_changed_notices(
+        &executions,
+        &why_deferred(&scope, base.as_deref()),
+    ));
     scope_findings(session, &scope, &mut findings);
-    let mut suppression_type = urzua_core::waiver::SuppressionType::from_config(&session.config);
-    // The suppression type's template says what its placeholder text is.
-    let template_path = session
-        .repo_root
-        .join(".urzua/templates")
-        .join(format!("{}.md", suppression_type.name));
-    match urzua_io::read_to_string(&template_path) {
-        Ok(text) => suppression_type = suppression_type.with_template(&text),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-        Err(e) => notices.push(Notice {
-            severity: NoticeSeverity::Warning,
-            subject: "waiver.template".to_string(),
-            message: format!(
-                "the waiver template '{}' could not be read ({e}); a Reason still holding the template's text is not recognised as a placeholder",
-                template_path.display()
-            ),
-        }),
-    }
-    let waivers = urzua_core::waiver::load_suppressions(&session.records, &suppression_type);
-    notices.extend(permanent_waivers_notice(&suppression_type, &waivers));
+    let waivers = load_waivers(session, &mut notices);
     let today = urzua_io::today();
     run_after_scoping(
         &context,
@@ -464,31 +502,20 @@ fn execute(config_path: Option<PathBuf>, args: CheckArgs) -> Result<CheckReport,
     let blocking = findings
         .iter()
         .any(|f| f.waived.is_none() && f.severity == FindingSeverity::Error);
+    // Counted over the same set `files_examined` counts (`BUG-40`). Rules run
+    // over the whole corpus because a reference resolves against records outside
+    // the scope (`BUG-67`); what is *reported on* is the scope.
+    let records_read_by_any_rule = urzua_core::report::records_read_by_any_rule_within(
+        &executions,
+        &scope.in_scope.iter().map(|p| p.as_path()).collect(),
+    );
     Ok(CheckReport {
         status,
         files_examined,
-        // Counted over the same set `files_examined` counts (`BUG-40`). Rules
-        // run over the whole corpus because a reference resolves against
-        // records outside the scope (`BUG-67`); what is *reported on* is the
-        // scope.
-        records_read_by_any_rule: urzua_core::report::records_read_by_any_rule_within(
-            &executions,
-            &scope.in_scope.iter().map(|p| p.as_path()).collect(),
-        ),
+        records_read_by_any_rule,
         rules_executed: executions,
         rules_selected: selection,
-        scope: ScopeInfo {
-            source: if scope.prospective.is_some() {
-                urzua_core::report::ScopeSource::Stdin
-            } else {
-                crate::discovery::scope_source(session.discovered.source)
-            },
-            base,
-            record_types: session.config.record_types.keys().cloned().collect(),
-            include_untracked: session.config.discovery.include_untracked,
-            untracked_included: session.discovered.untracked_included.len(),
-            diff: scope.diff,
-        },
+        scope: scope_info(session, scope, base),
         blocking,
         findings,
         notices,
@@ -841,15 +868,27 @@ fn selection_wants(selection: Option<&[String]>, ids: &[&str]) -> bool {
     selection.is_none_or(|s| s.iter().any(|r| ids.contains(&r.as_str())))
 }
 
-/// Stage 2: read everything the rules are handed.
-fn load_context<'a>(
-    session: &'a Session,
-    scope: &ReportScope,
+/// The files a run reads for the rules that judge them: claims, published
+/// files, index artifacts, the override log and the back-pointer sources.
+struct SourceInputs {
+    claims: Vec<(String, String)>,
+    published_files: Vec<rules::PublishedFile>,
+    boundaries: Vec<rules::ResolvedBoundary>,
+    ignore_marker: Option<String>,
+    index_artifacts: Vec<rules::IndexArtifact>,
+    override_log: Option<rules::OverrideLog>,
+    back_pointer_sources: Option<rules::BackPointerSources>,
+    decision_gate_sources: Option<rules::BackPointerSources>,
+}
+
+/// Stage 2a: read the source files the rules are handed.
+fn read_source_inputs(
+    session: &Session,
     selection: Option<&[String]>,
-) -> Result<(Context<'a>, Vec<Notice>), String> {
+    notices: &mut Vec<Notice>,
+) -> Result<SourceInputs, String> {
     let (repo_root, config, discovered) =
         (&session.repo_root, &session.config, &session.discovered);
-    let mut notices: Vec<Notice> = Vec::new();
     // A `--rules` selection reads only what its rules read: the source files
     // under `back_pointer_paths` and the published boundary files are most of a
     // narrow run's cost on a large tree, and a rule that was not selected
@@ -912,24 +951,25 @@ fn load_context<'a>(
     } else {
         None
     };
+    Ok(SourceInputs {
+        claims,
+        published_files,
+        boundaries,
+        ignore_marker,
+        index_artifacts,
+        override_log,
+        back_pointer_sources,
+        decision_gate_sources,
+    })
+}
 
-    // Drift is read only by `embodiment.consistency`, so a selection that leaves
-    // it out skips the git history it would cost.
-    let drift_wanted =
-        selection.is_none_or(|s| s.iter().any(|r| r == rules::RULE_EMBODIMENT_CONSISTENCY));
-    let (drift, claim_ages) = if drift_wanted {
-        load_drift(session, scope)
-    } else {
-        (Default::default(), HashMap::new())
-    };
-    notices.extend(crate::discovery::missing_record_notices(
-        &discovered.unstaged_deletions,
-    ));
-    notices.extend(crate::discovery::drift_notices(
-        drift.shallow,
-        &drift.git_problems,
-    ));
-
+/// Stage 2b: the index every reference resolves against, with the notices that
+/// disclose what the corpus holds (`BUG-116`).
+fn index_with_disclosures<'a>(
+    session: &'a Session,
+    notices: &mut Vec<Notice>,
+) -> (rules::RecordIndex<'a>, Vec<rules::IdentifierCollision<'a>>) {
+    let config = &session.config;
     // Built once and shared by every rule that resolves a reference against
     // the whole corpus (`BUG-116`).
     let (record_index, collisions) = rules::build_index_reporting_collisions(&session.records);
@@ -961,10 +1001,27 @@ fn load_context<'a>(
             &record_index,
         ));
     }
+    (record_index, collisions)
+}
 
-    let back_pointed = cited_records(back_pointer_sources.as_ref(), config, &record_index);
+/// What a diff run judges a change against: the committed copies, the added and
+/// changed paths, the fetched pull-request claims and the templates.
+struct DiffInputs {
+    base_text: HashMap<PathBuf, String>,
+    added_paths: Option<Vec<PathBuf>>,
+    pull_ref_claims: rules::PullRefClaims,
+    templates: urzua_core::new_record::TemplateValues,
+    changed_paths: Option<Vec<PathBuf>>,
+    committed_statuses: Option<HashMap<PathBuf, rules::CommittedStatus>>,
+}
 
-    let refs_snapshot = load_refs_with_notice(config, repo_root, &mut notices);
+/// Stage 2c: read what the diff rules judge a change against.
+fn read_diff_inputs(
+    session: &Session,
+    scope: &ReportScope,
+    notices: &mut Vec<Notice>,
+) -> Result<DiffInputs, String> {
+    let (repo_root, config) = (&session.repo_root, &session.config);
     // The diff rules judge a changed record against a committed copy. A
     // proposed record is the one changed record, and its committed copy is
     // HEAD's (`MILE-191`): status transitions and version bumps are then
@@ -974,26 +1031,91 @@ fn load_context<'a>(
         .as_ref()
         .map(|p| head_changes_for(repo_root, &p.path));
     let changes = scope.changed.as_ref().or(head_changes.as_ref());
-    let base_text = load_base_text(session, changes, &mut notices)?;
+    let base_text = load_base_text(session, changes, notices)?;
     let added_paths: Option<Vec<PathBuf>> = changes.map(|c| {
         let mut added: Vec<PathBuf> = c.added.iter().cloned().collect();
         added.sort();
         added
     });
-    let pull_ref_claims = load_pull_ref_claims(session, added_paths.as_deref(), &mut notices);
-    let templates = load_templates(repo_root, config, &mut notices)?;
+    let pull_ref_claims = load_pull_ref_claims(session, added_paths.as_deref(), notices);
+    let templates = load_templates(repo_root, config, notices)?;
+    // The diff rules judge the changed set itself; `None` without `--base`.
+    let changed_paths = changes.map(|c| c.changed.iter().cloned().collect());
+    let committed_statuses = changes.map(|c| {
+        // The types an authority status gate names are read too, but only
+        // when `diff.decider-required` will use them.
+        let gated = if enabled_setting(config, rules::RULE_DIFF_DECIDER_REQUIRED).is_some() {
+            config
+                .authority
+                .as_ref()
+                .map(|a| a.gated_types())
+                .unwrap_or_default()
+        } else {
+            Default::default()
+        };
+        crate::diff_scope::committed_statuses(
+            repo_root,
+            &session.config,
+            &session.records,
+            c,
+            &gated,
+            notices,
+        )
+    });
+    Ok(DiffInputs {
+        base_text,
+        added_paths,
+        pull_ref_claims,
+        templates,
+        changed_paths,
+        committed_statuses,
+    })
+}
+
+/// Stage 2: read everything the rules are handed.
+fn load_context<'a>(
+    session: &'a Session,
+    scope: &ReportScope,
+    selection: Option<&[String]>,
+) -> Result<(Context<'a>, Vec<Notice>), String> {
+    let (repo_root, config, discovered) =
+        (&session.repo_root, &session.config, &session.discovered);
+    let mut notices: Vec<Notice> = Vec::new();
+    let sources = read_source_inputs(session, selection, &mut notices)?;
+
+    // Drift is read only by `embodiment.consistency`, so a selection that leaves
+    // it out skips the git history it would cost.
+    let drift_wanted =
+        selection.is_none_or(|s| s.iter().any(|r| r == rules::RULE_EMBODIMENT_CONSISTENCY));
+    let (drift, claim_ages) = if drift_wanted {
+        load_drift(session, scope)
+    } else {
+        (Default::default(), HashMap::new())
+    };
+    notices.extend(crate::discovery::missing_record_notices(
+        &discovered.unstaged_deletions,
+    ));
+    notices.extend(crate::discovery::drift_notices(
+        drift.shallow,
+        &drift.git_problems,
+    ));
+
+    let (record_index, collisions) = index_with_disclosures(session, &mut notices);
+    let back_pointed = cited_records(sources.back_pointer_sources.as_ref(), config, &record_index);
+    let refs_snapshot = load_refs_with_notice(config, repo_root, &mut notices);
+    let diff = read_diff_inputs(session, scope, &mut notices)?;
 
     Ok((
         Context {
             session,
-            claims,
-            published_files,
-            boundaries,
-            ignore_marker,
-            index_artifacts,
-            override_log,
-            back_pointer_sources,
-            decision_gate_sources,
+            claims: sources.claims,
+            published_files: sources.published_files,
+            boundaries: sources.boundaries,
+            ignore_marker: sources.ignore_marker,
+            index_artifacts: sources.index_artifacts,
+            override_log: sources.override_log,
+            back_pointer_sources: sources.back_pointer_sources,
+            decision_gate_sources: sources.decision_gate_sources,
             back_pointed,
             drift,
             claim_ages,
@@ -1011,36 +1133,14 @@ fn load_context<'a>(
                 .filter(|p| !discovered.staged_deletions.contains(*p))
                 .cloned()
                 .collect(),
-            // The diff rules judge the changed set itself; `None` without `--base`.
-            changed_paths: changes.map(|c| c.changed.iter().cloned().collect()),
-            added_paths,
-            pull_ref_claims,
-            committed_statuses: changes.map(|c| {
-                // The types an authority status gate names are read too, but only
-                // when `diff.decider-required` will use them.
-                let gated = if enabled_setting(config, rules::RULE_DIFF_DECIDER_REQUIRED).is_some()
-                {
-                    config
-                        .authority
-                        .as_ref()
-                        .map(|a| a.gated_types())
-                        .unwrap_or_default()
-                } else {
-                    Default::default()
-                };
-                crate::diff_scope::committed_statuses(
-                    repo_root,
-                    &session.config,
-                    &session.records,
-                    c,
-                    &gated,
-                    &mut notices,
-                )
-            }),
+            changed_paths: diff.changed_paths,
+            added_paths: diff.added_paths,
+            pull_ref_claims: diff.pull_ref_claims,
+            committed_statuses: diff.committed_statuses,
             actors: None,
             repo_root: repo_root.clone(),
-            base_text,
-            templates,
+            base_text: diff.base_text,
+            templates: diff.templates,
             record_only: scope.prospective.is_some(),
             selected: selection.map(|s| s.iter().cloned().collect()),
         },
@@ -1471,5 +1571,68 @@ mod selection_tests {
             ]
         ));
         assert!(wanted(Some(&only), &["header.required-fields"]));
+    }
+}
+
+/// `MILE-172`: `check.rs` stays a composition of short stages. The bound is
+/// stated in `SPEC-22` (a function is at most 100 lines, from its signature to
+/// its closing brace); this test measures every function in the file, so one
+/// that grows past it fails here instead of being split in a later review.
+#[cfg(test)]
+mod size_tests {
+    const MAX_FUNCTION_LINES: usize = 100;
+
+    /// Each function in the non-test part of `check.rs` with its length in
+    /// lines. The file is rustfmt-formatted, so a function (or a method in an
+    /// `impl`) starts at an indent of 0 or 4 and ends at a lone `}` at that indent.
+    fn function_lengths() -> Vec<(String, usize)> {
+        let source = include_str!("check.rs");
+        let lines: Vec<&str> = source
+            .lines()
+            .take_while(|l| !l.starts_with("#[cfg(test)]"))
+            .collect();
+        let mut found = Vec::new();
+        let mut i = 0;
+        while i < lines.len() {
+            let line = lines[i];
+            let indent = line.len() - line.trim_start().len();
+            let rest = line.trim_start();
+            let rest = rest
+                .strip_prefix("pub(crate) ")
+                .or_else(|| rest.strip_prefix("pub(super) "))
+                .or_else(|| rest.strip_prefix("pub "))
+                .unwrap_or(rest);
+            if let (true, Some(after)) = (indent == 0 || indent == 4, rest.strip_prefix("fn ")) {
+                let name: String = after
+                    .chars()
+                    .take_while(|c| c.is_alphanumeric() || *c == '_')
+                    .collect();
+                let close = format!("{}}}", " ".repeat(indent));
+                let end = (i..lines.len())
+                    .find(|&j| lines[j] == close)
+                    .expect("a function ends at a lone closing brace");
+                found.push((name, end - i + 1));
+                i = end;
+            }
+            i += 1;
+        }
+        found
+    }
+
+    #[test]
+    fn no_function_in_check_rs_exceeds_the_size_bound() {
+        let lengths = function_lengths();
+        assert!(
+            lengths.len() > 20,
+            "the scan should see the file's functions, saw {lengths:?}"
+        );
+        let too_long: Vec<_> = lengths
+            .iter()
+            .filter(|(_, n)| *n > MAX_FUNCTION_LINES)
+            .collect();
+        assert!(
+            too_long.is_empty(),
+            "functions over {MAX_FUNCTION_LINES} lines: {too_long:?}"
+        );
     }
 }
