@@ -5,7 +5,7 @@ Phase: '0'
 Track: header-format
 Implements: ADR-33
 Blocked-on: —
-Realized-by: code:rust/crates/urzua-cli/src/commands/init.rs, test:rust/crates/urzua-cli/tests/check_integration.rs
+Realized-by: code:rust/crates/urzua-cli/src/commands/init.rs, test:rust/crates/urzua-cli/tests/check_integration.rs#init_then_check_names_a_pre_existing_blockquote_record_as_an_unsupported_form@sha256:1b223594d7badb7448e36b5647e11808f59aa675ca9bdfd2bb694aedff0cce4c
 ---
 # 2 — Add header.deprecated-shape rule and flip init's default to yaml-frontmatter
 
@@ -19,7 +19,8 @@ ADR-33 decided the deprecation; this is the mechanism that actually makes it vis
 
 ## Done means
 
-`urzua init` in adopt mode proposes `header_shape: yaml-frontmatter` for every type it proposes, whatever shape the corpus's records were detected in, and warns that records not in that shape will be unreadable until rewritten; the non-blocking `header.deprecated-shape` rule this milestone also built was retired with the shapes it warned about by `MILE-85`, so what remains true is the `init` default.
+- `urzua init` in adopt mode proposes `header_shape: yaml-frontmatter` for every type it proposes, whatever shape the corpus's records were detected in. — evidence: code:rust/crates/urzua-cli/src/commands/init.rs, test:rust/crates/urzua-cli/tests/check_integration.rs#init_then_check_names_a_pre_existing_blockquote_record_as_an_unsupported_form@sha256:1b223594d7badb7448e36b5647e11808f59aa675ca9bdfd2bb694aedff0cce4c
+- `urzua init` warns that records not in that shape will be unreadable until rewritten. The non-blocking `header.deprecated-shape` rule this milestone also built was retired with the shapes it warned about by `MILE-85`, so what remains true is the `init` default. — evidence: code:rust/crates/urzua-cli/src/commands/init.rs, test:rust/crates/urzua-cli/tests/check_integration.rs#init_then_check_names_a_pre_existing_blockquote_record_as_an_unsupported_form@sha256:1b223594d7badb7448e36b5647e11808f59aa675ca9bdfd2bb694aedff0cce4c
 
 > **Revision log**
 >
@@ -30,3 +31,4 @@ ADR-33 decided the deprecation; this is the mechanism that actually makes it vis
 > | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-183`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |
 > | 2026-11-04 | Partly superseded by `MILE-85`; `Status` stays Done. **Why:** the closure audit of #234 swept the Done milestones for later removals. `header.deprecated-shape` was deleted by `MILE-85` because it can no longer fire once the deprecated shapes are unsupported; `init` still defaults to `yaml-frontmatter`. | **structural** |
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. The criteria are those the delivered work met, checked against `Realized-by` and the code; `Status` stays Done. | **structural** |
+> | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |

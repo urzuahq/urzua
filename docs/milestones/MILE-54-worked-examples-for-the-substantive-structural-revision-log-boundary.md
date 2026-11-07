@@ -18,7 +18,9 @@ Add worked examples (real entries from this repo's own revision logs, classified
 
 ## Done means
 
-The revision-log guidance in `SPEC-2` and `RFC-6` carries worked examples taken from this repository's own revision logs, each classified substantive or structural with the reason, and records whether the two-value class needs a third state or sharper criteria (decided in an ADR if it changes); a worked example set is checked to name rows that exist.
+- The revision-log guidance in `SPEC-2` and `RFC-6` carries worked examples taken from this repository's own revision logs, each classified substantive or structural with the reason.
+- The guidance records whether the two-value class needs a third state or sharper criteria (decided in an ADR if it changes).
+- A worked example set is checked to name rows that exist.
 
 > **Revision log**
 >
@@ -26,3 +28,4 @@ The revision-log guidance in `SPEC-2` and `RFC-6` carries worked examples taken 
 > |---|---|---|
 
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |
+> | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |

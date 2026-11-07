@@ -18,7 +18,10 @@ RFC-5 §2's tier 5 names this for infra_manual/process locators; the mechanism, 
 
 ## Done means
 
-A declared cadence on a decision whose evidence cannot be checked mechanically makes `check` report the decision once its last human attestation is older than the cadence, an attestation records who and when in a checked field, and a fixture shows an expired attestation reported and a fresh one clean; the mechanism is exercised in urzua's own config and corpus.
+- A declared cadence on a decision whose evidence cannot be checked mechanically makes `check` report the decision once its last human attestation is older than the cadence.
+- An attestation records who and when in a checked field.
+- A fixture shows an expired attestation reported and a fresh one clean.
+- The mechanism is exercised in urzua's own config and corpus.
 
 > **Revision log**
 >
@@ -26,3 +29,4 @@ A declared cadence on a decision whose evidence cannot be checked mechanically m
 > |---|---|---|
 
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |
+> | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |
