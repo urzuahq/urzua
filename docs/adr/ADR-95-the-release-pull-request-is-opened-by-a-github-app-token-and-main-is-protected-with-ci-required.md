@@ -1,6 +1,7 @@
 ---
 Stable-Id: 01M6SW2V5SF3KYDQM48EGVXQTN
-Status: Proposed
+Status: Accepted
+Accepted-on: 2026-11-07
 Date: 2026-11-07
 Author: beauwilliams
 Deciders: beauwilliams
@@ -123,3 +124,4 @@ back to `GITHUB_TOKEN` also means removing the requirement or approving a held r
 > |---|---|---|
 > | 2026-11-07 | Drafted as Proposed. **Why:** Maintainer decision, 2026-11-05 ("Protect + app token"): protect `main` with `ci` required and open the release PR with a GitHub App token so `ci` runs on it. The workflow already builds `RFC-30`'s proposal with no ADR, which the RFC rules forbid. The maintainer accepts it in a later change. | **substantive** |
 > | 2026-11-07 | Revised after an independent review, status unchanged (`Proposed`). Clause 1's narrowing claim now matches `prepare-release.yml` on `main` (the token step passes `permission-contents` and `permission-pull-requests`); the two secrets are named exactly (`RELEASE_APP_CLIENT_ID`, `RELEASE_APP_PRIVATE_KEY`); the ruleset targets `main` only with 0 approvals and is marked required and not yet applied; unset secrets are noted as a red run on every push; the maintainer's steps are in `docs/reference/release-app-setup.md`; `RFC-30` moves to `Accepted` when this record is accepted. **Why:** the review of #394 found the narrowing claim false before #404, the secret names drifting, and the setup steps referenced but written nowhere. | **substantive** |
+> | 2026-11-07 | Status changed from Proposed to Accepted. **Why:** Maintainer decision, 2026-11-07. | **substantive** |

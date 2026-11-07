@@ -1,6 +1,7 @@
 ---
 Stable-Id: 01M2MMFZ5XEV4R5BX3DFGZ5PZM
-Status: Draft
+Status: Accepted
+Accepted-on: 2026-11-07
 Date: 2026-09-16
 Author: beauwilliams
 ---
@@ -86,7 +87,7 @@ trigger workflows:
 - uses: actions/create-github-app-token@<pinned sha>
   id: app-token
   with:
-    app-id: ${{ vars.RELEASE_APP_ID }}
+    client-id: ${{ secrets.RELEASE_APP_CLIENT_ID }}
     private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
 
 - uses: actions/checkout@<pinned sha>
@@ -145,3 +146,4 @@ Expected effects, each checkable on the next release:
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-16 | Initial proposal, `Status: Draft`. **Why:** three defects traced to one cause across two releases, two of which cannot be fixed by removing a dependency the way `BUG-28` was. Filed rather than built: it adds an external identity and a private key, which `ADR-45` previously declined on a weaker version of this evidence. | **structural** |
+> | 2026-11-07 | Status changed from Draft to Accepted, decided by `ADR-95`; the sample now uses the `client-id` input and the `RELEASE_APP_CLIENT_ID` secret the build uses. **Why:** Maintainer decision, 2026-11-07, accepting `ADR-95`. | **substantive** |
