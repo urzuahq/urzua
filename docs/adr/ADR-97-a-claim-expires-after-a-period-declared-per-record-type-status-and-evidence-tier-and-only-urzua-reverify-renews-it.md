@@ -83,6 +83,12 @@ opting-in type, and a recurring review workload.
 Maintainer direction, 2026-11-07: improve the engine, allow for configuration, and give this use case an
 expiration date. This ADR is Proposed until the maintainer accepts it.
 
+**"Refresh the hashes" is two acts, by design.** `reverify` never moves an existing pin: it re-checks
+that each pin still matches and dates the claim. A changed pin is moved by `fix --rebaseline`, with its
+own reason, and only then `reverify` renews. The one hash `reverify` does write is a **first** pin on a
+locator that has none (section 4), because a claim cannot be renewed over evidence that nothing but git
+history vouches for.
+
 ### 1. The rule and its configuration
 
 `embodiment.claim-expired` is opt-in: a configuration that does not declare it runs no new rule, reports
@@ -95,11 +101,13 @@ rules:
   embodiment.claim-expired:
     level: warn               # info | warn | error; the ceiling for every entry below
     anchor_field: Last-audited
+    require_pin: [code, test] # evidence categories whose locators must be pinned to be renewed
+    max_batch: 10             # most records one `reverify --apply` may name
     periods:
-      - {type: milestone, status: [Done],             days: 45}
-      - {type: bug,       status: [Fixed],            days: 60}
-      - {type: spec,      status: [Shipped, Accepted], days: 60}
-      - {type: adr,       status: [Accepted],         days: 90}
+      - {type: milestone, status: [Done],             days: 45, spread_days: 45}
+      - {type: bug,       status: [Fixed],            days: 60, spread_days: 60}
+      - {type: spec,      status: [Shipped, Accepted], days: 60, spread_days: 60}
+      - {type: adr,       status: [Accepted],         days: 90, spread_days: 90}
       # a narrower entry wins: spec-tier evidence only, a longer period, advisory
       - {type: adr, status: [Accepted], tier: Specified, days: 180, level: info}
 ```
@@ -107,7 +115,12 @@ rules:
 - **`periods` is a list of maps.** No string mini-language (`ADR-64`). An entry has `type` (a declared
   record type), optional `status` (a list of that type's statuses), optional `tier` (a state of the
   `embodiment` declaration, that is `Verified`, `Implemented` or `Specified` here), `days` (whole days,
-  1 or more) and an optional `level`.
+  1 or more), an optional `spread_days` (whole days, 0 or more, default 0; section 2) and an optional
+  `level`.
+- **`require_pin` and `max_batch` are rule-level.** `require_pin` is a list of evidence categories as the
+  `embodiment` declaration names them (`code`, `test`, `spec` here); the engine knows no category, and an
+  unknown one is a load error. It defaults to empty, which is today's behaviour. `max_batch` is a whole
+  number, 1 or more, and defaults to 1.
 - **The most specific entry wins.** An entry naming `type`, `status` and `tier` outranks one naming
   `type` and `status`, which outranks `type` alone. Two entries of equal specificity that can match the
   same record are a load error. A record of a listed type that no entry matches is eligible and not
@@ -151,6 +164,34 @@ Because a record with no date falls back to the line's last commit, adopting the
 has the weakness section 6 states: until a record carries the field, a rewrite of its line still counts
 as a renewal.
 
+**The first expiry is spread (`spread_days`).** The first cycle is a cliff when many records share an
+anchor: a bulk rewrite touched every `Done-means` section of the milestones on one day, and the bugs on
+another. Left alone, 127 milestones would expire together on 2026-12-22, and 131 bugs on 2027-01-04
+(section 10). Starting every clock at enable time would only move the cliff, and one longer first period
+would move it too, since everyone would still expire on one day. So a record with **no valid
+`anchor_field` date** (the fallback case above) has its period lengthened by a deterministic offset of
+`0` to `spread_days` days:
+
+`offset = (the first 8 bytes of SHA-256 of the record's Stable-Id text, as a big-endian u64) mod (spread_days + 1)`
+
+- **Deterministic and stateless.** Nothing is written to the record and no run date is stored. Every run,
+  every machine and every merge agrees. `Stable-Id` is a record's permanent identifier (`ADR-3`, `ADR-21`), so a record keeps its slot.
+- **First cycle only.** The offset ends when the record carries a valid `anchor_field` date, that is after
+  its first `reverify`. From then on a claim expires `days` after its anchor, with no offset. A renewal
+  that follows the `max_batch` cap is spread by the reviewers' own pace.
+- **It delays, never hastens.** A record's first expiry falls between `days` and `days + spread_days`
+  after its anchor. A longer period for some records is the price; the finding and `urzua rules` name the
+  offset, so a reviewer sees why a claim expires on that day. A record without a `Stable-Id` gets offset 0
+  and is counted in the report, not skipped silently.
+- **Why not seed `Last-audited` with spread dates?** That writes a date no one verified into 300 records,
+  which is a renewal that skipped the command (section 6). The offset is computed, so it records nothing
+  false.
+- **Chosen value.** `spread_days` equal to `days` for each entry here: a first expiry spread uniformly
+  over one further period. Section 10 gives the distribution. A repository that declares no
+  `spread_days` gets no offset, byte for byte as before.
+- **Removing the field is not a way back to an early offset.** Deleting a present `anchor_field` is
+  reported by the companion rule of section 6.
+
 ### 3. The finding
 
 An expired claim is a finding of `embodiment.claim-expired` at the entry's level, on the record. The
@@ -172,7 +213,8 @@ detect mode.
   `--rebaseline` shows them, so the reviewer reads the content they are attesting. It lists
   `refused` records with the reason.
 - **Apply** (`--apply`): the gates of `fix --apply` hold unchanged. `--ids` or `--force`, never implied;
-  an `--ids` entry matching nothing fails; identity resolves under the `attestation` setting
+  an `--ids` entry matching nothing fails; **`--force` is refused when it selects more than one record**
+  (a batch is named, never swept up); identity resolves under the `attestation` setting
   (`ADR-89` section 5, `MILE-201`): `--by`, the identity source, and `--actor agent|human`; a lock; a
   re-read before the write; a record with no revision log is refused. `--reason <text>` is required: one
   line, without `|` or a line break, naming what was checked. A refresh with no reason is a rubber stamp.
@@ -181,24 +223,81 @@ detect mode.
   a locator does not resolve (file missing, a scoped pin that no longer finds its symbol or range);
   a pin's current hash differs from the recorded one (run `fix --rebaseline` first, with its own reason);
   a locator has drifted by the git-history rule, whether or not the drift is still inside
-  `drift_grace_days`; `embodiment.consistency` would report the record; or the record's type declares no
-  `anchor_field`. Refusing on drift inside the window matters: attesting over a file that has changed
+  `drift_grace_days`; `embodiment.consistency` would report the record; the record's type declares no
+  `anchor_field`; or **a locator of a `require_pin` category has no pin** and was not pinned by the step
+  below. Refusing on drift inside the window matters: attesting over a file that has changed
   and not been re-read is the rubber stamp this command exists to prevent.
+- **The pin step: a renewal requires a pin on every `require_pin` locator.** Here that is every `code:`
+  and `test:` locator. `reverify --apply` first pins each such locator that has none, then renews. The
+  pin is written in the grammar of `ADR-74` and no other: the locator's own spelling, file-level or scoped
+  exactly as the record wrote it, then `@sha256:` and 64 lowercase hex of the content the tool just read.
+  The step **invents no scope**: narrowing a file-level locator to `path#Symbol` is a hand edit the author
+  makes before running the command, and the report names every pinned file-level locator so the author
+  can decide (section 10 measures why). A scope given without a pin (`ADR-74` point 8) is pinned to the
+  scope and so stops being "drift judged on the whole file". The step runs under the same gates as the
+  renewal: the same identity, the same required `--reason`, one row of its own, and the detect report shows
+  the file or span before the hash is written. It is refused, writing nothing, for a locator that does not
+  resolve or whose scope no longer finds its item.
+- **A drifted unpinned locator is pinned by `reverify --pin-only`, not renewed.** The git-history rule
+  can say an unpinned locator changed after the `Realized-by` line was last touched; with no pin,
+  `fix --rebaseline` has nothing to move and `SPEC-8` says only a hand edit clears it. `--pin-only
+  --apply` is that act made attested: it pins the unpinned locators of the chosen records, allows the
+  drift, writes the `Pinned` row and **does not set the `anchor_field`**, so nothing is renewed. Its
+  reason must name the real delta, as a re-pin's does (the 2026-11-05 decision), and the detect report
+  lists the commits since the line was touched. `--pin-only` refuses a pinned locator whose hash differs
+  (that is `fix --rebaseline`). Then `reverify` renews in a second act with its own reason. `--pin-only`
+  is also the one-off migration of a corpus (section 10), because pinning is not a claim that the claim
+  holds today, and so does not start a clock that the first-cycle spread (section 2) would then not apply
+  to.
+- **Spec locators stay unpinned.** A `spec:` locator cites another record, not code. That record has its
+  own lifecycle: a status, a supersession and a revision log, and `embodiment.consistency` already judges
+  the cited record. A hash of it moves on every revision row it gains, which is the needless re-pin
+  `ADR-74` was written to remove, and a re-pin trains the review into a rubber stamp. A `spec:` locator is
+  still re-resolved (the record must exist) and is checked by the git-history rule, and the row counts it
+  apart (`S` below) so nobody reads a history check as a content check. The category list is the
+  repository's: `require_pin: [code, test]` is a choice, not a rule of the engine.
+- **Who may renew, and in how many at once (decided).** An agent may renew and may pin: `--actor agent`
+  is accepted, as the re-pin decision of 2026-11-05 accepts it, when an independent reviewer reads the
+  PR's `Pinned:` and `Re-verified:` lines and confirms each reason matches what was read. The engine
+  records the actor and cannot check the reviewer's independence. **A human actor is required** where the
+  matching `periods` entry's level is `error`: `--actor agent` is refused there. `--apply` names at most
+  `max_batch` records (10 here); a longer `--ids` list is refused with the cap, not truncated. **Every row
+  of one batch carries the same `--reason`**, so a copy-pasted sentence is visible at once, and the
+  report prints the reason once above the list of records it covers. Beyond the cap the reviewer runs
+  another batch with its own reason. `--force` cannot batch, above.
 - **What is written.** The `anchor_field` is set to today (UTC), added to the header when absent. The
-  `Realized-by` line, `Status` and `Embodiment` are not touched: the computed state stays computed, so a
-  reverify cannot lift a claim, only date it. One revision-log row, of the type's `tool_class`
-  (`ADR-94`), in the form:
+  `Status` and `Embodiment` are not touched: the computed state stays computed, so a reverify cannot lift
+  a claim, only date it. The `Realized-by` line changes only to add the first pins of the pin step.
+  Revision-log rows, of the type's `tool_class` (`ADR-94`), in these forms:
 
-  `Re-verified (attested by NAME, identity: SOURCE, actor: ACTOR): N locators re-resolved, P hash-checked, H checked by git history only. Evidence: <locator>@sha256:<12 hex>, ... Reason: <reason> **Why:** the claim was <age> days old against a <days>-day period.`
+  `Pinned (attested by NAME, identity: SOURCE, actor: ACTOR): N locators pinned, F file-level, Q scoped. Evidence: <locator>@sha256:<12 hex>, ... Reason: <reason> **Why:** a claim is renewed only over pinned code and test evidence.`
 
-  The row names every locator with a 12-character prefix of the hash of the content the tool saw (the
-  file, or the resolved span for a scoped pin), so the row records what was attested. It names how many
-  locators were hash-checked and how many only history-checked, so a reader sees how much the tool could
-  prove. The format is pinned by a test, as the `Re-baselined` row is.
+  `Re-verified (attested by NAME, identity: SOURCE, actor: ACTOR): N locators re-resolved, P hash-checked, S spec locators checked by git history only. Evidence: <locator>@sha256:<12 hex>, ... Reason: <reason> **Why:** the claim was <age> days old against a <days>-day period.`
+
+  A record pinned and renewed in one `reverify` gets both rows, in that order, with the one reason. The
+  row names every locator with a 12-character prefix of the hash of the content the tool saw (the file,
+  or the resolved span for a scoped pin), so the row records what was attested. It names how many locators
+  were hash-checked and how many only history-checked, so a reader sees how much the tool could prove.
+  For a repository with no `require_pin`, `S` is replaced by `H` for every unpinned locator, as the
+  first version of the row had it. Both formats are pinned by a test, as the `Re-baselined` row is.
+- **Interaction with `ADR-74`.** The pin grammar, the hashed bytes and the resolver contract are `ADR-74`'s
+  and are not changed. The new thing is who may write a first pin: before, only a hand edit; now
+  `reverify` and `reverify --pin-only`, which call the same parser and the same hash. A pin the step writes
+  is moved later only by `fix --rebaseline`, exactly as any pin. `ADR-74` keeps the re-pin edit's rule that
+  the scope stays in the spelling as written.
+- **Interaction with the harness `/repin` command.** `/repin` runs `urzua-record.sh repin`, which runs `fix
+  --rebaseline` only (`.claude/commands/repin.md`). It is unchanged: it moves stale pins and has nothing
+  to do for an unpinned locator, and it must not be used to mean "pin it". The build adds a sibling,
+  `/reverify`, and a `reverify` verb in `urzua-record.sh`, built the same way: it takes a record and a
+  reason, passes `--actor agent`, refuses an empty reason, lists before it applies, and tells the agent
+  to put every `Pinned:` and `Re-verified:` line in the PR body. The script keeps holding no schema
+  knowledge.
 - **Renewing early is allowed.** `--ids` may name a record that has not expired.
-- **The order for a drifted, expired claim** is `fix --rebaseline` (its attestation says the pin moved
-  and why), then `reverify` (its attestation says the claim holds). They are two acts with two reasons
-  and two rows, because the first says what changed and the second says someone looked.
+- **The order for a drifted, expired claim** is `fix --rebaseline` for a pinned locator, or `reverify
+  --pin-only` for an unpinned one (the attestation says the pin moved or was first made, and why), then
+  `reverify` (its attestation says the claim holds). They are two acts with two reasons and two rows,
+  because the first says what changed and the second says someone looked. This closes the gap in which
+  drift on an unpinned locator could not be cleared by `rebaseline`.
 
 ### 5. What proves a renewal
 
@@ -206,7 +305,8 @@ detect mode.
 |---|---|---|
 | Every locator exists and every scoped pin still finds its item | The tool, at apply time | Mechanical |
 | Every pinned locator's content equals its recorded hash | The tool | Mechanical, and exact for a pin |
-| An unpinned locator has not changed in git since the `Realized-by` line was last touched | The tool, by the existing heuristic | Mechanical, and only as good as the heuristic |
+| Every `require_pin` (`code:`, `test:`) locator is pinned, and a pin created now equals the content read | The tool: it refuses a renewal otherwise, and writes the first pin itself | Mechanical, and exact |
+| A `spec:` locator exists and has not changed in git since the `Realized-by` line was last touched | The tool, by the existing heuristic | Mechanical, and only as good as the heuristic; the row counts it apart as `S` |
 | The record agrees with its computed `Embodiment` | The tool (`embodiment.consistency`) | Mechanical |
 | Who attested, as which identity source, and as which actor kind | The row, under `attestation` | Attribution, not cryptographic attestation (`RFC-25`); the actor is the caller's claim |
 | What was looked at | The row's locators and hash prefixes | A record of what the tool saw |
@@ -214,8 +314,9 @@ detect mode.
 | That a person read the code | Nothing | Not provable |
 
 The tool does not claim to prove the last row. What it does is make a renewal impossible without
-re-resolving the evidence, impossible over changed evidence, impossible without a named identity and a
-reason, and visible in the log with the content it saw. A false attestation is attributable and
+re-resolving the evidence, impossible over changed evidence, impossible over code or tests that are not
+pinned, impossible without a named identity and a reason, and visible in the log with the content it saw.
+The one weak row left is the `spec:` locator, which is judged by history, and the row says so. A false attestation is attributable and
 reviewable in the pull request that carries it, as a false `Re-baselined` row is today.
 
 ### 6. A renewal that skips the command
@@ -223,7 +324,8 @@ reviewable in the pull request that carries it, as a false `Re-baselined` row is
 A date in a text file can be typed. Prevention is not claimed; detection is. A second opt-in rule,
 `embodiment.claim-renewal-unattested`, takes `scope: changed` (`ADR-90`; its verdict depends on the record
 and its merge-base copy alone) and, on `check --base`, reports a record whose `anchor_field` is newer than
-in the merge-base copy and which gained no revision row of the `Re-verified` form dated that day. It is
+in the merge-base copy and which gained no revision row of the `Re-verified` form dated that day, or
+whose `anchor_field` the merge-base copy carried and the branch removed. It is
 declared by the same configuration that declares `embodiment.claim-expired` and its level is the
 repository's. It cannot see a record that never carried the field, which is why section 2's fallback is a
 weakness: a record in that state is renewed by any rewrite of its line. `fix --rebaseline` keeps
@@ -264,8 +366,8 @@ examined.
 ### 10. This repository's declaration and what the first run reports
 
 This repository declares the rule at `level: warn` (`fail_on: warning` makes an expiry fail CI), with
-`anchor_field: Last-audited`, declared on `adr`, `milestone` and `bug` as it is on `spec`, and these
-periods:
+`anchor_field: Last-audited`, declared on `adr`, `milestone` and `bug` as it is on `spec`,
+`require_pin: [code, test]`, `max_batch: 10`, and these periods, each with `spread_days` equal to `days`:
 
 | Type and status | Days | Why |
 |---|---|---|
@@ -275,23 +377,63 @@ periods:
 | ADR `Accepted` | 90 | A decision changes slowly; its evidence is usually a spec or the code that implements it |
 
 These are starting values, judged and not derived: the repository has 64 days of history and no
-measurement can tell 45 from 60. They are revisited after the first full cycle.
+measurement can tell 45 from 60. They are revisited after the first full cycle, and the milestone figure
+first: it is the one the cliff below bears on, and the first cycle is the cheapest time to learn what a
+review of 128 milestones costs. `max_batch: 10` is judged the same way: a day's steady-state expiries
+(about 6) fit one batch, and a week's (about 40) take four, each with a reason of its own.
 
 **Measured on this repository** (2026-11-07, `0ad09609`), using each record's `Realized-by` line age as
 the anchor, which is all any record has since none carries the field yet:
 
 - **Expired now: 0.** The oldest claim is 60 days old and the periods are 45 to 90 for the statuses
   that matter. Milestones and bugs are not examined by today's option at all.
-- **Expiring within 14 days: 6** (five bugs, `BUG-27`, `28`, `33`, `34` and `35`, on 2026-11-16, and
-  `SPEC-21` on 2026-11-19); **within 30 days: 7** (adding `SPEC-5`, 2026-11-24). Six ADRs
-  (`ADR-16`, `17`, `19`, `23`, `31`, `37`) are 60 days old and expire on 2026-12-07.
+- **Expiring within 14 days: 6** (five bugs, `BUG-27`, `28`, `33`, `34` and `35`, on 2026-11-15, and
+  `SPEC-21`); **within 30 days: 7**, adding `SPEC-5`, and **6 more ADRs on day 30 exactly**
+  (`ADR-16`, `17`, `19`, `23`, `31`, `37`, 60 days old, 2026-12-07), 13 if the day is counted. These are
+  today's ages, before the pin run and the spread below change the anchors.
 - **For comparison, today's option:** a rule-wide value of 14 or 30 reports 14 records (12 ADRs, 2
   specs) and fails CI; 60 reports none. Shorter periods (45 days for ADRs and specs, 30 for milestones and bugs) would report 18 records
   on the first run: 12 ADRs, 5 bugs and 1 spec.
-- **Steady state is a workload.** Across 364 records and these periods, about 6 claims a day expire
+- **Steady state is a workload.** Across 339 judged records and these periods, about 6 claims a day expire
   once the corpus is old enough (128 milestones over 45 days, 158 bugs over 60, 32 ADRs over 90, 21 specs
   over 60). That is a cost the repository chooses, not a side effect; longer periods lower it and weaken
   the guarantee.
+
+**The first cycle is a cliff, and this is the decided answer.** Measured on this repository on
+2026-11-07 by `git blame` of each `Realized-by` line, with the corpus pinned the same day (below):
+
+| First expiry | No spread | `spread_days` = `days` (chosen) |
+|---|---|---|
+| Milestones, 128 | 127 on 2026-12-22 (1 on 12-20) | 2026-12-22 to 2027-02-05, at most 6 a day |
+| Bugs, 158 | 131 on 2027-01-04, the rest by 01-06 | 2027-01-04 to 2027-03-07, at most 8 a day |
+| Specs, 21 | 21 on 2027-01-06 | 2027-01-06 to 2027-03-07, at most 2 a day |
+| ADRs, 32 | 18 on one day, the rest within 4 days of 2027-02-02 | 2027-02-09 to 2027-05-03, at most 2 a day |
+| All, 339 | 131 on one day; 127 on another; 307 within 60 days | 10 at most on any day; 24 in December 2026, 163 in January, 110 in February, 30 in March, 12 later |
+
+The chosen spread keeps the busiest week near 41 expiries (about the steady state of 6 a day) where the
+unspread corpus has 127 and 131 on two single days. It costs a longer first period for part of the
+corpus: no claim expires before its `days`, and one expires up to `days` later. Two alternatives were
+measured and not chosen. A shorter spread of half the period leaves up to 20 expiries on one day and 101
+in the first 60 days. A fixed 30-day spread leaves up to 15 on one day. The ADR tail to 2027-05-03 is the
+cost of spreading the slowest-moving type over its own 90-day period. The distribution moves with the
+adoption date; the shape does not, because the offset does not depend on it.
+
+**Pinning the corpus is a one-off, and it is measured.** Of the 339 judged records with a `Realized-by`
+line, **164 carry at least one unpinned `code:` or `test:` locator** (105 of 128 milestones, 25 of 158
+bugs, 20 of 21 specs, 14 of 32 ADRs). They hold **502 such locators**, **223 distinct**, all file-level
+(none has a scope), on **212 distinct files**. The other 1048 `code:` and `test:` locators are pinned
+already. 124 `spec:` locators stay unpinned by design (section 4). Run as `reverify --pin-only` in batches
+of at most 10, the pin run is **17 batches** and 164 reviewed records, each with a `Pinned` row. It is
+the same human review cost as 164 re-pins and it happens once; steady state adds nothing, since a locator
+pinned stays pinned. Two consequences are named, not hidden:
+
+- **The pin run restarts the fallback age** of the 164 records, because it edits their `Realized-by`
+  line; the table above already counts that. It does not set `Last-audited`, so the first-cycle spread
+  still applies to them.
+- **File-level pins on busy files will go stale.** 106 of the 212 files had 3 or more commits in the last
+  14 days. `ADR-74` was written because file-level pins on such files go stale in hours. The author
+  should narrow a locator to `path#Symbol` where a symbol is the claim, before the pin run, in the same
+  PR. The report lists file-level pins so the choice is visible; the step does not make it.
 
 `MILE-129` is reopened to implement this ADR (section 11).
 
@@ -320,7 +462,12 @@ same constraint). The workload section 10 measures is reversible only by lengthe
   line counts as a renewal for a record that carries the anchor field.
 - A person or an agent can renew a claim cheaply when the evidence is unchanged: one command, one reason.
   That is also the risk: the cost is low enough to batch, and the reason is a sentence. The tool refuses
-  changed evidence and records what it saw; it cannot make the reason true.
+  changed evidence and unpinned code or tests, caps a batch, makes every reason in a batch identical so a
+  paste shows, and records what it saw; it cannot make the reason true.
+- A one-off pin run over 164 records (502 locators) precedes the first renewals, and the file-level pins it
+  writes on busy files will need `fix --rebaseline` sooner than a scoped pin would.
+- The first expiries spread over about four months, at most 10 on a day, instead of two days that hold
+  258 of 339.
 - A record without the anchor field keeps today's behaviour, including that a rewrite of its line
   resets its age. Adopting the field is a per-type step and the repository's migration path.
 - Drift and expiry both report on a drifted, expired record. The reviewer sees two findings and two
@@ -330,15 +477,28 @@ same constraint). The workload section 10 measures is reversible only by lengthe
   attestation row format joins `Re-baselined` as one that agents parse.
 - `SPEC-8`, or a new spec, gains the command's contract with test vectors at the build.
 
+## Decided with this ADR
+
+The open questions of the first draft are settled in this revision, after the independent review of
+2026-11-07.
+
+- **Who may renew.** An agent may renew and may pin, with `--actor agent`, when an independent reviewer
+  reads the PR's lines and confirms each reason, the rule of the re-pin decision of 2026-11-05. A human
+  actor is required where the matching entry's level is `error`. The engine records the actor and cannot
+  verify the reviewer.
+- **A renewal of unpinned evidence.** Code and test locators must be pinned before a claim is renewed.
+  `reverify` pins any unpinned one first, with a real reason, and only then renews. There is no
+  "history-checked only" renewal for them. Spec locators may stay unpinned (section 4).
+- **Batch renewal.** `--ids` takes up to `max_batch` records (10 here), and every row of a batch carries
+  the same `--reason`. A longer list is refused; `--force` cannot batch.
+- **The first cycle.** Spread by a deterministic per-record offset (section 2), measured in section 10.
+
 ## Not decided here
 
-- **Who may renew.** Whether an agent's `--actor agent` renewal counts or a human's is required. The
-  re-pin decision of 2026-11-05 lets an agent re-pin when an independent reviewer confirms the stated
-  reason. This ADR extends the same rule to renewals and leaves a per-type actor requirement for later.
-- **A renewal of unpinned evidence.** The row says how many locators were history-checked only. Whether a
-  type may require at least one pin before it can be renewed is left to a later option.
-- **Batch renewal.** `--ids` takes several records and one `--reason`. Whether a batch needs a reason per
-  record is for the build to settle against the review burden.
+- **A per-type actor requirement beyond the `error` level.** For instance a human reviewer for
+  milestones only. The level of the entry is the only handle now.
+- **Pinning a `spec:` locator.** Left unpinned for the reason in section 4. A repository that wants it
+  adds `spec` to `require_pin`, and the cost of a pin that moves on every revision row is its own.
 
 ## References
 
@@ -358,3 +518,4 @@ same constraint). The workload section 10 measures is reversible only by lengthe
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-07 | Filed as Proposed. **Why:** maintainer direction of 2026-11-07 on `MILE-129`: improve the engine, make claim expiry configurable, and make a refresh a recorded re-verification with refreshed pins. | **substantive** |
+| 2026-11-07 | Amended after the independent review of PR 425 (still Proposed): a renewal requires a pin on every `code:` and `test:` locator (`require_pin`), written by `reverify` or `reverify --pin-only` under the attestation rules, with spec locators left unpinned; the first expiry is spread by a deterministic `spread_days` offset from the `Stable-Id`; agent renewal, pin-before-renewal and a capped batch with one shared reason are decided, no longer open; the corpus pin run (164 records, 502 locators) and the new first-cycle distribution are measured; the 30-day count and the two-act hash refresh are worded exactly. **Why:** the review found that unpinned locators made a renewal only as strong as the git-history heuristic and that `rebaseline` could not clear their drift (blocker), and that 258 of 339 first expiries fell on two days (should fix). | **substantive** |
