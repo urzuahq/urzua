@@ -583,10 +583,17 @@ scope: docs/adr/ADR-1-x.md
             for reason in ["TBD", "tbd", "TODO", "'  Todo  '"] {
                 let loaded = load_suppressions(&[reason_record(Some(reason))], &kind);
                 assert_eq!(loaded[0].unmet, vec!["Reason".to_string()], "{reason}");
-                assert_eq!(loaded[0].unmet_states, vec![FieldState::Placeholder], "{reason}");
+                assert_eq!(
+                    loaded[0].unmet_states,
+                    vec![FieldState::Placeholder],
+                    "{reason}"
+                );
                 assert!(!loaded[0].is_effective(), "{reason}");
             }
-            let loaded = load_suppressions(&[reason_record(Some("TBD until the upstream fix ships"))], &kind);
+            let loaded = load_suppressions(
+                &[reason_record(Some("TBD until the upstream fix ships"))],
+                &kind,
+            );
             assert!(loaded[0].is_effective());
         }
     }
