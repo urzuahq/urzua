@@ -202,6 +202,44 @@ pub fn unevidenced_successes(
         .filter_map(|record| {
             let decl = declared.get(&record.record_type)?;
             let judged = crate::rules::judge_delivery(record, config, decl, ctx).ok()?;
+            // A record whose items all resolve while a dependency is unfinished
+            // computes to `partial_status` (`ADR-96`, amendment of 2026-11-07):
+            // the notice names the dependency that caps it, and a finished
+            // status above the cap is not downgraded.
+            if let (None, Some(items)) = (&judged.disagreement, &judged.items) {
+                if !items.capped_by.is_empty() {
+                    let capped_at = decl
+                        .delivery
+                        .as_ref()
+                        .and_then(|d| d.items.as_ref())
+                        .map_or("", |i| i.partial_status.as_str());
+                    let finished = decl.is_success(&judged.status);
+                    let message = if finished {
+                        format!(
+                            "{} is '{}' but every item resolves and {} is unfinished, so the status computes to '{capped_at}'; not downgraded -- finish the dependency, or reopen it to '{capped_at}' by hand",
+                            judged.status_field,
+                            judged.status,
+                            items.capped_by.join(", ")
+                        )
+                    } else {
+                        format!(
+                            "{} '{}' agrees with the items: every item resolves, but {} is unfinished, which caps the status at '{capped_at}'",
+                            judged.status_field,
+                            judged.status,
+                            items.capped_by.join(", ")
+                        )
+                    };
+                    return Some(crate::report::Notice {
+                        severity: if finished {
+                            crate::report::NoticeSeverity::Warning
+                        } else {
+                            crate::report::NoticeSeverity::Info
+                        },
+                        subject: record.path.display().to_string(),
+                        message,
+                    });
+                }
+            }
             let message = match &judged.disagreement {
                 Some(crate::rules::DeliveryDisagreement::SuccessWithoutEvidence) => format!(
                     "{} is '{}' with no delivery evidence (computes to '{}'); not downgraded -- add the evidence that delivered it",
@@ -783,7 +821,7 @@ mod tests {
         back_pointed: &crate::rules::BackPointerEvidence,
     ) -> (Population, Vec<Repair>) {
         crate::rules::LocatorEnv::without_files(config, |env| {
-            let blocked = HashSet::new();
+            let blocked = std::collections::HashMap::new();
             let ctx = DeliveryContext {
                 back_pointed,
                 env,
