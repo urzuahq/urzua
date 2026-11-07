@@ -22,7 +22,10 @@ work. Needs `RFC-48`'s roadmap first.
 
 ## Done means
 
-A tool separate from the engine's record checks reads open changes on a forge (pull requests citing a record in `Implements` or a `Closes`-style trailer) and `urzua roadmap` output shows each against the record it implements as in progress, with a link; with no forge access the roadmap still renders from records alone and says the evidence was not read; a fixture with a stubbed forge shows a cited record in progress and an uncited one not.
+- A tool separate from the engine's record checks reads open changes on a forge: pull requests citing a record in `Implements` or a `Closes`-style trailer.
+- `urzua roadmap` output shows each open change against the record it implements as in progress, with a link.
+- With no forge access the roadmap still renders from records alone and says the evidence was not read.
+- A fixture with a stubbed forge shows a cited record in progress and an uncited one not.
 
 ## References
 
@@ -35,3 +38,4 @@ A tool separate from the engine's record checks reads open changes on a forge (p
 > | 2026-11-02 | Filed. **Why:** Author asked to keep forge-based progress evidence as a future roadmap idea. | **substantive** |
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |
 > | 2026-11-05 | `Depends-on: MILE-182` added. **Why:** Why states it needs the `RFC-48` roadmap first, which `MILE-182` builds. Proposed for maintainer review; `Status` unchanged. | **structural** |
+> | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |

@@ -3,7 +3,7 @@ Stable-Id: 01M6CXZXSNMN0AYVBVYEWRY95J
 Status: Done
 Phase: '0'
 Track: schema-governance
-Realized-by: spec:docs/adr/ADR-36-filenames-carry-the-type-prefix-going-forward.md
+Realized-by: spec:docs/adr/ADR-36-filenames-carry-the-type-prefix-going-forward.md, test:rust/crates/urzua-cli/tests/check_integration.rs#a_bare_number_corpus_is_reported_once_per_type_with_rename_guidance@sha256:cbe75ec7f8dd363b5945a74a54669bd1ee721798e2be92e93273d8538909c31d, test:rust/crates/urzua-core/src/values.rs#record_id_compares_by_numeric_value@sha256:2e7b3ad606e780cf911ea4ca968583e6965edd3139e656283974644fb202a570, test:rust/crates/urzua-cli/tests/document_model_integration.rs#an_identity_pattern_without_a_prefix_group_stops_the_run_naming_the_type@sha256:e794aafea826f3dcc070183bed1663828a54aa381414f2b44083e65d4046ab38, spec:docs/rfc/RFC-46-a-bare-numeric-filename-gets-its-identity-from-the-type-not-from-the-filename.md
 Non-reference-ids: ADR-173, ADR-0173
 ---
 # 126 — Decide how a record gets an identity from a bare zero-padded numeric filename
@@ -32,7 +32,10 @@ when the decision is taken.
 
 ## Done means
 
-The decision is recorded: a record whose filename is a bare zero-padded number (`0001-a.md`) gets no identity from the filename, and such a corpus is renamed to `TYPE-NNNN-slug.md` (`ADR-36`), where `ADR-0173` resolves against `ADR-173` numerically; a declared `identity` pattern must capture the type prefix; `RFC-46` is rejected and this record's revision log and `ADR-36` carry the decision.
+- A record whose filename is a bare zero-padded number (`0001-a.md`) gets no identity from the filename, and such a corpus is renamed to `TYPE-NNNN-slug.md`, as `ADR-36` decides. — evidence: spec:docs/adr/ADR-36-filenames-carry-the-type-prefix-going-forward.md, test:rust/crates/urzua-cli/tests/check_integration.rs#a_bare_number_corpus_is_reported_once_per_type_with_rename_guidance@sha256:cbe75ec7f8dd363b5945a74a54669bd1ee721798e2be92e93273d8538909c31d
+- `ADR-0173` resolves against `ADR-173` numerically. — evidence: test:rust/crates/urzua-core/src/values.rs#record_id_compares_by_numeric_value@sha256:2e7b3ad606e780cf911ea4ca968583e6965edd3139e656283974644fb202a570
+- A declared `identity` pattern must capture the type prefix. — evidence: test:rust/crates/urzua-cli/tests/document_model_integration.rs#an_identity_pattern_without_a_prefix_group_stops_the_run_naming_the_type@sha256:e794aafea826f3dcc070183bed1663828a54aa381414f2b44083e65d4046ab38
+- `RFC-46` is rejected. — evidence: spec:docs/rfc/RFC-46-a-bare-numeric-filename-gets-its-identity-from-the-type-not-from-the-filename.md
 
 ## References
 
@@ -54,3 +57,4 @@ The decision is recorded: a record whose filename is a bare zero-padded number (
 > | 2026-11-04 | `Realized-by` added and `Status` Planned -> Done. **Why:** the work is merged on `main`: the decision is recorded in the revision log (a bare zero-padded filename gets no identity; such a corpus is renamed to `TYPE-NNNN-slug.md`) and in the accepted `ADR-36`; `RFC-46` was rejected. Checked against this record's Done means and the code; the record never carried its own delivery evidence, and `status.delivery-agreement` (`MILE-183`) reads evidence under a not-done `Status` as a disagreement. | **structural** |
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. The criteria are those the delivered work met, checked against `Realized-by` and the code; `Status` stays Done. | **structural** |
 > | 2026-11-05 | Added the `Non-reference-ids` header field declaring `ADR-173, ADR-0173`. **Why:** the text names these ids as history or illustration, not as citations of a record; the declaration states that on the record itself, so a new unresolved citation in this file is reported, where a file-wide `citation.resolution` waiver had silenced every one (`BUG-190`, `ADR-75`). The field carries no decision; the milestone is unchanged. | **structural** |
+> | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |

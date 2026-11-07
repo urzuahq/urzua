@@ -4,7 +4,7 @@ Status: Done
 Phase: '0'
 Track: schema-governance
 Implements: SPEC-1
-Realized-by: code:rust/crates/urzua-core/src/rules/index.rs, test:rust/crates/urzua-cli/tests/index_freshness_integration.rs
+Realized-by: code:rust/crates/urzua-core/src/rules/index.rs, test:rust/crates/urzua-cli/tests/index_freshness_integration.rs#a_missing_record_an_extra_entry_and_a_stale_title_each_block@sha256:6bf98d566e70051bbcb648d3ea75c2c1286b0682c16f56d4ba5451bc2a340d92, test:rust/crates/urzua-cli/tests/index_freshness_integration.rs#a_missing_index_file_and_a_removed_marker_pair_block@sha256:b9cd4217f0bcbc82fdd8ef13539eddec474e24ec6f138a5df4075d612302f467, test:rust/crates/urzua-cli/tests/index_freshness_integration.rs#index_regenerates_a_declared_index_and_a_second_run_is_a_no_op_end_to_end@sha256:7046d1eaf20f875864e3d251792ff2156105132c5865fe4e2d7ff1ba511f003e, test:rust/crates/urzua-cli/tests/index_freshness_integration.rs#a_current_index_passes_and_the_census_counts_it@sha256:4c4df67647a08350cd054f50580dbf02486d706d18891132a7914721059c90eb
 ---
 # 139 — Generated index files and README index lists must match the records
 
@@ -18,7 +18,10 @@ The adopter regenerates two indexes per record directory in its audit and its li
 
 ## Done means
 
-A record added, removed or retitled without regenerating the index fails `check` with an error naming the stale artifact and the differing entry; a missing artifact and a removed marker pair each fail; regenerating clears the findings; the rule reports how many generated artifacts it compared.
+- A record added, removed or retitled without regenerating the index fails `check` with an error naming the stale artifact and the differing entry. — evidence: code:rust/crates/urzua-core/src/rules/index.rs, test:rust/crates/urzua-cli/tests/index_freshness_integration.rs#a_missing_record_an_extra_entry_and_a_stale_title_each_block@sha256:6bf98d566e70051bbcb648d3ea75c2c1286b0682c16f56d4ba5451bc2a340d92
+- A missing artifact and a removed marker pair each fail. — evidence: test:rust/crates/urzua-cli/tests/index_freshness_integration.rs#a_missing_index_file_and_a_removed_marker_pair_block@sha256:b9cd4217f0bcbc82fdd8ef13539eddec474e24ec6f138a5df4075d612302f467
+- Regenerating clears the findings. — evidence: test:rust/crates/urzua-cli/tests/index_freshness_integration.rs#index_regenerates_a_declared_index_and_a_second_run_is_a_no_op_end_to_end@sha256:7046d1eaf20f875864e3d251792ff2156105132c5865fe4e2d7ff1ba511f003e
+- The rule reports how many generated artifacts it compared. — evidence: test:rust/crates/urzua-cli/tests/index_freshness_integration.rs#a_current_index_passes_and_the_census_counts_it@sha256:4c4df67647a08350cd054f50580dbf02486d706d18891132a7914721059c90eb
 
 > **Revision log**
 >
@@ -27,3 +30,4 @@ A record added, removed or retitled without regenerating the index fails `check`
 > | 2026-11-04 | Filed. **Why:** maintainer decision of 2026-11-04 setting the Phase 0 exit (urzua governs its own repo in CI with zero standing warnings, and replaces one adopter's hand-written linter, which is then deleted); the adopter's linter treats a missing or stale generated index, or a removed README marker pair, as an error, and urzua has no equivalent gate. | **substantive** |
 > | 2026-11-04 | Narrowest reading built as the opt-in rule `index.freshness` (`SPEC-2`): each declared artifact is a file, or a marked list inside a README, in one declared line format; the engine compares the committed entries with the records and does not regenerate them or compare order. A structured (JSON) index is not read; only line formats. Status unchanged. **Why:** the milestone asks for the freshness gate, and a line format covers both artifacts without the engine owning an index file schema. | **substantive** |
 > | 2026-11-04 | `Realized-by` added and `Status` Planned -> Done. **Why:** the work is merged in #171: opt-in rule `index.freshness` compares declared index artifacts with the records. Checked against this record's Done means and the code; the record never carried its own delivery evidence, and `status.delivery-agreement` (`MILE-183`) reads evidence under a not-done `Status` as a disagreement. | **structural** |
+> | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |

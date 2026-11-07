@@ -3,7 +3,7 @@ Stable-Id: 01M6DEN8ZYA5Z4DVW6E7SA10F3
 Status: Done
 Phase: '0'
 Track: schema-governance
-Realized-by: code:rust/crates/urzua-core/src/status_model.rs, code:rust/crates/urzua-core/src/rules/status.rs, test:rust/crates/urzua-cli/tests/check_integration.rs
+Realized-by: code:rust/crates/urzua-core/src/status_model.rs, code:rust/crates/urzua-core/src/rules/status.rs, test:rust/crates/urzua-cli/tests/check_integration.rs#declared_statuses_are_enforced_end_to_end@sha256:a907e0b1e48e96373c41f5ff7abfe722c66924e2d53731b825d18d35f491deb2, test:rust/crates/urzua-core/src/rules/claim.rs#a_claim_against_a_declared_failure_terminal_is_not_an_error_observed_failing@sha256:db367747e84e82fcdefd797396e87e3b332342e25e97ae8f71423862787e6308, test:rust/crates/urzua-core/src/rules/narrative.rs#narrative_field_stale_reads_the_declared_terminals_observed_failing@sha256:90c542edfa84fdf8c0d9c15fd4a4cc96a6e6d3811d5564525545ab2d9cc504f9
 ---
 # 132 — Declared state machines per record type
 
@@ -36,10 +36,9 @@ the primitive.
 
 ## Done means
 
-A type declares its statuses in config and `check` reports an undeclared status value; a state can
-declare required and forbidden fields, a record violating either is reported, and a planted accepted
-record without Deciders fails while a Proposed one passes; the hand-copied terminal and closed status
-lists are read from the declaration instead (`BUG-178`).
+- A type declares its statuses in config and `check` reports an undeclared status value. — evidence: code:rust/crates/urzua-core/src/status_model.rs, code:rust/crates/urzua-core/src/rules/status.rs, test:rust/crates/urzua-cli/tests/check_integration.rs#declared_statuses_are_enforced_end_to_end@sha256:a907e0b1e48e96373c41f5ff7abfe722c66924e2d53731b825d18d35f491deb2
+- A state can declare required and forbidden fields, and a record violating either is reported: a planted accepted record without `Deciders` fails while a Proposed one passes. — evidence: test:rust/crates/urzua-cli/tests/check_integration.rs#declared_statuses_are_enforced_end_to_end@sha256:a907e0b1e48e96373c41f5ff7abfe722c66924e2d53731b825d18d35f491deb2
+- The hand-copied terminal and closed status lists are read from the declaration instead (`BUG-178`). — evidence: test:rust/crates/urzua-core/src/rules/claim.rs#a_claim_against_a_declared_failure_terminal_is_not_an_error_observed_failing@sha256:db367747e84e82fcdefd797396e87e3b332342e25e97ae8f71423862787e6308, test:rust/crates/urzua-core/src/rules/narrative.rs#narrative_field_stale_reads_the_declared_terminals_observed_failing@sha256:90c542edfa84fdf8c0d9c15fd4a4cc96a6e6d3811d5564525545ab2d9cc504f9
 
 ## References
 
@@ -58,3 +57,4 @@ lists are read from the declaration instead (`BUG-178`).
 > | 2026-11-04 | Phase 0 half built: a type declares `statuses` in config (values, success and failure terminals, fields required or forbidden at a status, its own pending vocabulary); `status.undeclared-value`, `status.required-field-missing` and `status.forbidden-field-present` report against it; `narrative-field.stale` and `claim.status-agreement` read the declared terminals. This repository declares the vocabulary for all five of its types. `Status` unchanged. **Why:** the Phase 0 exit needs the status enum and per-status required and forbidden fields (`SPEC-3`). | **substantive** |
 > | 2026-11-04 | The status vocabulary gains an optional `implementable` list beside `success` and `failure` (`SPEC-3` 0.10). `Status` unchanged. **Why:** a gate needs a per-type declaration of the statuses at which implementation is permitted (`MILE-133`). | **substantive** |
 > | 2026-11-04 | `Realized-by` added and `Status` Planned -> Done. **Why:** the work is merged in #173: a type declares `statuses`; `status.undeclared-value`, `status.required-field-missing` and `status.forbidden-field-present` read it. Checked against this record's Done means and the code; the record never carried its own delivery evidence, and `status.delivery-agreement` (`MILE-183`) reads evidence under a not-done `Status` as a disagreement. | **structural** |
+> | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |

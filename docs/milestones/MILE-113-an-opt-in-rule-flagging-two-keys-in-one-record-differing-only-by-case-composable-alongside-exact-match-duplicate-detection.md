@@ -4,7 +4,7 @@ Status: Done
 Phase: '1'
 Track: header-format
 Implements: ADR-57
-Realized-by: code:rust/crates/urzua-core/src/rules/header.rs, test:rust/crates/urzua-cli/tests/case_variant_key_integration.rs
+Realized-by: code:rust/crates/urzua-core/src/rules/header.rs#header_case_variant_key@sha256:4a282671e6e57b88f83b4f3d3bd66ce1b7868f9ddfd4b2701c6fe04c45a64f96, test:rust/crates/urzua-cli/tests/case_variant_key_integration.rs#a_declared_rule_reports_the_case_variant_and_what_it_examined_observed_failing@sha256:12d7f5e5a690c8a244ddc684c39d1190a63c73e673f7846f0a5243a6fa5012ed, test:rust/crates/urzua-core/src/rules/header.rs#three_spellings_of_one_key_are_one_finding_naming_all_three@sha256:43bf70c14007ef6fe2e1a50d91a4dd9092084af13d4496172c50f71e1d33fbdd, test:rust/crates/urzua-cli/tests/case_variant_key_integration.rs#it_composes_beside_the_exact_match_rules_without_changing_them@sha256:6bb244b603edb3d77107abe3e5ad77c46c96bcfcda40892b56e99a4223384f2c, code:rust/crates/urzua-core/src/rules/catalog.rs, spec:docs/specs/SPEC-2-urzua-check.md
 ---
 # 113 — an opt-in rule flagging two keys in one record differing only by case, composable alongside exact-match duplicate detection
 
@@ -32,7 +32,10 @@ same-record, no-declaration-required case.
 
 ## Done means
 
-The opt-in rule `header.case-variant-key` reports a record whose own header writes two keys differing only by case (Unicode `to_lowercase` equality), beside `duplicate_keys()`'s exact-match check which is unchanged, takes no options, is in `rules/catalog.rs` and `SPEC-2`'s generated rule table, and is covered by `case_variant_key_integration.rs` with a case-variant record and a clean one.
+- The opt-in rule `header.case-variant-key` reports a record whose own header writes two keys differing only by case (Unicode `to_lowercase` equality), once per group of spellings. — evidence: code:rust/crates/urzua-core/src/rules/header.rs#header_case_variant_key@sha256:4a282671e6e57b88f83b4f3d3bd66ce1b7868f9ddfd4b2701c6fe04c45a64f96, test:rust/crates/urzua-cli/tests/case_variant_key_integration.rs#a_declared_rule_reports_the_case_variant_and_what_it_examined_observed_failing@sha256:12d7f5e5a690c8a244ddc684c39d1190a63c73e673f7846f0a5243a6fa5012ed, test:rust/crates/urzua-core/src/rules/header.rs#three_spellings_of_one_key_are_one_finding_naming_all_three@sha256:43bf70c14007ef6fe2e1a50d91a4dd9092084af13d4496172c50f71e1d33fbdd
+- It runs beside `duplicate_keys()`'s exact-match check, which is unchanged. — evidence: test:rust/crates/urzua-cli/tests/case_variant_key_integration.rs#it_composes_beside_the_exact_match_rules_without_changing_them@sha256:6bb244b603edb3d77107abe3e5ad77c46c96bcfcda40892b56e99a4223384f2c
+- It takes no options and is registered in `rules/catalog.rs` and `SPEC-2`'s generated rule table. — evidence: code:rust/crates/urzua-core/src/rules/catalog.rs, code:rust/crates/urzua-core/src/rules/header.rs#header_case_variant_key@sha256:4a282671e6e57b88f83b4f3d3bd66ce1b7868f9ddfd4b2701c6fe04c45a64f96, spec:docs/specs/SPEC-2-urzua-check.md
+- `case_variant_key_integration.rs` covers a case-variant record and a clean one. — evidence: test:rust/crates/urzua-cli/tests/case_variant_key_integration.rs#a_declared_rule_reports_the_case_variant_and_what_it_examined_observed_failing@sha256:12d7f5e5a690c8a244ddc684c39d1190a63c73e673f7846f0a5243a6fa5012ed
 
 ## References
 
@@ -50,3 +53,4 @@ The opt-in rule `header.case-variant-key` reports a record whose own header writ
 > | 2026-11-03 | Built: `header.case-variant-key` ships in `rules/header.rs`, registered in `rules/catalog.rs` and `check`, with `SPEC-2`'s generated rule table updated. Narrowest readings taken: the rule takes no options; "differing only by case" is Unicode `to_lowercase` equality over the keys a record wrote (so `CAFÉ`/`café` group, `Maße`/`Masse` do not); one finding per group of distinct spellings, never for an exact repeat of one spelling (that stays `header.required-fields`'s); the population is every loaded record (`header_shape: none` out of scope, unreadable headers unreadable). **Why:** this milestone's design left these open and `ADR-57` allows only an additive, non-merging signal. `Status` is untouched. | **substantive** |
 > | 2026-11-04 | `Realized-by` added and `Status` Planned -> Done. **Why:** the work is merged in #157, #117: opt-in rule `header.case-variant-key` reports two keys differing only by case, beside the exact-match duplicate check. Checked against this record's Done means and the code; the record never carried its own delivery evidence, and `status.delivery-agreement` (`MILE-183`) reads evidence under a not-done `Status` as a disagreement. | **structural** |
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. The criteria are those the delivered work met, checked against `Realized-by` and the code; `Status` stays Done. | **structural** |
+> | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |

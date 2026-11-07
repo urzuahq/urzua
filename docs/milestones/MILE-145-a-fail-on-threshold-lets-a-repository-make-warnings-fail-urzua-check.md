@@ -4,7 +4,7 @@ Status: Done
 Phase: '0'
 Track: governance-process
 Implements: SPEC-3
-Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/fail_on_integration.rs
+Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/fail_on_integration.rs#config_fail_on_warning_makes_a_warning_exit_1_with_unchanged_json_observed_failing@sha256:d1e8e19c3842276d697a34cbf386f69ca04921417026f4d0cc1a5f9a86219b04, test:rust/crates/urzua-core/src/report.rs#a_waived_warning_never_fails_under_fail_on_warning@sha256:c5809caf0107252dfa4be40786a9490b1c81ba67d1a6c2c6c929bdd780782b3d, test:rust/crates/urzua-cli/tests/fail_on_integration.rs#fail_on_warning_still_exits_0_on_a_clean_corpus@sha256:cf2a2b2f6eccd4280e21ab610fdaea569de763897c41dcea4239b57f0da2d90b, test:rust/crates/urzua-cli/tests/fail_on_integration.rs#the_flag_overrides_the_config_in_both_directions_observed_failing@sha256:9ed82c0a3d5250ed239c08d30b1ffdbe243ccd4fac063298292e2a6bb91a3811, test:rust/crates/urzua-cli/tests/fail_on_integration.rs#an_unknown_fail_on_value_is_refused@sha256:18f38ee5051f554513ab1c062c1d37e90ef3ea48eb8dcfe6af7f1bb287815165, test:rust/crates/urzua-cli/tests/fail_on_integration.rs#an_invalid_config_fail_on_is_a_could_not_run@sha256:0d1e4dc2b6814c65060b1ac658c32d933d950de18ce98801d7b1695d77eb407c, spec:docs/specs/SPEC-3-configuration.md, spec:docs/specs/SPEC-2-urzua-check.md, spec:docs/bugs/BUG-180-a-base-run-reports-unchanged-source-files-as-out-of-scope-so-config-scope-matches-nothing-warns-on-every-pull-request.md
 ---
 # 145 — A fail_on threshold lets a repository make warnings fail urzua check
 
@@ -26,10 +26,13 @@ every other behaviour (`ADR-53`), with a flag for a one-off stricter or laxer ru
 
 ## Done means
 
-`fail_on: warning` makes a run with an unwaived warning exit 1 with unchanged stdout; a waived
-warning does not; a clean run still exits 0; `--fail-on` overrides the key in both directions; any
-other value is refused (a config error exits 2). Documented in `SPEC-3` and `SPEC-2`. Turning it on exposed `BUG-180`, a false warning every `--base`
-run produced, fixed in the same change.
+- `fail_on: warning` makes a run with an unwaived warning exit 1 with unchanged stdout. — evidence: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/fail_on_integration.rs#config_fail_on_warning_makes_a_warning_exit_1_with_unchanged_json_observed_failing@sha256:d1e8e19c3842276d697a34cbf386f69ca04921417026f4d0cc1a5f9a86219b04
+- A waived warning does not make the run exit 1. — evidence: test:rust/crates/urzua-core/src/report.rs#a_waived_warning_never_fails_under_fail_on_warning@sha256:c5809caf0107252dfa4be40786a9490b1c81ba67d1a6c2c6c929bdd780782b3d
+- A clean run still exits 0. — evidence: test:rust/crates/urzua-cli/tests/fail_on_integration.rs#fail_on_warning_still_exits_0_on_a_clean_corpus@sha256:cf2a2b2f6eccd4280e21ab610fdaea569de763897c41dcea4239b57f0da2d90b
+- `--fail-on` overrides the key in both directions. — evidence: test:rust/crates/urzua-cli/tests/fail_on_integration.rs#the_flag_overrides_the_config_in_both_directions_observed_failing@sha256:9ed82c0a3d5250ed239c08d30b1ffdbe243ccd4fac063298292e2a6bb91a3811
+- Any other value is refused, and a config error exits 2. — evidence: test:rust/crates/urzua-cli/tests/fail_on_integration.rs#an_unknown_fail_on_value_is_refused@sha256:18f38ee5051f554513ab1c062c1d37e90ef3ea48eb8dcfe6af7f1bb287815165, test:rust/crates/urzua-cli/tests/fail_on_integration.rs#an_invalid_config_fail_on_is_a_could_not_run@sha256:0d1e4dc2b6814c65060b1ac658c32d933d950de18ce98801d7b1695d77eb407c
+- It is documented in `SPEC-3` and `SPEC-2`. — evidence: spec:docs/specs/SPEC-3-configuration.md, spec:docs/specs/SPEC-2-urzua-check.md
+- Turning it on exposed `BUG-180`, a false warning every `--base` run produced, fixed in the same change. — evidence: spec:docs/bugs/BUG-180-a-base-run-reports-unchanged-source-files-as-out-of-scope-so-config-scope-matches-nothing-warns-on-every-pull-request.md
 
 > **Revision log**
 >
@@ -37,3 +40,4 @@ run produced, fixed in the same change.
 > |---|---|---|
 > | 2026-11-04 | Filed and done. **Why:** keep this repository at zero warnings by making them fail its own CI. | **substantive** |
 > | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-183`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |
+> | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |
