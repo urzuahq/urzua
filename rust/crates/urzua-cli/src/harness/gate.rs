@@ -13,11 +13,16 @@
 //! including a change the same command committed. In CI the evidence is
 //! authorship, not who decided (`diff.decider-required`).
 //!
-//! Paths are matched ASCII case-insensitively, always, on every filesystem: on
-//! a case-insensitive one (the macOS default) `.Hooks/x` is the same file as
-//! `.hooks/x`, and a gate that read the two as different would be bypassed by changing a letter's case. The cost on a
-//! case-sensitive filesystem is that a differently-cased sibling of a
-//! protected path is protected too, which is the safe direction.
+//! Paths are matched case-insensitively with Unicode case folding, always, on
+//! every filesystem: on a case-insensitive one (the macOS default) `.Hooks/x` is
+//! the same file as `.hooks/x`, and a gate that read the two as different would be bypassed by
+//! changing a letter's case. The cost on a case-sensitive filesystem is that a
+//! differently-cased sibling of a protected path is protected too, which is the
+//! safe direction. Names are not Unicode-normalised: a decomposed and a
+//! composed spelling of one letter stay different paths.
+//!
+//! A write through a hardlink is judged as the file it shares an inode with
+//! (Unix; see [`hardlink_aliases`]).
 
 use std::path::{Path, PathBuf};
 
@@ -57,7 +62,7 @@ fn status_before(repo_root: &Path, config: &Config, rel: &Path) -> Option<Option
     }
 }
 
-/// The path gate that covers `rel`, compared ASCII case-insensitively.
+/// The path gate that covers `rel`, compared with Unicode case folding.
 pub(super) fn protected_gate<'a>(
     authority: &'a urzua_core::authority::AuthorityDecl,
     rel: &Path,
@@ -74,32 +79,174 @@ pub(super) fn protected_gate<'a>(
         })
 }
 
-/// ASCII lower case, for comparing a path with a gate entry.
-fn fold_path(text: &str) -> String {
-    text.to_ascii_lowercase()
+/// Unicode case folding, for comparing a path with a gate entry: each
+/// character upper-cased then lower-cased, which folds `\u{df}` to `ss`, a
+/// final sigma to sigma and the Kelvin sign to `k` as well as the ASCII letters.
+pub(super) fn fold_path(text: &str) -> String {
+    text.chars()
+        .flat_map(char::to_uppercase)
+        .flat_map(char::to_lowercase)
+        .collect()
 }
 
 /// `rel` with a leading record directory spelled as the configuration spells
-/// it, when `rel` spells it in another ASCII case: `Docs/adr/x.md` is
-/// `docs/adr/x.md` on a case-insensitive filesystem. A path under no declared
-/// directory is returned as it is.
+/// it, when `rel` spells it in another case (Unicode case folding):
+/// `Docs/adr/x.md` is `docs/adr/x.md` on a case-insensitive filesystem. A path
+/// under no declared directory is returned as it is.
 pub(super) fn fold_to_declared_dir(config: &Config, rel: &Path) -> PathBuf {
     let text = rel.to_string_lossy();
     for t in config.record_types.values() {
         for dir in std::iter::once(&t.dir).chain(t.extra_dirs.iter()) {
             let dir = dir.trim_end_matches('/');
-            let n = dir.len();
-            if n > 0
-                && text.len() > n
-                && text.is_char_boundary(n)
-                && text[..n].eq_ignore_ascii_case(dir)
-                && text[n..].starts_with('/')
-            {
-                return PathBuf::from(format!("{dir}{}", &text[n..]));
+            if dir.is_empty() {
+                continue;
+            }
+            let want = fold_path(dir);
+            // The prefix may be a different number of bytes than `dir` once
+            // folded, so try each place a component could end.
+            for (n, _) in text.match_indices('/') {
+                if n > 0 && fold_path(&text[..n]) == want {
+                    return PathBuf::from(format!("{dir}{}", &text[n..]));
+                }
             }
         }
     }
     rel.to_path_buf()
+}
+
+/// The files under the path-gate `entries` (relative to `root`), sorted, and
+/// whether the walk stopped at its cap. A plain entry names a file or a
+/// directory; a glob entry is walked from the directory before its first glob
+/// character. `.git` is never entered and a symlinked directory is not followed.
+pub(super) fn walk_entries(root: &Path, entries: &[String]) -> (Vec<String>, bool) {
+    const CAP: usize = 50_000;
+    let mut found = std::collections::BTreeSet::new();
+    let mut visited = 0usize;
+    let mut truncated = false;
+    for entry in entries {
+        let trimmed = entry.trim().trim_end_matches('/');
+        // An empty or `.` entry covers nothing (see `path_is_published`).
+        if trimmed.is_empty() || trimmed == "." {
+            continue;
+        }
+        let glob = rules::is_path_glob(trimmed);
+        let start = if glob {
+            let mut prefix = PathBuf::new();
+            for part in trimmed.split('/') {
+                if rules::is_path_glob(part) {
+                    break;
+                }
+                prefix.push(part);
+            }
+            prefix
+        } else {
+            PathBuf::from(trimmed)
+        };
+        let mut stack = vec![start];
+        while let Some(rel) = stack.pop() {
+            if visited >= CAP {
+                truncated = true;
+                break;
+            }
+            visited += 1;
+            let abs = root.join(&rel);
+            let Ok(meta) = std::fs::symlink_metadata(&abs) else {
+                continue;
+            };
+            if meta.is_dir() {
+                if rel.file_name().is_some_and(|n| n == ".git") {
+                    continue;
+                }
+                if let Ok(read) = std::fs::read_dir(&abs) {
+                    for child in read.flatten() {
+                        stack.push(rel.join(child.file_name()));
+                    }
+                }
+            } else if !glob || rules::path_matches_entry(&rel, trimmed) {
+                found.insert(rel.to_string_lossy().to_string());
+            }
+        }
+    }
+    (found.into_iter().collect(), truncated)
+}
+
+/// The path-gate entries of the table (every protected path).
+pub(super) fn protected_entries(config: &Config) -> Vec<String> {
+    let Some(authority) = config.authority.as_ref() else {
+        return Vec::new();
+    };
+    authority
+        .gates
+        .iter()
+        .filter(|g| g.is_path_gate())
+        .flat_map(|g| g.paths.iter().cloned())
+        .collect()
+}
+
+/// The record directories of the types a status gate names.
+pub(super) fn gated_record_dirs(config: &Config) -> Vec<String> {
+    let Some(authority) = config.authority.as_ref() else {
+        return Vec::new();
+    };
+    authority
+        .gated_types()
+        .into_iter()
+        .filter_map(|t| config.record_types.get(t))
+        .flat_map(|t| t.all_dirs().map(|d| d.trim_end_matches('/').to_string()))
+        .collect()
+}
+
+/// The names (relative to `root`) of the protected files and gated records
+/// that are the same file as `path` through a hard link: a write to the alias
+/// writes them. Empty when `path` has no other link, does not exist, or off
+/// Unix, where the limit is documented instead. Looked up only for a file that
+/// has more than one link, so an ordinary edit pays nothing.
+#[cfg(unix)]
+pub(super) fn hardlink_aliases(
+    root: &Path,
+    path: &Path,
+    entries: &[String],
+    record_dirs: &[String],
+) -> Vec<PathBuf> {
+    use std::os::unix::fs::MetadataExt;
+    let abs = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        match std::env::current_dir() {
+            Ok(cwd) => cwd.join(path),
+            Err(_) => return Vec::new(),
+        }
+    };
+    let Ok(meta) = std::fs::metadata(&abs) else {
+        return Vec::new();
+    };
+    if !meta.is_file() || meta.nlink() < 2 {
+        return Vec::new();
+    }
+    let (dev, ino) = (meta.dev(), meta.ino());
+    // Whole directories for a record type: its files are all gated candidates.
+    let mut roots: Vec<String> = entries.to_vec();
+    roots.extend(record_dirs.iter().cloned());
+    walk_entries(root, &roots)
+        .0
+        .into_iter()
+        .filter(|rel| {
+            std::fs::metadata(root.join(rel)).is_ok_and(|m| m.dev() == dev && m.ino() == ino)
+        })
+        .map(PathBuf::from)
+        .collect()
+}
+
+/// Windows has no inode to compare through `std` without more than this
+/// module should carry: a write through a hard link is judged by its own name.
+#[cfg(not(unix))]
+pub(super) fn hardlink_aliases(
+    _root: &Path,
+    _path: &Path,
+    _entries: &[String],
+    _record_dirs: &[String],
+) -> Vec<PathBuf> {
+    Vec::new()
 }
 
 fn gate_summary(gate: &Gate) -> String {

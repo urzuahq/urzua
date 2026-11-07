@@ -247,27 +247,40 @@ this one: that one guards an already-decided record's content; this one guards t
 
 `authority` in `.urzua/config.yaml` (`ADR-89` section 4, `SPEC-3`) names the maintainer as the only
 decider for an ADR or RFC moving to `Accepted`, `Rejected` or `Superseded` (an ADR also `Retired`) and for the protected paths (`.claude`,
-`.git-hooks`, `.github/workflows`, `.urzua/config.yaml`, `.urzua/templates`; matched without regard to letter case). Through `urzua harness run
-edit` the engine refuses an agent's Write, Edit or MultiEdit that does either, and no override lifts it;
+`.git-hooks`, `.github/workflows`, `.urzua/config.yaml`, `.urzua/templates`; matched without regard to letter case, with Unicode case folding). Through `urzua harness run
+edit` the engine refuses an agent's Write, Edit, MultiEdit or NotebookEdit, or a file-writing MCP tool, that does either (a
+file hard-linked to a protected or gated one included, on Unix), and no override lifts it;
 a person edits outside the agent harness. In CI `diff.decider-required` checks that the pull request's
 author is the maintainer. That is **authorship, not who decided**: agents here run under the
 maintainer's token, so it cannot tell an agent from the maintainer.
 
 **Accepted risk (the maintainer, 2026-11-05: "We just need to clearly document this for now and accept
-the risk").** These routes get past the guardrail and are accepted, so the rule that you never accept a
-record or touch a guardrail rests on this file and on the person reading the diff: a Bash command that
-writes a `Status` (`sed -i`, `python -c`, `cp`, `tee`, a heredoc), which the post-command check reports
-(a move to a gated status or a change to a protected path, also when the same command commits it) and cannot stop; editing the guardrails by shell, through a local or user-level settings file, or
-skipping the commit hook with `--no-verify`; a pull request that changes its own workflow, since the
-gate runs from the head commit's workflow; and an agent acting as the maintainer. A distinct agent
-identity with `CODEOWNERS` and branch protection is a future option, not configured. Do none of these.
+the risk"; narrowed 2026-11-06, `ADR-89`).** These routes still get past the guardrail, so the rule that you
+never accept a record or touch a guardrail rests on this file and on the person reading the diff:
+
+- a Bash command that writes a `Status` (`sed -i`, `python -c`, `cp`, `tee`, a heredoc) or a protected path.
+  The post-command check reports it and cannot stop it. It reports a gated status move, a changed protected
+  path (a gitignored one such as `.claude/settings.local.json` included, found by content hash from the
+  baseline `session-start` records) and a commit the same command made. It reports a change once: the same
+  change made again, or one that is still there at the next check, is silent. That is deliberate;
+- skipping the commit hook with `git commit --no-verify`;
+- a pull request that changes its own workflow, since the gate runs from the head commit's workflow;
+- an agent acting under the maintainer's token: CI proves authorship, not who decided. A distinct agent
+  identity with `CODEOWNERS` and branch protection is a future option, not configured;
+- what the editor hook cannot read: a hard link is resolved on Unix only (elsewhere a write is judged by its
+  own name), names are not Unicode-normalised, an MCP tool whose input names no file path is not an edit it
+  can see, a change made before `session-start` took the protected baseline is not reported, and the agent's
+  user-level settings outside the repository are not protected.
+
+Do none of these.
 
 ## Findings, levels and the editor hook
 
 - **Levels.** A rule is `off`, `info`, `warn` or `error` (`ADR-87`). An `info` finding is reported and
   counted but never trips `fail_on` or sets `blocking`; it is not a finding to silence.
 - **The editor hook** (`.claude/settings.json` via the installed bundle, `ADR-69`, `ADR-78`) judges a
-  `Write`, `Edit` or `MultiEdit` of a governed record before it is written, by running `urzua check
+  `Write`, `Edit`, `MultiEdit` or `NotebookEdit`, or an MCP tool call that carries a file path and the file's
+  content, of a governed record before it is written, by running `urzua check
   --stdin-path`. It blocks an unwaived error the edit introduced (`block_on: introduced`; `block_on:
   all` in `.urzua/config.yaml` blocks any). Warnings are shown, not blocking. It does not cover
   edits made through `Bash`, and it allows an edit it could not judge with a message saying so (except
@@ -336,7 +349,7 @@ The record-edit guardrails are installed in this repository. What an agent must 
 - Do not edit the harness itself: the agent's hook settings, the hook files under `.claude/hooks`, `.git-hooks/`, `.urzua/config.yaml` and the CI workflows are protected paths.
 - Write records with their drafting commands and `urzua new`, not by hand; run `urzua check` before committing.
 
-Where `authority` is declared, the engine refuses an agent's Write, Edit or MultiEdit that moves a record to a status a gate names or writes a protected path, and no override lifts it; a person edits outside the agent harness. That is the whole claim. Accepted risk, documented by the maintainer on 2026-11-05: a shell command that writes a status or edits a guardrail (the post-command check reports it after the command, also when the same command commits it, when that guardrail is on; nothing stops it), `git commit --no-verify`, a pull request that changes its own workflow, and an agent acting under the maintainer's token (CI proves who authored the pull request, not who decided) all get past it. Do none of these.
+Where `authority` is declared, the engine refuses an agent's Write, Edit, MultiEdit or NotebookEdit, or a file-writing MCP tool, that moves a record to a status a gate names or writes a protected path (a hard link to one included), and no override lifts it; a person edits outside the agent harness. That is the whole claim. Accepted risk, documented by the maintainer on 2026-11-05 and narrowed on 2026-11-06: a shell command that writes a status or edits a guardrail (the post-command check reports it after the command, a gitignored protected file and a commit the same command makes included, when that guardrail is on; it reports a repeat of a change it has already reported only once; nothing stops it), `git commit --no-verify`, a pull request that changes its own workflow, and an agent acting under the maintainer's token (CI proves who authored the pull request, not who decided) all get past it. Do none of these.
 
-The editor hook judges a Write, Edit or MultiEdit of a record before it lands. It cannot see a shell command that writes a record, so run `urzua check` after one. Only the verdicts of `urzua harness run` bind; this text is advisory.
+The editor hook judges a Write, Edit, MultiEdit or NotebookEdit of a record before it lands. It cannot see a shell command that writes a record, so run `urzua check` after one. Only the verdicts of `urzua harness run` bind; this text is advisory.
 <!-- urzua-harness:end -->

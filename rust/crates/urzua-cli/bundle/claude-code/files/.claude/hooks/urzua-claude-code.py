@@ -20,6 +20,16 @@ configuration turns on the acceptance or protected-paths guardrail and leaves
 that when it can be run (the translator sends it the failure); when it cannot,
 the translator looks for the same two settings in .urzua/config.yaml as text.
 An adapter failure never blocks when the configuration allows.
+
+The editor hook covers Write, Edit, MultiEdit and NotebookEdit, and any MCP tool
+(`mcp__*`) whose input carries a file path. An MCP tool with a path field and a
+content field is judged as a write of that content to that path. One that has a
+path and looks like an edit, a move or a delete (an `edits` list, `old_string`,
+a tool name such as `edit_file` or `delete_file`) cannot be turned into the
+file's new text, so it is an edit that was not judged: refused only where the
+target is a gated record or a protected path and the configuration says deny.
+An MCP call with no path, or a path and nothing that writes, is not an edit and
+is left alone.
 """
 import json
 import os
@@ -27,7 +37,15 @@ import re
 import subprocess
 import sys
 
-EDIT_TOOLS = ("Write", "Edit", "MultiEdit")
+EDIT_TOOLS = ("Write", "Edit", "MultiEdit", "NotebookEdit")
+
+# How an MCP tool names the file it writes and the text it writes. None of this
+# is rule knowledge: it only finds the path and the content in a payload.
+MCP_PATH_KEYS = ("file_path", "filePath", "filepath", "path", "file", "filename", "fileName", "notebook_path", "target_path", "targetPath", "destination", "dest")
+MCP_CONTENT_KEYS = ("content", "contents", "file_text", "fileText", "text", "new_source")
+MCP_EDIT_KEYS = ("edits", "old_string", "new_string", "old_str", "new_str", "old_text", "new_text", "oldText", "newText", "patch", "diff", "changes", "operations", "insert_text", "replacement", "append")
+MCP_PARTIAL_WORDS = {"append", "insert", "patch", "edit", "replace", "modify", "update", "move", "rename", "delete", "remove"}
+MCP_WRITE_WORDS = MCP_PARTIAL_WORDS | {"write", "create", "save", "put", "overwrite"}
 
 
 def out(obj):
@@ -80,11 +98,12 @@ def closed_by_config_text(cwd):
 
 
 def unjudged_edit(message, argv, cwd, path, engine_failed):
+    paths = path if isinstance(path, list) else ([path] if path else [])
     """An edit the translator could not judge: the engine says whether the
     configuration refuses it (acceptance or protected-paths with
     on_unjudged: deny); the engine being unrunnable falls back to the config text."""
     if not engine_failed and argv:
-        request = {"event": "edit", "tool": None, "paths": [path] if path else [], "content": None, "actor": "agent", "cwd": cwd, "adapter_error": message}
+        request = {"event": "edit", "tool": None, "paths": paths, "content": None, "actor": "agent", "cwd": cwd, "adapter_error": message}
         try:
             verdict = engine(argv, request, cwd)
             if verdict.get("verdict") == "block":
@@ -97,7 +116,72 @@ def unjudged_edit(message, argv, cwd, path, engine_failed):
     return stated(message, "edit")
 
 
+def notebook_proposed(inp, path):
+    """The notebook as it will be once NotebookEdit has run."""
+    try:
+        with open(path, encoding="utf-8", newline="") as f:
+            nb = json.load(f)
+    except (OSError, ValueError) as e:
+        raise ValueError("cannot read notebook %s: %s" % (path, e))
+    cells = nb.get("cells") if isinstance(nb, dict) else None
+    if not isinstance(cells, list):
+        raise ValueError("%s is not a notebook with cells" % path)
+    mode, cell_id, source = inp.get("edit_mode") or "replace", inp.get("cell_id"), inp.get("new_source", "")
+    index = None
+    if cell_id is not None:
+        for i, c in enumerate(cells):
+            if isinstance(c, dict) and c.get("id") == cell_id:
+                index = i
+                break
+        if index is None and str(cell_id).isdigit() and int(cell_id) < len(cells):
+            index = int(cell_id)
+        if index is None:
+            raise ValueError("the cell %s is not in the notebook" % cell_id)
+    if mode == "insert":
+        kind = inp.get("cell_type") or "code"
+        cell = {"cell_type": kind, "metadata": {}, "source": source}
+        if kind == "code":
+            cell.update({"outputs": [], "execution_count": None})
+        cells.insert(0 if index is None else index + 1, cell)
+    elif mode in ("replace", "delete"):
+        if index is None:
+            raise ValueError("the edit names no cell")
+        if mode == "delete":
+            del cells[index]
+        else:
+            cells[index]["source"] = source
+            if inp.get("cell_type"):
+                cells[index]["cell_type"] = inp["cell_type"]
+    else:
+        raise ValueError("an unknown edit_mode '%s'" % mode)
+    return json.dumps(nb, indent=1, ensure_ascii=False) + "\n"
+
+
+def mcp_write(tool, inp):
+    """For an MCP tool call: None when it is not a file edit, else (paths,
+    content). content is None when the call cannot be turned into the file's
+    new text (it is an edit that was not judged)."""
+    paths = []
+    for k in MCP_PATH_KEYS:
+        v = inp.get(k)
+        if isinstance(v, str) and v.strip() and v not in paths:
+            paths.append(v)
+    if not paths:
+        return None
+    # The words of the tool's own name: write_file, writeFile, edit-file.
+    words = {w.lower() for w in re.findall(r"[A-Z]?[a-z]+|[A-Z]+(?![a-z])", tool.rsplit("__", 1)[-1])}
+    content = next((inp[k] for k in MCP_CONTENT_KEYS if isinstance(inp.get(k), str)), None)
+    partial = any(k in inp for k in MCP_EDIT_KEYS) or bool(words & MCP_PARTIAL_WORDS)
+    if content is not None and len(paths) == 1 and not partial:
+        return paths, content
+    if partial or content is not None or words & MCP_WRITE_WORDS:
+        return paths, None
+    return None
+
+
 def proposed(tool, inp, path):
+    if tool == "NotebookEdit":
+        return notebook_proposed(inp, path)
     if tool == "Write":
         return inp.get("content", "")
     edits = inp.get("edits") if tool == "MultiEdit" else [inp]
@@ -158,13 +242,24 @@ def main():
     else:
         tool = payload.get("tool_name")
         inp = payload.get("tool_input") or {}
-        path = inp.get("file_path")
-        if tool not in EDIT_TOOLS or not path:
+        if not isinstance(tool, str) or not isinstance(inp, dict):
             return 0
-        try:
-            content = proposed(tool, inp, path)
-        except ValueError as e:
-            return unjudged_edit("urzua harness: urzua did NOT judge this edit (%s of %s: %s). It is allowed unless the configuration refuses an edit that was not judged; run 'urzua check' before committing." % (tool, path, e), argv, cwd, path, False)
+        if tool.startswith("mcp__"):
+            target = mcp_write(tool, inp)
+            if target is None:
+                return 0
+            paths, content = target
+            if content is None:
+                return unjudged_edit("urzua harness: urzua did NOT judge this edit (%s on %s: the call is not a whole-file write urzua can read). It is allowed unless the configuration refuses an edit that was not judged; run 'urzua check' before committing." % (tool, ", ".join(paths)), argv, cwd, paths, False)
+            path = paths[0]
+        else:
+            path = inp.get("notebook_path") if tool == "NotebookEdit" else inp.get("file_path")
+            if tool not in EDIT_TOOLS or not path:
+                return 0
+            try:
+                content = proposed(tool, inp, path)
+            except ValueError as e:
+                return unjudged_edit("urzua harness: urzua did NOT judge this edit (%s of %s: %s). It is allowed unless the configuration refuses an edit that was not judged; run 'urzua check' before committing." % (tool, path, e), argv, cwd, path, False)
         request = {"event": "edit", "tool": tool, "paths": [path], "content": content, "actor": "agent", "cwd": cwd}
     try:
         verdict = engine(argv, request, cwd)

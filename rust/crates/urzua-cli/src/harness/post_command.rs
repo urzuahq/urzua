@@ -17,11 +17,22 @@
 //! `sed ... && git commit -am x` in one command is not invisible. A record is
 //! then compared with that commit, not with `HEAD`.
 //!
+//! Git does not see a gitignored file, so a protected path that is ignored
+//! (a local settings file under a protected directory) would never show in `git status`. The
+//! harness state therefore also keeps a content hash of every file under a
+//! protected path (`.urzua/cache/protected-hashes.json`, seeded at session
+//! start) and reports any file whose hash differs, that is new, or that is gone,
+//! whether or not git shows it. A change is reported by the first check that
+//! sees it; the baseline then moves, so the same change is not reported again.
+//!
 //! Cost: `git status` and one `git rev-parse` are the gate. A clean tree at the
-//! remembered commit, or a tree whose changes are not governed records, ends
-//! before the configuration is parsed, and a record whose content hash is the
-//! one already reported is not checked again. The memory is
-//! `.urzua/cache/post-command.json` (derived, ignored, never authoritative).
+//! remembered commit whose protected files hash as they did ends before the
+//! configuration is parsed (the state holds the protected entries and the hash
+//! of the configuration file they came from), as does a tree whose changes are
+//! not governed records, and a record whose content hash is the one already
+//! reported is not checked again. The memory is `.urzua/cache/post-command.json`
+//! and the protected baseline is `protected-hashes.json` (derived, ignored,
+//! never authoritative).
 //!
 //! Every state in which it cannot judge is stated as `allow-unjudged` with
 //! "NOT judged": a missing `git`, a working tree git does not know, a
@@ -34,6 +45,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
 
 use serde::{Deserialize, Serialize};
+use urzua_core::config::Config;
 use urzua_core::report::{Finding, FindingSeverity, Notice, Report, ReportStatus};
 
 use super::run::{key, live, to_json};
@@ -45,6 +57,7 @@ const GUARDRAIL: &str = "post-command";
 const P: &str = "urzua harness (post-command)";
 const CACHE: &str = ".urzua/cache/post-command.json";
 const HEAD_FILE: &str = ".urzua/cache/post-command-head";
+const PROTECTED_FILE: &str = ".urzua/cache/protected-hashes.json";
 
 #[derive(Deserialize, Default)]
 struct Request {
@@ -165,7 +178,7 @@ fn judge_changes(
         Ok(c) => c,
         Err(why) => return PostVerdict::unjudged(&why),
     };
-    if tree.is_empty() && committed.is_empty() {
+    if tree.is_empty() && committed.is_empty() && protected_unchanged(top, config.as_deref()) {
         forget_all(top);
         return PostVerdict::quiet(format!("{P}: git shows no changed file; nothing to check"));
     }
@@ -181,8 +194,8 @@ fn judge_changes(
     };
     let Workspace {
         repo_root,
+        config_path,
         config: loaded,
-        ..
     } = ws;
     if !loaded
         .harness
@@ -206,6 +219,11 @@ fn judge_changes(
     for rel in committed {
         let gone = !repo_root.join(&rel).exists();
         paths.entry(rel).or_insert(gone);
+    }
+    // Protected files git does not show (ignored ones), by content hash.
+    let scan = scan_protected(&repo_root, &config_path, &loaded, true);
+    for (rel, deleted) in scan.changes {
+        paths.entry(rel).or_insert(deleted);
     }
 
     // Governed, still on disk, with the content hash the memory is keyed by;
@@ -253,9 +271,14 @@ fn judge_changes(
     }
     if fresh.is_empty() && protected.is_empty() {
         write_memory(&repo_root, &remembered);
-        return PostVerdict::quiet(format!(
+        let mut v = PostVerdict::quiet(format!(
             "{P}: no governed record changed since the last check; no check ran"
         ));
+        if let Some(note) = &scan.note {
+            v.verdict = "allow-with-warnings";
+            v.message.push_str(&format!(" {note}"));
+        }
+        return v;
     }
 
     // A gated move is judged on the same records, against the commit the
@@ -297,6 +320,10 @@ fn judge_changes(
             "{P}: checked {} changed record(s); no findings",
             fresh.len()
         );
+        if let Some(note) = &scan.note {
+            v.verdict = "allow-with-warnings";
+            v.message.push_str(&format!(" {note}"));
+        }
         return v;
     }
     v.verdict = "allow-with-warnings";
@@ -330,6 +357,9 @@ fn judge_changes(
             "\nProtected path(s) the authority table reserves for a decider:\n{}",
             protected.join("\n")
         ));
+    }
+    if let Some(note) = &scan.note {
+        m.push_str(&format!("\n{note}"));
     }
     if !new.is_empty() {
         m.push_str(&format!("\n{}", describe(&new)));
@@ -409,6 +439,159 @@ fn write_head(top: &Path, head: &str) {
         let _ = std::fs::create_dir_all(dir);
     }
     let _ = urzua_io::write_atomic(&path, head);
+}
+
+/// The content hash of every file under a protected path, as of the last
+/// check. `config_sig` is the hash of the configuration file the entries were
+/// read from, so an unchanged configuration lets the next check skip parsing it.
+#[derive(Serialize, Deserialize, Default)]
+struct ProtectedState {
+    config_sig: String,
+    /// Whether the `protected-paths` guardrail was on.
+    enabled: bool,
+    entries: Vec<String>,
+    files: BTreeMap<String, String>,
+    /// The walk hit its file cap, so some protected files are not hashed.
+    #[serde(default)]
+    truncated: bool,
+}
+
+fn read_protected(top: &Path) -> Option<ProtectedState> {
+    serde_json::from_str(&std::fs::read_to_string(top.join(PROTECTED_FILE)).ok()?).ok()
+}
+
+fn write_protected(top: &Path, state: &ProtectedState) {
+    let Ok(text) = serde_json::to_string(state) else {
+        return;
+    };
+    let path = top.join(PROTECTED_FILE);
+    if std::fs::read_to_string(&path).is_ok_and(|t| t == text) {
+        return;
+    }
+    if let Some(dir) = path.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    let _ = urzua_io::write_atomic(&path, &text);
+}
+
+fn hash_files(root: &Path, files: &[String]) -> BTreeMap<String, String> {
+    files
+        .iter()
+        .map(|rel| {
+            // Unreadable (a dangling link, no permission) is its own state.
+            let hash = urzua_io::sha256_hex_of_file(&root.join(rel))
+                .unwrap_or_else(|| "unreadable".to_string());
+            (rel.clone(), hash)
+        })
+        .collect()
+}
+
+fn config_signature(top: &Path, config: Option<&Path>) -> Option<String> {
+    let path = config.map_or_else(
+        || crate::discovery::default_config_path(top),
+        Path::to_path_buf,
+    );
+    urzua_io::sha256_hex_of_file(&path)
+}
+
+/// The cheap check that ends a clean tree: the state exists, the configuration
+/// is the one it was read from, and every protected file hashes as it did and
+/// none is new or gone. Anything else (no state yet included) is a full check.
+fn protected_unchanged(top: Option<&Path>, config: Option<&Path>) -> bool {
+    let Some(top) = top else { return false };
+    let Some(state) = read_protected(top) else {
+        return false;
+    };
+    if config_signature(top, config).as_deref() != Some(state.config_sig.as_str()) {
+        return false;
+    }
+    if !state.enabled {
+        return true;
+    }
+    if state.truncated {
+        return false;
+    }
+    let (found, truncated) = super::gate::walk_entries(top, &state.entries);
+    !truncated && hash_files(top, &found) == state.files
+}
+
+struct ProtectedScan {
+    /// Files that differ from the baseline, with whether each is gone.
+    changes: Vec<(String, bool)>,
+    /// A stated limit of this scan, for the report.
+    note: Option<String>,
+}
+
+/// Hashes every file under a protected path and, when `report` is set, returns
+/// those that differ from the stored baseline; either way the baseline becomes
+/// what is on disk now. With no baseline yet nothing can be said to differ.
+/// When the configuration itself changed, only files under the entries the old
+/// baseline was read with are compared: new entries adopt their files silently
+/// (the configuration is a protected path itself, and its change is reported).
+fn scan_protected(root: &Path, config_path: &Path, config: &Config, report: bool) -> ProtectedScan {
+    let mut scan = ProtectedScan {
+        changes: Vec::new(),
+        note: None,
+    };
+    let Some(sig) = urzua_io::sha256_hex_of_file(config_path) else {
+        return scan;
+    };
+    let on = config
+        .harness
+        .as_ref()
+        .is_some_and(|h| h.enabled("protected-paths"));
+    let entries = if on {
+        super::gate::protected_entries(config)
+    } else {
+        Vec::new()
+    };
+    let (found, truncated) = super::gate::walk_entries(root, &entries);
+    let files = hash_files(root, &found);
+    let old = read_protected(root);
+    if report && on {
+        if let Some(old) = old.filter(|o| o.enabled) {
+            let same_config = old.config_sig == sig;
+            let covered = |rel: &str| {
+                same_config
+                    || old
+                        .entries
+                        .iter()
+                        .any(|e| urzua_core::rules::path_matches_entry(Path::new(rel), e))
+            };
+            for (rel, hash) in &files {
+                if covered(rel) && old.files.get(rel) != Some(hash) {
+                    scan.changes.push((rel.clone(), false));
+                }
+            }
+            for rel in old.files.keys() {
+                if !files.contains_key(rel) && !root.join(rel).exists() {
+                    scan.changes.push((rel.clone(), true));
+                }
+            }
+        }
+    }
+    if truncated {
+        scan.note = Some(
+            "The protected-path hash scan stopped at its file cap, so some files under a protected path were NOT hashed.".to_string(),
+        );
+    }
+    write_protected(
+        root,
+        &ProtectedState {
+            config_sig: sig,
+            enabled: on,
+            entries,
+            files,
+            truncated,
+        },
+    );
+    scan
+}
+
+/// Records the protected files' hashes as the baseline the next post-command
+/// check compares with. The session-start check calls it.
+pub(super) fn seed_protected(root: &Path, config_path: &Path, config: &Config) {
+    scan_protected(root, config_path, config, false);
 }
 
 /// Remembers `HEAD` as the commit the next post-command check starts from. The

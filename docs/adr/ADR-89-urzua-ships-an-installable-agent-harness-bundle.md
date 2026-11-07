@@ -256,23 +256,27 @@ repository `pr-approver` could never be satisfied and no acceptance could merge.
   `urzua doctor` says so and does not claim it.
 
 **Accepted risk.** The maintainer decided on 2026-11-05: "We just need to clearly document this for now and
-accept the risk." These routes get past the guardrail, and they are accepted:
+accept the risk." These routes get past the guardrail, and they are accepted (list revised 2026-11-06, see the
+revision log):
 
-1. **A Bash command that writes the status.** `sed -i 's/^Status: Proposed/Status: Accepted/'`, `python -c`,
-   `cp`, `tee` or a heredoc is outside the editor hook's matcher. The post-command check reports it, also when
-   the same command commits it, and cannot stop it.
-2. **Editing the guardrail itself by shell.** `.claude/settings.json`, the hook entries, the scripts, the git
-   hooks and `.urzua/config.yaml` (`block_on`, `override_log`, a rule's `level`, the `authority` table) can be
-   changed by a Bash command, which the post-command check reports for a protected path and cannot stop, or by
-   the agent's own settings (a local or user-level settings file the install neither reads nor writes), which
-   nothing reports, and `git commit --no-verify` skips the commit hook.
+1. **A Bash command that writes the status or a protected path.** `sed -i 's/^Status: Proposed/Status: Accepted/'`,
+   `python -c`, `cp`, `tee` or a heredoc is outside the editor hook's matcher. The post-command check reports
+   it and cannot stop it: a gated move, a changed protected path (a gitignored one such as
+   `.claude/settings.local.json` included, by content hash against a baseline taken at session start) and a
+   commit the same command made. A change is reported once; the same change again is silent, by design.
+2. **`git commit --no-verify`**, which skips the commit hook.
 3. **A pull request that changes its own workflow.** The gate runs from the head commit's workflow, so a pull
    request can drop or weaken the gate step it is judged by. Only `CODEOWNERS` and branch protection, which
    are host settings, can stop that, and neither is configured by this decision.
 4. **An agent acting as the maintainer.** Agents use the maintainer's token. CI cannot tell an agent from the
    maintainer, so `pr-author` is always satisfied and no CI check can say who accepted.
+5. **The limits of what the editor hook can read.** A hard link is resolved to the protected or gated file on
+   Unix only, and elsewhere is judged by its own name. Names are case-folded but not Unicode-normalised. An MCP
+   tool call that names no file path is not seen as an edit. A change made before the session's baseline was
+   taken is not reported, and the agent's user-level settings outside the repository are not protected.
 
-What is claimed is therefore only this: through the edit tools an agent cannot move a gated record or write a
+What is claimed is therefore only this: through the edit tools (Write, Edit, MultiEdit, NotebookEdit and any MCP tool
+that carries a file path and content) an agent cannot move a gated record or write a
 protected path; a Bash route is reported, not prevented; and in CI the evidence is authorship, which for a
 single maintainer is always the maintainer's. The agent-instructions block and the person reading the diff stay
 the controls for the rest. **A future option, not decided here:** give agents a distinct identity (a separate
@@ -416,3 +420,4 @@ convention and is not gated. The Status of this ADR stays Accepted.
 > | 2026-11-05 | Status changed from Proposed to Accepted. **Why:** Maintainer decision, 2026-11-05. | **substantive** |
 > | 2026-11-06 | Added an `## Amendment (2026-11-06)`, accepted by the maintainer on 2026-11-06: `require_evidence` is a config option the repository sets, the gate action always passes `--actors`, and this repository leaves it off (an action cannot set a rule option); open question 1 answered (this repository gates `Accepted`, `Rejected`, `Superseded` and `Retired` for ADRs and `Accepted`, `Rejected` and `Superseded` for RFCs). `Status` stays Accepted. **Why:** Maintainer decisions, 2026-11-06, on the review of pull request 374. | **substantive** |
 > | 2026-11-06 | Accepted-risk list brought in line with the harness after a second-pass review; the decision is unchanged. A Bash write to a protected path, and any change the same command commits, is now reported by the post-command check (route 2 shrinks from silent to reported; routes 1 and 2 are still not prevented); the settings file outside the install stays unreported. An adapter failure no longer defeats `on_unjudged: deny` for `acceptance` and `protected-paths`. **Why:** the review found the report claimed more than the check did, and the adapter failing open where the configuration said deny. | **structural** |
+> | 2026-11-06 | Accepted-risk list revised after the maintainer decided on 2026-11-06 to close the remaining guardrail gaps in Phase 0; the decision is unchanged. NotebookEdit and file-writing MCP tools now reach the editor hook, a Bash write to a gitignored protected file is reported by content hash, gate matching uses Unicode case folding, and a hard link is judged as the file it shares an inode with (Unix). Route 2 (the shell edit of a guardrail) joins route 1 and now includes the agent's local settings file under `.claude`; `--no-verify`, a pull request that changes its own workflow and an agent acting under the maintainer's token stay; a fifth item states what remains of the hook's reading (hard links off Unix, no Unicode normalisation, an MCP call with no path, no baseline before session start, user-level settings). A repeat of an already-reported change is silent and is documented, not changed. **Why:** the second-pass review left these gaps; the list now says exactly what remains. | **structural** |
