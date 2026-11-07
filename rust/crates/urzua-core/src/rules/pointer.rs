@@ -394,6 +394,37 @@ mod tests {
         assert_eq!(findings[0].severity, FindingSeverity::Error);
     }
 
+    /// BUG-8: `pointer.resolution` and `header.pointer-field-clean` read only
+    /// a hardcoded field list, so a pointer field a repository declared under
+    /// another name was never resolved or checked for prose. Both read the
+    /// declared `pointer_fields`, so `Feeds-into` is judged like `Implements`.
+    #[test]
+    fn a_declared_pointer_field_with_a_custom_name_is_resolved_and_checked_clean_observed_failing()
+    {
+        let dangling = record(
+            "docs/specs/SPEC-1-x.md",
+            "spec",
+            "---\nFeeds-into: SPEC-9999\n---\n",
+        );
+        let prose = record(
+            "docs/specs/SPEC-2-x.md",
+            "spec",
+            "---\nFeeds-into: SPEC-1 (the first one).\n---\n",
+        );
+        let config = config_with_types(vec![(
+            "spec",
+            type_config_pointer(&[], None, Some(&["Feeds-into"]), Some(&[])),
+        )]);
+        let records = [dangling, prose];
+        let index = build_normalized_index(&records);
+        let (_, resolution) = pointer_resolution(&records, &config, &index, &Default::default());
+        assert_eq!(resolution.len(), 1, "{resolution:?}");
+        assert!(resolution[0].message.contains("Feeds-into: SPEC-9999"));
+        let (_, clean) = header_pointer_field_clean(&records, &config);
+        assert_eq!(clean.len(), 1, "{clean:?}");
+        assert!(clean[0].file.to_string_lossy().contains("SPEC-2"), "{clean:?}");
+    }
+
     #[test]
     fn a_parent_pointer_resolves_the_same_as_implements() {
         // Every spec's `Parent: SPEC-N` pointer was completely unchecked

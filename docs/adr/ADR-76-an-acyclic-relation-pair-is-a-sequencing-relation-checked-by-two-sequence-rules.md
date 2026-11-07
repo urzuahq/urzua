@@ -50,6 +50,22 @@ pairs and a loop through an unreadable record are not seen, that a prose value i
 an error rather than a tolerated note, and that the unresolved-blocker rule is silent in a repository
 that follows `RFC-48`.
 
+## Amendment (2026-11-07): `sequence.cycle` reads the pairs `roadmap.pairs` names as one graph
+
+*Status of this amendment: proposed, pending maintainer acceptance. `Status` stays `Accepted` and the Decision text above is unchanged.*
+
+The Decision says both rules read "one graph per pair" and accepts that "a loop across two pairs" is not
+seen. That no longer holds for the pairs a repository lists in `roadmap.pairs`. `ADR-82` has `urzua roadmap`
+read those pairs as one merged graph, and `MILE-192` (Done) made `sequence.cycle` read the same graph when
+`roadmap.pairs` is declared: a loop that uses one edge of each of two acyclic pairs is reported on every
+member, with its path and the pairs it crosses (`merged_graph` and `cycle_over_roadmap_pairs` in
+`rules/sequence.rs`). So `check` and the roadmap agree on which loops exist.
+
+What stays as decided: with no `roadmap.pairs`, and for any acyclic pair it does not name, the rule reads
+that pair on its own, so a loop across pairs the key does not list is still not seen. The other readings in
+the Decision (both fields, direction by field name, every member reported, no edge for an unresolved claim or
+an unreadable record) are unchanged.
+
 ## Reversibility
 
 Moderate. `acyclic`, `sequence.cycle` and `sequence.unresolved-blocker` are named by `RFC-48` and become
@@ -81,3 +97,4 @@ it is settled before waivers exist.
 > | 2026-11-04 | Drafted as Proposed. **Why:** `MILE-27` builds part of `RFC-48`, and building part of an RFC needs its own decision record; the maintainer approves before it is Accepted. | **substantive** |
 > | 2026-11-04 | Amended while Proposed: the departure from `RFC-48` on a written `Blocks` is stated; the unresolved-blocker rule yields to the pointer rules; a prose entry is defined as an entry that is not, as a whole, one record reference; the cross-pair and unreadable-record blind spots are stated; `RFC-47` added to `Derives-from`. **Why:** design review of this ADR and of the first implementation, which read only the first token of an entry. | **substantive** |
 > | 2026-11-05 | Status changed from Proposed to Accepted. **Why:** Maintainer decision: accept once the independent review's issues were resolved; the prose-entry blocker and every requested amendment are in. | **substantive** |
+> | 2026-11-07 | Amendment added: `sequence.cycle` reads the pairs `roadmap.pairs` names as one graph, so a loop across those pairs is reported. **Why:** `ADR-82` and `MILE-192` (Done) built it; the Decision's "one graph per pair" and "a loop across two pairs ... not seen" no longer hold for those pairs; proposed, pending maintainer acceptance. `Status` stays `Accepted` and the Decision text is unchanged. | **substantive** |
