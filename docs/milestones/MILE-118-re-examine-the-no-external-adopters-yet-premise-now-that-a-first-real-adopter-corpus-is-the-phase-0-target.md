@@ -3,7 +3,7 @@ Stable-Id: 01M6CXZV44D4GZWR1D3KT6PZ3J
 Status: Done
 Phase: '0'
 Track: governance-process
-Realized-by: code:rust/crates/urzua-core/src/config.rs, code:AGENTS.md, spec:docs/adr/ADR-44-pointer-and-narrative-fields-are-config-declared-per-type-not-hardcoded.md, spec:docs/adr/ADR-54-a-break-is-a-break-no-migration-diagnostics-for-formats-we-no-longer-read.md, spec:docs/rfc/RFC-23-config-declared-pointer-and-blocking-fields-instead-of-hardcoded-in-urzua-core.md, spec:docs/rfc/RFC-26-records-not-github-issues-close-the-issue-tracker-as-a-tracking-surface.md, spec:docs/rfc/RFC-38-a-read-only-subset-does-not-earn-a-command-fold-audit-into-check-and-stop-re-deriving-fix-s-detection.md
+Realized-by: code:AGENTS.md, code:rust/crates/urzua-core/src/config.rs, spec:docs/adr/ADR-44-pointer-and-narrative-fields-are-config-declared-per-type-not-hardcoded.md, spec:docs/adr/ADR-54-a-break-is-a-break-no-migration-diagnostics-for-formats-we-no-longer-read.md, spec:docs/rfc/RFC-23-config-declared-pointer-and-blocking-fields-instead-of-hardcoded-in-urzua-core.md, spec:docs/rfc/RFC-26-records-not-github-issues-close-the-issue-tracker-as-a-tracking-surface.md, spec:docs/rfc/RFC-38-a-read-only-subset-does-not-earn-a-command-fold-audit-into-check-and-stop-re-deriving-fix-s-detection.md
 ---
 # 118 — Re-examine the 'no external adopters yet' premise now that a first real adopter corpus is the Phase 0 target
 
@@ -57,7 +57,9 @@ Accepted record's decision text is edited.
 
 ## Done means
 
-Each place that relies on there being no external adopters (`AGENTS.md`'s "Don't build speculative capability" and the other six places the What lists, each checked by grep) is read, the ones that still hold are kept and the ones that do not are rewritten, and the outcome is recorded; an Accepted record is left alone and corrected by a dated note, and a grep for the premise's wording lists only places with an outcome.
+- Each place that relies on there being no external adopters (`AGENTS.md`'s "Don't build speculative capability" and the six other places the What lists, each checked by grep) is read, the ones that still hold are kept and the ones that do not are rewritten, and the outcome is recorded. — evidence: code:AGENTS.md, code:rust/crates/urzua-core/src/config.rs, spec:docs/adr/ADR-44-pointer-and-narrative-fields-are-config-declared-per-type-not-hardcoded.md, spec:docs/adr/ADR-54-a-break-is-a-break-no-migration-diagnostics-for-formats-we-no-longer-read.md, spec:docs/rfc/RFC-23-config-declared-pointer-and-blocking-fields-instead-of-hardcoded-in-urzua-core.md, spec:docs/rfc/RFC-26-records-not-github-issues-close-the-issue-tracker-as-a-tracking-surface.md, spec:docs/rfc/RFC-38-a-read-only-subset-does-not-earn-a-command-fold-audit-into-check-and-stop-re-deriving-fix-s-detection.md
+- An Accepted record is left alone and corrected by a dated note. — evidence: spec:docs/adr/ADR-44-pointer-and-narrative-fields-are-config-declared-per-type-not-hardcoded.md, spec:docs/adr/ADR-54-a-break-is-a-break-no-migration-diagnostics-for-formats-we-no-longer-read.md, spec:docs/rfc/RFC-23-config-declared-pointer-and-blocking-fields-instead-of-hardcoded-in-urzua-core.md
+- A grep for the premise's wording lists only places with an outcome. — waived: process-outcome -- a search result, not a file; at the time of this migration the wording appears only in the seven noted places and in the records that cite the decided expiry (ADR-77, RFC-49)
 
 ## References
 
@@ -73,3 +75,4 @@ Each place that relies on there being no external adopters (`AGENTS.md`'s "Don't
 > | 2026-11-04 | Re-phased from Phase 1 to Phase 0 (pulled into Phase 0 as foundation work); `Status` unchanged. **Why:** Maintainer decision of 2026-11-04 defining Phase 0 as parity on a solid codebase (`SPEC-1`'s Phase 0 exit): it decides whether config and output changes may break callers, which gates every refactor in the foundation set, and adoption follows Phase 0. | **substantive** |
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |
 > | 2026-11-05 | `Status` changed from `Planned` to `Done`; `Realized-by` added; Outcome section added. The premise holds through Phase 0 and expires at the Phase 1 switchover (`MILE-102`), when `RFC-49`'s compatibility contract takes over; each of the seven places carries a dated note and no Accepted decision text was edited. **Why:** Maintainer decision, 2026-11-05; the PR that delivers the notes sets the evidence and `Done` together. Note: `RFC-38` is now Accepted, so it took a dated note like the other Accepted records, not an in-place edit. | **substantive** |
+> | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |

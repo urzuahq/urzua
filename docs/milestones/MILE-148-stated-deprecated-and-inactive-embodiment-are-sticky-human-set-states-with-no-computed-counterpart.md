@@ -5,7 +5,7 @@ Phase: '0'
 Track: schema-governance
 Implements: SPEC-1
 Blocked-on: —
-Realized-by: code:rust/crates/urzua-core/src/rules/embodiment.rs, test:rust/crates/urzua-cli/tests/sticky_state_integration.rs
+Realized-by: code:rust/crates/urzua-core/src/rules/embodiment.rs, test:rust/crates/urzua-cli/tests/sticky_state_integration.rs#declared_sticky_states_are_not_drift_and_a_neighbour_still_is@sha256:dcf3822c179a18bfaa70c091776a8c2b51882d9f03de93606c6f5767014d65b1, test:rust/crates/urzua-cli/tests/sticky_state_integration.rs#fix_leaves_a_sticky_state_alone@sha256:78a042c54008793d09bd5d5a72773d84b05fd682c6a35d4653b1989458d86d4b, test:rust/crates/urzua-cli/tests/sticky_state_integration.rs#without_a_declaration_every_stated_value_is_held_to_the_computed_one@sha256:b41f9acae2b9c00b773c54036464c5c97da95c02efe421a4a467b7f0a4b3e9b1, test:rust/crates/urzua-cli/tests/sticky_state_integration.rs#a_sticky_state_that_evidence_computes_is_refused_at_load@sha256:d2beb8d48e0ee9bb52deedc631a06f097542d97e19c1843170abc934dc7bd532, code:.urzua/config.yaml#rules::embodiment.consistency@sha256:2c6819d6375e3b4f59b879cd38d1a3b458329447e047bbb64ab06de0a1240886, spec:docs/adr/ADR-38-header-layout-is-declared-per-type-not-templated-or-voted.md
 ---
 # 148 — Stated Deprecated and Inactive Embodiment are sticky human-set states with no computed counterpart
 
@@ -19,7 +19,10 @@ A real adopter corpus has dozens of records stating `Deprecated` or `Inactive`. 
 
 ## Done means
 
-A record stating `Deprecated` or `Inactive` produces no consistency finding on that account; the set of sticky states is declared in configuration; a fixture covers a sticky state and a genuine drift on a neighbour; and the capability is exercised by urzua's own `.urzua/config.yaml` and records in this repository, not only by unit tests.
+- A record stating `Deprecated` or `Inactive` produces no consistency finding on that account. — evidence: code:rust/crates/urzua-core/src/rules/embodiment.rs, test:rust/crates/urzua-cli/tests/sticky_state_integration.rs#declared_sticky_states_are_not_drift_and_a_neighbour_still_is@sha256:dcf3822c179a18bfaa70c091776a8c2b51882d9f03de93606c6f5767014d65b1, test:rust/crates/urzua-cli/tests/sticky_state_integration.rs#fix_leaves_a_sticky_state_alone@sha256:78a042c54008793d09bd5d5a72773d84b05fd682c6a35d4653b1989458d86d4b
+- The set of sticky states is declared in configuration. — evidence: test:rust/crates/urzua-cli/tests/sticky_state_integration.rs#without_a_declaration_every_stated_value_is_held_to_the_computed_one@sha256:b41f9acae2b9c00b773c54036464c5c97da95c02efe421a4a467b7f0a4b3e9b1, test:rust/crates/urzua-cli/tests/sticky_state_integration.rs#a_sticky_state_that_evidence_computes_is_refused_at_load@sha256:d2beb8d48e0ee9bb52deedc631a06f097542d97e19c1843170abc934dc7bd532
+- A fixture covers a sticky state and a genuine drift on a neighbour. — evidence: test:rust/crates/urzua-cli/tests/sticky_state_integration.rs#declared_sticky_states_are_not_drift_and_a_neighbour_still_is@sha256:dcf3822c179a18bfaa70c091776a8c2b51882d9f03de93606c6f5767014d65b1
+- The capability is exercised by urzua's own `.urzua/config.yaml` and records in this repository, not only by unit tests. — evidence: code:.urzua/config.yaml#rules::embodiment.consistency@sha256:2c6819d6375e3b4f59b879cd38d1a3b458329447e047bbb64ab06de0a1240886, spec:docs/adr/ADR-38-header-layout-is-declared-per-type-not-templated-or-voted.md
 
 > **Revision log**
 >
@@ -28,3 +31,4 @@ A record stating `Deprecated` or `Inactive` produces no consistency finding on t
 > | 2026-11-04 | Filed. **Why:** a trial run of urzua over a real adopter corpus showed this capability gap; Phase 0 is capability parity exercised in urzua's own repository. | **substantive** |
 > | 2026-11-04 | Sticky Embodiment states declared in configuration (`SPEC-2` `0.36`, `SPEC-3` `0.22`): this repository declares `sticky_states: [Deprecated, Inactive]` and `ADR-29`, superseded by `ADR-45`, now states `Deprecated`; a fixture covers sticky states beside a genuine drift. **Why:** the Done-when asks for it. Status unchanged; the maintainer closes. | **substantive** |
 > | 2026-11-04 | `Realized-by` added and `Status` Planned -> Done. **Why:** the work is merged in #199: declared `sticky_states` are not drift and `fix` leaves them alone. Checked against this record's Done means and the code; the record never carried its own delivery evidence, and `status.delivery-agreement` (`MILE-183`) reads evidence under a not-done `Status` as a disagreement. | **structural** |
+> | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |
