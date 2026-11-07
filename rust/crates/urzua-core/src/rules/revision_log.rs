@@ -79,7 +79,26 @@ pub fn revision_log_change_class(
                 }
             };
 
+            let declared_columns = shape.class_column.is_some() || shape.date_column.is_some();
             for entry in log.entries {
+                if declared_columns && entry.cells > log.layout.width {
+                    findings.push(Finding {
+                        rule: RULE_ID.to_string(),
+                        severity: FindingSeverity::Error,
+                        file: record.path.clone(),
+                        line: Some(entry.line),
+                        waived: None,
+                        declared_severity: None,
+                        suggested_action: None,
+                        action_source: ActionSource::new("change-class-missing")
+                            .section(id.name()),
+                        message: format!(
+                            "revision log row at line {} has {} cells but the header has {}; a pipe inside a cell must be written \\| (the declared columns cannot be placed in this row)",
+                            entry.line, entry.cells, log.layout.width
+                        ),
+                    });
+                    continue;
+                }
                 let class = strip_emphasis(&entry.change_class);
                 if !shape.classes.iter().any(|c| c == class) {
                     findings.push(Finding {
@@ -256,6 +275,37 @@ pub(crate) struct RevisionLogEntry {
     pub(crate) date: String,
     pub(crate) change_class: String,
     pub(crate) line: usize,
+    /// How many cells the row has. A row wider than its header holds an
+    /// unescaped pipe in a cell, so a declared column cannot be placed in it
+    /// (`ADR-94`): the class rule reports the row rather than guess.
+    pub(crate) cells: usize,
+}
+
+/// A table row's cells, trimmed. `\|` is a literal pipe inside a cell (GFM),
+/// not a separator; the backslash stays in the cell text.
+fn split_cells(row: &str) -> Vec<&str> {
+    let row = row.trim();
+    let row = row.strip_prefix('|').unwrap_or(row);
+    let row = if row.ends_with('|') && !row.ends_with("\\|") {
+        &row[..row.len() - 1]
+    } else {
+        row
+    };
+    let mut cells = Vec::new();
+    let mut start = 0;
+    let mut escaped = false;
+    for (i, ch) in row.char_indices() {
+        match ch {
+            '\\' => escaped = !escaped,
+            '|' if !escaped => {
+                cells.push(row[start..i].trim());
+                start = i + 1;
+            }
+            _ => escaped = false,
+        }
+    }
+    cells.push(row[start..].trim());
+    cells
 }
 
 /// Where the date and class sit in a log's table, by index, and how wide the
@@ -381,11 +431,7 @@ pub(crate) fn find_revision_log_entries(
             break;
         }
 
-        let cells: Vec<&str> = stripped
-            .trim_matches('|')
-            .split('|')
-            .map(|c| c.trim())
-            .collect();
+        let cells = split_cells(stripped);
         row_index += 1;
         if row_index == 1 {
             // The header row: "Date | Change | Class". Undeclared columns are
@@ -418,18 +464,9 @@ pub(crate) fn find_revision_log_entries(
         }
 
         let layout = layout.expect("the header row precedes every data row");
-        // A row wider than the header (a cell holding an unescaped pipe) keeps
-        // the header's last column as its last cell, so a declared trailing
-        // column reads as an undeclared one always did. Any other column is
-        // read at its header position.
-        let cell = |at: usize| {
-            let at = if cells.len() > layout.width && at + 1 == layout.width {
-                cells.len() - 1
-            } else {
-                at
-            };
-            cells.get(at).copied().unwrap_or_default().to_string()
-        };
+        // Columns are read at their header position; a row of another width
+        // is not guessed at (see `RevisionLogEntry::cells`).
+        let cell = |at: usize| cells.get(at).copied().unwrap_or_default().to_string();
         entries.push(RevisionLogEntry {
             row: cells.join("|"),
             date: cell(layout.date),
@@ -439,6 +476,7 @@ pub(crate) fn find_revision_log_entries(
                 None => cells.last().copied().unwrap_or_default().to_string(),
                 Some(_) => cell(layout.class),
             },
+            cells: cells.len(),
             line: idx + 1,
         });
     }
@@ -915,25 +953,57 @@ mod tests {
     }
 
     #[test]
-    fn a_declared_trailing_class_column_is_the_last_cell_of_a_row_an_unescaped_pipe_widened() {
+    fn an_escaped_pipe_stays_inside_its_cell_so_the_declared_columns_still_line_up() {
+        for (class_column, header) in [
+            ("Class", "| Date | Change | Class |"),
+            ("Class", "| Date | Class | Change |"),
+        ] {
+            let config = declared(decl(None, Some(class_column), Some("Date")));
+            let row = if header.ends_with("Class |") {
+                "| 2026-01-01 | `true\\|false` is read. | **structural** |"
+            } else {
+                "| 2026-01-01 | structural | `true\\|false` is read. |"
+            };
+            let (_, findings) = check(&config, &table(header, &[row]));
+            assert!(findings.is_empty(), "{header}: {findings:?}");
+        }
+    }
+
+    #[test]
+    fn a_row_wider_than_its_header_is_reported_not_guessed_when_columns_are_declared() {
+        // The pipe sits before the class column: reading by position would take
+        // part of the Change cell for the class, and a guess could pass or fail
+        // by luck. One clear finding names the cause instead.
         let config = declared(decl(None, Some("Class"), Some("Date")));
+        for (header, row) in [
+            (
+                "| Date | Class | Change |",
+                "| 2026-01-01 | structural | `true|false` is read. |",
+            ),
+            (
+                "| Date | Change | Class |",
+                "| 2026-01-01 | `true|false` is read. | **structural** |",
+            ),
+        ] {
+            let (_, findings) = check(&config, &table(header, &[row]));
+            assert_eq!(findings.len(), 1, "{header}: {findings:?}");
+            assert!(
+                findings[0]
+                    .message
+                    .contains("has 4 cells but the header has 3"),
+                "{findings:?}"
+            );
+            assert!(findings[0].message.contains("\\|"), "{findings:?}");
+        }
+    }
+
+    #[test]
+    fn an_undeclared_type_never_judges_row_width() {
         let content = table(
             "| Date | Change | Class |",
-            &[
-                "| 2026-01-01 | `true|false` is read. | **structural** |",
-                "| 2026-01-02 | `true|false` is read. | — |",
-            ],
+            &["| 2026-01-01 | `true|false` is read. | **structural** |"],
         );
-        let (_, findings) = check(&config, &content);
-        assert_eq!(findings.len(), 1, "{findings:?}");
-        assert!(findings[0].message.contains("2026-01-02"), "{findings:?}");
-        // A middle column is still read at its header position.
-        let config = declared(decl(None, Some("Class"), None));
-        let content = table(
-            "| Date | Class | Change |",
-            &["| 2026-01-01 | structural | `a|b` |"],
-        );
-        let (_, findings) = check(&config, &content);
+        let (_, findings) = check(&config_with_types(vec![]), &content);
         assert!(findings.is_empty(), "{findings:?}");
     }
 }

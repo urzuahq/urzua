@@ -11,3 +11,6 @@ finding with an `edit-section` action, and `revision-log.version-bump-required` 
 record, or a merge-base log it cannot read, as unreadable. `urzua fix --apply` and
 `--rebaseline` write the type's `tool_class`, laid out by the log's header. A type that declares
 none of the keys behaves as before.
+A pipe written `\|` stays inside its table cell. When a type declares a column, a row with more
+cells than its header is one finding that names the row and its cell count, instead of being
+read by guesswork.
