@@ -1,0 +1,25 @@
+{
+  "args": [
+    "graph"
+  ],
+  "exit": 0,
+  "stdout": {
+    "edges": [
+      {
+        "dangling": true,
+        "from": "ADR-3",
+        "kind": "pointer",
+        "relation": "Parent",
+        "to": "ADR-99"
+      }
+    ],
+    "population": {
+      "eligible": 4,
+      "examined": 3,
+      "out_of_scope": 1,
+      "unit": "record",
+      "unreadable": 0
+    },
+    "status": "ok"
+  }
+}

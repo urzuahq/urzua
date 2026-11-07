@@ -1,0 +1,30 @@
+schema_version: 2
+rules:
+  header.required-fields: error
+  header.field-set-consistency: warn
+  filename.title-consistency: warn
+  embodiment.consistency: error
+  relation.supersession-reciprocity: error
+  pointer.resolution: error
+embodiment:
+  drift: Drift detected
+  tiers:
+    - {state: Verified, evidence: test, claims_built: true}
+    - {state: Implemented, evidence: code, claims_built: true}
+    - {state: Specified, evidence: spec}
+  none: Not started
+record_types:
+  adr:
+    dir: "docs/adr"
+    prefix: "ADR"
+    header_shape: "yaml-frontmatter"
+    required_fields: ["Status", "Embodiment"]
+    known_fields: ["Realized-by", "Supersedes / Superseded-by", "Parent"]
+    pointer_fields: ["Parent"]
+    companion_fields:
+      - [embodiment_state, embodiment_locator]
+  note:
+    dir: "docs/note"
+    prefix: "NOTE"
+    header_shape: none
+    required_fields: ["Status"]

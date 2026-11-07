@@ -1,11 +1,11 @@
 ---
 Stable-Id: 01M6JKNWP4NMYSTVM6QQNMV9P9
-Status: InProgress
+Status: Done
 Phase: '0'
 Track: schema-governance
 Implements: SPEC-1
 Blocked-on: —
-Realized-by: test:rust/crates/urzua-cli/tests/fix_paths_integration.rs#a_path_limits_the_examination_and_the_repairs_to_that_record@sha256:1d68f8b2b3b4fd9d4e016bc501bb737f8cbd5020539c18d5715810a487b11d64, test:rust/crates/urzua-cli/tests/fix_paths_integration.rs#apply_with_a_path_writes_only_that_record@sha256:6a6bd813c8ecc1469d291ffacee27334fc97fa448aaa85659241f31d48121a4b, test:rust/crates/urzua-cli/tests/fix_stdin_integration.rs#stdin_content_is_judged_and_nothing_is_written@sha256:b58fff42500a5af8b609994213ea808b694859a99325333fee4fcf0f2d4a0d8e, test:rust/crates/urzua-cli/tests/fix_revision_log_required_integration.rs#not_required_apply_writes_the_field_without_a_log_row@sha256:a4bfebcb43ef2b6530b1fdb08d5c368d66371daa9ef78219c10b5cdef75fd16c, code:.urzua/config.yaml, code:rust/crates/urzua-cli/src/commands/fix.rs
+Realized-by: test:rust/crates/urzua-cli/tests/fix_paths_integration.rs#a_path_limits_the_examination_and_the_repairs_to_that_record@sha256:1d68f8b2b3b4fd9d4e016bc501bb737f8cbd5020539c18d5715810a487b11d64, test:rust/crates/urzua-cli/tests/fix_paths_integration.rs#apply_with_a_path_writes_only_that_record@sha256:6a6bd813c8ecc1469d291ffacee27334fc97fa448aaa85659241f31d48121a4b, test:rust/crates/urzua-cli/tests/fix_stdin_integration.rs#stdin_content_is_judged_and_nothing_is_written@sha256:b58fff42500a5af8b609994213ea808b694859a99325333fee4fcf0f2d4a0d8e, test:rust/crates/urzua-cli/tests/fix_revision_log_required_integration.rs#not_required_apply_writes_the_field_without_a_log_row@sha256:a4bfebcb43ef2b6530b1fdb08d5c368d66371daa9ef78219c10b5cdef75fd16c, code:.urzua/config.yaml, code:rust/crates/urzua-cli/src/commands/fix.rs, test:rust/crates/urzua-cli/tests/fix_drift_git_integration.rs#a_single_file_run_spawns_one_blame_however_large_the_corpus_is@sha256:e0cd3fa8de4f77e07f680aed0dbbc0201775ae30a84275b2971e805d59643c1c
 ---
 # 159 — Urzua fix scoped to given paths, prospective content, and apply without a revision log
 
@@ -22,7 +22,7 @@ Make `urzua fix` accept a path argument or prospective content, make `--apply` w
 - `urzua fix <path>` examines and repairs only that path. — evidence: test:rust/crates/urzua-cli/tests/fix_paths_integration.rs#a_path_limits_the_examination_and_the_repairs_to_that_record@sha256:1d68f8b2b3b4fd9d4e016bc501bb737f8cbd5020539c18d5715810a487b11d64, test:rust/crates/urzua-cli/tests/fix_paths_integration.rs#apply_with_a_path_writes_only_that_record@sha256:6a6bd813c8ecc1469d291ffacee27334fc97fa448aaa85659241f31d48121a4b
 - Prospective content on stdin is judged without writing. — evidence: test:rust/crates/urzua-cli/tests/fix_stdin_integration.rs#stdin_content_is_judged_and_nothing_is_written@sha256:b58fff42500a5af8b609994213ea808b694859a99325333fee4fcf0f2d4a0d8e
 - `--apply` does not need a revision log section. — evidence: test:rust/crates/urzua-cli/tests/fix_revision_log_required_integration.rs#not_required_apply_writes_the_field_without_a_log_row@sha256:a4bfebcb43ef2b6530b1fdb08d5c368d66371daa9ef78219c10b5cdef75fd16c
-- A single-file run completes in well under a second on a large corpus.
+- A single-file run completes in well under a second on a large corpus. — evidence: test:rust/crates/urzua-cli/tests/fix_drift_git_integration.rs#a_single_file_run_spawns_one_blame_however_large_the_corpus_is@sha256:e0cd3fa8de4f77e07f680aed0dbbc0201775ae30a84275b2971e805d59643c1c
 - The capability is exercised by urzua's own `.urzua/config.yaml` and records in this repository, not only by unit tests. — evidence: code:.urzua/config.yaml, code:rust/crates/urzua-cli/src/commands/fix.rs
 
 > **Revision log**
@@ -38,3 +38,5 @@ Make `urzua fix` accept a path argument or prospective content, make `--apply` w
 > | 2026-11-04 | `Realized-by` added and `Status` Planned -> Done. **Why:** the work is merged in #214 (drift gated on the rule, git failures and shallow clones surfaced), #226 (`fix [PATHS...]` scopes examination, drift and repair), #229 (`fix --stdin-path` judges proposed content without writing) and #232; the maintainer relayed on 2026-11-04 that the milestone is fully delivered. | **structural** |
 > | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |
 > | 2026-11-07 | `Status` `Done` -> `InProgress`. Status set from its Done-means items (ADR-96, MILE-215): unresolved item 4. **Why:** the item has no evidence clause, and `DoneWithUnresolvedItems` forbids `Done` while an item is unresolved; `fix` never downgrades, so the status is set by hand to the computed value. | **structural** |
+> | 2026-11-07 | Done means item 4 evidenced. The test asserts the bound that makes a single-file run cheap by counting `git blame` process spawns, never wall-clock time: one record in scope costs one blame in a 40-record corpus (`fix <path>`, `check <path>` and `fix --stdin-path`), and the whole-corpus run costs one per record. The item text is unchanged. **Why:** the reopened item had no evidence (ADR-96); a timing claim is evidenced by the operation count that bounds it, which does not vary with the machine. | **structural** |
+> | 2026-11-07 | Tool-authored (by beauwilliams, identity: gh-verified, actor: agent): recomputed `Status` from `the Done means items (5 of 5 items resolved) computes to Implemented` -- stated `InProgress` disagreed with the computed value `Done`. | **structural** |

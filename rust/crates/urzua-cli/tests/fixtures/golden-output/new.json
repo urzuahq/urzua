@@ -1,0 +1,33 @@
+{
+  "args": [
+    "new",
+    "adr",
+    "Golden title",
+    "--by",
+    "tester"
+  ],
+  "exit": 0,
+  "stdout": {
+    "display_number": 4,
+    "notices": [
+      {
+        "message": "record type 'adr' declares a closed field set (`known_fields`) that does not list `Stable-Id`, yet every record type gets one (ADR-21); the new record carries it and `header.field-set-consistency` will report it until `Stable-Id` is added to the type's `known_fields`",
+        "severity": "warning",
+        "subject": "stable-id"
+      }
+    ],
+    "path": "docs/adr/ADR-4-golden-title.md",
+    "pull_refs": {
+      "fetched": false,
+      "reason": "disabled",
+      "refs": 0,
+      "remote": null,
+      "skipped_numbers": [],
+      "worktrees_scanned": 0
+    },
+    "skipped": [],
+    "stable_id": "<STABLE-ID>",
+    "status": "ok"
+  },
+  "written": "---\nStable-Id: <STABLE-ID>\nStatus: null\nEmbodiment: null\n---\n# 4 — Golden title\n"
+}

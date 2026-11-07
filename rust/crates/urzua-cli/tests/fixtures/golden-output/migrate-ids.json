@@ -1,0 +1,17 @@
+{
+  "args": [
+    "migrate",
+    "ids"
+  ],
+  "exit": 0,
+  "stdout": {
+    "apply": false,
+    "missing": [
+      "docs/adr/ADR-1-first.md",
+      "docs/adr/ADR-2-second.md",
+      "docs/adr/ADR-3-third.md",
+      "docs/note/NOTE-1-plain.md"
+    ],
+    "status": "ok"
+  }
+}
