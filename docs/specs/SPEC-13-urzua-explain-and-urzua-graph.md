@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5DB4YPSWZ6MQV85PQ7
-Version: '0.9'
+Version: '0.10'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -33,6 +33,8 @@ file (`ADR-74`). Given `urzua explain <path>#<scope>` the report also carries `s
 route for a scoped pin, and it shows the resolved span because an early end (a `}` in a string)
 cannot be detected by the engine. A scope that does not resolve, a file that is not UTF-8 and a
 locator carrying an anchor are `not-run` with the reason.
+
+A path that is absolute, climbs out of the repository with `..`, or resolves through a symlink to a file outside it is `not-run`, whether or not it exists, and nothing is read from it. The same confinement applies to every path the tool reads or writes on a name from the arguments or the configuration (`index`, `fix`, `migrate ids`, `refs refresh`, `init`).
 
 Given a directory or glob (`urzua explain src` or `urzua explain 'src/**/*.rs'`, `BUG-176`) the
 report carries `coverage`: `kind`, `files` (the tracked files it covers, sorted), `sha256` (the hash
@@ -119,3 +121,4 @@ Both are stdout-JSON-always (ADR-23) and never write. `graph` reads `pointer_fie
 > | 2026-11-05 | Bumped to `0.7`. `graph` and `explain` report the `check` population block (`eligible`, `examined`, `out_of_scope`, `unreadable`) and a warning notice listing the records left out for an unreadable header; status stays `ok`. **Why:** `BUG-169`, maintainer decision 2026-11-05; an unreadable header used to drop its edges with no disclosure. | **substantive** |
 > | 2026-11-05 | Status changed from Accepted to Shipped and bumped to `0.8`. **Why:** maintainer decision of 2026-11-05 to ship the specs whose implementation is verified; `Embodiment: Verified` with `Realized-by` naming the implementing code and tests. | **structural** |
 > | 2026-11-05 | Bumped to `0.9`. `explain <directory-or-glob>` prints `coverage`: the kind, the covered files, the hash and the pin to paste, when the repository declares that locator kind; otherwise a notice names `locator_kinds`. **Why:** `BUG-176` -- a pin on a directory or glob needs the reviewer to see which files it covers. | **substantive** |
+> | 2026-11-07 | Bumped to `0.10`. `explain` refuses a path that resolves outside the repository (absolute, `..`, or a symlink out), and the other file readers and writers share the check. **Why:** a Phase 0 hardening review found `explain '/etc/hostname#L1'` printing the file and a ready-to-paste pin. | **substantive** |

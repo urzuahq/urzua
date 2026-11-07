@@ -305,13 +305,18 @@ pub fn run(
         out
     };
 
+    let file_path = dir.join(&filename);
+    // A record directory that is (or sits below) a symlink out of the
+    // repository must not receive the new file.
+    if let Err(e) = urzua_io::confine_to_root(&repo_root, &file_path) {
+        return emit(&CouldNotRun::from(e));
+    }
     if let Err(e) = std::fs::create_dir_all(&dir) {
         return emit(&CouldNotRun::from(format!(
             "could not create {}: {e}",
             dir.display()
         )));
     }
-    let file_path = dir.join(&filename);
     // `create_new` is atomic (matching `FixLock`'s own pattern) -- a
     // separate `exists()` check followed by `write` would leave a race
     // window where a concurrent `new` invocation for the same slug clobbers
