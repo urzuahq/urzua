@@ -220,3 +220,31 @@ fn the_own_rust_resolver_addresses_each_pinned_record_type_config_field() {
         );
     }
 }
+
+/// MILE-206, ADR-92: this repository governs the records it has written and not
+/// yet staged. A draft planted in `docs/` is examined by a plain `check` and is
+/// added under `--base`.
+#[test]
+fn the_own_config_includes_untracked_records_and_a_draft_is_examined_and_added() {
+    let dir = repo("untracked", &[]);
+    std::fs::write(
+        dir.join("docs/bugs/BUG-1-a-draft.md"),
+        "---\nStatus: Open\n---\n# 1 - A draft\n",
+    )
+    .unwrap();
+    let out = urzua(&dir, &["check"]);
+    let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(v["scope"]["include_untracked"], true, "{v}");
+    assert_eq!(v["scope"]["untracked_included"], 1, "{v}");
+    assert_eq!(v["files_examined"], 1, "{v}");
+
+    let out = urzua(&dir, &["check", "--base", "HEAD"]);
+    let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    let changed: Vec<&str> = v["scope"]["changed_paths"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p.as_str().unwrap())
+        .collect();
+    assert_eq!(changed, vec!["docs/bugs/BUG-1-a-draft.md"], "{v}");
+}

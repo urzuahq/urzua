@@ -610,7 +610,7 @@ pub fn run(dry_run: bool) -> ExitCode {
         )));
     }
 
-    let discovered = match urzua_io::discover_tracked_files(&repo_root) {
+    let discovered = match urzua_io::discover_tracked_files(&repo_root, None) {
         Ok(d) => d,
         Err(e) => return emit(&CouldNotRun::from(e.to_string())),
     };

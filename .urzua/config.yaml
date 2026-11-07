@@ -2,6 +2,11 @@ schema_version: 2
 # Warnings fail this repository's own CI (MILE-145): the zero-warning state
 # must not regress. Both checks.yml steps read this, whole-repo and --base.
 fail_on: warning
+# Govern the records an author has written and not yet staged (ADR-92, MILE-206):
+# discovery includes untracked, non-ignored files directly under a declared
+# record directory, so a plain `check` and the gate read a draft before `git add`.
+discovery:
+  include_untracked: true
 # The Embodiment vocabulary (MILE-144): the states evidence computes to, highest
 # tier first, and the evidence category that lifts a record to each. The engine
 # knows no state name; `claims_built` marks the states that say work was built.
