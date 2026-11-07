@@ -101,4 +101,5 @@ This directory holds urzua's ADRs, one `ADR-N-slug.md` file each. This index is 
 - [The revision log declares its class vocabulary and its class column on the record type](ADR-94-the-revision-log-declares-its-class-vocabulary-and-its-class-column-on-the-record-type.md)
 - [The release pull request is opened by a GitHub App token, and main is protected with ci required](ADR-95-the-release-pull-request-is-opened-by-a-github-app-token-and-main-is-protected-with-ci-required.md)
 - [A milestone's Done means is a checklist whose items each name their evidence, and its status is computed from the items](ADR-96-a-milestone-s-done-means-is-a-checklist-whose-items-each-name-their-evidence-and-its-status-is-computed-from-the-items.md)
+- [A claim expires after a period declared per record type, status and evidence tier, and only urzua reverify renews it](ADR-97-a-claim-expires-after-a-period-declared-per-record-type-status-and-evidence-tier-and-only-urzua-reverify-renews-it.md)
 <!-- urzua:index:end -->
