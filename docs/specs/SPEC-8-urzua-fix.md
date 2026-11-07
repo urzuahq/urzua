@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5Q0XVK27P5T8FN72BN
-Version: '0.31'
+Version: '0.32'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -258,8 +258,13 @@ Every one of the following is a hard gate — none are optional, none are defaul
   the reason, and the record is left as it was: such a status is a decider's, not evidence's. The lifecycle
   command `/done` runs `fix --apply` and so inherits the refusal.
 
-Every applied write appends a `structural` revision-log entry naming the computation and the
-evidence read, so the write is reversible both by `git revert` and by reading the corpus itself.
+Every applied write appends a revision-log entry of the type's `tool_class` (`structural` unless
+the type declares another, `ADR-94`) naming the computation and the evidence read, so the write is
+reversible both by `git revert` and by reading the corpus itself. The row is laid out by the log's
+header: the date in the date column (the first when `date_column` is undeclared), the class in the
+class column (the last when `class_column` is undeclared), the narrative in the first remaining
+column and any other cell empty. A log with no such column left, or whose declared column is
+missing or repeated, is refused like one with no rows to append after.
 
 The entry names who wrote it, where the name came from and who held the command (`ADR-89` section 5):
 `Tool-authored (by NAME, identity: SOURCE, actor: ACTOR): recomputed ...`, with `, verified login: LOGIN`
@@ -383,3 +388,4 @@ asserted by test, not assumed by convention.
 > | 2026-11-07 | Bumped to `0.29`. `--reason` also refuses a carriage return; `--rebaseline --apply` reads the evidence after taking the lock, and every record write is confined to the repository. **Why:** a Phase 0 hardening review found a `\r` reaching the revision-log row, evidence hashed before the lock, and writes that followed a symlink out of the repository. | **substantive** |
 > | 2026-11-07 | Bumped to `0.30`. Detect mode (no `--apply`) honours `--ids`: the report lists only the named records and an `--ids` entry that matches no pending repair (no stale pin, under `--rebaseline`) is a `partial-failure`, as under `--apply`; `--force`, `--by` and `--actor` without `--apply` are usage errors (exit 2) instead of being ignored. **Why:** maintainer decision of 2026-11-07, from the CLI review. | **substantive** |
 > | 2026-11-07 | Bumped to `0.31`. The `Status` repair for a type that declares `statuses.delivery.items`: `fix` computes from the Done-means items, writes `set_status` or `partial_status` with the item counts in the row, never downgrades a `success` status, writes no `progress` status to a derived-blocked record, and `--rebaseline` re-pins a pin inside an item clause. **Why:** `MILE-214`, `ADR-96`. | **substantive** |
+> | 2026-11-07 | Bumped to `0.32`. `fix --apply` and `fix --rebaseline` write the type's `revision_log.tool_class` (default `structural`) in place of the literal, laid out by the log's header: the date in the date column, the class in the class column, the narrative in the first remaining column, any other cell empty; a log with no column left for the narrative, or whose declared column is missing or repeated, is refused. **Why:** `MILE-213`, the build of `ADR-94` and the 2026-11-07 amendment to `ADR-15`; a vocabulary without `structural` would have the tool write a row its own rule rejects. | **substantive** |

@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.108'
+Version: '0.109'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs, test:rust/crates/urzua-cli/tests/field_levels_integration.rs
@@ -123,6 +123,34 @@ Two details carry weight:
   of one of those classes while its field equals the merge base's. `field` must be non-blank and
   `classes` a non-empty list of non-blank names, else the config fails to load; `version_bump` may
   stand alone like `required`. Enabling the rule when no type declares one is a load error.
+  The declaration also takes four optional keys (`ADR-94`, `MILE-213`), each of which may stand alone:
+
+  ```yaml
+  revision_log:
+    classes: [substantive, structural]   # the vocabulary
+    class_column: Class                  # a header cell's name
+    date_column: Date                    # a header cell's name
+    tool_class: structural               # what fix writes
+  ```
+
+  Undeclared, each keeps today's behaviour from defaults held in the engine: `classes` is
+  `[substantive, structural]`, the class is the row's last cell, the date is its first cell, and
+  `tool_class` is `structural`; a type declaring none behaves exactly as before and the
+  `change-class-required` message reads as it always did. `classes` is a non-empty list of
+  non-blank names, distinct after stripping emphasis (`*`) and whitespace and compared
+  case-sensitively (`structural` and `**structural**` are one name, `Structural` and `structural`
+  are two); the `change-class-required` finding lists them. `class_column` and `date_column` name a
+  header cell: a cell matches when, emphasis and whitespace stripped, it equals the name exactly
+  (case-sensitive), in any position. A log whose header lacks a declared column, or has it more than
+  once, is one finding on the record (`revision-log-column-unreadable`, with an `edit-section`
+  action) and none of its rows is judged; `revision-log.version-bump-required` reports such a
+  record unreadable, in the log now or at the merge base, and never reads it as an empty log. A row
+  shorter than the class column has a blank class. A row wider than the header (a cell holding an unescaped pipe) keeps the header's last column as its last cell, so a declared trailing column reads as the undeclared last cell does; any other column is read at its header position. `class_column` and `date_column` may not name the
+  same header. When `classes` is declared, every `version_bump.classes` entry and `tool_class` must
+  be in it, and `tool_class` may be omitted only when the vocabulary has `structural`; a violation
+  is a load error naming the type and the entry or key. With `classes` undeclared, `version_bump.classes`
+  is not checked against the default pair. A declared class absent from `version_bump.classes`
+  requires no bump. These keys are additive and optional, so `schema_version` is unchanged.
 - **A record type may declare that it is the suppression type: `role: suppression`** (`BUG-74`).
   The records of that type suppress the findings they name (`SPEC-10`); the engine reads this
   declaration and knows no type name:
@@ -2187,3 +2215,4 @@ proves this configuration produces the three findings.
 > | 2026-11-07 | Bumped to `0.106`. A `harness.guardrails` name the build does not ship is a config load error for every command, suggesting the nearest valid name; unknown keys elsewhere in `harness` are still kept and reported. **Why:** `ADR-89` amendment of 2026-11-07, maintainer decision from the core-model review. | **substantive** |
 > | 2026-11-07 | Bumped to `0.107`. The `sequence.cycle` bullet "One graph per pair" no longer says a loop across two acyclic pairs is never detected: it is reported when both pairs are named in `roadmap.pairs`. **Why:** the bullet contradicted `ADR-82`, `MILE-192` and the `roadmap.pairs` bullet below it; `ADR-76`'s matching Decision text carries a proposed amendment. | **substantive** |
 > | 2026-11-07 | Bumped to `0.108`. Documents `statuses.delivery.items` (`ADR-96`, `MILE-214`): the opt-in per-item evidence for a type's Done means, its keys, its load errors and how the standing is computed from the items. **Why:** `MILE-214`, the engine of `ADR-96`; an undeclared config is unchanged. | **substantive** |
+> | 2026-11-07 | Bumped to `0.109`. Documents the optional `revision_log` keys `classes`, `class_column`, `date_column` and `tool_class` (`ADR-94`, `MILE-213`): the class vocabulary, the header names of the class and date columns, and the class `urzua fix` writes, their engine defaults, and their load errors. No `schema_version` bump. **Why:** `MILE-213`, the build of `ADR-94`; an undeclared config behaves as before. | **substantive** |

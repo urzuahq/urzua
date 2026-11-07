@@ -367,6 +367,7 @@ pub fn apply_repair(
     today: &str,
     attestation: &Attestation,
     log_id: &crate::config::RevisionLogId,
+    shape: &crate::config::RevisionLogShape,
     log_required: bool,
 ) -> Result<String, String> {
     let mut doc = LineDoc::parse(content);
@@ -393,13 +394,14 @@ pub fn apply_repair(
         return Ok(doc.to_string());
     }
     let edited_content = doc.to_string();
-    let entries = find_revision_log_entries(&edited_content, log_id).ok_or_else(|| {
+    let log = find_revision_log_entries(&edited_content, log_id, shape).ok_or_else(|| {
         format!(
             "record has no Revision log section (looked for {}) -- refusing to apply without one to record the change in (ADR-0015's reversibility requirement); declare revision_log: {{required: false}} on the type to apply without a log",
             log_id.describe()
         )
     })?;
-    let Some(last_entry) = entries.last() else {
+    let log = log.map_err(|problem| problem.message)?;
+    let Some(last_entry) = log.entries.last() else {
         return Err(
             "record's Revision log section has no existing rows to append after".to_string(),
         );
@@ -412,15 +414,17 @@ pub fn apply_repair(
         .and_then(table_row_prefix)
         .unwrap_or("> ")
         .to_string();
-    let new_row = format!(
-        "{prefix}| {today} | Tool-authored (by {}): recomputed `{}` from `{}` -- stated {} disagreed with the computed value `{}`. | **structural** |",
+    let narrative = format!(
+        "Tool-authored (by {}): recomputed `{}` from `{}` -- stated {} disagreed with the computed value `{}`.",
         attestation.label(),
         repair.field,
         repair.evidence,
         describe_stated(&repair.current_value),
         repair.computed_value
     );
-    doc.insert_after(last_entry.line, new_row);
+    let new_row = log_row(&prefix, log.layout, shape, today, &narrative)?;
+    let last_line = last_entry.line;
+    doc.insert_after(last_line, new_row);
 
     Ok(doc.to_string())
 }
@@ -649,6 +653,7 @@ pub fn apply_rebaseline(
     attestation: &Attestation,
     reason: &str,
     log_id: &crate::config::RevisionLogId,
+    shape: &crate::config::RevisionLogShape,
 ) -> Result<String, String> {
     let mut doc = LineDoc::parse(content);
     let prefix_key = format!("{}:", rebaseline.field);
@@ -687,10 +692,11 @@ pub fn apply_rebaseline(
     }
 
     let edited = doc.to_string();
-    let entries = find_revision_log_entries(&edited, log_id).ok_or_else(|| {
+    let log = find_revision_log_entries(&edited, log_id, shape).ok_or_else(|| {
         "record has no Revision log section -- refusing to re-baseline without one to record the attestation in".to_string()
     })?;
-    let Some(last_entry) = entries.last() else {
+    let log = log.map_err(|problem| problem.message)?;
+    let Some(last_entry) = log.entries.last() else {
         return Err(
             "record's Revision log section has no existing rows to append after".to_string(),
         );
@@ -718,14 +724,44 @@ pub fn apply_rebaseline(
         })
         .collect::<Vec<_>>()
         .join(", ");
-    doc.insert_after(
-        last_entry.line,
-        format!(
-            "{row_prefix}| {today} | Re-baselined (attested by {}): re-pinned {moved}. Reason: {reason} **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |",
-            attestation.label()
-        ),
+    let narrative = format!(
+        "Re-baselined (attested by {}): re-pinned {moved}. Reason: {reason} **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds.",
+        attestation.label()
     );
+    let new_row = log_row(&row_prefix, log.layout, shape, today, &narrative)?;
+    let last_line = last_entry.line;
+    doc.insert_after(last_line, new_row);
     Ok(doc.to_string())
+}
+
+/// A tool-authored revision-log row, laid out by the log's own header
+/// (`ADR-94`): the date in the date column, the type's `tool_class` in the
+/// class column, the narrative in the first remaining column, any other cell
+/// empty. A log with no such column left is refused, as one with no rows to
+/// append after is.
+fn log_row(
+    prefix: &str,
+    layout: crate::rules::LogLayout,
+    shape: &crate::config::RevisionLogShape,
+    today: &str,
+    narrative: &str,
+) -> Result<String, String> {
+    if layout.date == layout.class {
+        return Err(
+            "record's Revision log has its date and class in the same column -- refusing to write a row there".to_string(),
+        );
+    }
+    let Some(narrative_at) = (0..layout.width).find(|i| *i != layout.date && *i != layout.class)
+    else {
+        return Err(
+            "record's Revision log table has no column left for the narrative besides the date and class columns -- refusing to write a row there".to_string(),
+        );
+    };
+    let mut cells = vec![String::new(); layout.width];
+    cells[layout.date] = today.to_string();
+    cells[layout.class] = format!("**{}**", shape.tool_class);
+    cells[narrative_at] = narrative.to_string();
+    Ok(format!("{prefix}| {} |", cells.join(" | ")))
 }
 
 fn short(hash: &str) -> &str {
@@ -811,6 +847,7 @@ mod tests {
             &who,
             "Reason.",
             &Default::default(),
+            &Default::default(),
         )
         .unwrap();
         assert!(
@@ -842,8 +879,16 @@ mod tests {
             }],
         };
         let who = Attestation::new("ana", IdentitySource::Asserted, ActorKind::Agent);
-        let out =
-            apply_rebaseline(&content, &rb, "2026-11-06", &who, "R.", &Default::default()).unwrap();
+        let out = apply_rebaseline(
+            &content,
+            &rb,
+            "2026-11-06",
+            &who,
+            "R.",
+            &Default::default(),
+            &Default::default(),
+        )
+        .unwrap();
         assert!(
             out.contains(&format!(
                 "lib/a.rs@sha256:{h}, a.rs@sha256:bbbbbbbbbbbbbbbbbbbbbbbb"
@@ -1083,6 +1128,7 @@ mod tests {
             "2026-09-05",
             &attest("beau"),
             &Default::default(),
+            &Default::default(),
             true,
         )
         .unwrap();
@@ -1116,6 +1162,7 @@ mod tests {
                 "2026-09-05",
                 &attest("beau"),
                 &Default::default(),
+                &Default::default(),
                 true,
             )
             .unwrap();
@@ -1146,6 +1193,7 @@ mod tests {
             "2026-09-05",
             &attest("beau"),
             &Default::default(),
+            &Default::default(),
             false,
         )
         .unwrap();
@@ -1164,6 +1212,7 @@ mod tests {
             "2026-09-05",
             &attest("beau"),
             &Default::default(),
+            &Default::default(),
             false,
         )
         .unwrap_err();
@@ -1179,6 +1228,7 @@ mod tests {
             "2026-09-05",
             &attest("beau"),
             &Default::default(),
+            &Default::default(),
             true,
         )
         .unwrap_err();
@@ -1193,6 +1243,7 @@ mod tests {
             &sample_repair(),
             "2026-09-05",
             &attest("beau"),
+            &Default::default(),
             &Default::default(),
             false,
         )
@@ -1213,6 +1264,7 @@ mod tests {
             "2026-09-05",
             &attest("beau"),
             &Default::default(),
+            &Default::default(),
             true,
         )
         .unwrap_err();
@@ -1227,6 +1279,7 @@ mod tests {
             &sample_repair(),
             "2026-09-05",
             &attest("beau"),
+            &Default::default(),
             &Default::default(),
             true,
         )
@@ -1244,6 +1297,7 @@ mod tests {
             &sample_repair(),
             "2026-09-05",
             &attest("beau"),
+            &Default::default(),
             &Default::default(),
             true,
         )
@@ -1328,6 +1382,7 @@ mod tests {
             &attest("ana"),
             "Read the diff; the claim holds.",
             &Default::default(),
+            &Default::default(),
         )
         .unwrap();
         assert!(out.contains(&format!(
@@ -1342,6 +1397,7 @@ mod tests {
             "d",
             &attest("ana"),
             "r",
+            &Default::default(),
             &Default::default()
         )
         .is_err());
@@ -1395,6 +1451,7 @@ mod tests {
             &attest("ana"),
             "ok.",
             &Default::default(),
+            &Default::default(),
         )
         .unwrap();
         assert!(out.contains(&format!(
@@ -1421,6 +1478,7 @@ mod tests {
             "2026-11-04",
             &attest("beau"),
             &Default::default(),
+            &Default::default(),
             true,
         )
         .unwrap();
@@ -1433,5 +1491,170 @@ mod tests {
             result.contains("disagreed with the computed value `Done`"),
             "{result}"
         );
+    }
+
+    // ---- ADR-94: the tool writes the type's tool_class, laid out by the log's header ----
+
+    fn shape(
+        classes: Option<&[&str]>,
+        class_column: Option<&str>,
+        date_column: Option<&str>,
+        tool_class: &str,
+    ) -> crate::config::RevisionLogShape {
+        crate::config::RevisionLogShape {
+            classes: classes.map_or_else(
+                || crate::config::RevisionLogShape::default().classes,
+                |c| c.iter().map(|c| c.to_string()).collect(),
+            ),
+            class_column: class_column.map(str::to_string),
+            date_column: date_column.map(str::to_string),
+            tool_class: tool_class.to_string(),
+        }
+    }
+
+    fn repair_with(
+        content: &str,
+        shape: &crate::config::RevisionLogShape,
+    ) -> Result<String, String> {
+        apply_repair(
+            content,
+            &sample_repair(),
+            "2026-09-05",
+            &attest("beau"),
+            &Default::default(),
+            shape,
+            true,
+        )
+    }
+
+    fn log_doc(header: &str, sep: &str, row: &str) -> String {
+        format!(
+            "---\nEmbodiment: Not started\n---\n# 0001 — X\n\n> **Revision log**\n>\n> {header}\n> {sep}\n> {row}\n"
+        )
+    }
+
+    #[test]
+    fn apply_repair_writes_the_declared_tool_class_not_a_literal() {
+        let content = log_doc(
+            "| Date | Change | Class |",
+            "|---|---|---|",
+            "| 2026-08-20 | Initial. | **minor** |",
+        );
+        let out = repair_with(
+            &content,
+            &shape(Some(&["major", "minor"]), None, None, "minor"),
+        )
+        .unwrap();
+        let row = out.lines().find(|l| l.contains("Tool-authored")).unwrap();
+        assert!(row.ends_with("| **minor** |"), "{row}");
+        assert!(!out.contains("**structural**"), "{out}");
+    }
+
+    #[test]
+    fn apply_repair_lays_the_row_out_by_the_declared_header() {
+        let content = log_doc(
+            "| Class | Date | Change |",
+            "|---|---|---|",
+            "| **major** | 2026-08-20 | Initial. |",
+        );
+        let out = repair_with(
+            &content,
+            &shape(
+                Some(&["major", "structural"]),
+                Some("Class"),
+                Some("Date"),
+                "major",
+            ),
+        )
+        .unwrap();
+        let row = out.lines().find(|l| l.contains("Tool-authored")).unwrap();
+        assert!(
+            row.starts_with("> | **major** | 2026-09-05 | Tool-authored"),
+            "{row}"
+        );
+        assert!(row.ends_with(". |"), "{row}");
+        assert_eq!(row.matches('|').count(), 4, "{row}");
+    }
+
+    #[test]
+    fn apply_repair_leaves_other_columns_empty_and_puts_the_narrative_in_the_first_remaining() {
+        let content = log_doc(
+            "| Date | Change | Notes | Class |",
+            "|---|---|---|---|",
+            "| 2026-08-20 | Initial. | n | **structural** |",
+        );
+        let out = repair_with(&content, &Default::default()).unwrap();
+        let row = out.lines().find(|l| l.contains("Tool-authored")).unwrap();
+        assert!(row.starts_with("> | 2026-09-05 | Tool-authored"), "{row}");
+        assert!(row.ends_with("|  | **structural** |"), "{row}");
+        assert_eq!(row.matches('|').count(), 5, "{row}");
+    }
+
+    #[test]
+    fn apply_repair_refuses_a_log_with_no_column_left_for_the_narrative() {
+        let content = log_doc(
+            "| Date | Class |",
+            "|---|---|",
+            "| 2026-08-20 | **structural** |",
+        );
+        let err = repair_with(&content, &Default::default()).unwrap_err();
+        assert!(err.contains("narrative"), "{err}");
+        // A date column that is the class column leaves none either.
+        let content = log_doc(
+            "| Date | Change | Class |",
+            "|---|---|---|",
+            "| 2026-08-20 | A. | **structural** |",
+        );
+        let err =
+            repair_with(&content, &shape(None, Some("Date"), None, "structural")).unwrap_err();
+        assert!(err.contains("narrative") || err.contains("same"), "{err}");
+    }
+
+    #[test]
+    fn apply_repair_refuses_a_log_whose_declared_column_is_missing() {
+        let content = log_doc(
+            "| Date | Change | Kind |",
+            "|---|---|---|",
+            "| 2026-08-20 | A. | **structural** |",
+        );
+        let err =
+            repair_with(&content, &shape(None, Some("Class"), None, "structural")).unwrap_err();
+        assert!(err.contains("no column named"), "{err}");
+        assert!(err.contains("Class"), "{err}");
+    }
+
+    #[test]
+    fn apply_rebaseline_writes_the_declared_tool_class_laid_out_by_the_header() {
+        let r = pinned("docs/adr/0001-x.md", H1);
+        let lookup = |_: &crate::locator::Locator| PinRead::Current {
+            hash: H2.to_string(),
+            span: None,
+            files: Vec::new(),
+        };
+        let (_, found, _) = detect_rebaselines(&[r], &no_relation_field_overrides(), &lookup);
+        let content = format!(
+            "---\nEmbodiment: Implemented\nRealized-by: 'spec:docs/s.md, code:src/a.rs@sha256:{H1}, test:t.rs'\n---\n# 1\n\n> **Revision log**\n>\n> | Class | Date | Change |\n> |---|---|---|\n> | **major** | 2026-01-01 | Initial. |\n"
+        );
+        let out = apply_rebaseline(
+            &content,
+            &found[0],
+            "2026-11-04",
+            &attest("ana"),
+            "Read the diff.",
+            &Default::default(),
+            &shape(
+                Some(&["major", "minor"]),
+                Some("Class"),
+                Some("Date"),
+                "major",
+            ),
+        )
+        .unwrap();
+        let row = out.lines().find(|l| l.contains("Re-baselined")).unwrap();
+        assert!(
+            row.starts_with("> | **major** | 2026-11-04 | Re-baselined (attested by ana"),
+            "{row}"
+        );
+        assert!(!out.contains("**structural**"), "{out}");
     }
 }

@@ -1,0 +1,15 @@
+fixtures:
+  - path: .urzua/config.yaml
+    irregularity: the config the corpus is validated under; the spec type declares its own classes, class and date columns and tool class, and a bump for major and minor; not a record.
+  - path: docs/specs/SPEC-1-reordered-and-valid.md
+    irregularity: none -- the table is ordered Class | Date | Change and every class is in the declared vocabulary.
+  - path: docs/specs/SPEC-2-class-outside-the-vocabulary.md
+    irregularity: the row's class is substantive, which the declared vocabulary does not include.
+  - path: docs/specs/SPEC-3-column-missing.md
+    irregularity: the header has no Class cell (it reads Kind), so the declared class column matches nothing.
+  - path: docs/specs/SPEC-4-column-repeated.md
+    irregularity: the header has two Class cells, so the declared class column is ambiguous.
+  - path: docs/specs/SPEC-5-cosmetic-on-change.md
+    irregularity: none at the base commit; the case's change adds a cosmetic row, a declared class that requires no bump.
+  - path: docs/specs/SPEC-6-major-on-change.md
+    irregularity: none at the base commit; the case's change adds a major row and leaves Version at 0.1.

@@ -1071,6 +1071,19 @@ pub struct RevisionLogDecl {
     /// change (`BUG-51`). Absent for every type unless declared.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub version_bump: Option<VersionBumpDecl>,
+    /// The class vocabulary of the log's class column (`ADR-94`). Absent: the
+    /// engine default, `DEFAULT_REVISION_LOG_CLASSES`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub classes: Option<Vec<String>>,
+    /// The header cell that names the class column. Absent: the last cell.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub class_column: Option<String>,
+    /// The header cell that names the date column. Absent: the first cell.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub date_column: Option<String>,
+    /// The class `urzua fix` writes. Absent: `DEFAULT_REVISION_LOG_TOOL_CLASS`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_class: Option<String>,
 }
 
 /// A type's version-bump requirement: a revision-log row of one of `classes`
@@ -1089,6 +1102,50 @@ pub struct VersionBumpDecl {
 /// The default marker line: what every repository used before the identity
 /// was declared.
 pub const DEFAULT_REVISION_LOG_MARKER: &str = "**Revision log**";
+
+/// The default class vocabulary of a revision log, held in the engine so a type
+/// that declares no `classes` behaves as every type did before `ADR-94`. This
+/// pair and `DEFAULT_REVISION_LOG_TOOL_CLASS` are the only class names the
+/// engine knows.
+pub const DEFAULT_REVISION_LOG_CLASSES: [&str; 2] = ["substantive", "structural"];
+
+/// The class `urzua fix` writes when a type declares no `tool_class`.
+pub const DEFAULT_REVISION_LOG_TOOL_CLASS: &str = "structural";
+
+/// A cell or declared name with emphasis marks and whitespace stripped: how a
+/// revision-log class, header cell and declared name are compared (`ADR-94`).
+pub fn strip_emphasis(s: &str) -> &str {
+    s.trim().trim_matches('*').trim()
+}
+
+/// A type's revision-log vocabulary and columns, resolved from its
+/// `revision_log` declaration with the engine defaults filled in (`ADR-94`).
+/// Every name is already stripped.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RevisionLogShape {
+    /// The accepted classes.
+    pub classes: Vec<String>,
+    /// The header cell naming the class column; `None` reads the last cell.
+    pub class_column: Option<String>,
+    /// The header cell naming the date column; `None` reads the first cell.
+    pub date_column: Option<String>,
+    /// The class `urzua fix` writes.
+    pub tool_class: String,
+}
+
+impl Default for RevisionLogShape {
+    fn default() -> Self {
+        RevisionLogShape {
+            classes: DEFAULT_REVISION_LOG_CLASSES
+                .iter()
+                .map(|c| c.to_string())
+                .collect(),
+            class_column: None,
+            date_column: None,
+            tool_class: DEFAULT_REVISION_LOG_TOOL_CLASS.to_string(),
+        }
+    }
+}
 
 /// A resolved revision-log identity: how to recognise the line that opens the
 /// section. A line matches only when it is that line, not when it mentions the
@@ -1156,6 +1213,24 @@ impl RecordTypeConfig {
         }
     }
 
+    /// The revision-log vocabulary and columns this type declares, with the
+    /// engine defaults for what it leaves out (`ADR-94`).
+    pub fn revision_log_shape(&self) -> RevisionLogShape {
+        let default = RevisionLogShape::default();
+        let Some(decl) = &self.revision_log else {
+            return default;
+        };
+        let name = |v: &Option<String>| v.as_deref().map(|v| strip_emphasis(v).to_string());
+        RevisionLogShape {
+            classes: decl.classes.as_ref().map_or(default.classes, |c| {
+                c.iter().map(|c| strip_emphasis(c).to_string()).collect()
+            }),
+            class_column: name(&decl.class_column),
+            date_column: name(&decl.date_column),
+            tool_class: name(&decl.tool_class).unwrap_or(default.tool_class),
+        }
+    }
+
     /// The version-bump requirement this type declares, if any (`BUG-51`).
     pub fn version_bump(&self) -> Option<&VersionBumpDecl> {
         self.revision_log
@@ -1190,6 +1265,15 @@ impl Config {
         self.record_types
             .get(record_type)
             .map(RecordTypeConfig::revision_log_id)
+            .unwrap_or_default()
+    }
+
+    /// The revision-log shape for a record of `record_type` (the defaults for a
+    /// type the config does not declare).
+    pub fn revision_log_shape(&self, record_type: &str) -> RevisionLogShape {
+        self.record_types
+            .get(record_type)
+            .map(RecordTypeConfig::revision_log_shape)
             .unwrap_or_default()
     }
 
@@ -1504,10 +1588,7 @@ pub enum ConfigError {
     #[error("record type '{record_type}' declares permanent {reason}")]
     InvalidPermanent { record_type: String, reason: String },
     #[error("record type '{record_type}' declares revision_log {reason}")]
-    InvalidRevisionLog {
-        record_type: String,
-        reason: &'static str,
-    },
+    InvalidRevisionLog { record_type: String, reason: String },
     #[error("rule '{rule}' option '{option}' entry '{entry}' {reason}")]
     InvalidPublishedPath {
         rule: String,
@@ -1568,6 +1649,109 @@ pub enum ConfigError {
 /// (`parse_record_filename`): hyphen-separated segments, each non-empty
 /// upper-case/digits and not all digits (an all-digit segment would be read
 /// as the record number).
+/// Why a type's `revision_log` declaration cannot be used, or `None`: the
+/// identity (`MILE-167`), the version bump (`BUG-51`) and the vocabulary,
+/// columns and tool class (`ADR-94`).
+fn revision_log_problem(decl: &RevisionLogDecl) -> Option<String> {
+    let identity = match (&decl.marker, &decl.heading) {
+        (None, None)
+            if decl.required.is_some()
+                || decl.version_bump.is_some()
+                || decl.classes.is_some()
+                || decl.class_column.is_some()
+                || decl.date_column.is_some()
+                || decl.tool_class.is_some() =>
+        {
+            None
+        }
+        (None, None) => Some("neither `marker` nor `heading` -- name one"),
+        (Some(_), Some(_)) => Some("both `marker` and `heading` -- name exactly one"),
+        (Some(t), None) | (None, Some(t)) if t.trim().is_empty() => {
+            Some("a blank identity -- it would match no line")
+        }
+        (Some(t), None) | (None, Some(t)) if t.contains('\n') => {
+            Some("an identity spanning lines -- it would match no line")
+        }
+        _ => None,
+    };
+    if let Some(reason) = identity {
+        return Some(reason.to_string());
+    }
+    if let Some(bump) = &decl.version_bump {
+        if bump.field.trim().is_empty() {
+            return Some("a `version_bump` with a blank `field` -- it names no field".into());
+        } else if bump.classes.is_empty() {
+            return Some("a `version_bump` with no `classes` -- it would require nothing".into());
+        } else if bump.classes.iter().any(|c| c.trim().is_empty()) {
+            return Some("a `version_bump` with a blank class -- it would match no row".into());
+        }
+    }
+    let mut seen: Vec<&str> = Vec::new();
+    if let Some(classes) = &decl.classes {
+        if classes.is_empty() {
+            return Some("an empty `classes` -- it would accept no row".into());
+        }
+        for class in classes {
+            let class = strip_emphasis(class);
+            if class.is_empty() {
+                return Some("a blank class in `classes` -- it would match no row".into());
+            }
+            if seen.contains(&class) {
+                return Some(format!(
+                    "`classes` naming `{class}` twice (names are compared after stripping emphasis and whitespace)"
+                ));
+            }
+            seen.push(class);
+        }
+        if let Some(bump) = &decl.version_bump {
+            if let Some(out) = bump
+                .classes
+                .iter()
+                .find(|c| !seen.contains(&strip_emphasis(c)))
+            {
+                return Some(format!(
+                    "a `version_bump` class `{}` that is not in `classes`",
+                    strip_emphasis(out)
+                ));
+            }
+        }
+    }
+    for (key, value) in [
+        ("class_column", &decl.class_column),
+        ("date_column", &decl.date_column),
+        ("tool_class", &decl.tool_class),
+    ] {
+        if value
+            .as_deref()
+            .is_some_and(|v| strip_emphasis(v).is_empty())
+        {
+            return Some(format!("a blank `{key}` -- it names nothing"));
+        }
+    }
+    if let (Some(class), Some(date)) = (&decl.class_column, &decl.date_column) {
+        if strip_emphasis(class) == strip_emphasis(date) {
+            return Some(format!(
+                "`class_column` and `date_column` both naming `{}` -- they must be different headers",
+                strip_emphasis(class)
+            ));
+        }
+    }
+    if decl.classes.is_some() {
+        match decl.tool_class.as_deref().map(strip_emphasis) {
+            Some(tool) if !seen.contains(&tool) => {
+                return Some(format!("a `tool_class` `{tool}` that is not in `classes`"));
+            }
+            None if !seen.contains(&DEFAULT_REVISION_LOG_TOOL_CLASS) => {
+                return Some(format!(
+                    "`classes` without `{DEFAULT_REVISION_LOG_TOOL_CLASS}` and no `tool_class` -- name the class `urzua fix` writes"
+                ));
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
 fn prefix_problem(prefix: &str) -> Option<&'static str> {
     if prefix.is_empty() {
         return Some("is empty");
@@ -2182,31 +2366,7 @@ pub fn parse_with_document_models(
             }
         }
         if let Some(decl) = &rt.revision_log {
-            let reason = match (&decl.marker, &decl.heading) {
-                (None, None) if decl.required.is_some() || decl.version_bump.is_some() => None,
-                (None, None) => Some("neither `marker` nor `heading` -- name one"),
-                (Some(_), Some(_)) => Some("both `marker` and `heading` -- name exactly one"),
-                (Some(t), None) | (None, Some(t)) if t.trim().is_empty() => {
-                    Some("a blank identity -- it would match no line")
-                }
-                (Some(t), None) | (None, Some(t)) if t.contains('\n') => {
-                    Some("an identity spanning lines -- it would match no line")
-                }
-                _ => None,
-            };
-            let reason = reason.or_else(|| {
-                let bump = decl.version_bump.as_ref()?;
-                if bump.field.trim().is_empty() {
-                    Some("a `version_bump` with a blank `field` -- it names no field")
-                } else if bump.classes.is_empty() {
-                    Some("a `version_bump` with no `classes` -- it would require nothing")
-                } else if bump.classes.iter().any(|c| c.trim().is_empty()) {
-                    Some("a `version_bump` with a blank class -- it would match no row")
-                } else {
-                    None
-                }
-            });
-            if let Some(reason) = reason {
+            if let Some(reason) = revision_log_problem(decl) {
                 return Err(ConfigError::InvalidRevisionLog {
                     record_type: name.clone(),
                     reason,
@@ -4087,6 +4247,111 @@ rules:
             "{base}    revision_log: {{marker: \"a\", other: 1}}\n"
         ))
         .is_err());
+    }
+
+    const LOG_BASE: &str = "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n";
+
+    fn log_shape(decl: &str) -> Result<RevisionLogShape, ConfigError> {
+        parse(&format!("{LOG_BASE}    revision_log: {decl}\n")).map(|c| c.revision_log_shape("adr"))
+    }
+
+    #[test]
+    fn an_undeclared_revision_log_shape_is_todays_behaviour() {
+        // ADR-94 point 2: the defaults live in the engine.
+        let want = RevisionLogShape {
+            classes: vec!["substantive".into(), "structural".into()],
+            class_column: None,
+            date_column: None,
+            tool_class: "structural".into(),
+        };
+        assert_eq!(RevisionLogShape::default(), want);
+        let c = parse(LOG_BASE).unwrap();
+        assert_eq!(c.revision_log_shape("adr"), want);
+        assert_eq!(c.revision_log_shape("unknown"), want);
+        assert_eq!(log_shape("{marker: \"**Revision log**\"}").unwrap(), want);
+    }
+
+    #[test]
+    fn a_declared_revision_log_shape_is_read_stripped() {
+        let shape = log_shape(
+            "{required: true, classes: [cosmetic, \"**major**\", \" minor \"], class_column: \"**Kind**\", date_column: When, tool_class: minor}",
+        )
+        .unwrap();
+        assert_eq!(shape.classes, ["cosmetic", "major", "minor"]);
+        assert_eq!(shape.class_column.as_deref(), Some("Kind"));
+        assert_eq!(shape.date_column.as_deref(), Some("When"));
+        assert_eq!(shape.tool_class, "minor");
+        // Each key may stand alone, like `required`.
+        for alone in [
+            "{classes: [structural]}",
+            "{class_column: Class}",
+            "{date_column: Date}",
+            "{tool_class: structural}",
+        ] {
+            assert!(log_shape(alone).is_ok(), "{alone} must load");
+        }
+    }
+
+    #[test]
+    fn a_malformed_revision_log_vocabulary_is_refused_naming_the_type() {
+        for bad in [
+            "{classes: []}",
+            "{classes: [\"  \"]}",
+            "{classes: [\"**\"]}",
+            "{classes: [structural, \"**structural**\"]}",
+            "{classes: [a, a, structural]}",
+            "{class_column: \" \"}",
+            "{date_column: \"**\"}",
+            "{class_column: Class, date_column: \"**Class**\"}",
+            "{tool_class: \" \"}",
+        ] {
+            let err = log_shape(bad).expect_err(bad);
+            assert!(
+                matches!(err, ConfigError::InvalidRevisionLog { .. }),
+                "{bad}: {err:?}"
+            );
+            assert!(err.to_string().contains("'adr'"), "{bad}: {err}");
+        }
+        // Case-sensitive: two names, not a duplicate.
+        assert!(log_shape("{classes: [Structural, structural]}").is_ok());
+    }
+
+    #[test]
+    fn a_version_bump_class_outside_the_declared_vocabulary_is_refused_naming_it() {
+        let err = log_shape(
+            "{classes: [major, structural], version_bump: {field: Version, classes: [major, huge]}}",
+        )
+        .unwrap_err();
+        assert!(
+            matches!(err, ConfigError::InvalidRevisionLog { .. }),
+            "{err:?}"
+        );
+        assert!(err.to_string().contains("huge"), "{err}");
+        // A declared class that is not in version_bump.classes requires no bump.
+        assert!(log_shape(
+            "{classes: [cosmetic, structural], version_bump: {field: Version, classes: [structural]}}"
+        )
+        .is_ok());
+        // With `classes` undeclared the bump classes are not checked.
+        assert!(log_shape("{version_bump: {field: Version, classes: [anything]}}").is_ok());
+    }
+
+    #[test]
+    fn the_tool_class_must_be_writable_under_the_declared_vocabulary() {
+        let err = log_shape("{classes: [major, minor], tool_class: structural}").unwrap_err();
+        assert!(
+            matches!(err, ConfigError::InvalidRevisionLog { .. }),
+            "{err:?}"
+        );
+        assert!(err.to_string().contains("structural"), "{err}");
+        // A vocabulary without `structural` and without `tool_class` names the missing key.
+        let err = log_shape("{classes: [major, minor]}").unwrap_err();
+        assert!(err.to_string().contains("tool_class"), "{err}");
+        // `structural` in the vocabulary is the default tool class.
+        let shape = log_shape("{classes: [major, structural]}").unwrap();
+        assert_eq!(shape.tool_class, "structural");
+        // With the vocabulary undeclared the tool class is not checked.
+        assert!(log_shape("{tool_class: whatever}").is_ok());
     }
 
     #[test]

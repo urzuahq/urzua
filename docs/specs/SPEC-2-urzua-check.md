@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5GM1RYRRX2XVMZ0ZAK
-Version: '0.118'
+Version: '0.119'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs, code:rust/crates/urzua-core/src/rules.rs, test:rust/crates/urzua-cli/tests/check_integration.rs, test:rust/crates/urzua-cli/tests/fail_on_integration.rs
@@ -680,6 +680,7 @@ declares `known_fields` keeps the `append` variant.
 | `relation.target-status-undeclared` | `target-status-undeclared-declare-set` | `edit-config` `set` |
 | `revision-log.change-class-required` | `change-class-missing` | `edit-section` `set` |
 | `revision-log.change-class-required` | `revision-log-missing` | `edit-section` `add` |
+| `revision-log.change-class-required` | `revision-log-column-unreadable` | `edit-section` `set` |
 | `revision-log.version-bump-required` | `version-bump` | `edit-field` `set` |
 | `embodiment.consistency` | `embodiment-drift` | `run-command` |
 | `embodiment.consistency` | `embodiment-unevidenced` | `edit-field` `set` |
@@ -1097,3 +1098,4 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-07 | Bumped to `0.116`. Documents that `embodiment.locator-exists` reports `Realized-by` text outside a recognised entry as `locator-malformed`; the `undeclared-field-case` variant of `header.field-set-consistency` (rename, never remove); that `revision-log.change-class-required` reads an alignment row as a delimiter; and that `header.required-fields` leaves a type with no `required_fields` out of its population. **Why:** Phase 0 hardening review of the core rules. | **substantive** |
 > | 2026-11-07 | Bumped to `0.117`. `identity.open-pr-collision` names the remedy that works: rename the file and its H1 to the next free number, or waive the finding when the other pull request is abandoned (`urzua migrate ids` cannot renumber); the `open-pr-collision` action reason says the same. An unknown `harness.guardrails` name is a load error, so `check` exits 2 on it. **Why:** `ADR-93` and `ADR-89` amendments of 2026-11-07. | **substantive** |
 > | 2026-11-07 | Bumped to `0.118`. Documents the status computed from Done-means items for a type that declares `statuses.delivery.items`: the new `status.delivery-agreement` variants, among them the guaranteed `DoneWithUnresolvedItems` error (severity floor, unwaivable by a rule-level waiver, two declared actions); the new rules `status.done-items-shape` and `status.waived-item-stale`; the `item-locator-defect` variant of `embodiment.locator-exists`; the `severity_floor` and `waivable` keys of `urzua rules`; the roadmap's `items` object. **Why:** `MILE-214`, the engine of `ADR-96`; an undeclared config is unchanged. | **substantive** |
+> | 2026-11-07 | Bumped to `0.119`. `revision-log.change-class-required` accepts the classes a type declares in `revision_log.classes` (default `substantive` and `structural`) and lists them in its finding, and reads the class and date from the columns `class_column` and `date_column` name; a header lacking a declared column or repeating it is the new variant `revision-log-column-unreadable`, offering `edit-section` `set`, with no row judged. `revision-log.version-bump-required` reports a record with such a log, now or at the merge base, as unreadable and no longer reads an unreadable base log as empty. The rule-table and action-table rows are regenerated. **Why:** `MILE-213`, the build of `ADR-94`; an undeclared config is unchanged. | **substantive** |
