@@ -72,12 +72,12 @@ What exists today:
 
 *In the context of a revision-log rule that names two classes and one column in Rust source, facing a maintainer
 decision of 2026-11-07 that it must not, we decided that a record type declares the log's class vocabulary, the
-header name of its class column and the class the tool writes, as optional keys of its existing `revision_log`
-declaration, and that a type declaring none keeps today's behaviour from defaults held in the engine, to make the
+header names of its class column and, optionally, its date column and the class the tool writes, as optional
+keys of its existing `revision_log` declaration, and that a type declaring none keeps today's behaviour from defaults held in the engine, to make the
 rule serve any repository's vocabulary with no change for one that declares nothing, accepting that the two default
 class names remain in Rust as one documented constant pair.*
 
-1. **Three optional keys on `revision_log`**, beside `marker`, `heading`, `required` and `version_bump`
+1. **Four optional keys on `revision_log`**, beside `marker`, `heading`, `required` and `version_bump`
    (`config.rs:1063-1074`):
    ```yaml
    revision_log:
@@ -85,14 +85,15 @@ class names remain in Rust as one documented constant pair.*
      required: true
      classes: [substantive, structural]   # the vocabulary
      class_column: Class                  # a header cell's name
+   date_column: Date                    # a header cell's name
      tool_class: structural               # what fix writes
      version_bump: {field: Version, classes: [substantive, structural]}
    ```
    Each may stand alone, like `required` (`config.rs:2179` allows a declaration with neither `marker` nor
    `heading` only when `required` or `version_bump` is present; it will list the new keys too).
 2. **Undeclared keeps today's behaviour, from the engine.** No `classes` means the vocabulary
-   `[substantive, structural]`; no `class_column` means the last cell, whatever the header says; no `tool_class`
-   means `structural`. These are constants next to `DEFAULT_REVISION_LOG_MARKER` (`config.rs:1091`), reached the
+   `[substantive, structural]`; no `class_column` means the last cell, whatever the header says; no `date_column`
+   means the first cell; no `tool_class` means `structural`. These are constants next to `DEFAULT_REVISION_LOG_MARKER` (`config.rs:1091`), reached the
    same way `RevisionLogId::default()` is (`config.rs:1102`). The default is in the engine, not in a generated
    default config, for two reasons. A generated config reaches only repositories that run `init` after the change,
    and the stated population, configs that declare nothing today, would still need an engine default (option F).
@@ -101,16 +102,31 @@ class names remain in Rust as one documented constant pair.*
    default and no rule reads a name outside that one pair.
 3. **Vocabulary.** `classes` is a non-empty list of non-blank, distinct names; load refuses otherwise, naming the
    type, as `InvalidRevisionLog` does today (`config.rs:1507`, `:2203`). A row's class is matched as now: emphasis
-   (`*`) and whitespace stripped, then compared exactly, case-sensitively (`rules/revision_log.rs:61`). The finding
+   (`*`) and whitespace stripped, then compared exactly, case-sensitively (`rules/revision_log.rs:61`). Declared
+   names get the same stripping before they are compared or checked for blankness, so "distinct" means distinct
+   after stripping and case-sensitive: `structural` and `**structural**` are one name and refused as a duplicate,
+   `Structural` and `structural` are two. The finding
    lists the declared names; with the default it reads exactly as today.
-4. **Column by header name.** With `class_column` declared, the class is the cell under the header cell of that
-   name (emphasis and whitespace stripped, exact match), in every log of the type. A row shorter than the column has
-   a blank class, which is the existing blank-class finding. A log whose header has no such cell is one finding on
-   that record at the header line, naming the column and the cells found, and its rows are not judged
-   (a declared input that matches nothing is reported, not skipped). `revision-log.version-bump-required` reads the
+4. **Columns by header name.** With `class_column` declared, the class is the cell under the header cell of that
+   name, in every log of the type. A header cell matches when, with emphasis and whitespace stripped, it equals the
+   declared name exactly: case-sensitive, like class values, with no case folding or fuzzy match. A miss is already
+   a loud finding that lists the cells found. A row shorter than the column has
+   a blank class, which is the existing blank-class finding. A log whose header has no such cell, or has more than
+   one (duplicate header cells are refused, not resolved by taking the first), is one finding on that record at the
+   header line, naming the column, the cells found and, for a duplicate, their positions; its rows are not judged
+   (a declared input that matches nothing is reported, not skipped). The finding is a new variant and so carries a
+   `suggested_action` (`ADR-73`): `edit-section` on the revision log, like `change-class-required` (`ADR-73:89`),
+   with an `action_source` and a `SPEC-2` row. `revision-log.version-bump-required` reads the
    same parser; for such a log it reports the record `Unreadable` in its population (the outcome it already
-   uses, `rules/revision_log.rs:148`) and adds no second finding. The date stays the first cell
-   (`rules/revision_log.rs:293`); it feeds a message and the row identity, never a rule outcome.
+   uses, `rules/revision_log.rs:148`) and adds no second finding. The same holds for the base side: the rule reads the
+   merge base's copy of the log with the same parser, and a base log it cannot read (the declared column missing or
+   duplicated there) also makes the record `Unreadable`; it is not treated as an empty log, which would make every
+   current row look added and raise false bump findings (today `find_revision_log_entries(then_text).unwrap_or_default()`
+   does exactly that).
+   With `date_column` declared, the date is the cell under that header name, found and reported by the same rules
+   as `class_column` (a miss or duplicate is the same finding, naming the column); `date_column` and `class_column`
+   may not name the same header, a load error. Undeclared, the date stays the first cell
+   (`rules/revision_log.rs:293`). The date feeds a message and the row identity, never a rule outcome.
 5. **Which classes require a bump.** Exactly the classes in `version_bump.classes`, unchanged in shape
    (`config.rs:1081-1088`); a declared class absent from it (a `cosmetic`, say) requires none, and a row whose class
    is outside the vocabulary is the change-class rule's finding and requires nothing from the bump rule
@@ -121,17 +137,22 @@ class names remain in Rust as one documented constant pair.*
    `tool_class` omitted, `structural` is used if the vocabulary has it; otherwise load refuses, naming the
    missing key, since `fix` would write a row the rule rejects. `fix --apply` and `fix --rebaseline` write
    `tool_class` where they write `structural` now (`fix.rs:385`, `:632`). The row is laid out by the log's own
-   header: the date in the first column, the class in the class column, the narrative in the first remaining
-   column, any other cell empty. A log with no class column, or no column left for the narrative, is refused as a
-   log with no rows to append after already is (`fix.rs:365-374`, `:598-605`).
+   header: the date in the date column (the first when `date_column` is undeclared), the class in the class column,
+   the narrative in the first remaining column, any other cell empty. A log with no class or date column, or no
+   column left for the narrative, is refused as a log with no rows to append after already is (`fix.rs:365-374`,
+   `:598-605`). This changes what an undeclared type's `fix` writes only for a log whose header does not have exactly
+   three columns, and today's write there is a malformed row.
 7. **This repository declares today's values** on all seven types: `classes: [substantive, structural]`,
-   `class_column: Class`, `tool_class: structural`. Nothing changes here. Because that is also the default, the
+   `class_column: Class`, `date_column: Date`, `tool_class: structural`. Nothing changes here. Because that is also the default, the
    non-default path is exercised by an acceptance corpus with another vocabulary and a reordered table, and by
    unit tests, not only by this repository's config.
 8. **No `schema_version` bump** (`ADR-77:68-70`, `SPEC-3:1458`): three additive optional keys whose absence
    preserves behaviour.
-9. **Not decided here.** Whether the date column is also declared by name; whether a header match ignores case;
-   a rule enforcing `ADR-14`'s Why for the classes that need one. Each is a later decision.
+9. **Not decided here.** A rule enforcing `ADR-14`'s Why for the classes that need one ("require a Why on
+   substantive rows"). It adds a rule and a finding, and would change undeclared configs unless opted in (for
+   example through a `classes_requiring_why` key), so it is a separate opt-in decision. Decided here, from the open
+   questions of the review: the date column is declared by name (`date_column`, optional), because a reordered
+   table otherwise reads the class as the date; header matching is exact, not case-insensitive.
 
 ## Reversibility
 
@@ -150,16 +171,19 @@ loud and its fix is one line in the config.
 - The tool can no longer write a class its own rule rejects, and a vocabulary without `structural` forces a
   decision at load time instead of a failing `fix`.
 - `ADR-15`'s "every applied write appends a `structural` entry" becomes "the type's `tool_class`", which defaults
-  to `structural`; that clause is amended when this ADR is accepted.
+  to `structural`, and `ADR-14`'s closed `substantive | structural` vocabulary and columns become declared
+  defaults; both are amended on acceptance (2026-11-07) by dated amendment sections.
 - The population of the change-class rule is unchanged (a record per log); a log with a missing class column is a
-  finding, and the bump rule discloses it as unreadable.
+  finding, and the bump rule discloses it as unreadable, as it does for an unreadable base log.
 - `SPEC-3` (the keys, their defaults, the load errors), `SPEC-2` and the rule table (`table.rs:537`, `:559`),
   `SPEC-8` (the written class and row layout) and `SPEC-4`'s corpus list change in the milestone that builds this.
 
 ## References
 
-- `ADR-14` -- the revision log and its `substantive | structural` tag, including the Why amendment.
-- `ADR-15` -- tool-authored writes append a `structural` row.
+- `ADR-14` -- the revision log and its `substantive | structural` tag, including the Why amendment; amended
+  2026-11-07 to make the vocabulary and columns declared.
+- `ADR-15` -- tool-authored writes append a `structural` row; amended 2026-11-07 to the type's `tool_class`.
+- `ADR-73` -- every finding variant declares a `suggested_action`.
 - `ADR-20` -- `fix --apply` and its revision-log write path.
 - `ADR-33` -- `init` infers nothing from the corpus.
 - `ADR-64` -- structured config in, structured output out; config-driven.
@@ -173,3 +197,4 @@ loud and its fix is one line in the config.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-07 | Drafted as Proposed. **Why:** Maintainer decision, 2026-11-07: the revision-log rule must not hardcode its vocabulary; the class names and the class column (by header name) are declared on the record type, this repository declares today's values, and an undeclared config keeps today's behaviour. The maintainer accepts it in a later change. | **substantive** |
+> | 2026-11-07 | Folded in the independent review of `#391`, accepted by the maintainer on 2026-11-07: an optional `date_column` declared by header name; exact header matching; a duplicate header cell is a finding, not resolved; "distinct" in `classes` is after stripping, case-sensitive; an unreadable base log makes the record `Unreadable`; the missing-column finding carries an `edit-section` `suggested_action`; `fix`'s row layout noted; `ADR-14` is amended alongside `ADR-15`; the Why rule stays a separate opt-in decision. **Why:** the review found the base-side `unwrap_or_default` would raise false bump findings, the new finding variant needs an `ADR-73` action, and a reordered table makes the first-cell date the class; maintainer decision, 2026-11-07. `Status` is unchanged here; acceptance is recorded separately. | **substantive** |
