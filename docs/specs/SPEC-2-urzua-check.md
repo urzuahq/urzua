@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5GM1RYRRX2XVMZ0ZAK
-Version: '0.112'
+Version: '0.113'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs, code:rust/crates/urzua-core/src/rules.rs, test:rust/crates/urzua-cli/tests/check_integration.rs, test:rust/crates/urzua-cli/tests/fail_on_integration.rs
@@ -229,8 +229,11 @@ not a reading scope, exactly as a path argument is (`BUG-60`):
   unstaged edits to tracked files count. Untracked files do not (the tracked-only guarantee
   above), except the untracked records a repository includes with `discovery.include_untracked`: they
   have no merge-base copy, so they are in the changed set and the added set exactly as a staged addition
-  is, and the diff rules (`scope: changed`) judge a draft the way they judge a staged one (`ADR-92`). A rename is a deletion plus an addition, and a deleted path is simply not a record any
-  more.
+  is, and the diff rules (`scope: changed`) judge a draft the way they judge a staged one (`ADR-92`). A
+  rename is a deletion plus an addition, and a deleted path is simply not a record any
+  more. A tracked record missing from the working tree that nothing has staged for deletion (an `rm`,
+  or a `mv` before `git add`) is treated the same way, as removed, and a `missing-record` warning
+  notice names it, so a record never vanishes in silence and the run is not `not-run`.
 - The **examined set** is the changed records plus their dependents, and `files_examined`,
   `records_read_by_any_rule` and the findings are limited to it. A dependent is an unchanged record
   that (a) names a changed or deleted record's id in any header field (a pointer, narrative or
@@ -724,7 +727,9 @@ declaration. Selection narrows what runs and never enables anything (`ADR-53`).
   has to infer a filter from the length of `rules_executed`.
 - **An excluded rule is omitted from `rules_executed`.** It is not listed as `not-enabled`, which would
   say the repository declined a policy it declared, and it is not run: a selection that leaves out
-  `embodiment.consistency` skips the git history that rule reads. `status`, `blocking` and the exit code
+  `embodiment.consistency` skips the git history that rule reads, and one that leaves out the
+  back-pointer and boundary rules does not read the source files under `back_pointer_paths` or the
+  published boundary files. `status`, `blocking` and the exit code
   are computed over the rules that ran exactly as over a full run. A rule that is selected but
   declared `off` is listed `not-enabled`, so a selection of only such rules is `not-run` (exit 2), as a
   run with nothing enabled always is.
@@ -1018,4 +1023,5 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-06 | Bumped to `0.109`. For a type declaring no `known_fields`, the `edit-config` suggested by `config.pointer-field-not-known` and `config.relation-field-not-known` sets the full list the type's records use plus the field in question, instead of appending one field; two variants (`pointer-field-not-known-declare-set`, `relation-field-not-known-declare-set`) are added. **Why:** maintainer decision of 2026-11-05: applying the one-field append switched `header.field-set-consistency` on and flagged every other optional field. | **substantive** |
 > | 2026-11-06 | Bumped to `0.110`. `relation.target-status-undeclared` and `config.companion-declaration-missing` follow the same rule as the two field-not-known rules: for a type declaring no `known_fields` the suggested `edit-config` is a `set` of the full list the type's records use plus the field(s) in question (`-declare-set` variants), not an `append` that would create a one-item list. **Why:** review of the same-day change found the same one-field append in these two rules. | **substantive** |
 > | 2026-11-06 | Bumped to `0.111`. `embodiment.locator-promotion-candidate` lists the `scope` option (`ADR-90`, `MILE-203`): with `scope: changed` a locator is reported only when a record the `--base` diff adds or changes cites it, the finding sits on that changed record and names every citer, a plain `check` reports none, and the unchanged citers are counted in `deferred_by_scope`. The rule's table row is regenerated. **Why:** a repository that enables the nudge at `info` should not see it on records nobody edited; ADR-90 permits the option on a record-level rule. | **substantive** |
-> | 2026-11-07 | Bumped to `0.112`. §Discovery states `discovery.include_untracked` (`SPEC-3`): with it, untracked, non-ignored record files directly in a declared directory join the run's files (source still `tracked-sweep`), `--base` counts them as added, and a named file keeps its `BUG-24` treatment; without it, a plain `check` adds the info notice `discovery.untracked-skipped` naming the untracked records it skipped. `scope` gains the always-present `include_untracked` and `untracked_included`. The info notice `discovery.untracked-not-drift-judged` counts records with a locator and no history that drift did not judge. **Why:** `MILE-206` / `ADR-92`; `ADR-56` stands for the default and carries the amendment. | **substantive** |
+> | 2026-11-06 | Bumped to `0.112`. A tracked record missing from the working tree and not staged for deletion is judged as removed and named in a `missing-record` warning notice, where it made the whole run `not-run`; a `--rules` selection reads the back-pointer sources and published boundary files only for the rules that read them. **Why:** Phase 0 hardening from a second adopter switchover -- one `rm` stopped every check and the editor hook could not judge, and a header-only rule paid for scanning every source file. | **substantive** |
+> | 2026-11-07 | Bumped to `0.113`. §Discovery states `discovery.include_untracked` (`SPEC-3`): with it, untracked, non-ignored record files directly in a declared directory join the run's files (source still `tracked-sweep`), `--base` counts them as added, and a named file keeps its `BUG-24` treatment; without it, a plain `check` adds the info notice `discovery.untracked-skipped` naming the untracked records it skipped. `scope` gains the always-present `include_untracked` and `untracked_included`. The info notice `discovery.untracked-not-drift-judged` counts records with a locator and no history that drift did not judge. **Why:** `MILE-206` / `ADR-92`; `ADR-56` stands for the default and carries the amendment. | **substantive** |

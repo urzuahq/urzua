@@ -203,6 +203,55 @@ later is not. `out_of_scope` is untouched. `scope` accepts one value now: a seco
 - `MILE-203` -- builds this decision.
 - `SPEC-2`, `SPEC-3` -- the check output contract and the configuration.
 
+## Amendment (2026-11-07): a cross-record rule may take `scope: changed` when every finding it emits is anchored on a changed record
+
+*Status of this amendment: proposed, pending maintainer acceptance (drafted 2026-11-07 at the maintainer's request; the maintainer decided on 2026-11-07 to permit this). `Status` stays `Accepted` and the Decision text above is unchanged.*
+
+Item 7 lets a rule take `scope` only when its verdict on a record depends on that record alone, and refuses
+it to a cross-record rule because deferring the unchanged records would hide a defect a change caused.
+`embodiment.locator-promotion-candidate` (PR #379, `b28ec6f`) takes `scope: changed` and counts citers across
+records, so it is cross-record by item 7's test. It is safe for a narrower reason, which this amendment
+states as a second admission rule. Items 1 to 6 and 8 to 12 are unchanged.
+
+**1. The admission rule.** A cross-record rule may list `scope` when every finding it emits is anchored on a
+record the diff touches (a changed record, as in item 2). Item 7's per-record admission stays as it is;
+this adds a second way in and does not widen the first.
+
+**2. Unchanged records are context only.** Such a rule may read unchanged records to reach a verdict about a
+changed one (for the promotion nudge, to count that an unchanged record also cites a locator). It never
+judges an unchanged record, never anchors a finding on one, and never reports one as a defect. A message may
+name an unchanged record as evidence for the finding on the changed one.
+
+**3. The population counts only the changed anchors as examined.** A slot on a changed record is
+`examined`; a slot on an unchanged record is `eligible` and counted in `deferred_by_scope` (item 4), even
+though the rule read it as context. On a plain `check` every slot is deferred, as in item 3. A rule that
+reads a record as context does not thereby examine it.
+
+**4. The declaration marks the rule as anchor-scoped.** The rule's declaration in the rule table
+(`rust/crates/urzua-core/src/rules/table.rs`, where item 7's per-rule marking and its table-consistency test
+live) must say the rule is cross-record in what it reads and anchor-scoped in what it reports, so the list of
+rules that take `scope` stays exact and the load error "rule 'x' does not take the option 'scope'" stays
+true for every rule that fails the admission rule. A rule that is cross-record and not anchor-scoped (identity
+collision, reference resolution, reciprocity, sequence cycles) still does not list `scope`.
+
+**What `b28ec6f` built, checked against this.** It matches points 1 to 3 and does not yet do point 4.
+
+- Matches: citers are collected from every record, changed or not (`embodiment.rs`, the `citers` map); the
+  finding is placed on a changed citer, and a locator no changed record cites is skipped
+  (`first_path` under `scope.is_some()`); an unchanged record's slot returns `Outcome::DeferredByScope` after
+  it was counted as a citer; the message names every citer, changed or not
+  (`scope_changed_integration.rs`, `..._fires_on_the_changed_citer_and_names_all_citers`: `examined` 1,
+  `deferred_by_scope` 2); a plain `check` reports none and defers all.
+- Differs: the rule's table entry declares `judges: Judges::OneRecord` (`table.rs`, the
+  `RULE_EMBODIMENT_LOCATOR_PROMOTION_CANDIDATE` entry), which says its verdict on a record depends on that
+  record alone. It does not: the verdict reads every citer. The table-consistency test
+  `scope_is_listed_only_by_rules_that_judge_one_record` passes only because of that label, so the table is
+  inexact. Point 4 needs a distinct marker (for example a `Judges` variant for cross-record, anchor-scoped
+  rules, and the test updated to accept it), which is code work outside this records-only change.
+- Also noted: when several changed records cite one shared locator, one finding is emitted per locator, on the
+  first changed citer in path order, not one per changed citer. That keeps every finding on a changed record
+  and satisfies point 1; whether each changed citer should be nudged is left to the maintainer.
+
 > **Revision log**
 >
 > | Date | Change | Class |
@@ -210,3 +259,4 @@ later is not. `out_of_scope` is untouched. `scope` accepts one value now: a seco
 > | 2026-11-05 | Drafted as Proposed. **Why:** Maintainer decision, 2026-11-05, recorded here; the maintainer accepts it in a later change. | **substantive** |
 > | 2026-11-05 | Amended while Proposed after independent review: a separate additive `deferred_by_scope` counter replaces reuse of `out_of_scope` (which `config.scope-matches-nothing` would have warned on); dedicated scalar validation for `scope`; units are `field` slots (494 eligible); cross-record rules named; ADR-78 added. **Why:** Review of PR #360 found that reuse would warn on every plain `check`. Status stays Proposed. | **substantive** |
 > | 2026-11-05 | Status changed from Proposed to Accepted. **Why:** Maintainer decision, 2026-11-05. | **substantive** |
+> | 2026-11-07 | Amendment added: a cross-record rule may take `scope: changed` when every finding it emits is anchored on a changed record, reads unchanged records as context only, counts only the changed anchors as examined, and is marked anchor-scoped in its table declaration. **Why:** `embodiment.locator-promotion-candidate` (#379) counts citers across records while item 7 limits the option to one-record rules; maintainer decision, 2026-11-07; proposed, pending maintainer acceptance. `Status` stays `Accepted` and the Decision text is unchanged. The built rule is labelled `Judges::OneRecord`, which point 4 asks to change. | **substantive** |

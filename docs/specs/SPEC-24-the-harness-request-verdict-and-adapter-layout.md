@@ -2,7 +2,7 @@
 Stable-Id: 01M6Q32HB672E7RB57RFQ9QEB3
 Status: Draft
 Date: 2026-11-06
-Version: '0.7'
+Version: '0.8'
 Author: beauwilliams
 Subject: 'The neutral request and verdict `urzua harness run` speaks, the adapter directory layout of the embedded bundle, and the lock file.'
 Implements: ADR-89
@@ -63,8 +63,12 @@ under any other configuration the call proceeds with a stated notice. An edit th
 refused only when its file is a protected path or a gated record (the table above); for any other file it
 proceeds with the notice, since the edit tool fails by itself when its `old_string` is absent.
 
-Gate matching (`acceptance`, `protected-paths`) compares paths ASCII case-insensitively on every filesystem, and
-judges an edit through a symlink as the file it resolves to.
+Gate matching (`acceptance`, `protected-paths`) compares paths with Unicode case folding on every filesystem (each
+character upper-cased then lower-cased, so `ß` folds to `ss`; names are not Unicode-normalised), judges an edit
+through a symlink as the file it resolves to, and on Unix judges an edit through a hard link (a file with another
+link, found by device and inode among the files under a protected path and the directories of a gated record type)
+as that protected or gated file. Off Unix a hard link is judged by its own name. The engine names no agent: how an
+agent's tools become a request is the adapter's.
 
 ### The post-command verdict
 
@@ -81,7 +85,7 @@ extra fields:
 |---|---|
 | `findings` | The unwaived findings the checked records have now and did not have at `HEAD`, as `urzua check` prints them. |
 | `gated_moves` | One line per changed record the command moved to a status the `authority` table gates (a new record, or one whose status at `HEAD` was another), judged against that commit (`HEAD` when the command committed nothing) when `acceptance` is enabled. Reported as errors of their own, never blocked; empty when none, and reported even when `check` cannot run. |
-| `protected_changes` | One line per path under an `authority` path gate that the command changed, created, deleted or committed, when `protected-paths` is enabled. Matched ASCII case-insensitively. Reported as errors of their own, never blocked, once per content hash. |
+| `protected_changes` | One line per path under an `authority` path gate that the command changed, created, deleted or committed, when `protected-paths` is enabled. Matched with Unicode case folding. Includes a file git does not show (a gitignored one): the harness keeps a content hash of every file under a protected path in `.urzua/cache/protected-hashes.json` (seeded by `session-start`, refreshed by each check) and reports a file whose hash differs, that is new or that is gone. Reported as errors of their own, never blocked, once per content hash: the same change is not reported again. |
 | `pre_existing` | The unwaived findings the same record already had at `HEAD`, judged from its committed text (a record with no copy at `HEAD` has none). Listed, not new. |
 | `checked` | The records `check` ran on this time. Empty when no check ran: a clean tree, no governed record changed, the guardrail is off, or every changed record's content hash was already reported. |
 
@@ -93,7 +97,7 @@ unreadable request and a `check` that cannot run; the message contains "NOT judg
 hashes is `.urzua/cache/post-command.json` (derived, ignored by git): it keeps exactly the records and protected
 paths that are changed now, so a reverted one is forgotten, and a clean tree removes it. The commit the next check
 starts from is `.urzua/cache/post-command-head`, written by every check that judged and by `session-start`; when
-it is absent or no longer in the history the working tree is compared with `HEAD` only. The guardrail takes no
+it is absent or no longer in the history the working tree is compared with `HEAD` only. The protected hashes file also holds the protected entries and the hash of the configuration file they were read from; when the configuration is unchanged and every protected file hashes as before, a clean tree ends the check before the configuration is parsed. With no baseline yet (no `session-start`), the first check records one and can report nothing for a gitignored file. The walk stops at 50 000 entries and says so. The guardrail takes no
 `on_unjudged`.
 
 ## Adapter layout
@@ -173,3 +177,4 @@ out of the shared files, and deletes the lock last.
 > | 2026-11-06 | Bumped to `0.5`. Drops the not-covered entry for cutting this repository over: it runs on the installed bundle (`SPEC-19`). **Why:** `MILE-204`. | **substantive** |
 > | 2026-11-06 | Bumped to `0.6`. Adds the request field `adapter_error` and the adapter-failure rule for `on_unjudged: deny` (`acceptance`, `protected-paths`), the post-command verdict field `protected_changes`, the commit range and `post-command-head` memory, and the case-insensitive and symlink-resolving gate matching. **Why:** the second-pass review of the harness. | **substantive** |
 > | 2026-11-06 | Bumped to `0.7`. An edit the translator cannot place is refused under `on_unjudged: deny` only when its file is a protected path or a gated record; any other file is allowed with a notice. An unreadable payload, which names no file, is still refused. **Why:** review of pull request 378: refusing every unplaceable edit overreached onto files no gate covers, where the edit tool fails by itself. | **substantive** |
+> | 2026-11-06 | Bumped to `0.8`. Gate matching uses Unicode case folding and resolves a hard link (Unix); `protected_changes` includes gitignored protected files by content hash, kept in `.urzua/cache/protected-hashes.json`; an adapter may send several `paths` with `adapter_error` (the call is refused when any is a protected path or gated record). **Why:** the maintainer's decision of 2026-11-06 to close the guardrail gaps left by pull request 378, under `ADR-89`. | **substantive** |

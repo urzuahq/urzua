@@ -72,7 +72,7 @@ expensive or noisy it is deleted without consequence.
 
 ## Amendment (2026-11-06): untracked-means-ungoverned is the default, not the rule
 
-*Status of this amendment: proposed, pending maintainer acceptance (drafted 2026-11-06 with `ADR-92`). `Status` stays `Accepted` and the Decision text above is unchanged.*
+*Status of this amendment: accepted by the maintainer on 2026-11-06 (drafted with `ADR-92`). `Status` stays `Accepted` and the Decision text above is unchanged.*
 
 The Decision says "untracked-means-ungoverned stands unchanged" and the Reversibility section says
 "Nothing about discovery, the record set, or `files_examined` moves". `ADR-92` (Proposed) makes both
@@ -104,3 +104,4 @@ staging by `urzua new` is left to `MILE-103`, is unchanged.
 > |---|---|---|
 > | 2026-11-05 | Revision log added, 2026-11-05. | **structural** |
 > | 2026-11-06 | Amendment added: untracked-means-ungoverned is now the default only; an opt-in `discovery.include_untracked` includes untracked records and a default notice lists the ones skipped (`ADR-92`); proposed, pending maintainer acceptance. **Why:** `ADR-92` makes the Decision's "stands unchanged" and the Reversibility claim conditional, and a revision row alone would leave the Accepted text contradicting it; the Decision is unchanged and `Status` stays `Accepted`. | **substantive** |
+> | 2026-11-06 | Amendment (untracked records opt-in, `ADR-92`) accepted. **Why:** Maintainer decision, 2026-11-06. | **substantive** |

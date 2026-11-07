@@ -264,6 +264,10 @@ fn translate(dir: &Path, payload: &str, engine: &[&str]) -> serde_json::Value {
         .env("URZUA_BIN", env!("CARGO_BIN_EXE_urzua"));
     let out = run_with_stdin(&mut c, payload);
     assert_eq!(out.status.code(), Some(0), "{out:?}");
+    // An allowed call prints nothing.
+    if out.stdout.is_empty() {
+        return serde_json::Value::Null;
+    }
     json(&out)
 }
 
@@ -558,4 +562,400 @@ fn the_installed_instructions_say_the_post_command_check_reports_a_shell_edit_of
     let dir = fixture("instructions-true", &config(""));
     bash(&dir, "echo '# x' >> .urzua/config.yaml");
     assert_eq!(post(&dir)["protected_changes"].as_array().unwrap().len(), 1);
+}
+
+// ============================================================ third pass
+// The gaps #378 left: NotebookEdit and file-writing MCP tools, a gitignored
+// protected file written by shell, Unicode case, and hardlinks.
+
+/// A fake engine that saves the request it is sent to `capture` and allows.
+fn capturing_engine(capture: &Path) -> Vec<String> {
+    vec![
+        "sh".into(),
+        "-c".into(),
+        "cat > \"$0\"; echo '{\"verdict\":\"allow\",\"message\":\"\"}'".into(),
+        capture.to_string_lossy().to_string(),
+    ]
+}
+
+fn translate_with(dir: &Path, payload: &str, engine: &[String]) -> serde_json::Value {
+    let engine: Vec<&str> = engine.iter().map(String::as_str).collect();
+    translate(dir, payload, &engine)
+}
+
+fn notebook(cells: serde_json::Value) -> String {
+    serde_json::json!({"cells": cells, "metadata": {}, "nbformat": 4, "nbformat_minor": 5})
+        .to_string()
+}
+
+fn notebook_payload(dir: &Path, file: &str) -> String {
+    serde_json::json!({
+        "tool_name": "NotebookEdit", "cwd": dir.to_string_lossy(),
+        "tool_input": {
+            "notebook_path": dir.join(file).to_string_lossy(),
+            "cell_id": "c1", "new_source": "print('edited')", "edit_mode": "replace",
+        },
+    })
+    .to_string()
+}
+
+#[test]
+fn a_notebook_edit_is_judged_as_the_notebook_it_writes() {
+    let dir = fixture("notebook", &config(""));
+    let nb = notebook(serde_json::json!([
+        {"id": "c1", "cell_type": "code", "source": "print(1)", "metadata": {}, "outputs": [], "execution_count": null}
+    ]));
+    std::fs::write(dir.join(".claude/n.ipynb"), &nb).unwrap();
+    std::fs::write(dir.join("n.ipynb"), &nb).unwrap();
+    // A protected notebook is refused, an ordinary one is not.
+    let v = translate(&dir, &notebook_payload(&dir, ".claude/n.ipynb"), &ENGINE);
+    assert_eq!(decision(&v), Some("deny"), "{v}");
+    let v = translate(&dir, &notebook_payload(&dir, "n.ipynb"), &ENGINE);
+    assert_eq!(decision(&v), None, "{v}");
+    // The engine is sent the notebook as it would be after the edit.
+    let capture = dir.join("request.json");
+    translate_with(
+        &dir,
+        &notebook_payload(&dir, "n.ipynb"),
+        &capturing_engine(&capture),
+    );
+    let request: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&capture).unwrap()).unwrap();
+    assert_eq!(request["tool"], "NotebookEdit", "{request}");
+    assert!(
+        request["paths"][0].as_str().unwrap().ends_with("n.ipynb"),
+        "{request}"
+    );
+    let after: serde_json::Value =
+        serde_json::from_str(request["content"].as_str().unwrap()).unwrap();
+    assert_eq!(after["cells"][0]["source"], "print('edited')", "{request}");
+}
+
+#[test]
+fn a_notebook_edit_that_cannot_be_placed_is_refused_only_on_a_protected_path() {
+    let dir = fixture("notebook-unplaced", &config(""));
+    // The notebook does not exist, so the edit cannot be applied to it.
+    let v = translate(&dir, &notebook_payload(&dir, ".claude/none.ipynb"), &ENGINE);
+    assert_eq!(decision(&v), Some("deny"), "{v}");
+    let v = translate(&dir, &notebook_payload(&dir, "none.ipynb"), &ENGINE);
+    assert_eq!(decision(&v), None, "{v}");
+    assert!(
+        v["systemMessage"].as_str().unwrap().contains("NOT judge"),
+        "{v}"
+    );
+}
+
+fn mcp(dir: &Path, tool: &str, input: serde_json::Value) -> String {
+    serde_json::json!({"tool_name": tool, "cwd": dir.to_string_lossy(), "tool_input": input})
+        .to_string()
+}
+
+#[test]
+fn an_mcp_tool_that_writes_a_file_is_judged_by_its_path_and_content_fields() {
+    let dir = fixture("mcp-write", &config(""));
+    let abs = |f: &str| dir.join(f).to_string_lossy().to_string();
+    for (tool, path_key, content_key) in [
+        ("mcp__fs__write_file", "path", "content"),
+        ("mcp__files__create", "filePath", "contents"),
+        ("mcp__other__put", "file", "text"),
+    ] {
+        let v = translate(
+            &dir,
+            &mcp(
+                &dir,
+                tool,
+                serde_json::json!({path_key: abs(".claude/x.json"), content_key: "{}"}),
+            ),
+            &ENGINE,
+        );
+        assert_eq!(decision(&v), Some("deny"), "{tool}: {v}");
+        // A gated record's move to an accepting status is refused as well.
+        let v = translate(
+            &dir,
+            &mcp(
+                &dir,
+                tool,
+                serde_json::json!({path_key: abs(PATH_1), content_key: ACCEPTED}),
+            ),
+            &ENGINE,
+        );
+        assert_eq!(decision(&v), Some("deny"), "{tool}: {v}");
+        let v = translate(
+            &dir,
+            &mcp(
+                &dir,
+                tool,
+                serde_json::json!({path_key: abs("notes.txt"), content_key: "hi"}),
+            ),
+            &ENGINE,
+        );
+        assert_eq!(decision(&v), None, "{tool}: {v}");
+    }
+    // The engine is sent the path and the content.
+    let capture = dir.join("request.json");
+    translate_with(
+        &dir,
+        &mcp(
+            &dir,
+            "mcp__fs__write_file",
+            serde_json::json!({"path": abs("notes.txt"), "content": "hi"}),
+        ),
+        &capturing_engine(&capture),
+    );
+    let request: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&capture).unwrap()).unwrap();
+    assert_eq!(request["content"], "hi", "{request}");
+    assert!(request["paths"][0].as_str().unwrap().ends_with("notes.txt"));
+}
+
+#[test]
+fn an_mcp_write_it_cannot_judge_applies_on_unjudged_only_to_a_gated_or_protected_target() {
+    let dir = fixture("mcp-unjudged", &config(""));
+    let abs = |f: &str| dir.join(f).to_string_lossy().to_string();
+    let edit = |f: &str| {
+        mcp(
+            &dir,
+            "mcp__fs__edit_file",
+            serde_json::json!({"path": abs(f), "edits": [{"oldText": "a", "newText": "b"}]}),
+        )
+    };
+    // Edit-shaped input, or a move/delete by name, cannot be turned into the
+    // file's text: refused on a protected path or a gated record only.
+    for f in [".claude/settings.json", PATH_1, ".CLAUDE/settings.json"] {
+        let v = translate(&dir, &edit(f), &ENGINE);
+        assert_eq!(decision(&v), Some("deny"), "{f}: {v}");
+    }
+    let v = translate(&dir, &edit("notes.txt"), &ENGINE);
+    assert_eq!(decision(&v), None, "{v}");
+    assert!(
+        v["systemMessage"].as_str().unwrap().contains("NOT judge"),
+        "{v}"
+    );
+    let v = translate(
+        &dir,
+        &mcp(
+            &dir,
+            "mcp__fs__delete_file",
+            serde_json::json!({"path": abs(".claude/settings.json")}),
+        ),
+        &ENGINE,
+    );
+    assert_eq!(decision(&v), Some("deny"), "{v}");
+    // Reads and tools with no file in them are not edits and say nothing.
+    for (tool, input) in [
+        (
+            "mcp__fs__read_file",
+            serde_json::json!({"path": abs(".claude/settings.json")}),
+        ),
+        (
+            "mcp__github__create_issue",
+            serde_json::json!({"title": "t", "body": "b"}),
+        ),
+    ] {
+        let mut c = Command::new("python3");
+        c.arg("-I")
+            .arg(translator())
+            .args(["edit", "--"])
+            .args(ENGINE)
+            .current_dir(&dir)
+            .env("URZUA_BIN", env!("CARGO_BIN_EXE_urzua"));
+        let out = run_with_stdin(&mut c, &mcp(&dir, tool, input));
+        assert_eq!(out.status.code(), Some(0));
+        assert!(out.stdout.is_empty(), "{tool}: {out:?}");
+    }
+    // With on_unjudged: allow the unjudged protected target is allowed, loudly.
+    let dir = fixture("mcp-unjudged-open", &config(", on_unjudged: allow"));
+    let v = translate(
+        &dir,
+        &mcp(
+            &dir,
+            "mcp__fs__edit_file",
+            serde_json::json!({"path": dir.join(".claude/settings.json").to_string_lossy(), "edits": [{}]}),
+        ),
+        &ENGINE,
+    );
+    assert_eq!(decision(&v), None, "{v}");
+    assert!(v["systemMessage"].as_str().unwrap().contains("NOT judge"));
+}
+
+#[test]
+fn the_installed_hook_entry_matches_notebook_edit_and_mcp_tools() {
+    let fragment = std::fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("bundle/claude-code/settings.fragment.json"),
+    )
+    .unwrap();
+    let v: serde_json::Value = serde_json::from_str(&fragment).unwrap();
+    let matcher = v["hooks"]["PreToolUse"][0]["matcher"].as_str().unwrap();
+    assert_eq!(matcher, "Write|Edit|MultiEdit|NotebookEdit|mcp__.*");
+}
+
+// ------------------------- a gitignored protected file written by shell
+
+fn ignored_fixture(name: &str) -> common::TempDir {
+    let dir = fixture(name, &config(""));
+    std::fs::write(
+        dir.join(".gitignore"),
+        ".urzua/cache/\n.claude/settings.local.json\n",
+    )
+    .unwrap();
+    std::fs::write(dir.join(".claude/settings.local.json"), "{}\n").unwrap();
+    git(&dir, &["add", "-A"]);
+    git(&dir, &["commit", "-q", "-m", "ignore"]);
+    dir
+}
+
+#[test]
+fn a_bash_write_to_a_gitignored_protected_file_is_reported_once() {
+    let dir = ignored_fixture("ignored");
+    run_event(&dir, "session-start");
+    assert_eq!(post(&dir)["verdict"], "allow", "nothing changed yet");
+    bash(&dir, "echo '{\"hooks\": {}}' > .claude/settings.local.json");
+    assert!(
+        git(&dir, &["status", "--porcelain"]).trim().is_empty(),
+        "git does not see it"
+    );
+    let v = post(&dir);
+    assert_eq!(v["verdict"], "allow-with-warnings", "{v}");
+    let lines = v["protected_changes"].as_array().unwrap();
+    assert_eq!(lines.len(), 1, "{v}");
+    assert!(
+        lines[0]
+            .as_str()
+            .unwrap()
+            .contains(".claude/settings.local.json"),
+        "{v}"
+    );
+    // The same change is not reported again (documented).
+    assert_eq!(post(&dir)["verdict"], "allow", "{}", post(&dir));
+    bash(&dir, "rm .claude/settings.local.json");
+    let v = post(&dir);
+    assert_eq!(v["protected_changes"].as_array().unwrap().len(), 1, "{v}");
+    assert!(
+        v["protected_changes"][0]
+            .as_str()
+            .unwrap()
+            .contains("deleted"),
+        "{v}"
+    );
+}
+
+#[test]
+fn a_new_gitignored_file_under_a_protected_directory_is_reported() {
+    let dir = ignored_fixture("ignored-new");
+    std::fs::write(
+        dir.join(".gitignore"),
+        ".urzua/cache/\n.claude/*.local.json\n",
+    )
+    .unwrap();
+    git(&dir, &["add", "-A"]);
+    git(&dir, &["commit", "-q", "-m", "ignore more"]);
+    run_event(&dir, "session-start");
+    bash(&dir, "echo x > .claude/new.local.json");
+    assert!(git(&dir, &["status", "--porcelain"]).trim().is_empty());
+    let v = post(&dir);
+    assert_eq!(v["protected_changes"].as_array().unwrap().len(), 1, "{v}");
+}
+
+#[test]
+fn an_unchanged_protected_set_is_quiet_and_off_without_the_guardrail() {
+    let dir = ignored_fixture("ignored-quiet");
+    run_event(&dir, "session-start");
+    for _ in 0..3 {
+        let v = post(&dir);
+        assert_eq!(v["verdict"], "allow", "{v}");
+        assert!(v["protected_changes"].as_array().unwrap().is_empty());
+    }
+    let cfg = config("").replace(
+        "    protected-paths: {enabled: true}\n",
+        "    protected-paths: {enabled: false}\n",
+    );
+    let dir = ignored_fixture("ignored-off");
+    std::fs::write(dir.join(".urzua/config.yaml"), cfg).unwrap();
+    git(&dir, &["commit", "-q", "-am", "off"]);
+    run_event(&dir, "session-start");
+    bash(&dir, "echo x > .claude/settings.local.json");
+    assert_eq!(post(&dir)["verdict"], "allow");
+}
+
+// ----------------------------------------------- Unicode case folding
+
+const UNICODE_TYPES: &str = "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/décisions\"\n    required_fields: [\"Status\"]\n    statuses:\n      values: [Proposed, Accepted, Rejected]\n";
+const UNICODE_AUTHORITY: &str = "authority:\n  deciders:\n    maintainers: {logins: [Alice]}\n  gates:\n    - {type: adr, to: [Accepted, Rejected], by: maintainers}\n    - {paths: [\".claude\", \"café\", \"Straße\"], by: maintainers}\n";
+
+fn unicode_fixture(name: &str) -> common::TempDir {
+    let cfg = format!("{UNICODE_TYPES}{}{UNICODE_AUTHORITY}", harness(""));
+    let dir = common::TempDir::new(&format!("urzua-hardening-{name}"));
+    for d in ["docs/décisions", ".urzua", ".claude", "café"] {
+        std::fs::create_dir_all(dir.join(d)).unwrap();
+    }
+    git(&dir, &["init", "-q"]);
+    git(&dir, &["config", "user.email", "t@example.com"]);
+    git(&dir, &["config", "user.name", "t"]);
+    std::fs::write(dir.join(".gitignore"), ".urzua/cache/\n").unwrap();
+    std::fs::write(dir.join(".urzua/config.yaml"), cfg).unwrap();
+    std::fs::write(dir.join("café/a.txt"), "x\n").unwrap();
+    std::fs::write(dir.join("docs/décisions/ADR-1-a.md"), PROPOSED).unwrap();
+    git(&dir, &["add", "-A"]);
+    git(&dir, &["commit", "-q", "-m", "fixture"]);
+    dir
+}
+
+#[test]
+fn a_protected_path_or_record_directory_in_another_unicode_case_is_still_gated() {
+    let dir = unicode_fixture("unicode");
+    // Non-ASCII letters, and a sharp s that folds to "ss".
+    for path in ["CAFÉ/b.txt", "Café/b.txt", "STRASSE/x", "STRASSE"] {
+        let (code, v) = run_edit(&dir, path, "x\n");
+        assert_eq!(code, 1, "{path}: {v}");
+        assert!(
+            v["message"].as_str().unwrap().contains("protected-paths"),
+            "{v}"
+        );
+    }
+    let (code, v) = run_edit(&dir, "DOCS/DÉCISIONS/ADR-1-a.md", ACCEPTED);
+    assert_eq!(code, 1, "{v}");
+    assert!(v["message"].as_str().unwrap().contains("acceptance"), "{v}");
+    // A different letter is a different path.
+    let (code, v) = run_edit(&dir, "cafe/b.txt", "x\n");
+    assert_eq!(code, 0, "{v}");
+}
+
+#[test]
+fn a_protected_path_changed_by_shell_in_another_unicode_case_is_reported() {
+    let dir = unicode_fixture("unicode-bash");
+    bash(&dir, "mkdir -p CAFÉ && echo x > CAFÉ/new.txt");
+    let v = post(&dir);
+    assert_eq!(v["protected_changes"].as_array().unwrap().len(), 1, "{v}");
+}
+
+// ----------------------------------------------------------- hardlinks
+
+#[cfg(unix)]
+#[test]
+fn an_edit_through_a_hardlink_is_judged_as_the_file_it_writes() {
+    let dir = fixture("hardlink", &config(""));
+    std::fs::write(dir.join(".claude/settings.local.json"), "{}\n").unwrap();
+    std::fs::hard_link(dir.join(".claude/settings.json"), dir.join("alias.json")).unwrap();
+    std::fs::hard_link(
+        dir.join(".claude/settings.local.json"),
+        dir.join("alias2.json"),
+    )
+    .unwrap();
+    std::fs::hard_link(dir.join(PATH_1), dir.join("docs/alias.md")).unwrap();
+    for path in ["alias.json", "alias2.json"] {
+        let (code, v) = run_edit(&dir, path, "{}\n");
+        assert_eq!(code, 1, "{path}: {v}");
+        assert!(
+            v["message"].as_str().unwrap().contains("protected-paths"),
+            "{v}"
+        );
+    }
+    let (code, v) = run_edit(&dir, "docs/alias.md", ACCEPTED);
+    assert_eq!(code, 1, "{v}");
+    assert!(v["message"].as_str().unwrap().contains("acceptance"), "{v}");
+    // A file with other links that are not gated is judged as itself.
+    std::fs::write(dir.join("a.txt"), "x\n").unwrap();
+    std::fs::hard_link(dir.join("a.txt"), dir.join("b.txt")).unwrap();
+    let (code, v) = run_edit(&dir, "b.txt", "y\n");
+    assert_eq!(code, 0, "{v}");
 }
