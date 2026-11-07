@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5BCRKD027XA81J0Q8Q
-Version: '0.12'
+Version: '0.13'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -27,9 +27,12 @@ record_types:
   waiver:
     dir: "docs/waiver"
     role: suppression
-    required_fields: ["Rule", "Scope", "Reason"]
+    # A waiver with no Reason suppresses nothing.
+    effective_requires: [Reason]
+    identity: {from: filename, pattern: '^(?P<prefix>WAIVER)-(?P<number>\d{4})-(?P<slug>.+)$'}
+    required_fields: ["Rule", "Scope", "Reason", "Stable-Id"]
     header_shape: "yaml-frontmatter"
-    known_fields: ["Stable-Id", "Expires", "Category", "Justified-by"]
+    known_fields: ["Expires", "Category", "Justified-by"]
     spec: "SPEC-10"
     pointer_fields: ["Justified-by"]
     narrative_fields: []
@@ -151,3 +154,4 @@ record is edited later.
 > | 2026-11-05 | Bumped to `0.10`. The type may declare `effective_requires` (`SPEC-3`): a waiver missing a listed field, or holding a blank, placeholder or pending value, does not suppress, its target finding is reported again, and `waiver.matches-nothing` reports the waiver (`waiver-ineffective`). Off unless declared; this repository requires `Reason`. **Why:** `BUG-177`, maintainer decision of 2026-11-05: the `Reason` is the whole reviewability point and was enforced only by the opt-in `header.required-fields`. | **substantive** |
 > | 2026-11-05 | Bumped to `0.11`. The type may declare `permanent` (`SPEC-3`): a waiver without `Expires` takes effect only for a listed rule, under a declared category and, where the category requires it, a resolving `Justified-by`; declaring it closes permanence for unlisted rules, and `check` counts permanent waivers by category. Added the `Category` and `Justified-by` fields; the statement that the type has no relationship fields is amended, `Justified-by` being declared in `pointer_fields`. **Why:** `MILE-193` / `ADR-86`. | **substantive** |
 > | 2026-11-06 | Bumped to `0.12`. States that `Expires` is compared against the current UTC date, not the machine's local date. **Why:** maintainer decision of 2026-11-05: every date comparison uses UTC; the engine had read local time here and UTC for the claim-age clock. | **substantive** |
+> | 2026-11-07 | Bumped to `0.13`. The Schema block matches the declaration this repository runs: `Stable-Id` is a required field rather than a known one, and `identity` and `effective_requires: [Reason]` are shown. **Why:** the block had fallen behind the configuration; `effective_requires` was described in prose only. | **substantive** |

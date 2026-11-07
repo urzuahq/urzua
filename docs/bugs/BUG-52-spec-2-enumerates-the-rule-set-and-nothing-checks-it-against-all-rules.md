@@ -2,7 +2,7 @@
 Stable-Id: 01M2W0QAD0PBVS3XD05RQQTJ4W
 Status: Fixed
 Found-in: 'A code review of PR #74 -- SPEC-2 called itself the complete, current rule set while understating it by four'
-Realized-by: test:rust/crates/urzua-core/src/rules/table.rs#every_rule_id_constant_has_a_table_entry@sha256:d8805b858389e7ccda9bd33e1d8227c020c617761ed0d44a86632b39ef89f9e7
+Realized-by: code:scripts/generate-rule-table.py, code:Makefile, test:rust/crates/urzua-core/src/rules/table.rs#every_rule_id_constant_has_a_table_entry@sha256:d8805b858389e7ccda9bd33e1d8227c020c617761ed0d44a86632b39ef89f9e7
 ---
 # 52 — `SPEC-2` enumerates the rule set and nothing checks it against `ALL_RULES`
 
@@ -48,3 +48,4 @@ the corpus says about it.
 > | 2026-09-19 | `Blocked-on: MILE-98` declared as a field rather than described in prose. **Why:** the `bug` type did not declare `Blocked-on`, so the deferral was written into this log where no rule could see it. That is a configuration gap, not a missing rule -- `ADR-53` makes the field set a repository's declaration, and declaring it took one line. `narrative-field.stale` now reports all six of these when `MILE-98` reaches a terminal status. | **structural** |
 > | 2026-09-23 | Fixed, unblocked from `MILE-98`. **Why:** the deferred concern was specifically "another hardcoded comparison in `rules.rs`" -- a rule re-deriving the same fact `ALL_RULES` already states, in a second place, taught nothing by `MILE-98`'s eventual declared document model. The actual fix collapses to one source instead: `urzua_core::rules::RULE_METADATA` (checked against `ALL_RULES` by a compiled test, `every_rule_in_all_rules_has_metadata_in_the_same_order`) is what `SPEC-2`'s table is generated from (`scripts/generate-rule-table.py`), not compared against. Nothing is duplicated for `MILE-98` to later replace, so the original deferral reasoning doesn't apply to this shape of fix. | **substantive** |
 > | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |
+> | 2026-11-07 | `Realized-by` now cites `scripts/generate-rule-table.py` and the Makefile's `rule-table-check` target (which runs it with `--check`), the check that fails when `SPEC-2`'s rule table differs from the shipped rule set. **Why:** the one locator before, `table.rs#every_rule_id_constant_has_a_table_entry`, compares rule-id constants with the metadata table, a different drift; it stays as supporting evidence. No cargo test compares `SPEC-2`'s table; `make rule-table-check` runs in CI. | **structural** |

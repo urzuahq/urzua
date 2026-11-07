@@ -135,6 +135,7 @@ record_types:
     # unexamined, not a configuration that reaches nothing.
     sections:
       from: headings
+      depth: 2
       required:
         - {name: Context}
         - {name: Decision}
@@ -186,6 +187,7 @@ record_types:
     # headings). A Rejected proposal still made its case, so none is exempt.
     sections:
       from: headings
+      depth: 2
       required:
         - {name: Summary}
         - {name: Motivation}

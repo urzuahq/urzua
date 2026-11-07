@@ -2,7 +2,7 @@
 Stable-Id: 01M21FJ787H49Q7Z6AK579KJSE
 Status: Fixed
 Found-in: discussing whether header.pointer-field-clean's hardcoded field list (Implements/Derives-from/Parent) and pointer_resolution's own (Implements/Derives-from/Parent/Blocked-on) match this engine's own "declared, not hardcoded" pitch for an adopting org
-Realized-by: test:rust/crates/urzua-core/src/rules/pointer.rs#target_status_judges_only_the_statuses_a_repository_declared@sha256:3dec110571d2cb7ad4e48e74a906d9474641f8118fbeb3e030e833258a2a2046
+Realized-by: test:rust/crates/urzua-core/src/rules/pointer.rs#a_declared_pointer_field_with_a_custom_name_is_resolved_and_checked_clean_observed_failing@sha256:426f62be986c3c630bcd28f9fe65b3ce8c8d28680b1d0e194ef5d7f85bbf46ce
 ---
 # 8 — README overstates pointer-field genericity -- Implements/Derives-from/Parent/Blocked-on are hardcoded, not config-declared
 
@@ -45,3 +45,4 @@ content-scope ceiling this project names elsewhere), so the overstatement shippe
 > | 2026-09-08 | Initial bug record, `Status: Open`. Not yet fixed -- the real fix is a design decision (RFC-23), not a mechanical patch; README wording will be corrected once that's decided, either by making the claim true or by narrowing what it asserts. | **structural** |
 > | 2026-09-09 | Fixed by MILE-90/ADR-44: `pointer_resolution`, `header_pointer_field_clean`, and `narrative_field_stale` now read `pointer_fields`/`narrative_fields` per type from `.urzua/config.toml`, with no hardcoded field list anywhere in `rules.rs`. The README's `Feeds-into` example is now literally true, not aspirational. `Status: Fixed`. | **substantive** |
 > | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |
+> | 2026-11-07 | `Realized-by` re-pointed to `pointer.rs#a_declared_pointer_field_with_a_custom_name_is_resolved_and_checked_clean_observed_failing`. **Why:** the earlier locator, `target_status_judges_only_the_statuses_a_repository_declared`, tests `pointer.target-status` on `Implements` alone and passes with a hardcoded field list. The new test declares a pointer field no default list holds (`Feeds-into`) and requires `pointer.resolution` to report its dangling value and `header.pointer-field-clean` to report its prose; it fails when the field list is hardcoded. | **structural** |

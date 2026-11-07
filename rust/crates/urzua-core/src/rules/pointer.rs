@@ -422,7 +422,10 @@ mod tests {
         assert!(resolution[0].message.contains("Feeds-into: SPEC-9999"));
         let (_, clean) = header_pointer_field_clean(&records, &config);
         assert_eq!(clean.len(), 1, "{clean:?}");
-        assert!(clean[0].file.to_string_lossy().contains("SPEC-2"), "{clean:?}");
+        assert!(
+            clean[0].file.to_string_lossy().contains("SPEC-2"),
+            "{clean:?}"
+        );
     }
 
     #[test]
