@@ -529,3 +529,79 @@ fn the_promotion_nudge_with_scope_changed_fires_on_every_changed_citer() {
         assert_eq!(waived, f["file"] == PATH_1, "{f}");
     }
 }
+
+/// The finding `RULE` raised on `file`, whole.
+fn finding_on(v: &serde_json::Value, file: &str) -> serde_json::Value {
+    v["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|f| f["rule"] == RULE && f["file"] == file)
+        .unwrap_or_else(|| panic!("no {RULE} finding on {file}: {v}"))
+        .clone()
+}
+
+/// ADR-90 / MILE-203: the option changes which records a rule judges, never what
+/// a judged record is told to do. A finding the rule emits, the rule's action
+/// variants in `explain --rule`, and the row of `urzua rules` are the same with
+/// and without `scope: changed` (ADR-90 point 9: no kind, no `target` key, no
+/// variant is added).
+#[test]
+fn the_adr73_actions_of_a_rule_that_takes_the_option_are_unchanged() {
+    let edit = |dir: &Path| {
+        std::fs::write(
+            dir.join(PATH_2),
+            format!("{}\nMore.\n", record(2, Some("code:src/a.rs"))),
+        )
+        .unwrap();
+    };
+    let plain = fixture("actions-plain", &config(""));
+    let scoped = fixture("actions-scoped", &config("    scope: changed\n"));
+    edit(&plain);
+    edit(&scoped);
+
+    // The same changed record, nudged by the same diff run.
+    let (_, plain_run) = urzua(&plain, &["check", "--base", "HEAD"]);
+    let (_, scoped_run) = urzua(&scoped, &["check", "--base", "HEAD"]);
+    let without = finding_on(&plain_run, PATH_2);
+    let with = finding_on(&scoped_run, PATH_2);
+    // The rule declares its variants exempt (the repair is a comment in a source
+    // file), so a finding carries no `suggested_action`, with the option or without.
+    assert!(
+        without.get("suggested_action").is_none(),
+        "an exempt variant offers no action: {without}"
+    );
+    assert_eq!(
+        with, without,
+        "the finding is byte for byte the same under the option"
+    );
+    assert_eq!(
+        serde_json::to_string(&with).unwrap(),
+        serde_json::to_string(&without).unwrap()
+    );
+
+    // The rule's declared action variants.
+    let (_, plain_rule) = urzua(&plain, &["explain", "--rule", RULE]);
+    let (_, scoped_rule) = urzua(&scoped, &["explain", "--rule", RULE]);
+    let actions = &plain_rule["rule"]["actions"];
+    assert!(
+        actions
+            .as_array()
+            .is_some_and(|a| !a.is_empty() && a.iter().all(|v| v.get("exempt").is_some())),
+        "the declared variants are exemptions: {plain_rule}"
+    );
+    assert_eq!(&scoped_rule["rule"]["actions"], actions, "{scoped_rule}");
+
+    // The rule table every build prints.
+    let table_actions = |dir: &Path| {
+        let (_, rules) = urzua(dir, &["rules"]);
+        let rows = rules["rules"]
+            .as_array()
+            .unwrap_or_else(|| panic!("{rules}"));
+        rows.iter()
+            .find(|r| r["id"] == RULE)
+            .unwrap_or_else(|| panic!("no row for {RULE}: {rules}"))["actions"]
+            .clone()
+    };
+    assert_eq!(table_actions(&scoped), table_actions(&plain));
+}

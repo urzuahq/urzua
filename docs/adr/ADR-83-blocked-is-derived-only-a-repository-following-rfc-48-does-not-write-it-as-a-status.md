@@ -121,6 +121,12 @@ once adopters of the milestone shape have migrated, and the `progress` key's nam
 - The rule is inert until `roadmap.pairs` is declared, which ties it to the roadmap command's decision
   and sequencing: it should be accepted after, or together with, that record.
 
+## Amendment (2026-11-07): a record held below its items only by a dependency is not out of order
+
+*Status of this amendment: accepted by the maintainer on 2026-11-07. `Status` stays `Accepted` and the Decision text above is unchanged, except where it says what `sequence.status-agreement` reports.*
+
+With `ADR-96` on, a record whose Done means items all resolve computes `InProgress` while a dependency is unfinished (the cap of the `ADR-96` amendment of the same date). Reporting that `InProgress` as a progress claim by a blocked record would leave no status the record can state. So `sequence.status-agreement` skips a blocked record whose status comes from that cap: its status is the type's `delivery.items.partial_status`, every item resolves, and an unfinished dependency is the only thing holding it below the type's `success` status. It emits an info notice, `all items proven ahead of dependency X`, naming the open dependency, and reports no error. The derived blocked value is unchanged otherwise: a record genuinely in progress out of order (an item unresolved), and a capped record that states `Done`, are still reported, and the type's `progress` list is unchanged. The rule reads the same blocked set as the cap, so the two cannot disagree. A configuration that declares no `delivery.items` is unchanged.
+
 ## References
 
 - `RFC-48` -- the proposal this builds; its "Status: Blocked is computed this way" section.
@@ -137,3 +143,4 @@ once adopters of the milestone shape have migrated, and the `progress` key's nam
 > | 2026-11-05 | Drafted as Proposed. **Why:** maintainer decision of 2026-11-05 that `Blocked` is derived only, per `RFC-48`; #313's review found no decision record for the derived readings and a departure from the RFC. The maintainer approves before it is Accepted. | **substantive** |
 > | 2026-11-05 | Amended while Proposed: the dependency set is the pairs `roadmap.pairs` declares, not every `acyclic` pair, so a containment pair never blocks and check agrees with the roadmap; the containment warning is dropped; `Planned` while blocked is not reported. **Why:** coordinator alignment with the roadmap decision. | **substantive** |
 > | 2026-11-05 | Status changed from Proposed to Accepted. **Why:** Maintainer decision, 2026-11-05 (blocked is derived only, per RFC-48); accepted together with ADR-82. | **substantive** |
+> | 2026-11-07 | Amendment added, accepted by the maintainer on 2026-11-07: `sequence.status-agreement` skips a blocked record whose `partial_status` comes from the `ADR-96` dependency cap (every item resolves, only an unfinished dependency holds it back) and emits an info notice, `all items proven ahead of dependency X`; a record genuinely in progress out of order is still flagged. **Why:** maintainer decision of 2026-11-07, so the two status rules can agree on a capped record without removing `InProgress` from `progress`, which would turn off out-of-order detection for every `InProgress` milestone. The Decision text is unchanged. | **substantive** |

@@ -290,3 +290,37 @@ fn the_own_config_includes_untracked_records_and_a_draft_is_examined_and_added()
         .collect();
     assert_eq!(changed, vec!["docs/bugs/BUG-1-a-draft.md"], "{v}");
 }
+
+/// MILE-193: the waiver template names `Justified-by`, so a waiver filed with
+/// `urzua new` carries the field a `cite: required` category needs. Observed
+/// failing before the template line was added: the scaffold stopped at
+/// `Category`.
+#[test]
+fn new_waiver_scaffolds_justified_by_from_the_repositorys_own_template() {
+    let dir = repo("waiver-template", &[]);
+    let template =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../.urzua/templates/waiver.md");
+    std::fs::create_dir_all(dir.join(".urzua/templates")).unwrap();
+    std::fs::copy(template, dir.join(".urzua/templates/waiver.md")).unwrap();
+    let out = urzua(&dir, &["new", "waiver", "A fresh record", "--by", "tester"]);
+    assert!(
+        out.status.success(),
+        "{} {}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let written = std::fs::read_dir(dir.join("docs/waiver"))
+        .unwrap()
+        .filter_map(Result::ok)
+        .map(|e| e.path())
+        .find(|p| p.to_string_lossy().contains("a-fresh-record"))
+        .expect("a waiver was written");
+    let text = std::fs::read_to_string(written).unwrap();
+    let header: Vec<&str> = text.lines().skip(1).take_while(|l| *l != "---").collect();
+    for field in ["Category", "Justified-by"] {
+        assert!(
+            header.iter().any(|l| l.starts_with(&format!("{field}:"))),
+            "the header names {field}: {header:?}"
+        );
+    }
+}

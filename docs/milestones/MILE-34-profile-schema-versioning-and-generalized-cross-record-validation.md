@@ -1,9 +1,10 @@
 ---
-Status: Done
+Status: InProgress
 Stable-Id: 01M1Y5JYB0J2X7P0AVRJKWJAJV
 Phase: '0'
 Track: schema-governance
 Implements: RFC-6
+Depends-on: MILE-171
 Blocked-on: —
 Realized-by: code:rust/crates/urzua-core/src/schema_version.rs, test:rust/crates/urzua-cli/tests/schema_version_integration.rs#the_fixture_at_each_supported_version_loads_to_the_same_effective_config@sha256:f4edfba5a5061aa858ca7cb8bc9a7617ad9f105ca780fcb5d17930aec62f2cf8, code:rust/crates/urzua-cli/src/commands/migrate.rs, spec:docs/specs/SPEC-3-configuration.md, test:rust/crates/urzua-cli/tests/schema_version_integration.rs#a_previous_version_config_gives_the_findings_the_current_one_does_plus_one_warning@sha256:f8359c0933c1d1b4a7703dec5986e5a168cce460c6c58e34aff42f254caf5e54, test:rust/crates/urzua-cli/tests/schema_version_integration.rs#migrate_config_never_reads_a_version_outside_the_window@sha256:f445dfca8f0269609259cf2d1c8a6903eb4e37b104d3af648b0b7178d14396cd, code:rust/crates/urzua-core/src/rules/table.rs, code:.urzua/config.yaml
 ---
@@ -36,3 +37,4 @@ RFC-6 versions records; nothing versions the schema those records are validated 
 > | 2026-11-05 | The version-1 upgrade refuses a record type that omits `header_shape` (version 1 read it as `blockquote`, which `MILE-85` removed) instead of silently changing it to `yaml-frontmatter`; `SPEC-3` says so and a test covers it. **Why:** review of the pull request that delivered this record; `ADR-54` (a break is a break) and `ADR-77` (an upgrade keeps behaviour or says it cannot). | **substantive** |
 > | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |
 > | 2026-11-07 | `Depends-on: MILE-171` removed; `Status` unchanged. **Why:** `MILE-171` is `InProgress` from its Done-means items (ADR-96, MILE-215) and a blocked milestone cannot claim progress (`sequence.status-agreement`). The part of `MILE-171` this milestone needed, the rule table running the declared cross-record model, is built and evidenced here by `rules/table.rs`; the unresolved `MILE-171` item (the output of `urzua check` unchanged by its refactor) is not something this milestone's Done means relies on. The dependency was real as an ordering (the table had to exist first) and that ordering is met; `Depends-on` is a whole-milestone gate and cannot say "needs the table, not the last item" (`ADR-96`, decisions on the open questions, 3: the wait is item-blind). Keeping it was tried: `Done` is refused by `sequence.status-agreement` and `InProgress` by `status.delivery-agreement`, because all five items resolve. Restore `Depends-on: MILE-171` once its item 5 has evidence. | **structural** |
+> | 2026-11-07 | `Depends-on: MILE-171` restored and `Status` Done -> InProgress. **Why:** the `ADR-96` amendment of 2026-11-07 (accepted by the maintainer) makes dependencies cap the status: all five items resolve, but `MILE-171` is unfinished (`InProgress`, item 5 has no evidence), so the status computes to `InProgress`, which both `status.delivery-agreement` and `sequence.status-agreement` accept. The removal of 2026-11-07 named this restore: `MILE-171`'s item 5 still has no evidence, so the dependency caps this milestone until it does. | **substantive** |

@@ -188,6 +188,11 @@ pub struct ItemsJudgement {
     /// The lowest tier among the resolved items, else the declared `none`.
     pub tier: String,
     pub standing: Standing,
+    /// The unfinished dependencies that lower a `Delivered` standing to
+    /// `Partial` (`ADR-96`, amendment of 2026-11-07): the computed status is
+    /// the lower of the item result and the dependency result. Empty when no
+    /// dependency lowered anything.
+    pub capped_by: Vec<String>,
 }
 
 impl ItemsJudgement {
@@ -329,6 +334,7 @@ pub fn judge_items(
         unresolved,
         tier,
         standing,
+        capped_by: Vec::new(),
         items: standings,
     }
 }
@@ -368,9 +374,16 @@ pub fn first_non_progress_status(decl: &StatusDecl) -> Option<&str> {
 }
 
 /// The records whose dependencies are not all finished (`ADR-83`): derived, the
-/// way `sequence.status-agreement` derives it. Empty without a sequencing pair.
-pub fn derived_blocked_records(records: &[Record], config: &Config) -> HashSet<PathBuf> {
-    let mut blocked = HashSet::new();
+/// way `sequence.status-agreement` derives it, each with the dependencies that
+/// are still open, shown as `MILE-171 (InProgress)`. A dependency is unfinished
+/// when it is not in a status its own type declares `success`, so one in a
+/// `failure` status, one with no `Status` and one whose type declares no
+/// `success` all count. Empty without a sequencing pair.
+pub fn derived_blocked_records(
+    records: &[Record],
+    config: &Config,
+) -> HashMap<PathBuf, Vec<String>> {
+    let mut blocked = HashMap::new();
     if config.roadmap.pairs.is_empty() {
         return blocked;
     }
@@ -383,10 +396,11 @@ pub fn derived_blocked_records(records: &[Record], config: &Config) -> HashSet<P
             continue;
         };
         let id = crate::values::RecordId::new(&id);
-        let open = graphs.values().any(|graph| {
-            graph.get(&id).into_iter().flatten().any(|dependency| {
+        let mut open: Vec<String> = Vec::new();
+        for graph in graphs.values() {
+            for dependency in graph.get(&id).into_iter().flatten() {
                 let Some(target) = index.get(dependency) else {
-                    return false;
+                    continue;
                 };
                 let field = relation_field_name(
                     config,
@@ -394,15 +408,24 @@ pub fn derived_blocked_records(records: &[Record], config: &Config) -> HashSet<P
                     crate::config::RelationRole::Status,
                 );
                 let status = target.header.get(field).map(str::trim);
-                !status.is_some_and(|s| {
+                let finished = status.is_some_and(|s| {
                     declared
                         .get(&target.record_type)
                         .is_some_and(|d| d.is_success(s))
-                })
-            })
-        });
-        if open {
-            blocked.insert(record.path.clone());
+                });
+                if !finished {
+                    let shown = format!(
+                        "{dependency} ({})",
+                        status.filter(|s| !s.is_empty()).unwrap_or("no status")
+                    );
+                    if !open.contains(&shown) {
+                        open.push(shown);
+                    }
+                }
+            }
+        }
+        if !open.is_empty() {
+            blocked.insert(record.path.clone(), open);
         }
     }
     blocked
