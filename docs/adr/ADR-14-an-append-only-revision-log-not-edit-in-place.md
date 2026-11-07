@@ -92,6 +92,17 @@ does; a spec is the living current build-truth for its subject, where the same c
 view is exactly what an implementer needs. No new field beyond the already-required `change_class`.
 Does not require rewriting past terse entries — applies going forward.
 
+## Amendment (2026-11-07): the class vocabulary and the class and date columns are declared per ADR-94
+
+*Status of this amendment: accepted by the maintainer on 2026-11-07. `Status` stays `Accepted` and the Decision text above is unchanged; `MILE-213` builds it.*
+
+The Decision names `substantive | structural` as the closed class vocabulary and the Why clause names `substantive`
+(Decided, item 2). Per `ADR-94`, a record type now declares the revision log's `classes`, its `class_column` and
+`date_column` (header names) and the `tool_class` the tool writes, as optional keys of `revision_log`. Today's
+values, `substantive` and `structural`, the last cell for the class and the first for the date, are the defaults for
+a type that declares none, so nothing changes for it. Item 2's Why requirement applies to the class a repository
+treats as substantive; a rule enforcing it remains a separate decision, not made by `ADR-94`.
+
 ## References
 
 - RFC-6 — the proposal this decides.
@@ -107,3 +118,4 @@ Does not require rewriting past terse entries — applies going forward.
 > |---|---|---|
 > | 2026-11-05 | Revision log added, 2026-11-05. | **structural** |
 > | 2026-11-05 | Added the `Non-reference-ids` header field declaring `SPEC-7`. **Why:** the text names this id as history or illustration, not as citations of a record; the declaration states that on the record itself, so a new unresolved citation in this file is reported, where a file-wide `citation.resolution` waiver had silenced every one (`BUG-190`, `ADR-75`). The field carries no decision; the Decision is unchanged. | **structural** |
+> | 2026-11-07 | Amendment added, accepted by the maintainer on 2026-11-07: the class vocabulary and the class and date columns are declared per `ADR-94`, with today's values as the defaults. The Decision text and `Status` are unchanged. **Why:** maintainer decision, 2026-11-07, accepting `ADR-94`. | **substantive** |
