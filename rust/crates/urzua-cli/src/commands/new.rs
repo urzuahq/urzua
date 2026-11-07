@@ -165,15 +165,13 @@ pub fn run(
             None => urzua_core::new_record::parse_record_filename(name).map(|(_, n)| n),
         }
     };
-    let mut skipped: Vec<SkippedReason> = Vec::new();
-    let display_number = match assign_display_number(
+    let (display_number, skipped) = match assign_display_number(
         &repo_root,
         &type_config.all_dirs().collect::<Vec<_>>(),
         &filenames,
         &number_of,
         opts.check_open_prs.then_some(opts),
         &mut pull,
-        &mut skipped,
         &mut notices,
     ) {
         Ok(n) => n,
@@ -375,9 +373,9 @@ pub fn run(
 /// remote-tracking ref already uses (`MILE-89`). With `scan` (`new.check_open_prs`,
 /// `ADR-93`) it also reads the refs under `refs/urzua/pr` and the trees of every
 /// sibling worktree, untracked files included. Git only. A git failure falls back
-/// to the working-tree-only number and says so in a notice. The numbers it
-/// skipped are returned in `skipped`, never printed (`ADR-93`, Amendment of
-/// 2026-11-07).
+/// to the working-tree-only number and says so in a notice. It returns the number
+/// and the numbers it skipped with their reasons, which are never printed
+/// (`ADR-93`, Amendment of 2026-11-07).
 fn assign_display_number(
     repo_root: &std::path::Path,
     dirs: &[&str],
@@ -385,9 +383,8 @@ fn assign_display_number(
     number_of: &dyn Fn(&str) -> Option<u32>,
     scan: Option<&NewDecl>,
     pull: &mut PullRefsReport,
-    skipped: &mut Vec<SkippedReason>,
     notices: &mut Vec<Notice>,
-) -> Result<u32, String> {
+) -> Result<(u32, Vec<SkippedReason>), String> {
     let mut prefixes = vec!["refs/heads", "refs/remotes"];
     if scan.is_some() {
         prefixes.push(new_refs::PR_NAMESPACE);
@@ -403,7 +400,8 @@ fn assign_display_number(
                      A number claimed on an unmerged branch will not be seen."
                 ),
             });
-            return urzua_core::new_record::next_display_number_by(filenames, number_of);
+            return urzua_core::new_record::next_display_number_by(filenames, number_of)
+                .map(|number| (number, Vec::new()));
         }
     };
     if scan.is_some() {
@@ -446,7 +444,7 @@ fn assign_display_number(
     }
     let got =
         urzua_core::new_record::next_display_number_with_claims_by(filenames, &claims, number_of)?;
-    *skipped = skipped_reasons(&got.skipped);
+    let skipped = skipped_reasons(&got.skipped);
     pull.skipped_numbers = got
         .skipped
         .iter()
@@ -455,7 +453,7 @@ fn assign_display_number(
             held_by: held_by.clone(),
         })
         .collect();
-    Ok(got.number)
+    Ok((got.number, skipped))
 }
 
 /// Subject of the notices about the pull-request refs, the lock and the worktrees.
