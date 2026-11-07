@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5C0WX34AQKF79DQDS5
-Version: '0.16'
+Version: '0.17'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -86,6 +86,48 @@ one `for-each-ref` plus one `ls-tree` per distinct commit: it reads a single dir
 and knows which ref each name came from, where `git log --all --name-only` walks all history and
 cannot attribute.
 
+**Open pull requests are consulted too, opt in (`ADR-93`, `MILE-89`).** With `new.check_open_prs: true`
+(`SPEC-3`) `new` goes further than local refs. Absent or false, none of this runs: `new` behaves as above and
+touches no remote.
+
+- **The fetch.** `git fetch --no-tags --quiet <remote> '+<pattern>:refs/urzua/pr/<segment>/*'` for each entry
+  of `new.pull_ref_patterns` (default `refs/pull/*/head`, GitHub's layout; another host names its own, such as
+  GitLab's `refs/merge-requests/*/head`), from `new.remote` (default `origin`). Plain git: no `gh`, no
+  GraphQL, and git's own credential helper does any authentication (a prompt is never shown). Each pattern has
+  its own namespace so two patterns that both yield `123` cannot overwrite each other: `<segment>` is the
+  remote's name when one pattern is configured and the pattern's zero-based index when several are. Every
+  reader (numbering, `identity.open-pr-collision`) reads all of `refs/urzua/pr/` recursively, so a segment left
+  by an earlier layout only reserves more numbers, never fewer. A hung fetch is killed after
+  `new.fetch_timeout_seconds` (default 30). `--filter=blob:none` is not used: it turns a clone into a partial
+  clone (it sets the remote's `promisor` configuration), which a numbering command must not do, and only trees
+  are read either way.
+- **What it sees.** Every pull request the host publishes a head ref for, forks included, **open, merged and
+  closed alike**: plain git sees no state. A merged pull request's number is already on `main`. A closed,
+  unmerged one keeps its number reserved, which leaves a gap in a sequence and never a duplicate; the cost is
+  bounded by a project's abandoned pull requests and is the price of not calling an API. Numbering skips every
+  number found under `refs/urzua/pr` or on any branch, as above, and names the refs that held it.
+- **A lock serializes runs.** `<git-common-dir>/urzua-new.lock` (the git common directory, so linked worktrees
+  share it) is created with `create_new`, holds the owner's pid, and is held from numbering through the file
+  write; the type's directories are read under it. A second run waits, retrying for `new.lock_timeout_seconds`
+  (default 10), then exits 2 naming the lock's path and holder pid. A lock whose pid is gone is removed. The
+  fetch runs before the lock is taken, so the network is not held under it.
+- **Every worktree is scanned.** While holding the lock `new` also lists the type's declared directories in each
+  tree `git worktree list --porcelain` names, untracked files included, and skips any number found there, so a
+  record just created and not yet committed in a sibling worktree is seen (a directory listing per worktree, no
+  git object reads). A listed worktree whose directory is missing is skipped with a notice. **Separate
+  clones remain a limit**: two clones share neither the lock nor a worktree list, so an untracked record in
+  another clone is undetectable, and the fetch cannot see it either; an info notice says so.
+- **Offline is never a failure.** If the remote is missing, the fetch fails or it times out, `new` numbers from
+  the local refs it has, including `refs/urzua/pr/*` left by an earlier fetch, and adds a warning notice
+  (subject `new.pull-refs`) naming the reason and that a number claimed on an unfetched pull request will not
+  be seen. Exit is `0`.
+- **The report says what was used.** `pull_refs` is always present: `fetched` (bool), `reason` (`null` when
+  fetched; `disabled`, `offline` or `timeout`), `remote` (`null` when disabled), `refs` (the count under
+  `refs/urzua/pr`, fetched now or earlier), `worktrees_scanned`, and `skipped_numbers`, a list of
+  `{number, held_by}` naming the refs or worktrees that held each number skipped.
+- **Never reused still holds.** This only widens the set of taken numbers, with pull refs and sibling
+  worktrees; it never frees one (`ADR-27`).
+
 Filenames emitted going forward carry the type's prefix (`ADR-38-slug.md`, ADR-36); legacy
 `NNNN-slug.md` filenames are never renamed and resolve identically forever.
 
@@ -95,7 +137,7 @@ one the numbering scan recognises, so the number would be reissued (`BUG-167`).
 
 ## Output
 
-Stdout is the JSON report (ADR-23/46): `path`, `display_number`, `stable_id` (always populated), plus an optional
+Stdout is the JSON report (ADR-23/46): `path`, `display_number`, `stable_id` (always populated), `pull_refs` (always present, see above), plus an optional
 `notices` array (ADR-46) carrying non-fatal observations -- e.g. an explicit `--by` diverging from
 the identity `resolve_identity` actually used -- omitted entirely when empty. `new` still does not
 echo the generated content back; the caller reads the file at `path` if it needs to.
@@ -146,3 +188,4 @@ take content and parameters, returning a string.
 > | 2026-11-05 | Bumped to `0.14`. `urzua new` reports a could-not-run when the highest existing number is the largest a `u32` holds, instead of overflowing and reissuing a number. **Why:** Phase 0 hardening of the core model. | **substantive** |
 > | 2026-11-05 | Bumped to `0.15`. `new` creates the type's directory for its first record instead of failing with `could not read`. **Why:** Phase 0 hardening from an adopter switchover -- the first `urzua new waiver` failed. | **substantive** |
 > | 2026-11-06 | Bumped to `0.16`. A type that requires `Stable-Id` gets the generated value in that field instead of a blank. **Why:** maintainer decision of 2026-11-05 made `Stable-Id` required on every record type in this repository, and the blank required field overwrote the generated identity. | **substantive** |
+> | 2026-11-07 | Bumped to `0.17`. §Display-number assignment documents the opt-in open-pull-request check (`new.check_open_prs`): the fetch of pull-request head refs into `refs/urzua/pr/<segment>/*` with plain git, one namespace per pattern; numbering that skips the numbers held there, including closed and merged pull requests, and in sibling worktrees (untracked files included); the `<git-common-dir>/urzua-new.lock` lock; the offline fallback with a notice and exit 0; and the report's always-present `pull_refs`. Separate clones are stated as the remaining limit. **Why:** `MILE-89` / `ADR-93`. | **substantive** |

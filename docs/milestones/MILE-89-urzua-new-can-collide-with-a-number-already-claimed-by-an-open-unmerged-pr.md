@@ -1,10 +1,11 @@
 ---
 Stable-Id: 01M21FPQMYDX23D28Q48V8D815
-Status: Planned
+Status: Done
 Phase: '0'
 Track: schema-governance
 Implements: ADR-93
 Blocked-on: —
+Realized-by: code:rust/crates/urzua-cli/src/commands/new.rs, code:rust/crates/urzua-cli/src/commands/new_refs.rs, code:rust/crates/urzua-core/src/rules/open_pr.rs, code:rust/crates/urzua-core/src/rules/table.rs, code:rust/crates/urzua-core/src/config.rs, code:rust/crates/urzua-core/src/report.rs, code:rust/crates/urzua-cli/src/discovery.rs, code:rust/crates/urzua-cli/src/commands/check.rs, code:.urzua/config.yaml, code:.github/workflows/checks.yml, test:rust/crates/urzua-cli/tests/new_open_pr_integration.rs, spec:docs/specs/SPEC-12-urzua-new.md, spec:docs/specs/SPEC-3-configuration.md, spec:docs/specs/SPEC-2-urzua-check.md
 ---
 # 89 — urzua new can collide with a number already claimed by an open, unmerged PR
 
@@ -77,3 +78,4 @@ Matching `ADR-93`:
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |
 > | 2026-11-06 | Re-phased from Phase 1 to Phase 0; `Implements` `ADR-93`; Done means replaced to match it. Built so far is unchanged: the local-ref scan. **Why:** maintainer decision of 2026-11-06 moving this milestone to Phase 0 and deciding the remote-aware path, plain git fetch of pull-request head refs, opt in, with a lock, an offline fallback and an opt-in `check` rule (`ADR-93`); the earlier open choice between a local scan and a `gh` query is closed, and the stated-limit alternative in the old Done means is dropped. | **substantive** |
 > | 2026-11-06 | Done means amended to match `ADR-93` as reviewed: numbering scans `git worktree list` trees, each pull-ref pattern has its own namespace, and `identity.open-pr-collision` defaults to warning. `Status` unchanged. **Why:** independent review of 2026-11-06 found the lock did not cover worktrees, patterns shared one namespace and an error rule could fire forever against a closed head. | **structural** |
+> | 2026-11-07 | Tool-authored (by beauwilliams, identity: gh-verified, actor: agent): recomputed `Status` from `Realized-by computes to Verified` -- stated `Planned` disagreed with the computed value `Done`. | **structural** |

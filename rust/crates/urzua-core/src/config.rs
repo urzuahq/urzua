@@ -74,6 +74,11 @@ pub struct Config {
     /// today's behaviour.
     #[serde(default, skip_serializing_if = "AttestationDecl::is_default")]
     pub attestation: AttestationDecl,
+    /// How `urzua new` numbers a record (`ADR-93`, `MILE-89`, `SPEC-3`): whether
+    /// it fetches pull-request head refs to skip the numbers open pull requests
+    /// took. Absent means it does not, and touches no remote.
+    #[serde(default, skip_serializing_if = "NewDecl::is_default")]
+    pub new: NewDecl,
     /// Which files discovery reads beyond the tracked ones (`ADR-92`,
     /// `MILE-206`, `SPEC-3`). Absent means the tracked and staged files only.
     #[serde(default, skip_serializing_if = "DiscoveryDecl::is_default")]
@@ -95,6 +100,60 @@ pub struct Config {
         skip_serializing_if = "Option::is_none"
     )]
     pub authority: Option<crate::authority::AuthorityDecl>,
+}
+
+/// The `new` key (`ADR-93`, `SPEC-3`). Structured (`ADR-64`): booleans, numbers
+/// and a list of ref patterns, no string mini-language beyond a git refspec source.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct NewDecl {
+    /// Fetch pull-request head refs with plain git before numbering and skip the
+    /// numbers found there. Default `false`: `new` touches no remote.
+    #[serde(default)]
+    pub check_open_prs: bool,
+    /// The ref patterns to fetch, each with exactly one `*` standing for the pull
+    /// request number. Default GitHub's layout.
+    #[serde(default = "NewDecl::default_patterns")]
+    pub pull_ref_patterns: Vec<String>,
+    /// The remote to fetch from. Default `origin`.
+    #[serde(default = "NewDecl::default_remote")]
+    pub remote: String,
+    /// Seconds before a hung fetch is killed. Default 30.
+    #[serde(default = "NewDecl::default_fetch_timeout")]
+    pub fetch_timeout_seconds: u32,
+    /// Seconds a second `new` waits for the numbering lock. Default 10.
+    #[serde(default = "NewDecl::default_lock_timeout")]
+    pub lock_timeout_seconds: u32,
+}
+
+impl NewDecl {
+    fn default_patterns() -> Vec<String> {
+        vec!["refs/pull/*/head".to_string()]
+    }
+    fn default_remote() -> String {
+        "origin".to_string()
+    }
+    fn default_fetch_timeout() -> u32 {
+        30
+    }
+    fn default_lock_timeout() -> u32 {
+        10
+    }
+    pub fn is_default(&self) -> bool {
+        *self == NewDecl::default()
+    }
+}
+
+impl Default for NewDecl {
+    fn default() -> Self {
+        NewDecl {
+            check_open_prs: false,
+            pull_ref_patterns: Self::default_patterns(),
+            remote: Self::default_remote(),
+            fetch_timeout_seconds: Self::default_fetch_timeout(),
+            lock_timeout_seconds: Self::default_lock_timeout(),
+        }
+    }
 }
 
 /// The `discovery` key (`ADR-92`, `SPEC-3`): a repository's choice to govern
@@ -3243,6 +3302,40 @@ fn validate_relation_pairs(config: &Config) -> Result<(), ConfigError> {
                 BLOCK_ON_VALUES.join(", ")
             ));
         }
+    }
+    // The `new` key is read by a command that must not guess (`ADR-93`): a
+    // pattern that is not a refspec source with one `*`, or a remote git would read
+    // as an option, is refused here.
+    if config.new.pull_ref_patterns.is_empty() {
+        return bad(
+            "new.pull_ref_patterns is empty; list at least one pattern or omit the key".to_string(),
+        );
+    }
+    for pattern in &config.new.pull_ref_patterns {
+        if !pattern.starts_with("refs/")
+            || pattern.matches('*').count() != 1
+            || pattern.contains(char::is_whitespace)
+            || pattern.contains("..")
+        {
+            return bad(format!(
+                "new.pull_ref_patterns entry '{pattern}' must start with refs/ and contain exactly one * (the pull request number), for example refs/pull/*/head"
+            ));
+        }
+    }
+    if config.new.remote.trim().is_empty()
+        || config.new.remote.starts_with('-')
+        || config.new.remote.contains(char::is_whitespace)
+    {
+        return bad(format!(
+            "new.remote '{}' is not a remote name",
+            config.new.remote
+        ));
+    }
+    if config.new.fetch_timeout_seconds == 0 {
+        return bad("new.fetch_timeout_seconds must be at least 1".to_string());
+    }
+    if config.new.lock_timeout_seconds == 0 {
+        return bad("new.lock_timeout_seconds must be at least 1".to_string());
     }
     // `asserted` takes `--by` as given, so there is no verification to require
     // (`ADR-89` section 5).

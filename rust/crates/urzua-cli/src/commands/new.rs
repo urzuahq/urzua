@@ -7,7 +7,12 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use urzua_core::report::{CouldNotRun, NewReport, Notice, NoticeSeverity, ReportStatus};
+use urzua_core::config::NewDecl;
+use urzua_core::report::{
+    CouldNotRun, NewReport, Notice, NoticeSeverity, PullRefsReport, ReportStatus, SkippedNumber,
+};
+
+use super::new_refs::{self, FetchFailure, LockOutcome};
 
 use crate::session::Workspace;
 use crate::{emit, NOTICE_IDENTITY};
@@ -41,6 +46,67 @@ pub fn run(
         return emit(&CouldNotRun::from(format!(
             "record type '{record_type}' declares header_shape: none -- urzua new cannot generate an identity for a type with no header"
         )));
+    }
+
+    // The open-pull-request check (`ADR-93`), only when the repository opts in: fetch
+    // the pull-request head refs, then take the numbering lock. The fetch comes first
+    // so the lock is not held across the network; the lock is held from here to the
+    // file write, and the directories are read under it.
+    let opts = &config.new;
+    let mut notices: Vec<Notice> = Vec::new();
+    let mut pull = PullRefsReport {
+        fetched: false,
+        reason: Some("disabled".to_string()),
+        remote: None,
+        refs: 0,
+        worktrees_scanned: 0,
+        skipped_numbers: Vec::new(),
+    };
+    let mut _lock = None;
+    if opts.check_open_prs {
+        pull.remote = Some(opts.remote.clone());
+        match new_refs::fetch_pull_refs(&repo_root, opts) {
+            Ok(()) => {
+                pull.fetched = true;
+                pull.reason = None;
+            }
+            Err(failure) => {
+                pull.reason = Some(failure.reason().to_string());
+                let detail = match &failure {
+                    FetchFailure::Offline(why) => format!("offline: {why}"),
+                    FetchFailure::Timeout => {
+                        format!("timed out after {}s", opts.fetch_timeout_seconds)
+                    }
+                };
+                let message = format!(
+                    "could not fetch pull request refs from '{}' ({detail}); numbering from the local refs, so a number claimed on an unfetched pull request will not be seen",
+                    opts.remote
+                );
+                eprintln!("urzua: {message}");
+                notices.push(Notice {
+                    severity: NoticeSeverity::Warning,
+                    subject: NOTICE_PULL_REFS.to_string(),
+                    message,
+                });
+            }
+        }
+        pull.refs = new_refs::count_pull_refs(&repo_root);
+        match new_refs::acquire_lock(&repo_root, opts.lock_timeout_seconds) {
+            LockOutcome::Held(lock) => _lock = Some(lock),
+            LockOutcome::Unavailable(why) => notices.push(Notice {
+                severity: NoticeSeverity::Warning,
+                subject: NOTICE_PULL_REFS.to_string(),
+                message: format!(
+                    "the numbering lock was not taken ({why}); a concurrent `urzua new` could take the same number"
+                ),
+            }),
+            LockOutcome::TimedOut(why) => return emit(&CouldNotRun::from(why)),
+        }
+        notices.push(Notice {
+            severity: NoticeSeverity::Info,
+            subject: NOTICE_PULL_REFS.to_string(),
+            message: "separate clones are not scanned: a record created and not pushed in another clone of this repository is invisible to numbering, and to the fetch".to_string(),
+        });
     }
 
     // One namespace across every directory the type declares (`MILE-130`):
@@ -103,6 +169,9 @@ pub fn run(
         &type_config.all_dirs().collect::<Vec<_>>(),
         &filenames,
         &number_of,
+        opts.check_open_prs.then_some(opts),
+        &mut pull,
+        &mut notices,
     ) {
         Ok(n) => n,
         Err(e) => {
@@ -268,15 +337,11 @@ pub fn run(
         }
     }
 
-    let mut notices: Vec<Notice> = identity
-        .warning
-        .into_iter()
-        .map(|message| Notice {
-            severity: NoticeSeverity::Warning,
-            subject: NOTICE_IDENTITY.to_string(),
-            message,
-        })
-        .collect();
+    notices.extend(identity.warning.into_iter().map(|message| Notice {
+        severity: NoticeSeverity::Warning,
+        subject: NOTICE_IDENTITY.to_string(),
+        message,
+    }));
     if !admits_stable_id {
         notices.push(Notice {
             severity: NoticeSeverity::Warning,
@@ -297,21 +362,30 @@ pub fn run(
             .to_path_buf(),
         display_number,
         stable_id: Some(stable_id.as_str().to_string()),
+        pull_refs: pull,
         notices,
     })
 }
 
 /// Numbers `new` in the working tree, then skips past any a local branch or
-/// remote-tracking ref already uses (`MILE-89`). Git only, no network: refs
-/// never fetched into this clone are invisible. A git failure falls back to
-/// the working-tree-only number and says so on stderr.
+/// remote-tracking ref already uses (`MILE-89`). With `scan` (`new.check_open_prs`,
+/// `ADR-93`) it also reads the refs under `refs/urzua/pr` and the trees of every
+/// sibling worktree, untracked files included. Git only. A git failure falls back
+/// to the working-tree-only number and says so on stderr.
 fn assign_display_number(
     repo_root: &std::path::Path,
     dirs: &[&str],
     filenames: &[String],
     number_of: &dyn Fn(&str) -> Option<u32>,
+    scan: Option<&NewDecl>,
+    pull: &mut PullRefsReport,
+    notices: &mut Vec<Notice>,
 ) -> Result<u32, String> {
-    let claims = match other_ref_claims(repo_root, dirs) {
+    let mut prefixes = vec!["refs/heads", "refs/remotes"];
+    if scan.is_some() {
+        prefixes.push(new_refs::PR_NAMESPACE);
+    }
+    let mut claims = match other_ref_claims(repo_root, dirs, &prefixes) {
         Ok(c) => c,
         Err(reason) => {
             eprintln!(
@@ -321,16 +395,72 @@ fn assign_display_number(
             return urzua_core::new_record::next_display_number_by(filenames, number_of);
         }
     };
+    if scan.is_some() {
+        match new_refs::sibling_worktrees(repo_root) {
+            Ok(siblings) => {
+                for path in siblings {
+                    if !path.is_dir() {
+                        notices.push(Notice {
+                            severity: NoticeSeverity::Warning,
+                            subject: NOTICE_PULL_REFS.to_string(),
+                            message: format!(
+                                "worktree {} is listed by git but its directory is missing; skipped",
+                                path.display()
+                            ),
+                        });
+                        continue;
+                    }
+                    let mut names = Vec::new();
+                    for dir in dirs {
+                        if let Ok(entries) = std::fs::read_dir(path.join(dir)) {
+                            names.extend(
+                                entries
+                                    .filter_map(|e| e.ok())
+                                    .filter_map(|e| e.file_name().into_string().ok()),
+                            );
+                        }
+                    }
+                    claims.push((format!("worktree {}", path.display()), names));
+                    pull.worktrees_scanned += 1;
+                }
+            }
+            Err(why) => notices.push(Notice {
+                severity: NoticeSeverity::Warning,
+                subject: NOTICE_PULL_REFS.to_string(),
+                message: format!(
+                    "could not list the worktrees ({why}); a number drafted and untracked in a sibling worktree will not be seen"
+                ),
+            }),
+        }
+    }
     let got =
         urzua_core::new_record::next_display_number_with_claims_by(filenames, &claims, number_of)?;
     for (number, refs) in &got.skipped {
-        eprintln!(
-            "urzua: skipped {number}: already used on {} (local git refs only; unfetched remotes are not checked)",
-            refs.join(", ")
-        );
+        if scan.is_some() {
+            eprintln!(
+                "urzua: skipped {number}: already used on {}",
+                refs.join(", ")
+            );
+        } else {
+            eprintln!(
+                "urzua: skipped {number}: already used on {} (local git refs only; unfetched remotes are not checked)",
+                refs.join(", ")
+            );
+        }
     }
+    pull.skipped_numbers = got
+        .skipped
+        .iter()
+        .map(|(number, held_by)| SkippedNumber {
+            number: *number,
+            held_by: held_by.clone(),
+        })
+        .collect();
     Ok(got.number)
 }
+
+/// Subject of the notices about the pull-request refs, the lock and the worktrees.
+const NOTICE_PULL_REFS: &str = "new.pull-refs";
 
 fn git_output(repo_root: &std::path::Path, args: &[&str]) -> Result<Vec<u8>, String> {
     let out = std::process::Command::new("git")
@@ -358,16 +488,11 @@ fn git_output(repo_root: &std::path::Path, args: &[&str]) -> Result<Vec<u8>, Str
 fn other_ref_claims(
     repo_root: &std::path::Path,
     dirs: &[&str],
+    prefixes: &[&str],
 ) -> Result<Vec<(String, Vec<String>)>, String> {
-    let refs = git_output(
-        repo_root,
-        &[
-            "for-each-ref",
-            "--format=%(objectname) %(refname)",
-            "refs/heads",
-            "refs/remotes",
-        ],
-    )?;
+    let mut args = vec!["for-each-ref", "--format=%(objectname) %(refname)"];
+    args.extend_from_slice(prefixes);
+    let refs = git_output(repo_root, &args)?;
     let mut by_commit: std::collections::BTreeMap<String, Vec<String>> = Default::default();
     for line in String::from_utf8_lossy(&refs).lines() {
         let Some((sha, full)) = line.split_once(' ') else {
@@ -386,23 +511,20 @@ fn other_ref_claims(
             .or_default()
             .push(short.to_string());
     }
-    let pathspecs: Vec<String> = dirs
-        .iter()
-        .map(|dir| format!("{}/", dir.trim_end_matches('/')))
-        .collect();
+    let commits: Vec<String> = by_commit.keys().cloned().collect();
+    let dir_names: Vec<String> = dirs.iter().map(|d| d.to_string()).collect();
+    let files_by_commit = urzua_io::files_in_dirs_at_commits(repo_root, &commits, &dir_names)?;
     let mut claims = Vec::new();
     for (sha, names) in by_commit {
-        let mut args = vec!["ls-tree", "-z", "--name-only", &sha, "--"];
-        args.extend(pathspecs.iter().map(String::as_str));
-        let listing = git_output(repo_root, &args)?;
-        let files: Vec<String> = listing
-            .split(|b| *b == 0)
-            .filter(|p| !p.is_empty())
-            .map(|p| {
-                let p = String::from_utf8_lossy(p);
-                p.rsplit('/').next().unwrap_or(&p).to_string()
+        let files: Vec<String> = files_by_commit
+            .get(&sha)
+            .map(|paths| {
+                paths
+                    .iter()
+                    .map(|p| p.rsplit('/').next().unwrap_or(p).to_string())
+                    .collect()
             })
-            .collect();
+            .unwrap_or_default();
         for name in names {
             claims.push((name, files.clone()));
         }
