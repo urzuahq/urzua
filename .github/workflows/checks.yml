@@ -27,7 +27,10 @@ jobs:
   rust:
     name: rust (fmt, clippy, test, build)
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # cargo test alone takes about 13 minutes, so 15 cancelled the job. The
+    # long-term fix is to speed up the suite, tracked by the Phase 0
+    # code-quality review; this limit is only the stopgap.
+    timeout-minutes: 30
     permissions:
       contents: read
       # The gate's one updating comment on a pull request. A caller must grant
