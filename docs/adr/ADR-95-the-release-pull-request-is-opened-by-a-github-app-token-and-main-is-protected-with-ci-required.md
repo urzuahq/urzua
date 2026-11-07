@@ -25,9 +25,10 @@ ruleset that requires the `ci` check, and to open the release PR with a GitHub A
 the two halves stand or fall together; `RFC-30` already said to decide them together.
 
 The workflow side is built: `prepare-release.yml` mints a token with `actions/create-github-app-token` from
-the App's identifier and private key, held as repository secrets, fails the job when either is unset,
-and uses the token for the checkout, the `release` branch push, knope's `CreatePullRequest` and the
-`no-changeset` label. That is the proposal of `RFC-30`, which is still `Draft`. The rule in `AGENTS.md` and
+the App's client id and private key, held as the repository secrets `RELEASE_APP_CLIENT_ID` and
+`RELEASE_APP_PRIVATE_KEY`, fails the job when either is unset, requests the token with only
+`permission-contents: write` and `permission-pull-requests: write`, and uses it for the checkout, the
+`release` branch push, knope's `CreatePullRequest` and the `no-changeset` label. That is the proposal of `RFC-30`, which is still `Draft`. The rule in `AGENTS.md` and
 `docs/rfc/README.md` is that when part of an RFC is built, that decision gets its own ADR. No ADR recorded
 this one, so `SPEC-20` and the workflow comments described a pipeline that no longer existed. This record
 closes that gap. It does not accept `RFC-30`, which stays `Draft`.
@@ -54,17 +55,27 @@ token that runs repository code inside the release job.*
 
 1. **Identity and scope.** One GitHub App owned by the maintainer, installed on this repository only, with the
    repository permissions Contents and Pull requests (read and write) and no webhook. The workflow requests
-   an installation token narrowed to those two permissions, not every permission the App holds.
-2. **Who holds the key.** The maintainer. The private key lives only in a repository secret
-   (the App's identifier is the other secret); the local copy is deleted after it is stored.
+   an installation token narrowed to those two permissions, not every permission the App holds: the
+   `create-github-app-token` step passes `permission-contents: write` and `permission-pull-requests: write`,
+   and the job holds no write grant on its own `GITHUB_TOKEN`.
+2. **Who holds the key.** The maintainer. The private key lives only in the repository secret
+   `RELEASE_APP_PRIVATE_KEY` (the App's client id is the other secret, `RELEASE_APP_CLIENT_ID`); the local
+   copy is deleted after it is stored.
    The workflow has no fallback to `GITHUB_TOKEN`: with either secret unset the job fails with a message
-   saying so, so the release PR is never quietly opened by an identity whose events start no run.
+   saying so, so the release PR is never quietly opened by an identity whose events start no run. The check
+   runs on every push to `main`, so unset secrets also mean a red `prepare release` run on every push, even
+   with nothing to release; an empty secret is caught by it, and a wrong or malformed key fails at the token
+   step.
 3. **Rotation.** Not decided here. A rotation is a new key generated in the App settings and stored in the
    secret; no schedule is set. If the maintainer wants one, it is a later record.
-4. **The ruleset.** `main` requires a pull request and the `ci` check (the aggregate job of `ci.yml`, GitHub
-   Actions source), blocks force pushes and deletions, and has no bypass actor. The release PR is an ordinary
-   pull request under it. The ruleset is a repository setting, not a file, so it is applied by the maintainer;
-   this record states the intent and does not prove the setting.
+4. **The ruleset.** The ruleset targets `main` only: not the `release` branch (a rule there blocks the
+   workflow's force-push) and not `v*` tags (a rule there blocks the tag push of `publish-release.yml`). It
+   requires a pull request with 0 approvals (with more, a sole maintainer cannot merge) and the `ci` check
+   (the aggregate job of `ci.yml`, GitHub Actions source), blocks force pushes and deletions, and has no bypass
+   actor. The release PR is an ordinary pull request under it. The ruleset is a repository setting, not a
+   file, so it is applied by the maintainer; it is required and not yet applied, and this record states the
+   intent and does not prove the setting. The maintainer's steps, with the secrets, are in
+   `docs/reference/release-app-setup.md`.
 5. **What does not change.** `publish-release.yml` still runs `verify` on the merge commit and still tags with
    `GITHUB_TOKEN` (a tag push needs no workflow run to start; `BUG-28`). `ADR-47`'s decision stands, so
    nothing relies on `ci` having run on the release PR. This record uses only the clause of `ADR-47` that
@@ -90,7 +101,9 @@ back to `GITHUB_TOKEN` also means removing the requirement or approving a held r
 - Setup lives outside the repository: the App, the two secrets, the ruleset and the permission to create and
   force-push the `release` branch. A missing piece fails visibly (the secrets check) or by blocking a merge,
   never by passing.
-- `RFC-30` stays `Draft`; this record and `SPEC-20` carry what was built. Its open questions about a bypass
+- `RFC-30` stays `Draft` while this record is `Proposed`. When this record is accepted, `RFC-30` moves to
+  `Accepted` (this record builds its proposal, so it is not `Superseded`) and its stale "Rejected by
+  `ADR-47`" banner goes. This record and `SPEC-20` carry what was built. Its open questions about a bypass
   actor and about `verify-ci` are answered here (no bypass; `verify` stays, `ADR-47`).
 - `SPEC-20` is revised to describe the pipeline as built.
 
@@ -102,9 +115,11 @@ back to `GITHUB_TOKEN` also means removing the requirement or approving a held r
 - `BUG-28` -- why the publish workflow does not depend on a tag trigger.
 - `BUG-34` -- the held-run and stale-label failures that follow from `GITHUB_TOKEN` events.
 - `SPEC-20` -- the CI/CD pipeline reference, revised alongside this record.
+- `docs/reference/release-app-setup.md` -- the maintainer's setup steps for the App, the secrets and the ruleset.
 
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-07 | Drafted as Proposed. **Why:** Maintainer decision, 2026-11-05 ("Protect + app token"): protect `main` with `ci` required and open the release PR with a GitHub App token so `ci` runs on it. The workflow already builds `RFC-30`'s proposal with no ADR, which the RFC rules forbid. The maintainer accepts it in a later change. | **substantive** |
+> | 2026-11-07 | Revised after an independent review, status unchanged (`Proposed`). Clause 1's narrowing claim now matches `prepare-release.yml` on `main` (the token step passes `permission-contents` and `permission-pull-requests`); the two secrets are named exactly (`RELEASE_APP_CLIENT_ID`, `RELEASE_APP_PRIVATE_KEY`); the ruleset targets `main` only with 0 approvals and is marked required and not yet applied; unset secrets are noted as a red run on every push; the maintainer's steps are in `docs/reference/release-app-setup.md`; `RFC-30` moves to `Accepted` when this record is accepted. **Why:** the review of #394 found the narrowing claim false before #404, the secret names drifting, and the setup steps referenced but written nowhere. | **substantive** |
