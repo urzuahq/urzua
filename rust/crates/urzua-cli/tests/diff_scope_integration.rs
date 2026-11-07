@@ -121,7 +121,7 @@ fn commit(dir: &Path, message: &str) {
 }
 
 fn check(dir: &Path, args: &[&str]) -> (Option<i32>, serde_json::Value) {
-    let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
+    let out = common::urzua()
         .arg("check")
         .args(args)
         .current_dir(dir)

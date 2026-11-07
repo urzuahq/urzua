@@ -1,0 +1,9 @@
+id: a-header-none-type-with-required-fields-is-reported
+corpus: corpus-q
+invocation: [--config, .urzua/header-none.yaml, check]
+# A type with no header that still requires a field: header_shape: none with required_fields [Status], though a type with no header has nowhere for a field to be.
+# The finding is on the configuration, and it is a failing case: with the rule
+# off nothing else reports it.
+expect_exit: 1
+expect_findings:
+  - {rule: config.header-none-has-no-required-fields, severity: error, file: .urzua/header-none.yaml}

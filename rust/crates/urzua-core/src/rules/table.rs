@@ -991,7 +991,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_IDENTITY_OPEN_PR_COLLISION,
-        description: "A record a `--base` diff adds shares its type and number with a file on a fetched pull-request head ref under a different `Stable-Id` (`ADR-93`, `MILE-89`): two branches filed the same number from one `main`, and each looks valid alone. The refs are the ones `urzua new` fetches into `refs/urzua/pr/<segment>/*` with `new.check_open_prs`; `check` never fetches, so with none present the rule notices how to fetch them and its population counts zero refs, never a clean run over nothing. A head whose file for that id carries the record's own `Stable-Id` is the same record and is not a collision, so a pull request is not flagged against itself nor against its own merged copy. Plain git cannot tell an open pull request from a closed one, so a closed, unmerged head can still hold a number a new record legitimately took: the finding is a warning, which still gates under `fail_on: warning`, and the path out is a waiver whose `Reason` names that pull request, or a renumber with `urzua migrate ids`. Judges the changed set: `not-applicable` on a run with no `--base`. Opt-in.",
+        description: "A record a `--base` diff adds shares its type and number with a file on a fetched pull-request head ref under a different `Stable-Id` (`ADR-93`, `MILE-89`): two branches filed the same number from one `main`, and each looks valid alone. The refs are the ones `urzua new` fetches into `refs/urzua/pr/<segment>/*` with `new.check_open_prs`; `check` never fetches, so with none present the rule notices how to fetch them and its population counts zero refs, never a clean run over nothing. A head whose file for that id carries the record's own `Stable-Id` is the same record and is not a collision, so a pull request is not flagged against itself nor against its own merged copy. Plain git cannot tell an open pull request from a closed one, so a closed, unmerged head can still hold a number a new record legitimately took: the finding is a warning, which still gates under `fail_on: warning`, and the path out is a waiver whose `Reason` names that pull request, or renaming the file and its H1 to the next free number (the one `urzua new` would take; `urzua migrate ids` cannot renumber). Judges the changed set: `not-applicable` on a run with no `--base`. Opt-in.",
         scope: Scope::Records,
         anchor: Anchor::Record,
         judges: Judges::ChangedSet,
@@ -1004,7 +1004,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         header_none: HeaderNone::Exempt("reads the filename identifier and the Stable-Id, only on a --base run"),
         options: &[],
         actions: &[
-            VariantAction::new("open-pr-collision", ActionDecl::Exempt("the fix is a renumber (`urzua migrate ids`) or a waiver naming a closed pull request; neither is a field edit")),
+            VariantAction::new("open-pr-collision", ActionDecl::Exempt("the fix is to rename the file and its H1 to the next free number, or a waiver naming a closed pull request; neither is a field edit")),
         ],
         phase: Phase::Main,
         companion: None,

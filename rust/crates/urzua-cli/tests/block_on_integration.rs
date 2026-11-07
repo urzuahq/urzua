@@ -93,7 +93,7 @@ fn core(root: &Path, args: &[&str], stdin: &str) -> (i32, serde_json::Value) {
     if !ovr.is_empty() {
         request["override"] = ovr.into();
     }
-    let mut c = Command::new(env!("CARGO_BIN_EXE_urzua"));
+    let mut c = common::urzua();
     c.args(["harness", "run", "edit"])
         .env_remove("URZUA_HOOK_OVERRIDE")
         .env_remove("URZUA_HOOK_REASON");
@@ -104,7 +104,7 @@ fn core(root: &Path, args: &[&str], stdin: &str) -> (i32, serde_json::Value) {
 }
 
 fn check(root: &Path) -> (i32, serde_json::Value) {
-    let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
+    let out = common::urzua()
         .arg("check")
         .current_dir(root)
         .output()
@@ -177,7 +177,7 @@ fn all_lets_a_clean_proposal_through() {
 
 /// The hook command the installed settings carry for an edit, run the way the agent runs it.
 fn translator(root: &Path) -> Command {
-    let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
+    let out = common::urzua()
         .args(["harness", "install"])
         .current_dir(root)
         .output()

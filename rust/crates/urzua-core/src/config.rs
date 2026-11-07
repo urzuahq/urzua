@@ -1992,7 +1992,7 @@ pub fn normalize_published_path(entry: &str) -> String {
 }
 
 /// Why a `published_paths` entry cannot name a path inside the repository.
-fn published_path_problem(entry: &str) -> Option<&'static str> {
+pub(crate) fn published_path_problem(entry: &str) -> Option<&'static str> {
     let trimmed = entry.trim();
     if trimmed.contains('\\') {
         return Some("contains a backslash; write the path with forward slashes");

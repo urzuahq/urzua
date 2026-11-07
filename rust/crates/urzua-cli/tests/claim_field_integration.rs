@@ -4,6 +4,8 @@
 //!
 //! Verifies: ADR-85
 
+mod common;
+
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -54,7 +56,7 @@ fn repo(name: &str, claim_options: &str, fragments: &[(&str, &str)]) -> PathBuf 
 }
 
 fn check(dir: &Path) -> (i32, serde_json::Value) {
-    let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
+    let out = common::urzua()
         .arg("check")
         .current_dir(dir)
         .output()
@@ -237,7 +239,7 @@ fn a_verb_claim_in_the_body_is_still_found_and_counted_observed_failing() {
 #[test]
 fn strict_without_closes_does_not_load_observed_failing() {
     let dir = repo("strict-alone", "    strict: true\n", &[]);
-    let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
+    let out = common::urzua()
         .arg("check")
         .current_dir(&dir)
         .output()
@@ -288,7 +290,7 @@ fn strict_reports_a_fence_the_release_tool_cannot_read_observed_failing() {
 const VERB_OFF: &str = "    closes: closes\n    strict: true\n    verb_claims: false\n";
 
 fn load_error(dir: &Path) -> String {
-    let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
+    let out = common::urzua()
         .arg("check")
         .current_dir(dir)
         .output()

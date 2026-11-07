@@ -22,7 +22,7 @@ fn commit_all(dir: &Path) {
 }
 
 fn run_urzua(dir: &Path, args: &[&str]) -> std::process::Output {
-    Command::new(env!("CARGO_BIN_EXE_urzua"))
+    common::urzua()
         .args(args)
         .current_dir(dir)
         .output()
@@ -46,7 +46,7 @@ fn run_urzua_with_gh(dir: &Path, args: &[&str], login: Option<&str>) -> std::pro
         stub.display(),
         std::env::var("PATH").unwrap_or_default()
     );
-    Command::new(env!("CARGO_BIN_EXE_urzua"))
+    common::urzua()
         .args(args)
         .env("PATH", path)
         .current_dir(dir)
@@ -358,6 +358,41 @@ fn a_git_user_name_with_a_pipe_is_refused_for_the_row_too() {
     let parsed = json(&out);
     assert_eq!(parsed["status"], "not-run", "{parsed}");
     assert_eq!(std::fs::read_to_string(dir.join(A)).unwrap(), before);
+}
+
+#[test]
+fn rebaseline_detect_honours_ids_and_names_an_unknown_one_observed_failing() {
+    let dir = fixture("detect-ids");
+    let v = json(&run_urzua(&dir, &["fix", "--rebaseline", "--ids", B]));
+    let rb = v["rebaselines"].as_array().unwrap();
+    assert_eq!(rb.len(), 1, "{v}");
+    assert_eq!(rb[0]["record"], B, "{v}");
+
+    let out = run_urzua(
+        &dir,
+        &["fix", "--rebaseline", "--ids", "docs/adr/ADR-9-nope.md"],
+    );
+    let v = json(&out);
+    assert_eq!(v["status"], "partial-failure", "{v}");
+    assert_eq!(out.status.code(), Some(1), "{v}");
+    assert!(v["failed"][0]["error"].as_str().unwrap().contains("ADR-9"));
+    assert!(
+        v["rebaselines"].as_array().is_none_or(|r| r.is_empty()),
+        "{v}"
+    );
+}
+
+#[test]
+fn rebaseline_without_apply_rejects_force_by_and_actor_observed_failing() {
+    let dir = fixture("detect-flags");
+    for args in [
+        vec!["fix", "--rebaseline", "--force"],
+        vec!["fix", "--rebaseline", "--by", "ana"],
+        vec!["fix", "--rebaseline", "--actor", "agent"],
+    ] {
+        let out = run_urzua(&dir, &args);
+        assert_eq!(out.status.code(), Some(2), "{args:?}: {out:?}");
+    }
 }
 
 #[test]

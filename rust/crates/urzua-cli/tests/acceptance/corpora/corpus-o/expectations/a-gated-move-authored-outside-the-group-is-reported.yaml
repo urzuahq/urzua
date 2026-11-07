@@ -1,0 +1,14 @@
+id: a-gated-move-authored-outside-the-group-is-reported
+corpus: corpus-o
+# ADR-1 moves from Proposed to Accepted after the base commit. The pull request's
+# author is mallory, who is not in the maintainers group, and the default
+# evidence is the author, so a decider's approval does not make the move valid.
+commits:
+  - write:
+      docs/adr/ADR-1-queue.md: "---\nStatus: Accepted\n---\n# ADR-1: Queue\n\nprose\n"
+invocation: [check, --base, base, --actors, actors-outsider.json]
+expect_exit: 1
+expect_findings:
+  - {rule: diff.decider-required, severity: error, file: docs/adr/ADR-1-queue.md, message_contains: maintainers}
+expect_no_findings:
+  - {rule: diff.decider-required, file: docs/adr/ADR-2-stream.md}

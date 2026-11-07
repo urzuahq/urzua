@@ -1,0 +1,13 @@
+id: a-dependency-cycle-is-reported-on-every-record-in-it
+corpus: corpus-m
+invocation: [check]
+expect_exit: 1
+# MILE-1 -> MILE-2 -> MILE-3 -> MILE-1 in a pair declared acyclic. Each record on
+# the loop is named, with the path, once; MILE-4 depends on nothing in the loop.
+expect_findings:
+  - {rule: sequence.cycle, severity: error, file: docs/milestones/MILE-1-loop-a.md, message_contains: "MILE-1 -> MILE-2 -> MILE-3 -> MILE-1"}
+  - {rule: sequence.cycle, severity: error, file: docs/milestones/MILE-2-loop-b.md}
+  - {rule: sequence.cycle, severity: error, file: docs/milestones/MILE-3-loop-c.md}
+expect_no_findings:
+  - {rule: sequence.cycle, file: docs/milestones/MILE-4-names-nothing.md}
+  - {rule: sequence.cycle, file: docs/milestones/MILE-6-not-done.md}

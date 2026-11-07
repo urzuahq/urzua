@@ -26,7 +26,7 @@ fn commit_all(dir: &Path, date: Option<&str>) {
 }
 
 fn run_urzua(dir: &Path, args: &[&str]) -> std::process::Output {
-    Command::new(env!("CARGO_BIN_EXE_urzua"))
+    common::urzua()
         .args(args)
         .current_dir(dir)
         .output()

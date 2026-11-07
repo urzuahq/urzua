@@ -39,7 +39,7 @@ fn run(dir: &Path, args: &[&str], login: Option<&str>) -> std::process::Output {
         stub.display(),
         std::env::var("PATH").unwrap_or_default()
     );
-    Command::new(env!("CARGO_BIN_EXE_urzua"))
+    common::urzua()
         .args(args)
         .env("PATH", path)
         .current_dir(dir)

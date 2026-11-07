@@ -1,0 +1,30 @@
+schema_version: 2
+relation_pairs:
+  - {name: supersession, forward: Supersedes, inverse: Superseded-by, reciprocity: required}
+rules:
+  header.required-fields: error
+  relation.pair-reciprocity: error
+  relation.target-status-undeclared: error
+  pointer.target-status:
+    level: error
+    not_in: [Superseded]
+  header.pointer-field-clean: error
+  type.no-declared-spec: warn
+record_types:
+  adr:
+    dir: docs/adr
+    prefix: ADR
+    header_shape: yaml-frontmatter
+    required_fields: [Status]
+    known_fields: [Status, Supersedes, Superseded-by, Implements]
+    pointer_fields: [Supersedes, Superseded-by, Implements]
+    narrative_fields: []
+  note:
+    dir: docs/notes
+    prefix: NOTE
+    header_shape: yaml-frontmatter
+    required_fields: [Owner]
+    known_fields: [Owner]
+    pointer_fields: []
+    narrative_fields: []
+    spec: SPEC-1

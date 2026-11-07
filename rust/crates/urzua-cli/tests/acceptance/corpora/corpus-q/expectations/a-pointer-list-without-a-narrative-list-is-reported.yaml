@@ -1,0 +1,9 @@
+id: a-pointer-list-without-a-narrative-list-is-reported
+corpus: corpus-q
+invocation: [--config, .urzua/pointer-missing.yaml, check]
+# A type declaring pointer_fields without narrative_fields: narrative_fields is absent while pointer_fields is declared.
+# The finding is on the configuration, and it is a failing case: with the rule
+# off nothing else reports it.
+expect_exit: 1
+expect_findings:
+  - {rule: config.pointer-declaration-missing, severity: error, file: .urzua/pointer-missing.yaml}

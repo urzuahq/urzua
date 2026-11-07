@@ -1,8 +1,10 @@
 ---
 Stable-Id: 01M6NNNZJ92WC419AF3NQP471H
-Status: Draft
+Status: Shipped
+Embodiment: Verified
+Realized-by: code:.urzua/config.yaml, code:rust/crates/urzua-core/src/rules/roadmap.rs, test:rust/crates/urzua-cli/tests/condition_type_integration.rs, test:rust/crates/urzua-cli/tests/work_types_integration.rs
 Date: 2026-11-05
-Version: '0.2'
+Version: '0.6'
 Author: beauwilliams
 Subject: 'The `condition` record type -- a dependency on a fact that is observed rather than built, declared in configuration alone.'
 Parent: —
@@ -16,8 +18,9 @@ asking for a feature. `RFC-48` sorts what can stop a record into work, which a `
 record already expresses, and facts, which no record expressed. A `condition` is that record, so a
 milestone, ADR or RFC that waits on a fact points at it with `Depends-on`, and `urzua roadmap`
 (`SPEC-3`) and the derived `blocked` value read the wait like any other. The type is the first built
-entirely from configuration: it uses a declared directory, prefix and identity, a status vocabulary
-with success and failure sets, `transitions` and `statuses.require`, and nothing else. The engine has
+entirely from configuration: it uses a declared directory, prefix and identity, a revision log, a status vocabulary
+with success and failure sets, `transitions`, `statuses.require` and `statuses.forbid`, and a required
+section, and nothing else. The engine has
 no knowledge of the name `condition`; the shape under any other name behaves the same.
 
 ## Schema
@@ -28,9 +31,10 @@ record_types:
     dir: "docs/conditions"
     prefix: "COND"
     identity: {from: filename, pattern: '^(?P<prefix>COND)-(?P<number>\d{4})-(?P<slug>.+)$'}
-    required_fields: ["Status"]
+    revision_log: {marker: "**Revision log**", required: true}
+    required_fields: ["Status", "Stable-Id"]
     header_shape: "yaml-frontmatter"
-    known_fields: ["Stable-Id", "Met-by"]
+    known_fields: ["Met-by"]
     statuses:
       values: ["Open", "Met", "Dropped"]
       success: ["Met"]
@@ -40,11 +44,15 @@ record_types:
         Open: ["Met", "Dropped"]
       require:
         - {when: ["Met"], fields: ["Met-by"]}
+      forbid:
+        - {when: ["Open"], fields: ["Met-by"]}
     sections: {from: headings, required: [{name: Signal}]}
     pointer_fields: ["Met-by"]
     narrative_fields: []
     spec: "SPEC-23"
 ```
+
+This is the type as this repository's `.urzua/config.yaml` declares it.
 
 Files are `COND-NNNN-slug.md` (`ADR-36`), with a four-digit padded number, and the H1 opens
 `COND-NNNN`. `COND-1` and `COND-0001` name the same record.
@@ -52,7 +60,7 @@ Files are `COND-NNNN-slug.md` (`ADR-36`), with a four-digit padded number, and t
 | Field | Values | Notes |
 |---|---|---|
 | `Status` | `Open`, `Met`, `Dropped` | `Open` is the only initial state: a condition is filed `Open`, never already `Met`. It moves to `Met` or `Dropped`, and both are terminal (`ADR-72`); a mistaken closure is a new condition, not a reopening. |
-| `Met-by` | a record reference | The record that shows the signal happened, such as the ADR that records the decision or the milestone that names the adopter's ask. Required once `Status` is `Met` (`status.required-field-missing`). It is left unset while the condition is `Open`: it records the fact, and the fact has not happened yet, even where the record that will hold it is already known. A pointer field, so it must resolve to a record. |
+| `Met-by` | a record reference | The record that shows the signal happened, such as the ADR that records the decision or the milestone that names the adopter's ask. Required once `Status` is `Met` (`status.required-field-missing`) and forbidden while it is `Open` (`status.forbidden-field-present`): it records the fact, and the fact has not happened yet, even where the record that will hold it is already known. A pointer field, so it must resolve to a record. |
 
 `Met` is the type's success state and `Dropped` its failure state, which is all the sequencing rules
 and the roadmap read.
@@ -114,3 +122,8 @@ whether the Signal is precise is a reviewer's judgement, as for any section (`SP
 > | 2026-11-05 | Initial spec. **Why:** `MILE-187`, maintainer decision of 2026-11-05: the `condition` type of `RFC-48` is declared in configuration so waits on facts are structured and the computed roadmap sees them. | **structural** |
 > | 2026-11-05 | `Met-by` is unset while `Open`. **Why:** review of `MILE-187`: `Met-by` names the record that shows the signal happened, so naming a record before then asserts evidence that does not exist; `COND-1` no longer sets `Met-by: RFC-9`. | **structural** |
 > | 2026-11-05 | Bumped to `0.2`. A condition is read as non-work when a repository leaves it out of `roadmap.work_types`: it gates but is not ordered, and is listed under `waiting_on`. **Why:** `MILE-196` builds the `ADR-82` Amendment of 2026-11-05, which this repository's own configuration uses so `COND-1` to `COND-4` leave the ready set. | **substantive** |
+> | 2026-11-07 | Bumped to `0.3`. Checked against `.urzua/config.yaml` and the tests, and corrected: the schema excerpt now shows the type as declared (`revision_log`, `Stable-Id` required, and `statuses.forbid` of `Met-by` while `Open`), the Purpose lists what the type uses, and the `Met-by` row says the field is forbidden while `Open`, with its rule (`status.forbidden-field-present`), where it said only that it is left unset. **Why:** the maintainer approved moving this spec to `Shipped` (2026-11-07), which required verifying each section against the built type. | **substantive** |
+> | 2026-11-07 | Bumped to `0.4`. Status changed from Draft to Accepted. **Why:** Maintainer decision, 2026-11-07: the maintainer approved moving this spec to `Shipped`, and the lifecycle moves one step at a time (`Draft` to `Accepted` to `Shipped`). | **substantive** |
+> | 2026-11-07 | Bumped to `0.5`. Realized-by names the implementing code and tests, ready for `Shipped` (`MILE-7`). **Why:** Maintainer decision, 2026-11-07: moving this spec to `Shipped` requires `Embodiment` and `Realized-by`. | **structural** |
+> | 2026-11-07 | Tool-authored (by beauwilliams, identity: gh-verified, actor: agent): recomputed `Embodiment` from `Realized-by: code:.urzua/config.yaml, code:rust/crates/urzua-core/src/rules/roadmap.rs, test:rust/crates/urzua-cli/tests/condition_type_integration.rs, test:rust/crates/urzua-cli/tests/work_types_integration.rs` -- stated `Not started` disagreed with the computed value `Verified`. | **structural** |
+> | 2026-11-07 | Bumped to `0.6`. Status changed from Accepted to Shipped. **Why:** Maintainer decision, 2026-11-07: its `Realized-by` evidence computes `Verified`, and each section was checked against the built code and tests. | **substantive** |

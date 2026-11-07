@@ -1,0 +1,7 @@
+fixtures:
+  - path: .urzua/config.yaml
+    irregularity: the config the corpus is validated under, naming the committed override log and enabling override.unreviewed; not a record.
+  - path: .urzua/override-log.md
+    irregularity: two override rows -- alice's has an empty Reviewed-by, bob's was reviewed by carol; the log is not a record.
+  - path: docs/adr/ADR-1-queue.md
+    irregularity: none -- the record both overrides name.

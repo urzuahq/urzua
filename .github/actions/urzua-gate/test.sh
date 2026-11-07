@@ -155,8 +155,9 @@ mk_release() { # version reported
 mk_release 1.2.3
 archive="$tmp/rel/o/r/releases/download/v1.2.3/urzua-x86_64-unknown-linux-gnu.tar.gz"
 sum="$(sha256sum "$archive" | cut -d' ' -f1)"
+mkdir -p "$tmp/inst-tmp"
 inst() { # extra env assignments via "$@"
-  env VERSION=v1.2.3 REPO=o/r RELEASE_BASE_URL="file://$tmp/rel" DEST="$tmp/dest" TARGET_OS=Linux TARGET_ARCH=X64 "$@" \
+  env VERSION=v1.2.3 REPO=o/r RELEASE_BASE_URL="file://$tmp/rel" DEST="$tmp/dest" TARGET_OS=Linux TARGET_ARCH=X64 TMPDIR="$tmp/inst-tmp" "$@" \
     "$here/install.sh"
 }
 
@@ -193,5 +194,10 @@ mk_release 11.2.35
 inst >/dev/null 2>"$tmp/err.txt"; rc=$?
 { [ "$rc" -ne 0 ] && grep -q 'not the pinned' "$tmp/err.txt"; }
 expect "install: a reported version that only contains the pinned one fails" $?
+
+# Every install above, successful or refused, downloaded into a work directory
+# under TMPDIR; none may be left behind on the runner.
+[ -z "$(ls -A "$tmp/inst-tmp")" ]
+expect "install: no work directory is left behind, on success or on a refusal" $?
 
 [ "$fails" -eq 0 ] && echo "urzua-gate: all tests passed" || { echo "urzua-gate: $fails test(s) failed" >&2; exit 1; }

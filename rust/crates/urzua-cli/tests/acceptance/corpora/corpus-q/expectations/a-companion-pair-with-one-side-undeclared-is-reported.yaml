@@ -1,0 +1,9 @@
+id: a-companion-pair-with-one-side-undeclared-is-reported
+corpus: corpus-q
+invocation: [--config, .urzua/companion.yaml, check]
+# A type declaring one field of a companion pair without the other: companion_fields names embodiment_state and embodiment_locator, but the type declares Embodiment without Realized-by.
+# The finding is on the configuration, and it is a failing case: with the rule
+# off nothing else reports it.
+expect_exit: 1
+expect_findings:
+  - {rule: config.companion-declaration-missing, severity: error, file: .urzua/companion.yaml}

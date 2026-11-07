@@ -28,7 +28,7 @@ fn git(dir: &Path, args: &[&str]) -> String {
 }
 
 fn urzua_in(dir: &Path, args: &[&str]) -> std::process::Output {
-    Command::new(env!("CARGO_BIN_EXE_urzua"))
+    common::urzua()
         .args(args)
         .current_dir(dir)
         .env("GIT_ALLOW_PROTOCOL", "file:ext")
@@ -159,6 +159,17 @@ fn a_number_claimed_only_on_a_pull_ref_is_skipped_and_reported() {
             .unwrap()
             .contains("refs/urzua/pr/origin/7"),
         "{v}"
+    );
+    // The top-level list gives each number and why it was skipped, and nothing
+    // is written to stderr.
+    assert_eq!(
+        v["skipped"],
+        serde_json::json!([{"number": 2, "reason": "open-pr refs/urzua/pr/origin/7"}]),
+        "{v}"
+    );
+    assert_eq!(
+        stderr, "",
+        "a skipped number is reported in JSON, not on stderr"
     );
     // The ref lives in the private namespace, and the lock is gone.
     assert!(git(&w.work, &["for-each-ref", "refs/urzua/pr"]).contains("refs/urzua/pr/origin/7"));
@@ -316,6 +327,18 @@ fn a_number_in_a_sibling_worktree_untracked_is_skipped() {
         .as_str()
         .unwrap();
     assert!(held.contains("sibling"), "{v}");
+    let skipped = v["skipped"].as_array().unwrap();
+    assert_eq!(skipped.len(), 1, "{v}");
+    assert_eq!(skipped[0]["number"], 2, "{v}");
+    let reason = skipped[0]["reason"].as_str().unwrap();
+    assert!(
+        reason.starts_with("worktree ") && reason.ends_with("sibling"),
+        "{v}"
+    );
+    assert_eq!(
+        stderr, "",
+        "a skipped number is reported in JSON, not on stderr"
+    );
 }
 
 #[test]
@@ -360,7 +383,7 @@ fn the_report_states_that_separate_clones_are_not_seen() {
 fn two_runs_started_together_take_two_different_numbers() {
     let w = world("concurrent", ON, "");
     let spawn = || {
-        Command::new(env!("CARGO_BIN_EXE_urzua"))
+        common::urzua()
             .args(["new", "bug", "Same time", "--by", "tester"])
             .current_dir(&w.work)
             .stdout(std::process::Stdio::piped())
@@ -519,6 +542,14 @@ fn two_pull_refs_holding_one_number_are_flagged_against_the_record_a_diff_adds()
     assert_eq!(f[0]["file"], "docs/bug/BUG-2-mine.md", "{v}");
     let message = f[0]["message"].as_str().unwrap();
     assert!(message.contains("refs/urzua/pr/origin/9"), "{message}");
+    assert!(message.contains("docs/bug/BUG-2-theirs.md"), "{message}");
+    // The remedy must be one that works: `migrate ids` cannot renumber.
+    assert!(!message.contains("migrate ids"), "{message}");
+    assert!(
+        message.contains("Rename the file and its H1 to the next free number"),
+        "{message}"
+    );
+    assert!(message.contains("waive"), "{message}");
     assert!(message.contains("docs/bug/BUG-2-theirs.md"), "{message}");
     assert_eq!(execution(&v)["status"], "ran", "{v}");
     assert_eq!(execution(&v)["population"]["eligible"], 1, "{v}");

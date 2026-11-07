@@ -47,7 +47,7 @@ fn repo(name: &str) -> common::TempDir {
 }
 
 fn urzua(dir: &Path, args: &[&str]) -> (i32, serde_json::Value) {
-    let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
+    let out = common::urzua()
         .args(args)
         .current_dir(dir)
         .output()

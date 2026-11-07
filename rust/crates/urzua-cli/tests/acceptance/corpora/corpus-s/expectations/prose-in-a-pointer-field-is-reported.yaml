@@ -1,0 +1,9 @@
+id: prose-in-a-pointer-field-is-reported
+corpus: corpus-s
+invocation: [check]
+# ADR-5's Implements holds `ADR-2 (see the thread)`, prose after the reference, in a field that holds only reference ids.
+expect_exit: 1
+expect_findings:
+  - {rule: header.pointer-field-clean, severity: error, file: docs/adr/ADR-5-prose-pointer.md, message_contains: "clean reference"}
+expect_no_findings:
+  - {rule: header.pointer-field-clean, file: docs/adr/ADR-3-leans-on-old.md}

@@ -6,16 +6,18 @@
 # A block list and a list continued over two lines must stay rejected: the
 # single-line form is the form claim.field-malformed demands because of it.
 #
-# The pin is read from prepare-release.yml, so a knope upgrade re-runs this
-# against the new version (the version installed here must equal the pin).
+# The pin is read from the install-knope action, the one place it is written
+# (knope-pin.test.sh fails when a workflow carries its own copy), so a knope
+# upgrade re-runs this against the new version (the version installed here must
+# equal the pin).
 # Without knope on PATH it fails in CI and says SKIPPED anywhere else.
 set -uo pipefail
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 pin=$(sed -n 's|.*knope-dev/knope/releases/download/knope/v\([0-9][0-9.]*\)/.*|\1|p' \
-  "$root/.github/workflows/prepare-release.yml" | head -1)
+  "$root/.github/actions/install-knope/action.yml" | head -1)
 if [ -z "$pin" ]; then
-  echo "knope-closes-compat: no pinned knope version found in prepare-release.yml" >&2
+  echo "knope-closes-compat: no pinned knope version found in the install-knope action" >&2
   exit 1
 fi
 
@@ -29,7 +31,7 @@ if ! command -v knope >/dev/null 2>&1; then
 fi
 have=$(knope --version | awk '{print $2}')
 if [ "$have" != "$pin" ]; then
-  echo "knope-closes-compat: installed knope is $have but prepare-release.yml pins $pin" >&2
+  echo "knope-closes-compat: installed knope is $have but the install-knope action pins $pin" >&2
   exit 1
 fi
 

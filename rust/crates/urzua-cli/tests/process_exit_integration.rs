@@ -11,7 +11,7 @@ use std::path::Path;
 use std::process::{Command, Stdio};
 
 fn bin() -> Command {
-    Command::new(env!("CARGO_BIN_EXE_urzua"))
+    common::urzua()
 }
 
 fn git(dir: &Path, args: &[&str]) {

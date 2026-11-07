@@ -23,10 +23,11 @@ permissions:
 
 jobs:
   # Runs the checks here rather than asking whether `ci` ran elsewhere
-  # (ADR-0047). The release PR is opened with GITHUB_TOKEN, so its own `ci` run
-  # is held at action_required until a human approves it -- a cross-workflow
-  # query could only ever report "did someone click approve". This workflow is
-  # triggered by the human merge, so it always runs.
+  # (ADR-0047). The release PR is opened by a GitHub App, so its own `ci` run
+  # executes and gates the merge (ADR-0095), but a cross-workflow query could
+  # only report that a run happened, and on the PR head, not on the commit
+  # being tagged. This workflow is triggered by the merge, so it always runs,
+  # against the tree it is about to release.
   #
   # Pinned to merge_commit_sha: for a squash merge that is the commit created
   # on main, which is the commit knope tags below. The PR head is a different
@@ -35,13 +36,16 @@ jobs:
   verify:
     if: github.event.pull_request.merged == true && github.event.pull_request.head.ref == 'release' && github.event.pull_request.head.repo.full_name == github.repository
     uses: ./.github/workflows/checks.yml
-    # checks.yml's gate can comment on a pull request; a caller must grant
-    # what the called workflow asks for. Nothing comments on a release tag.
+    # A caller must grant what the called workflow's job asks for, and its
+    # gate can comment on a pull request. This event is the merged release PR,
+    # whose comment would be rewritten for a tree nobody is reviewing, so the
+    # comment is switched off: the grant stays, nothing is posted.
     permissions:
       contents: read
       pull-requests: write
     with:
       ref: ${{ github.event.pull_request.merge_commit_sha }}
+      comment: "false"
 
   release:
     needs: verify
@@ -61,14 +65,8 @@ jobs:
           # The commit `verify` tested, not the default ref.
           ref: ${{ github.event.pull_request.merge_commit_sha }}
 
-      - name: install knope 0.23.0 (pinned, checksummed)
-        run: |
-          set -euo pipefail
-          curl -fsSL -o knope.tgz "https://github.com/knope-dev/knope/releases/download/knope/v0.23.0/knope-x86_64-unknown-linux-musl.tgz"
-          echo "76a970a5e237344abc14be3de37ed50c021b659a9b66b3f54afc77e6d48ac501  knope.tgz" | sha256sum -c -
-          tar -xzf knope.tgz
-          sudo mv knope-x86_64-unknown-linux-musl/knope /usr/local/bin/knope
-          knope --version
+      # The pin and its checksum live in one place (.github/actions/install-knope).
+      - uses: ./.github/actions/install-knope
 
       - name: configure git identity for the release tag
         run: |
@@ -168,7 +166,7 @@ jobs:
           TAG: ${{ needs.release.outputs.tag }}
         run: |
           set -euo pipefail
-          gh release upload "$TAG" dist/*.tar.gz --repo "${{ github.repository }}"
+          gh release upload "$TAG" dist/*.tar.gz --clobber --repo "${{ github.repository }}"
       # A release with no attached archive is the defect BUG-0028 records:
       # it looks published and cannot be installed. Assert rather than trust.
       - name: verify the release actually carries its archives

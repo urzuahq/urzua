@@ -17,7 +17,7 @@ fn git(dir: &Path, args: &[&str]) {
 }
 
 fn run(dir: &Path, args: &[&str]) -> (std::process::Output, serde_json::Value) {
-    let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
+    let out = common::urzua()
         .args(args)
         .current_dir(dir)
         .output()

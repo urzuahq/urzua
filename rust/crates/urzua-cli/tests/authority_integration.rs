@@ -48,7 +48,7 @@ fn fixture(name: &str, config: &str) -> common::TempDir {
 }
 
 fn urzua(dir: &Path, args: &[&str]) -> Command {
-    let mut c = Command::new(env!("CARGO_BIN_EXE_urzua"));
+    let mut c = common::urzua();
     c.args(args).current_dir(dir);
     c
 }
@@ -621,4 +621,38 @@ fn this_repositorys_own_authority_denies_an_agent_acceptance_and_leaves_a_person
     let (_, v) = check_base(&dir, &["--actors", &actors]);
     assert!(decider_findings(&v).is_empty(), "{v}");
     assert_eq!(decider_status(&v), "ran", "{v}");
+}
+
+// ----------------------------------- path entries in a non-canonical spelling
+
+#[test]
+fn a_gate_path_written_with_a_leading_dot_slash_gates_what_the_plain_spelling_does() {
+    let cfg = config().replace("[\".claude\", ", "[\"./.claude/\", ");
+    let dir = fixture("dot-slash", &cfg);
+    // The hook core refuses an agent on the path.
+    let (code, v) = run_edit(&dir, ".claude/settings.json", "{}\n", "agent", &[]);
+    assert_eq!(code, 1, "{v}");
+    assert_eq!(v["verdict"], "block", "{v}");
+    // And check --base asks for the group on the changed path.
+    std::fs::write(dir.join(".claude/settings.json"), "{\"a\": 1}\n").unwrap();
+    let bad = write_actors(
+        &dir,
+        serde_json::json!({"schema": 1, "pr_author": "mallory"}),
+    );
+    let (code, v) = check_base(&dir, &["--actors", &bad]);
+    assert_eq!(code, 1, "{v}");
+    assert_eq!(decider_findings(&v).len(), 1, "{v}");
+}
+
+#[test]
+fn a_gate_path_that_can_match_nothing_is_a_load_error() {
+    for (entry, needle) in [
+        ("\".\"", "names no path"),
+        ("\"./\"", "names no path"),
+        ("\"a\\\\b\"", "backslash"),
+        ("\"/abs\"", "absolute"),
+    ] {
+        let cfg = config().replace("[\".claude\", ", &format!("[{entry}, \".claude\", "));
+        must_not_load("unmatchable", &cfg, &[needle, "authority.gates[1]"]);
+    }
 }

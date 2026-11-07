@@ -75,7 +75,7 @@ fn repo(name: &str, config: &str, milestones: &[Milestone], rfcs: &[u32]) -> com
 }
 
 fn run(dir: &Path, args: &[&str]) -> (i32, String) {
-    let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
+    let out = common::urzua()
         .args(args)
         .current_dir(dir)
         .output()

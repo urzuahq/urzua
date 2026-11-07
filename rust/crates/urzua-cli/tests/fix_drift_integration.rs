@@ -21,7 +21,7 @@ fn commit_all(dir: &Path) {
 }
 
 fn run_urzua(dir: &Path, args: &[&str]) -> std::process::Output {
-    Command::new(env!("CARGO_BIN_EXE_urzua"))
+    common::urzua()
         .args(args)
         .current_dir(dir)
         .output()
@@ -93,7 +93,9 @@ fn apply_writes_drift_detected_and_a_revision_log_row() {
     let after = std::fs::read_to_string(dir.join(RECORD_PATH)).unwrap();
     assert!(after.contains("\nEmbodiment: Drift detected\n"), "{after}");
     assert!(!after.contains("Embodiment: Implemented"), "{after}");
-    assert!(after.contains("Tool-authored (by "), "{after}");
+    // The actor is the `--by` given: a `gh` login on the machine must not
+    // replace it, so the test reads the same everywhere.
+    assert!(after.contains("Tool-authored (by me"), "{after}");
 }
 
 #[test]

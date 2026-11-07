@@ -182,6 +182,63 @@ the report shape (`pull_refs`) and the config key names.
 - `SPEC-12` (numbering, the lock, the report fields), `SPEC-3` (the `new` key), `SPEC-2` and the rule table
   (`identity.open-pr-collision`) change in `MILE-89`.
 
+## Amendment (2026-11-07)
+
+Two changes, both decided by the maintainer on 2026-11-07, share this one amendment.
+
+### The remedy for a shared number is a rename, not `urzua migrate ids`
+
+Accepted by the maintainer on 2026-11-07.
+
+Clause 7 and the Consequences name `urzua migrate ids` as the way to renumber a record that shares a
+number with a pull request. It cannot: `migrate ids` only inserts a missing `Stable-Id` line and keeps the
+filename's number, so running it on a colliding record changes nothing and an agent following the
+machine-readable remedy loops. No command renumbers a record. The corrected statement is: the remedy is to
+rename the file and its H1 to the next free number, the one `urzua new` would take, or to waive the finding
+when the other pull request is abandoned (a `docs/waiver` record whose `Reason` names it, as clause 7
+already says). The finding's message, the `open-pr-collision` action reason in the rule table and `SPEC-2`
+say this. The maintainer's wording named `urzua new --dry-run` as the way to find the next number; `new`
+has no `--dry-run`, so the text says what the next number is rather than naming a flag that does not
+exist, and a dry-run option for `new` is a separate decision. What clause 7 decides is unchanged.
+
+### The numbers `new` skipped are reported in the JSON, not on stderr
+
+*Status of this amendment: accepted by the maintainer on 2026-11-07. `Status` stays `Accepted` and the Decision text above is unchanged.*
+
+Clause 3 says a skipped number "is named in the report", and clause 6 puts the refs or worktrees that held it in
+`pull_refs.skipped_numbers`. The build also printed `urzua: skipped N: already used on ...` to stderr for every
+number it passed over (`new.rs:440` and `new.rs:445`, the second with the caveat "local git refs only; unfetched
+remotes are not checked"), and printed `urzua: numbering from the working tree only; could not read other refs`
+when git could not list the refs (`new.rs:391`). `ADR-46` decision 8 eliminates stderr for anything this code can
+structure into JSON, and each of these is structured: a number and what held it, and a fallback that is a
+notice. The maintainer decided on 2026-11-07 to report the skipped numbers in the JSON and drop the stderr lines.
+Clauses 1 to 5 and 7 to 9 are unchanged, and clause 6 gains the list below; `pull_refs.skipped_numbers` stays as
+clause 6 states it.
+
+**1. A `skipped` list.** `new`'s JSON gains a top-level `skipped` list, always present and empty when nothing
+was skipped. Each entry is `{number, reason}`, one for each skipped number and reason:
+
+- `open-pr <ref>`: the number is held by a ref under `refs/urzua/pr`, named by its full ref name (clause 2).
+- `worktree <path>`: the number is held in the tree of a sibling worktree (clause 4), named by its path.
+- `local`: the number is held by a local branch or a remote-tracking ref. One entry however many such refs hold
+  it; `pull_refs.skipped_numbers[].held_by` names them.
+
+The list is ordered by number, then open pull requests, worktrees and `local`, then by text, so two runs over
+the same state print the same list. A number held in two kinds of place has one entry for each.
+
+**2. No stderr lines for skipped numbers.** The per-number `skipped` lines are removed, in both forms. When the
+pull-request check is off, `pull_refs.reason` is `disabled`, which already states that only local refs were
+consulted; the caveat that an unfetched remote is not checked is that field, not a stderr suffix.
+
+**3. The git-failure fallback is a notice.** When git cannot list the other refs, `new` still numbers from the
+working tree and still exits `0`, and says so as a warning notice with the subject `new.numbering` instead of
+a stderr line. Nothing is silent: the check that could not be made is reported, as clause 5 requires of the
+offline fetch.
+
+Not changed: the stderr lines `new` prints for an `extra_dirs` entry that does not exist, for a type directory
+it is about to create and for a failed pull-request fetch (the last also a notice). They are outside this
+decision and stay on stderr until a change of their own moves them.
+
 ## References
 
 - `ADR-6` -- shell out to git; the fetch is plain `git fetch`.
@@ -199,3 +256,5 @@ the report shape (`pull_refs`) and the config key names.
 > | 2026-11-06 | Drafted as Proposed. **Why:** Maintainer decision, 2026-11-06: move `MILE-89` to Phase 0; fetch pull-request head refs with plain git (no `gh`, no GraphQL), opt in; skip numbers taken there or on any fetched branch; add a local lock; fall back to local refs offline; add an opt-in `check` rule under `--base`. The maintainer accepts it in a later change. | **substantive** |
 > | 2026-11-06 | Amended before acceptance; stays Proposed. Clause 4 scans the trees of `git worktree list` for claimed numbers, untracked files included, and discloses separate clones as the remaining limit; clause 2 gives each `pull_ref_patterns` entry its own `refs/urzua/pr/<segment>/*` namespace; new clause 9 cites `ADR-27`'s never-reuse rule and amendments and states compliance; clause 7 defaults `identity.open-pr-collision` to warning and documents the waiver for a closed unmerged head; the cite `new.rs:313-319` is corrected to `314-319`; the review's answers to the six open questions are recorded as decided, with the measured gap of 0. **Why:** independent review of 2026-11-06 found four blockers (the lock did not cover worktrees, patterns shared one namespace, `ADR-27` was uncited, an error rule could fire forever against a closed head). | **substantive** |
 > | 2026-11-06 | Status changed from Proposed to Accepted. **Why:** Maintainer decision, 2026-11-06. | **substantive** |
+> | 2026-11-07 | Amendment added: `new` reports the numbers it skipped in a `skipped` list in its JSON (`open-pr <ref>`, `worktree <path>` or `local` for each), the `skipped N` stderr lines are dropped, and the git-failure fallback becomes a `new.numbering` notice. `Status` stays `Accepted`. **Why:** Maintainer decision, 2026-11-07: the stderr lines contradicted `ADR-46` decision 8. | **substantive** |
+> | 2026-11-07 | Added an `## Amendment (2026-11-07)`, accepted by the maintainer on 2026-11-07: the remedy for `identity.open-pr-collision` is to rename the file and its H1 to the next free number, or waive the finding when the other pull request is abandoned, because `urzua migrate ids` cannot renumber. `Status` stays Accepted. **Why:** Maintainer decision, 2026-11-07, on the CLI review. | **substantive** |

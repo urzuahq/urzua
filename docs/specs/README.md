@@ -11,7 +11,7 @@ regenerates the list below from the records.
   `urzua check`
 - [SPEC-3](SPEC-3-configuration.md) — Shipped, 2026-08-20
   Configuration: `.urzua/config.yaml`
-- [SPEC-4](SPEC-4-the-corpus-acceptance-suite.md) — Draft, 2026-08-20
+- [SPEC-4](SPEC-4-the-corpus-acceptance-suite.md) — Shipped, 2026-08-20
   The corpus acceptance suite
 - [SPEC-5](SPEC-5-urzua-init.md) — Accepted, 2026-08-20
   `urzua init`
@@ -47,8 +47,8 @@ regenerates the list below from the records.
   Repository layout
 - [SPEC-22](SPEC-22-rust-coding-standards.md) — Accepted, 2026-09-23
   Rust coding standards
-- [SPEC-23](SPEC-23-the-condition-record-type.md) — Draft, 2026-11-05
+- [SPEC-23](SPEC-23-the-condition-record-type.md) — Shipped, 2026-11-05
   The condition record type
-- [SPEC-24](SPEC-24-the-harness-request-verdict-and-adapter-layout.md) — Draft, 2026-11-06
+- [SPEC-24](SPEC-24-the-harness-request-verdict-and-adapter-layout.md) — Shipped, 2026-11-06
   The harness request, verdict and adapter layout
 <!-- urzua:index:end -->

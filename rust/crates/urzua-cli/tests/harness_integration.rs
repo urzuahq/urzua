@@ -49,7 +49,7 @@ fn fixture(name: &str, config: &str) -> common::TempDir {
 }
 
 fn urzua(dir: &Path, args: &[&str]) -> Command {
-    let mut c = Command::new(env!("CARGO_BIN_EXE_urzua"));
+    let mut c = common::urzua();
     c.args(args).current_dir(dir);
     c
 }
@@ -218,6 +218,61 @@ fn the_adapters_command_lists_the_adapter_directories_of_the_bundle() {
         .any(|p| p == "editor-hook"));
 }
 
+/// `ADR-89` amendment (2026-11-07): a name `harness.guardrails` does not ship is a
+/// config load error for every command, so `check` exits 2 instead of running
+/// without the gate the author meant, and `doctor` does not call the config clean.
+#[test]
+fn a_misspelled_guardrail_stops_check_and_doctor_names_it_observed_failing() {
+    let bad = config("").replace(
+        "    session-start",
+        "    acceptence: {enabled: true}\n    session-start",
+    );
+    let dir = fixture("misspelled-guardrail", &bad);
+    let out = urzua(&dir, &["check"]).output().unwrap();
+    assert_eq!(out.status.code(), Some(2), "{out:?}");
+    let v = json(&out);
+    let error = v["error"].as_str().unwrap();
+    assert!(error.contains("'acceptence'"), "{v}");
+    assert!(error.contains("did you mean 'acceptance'?"), "{v}");
+
+    let out = urzua(&dir, &["doctor"]).output().unwrap();
+    let v = json(&out);
+    let checks = v["checks"].as_array().unwrap();
+    let parses = checks
+        .iter()
+        .find(|c| c["check"] == "config-parses")
+        .unwrap();
+    assert_eq!(parses["status"], "error", "{v}");
+    assert!(
+        parses["message"].as_str().unwrap().contains("acceptence"),
+        "{v}"
+    );
+    assert!(
+        !checks.iter().any(|c| c["message"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("no unrecognized keys")),
+        "{v}"
+    );
+}
+
+#[test]
+fn doctor_does_not_claim_no_unrecognized_keys_beside_an_unknown_harness_key_observed_failing() {
+    let bad = config("").replace(
+        "  instructions_file: AGENTS.md\n",
+        "  instructions_file: AGENTS.md\n  teleport: true\n",
+    );
+    let dir = fixture("doctor-unknown-key", &bad);
+    let out = urzua(&dir, &["doctor"]).output().unwrap();
+    let v = json(&out);
+    let checks = v["checks"].to_string();
+    assert!(
+        checks.contains("teleport") && checks.contains("harness-config"),
+        "{checks}"
+    );
+    assert!(!checks.contains("no unrecognized keys"), "{checks}");
+}
+
 #[test]
 fn an_unknown_adapter_guardrail_or_key_is_reported_and_an_unprovided_guardrail_is_never_skipped() {
     let dir = fixture("unknown-adapter", &config(""));
@@ -230,10 +285,10 @@ fn an_unknown_adapter_guardrail_or_key_is_reported_and_an_unprovided_guardrail_i
     assert!(!dir.join(LOCK).exists());
 
     let bad = config("").replace(
-        "    session-start",
-        "    teleport: {enabled: true}\n    session-start",
+        "  instructions_file: AGENTS.md\n",
+        "  instructions_file: AGENTS.md\n  teleport: true\n",
     );
-    let dir = fixture("unknown-guardrail", &bad);
+    let dir = fixture("unknown-key", &bad);
     let (code, v) = harness(&dir, &["install"]);
     assert_eq!(code, 2, "{v}");
     assert!(

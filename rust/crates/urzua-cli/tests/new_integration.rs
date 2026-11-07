@@ -31,7 +31,7 @@ fn commit_all(dir: &Path) {
 }
 
 fn run_urzua(dir: &Path, args: &[&str]) -> std::process::Output {
-    Command::new(env!("CARGO_BIN_EXE_urzua"))
+    common::urzua()
         .args(args)
         .current_dir(dir)
         .output()
@@ -111,10 +111,11 @@ fn new_creates_the_type_directory_for_its_first_record() {
     assert!(dir.join(rel).is_file());
 }
 
-/// MILE-89: a number already used on another local branch must be skipped,
-/// with the claiming branch named on stderr.
+/// MILE-89: a number already used on another local branch must be skipped, and
+/// the report says so in its `skipped` list (`ADR-93`, Amendment of 2026-11-07).
+/// Nothing is written to stderr: `ADR-46` decision 8.
 #[test]
-fn new_skips_a_number_claimed_on_another_branch_and_names_it() {
+fn new_skips_a_number_claimed_on_another_branch_and_reports_it_in_json() {
     let dir = fixture_repo("claimed-elsewhere");
     std::fs::create_dir_all(dir.join("docs/bug")).unwrap();
     std::fs::write(dir.join(".urzua/config.yaml"), BUG_CONFIG).unwrap();
@@ -139,12 +140,41 @@ fn new_skips_a_number_claimed_on_another_branch_and_names_it() {
     assert!(output.status.success(), "stderr: {stderr}");
     let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(report["display_number"], 3, "stderr: {stderr}");
-    assert!(stderr.contains("other-pr"), "stderr: {stderr}");
+    assert_eq!(
+        report["skipped"],
+        serde_json::json!([{"number": 2, "reason": "local"}]),
+        "{report}"
+    );
+    // The detail of which ref held it stays in `pull_refs`.
+    assert_eq!(
+        report["pull_refs"]["skipped_numbers"][0]["held_by"][0], "other-pr",
+        "{report}"
+    );
+    assert_eq!(
+        stderr, "",
+        "a skipped number is reported in JSON, not on stderr"
+    );
+}
+
+/// `skipped` is always present, so a run that skipped nothing says so.
+#[test]
+fn new_reports_an_empty_skipped_list_when_nothing_was_skipped() {
+    let dir = fixture_repo("nothing-skipped");
+    std::fs::create_dir_all(dir.join("docs/bug")).unwrap();
+    std::fs::write(dir.join(".urzua/config.yaml"), BUG_CONFIG).unwrap();
+    commit_all(&dir);
+
+    let output = run_urzua(&dir, &["new", "bug", "Fresh", "--by", "t"]);
+    assert!(output.status.success());
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(report["skipped"], serde_json::json!([]), "{report}");
+    assert_eq!(String::from_utf8_lossy(&output.stderr), "");
 }
 
 /// When git cannot read refs (here: a `.git` directory that is not a real
 /// repository, which `find_repo_root` still accepts), numbering falls back to
-/// the working tree and says so rather than silently skipping the check.
+/// the working tree and says so in a warning notice rather than silently
+/// skipping the check (`ADR-46` decision 8: not on stderr).
 #[test]
 fn new_falls_back_to_the_working_tree_and_says_so_when_git_cannot_read_refs() {
     let dir = common::TempDir::new("urzua-cli-new-nogit");
@@ -163,7 +193,19 @@ fn new_falls_back_to_the_working_tree_and_says_so_when_git_cannot_read_refs() {
     assert!(output.status.success(), "stderr: {stderr}");
     let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(report["display_number"], 2);
-    assert!(stderr.contains("working tree only"), "stderr: {stderr}");
+    let notice = report["notices"]
+        .as_array()
+        .and_then(|n| n.iter().find(|n| n["subject"] == "new.numbering"))
+        .unwrap_or_else(|| panic!("no new.numbering notice: {report}"));
+    assert_eq!(notice["severity"], "warning", "{report}");
+    assert!(
+        notice["message"]
+            .as_str()
+            .unwrap()
+            .contains("working tree only"),
+        "{report}"
+    );
+    assert!(!stderr.contains("working tree only"), "stderr: {stderr}");
 }
 
 /// A title that slugifies to nothing (empty, whitespace, or only non-ASCII)

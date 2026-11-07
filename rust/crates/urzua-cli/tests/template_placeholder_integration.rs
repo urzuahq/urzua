@@ -41,7 +41,7 @@ fn run(name: &str, config: &str, template: Option<&str>, bug: &str) -> (serde_js
         .status()
         .unwrap()
         .success());
-    let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
+    let out = common::urzua()
         .args(["check"])
         .current_dir(&dir)
         .output()
@@ -226,7 +226,7 @@ fn migrate_schema_report_judges_a_field_as_field_quality_does() {
         .unwrap()
         .success());
     let report = |field: &str| -> serde_json::Value {
-        let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
+        let out = common::urzua()
             .args(["migrate", "schema", "--report", "--field", field])
             .current_dir(&dir)
             .output()

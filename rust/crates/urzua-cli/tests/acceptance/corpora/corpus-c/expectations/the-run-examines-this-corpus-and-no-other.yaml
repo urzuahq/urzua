@@ -1,0 +1,11 @@
+id: the-run-examines-this-corpus-and-no-other
+corpus: corpus-c
+invocation: [check, records/]
+# Shares its id with the case of the same name in corpus-m. The cases run at the
+# same time on separate threads, so each must get a scratch repository of its own:
+# a name keyed on the id alone is one directory, and the second case to start would
+# delete the first's repository and run over the wrong records.
+expect_exit: 0
+expect_json:
+  - {at: /files_examined, equals: 3}
+mutation_exempt: asserts which corpus was examined; no rule's absence changes the count of records read.
