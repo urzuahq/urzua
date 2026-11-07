@@ -19,7 +19,7 @@ Every lane on the roadmap edits `rules.rs`, so parallel work on sections, values
 
 - `rules.rs` is a thin module root over one module per rule family under `rules/` (`catalog`, `shared`, `header`, `type_scope`, `declaration`, `identity`, `pointer`, `relation`, `section`, `embodiment` and the others). — evidence: code:rust/crates/urzua-core/src/rules.rs, code:rust/crates/urzua-core/src/rules/catalog.rs, code:rust/crates/urzua-core/src/rules/shared.rs, code:rust/crates/urzua-core/src/rules/header.rs, code:rust/crates/urzua-core/src/rules/type_scope.rs, code:rust/crates/urzua-core/src/rules/declaration.rs, code:rust/crates/urzua-core/src/rules/identity.rs, code:rust/crates/urzua-core/src/rules/pointer.rs, code:rust/crates/urzua-core/src/rules/relation.rs, code:rust/crates/urzua-core/src/rules/section.rs, code:rust/crates/urzua-core/src/rules/embodiment.rs
 - There is no change in behaviour: every pre-existing test passes unchanged. — evidence: test:rust/crates/urzua-cli/tests/check_integration.rs
-- `urzua check` output on this repository is byte-identical before and after the split. — waived: process-outcome -- a one-time before and after comparison made when the split landed; no file records it
+- `urzua check` output on this repository is byte-identical before and after the split.
 
 ## References
 
