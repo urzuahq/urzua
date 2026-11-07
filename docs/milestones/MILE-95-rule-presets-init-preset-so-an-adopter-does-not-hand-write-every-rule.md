@@ -47,7 +47,11 @@ can delete lines from, and the engine never sees where it came from.
 
 ## Done means
 
-`urzua init --preset <name>` writes a config from a named starting rule set (`recommended`), the preset is an init-time generator and nothing reads a preset at `check` time, the written config is ordinary editable text, a second `init` over an existing config does not overwrite it, and a test shows the generated config enables the preset's rules at their levels; the preset names and contents are documented in `SPEC-5`.
+- `urzua init --preset <name>` writes a config from a named starting rule set (`recommended`).
+- The preset is an init-time generator and nothing reads a preset at `check` time; the written config is ordinary editable text.
+- A second `init` over an existing config does not overwrite it.
+- A test shows the generated config enables the preset's rules at their levels.
+- The preset names and contents are documented in `SPEC-5`.
 
 > **Revision log**
 >
@@ -56,3 +60,4 @@ can delete lines from, and the engine never sees where it came from.
 > | 2026-09-17 | Filed. **Why:** `ADR-53`'s opt-in decision leaves every adopter writing the full rule list, and `MILE-80` shipped `init`-proposes-all-at-`warn` as a stand-in rather than leaving that unaddressed. Naming the stand-in as a stand-in, so it is not mistaken for the answer. | **substantive** |
 > | 2026-09-17 | `Phase: '1'` → `'3'`. **Why:** filed against Phase 1 on the assumption that opt-in without presets is urgent debt. It is not: `urzua init` already writes every rule at `warn`, so an adopter gets a working config without hand-writing one. What remains is the convenience of choosing *which* starting set, which is the same distance out as the rest of Phase 3. | **structural** |
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |
+> | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |

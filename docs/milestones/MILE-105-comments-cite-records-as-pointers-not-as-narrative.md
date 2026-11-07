@@ -47,7 +47,10 @@ convention, enforced by review.
 
 ## Done means
 
-The comments in `rust/` that narrate how code got here by citing a record ("which `BUG-43` was filed to fix") are removed, structured `Implements:` back-pointers are untouched, and whether a bare `(BUG-43)` tag is acceptable shorthand is decided and written in `AGENTS.md` or `SPEC-22`; a count of record-citing comment lines before and after is recorded here, and `urzua check` and the test suite pass unchanged.
+- The comments in `rust/` that narrate how code got here by citing a record ("which `BUG-43` was filed to fix") are removed, and structured `Implements:` back-pointers are untouched.
+- Whether a bare `(BUG-43)` tag is acceptable shorthand is decided and written in `AGENTS.md` or `SPEC-22`.
+- A count of record-citing comment lines before and after is recorded here.
+- `urzua check` and the test suite pass unchanged.
 
 > **Revision log**
 >
@@ -55,3 +58,4 @@ The comments in `rust/` that narrate how code got here by citing a record ("whic
 > |---|---|---|
 > | 2026-09-19 | Filed. **Why:** counted while cleaning comments in a release branch -- 232 comment lines name a record, 61 of them added in one session. Structured back-pointers are the point of this project; prose about which ticket produced a line is history a reader can get from `git blame`, and it outlives the records it describes. | **substantive** |
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |
+> | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |

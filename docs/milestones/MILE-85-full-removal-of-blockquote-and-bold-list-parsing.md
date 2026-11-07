@@ -4,7 +4,7 @@ Status: Done
 Phase: '0'
 Track: header-format
 Blocked-on: —
-Realized-by: code:rust/crates/urzua-core/src/header.rs, test:rust/crates/urzua-cli/tests/acceptance/corpora/corpus-a/expectations/check-removed-bold-list-config-is-rejected.yaml
+Realized-by: code:rust/crates/urzua-core/src/header.rs#parse_with_shape@sha256:0684a0aa75d67805845cf344098f4076eb775d807219f0a18a524a5e8b40ecde, code:rust/crates/urzua-core/src/schema_version.rs, spec:docs/specs/SPEC-2-urzua-check.md, code:rust/crates/urzua-core/src/config.rs#RecordTypeConfig::header_shape@sha256:a8cbdc7195689ce5ad34e2ec96b67345dabbb480c565097ec2fce90a44b9ba67, test:rust/crates/urzua-cli/tests/acceptance/corpora/corpus-a/expectations/check-removed-bold-list-config-is-rejected.yaml, test:rust/crates/urzua-core/src/config.rs#a_removed_header_shape_is_a_clear_error_naming_the_form@sha256:3704ea8e26e1ead03470812212cd819ec5538a8d7452bbf58096c48dff815e80, code:.urzua/config.yaml, code:.github/workflows/checks.yml
 ---
 # 85 — Full removal of blockquote and bold-list parsing
 
@@ -48,7 +48,11 @@ phase moves from 2 back to Phase 0, since the switchover is the Phase 0 exit.
 
 ## Done means
 
-`header::parse_with_shape` has no `Blockquote` or `BoldList` branch, the `HeaderLayout` enum, `header.layout-consistency`, `header.deprecated-shape` and the `header_layout` option are gone, `header_shape` defaults to `yaml-frontmatter`, and a config naming a removed shape or option fails loudly rather than being ignored (acceptance expectation `check-removed-bold-list-config-is-rejected`); this repository's records are all YAML frontmatter.
+- `header::parse_with_shape` has no `Blockquote` or `BoldList` branch. — evidence: code:rust/crates/urzua-core/src/header.rs#parse_with_shape@sha256:0684a0aa75d67805845cf344098f4076eb775d807219f0a18a524a5e8b40ecde
+- The `HeaderLayout` enum, `header.layout-consistency`, `header.deprecated-shape` and the `header_layout` option are gone. — evidence: code:rust/crates/urzua-core/src/schema_version.rs, spec:docs/specs/SPEC-2-urzua-check.md
+- `header_shape` defaults to `yaml-frontmatter`. — evidence: code:rust/crates/urzua-core/src/config.rs#RecordTypeConfig::header_shape@sha256:a8cbdc7195689ce5ad34e2ec96b67345dabbb480c565097ec2fce90a44b9ba67
+- A config naming a removed shape or option fails loudly rather than being ignored (acceptance expectation `check-removed-bold-list-config-is-rejected`). — evidence: test:rust/crates/urzua-cli/tests/acceptance/corpora/corpus-a/expectations/check-removed-bold-list-config-is-rejected.yaml, test:rust/crates/urzua-core/src/config.rs#a_removed_header_shape_is_a_clear_error_naming_the_form@sha256:3704ea8e26e1ead03470812212cd819ec5538a8d7452bbf58096c48dff815e80
+- This repository's records are all YAML frontmatter. — evidence: code:.urzua/config.yaml, code:.github/workflows/checks.yml
 
 > **Revision log**
 >
@@ -61,3 +65,4 @@ phase moves from 2 back to Phase 0, since the switchover is the Phase 0 exit.
 > | 2026-11-04 | `Realized-by` added and `Status` Planned -> Done. **Why:** the work is merged in #205: the blockquote and bold-list branches, `HeaderLayout` and `header.layout-consistency` are gone; a removed form fails loudly. Checked against this record's Done means and the code; the record never carried its own delivery evidence, and `status.delivery-agreement` (`MILE-183`) reads evidence under a not-done `Status` as a disagreement. | **structural** |
 > | 2026-11-04 | `Blocked-on` corrected from the adopter-side header rewriter to none; `Status` stays Done. **Why:** the closure audit of #234 found a Done record still naming a blocker. This milestone's Done-when, removing the parser branches, `HeaderLayout` and `header.layout-consistency`, is met in this repository. The one-off header rewrite of the adopter's corpus is not this milestone's delivery: it moved to `MILE-102` (Phase 1), whose switchover list names it. | **substantive** |
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. The criteria are those the delivered work met, checked against `Realized-by` and the code; `Status` stays Done. | **structural** |
+> | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |

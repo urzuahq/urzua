@@ -37,7 +37,10 @@ immediate task closes.
 
 ## Done means
 
-Each of the three findings has its own recorded design decision and fix: `RealizedBy`'s `spec`/`code`/`test` categories come from one shared definition instead of independent string literals in the parser and the rules, and the other two findings listed in the What are likewise resolved or declined with the reason; a test fails when one definition changes without the others, and the result is visible in urzua's own `urzua check`.
+- Each of the three findings has its own recorded design decision and fix: `RealizedBy`'s `spec`/`code`/`test` categories come from one shared definition instead of independent string literals in the parser and the rules.
+- The other two findings listed in the What are likewise resolved or declined with the reason.
+- A test fails when one definition changes without the others.
+- The result is visible in urzua's own `urzua check`.
 
 > **Revision log**
 >
@@ -46,3 +49,4 @@ Each of the three findings has its own recorded design decision and fix: `Realiz
 > | 2026-09-09 | Initial milestone, `Status: Planned`. Not yet scoped into concrete fix designs — each of the three findings needs its own design decision (e.g. whether `RealizedBy`'s categories become a shared `const` array or an enum) before implementation starts. | **structural** |
 > | 2026-11-04 | Re-phased from Phase 0 to Phase 1; `Status` unchanged. Not needed to replace the adopter's linter. **Why:** maintainer decision of 2026-11-04 setting the Phase 0 exit (urzua governs its own repo in CI with zero standing warnings, and replaces one adopter's hand-written linter, which is then deleted); the exit is the adopter's linter deleted and urzua's own repo clean in CI, and this work is on neither path, so it moves out of Phase 0. | **substantive** |
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |
+> | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |

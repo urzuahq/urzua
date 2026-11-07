@@ -5,7 +5,7 @@ Phase: '0'
 Track: governance-process
 Implements: SPEC-1
 Blocked-on: —
-Realized-by: code:.git-hooks/pre-push, code:Makefile
+Realized-by: code:.git-hooks/pre-push, code:Makefile, code:.github/workflows/checks.yml, test:rust/crates/urzua-cli/tests/fail_on_integration.rs#config_fail_on_warning_makes_a_warning_exit_1_with_unchanged_json_observed_failing@sha256:d1e8e19c3842276d697a34cbf386f69ca04921417026f4d0cc1a5f9a86219b04
 ---
 # 99 — The pre-push hook runs `urzua check`, not only fmt and clippy
 
@@ -45,7 +45,10 @@ what level the rules are declared at.
 
 ## Done means
 
-`.git-hooks/pre-push`, installed by `make hooks-install`, runs `cargo fmt --check`, `cargo clippy` and `make records`, and `make records` builds the release binary and runs `urzua check` exactly as CI does, so a record `check` rejects does not reach a push; the hook acts on what `check` returns under the configured `fail_on`.
+- `.git-hooks/pre-push` runs `cargo fmt --check`, `cargo clippy` and the records gate (it builds the release binary and runs `urzua check`). — evidence: code:.git-hooks/pre-push
+- The hook is installed by `make hooks-install`. — evidence: code:Makefile
+- `make records` builds the release binary and runs `urzua check` exactly as CI does, so a record `check` rejects does not reach a push. — evidence: code:Makefile, code:.github/workflows/checks.yml
+- The hook acts on what `check` returns under the configured `fail_on`. — evidence: test:rust/crates/urzua-cli/tests/fail_on_integration.rs#config_fail_on_warning_makes_a_warning_exit_1_with_unchanged_json_observed_failing@sha256:d1e8e19c3842276d697a34cbf386f69ca04921417026f4d0cc1a5f9a86219b04, code:.git-hooks/pre-push
 
 > **Revision log**
 >
@@ -55,3 +58,4 @@ what level the rules are declared at.
 > | 2026-09-19 | Filed. **Why:** `SPEC-1`'s first success criterion names the pre-push hook alongside CI, and only CI was built. Surfaced by asking what Phase 0 actually exits on rather than reading the milestone list, which did not contain this. | **substantive** |
 > | 2026-11-04 | `Realized-by` added and `Status` Planned -> Done. **Why:** the work is merged in #134: the pre-push hook runs `make records`, which runs `urzua check`. Checked against this record's Done means and the code; the record never carried its own delivery evidence, and `status.delivery-agreement` (`MILE-183`) reads evidence under a not-done `Status` as a disagreement. | **structural** |
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. The criteria are those the delivered work met, checked against `Realized-by` and the code; `Status` stays Done. | **structural** |
+> | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |

@@ -31,7 +31,10 @@ milestone's implementation has to resolve, in an ADR, before shipping the rule.
 
 ## Done means
 
-The rule `code.dangling-bug-reference` reads tracked source files whose extensions config declares and reports a comment citing a record id (`BUG-\d+`, `ADR-\d+`, `RFC-\d+` per the type prefixes) whose record does not exist under that type's declared `dir`; the extensions and prefixes come from config, a fixture covers a dangling and a live citation, the rule is declared in urzua's own `.urzua/config.yaml`, and it reports nothing unwaived on this repository's `rust/` and `scripts/`.
+- The rule `code.dangling-bug-reference` reads tracked source files whose extensions config declares and reports a comment citing a record id (`BUG-\d+`, `ADR-\d+`, `RFC-\d+` per the type prefixes) whose record does not exist under that type's declared `dir`.
+- The extensions and prefixes come from config.
+- A fixture covers a dangling and a live citation.
+- The rule is declared in urzua's own `.urzua/config.yaml`, and it reports nothing unwaived on this repository's `rust/` and `scripts/`.
 
 > **Revision log**
 >
@@ -41,3 +44,4 @@ The rule `code.dangling-bug-reference` reads tracked source files whose extensio
 > | 2026-11-04 | Re-phased from Phase 0 to Phase 1; `Status` unchanged. Not needed to replace the adopter's linter. **Why:** maintainer decision of 2026-11-04 setting the Phase 0 exit (urzua governs its own repo in CI with zero standing warnings, and replaces one adopter's hand-written linter, which is then deleted); the exit is the adopter's linter deleted and urzua's own repo clean in CI, and this work is on neither path, so it moves out of Phase 0. | **substantive** |
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |
 > | 2026-11-05 | Added the `Non-reference-ids` header field declaring `BUG-104`. **Why:** the text names this id as history or illustration, not as citations of a record; the declaration states that on the record itself, so a new unresolved citation in this file is reported, where a file-wide `citation.resolution` waiver had silenced every one (`BUG-190`, `ADR-75`). The field carries no decision; the milestone is unchanged. | **structural** |
+> | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |

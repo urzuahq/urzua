@@ -56,7 +56,9 @@ front of the tool.
 
 ## Done means
 
-Records in this repository are created through `urzua new` and not by hand: `urzua new` is measurably the faster path (a recorded comparison of time or steps against hand-authoring), the agent commands of `MILE-177` route through it, and over a stated window no record is merged whose header `urzua new` would have produced differently and `check` rejected; the window and the count are recorded here when it is met (`SPEC-1` Phase 1 exit criterion).
+- Records in this repository are created through `urzua new` and not by hand: `urzua new` is measurably the faster path (a recorded comparison of time or steps against hand-authoring).
+- The agent commands of `MILE-177` route through `urzua new`.
+- Over a stated window no record is merged whose header `urzua new` would have produced differently and `check` rejected; the window and the count are recorded here when it is met (`SPEC-1` Phase 1 exit criterion).
 
 > **Revision log**
 >
@@ -66,3 +68,4 @@ Records in this repository are created through `urzua new` and not by hand: `urz
 > | 2026-11-04 | `Phase` 0 -> 1; `Status` unchanged. **Why:** Maintainer decision, 2026-11-04: `urzua new` being the faster path is a Phase 1 exit criterion, not part of the Phase 0 exit; `SPEC-1` already lists it under Phase 1. | **substantive** |
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |
 > | 2026-11-05 | `Depends-on: MILE-177` added. **Why:** Done means requires the agent commands of `MILE-177` to route through `urzua new` (Done). Proposed for maintainer review; `Status` unchanged. | **structural** |
+> | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |
