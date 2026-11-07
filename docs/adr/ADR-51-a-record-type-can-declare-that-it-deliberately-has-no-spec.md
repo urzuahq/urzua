@@ -2,7 +2,6 @@
 Stable-Id: 01M2PCCCM8EJDJH9GCN2J8T257
 Status: Rejected
 Embodiment: Not started
-Realized-by: —
 Date: 2026-09-16
 Author: beauwilliams
 Deciders: beauwilliams
@@ -141,3 +140,4 @@ than to build machinery making it retroactively true.
 `RFC-32` returns to `Draft`. If a repository appears with types that genuinely differ on this — some
 warranting a spec, some not — that is the evidence to revisit, and this reasoning is the starting
 point rather than a blank page.
+> | 2026-11-07 | Removed the placeholder `Realized-by: —` line: the field is optional and `embodiment.locator-exists` now reports text that is not a `spec:`, `code:` or `test:` entry. Nothing is realized-by yet. | **structural** |

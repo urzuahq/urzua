@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.103'
+Version: '0.104'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs, test:rust/crates/urzua-cli/tests/field_levels_integration.rs
@@ -1957,7 +1957,8 @@ rules:
 - `date_fields` (required, non-empty): a value that is not `YYYY-MM-DD`, or is not a real calendar
   date (`2026-02-30`, `2026-02-29` outside a leap year), is an error. A blank, placeholder or
   pending value is not a date value and is not examined. A missing option is a load-time error, as
-  is the option on any other rule.
+  is the option on any other rule, a blank entry, and an entry that no record type declares as a
+  field (it could never be examined).
 
 `date.field-order` (`MILE-157`) compares two date fields of one record:
 
@@ -2128,3 +2129,4 @@ proves this configuration produces the three findings.
 > | 2026-11-07 | Bumped to `0.101`. Documents the top-level `discovery` key (`include_untracked`, a boolean, default `false`): untracked, non-ignored record files directly under a declared directory join discovery, and an unknown key or a non-boolean value is a load error. **Why:** `MILE-206` / `ADR-92`. | **substantive** |
 > | 2026-11-07 | Bumped to `0.102`. Documents the top-level `new` key (`check_open_prs`, `pull_ref_patterns`, `remote`, `fetch_timeout_seconds`, `lock_timeout_seconds`) and its load errors. **Why:** `MILE-89` / `ADR-93`. | **substantive** |
 > | 2026-11-07 | Bumped to `0.103`. The rule table's `judges` column gains `anchor-scoped`, which with `one-record` is the only value that lists `scope` (`ADR-90` amendment); `embodiment.locator-promotion-candidate` is labelled with it and, under `scope: changed`, emits one finding per changed citer. **Why:** the accepted 2026-11-07 amendment to `ADR-90`, points 4 and 5. | **substantive** |
+> | 2026-11-07 | Bumped to `0.104`. `date.field-valid`'s `date_fields` entries are validated at load: a blank entry or one that no record type declares is an error, as `date_order` already was. **Why:** a typo ran with no eligible slot and no notice. | **substantive** |

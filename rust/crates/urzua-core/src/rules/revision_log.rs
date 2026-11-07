@@ -283,10 +283,7 @@ pub(crate) fn find_revision_log_entries(
         if row_index == 1 {
             continue; // header row: "Date | Change | Class"
         }
-        if cells
-            .iter()
-            .all(|c| !c.is_empty() && c.chars().all(|ch| ch == '-'))
-        {
+        if super::section::is_delimiter_row(stripped) {
             continue; // separator row: |---|---|---|
         }
 
@@ -330,6 +327,16 @@ mod tests {
         let mut full_text = HashMap::new();
         full_text.insert(r.path.clone(), content.to_string());
 
+        let (_, findings) = revision_log_change_class(&[r], &config_with_types(vec![]), &full_text);
+        assert!(findings.is_empty(), "unexpected findings: {findings:?}");
+    }
+
+    #[test]
+    fn an_alignment_row_is_a_delimiter_not_a_data_row_observed_failing() {
+        let content = "# 0001 — X\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |:---|:---|:---:|\n> | 2026-08-20 | Split. | structural |\n";
+        let r = record("docs/specs/0001-x.md", "spec", content);
+        let mut full_text = HashMap::new();
+        full_text.insert(r.path.clone(), content.to_string());
         let (_, findings) = revision_log_change_class(&[r], &config_with_types(vec![]), &full_text);
         assert!(findings.is_empty(), "unexpected findings: {findings:?}");
     }
