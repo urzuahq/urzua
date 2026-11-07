@@ -205,7 +205,7 @@ later is not. `out_of_scope` is untouched. `scope` accepts one value now: a seco
 
 ## Amendment (2026-11-07): a cross-record rule may take `scope: changed` when every finding it emits is anchored on a changed record
 
-*Status of this amendment: proposed, pending maintainer acceptance (drafted 2026-11-07 at the maintainer's request; the maintainer decided on 2026-11-07 to permit this). `Status` stays `Accepted` and the Decision text above is unchanged.*
+*Status of this amendment: accepted by the maintainer on 2026-11-07, with the two changes from the independent review folded in (points 1 and 5). `Status` stays `Accepted` and the Decision text above is unchanged.*
 
 Item 7 lets a rule take `scope` only when its verdict on a record depends on that record alone, and refuses
 it to a cross-record rule because deferring the unchanged records would hide a defect a change caused.
@@ -215,7 +215,7 @@ states as a second admission rule. Items 1 to 6 and 8 to 12 are unchanged.
 
 **1. The admission rule.** A cross-record rule may list `scope` when every finding it emits is anchored on a
 record the diff touches (a changed record, as in item 2). Item 7's per-record admission stays as it is;
-this adds a second way in and does not widen the first.
+this adds a second way in and does not widen the first. Every such finding must be advisory: a nudge about the changed record itself, never a defect that a change to another record caused. A rule whose finding on a record can be caused by an edit elsewhere (`pointer.resolution`, identity collision, reciprocity) is not admitted, whatever it anchors on.
 
 **2. Unchanged records are context only.** Such a rule may read unchanged records to reach a verdict about a
 changed one (for the promotion nudge, to count that an unchanged record also cites a locator). It never
@@ -233,6 +233,8 @@ live) must say the rule is cross-record in what it reads and anchor-scoped in wh
 rules that take `scope` stays exact and the load error "rule 'x' does not take the option 'scope'" stays
 true for every rule that fails the admission rule. A rule that is cross-record and not anchor-scoped (identity
 collision, reference resolution, reciprocity, sequence cycles) still does not list `scope`.
+
+**5. One finding per changed anchor.** Where several changed records qualify as the anchor (for the promotion nudge, several changed citers of one locator), the rule emits one finding on each of them, not on the first only, so `check <path>`, `--stdin-path` and a file-scoped waiver each see the finding on the record they examine.
 
 **What `b28ec6f` built, checked against this.** It matches points 1 to 3 and does not yet do point 4.
 
@@ -260,3 +262,4 @@ collision, reference resolution, reciprocity, sequence cycles) still does not li
 > | 2026-11-05 | Amended while Proposed after independent review: a separate additive `deferred_by_scope` counter replaces reuse of `out_of_scope` (which `config.scope-matches-nothing` would have warned on); dedicated scalar validation for `scope`; units are `field` slots (494 eligible); cross-record rules named; ADR-78 added. **Why:** Review of PR #360 found that reuse would warn on every plain `check`. Status stays Proposed. | **substantive** |
 > | 2026-11-05 | Status changed from Proposed to Accepted. **Why:** Maintainer decision, 2026-11-05. | **substantive** |
 > | 2026-11-07 | Amendment added: a cross-record rule may take `scope: changed` when every finding it emits is anchored on a changed record, reads unchanged records as context only, counts only the changed anchors as examined, and is marked anchor-scoped in its table declaration. **Why:** `embodiment.locator-promotion-candidate` (#379) counts citers across records while item 7 limits the option to one-record rules; maintainer decision, 2026-11-07; proposed, pending maintainer acceptance. `Status` stays `Accepted` and the Decision text is unchanged. The built rule is labelled `Judges::OneRecord`, which point 4 asks to change. | **substantive** |
+> | 2026-11-07 | Amendment (cross-record rules under `scope: changed`) accepted, with the review's two changes: findings must be advisory nudges about the changed record (point 1), and one finding is emitted per changed anchor (point 5). **Why:** Maintainer decision, 2026-11-07. | **substantive** |
