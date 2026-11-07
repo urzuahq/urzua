@@ -160,6 +160,17 @@ fn a_number_claimed_only_on_a_pull_ref_is_skipped_and_reported() {
             .contains("refs/urzua/pr/origin/7"),
         "{v}"
     );
+    // The top-level list gives each number and why it was skipped, and nothing
+    // is written to stderr.
+    assert_eq!(
+        v["skipped"],
+        serde_json::json!([{"number": 2, "reason": "open-pr refs/urzua/pr/origin/7"}]),
+        "{v}"
+    );
+    assert_eq!(
+        stderr, "",
+        "a skipped number is reported in JSON, not on stderr"
+    );
     // The ref lives in the private namespace, and the lock is gone.
     assert!(git(&w.work, &["for-each-ref", "refs/urzua/pr"]).contains("refs/urzua/pr/origin/7"));
     assert!(!w.work.join(".git/urzua-new.lock").exists());
@@ -316,6 +327,18 @@ fn a_number_in_a_sibling_worktree_untracked_is_skipped() {
         .as_str()
         .unwrap();
     assert!(held.contains("sibling"), "{v}");
+    let skipped = v["skipped"].as_array().unwrap();
+    assert_eq!(skipped.len(), 1, "{v}");
+    assert_eq!(skipped[0]["number"], 2, "{v}");
+    let reason = skipped[0]["reason"].as_str().unwrap();
+    assert!(
+        reason.starts_with("worktree ") && reason.ends_with("sibling"),
+        "{v}"
+    );
+    assert_eq!(
+        stderr, "",
+        "a skipped number is reported in JSON, not on stderr"
+    );
 }
 
 #[test]

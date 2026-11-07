@@ -1044,8 +1044,21 @@ pub struct NewReport {
     pub stable_id: Option<String>,
     /// What the numbering consulted beyond the working tree (`ADR-93` clause 6).
     pub pull_refs: PullRefsReport,
+    /// Every number numbering passed over and why, one entry per number and
+    /// reason (`ADR-93`, Amendment of 2026-11-07). Always present; empty when
+    /// nothing was skipped.
+    pub skipped: Vec<SkippedReason>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub notices: Vec<Notice>,
+}
+
+/// One reason a number was skipped: `open-pr <ref>` (held by a ref under
+/// `refs/urzua/pr`), `worktree <path>` (held in a sibling worktree) or `local`
+/// (held by a local branch or remote-tracking ref).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct SkippedReason {
+    pub number: u32,
+    pub reason: String,
 }
 
 /// The pull-request refs and sibling worktrees `urzua new` consulted

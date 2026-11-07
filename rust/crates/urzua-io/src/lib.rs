@@ -971,7 +971,7 @@ pub fn commit_for_line_in(
 /// which (unlike a header field) aren't a single line (ADR-0032).
 pub fn last_commit_for_path(repo_root: &Path, path: &Path) -> Result<Option<String>, String> {
     let output = Command::new("git")
-        .args(["log", "-1", "--format=%H", "--"])
+        .args(["--literal-pathspecs", "log", "-1", "--format=%H", "--"])
         .arg(path)
         .current_dir(repo_root)
         .output()
@@ -1897,6 +1897,24 @@ mod tests {
         assert_eq!(
             last_commit_for_path(&tmp, &tmp.join("b.txt")).unwrap(),
             Some(first)
+        );
+    }
+
+    #[test]
+    fn last_commit_for_path_reads_glob_characters_literally() {
+        let tmp = Scratch::new("urzua-io-lastcommit-literal");
+        fs::create_dir_all(tmp.join("app/[id]")).unwrap();
+        fs::create_dir_all(tmp.join("app/i")).unwrap();
+        init_repo(&tmp);
+
+        fs::write(tmp.join("app/[id]/page.tsx"), "1").unwrap();
+        let literal = commit_all(&tmp, "add the bracketed page");
+        fs::write(tmp.join("app/i/page.tsx"), "1").unwrap();
+        commit_all(&tmp, "add a page the bracket class would match");
+
+        assert_eq!(
+            last_commit_for_path(&tmp, Path::new("app/[id]/page.tsx")).unwrap(),
+            Some(literal)
         );
     }
 

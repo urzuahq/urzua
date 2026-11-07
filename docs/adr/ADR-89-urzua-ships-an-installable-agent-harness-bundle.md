@@ -263,7 +263,9 @@ revision log):
    `python -c`, `cp`, `tee` or a heredoc is outside the editor hook's matcher. The post-command check reports
    it and cannot stop it: a gated move, a changed protected path (a gitignored one such as
    `.claude/settings.local.json` included, by content hash against a baseline taken at session start) and a
-   commit the same command made. A change is reported once; the same change again is silent, by design.
+   commit the same command made, and a record changed after `git update-index --assume-unchanged` or
+   `--skip-worktree` (found by comparing the file with the index). A change is reported once; the same change
+   again is silent, by design.
 2. **`git commit --no-verify`**, which skips the commit hook.
 3. **A pull request that changes its own workflow.** The gate runs from the head commit's workflow, so a pull
    request can drop or weaken the gate step it is judged by. Only `CODEOWNERS` and branch protection, which
@@ -272,8 +274,26 @@ revision log):
    maintainer, so `pr-author` is always satisfied and no CI check can say who accepted.
 5. **The limits of what the editor hook can read.** A hard link is resolved to the protected or gated file on
    Unix only, and elsewhere is judged by its own name. Names are case-folded but not Unicode-normalised. An MCP
-   tool call that names no file path is not seen as an edit. A change made before the session's baseline was
-   taken is not reported, and the agent's user-level settings outside the repository are not protected.
+   tool call that names no string a path can be read from (a path encoded, split or computed) is not seen as an
+   edit, and an MCP server that resolves a relative path against its own directory instead of the session's is
+   judged against the session's. A change made before the session's baseline was taken is not reported. The
+   agent's user-level settings and the project's local settings file are neither protected nor read: a hook
+   entry or `disableAllHooks` set only there is not seen by the session-start check. A link or file swapped
+   between the judgement and the write is not seen (the gap between check and use).
+6. **A Bash command that writes what the harness keeps.** The edit tools cannot write `.urzua/cache`, the
+   harness lock, the override log, `.git/hooks` or `.git/config`, but a Bash command can. A post-command
+   baseline written ahead of a later change disarms the report for that change, an override row can be given
+   a `Reviewed-by`, and a `core.hooksPath` turns the commit layer off; the post-command check does not report
+   these files.
+7. **The edit hook cannot run and the configuration cannot be read as text.** When python3 or the translator is
+   missing, the settings command reads `.urzua/config.yaml` as text and refuses the edit only if it finds
+   `acceptance` or `protected-paths` enabled without `on_unjudged: allow`; a configuration that scan misreads
+   (an unusual layout, a key spelled by an anchor or an include) is read as not closed. The refusal then
+   covers every edit tool call, not only a protected one, because without the translator the target is not
+   known. The post-command and session-start commands can only state that they did not run.
+8. **A nested repository that has its own configuration.** An edit is judged by the outermost repository that
+   holds `.urzua/config.yaml`, so a nested repository's own gates are not consulted for an edit made from the
+   outer one.
 
 What is claimed is therefore only this: through the edit tools (Write, Edit, MultiEdit, NotebookEdit and any MCP tool
 that carries a file path and content) an agent cannot move a gated record or write a
@@ -397,6 +417,39 @@ Open question 1 is answered for this repository: its `authority` table gates `Ac
 `Retired` status). An in-place edit of an Accepted ADR's Decision text stays handled by the amendment
 convention and is not gated. The Status of this ADR stays Accepted.
 
+## Amendment (2026-11-07, proposed, pending maintainer acceptance): the settings command, the repository an edit is judged in, and what the harness keeps
+
+Proposed in the third review of the harness (2026-11-07); it is not accepted until the maintainer accepts it.
+The Decision is unchanged; this corrects statements above and records what the review found.
+
+- **The settings command depends on the project directory, with a fallback.** The Context says the adapter's
+  command does not depend on `CLAUDE_PROJECT_DIR`, and the first implementation found the translator with
+  `git rev-parse --show-toplevel`. Both are replaced: the command resolves the project root from
+  `CLAUDE_PROJECT_DIR` and, when it is unset, from the outermost directory above the current one that holds
+  `.urzua/config.yaml`. The current directory follows a Bash `cd`, so a git repository created below the
+  project (`git init docs/nest && cd docs/nest`) made the old command look for the translator in the wrong
+  place, find none and let the edit through, ignoring `on_unjudged: deny`. When the translator or `python3`
+  cannot run, the editor hook's command now reads `.urzua/config.yaml` as text and refuses the edit where
+  `acceptance` or `protected-paths` is enabled and not set to `on_unjudged: allow` (accepted risk 7). The
+  unset variable stays a session-start problem.
+- **An edit is judged by the outermost governed repository, with symlinks followed to the end.** The engine
+  enters the outermost git working tree with `.urzua/config.yaml` that holds the file the edit writes (after
+  following every link), else the one that holds the session's directory. A nested repository with no
+  configuration of its own therefore no longer makes its files unjudged, and a link inside it to a protected
+  file is the protected file. A link whose target does not exist yet is the target it would create, so
+  writing through `docs/foo -> ../.github/workflows/evil.yml` is a write to a workflow.
+- **The harness keeps some files for itself.** While `protected-paths` is on, the edit tools are refused
+  for `.urzua/cache`, `.urzua/harness.lock`, the file `override_log` names, `.git/hooks` and `.git/config`.
+  They are not in the `authority` table, so CI's `diff.decider-required` does not ask a decider for an
+  override row that the override path appends. The override path writes the log from the engine, not through
+  an edit tool, so it still works.
+- **The session-start check compares the lock.** It reports an installed file whose hash differs from the
+  lock or that is gone (a neutered or deleted translator), a hook entry that is present by name but is not the
+  one the install wrote, and a settings key the adapter names as switching every hook off
+  (`disableAllHooks`).
+- **The MCP path reading.** An MCP tool call is read for every string that can name a file, at any depth and
+  in any list, `file://` URIs included. A tool named for reading is left alone.
+
 ## References
 
 - `ADR-69`, `ADR-70`, `ADR-71`: the hook, drafting commands and layered gate this extends; `ADR-70` gains an
@@ -421,3 +474,4 @@ convention and is not gated. The Status of this ADR stays Accepted.
 > | 2026-11-06 | Added an `## Amendment (2026-11-06)`, accepted by the maintainer on 2026-11-06: `require_evidence` is a config option the repository sets, the gate action always passes `--actors`, and this repository leaves it off (an action cannot set a rule option); open question 1 answered (this repository gates `Accepted`, `Rejected`, `Superseded` and `Retired` for ADRs and `Accepted`, `Rejected` and `Superseded` for RFCs). `Status` stays Accepted. **Why:** Maintainer decisions, 2026-11-06, on the review of pull request 374. | **substantive** |
 > | 2026-11-06 | Accepted-risk list brought in line with the harness after a second-pass review; the decision is unchanged. A Bash write to a protected path, and any change the same command commits, is now reported by the post-command check (route 2 shrinks from silent to reported; routes 1 and 2 are still not prevented); the settings file outside the install stays unreported. An adapter failure no longer defeats `on_unjudged: deny` for `acceptance` and `protected-paths`. **Why:** the review found the report claimed more than the check did, and the adapter failing open where the configuration said deny. | **structural** |
 > | 2026-11-06 | Accepted-risk list revised after the maintainer decided on 2026-11-06 to close the remaining guardrail gaps in Phase 0; the decision is unchanged. NotebookEdit and file-writing MCP tools now reach the editor hook, a Bash write to a gitignored protected file is reported by content hash, gate matching uses Unicode case folding, and a hard link is judged as the file it shares an inode with (Unix). Route 2 (the shell edit of a guardrail) joins route 1 and now includes the agent's local settings file under `.claude`; `--no-verify`, a pull request that changes its own workflow and an agent acting under the maintainer's token stay; a fifth item states what remains of the hook's reading (hard links off Unix, no Unicode normalisation, an MCP call with no path, no baseline before session start, user-level settings). A repeat of an already-reported change is silent and is documented, not changed. **Why:** the second-pass review left these gaps; the list now says exactly what remains. | **structural** |
+> | 2026-11-07 | Added a proposed `## Amendment (2026-11-07)`, pending maintainer acceptance, after the third review of the harness: the settings command resolves the project root from `CLAUDE_PROJECT_DIR` or the outermost configuration above the current directory and refuses an edit under `on_unjudged: deny` when it cannot run the translator; an edit is judged by the outermost governed repository with symlinks followed, a dangling link included; the harness protects its own cache, lock, override log and git hooks from the edit tools; session-start compares the installed files, hook entries and `disableAllHooks` with the lock; MCP calls are read for every path-like string. The Accepted-risk list gains items 6 to 8 (a Bash write to the harness's own files, an unreadable configuration in the shell fallback, a nested repository with its own configuration), and items 1 and 5 are widened (`--assume-unchanged` is now reported; local settings and a swap between check and write are named). `Status` stays Accepted. **Why:** the third review found the wrapper failing open outside the project root, a dangling link and a nested repository escaping the gates, and several silent routes. | **substantive** |

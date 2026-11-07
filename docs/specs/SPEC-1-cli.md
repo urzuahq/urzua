@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5AJB7EBVDWVSMCSYZQ
-Version: '0.27'
+Version: '0.28'
 Date: 2026-07-29
 Status: Shipped
 Embodiment: Verified
@@ -95,7 +95,9 @@ original command surface — the gap surfaced when the bootstrap plan needed it.
 
 ### `urzua new <type> [title]`
 **Specified in full by SPEC-12.** Creates a record from the configured template with a stable ID
-assigned, never asking the author to pick a number.
+assigned, never asking the author to pick a number. The numbers it passed over because a branch, an open
+pull request or a sibling worktree already holds them are in the report's `skipped` list, each with its
+reason, and not on stderr (`ADR-93`, Amendment of 2026-11-07).
 
 ### `urzua check [paths...]`
 **Specified in full by SPEC-2.** The validator. Exit non-zero on error; stdout is always the JSON
@@ -354,3 +356,4 @@ None. Every question this spec carried has been answered or routed:
 > | 2026-11-06 | Bumped to `0.26`. `urzua export` and `urzua import` require `--format`; the `agdr` default is gone, so a bare `urzua export` says a format is required instead of reporting an unimplemented one. `urzua fix --help` says what is implemented (tier 1 and `--rebaseline`). **Why:** the second-pass review (`cli.md` #11): the defaults named a format that is not implemented and the help text no longer matched `fix`. | **substantive** |
 > | 2026-11-06 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: unspecified): re-pinned `rust/crates/urzua-cli/src/main.rs#Command` (lines 92-288) 6be4a09f031d -> c61774c9d4cb, `rust/crates/urzua-cli/tests/export_integration.rs` ffeb24dfae4a -> 188eded0b56a. Reason: main.rs#Command: export and import now require --format (the agdr default is removed) and the fix help text names what fix does; no change to any other command, flag or output; export_integration.rs: the bare `export` case now asserts the `--format` required error instead of the not-implemented one, and the `agdr` case is kept **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
 > | 2026-11-06 | Bumped to `0.27`. `urzua refs refresh` dates the snapshot with the current UTC date. **Why:** maintainer decision of 2026-11-05: every date comparison uses UTC; the date was the machine's local date. | **substantive** |
+> | 2026-11-07 | Bumped to `0.28`. `urzua new` names the numbers it skipped, with the reason, in the report and not on stderr. **Why:** Maintainer decision, 2026-11-07, recorded as an amendment to `ADR-93`; the detail is in `SPEC-12`. | **substantive** |
