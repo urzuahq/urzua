@@ -171,11 +171,12 @@ fn process_alive(pid: u32) -> bool {
     }
     #[cfg(unix)]
     {
-        return Command::new("kill")
+        Command::new("kill")
             .args(["-0", &pid.to_string()])
             .stderr(Stdio::null())
             .status()
-            .map_or(true, |s| s.success());
+            .ok()
+            .is_none_or(|s| s.success())
     }
     #[cfg(not(unix))]
     {

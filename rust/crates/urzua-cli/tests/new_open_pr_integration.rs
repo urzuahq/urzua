@@ -122,7 +122,7 @@ fn new_report(w: &World, extra: &[&str]) -> (i32, serde_json::Value, String) {
 
 const ON: &str = "new:\n  check_open_prs: true\n";
 
-fn notice<'a>(v: &'a serde_json::Value) -> Vec<&'a serde_json::Value> {
+fn notice(v: &serde_json::Value) -> Vec<&serde_json::Value> {
     v.get("notices")
         .and_then(|n| n.as_array())
         .into_iter()
@@ -494,7 +494,7 @@ fn rule_findings(v: &serde_json::Value) -> Vec<&serde_json::Value> {
         .collect()
 }
 
-fn execution<'a>(v: &'a serde_json::Value) -> &'a serde_json::Value {
+fn execution(v: &serde_json::Value) -> &serde_json::Value {
     v["rules_executed"]
         .as_array()
         .unwrap()

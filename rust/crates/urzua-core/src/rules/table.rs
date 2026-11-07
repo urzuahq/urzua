@@ -2046,8 +2046,8 @@ mod tests {
         assert_eq!(
             judged(Judges::ChangedSet),
             vec![
-                RULE_IDENTITY_OPEN_PR_COLLISION,
                 RULE_REVISION_LOG_VERSION_BUMP_REQUIRED,
+                RULE_IDENTITY_OPEN_PR_COLLISION,
                 RULE_STATUS_TRANSITION_ALLOWED
             ]
         );
