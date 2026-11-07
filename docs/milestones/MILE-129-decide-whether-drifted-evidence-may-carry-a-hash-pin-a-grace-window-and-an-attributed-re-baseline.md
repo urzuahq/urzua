@@ -36,12 +36,23 @@ All three, each opt-in and off by default: content-hash pins on evidence, a conf
 - `claim_max_age_days` is built. — evidence: test:rust/crates/urzua-cli/tests/evidence_pins_integration.rs#a_claim_older_than_the_configured_age_warns_observed_failing@sha256:9d5451b42517e62e86cb9502b5335fcb629af38de9446ce55ee3171c72ebbc22, test:rust/crates/urzua-cli/tests/evidence_pins_integration.rs#a_claim_younger_than_the_configured_age_is_silent@sha256:507e887241b5c986cfec623447c9690ef9155620d07fd0bb33fbfc0f4cc73624
 - The attributed re-baseline, re-baselining from `MILE-181`, is built. — evidence: code:rust/crates/urzua-core/src/fix.rs#apply_rebaseline@sha256:88aa628c1aa4182144a8a5ec1c67e21fc0890d54575226b70274a362d5ca65b4, code:rust/crates/urzua-cli/src/commands/fix.rs, test:rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs#apply_re_pins_only_the_chosen_record_with_who_and_why_then_is_a_no_op_observed_failing@sha256:5c4d251e51ffe05cb113f79f727e2624dcf302077bb319f879c60de4f3fec007
 - `drift_grace_days` is exercised in urzua's own `.urzua/config.yaml` and the pins on its own records. — evidence: code:.urzua/config.yaml#rules::embodiment.consistency@sha256:2c6819d6375e3b4f59b879cd38d1a3b458329447e047bbb64ab06de0a1240886, spec:docs/bugs/BUG-139-record-id-and-filename-number-independently-re-implement-the-same-filename-id-extraction.md
-- `claim_max_age_days` is exercised in urzua's own `.urzua/config.yaml`.
+- `ADR-97`, which replaces the rule-wide claim age as this repository's use of claim expiry, is Accepted by the maintainer.
+- `embodiment.claim-expired` and `embodiment.claim-renewal-unattested` are built as `ADR-97` sections 1 to 3, 6 and 7 decide, off until declared.
+- `urzua reverify` is built as `ADR-97` section 4 decides: a review report, the refusals, the attributed `Re-verified` row and the anchor date.
+- `SPEC-2`, `SPEC-3`, `SPEC-8` (or a new spec) and `SPEC-18` document the rules, options, command and field with revision rows, and a minor changeset names them.
+- urzua's own `.urzua/config.yaml` declares `embodiment.claim-expired` with the periods of `ADR-97` section 10, and the `adr`, `milestone` and `bug` types declare `Last-audited`; a first run reports the 0 expired records `ADR-97` measured.
+
+## Decision (2026-11-07)
+
+Reopened by the maintainer: the claim age must be usable here, with an expiry configured per record
+type, where re-verifying a claim and refreshing its hashes is a recorded act. `ADR-97` (Proposed) drafts
+it; Done now means implementing it.
 
 ## References
 
 - `ADR-32` -- drift via git history, not a stored hash.
 - `RFC-2` -- review-before-apply refresh; grace window and attribution.
+- `ADR-97` -- the per-type claim expiry and `urzua reverify` that this milestone now builds.
 
 > **Revision log**
 >
@@ -57,3 +68,4 @@ All three, each opt-in and off by default: content-hash pins on evidence, a conf
 > | 2026-11-04 | `Realized-by` added and `Status` Planned -> Done. **Why:** the maintainer accepted `ADR-67` on 2026-11-04, which is this record's Done condition; pins, the grace window, the claim age and the attributed re-baseline are built (#174, #182, #238). Checked against the Done means and the code. | **substantive** |
 > | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |
 > | 2026-11-07 | `Status` `Done` -> `InProgress`. Status set from its Done-means items (ADR-96, MILE-215): unresolved item 7. **Why:** the item has no evidence clause, and `DoneWithUnresolvedItems` forbids `Done` while an item is unresolved; `fix` never downgrades, so the status is set by hand to the computed value. | **structural** |
+> | 2026-11-07 | Done means item 7 (`claim_max_age_days` exercised in this repository's config) replaced by five items that implement `ADR-97` (Proposed): the two rules, `urzua reverify`, the specs and changeset, and this repository's declaration; a Decision section records why. `Status` stays `InProgress`. **Why:** the rule-wide option cannot be declared here without 14 ADR and spec warnings, reaches only records stating `Embodiment`, and treats any edit to the `Realized-by` line as a renewal; maintainer direction of 2026-11-07. | **substantive** |
