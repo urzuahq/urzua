@@ -75,6 +75,11 @@ fn milestone(status: &str, extra: &str, done_means: bool) -> String {
     )
 }
 
+/// A milestone whose Done means is the given list of items.
+fn milestone_with_items(status: &str, items: &str) -> String {
+    milestone(status, "", true).replace("It works.\n", items)
+}
+
 // ---- SPEC-6: the milestone type
 
 #[test]
@@ -97,8 +102,30 @@ fn a_done_milestone_needs_delivery_evidence_and_evidence_under_planned_is_a_disa
         "{:?}",
         check_rules(&done, "MILE-1-")
     );
+    // Delivery is judged from the Done means items (`ADR-96`): an item that
+    // names its evidence, under `Planned`, is a disagreement.
     let evidenced = repo(
         "mile-evidenced",
+        &[
+            (
+                path,
+                &milestone_with_items(
+                    "Planned",
+                    "- It works. \u{2014} evidence: code:src/lib.rs\n",
+                ),
+            ),
+            ("src/lib.rs", "// code\n"),
+        ],
+    );
+    assert!(
+        check_rules(&evidenced, "MILE-1-").contains(&"status.delivery-agreement".to_string()),
+        "{:?}",
+        check_rules(&evidenced, "MILE-1-")
+    );
+    // A record-level `Realized-by` is evidence for every reader but never makes
+    // an itemised milestone delivered.
+    let record_level = repo(
+        "mile-record-level",
         &[
             (
                 path,
@@ -108,9 +135,9 @@ fn a_done_milestone_needs_delivery_evidence_and_evidence_under_planned_is_a_disa
         ],
     );
     assert!(
-        check_rules(&evidenced, "MILE-1-").contains(&"status.delivery-agreement".to_string()),
+        !check_rules(&record_level, "MILE-1-").contains(&"status.delivery-agreement".to_string()),
         "{:?}",
-        check_rules(&evidenced, "MILE-1-")
+        check_rules(&record_level, "MILE-1-")
     );
 }
 

@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6MP8T0T4AAJDC15G7PBQ49Q
-Status: Done
+Status: InProgress
 Phase: '0'
 Track: governance-process
 Implements: ADR-79
@@ -39,3 +39,4 @@ Realized-by: test:rust/crates/urzua-cli/tests/audit_fold_integration.rs#rules_re
 > | 2026-11-05 | Built in #311: `check --rules`, `rules_selected`, `audit` as a deprecated alias of `check` with one `Notice` (`SPEC-1`, `SPEC-2`, `SPEC-11`), and `BUG-99` fixed with its regression test. The command is removed the release after (`ADR-79`), which this milestone does not do. `Realized-by` added and `Status` set to `Done`. **Why:** every item of Done means is met and exercised in this repository's corpus. | **substantive** |
 > | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Status` from `Realized-by computes to Verified` -- stated `Planned` disagreed with the computed value `Done`. | **structural** |
 > | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |
+> | 2026-11-07 | `Status` `Done` -> `InProgress`. Status set from its Done-means items (ADR-96, MILE-215): unresolved item 11. **Why:** the item has no evidence clause, and `DoneWithUnresolvedItems` forbids `Done` while an item is unresolved; `fix` never downgrades, so the status is set by hand to the computed value. | **structural** |

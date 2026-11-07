@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6K40Q60VB9T17T4YHKBYRXZ
-Status: Done
+Status: InProgress
 Phase: '0'
 Track: schema-governance
 Implements: SPEC-22
@@ -41,3 +41,4 @@ Ordering: this precedes `MILE-172`, `MILE-174` and `MILE-173`'s check-specific p
 > | 2026-11-04 | Third step landed (scoping): each rule's table entry declares the anchor its findings sit on, and a path argument or `--base` keeps or drops a finding by it, so `RULES_REPORTING_OUTSIDE_THE_CORPUS`, the snapshot special case and the two rule-id exceptions in `check` are gone. `Status` stays Planned. **Why:** the config-option ownership lists remain. | **structural** |
 > | 2026-11-04 | Fourth step landed and `Status` Planned -> Done, `Realized-by` added. The config loader's option ownership (which rule accepts which option, the `field_levels` rule list, the per-rule `name !=` checks) now reads the rule's table entry, and `config.relation-field-not-known` checks `relation_fields.date` and `author` (`MILE-176`'s gap). **Why:** checked against this record's Done means: a rule is one table entry plus its function (the test that every `RULE_*` constant is in the table, and the config option test, fail otherwise); no list, closure or filter in `check`, the config loader or `init` names a rule id to treat it differently; `--base` and `check <path>` scope by the declared anchor; the `MILE-119` test iterates the table; `urzua check` output over this repository and the acceptance corpora is byte-identical before and after; the acceptance suite passes unchanged. What stays outside the table by design: the commands that read one rule's own options to gather its inputs (`check`'s claim, index and published-file readers, `fix`'s drift gate), which pick inputs and do not register or filter a rule. `MILE-119`'s population builder is `scoped_census_records`, which remains the one place a `header_shape: none` type is classified out of scope; the table declares each rule's `header_none` and the test enforces it. | **structural** |
 > | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |
+> | 2026-11-07 | `Status` `Done` -> `InProgress`. Status set from its Done-means items (ADR-96, MILE-215): unresolved item 5. **Why:** the item has no evidence clause, and `DoneWithUnresolvedItems` forbids `Done` while an item is unresolved; `fix` never downgrades, so the status is set by hand to the computed value. | **structural** |

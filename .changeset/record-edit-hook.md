@@ -1,6 +1,6 @@
 ---
 default: minor
-closes: [MILE-178]
+closes: []
 ---
 
 A record-edit hook for coding-agent harnesses judges an edit to a computed field such as `Embodiment`

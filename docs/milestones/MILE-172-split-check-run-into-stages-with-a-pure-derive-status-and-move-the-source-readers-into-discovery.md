@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6K40QR3PB1ZRMH7B9G6S3R2
-Status: Done
+Status: InProgress
 Phase: '0'
 Track: schema-governance
 Implements: SPEC-22
@@ -36,3 +36,4 @@ Ordering: after `MILE-171`, which removes the 51 closures this function holds; d
 > | 2026-11-04 | `Blocked-on` cleared. **Why:** `MILE-171` is `Done` and `narrative-field.stale` flagged the leftover. `Status` unchanged; this milestone can start. | **substantive** |
 > | 2026-11-04 | `Status` Planned -> Done, `Realized-by` added. `check::run` is a composition of `open_session`, `narrow`, `load_context`, `run_rules`, `scope_findings`, `run_after_scoping` and a report build, none over 100 lines; `derive_status` is pure in `gate.rs` with a table test for each branch; `read_claim_files`, `resolve_inside_repo`, `path_is_inside_repo` and `read_index_artifacts` live in `discovery.rs`. **Why:** checked against this record's Done means: `urzua check` output over this repository (full, path-scoped, `--base HEAD~1/8/30`) and every acceptance corpus is byte-identical before and after; the acceptance suite passes. The symlink-policy cases (`BUG-69`, `BUG-75`, `BUG-85`, `BUG-117`) are end-to-end tests in `check_integration.rs` that exercise the readers through the command, so they stay where they are and still cover the moved code; there are no unit tests in the old location to move. | **structural** |
 > | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |
+> | 2026-11-07 | `Status` `Done` -> `InProgress`. Status set from its Done-means items (ADR-96, MILE-215): unresolved item 2; item 5. **Why:** the item has no evidence clause, and `DoneWithUnresolvedItems` forbids `Done` while an item is unresolved; `fix` never downgrades, so the status is set by hand to the computed value. | **structural** |

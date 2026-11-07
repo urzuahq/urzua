@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6JKNWP4NMYSTVM6QQNMV9P9
-Status: Done
+Status: InProgress
 Phase: '0'
 Track: schema-governance
 Implements: SPEC-1
@@ -37,3 +37,4 @@ Make `urzua fix` accept a path argument or prospective content, make `--apply` w
 > | 2026-11-04 | Progress, part 2c of 2 (part 2 complete): a type's `revision_log` takes `required: true|false` (default `true`); `urzua fix --apply` writes the field without a log row where it is `false`, and where it is `true` a record with no section fails naming the record and the identity looked for. Declared (`true`) on `adr` in this repository's `.urzua/config.yaml`. **Why:** an adopter's records have no revision log section. | **substantive** |
 > | 2026-11-04 | `Realized-by` added and `Status` Planned -> Done. **Why:** the work is merged in #214 (drift gated on the rule, git failures and shallow clones surfaced), #226 (`fix [PATHS...]` scopes examination, drift and repair), #229 (`fix --stdin-path` judges proposed content without writing) and #232; the maintainer relayed on 2026-11-04 that the milestone is fully delivered. | **structural** |
 > | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |
+> | 2026-11-07 | `Status` `Done` -> `InProgress`. Status set from its Done-means items (ADR-96, MILE-215): unresolved item 4. **Why:** the item has no evidence clause, and `DoneWithUnresolvedItems` forbids `Done` while an item is unresolved; `fix` never downgrades, so the status is set by hand to the computed value. | **structural** |

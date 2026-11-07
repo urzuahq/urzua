@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M36BA15XBAZKPVGZZE5SKTME
-Status: Done
+Status: InProgress
 Phase: '1'
 Track: schema-governance
 Implements: RFC-45
@@ -61,3 +61,4 @@ rule may depend on another rule being enabled to cover a gap in its own disclosu
 > | 2026-09-23 | `Status: Planned` → `Done`. **Why:** both parts implemented and verified: full test suite, clippy, `make ci`, and a real-corpus `check` diff reporting the same 70 findings before and after. Part 1 shipped as a dedicated rule rather than the originally-decided `Outcome` variant, corrected mid-implementation per `ADR-63`'s amendment. | **substantive** |
 > | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-183`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |
 > | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |
+> | 2026-11-07 | `Status` `Done` -> `InProgress`. Status set from its Done-means items (ADR-96, MILE-215): unresolved item 4. **Why:** the item has no evidence clause, and `DoneWithUnresolvedItems` forbids `Done` while an item is unresolved; `fix` never downgrades, so the status is set by hand to the computed value. | **structural** |

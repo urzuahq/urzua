@@ -1,6 +1,6 @@
 ---
 default: minor
-closes: [MILE-214]
+closes: []
 ---
 
 A record type can declare `statuses.delivery.items`, so that its Done means is a list whose items each
