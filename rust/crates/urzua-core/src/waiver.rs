@@ -234,11 +234,22 @@ pub fn load_suppressions(
                 .effective_requires
                 .iter()
                 .filter_map(|field| {
-                    let state = classify_against_template(
+                    let mut state = classify_against_template(
                         r.header.get(field),
                         suppression_type.template.get(field).map(String::as_str),
                         suppression_type.declared.as_ref(),
                     );
+                    // The default vocabulary still applies to the whole value:
+                    // a Reason that is just `TBD` or `TODO` is a placeholder.
+                    if state == FieldState::Present {
+                        if let Some(default) = r
+                            .header
+                            .get(field)
+                            .and_then(crate::field_state::whole_value_default_state)
+                        {
+                            state = default;
+                        }
+                    }
                     (state != FieldState::Present).then(|| (field.clone(), state))
                 })
                 .unzip();
@@ -558,6 +569,25 @@ scope: docs/adr/ADR-1-x.md
             let mut findings = vec![finding("field.quality", "docs/adr/0001-x.md")];
             apply_suppressions(&mut findings, &loaded, "2026-11-05");
             assert!(findings[0].waived.is_none(), "{case}");
+        }
+    }
+
+    /// A Reason that is entirely a default placeholder word is not a real
+    /// reason, whatever the case or padding; a sentence holding the word is.
+    #[test]
+    fn a_reason_that_is_only_a_default_placeholder_word_does_not_suppress_observed_failing() {
+        for kind in [
+            requiring_reason(),
+            requiring_reason().with_template("---\nRule: x\nReason: why\n---\n"),
+        ] {
+            for reason in ["TBD", "tbd", "TODO", "'  Todo  '"] {
+                let loaded = load_suppressions(&[reason_record(Some(reason))], &kind);
+                assert_eq!(loaded[0].unmet, vec!["Reason".to_string()], "{reason}");
+                assert_eq!(loaded[0].unmet_states, vec![FieldState::Placeholder], "{reason}");
+                assert!(!loaded[0].is_effective(), "{reason}");
+            }
+            let loaded = load_suppressions(&[reason_record(Some("TBD until the upstream fix ships"))], &kind);
+            assert!(loaded[0].is_effective());
         }
     }
 

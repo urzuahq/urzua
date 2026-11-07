@@ -67,6 +67,21 @@ pub fn classify_with(
     FieldState::Present
 }
 
+/// The compiled-in vocabulary read against the WHOLE trimmed value, case
+/// insensitively: `TBD`, `TODO`, `name` and the other placeholder tokens are a
+/// Placeholder, and `pending` alone is Pending. A sentence that merely contains
+/// one of them ("pending the upstream fix") is `None`: that is a real value.
+pub fn whole_value_default_state(value: &str) -> Option<FieldState> {
+    let lower = value.trim().to_ascii_lowercase();
+    if PLACEHOLDER_TOKENS.contains(&lower.as_str()) {
+        Some(FieldState::Placeholder)
+    } else if lower == "pending" {
+        Some(FieldState::Pending)
+    } else {
+        None
+    }
+}
+
 /// [`classify_with`] for a type whose placeholder vocabulary is its template
 /// (`BUG-22`): a value identical after trimming to `template_value`, the
 /// template's text for the same field, is a Placeholder. The compiled-in tokens
