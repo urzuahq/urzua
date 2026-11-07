@@ -1,0 +1,13 @@
+fixtures:
+  - path: .urzua/config.yaml
+    irregularity: the config the corpus is validated under; Fixed is terminal for narrative-field.stale; not a record.
+  - path: docs/bug/BUG-1-already-fixed.md
+    irregularity: none -- a Fixed bug the first milestone is blocked on.
+  - path: docs/bug/BUG-2-still-open.md
+    irregularity: none -- an Open bug, so a milestone blocked on it is not stale.
+  - path: docs/milestone/MILE-1-blocked-on-fixed.md
+    irregularity: Blocked-on names BUG-1, which is Fixed.
+  - path: docs/milestone/MILE-2-blocked-on-open.md
+    irregularity: none -- Blocked-on names BUG-2, which is still Open.
+  - path: docs/waiver/WAIVER-1-unknown-rule.md
+    irregularity: names the rule not.a.rule, which no build ships.

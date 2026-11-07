@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5N2PD9ZYBJPZHN05W7
-Version: '0.14'
+Version: '0.15'
 Date: 2026-08-20
 Status: Shipped
 Embodiment: Verified
@@ -232,10 +232,18 @@ built, and where it differs from the sketch:
   **ran clean only** (`ran-only  <rule>`) when its sole proof is `expect_rules_ran` or `proves`: a case
   shows the rule executes over a population, and none expects it to report anything, so the suite does
   not show it can fire. A rule with **no case** is listed as `uncovered  <rule>`. The count of rules with
-  a failing case is the number the suite proves; the other two are what it does not. It reports and does
-  not fail: a rule added by another change has no case yet, and the lists are where that is seen. A rule
+  a failing case is the number the suite proves; the other two are what it does not. A rule
   with no failing case here may still have a unit or integration test that plants its violation; this
   report is about the acceptance layer only.
+- **Coverage gate.** The same unfiltered run fails when a rule in `ALL_RULES` has no failing case and is
+  not on the committed allow-list, `tests/acceptance/coverage-allowlist.yaml` (decided 2026-11-07). Each
+  entry is a `rule` id and a `reason`; an entry with no reason fails. The list only shrinks: the gate
+  holds a fixed ceiling of the ids the list may name (`CEILING` in `tests/acceptance/coverage_gate.rs`),
+  so an entry for any other rule is refused, and a rule the table gains has to come with a failing case
+  rather than a listing. An entry is stale, and fails, once its rule has a failing case or has left the
+  rule table, so the entry is deleted in the same change that earns or removes it. A name-filtered run
+  does not run the gate, for the same reason it does not report coverage. `acceptance_coverage_gate.rs`
+  tests the gate, including that a new rule without a failing case fails it.
 - **Scratch names.** A case's temporary repository and its mutated config are named by process, corpus
   and case id. Cases run on several threads, and two corpora (a private one merged in through
   `URZUA_ACCEPTANCE_EXTRA`, say) may each declare a case with one id, so a name keyed on the id alone would
@@ -293,13 +301,14 @@ built, and where it differs from the sketch:
   but 22 of them held it through `expect_rules_ran` or `proves` alone, so the count of 57 of 65 overstated what the
   suite showed: it counted a rule that ran as a rule that can fire. Later rules were added with no case at
   all. The report now keeps the tiers apart (see "Coverage report"). Rules with a failing case grew from 35
-  of 65 to 58 with `corpus-m` to `corpus-t` (see "Added by the hardening of CI and release tests"). Seven
-  rules still have no failing acceptance case: `claim.status-agreement`,
-  `embodiment.back-pointer-decision-accepted`, `narrative-field.stale`, `index.freshness` and
-  `waiver.matches-nothing` ran clean only; `config.schema-version-outdated` has a failing case that cannot be
-  mutated, because a version-1 config has no `rules` table to switch the rule off in; and
+  of 65 to 58 with `corpus-m` to `corpus-t` (see "Added by the hardening of CI and release tests"). Rules with a failing case are now 60 of 65, with
+  `corpus-u` (`narrative-field.stale`, `waiver.matches-nothing`). Five rules remain on the allow-list (see
+  "Coverage gate"): `claim.status-agreement` and `embodiment.back-pointer-decision-accepted` ran clean only;
+  `index.freshness` has no mutation-provable case, because switching the rule off leaves its `indexes`
+  option on a disabled rule and the config is rejected; `config.schema-version-outdated` has a failing case
+  that cannot be mutated, because a version-1 config has no `rules` table to switch the rule off in; and
   `identity.open-pr-collision` has none, because a case cannot create the pull-request refs it reads. Each
-  of the seven has a planted-violation test at the integration or unit level. The counts are the run's output when this was written; the coverage report is authoritative.
+  has a planted-violation test at the integration or unit level. The counts are the run's output when this was written; the coverage report is authoritative.
 
 ### Added since
 
@@ -399,3 +408,4 @@ Failing cases for rules that had only a clean run or no case, each with a mutati
 > | 2026-11-07 | Tool-authored (by beauwilliams, identity: gh-verified, actor: agent): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-cli/tests/acceptance.rs, test:rust/crates/urzua-cli/tests/acceptance_property.rs` -- stated `Not started` disagreed with the computed value `Verified`. | **structural** |
 > | 2026-11-07 | Bumped to `0.13`. Status changed from Accepted to Shipped. **Why:** Maintainer decision, 2026-11-07: its `Realized-by` evidence computes `Verified`, and each section was checked against the built code and tests. | **substantive** |
 > | 2026-11-07 | Bumped to `0.14`. The coverage report keeps three tiers apart: rules with a failing case, rules that ran clean only (`ran-only`) and rules with no case (`uncovered`), and no longer adds them into one figure; the "Coverage" claim that every rule has a case and none is uncovered is replaced by the count, and the seven rules without a failing acceptance case are named. Scratch repositories and mutated configs are named by corpus as well as case, and the runner fails a run in which two cases would share one. `corpus-m` to `corpus-t` add failing cases for 23 rules. **Why:** the report said 57 of 65 rules were proven, but 22 of them were counted from `expect_rules_ran` or `proves`, which show a rule runs and not that it can fire, so the figure overstated the proof and the spec claimed more than the suite showed; and a case id shared by two corpora made concurrent cases delete each other's repository. | **substantive** |
+> | 2026-11-07 | Bumped to `0.15`. The coverage report is now a gate: an unfiltered run fails when a rule has no failing case and is not on the committed allow-list, each entry carrying a rule id and a reason, and the list may only shrink (an entry outside a fixed ceiling is refused, and an entry for a rule that gained a case or left the table is stale). The allow-list holds the five rules still without a failing case; `corpus-u` adds failing cases for `narrative-field.stale` and `waiver.matches-nothing`. **Why:** maintainer decision, 2026-11-07: the report only reported, so a rule could be added with no failing case and CI stayed green. | **substantive** |
