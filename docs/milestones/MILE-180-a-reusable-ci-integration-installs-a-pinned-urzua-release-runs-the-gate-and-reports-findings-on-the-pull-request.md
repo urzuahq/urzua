@@ -5,7 +5,7 @@ Phase: '0'
 Track: governance-process
 Implements: RFC-7, ADR-71
 Blocked-on: —
-Realized-by: code:.github/actions/urzua-gate/action.yml, code:.github/actions/urzua-gate/render.sh, code:.github/actions/urzua-gate/install.sh, test:.github/actions/urzua-gate/test.sh, code:.github/workflows/checks.yml
+Realized-by: code:.github/actions/urzua-gate/install.sh, test:.github/actions/urzua-gate/test.sh, code:.github/actions/urzua-gate/check-history.sh, code:.github/workflows/checks.yml, code:.github/actions/urzua-gate/action.yml, code:.github/actions/urzua-gate/render.sh, code:.github/actions/urzua-gate/post-comment.sh, code:.github/workflows/ci.yml
 ---
 # 180 — A reusable CI integration installs a pinned urzua release, runs the gate and reports findings on the pull request
 
@@ -21,7 +21,14 @@ A real adopter environment's records job installs its tool, runs the gate with f
 
 ## Done means
 
-The unit installs a pinned release, fails when checksum or attestation verification fails, and fails with a stated reason when the checkout is too shallow for drift; this repository's pull-request CI runs the renderer over its own `urzua check --base` output and posts annotations and one updating comment (with a recorded-fixture test of the rendering and of the update-in-place behaviour); a job installs the previous release through the unit and runs it over this repository's corpus; whether to publish a Linux arm64 build is decided and recorded; and the capability is what this repository's own workflows run, not only a test.
+- The unit installs a pinned release. — evidence: code:.github/actions/urzua-gate/install.sh, test:.github/actions/urzua-gate/test.sh
+- The unit fails when checksum or attestation verification fails. — evidence: test:.github/actions/urzua-gate/test.sh, code:.github/actions/urzua-gate/install.sh
+- The unit fails with a stated reason when the checkout is too shallow for drift. — evidence: code:.github/actions/urzua-gate/check-history.sh, test:.github/actions/urzua-gate/test.sh
+- This repository's pull-request CI runs the renderer over its own `urzua check --base` output and posts annotations and one updating comment. — evidence: code:.github/workflows/checks.yml, code:.github/actions/urzua-gate/action.yml, code:.github/actions/urzua-gate/render.sh, code:.github/actions/urzua-gate/post-comment.sh
+- A recorded-fixture test covers the rendering and the update-in-place behaviour. — evidence: test:.github/actions/urzua-gate/test.sh
+- A job installs the previous release through the unit and runs it over this repository's corpus. — evidence: code:.github/workflows/ci.yml
+- Whether to publish a Linux arm64 build is decided and recorded. — evidence: code:.github/actions/urzua-gate/install.sh
+- The capability is what this repository's own workflows run, not only a test. — evidence: code:.github/workflows/checks.yml, code:.github/workflows/ci.yml
 
 > **Revision log**
 >
@@ -29,3 +36,4 @@ The unit installs a pinned release, fails when checksum or attestation verificat
 > |---|---|---|
 > | 2026-11-04 | Filed. **Why:** a trial run of urzua over a real adopter corpus showed that environment's records CI job and pull-request reporting have no reusable counterpart here; Phase 0 is capability parity exercised in urzua's own repository. | **substantive** |
 > | 2026-11-04 | Delivered and shipped as the composite action `.github/actions/urzua-gate`: installs a pinned release (exact tag; archive checksum when pinned; build provenance attestation always; reported version must match), fails with a stated reason on a shallow checkout or an unfetchable base, runs `check` and on a pull request `check --base`, and reports inline annotations plus one comment that is updated in place; a failed comment post warns and never changes the verdict, a run that could not run fails and is rendered NOT RUN. Rendering, update-in-place, the history precondition and the installer's refusals are tested against recorded fixtures (`.github/actions/urzua-gate/test.sh`, run in CI). This repository's `checks.yml` now runs the unit in place of its bespoke steps. **Decisions:** (1) Linux arm64 is not needed and is not added: the action runs on GitHub-hosted x86_64 Linux and macOS runners, the installer refuses an arm64 Linux runner with that reason, and a build can be added when an adopter needs one. (2) The "previous release" job installs v0.3.0 through the unit and runs it over this repository's corpus as of the `v0.3.0` tag, not today's tree, because v0.3.0 reads only `config.toml` and reports not-run on the current `config.yaml`. (3) No release publishes a checksum file, so the checksum is an optional `sha256` pin and the attestation is the integrity guarantee that always runs. **Why:** `ADR-71` needs the gate at CI as the guarantee and a shallow checkout made a stated failure, and no other repository could reuse this one's CI steps. | **substantive** |
+> | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |
