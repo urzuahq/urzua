@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5Q0XVK27P5T8FN72BN
-Version: '0.29'
+Version: '0.30'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -83,6 +83,11 @@ A path that selects no record, or lies outside the repository, is reported in `f
 (`partial-failure`, exit 1), never skipped. In apply mode `--ids` and `--force` select among the
 scoped repairs only, so an `--ids` entry outside the given paths matches no pending repair and fails
 as above.
+
+In detect mode `--ids` filters the report the same way: only the named records are listed, and an entry
+that matches no pending repair is a failure naming it (`partial-failure`, exit 1). `--force`, `--by` and
+`--actor` belong to a write, so without `--apply` they are a usage error (exit 2) rather than silently
+ignored.
 
 ### Judging proposed content (`--stdin-path`)
 
@@ -364,3 +369,4 @@ asserted by test, not assumed by convention.
 > | 2026-11-06 | Bumped to `0.27`. `fix --apply` refuses to write a status an `authority` gate names for the record's type and reports it in `failed`. **Why:** `MILE-199`, the `ADR-70` amendment of 2026-11-05: a lifecycle command sets a status only when the engine computes it, never one reserved to a decider. | **substantive** |
 > | 2026-11-06 | Bumped to `0.28`. The record-edit hook section describes the engine core `urzua harness run edit` and the installed translator, not the deleted `scripts/hooks` shell and Python chain; the verdicts are unchanged. **Why:** `MILE-204` deletes the scripts, `ADR-89` section 6. | **substantive** |
 > | 2026-11-07 | Bumped to `0.29`. `--reason` also refuses a carriage return; `--rebaseline --apply` reads the evidence after taking the lock, and every record write is confined to the repository. **Why:** a Phase 0 hardening review found a `\r` reaching the revision-log row, evidence hashed before the lock, and writes that followed a symlink out of the repository. | **substantive** |
+> | 2026-11-07 | Bumped to `0.30`. Detect mode (no `--apply`) honours `--ids`: the report lists only the named records and an `--ids` entry that matches no pending repair (no stale pin, under `--rebaseline`) is a `partial-failure`, as under `--apply`; `--force`, `--by` and `--actor` without `--apply` are usage errors (exit 2) instead of being ignored. **Why:** maintainer decision of 2026-11-07, from the CLI review. | **substantive** |

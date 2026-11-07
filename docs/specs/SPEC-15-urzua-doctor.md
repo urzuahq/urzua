@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5E1D23JRXBPTP54NSG
-Version: '0.11'
+Version: '0.12'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -56,7 +56,7 @@ empty, same as every other command's report.
 | `check` id | Meaning |
 |---|---|
 | `config-exists` | `.urzua/config.yaml` is present. `error` if missing (short-circuits, exit 2). |
-| `config-parses` | The config parses with no unrecognized keys (`deny_unknown_fields` — a typo'd key is a hard parse error, not a silently-ignored one). `error` if not (short-circuits, exit 1). |
+| `config-parses` | The config parses with no unrecognized keys (`deny_unknown_fields` — a typo'd key is a hard parse error, not a silently-ignored one, and so is a `harness.guardrails` name the build does not ship). `error` if not (short-circuits, exit 1). Unrecognized entries inside the `harness` table still load; the message then counts them and `harness-config` names them. |
 | `record-types-declared` | At least one `[record_types.*]` entry exists. `error` if the map is empty — `check` would never examine anything. |
 | `rules-enabled` | At least one rule is enabled (level other than `off`). `error` if none is: every rule is opt-in (`ADR-53`), so `check` would report not-run and examine nothing (`BUG-174`). |
 | `record-type-dir` | One check per declared type: does `dir` actually exist on disk. `error` if not — this fires today for `waiver` in this very repo, correctly, since no waiver record has been created yet (MILE-59) and its directory was deliberately never pre-created. |
@@ -105,3 +105,4 @@ than compounded:
 > | 2026-11-05 | Status changed from Accepted to Shipped and bumped to `0.9`. **Why:** maintainer decision of 2026-11-05 to ship the specs whose implementation is verified; `Embodiment: Verified` with `Realized-by` naming the implementing code and tests. | **structural** |
 > | 2026-11-05 | Bumped to `0.10`. `doctor` reads the global `--config`, as every other command does, instead of always reporting on the default file. **Why:** review of the CLI found `urzua doctor --config x.yaml` reported on the default config, a silent no-op. | **substantive** |
 > | 2026-11-06 | Bumped to `0.11`. `ci-wired` and `hook-wired` read a call, not a word: a `#` comment and an `echo`/`printf` line are dropped, the call is `urzua <subcommand>` (a path ending in `urzua`, or a variable assigned one), and `make records` is no longer recognised; the harness checks gain `harness-legacy-hook`. **Why:** Phase 0 hardening from a second adopter switchover -- a hook whose only mention of urzua was a comment read as wired, and the engine carried one repository's make target. | **substantive** |
+> | 2026-11-07 | Bumped to `0.12`. `config-parses` no longer says "no unrecognized keys" while the harness table holds unrecognized entries (it counts them and points to `harness-config`); an unknown `harness.guardrails` name is now a config load error, so this check reports `error` for it. **Why:** `ADR-89` amendment of 2026-11-07. | **substantive** |

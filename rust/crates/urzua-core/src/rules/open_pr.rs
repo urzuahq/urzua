@@ -89,7 +89,7 @@ pub fn open_pr_collision(
                 suggested_action: None,
                 action_source: ActionSource::new("open-pr-collision"),
                 message: format!(
-                    "{} is also used by {} on {} (Stable-Id {}, this record's {}) -- a different record. Renumber with `urzua migrate ids`; if that pull request is closed and unmerged, waive this finding with a waiver naming it",
+                    "{} is also used by {} on {} (Stable-Id {}, this record's {}) -- a different record. Rename the file and its H1 to the next free number (the one `urzua new` would take); if that pull request is closed and unmerged, waive this finding with a waiver naming it",
                     id.as_str(),
                     holder.path,
                     holder.reference,

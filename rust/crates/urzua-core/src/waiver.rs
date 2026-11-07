@@ -5,7 +5,7 @@
 //! `status`/`blocking` are computed from non-waived findings only.
 
 use crate::config::{CiteRequirement, Config, PermanentDecl};
-use crate::field_state::classify_with;
+use crate::field_state::{classify_against_template, classify_with};
 use crate::record::Record;
 use crate::report::Finding;
 use crate::status_model::StatusDecl;
@@ -20,6 +20,10 @@ pub struct SuppressionType {
     pub name: String,
     pub effective_requires: Vec<String>,
     pub declared: Option<StatusDecl>,
+    /// The type's template header as `field -> value` (read by the caller from
+    /// `.urzua/templates/<type>.md`): a required field still holding the
+    /// template's text for it is a placeholder. Empty when there is no template.
+    pub template: std::collections::HashMap<String, String>,
     /// Where a suppression without `Expires` may take effect (`ADR-86`).
     /// `None` is "not declared": permanence is allowed for any rule, as it
     /// always was. `Some` closes permanence for every rule it does not list.
@@ -44,8 +48,15 @@ impl SuppressionType {
                 .and_then(|t| t.effective_requires.clone())
                 .unwrap_or_default(),
             declared: declared.and_then(|t| t.status_decl()),
+            template: Default::default(),
             permanent: declared.and_then(|t| t.permanent.clone()),
         }
+    }
+
+    /// The same type, judging a placeholder against the template's text.
+    pub fn with_template(mut self, template: &str) -> Self {
+        self.template = crate::new_record::template_header_values(template);
+        self
     }
 }
 
@@ -61,6 +72,10 @@ pub struct Suppression {
     /// The `effective_requires` fields this suppression lacks: absent, blank,
     /// a placeholder or pending. Empty means it takes effect (`BUG-177`).
     pub unmet: Vec<String>,
+    /// Why each `unmet` field is unmet, in the same order: blank (absent or
+    /// empty), a placeholder, or pending. Lets the report say which, rather
+    /// than calling a field that is present "missing".
+    pub unmet_states: Vec<FieldState>,
     /// Whether the type's `permanent` declaration lets this suppression stand
     /// without an `Expires` (`ADR-86`).
     pub permanence: Permanence,
@@ -215,15 +230,32 @@ pub fn load_suppressions(
             let rule = r.header.get_reserved("Rule")?.to_string();
             let scope = r.header.get_reserved("Scope")?.to_string();
             let expires = r.header.get_reserved("Expires").map(|s| s.to_string());
-            let unmet = suppression_type
+            // A prose field is a placeholder only when its whole trimmed value
+            // is the template's text for it or a declared pending value; the
+            // word "pending" inside a real sentence is a real reason.
+            let (unmet, unmet_states): (Vec<String>, Vec<FieldState>) = suppression_type
                 .effective_requires
                 .iter()
-                .filter(|field| {
-                    classify_with(r.header.get(field), suppression_type.declared.as_ref())
-                        != FieldState::Present
+                .filter_map(|field| {
+                    let mut state = classify_against_template(
+                        r.header.get(field),
+                        suppression_type.template.get(field).map(String::as_str),
+                        suppression_type.declared.as_ref(),
+                    );
+                    // The default vocabulary still applies to the whole value:
+                    // a Reason that is just `TBD` or `TODO` is a placeholder.
+                    if state == FieldState::Present {
+                        if let Some(default) = r
+                            .header
+                            .get(field)
+                            .and_then(crate::field_state::whole_value_default_state)
+                        {
+                            state = default;
+                        }
+                    }
+                    (state != FieldState::Present).then(|| (field.clone(), state))
                 })
-                .cloned()
-                .collect();
+                .unzip();
             let permanence =
                 judge_permanence(r, &rule, expires.is_some(), suppression_type, &known);
             Some(Suppression {
@@ -232,6 +264,7 @@ pub fn load_suppressions(
                 scope,
                 expires,
                 unmet,
+                unmet_states,
                 permanence,
             })
         })
@@ -373,6 +406,7 @@ mod tests {
             scope: "*".into(),
             expires: Some(expires.into()),
             unmet: Vec::new(),
+            unmet_states: Vec::new(),
             permanence: Permanence::Ungoverned,
         };
         assert!(w("2028-02-29").is_active("2028-02-29"));
@@ -414,6 +448,7 @@ scope: docs/adr/ADR-1-x.md
             scope: "*".into(),
             expires: None,
             unmet: Vec::new(),
+            unmet_states: Vec::new(),
             permanence: Permanence::Ungoverned,
         };
         assert!(w.is_active("2020-01-01"));
@@ -428,6 +463,7 @@ scope: docs/adr/ADR-1-x.md
             scope: "*".into(),
             expires: Some("2026-01-01".into()),
             unmet: Vec::new(),
+            unmet_states: Vec::new(),
             permanence: Permanence::Ungoverned,
         };
         assert!(w.is_active("2025-12-31"));
@@ -457,6 +493,7 @@ scope: docs/adr/ADR-1-x.md
                 scope: "*".into(),
                 expires: Some(bad.into()),
                 unmet: Vec::new(),
+                unmet_states: Vec::new(),
                 permanence: Permanence::Ungoverned,
             };
             assert!(
@@ -475,6 +512,7 @@ scope: docs/adr/ADR-1-x.md
             scope: "docs/adr/0001-x.md".into(),
             expires: None,
             unmet: Vec::new(),
+            unmet_states: Vec::new(),
             permanence: Permanence::Ungoverned,
         }];
         apply_suppressions(&mut findings, &waivers, "2026-09-04");
@@ -499,6 +537,7 @@ scope: docs/adr/ADR-1-x.md
             scope: "*".into(),
             expires: None,
             unmet: Vec::new(),
+            unmet_states: Vec::new(),
             permanence: Permanence::Ungoverned,
         }];
         apply_suppressions(&mut findings, &waivers, "2026-09-04");
@@ -520,6 +559,7 @@ scope: docs/adr/ADR-1-x.md
             scope: "*".into(),
             expires: Some("2020-01-01".into()),
             unmet: Vec::new(),
+            unmet_states: Vec::new(),
             permanence: Permanence::Ungoverned,
         }];
         apply_suppressions(&mut findings, &waivers, "2026-09-04");
@@ -545,22 +585,88 @@ scope: docs/adr/ADR-1-x.md
     }
 
     /// `BUG-177`: a suppression lacking a declared field, or holding a blank,
-    /// placeholder or pending value, is loaded (so it can be reported) but
-    /// does not suppress.
+    /// the template's placeholder text or a declared pending value, is loaded
+    /// (so it can be reported) but does not suppress.
     #[test]
     fn a_suppression_lacking_a_required_field_does_not_suppress_observed_failing() {
-        for (case, reason) in [
-            ("absent", None),
-            ("blank", Some("''")),
-            ("placeholder", Some("TBD")),
-            ("pending", Some("pending")),
+        let mut kind = requiring_reason()
+            .with_template("---\nRule: x\nReason: why this exception is accepted\n---\n");
+        kind.declared = Some(pending_decl());
+        for (case, reason, state) in [
+            ("absent", None, FieldState::Blank),
+            ("blank", Some("''"), FieldState::Blank),
+            (
+                "template text",
+                Some("why this exception is accepted"),
+                FieldState::Placeholder,
+            ),
+            ("pending", Some("Pending"), FieldState::Pending),
+            (
+                "pending, padded",
+                Some("'  Pending  '"),
+                FieldState::Pending,
+            ),
         ] {
-            let loaded = load_suppressions(&[reason_record(reason)], &requiring_reason());
+            let loaded = load_suppressions(&[reason_record(reason)], &kind);
             assert_eq!(loaded.len(), 1, "{case}");
             assert_eq!(loaded[0].unmet, vec!["Reason".to_string()], "{case}");
+            assert_eq!(loaded[0].unmet_states, vec![state], "{case}");
             let mut findings = vec![finding("field.quality", "docs/adr/0001-x.md")];
             apply_suppressions(&mut findings, &loaded, "2026-11-05");
             assert!(findings[0].waived.is_none(), "{case}");
+        }
+    }
+
+    /// A Reason that is entirely a default placeholder word is not a real
+    /// reason, whatever the case or padding; a sentence holding the word is.
+    #[test]
+    fn a_reason_that_is_only_a_default_placeholder_word_does_not_suppress_observed_failing() {
+        for kind in [
+            requiring_reason(),
+            requiring_reason().with_template("---\nRule: x\nReason: why\n---\n"),
+        ] {
+            for reason in ["TBD", "tbd", "TODO", "'  Todo  '"] {
+                let loaded = load_suppressions(&[reason_record(Some(reason))], &kind);
+                assert_eq!(loaded[0].unmet, vec!["Reason".to_string()], "{reason}");
+                assert_eq!(
+                    loaded[0].unmet_states,
+                    vec![FieldState::Placeholder],
+                    "{reason}"
+                );
+                assert!(!loaded[0].is_effective(), "{reason}");
+            }
+            let loaded = load_suppressions(
+                &[reason_record(Some("TBD until the upstream fix ships"))],
+                &kind,
+            );
+            assert!(loaded[0].is_effective());
+        }
+    }
+
+    fn pending_decl() -> StatusDecl {
+        yaml_serde::from_str("values: [Open]\npending: [pending]\n").unwrap()
+    }
+
+    /// The word "pending" inside real prose is a real reason; only a whole value
+    /// that is the declared pending value or the template's text is a placeholder.
+    #[test]
+    fn a_reason_containing_the_word_pending_in_prose_suppresses_observed_failing() {
+        for kind in [
+            requiring_reason(),
+            SuppressionType {
+                declared: Some(pending_decl()),
+                ..requiring_reason()
+            },
+        ] {
+            for reason in [
+                "pending the upstream fix",
+                "Deferred until the pending refactor lands",
+                "TBD until the upstream fix ships",
+            ] {
+                let loaded = load_suppressions(&[reason_record(Some(reason))], &kind);
+                assert!(loaded[0].is_effective(), "{reason}: {:?}", loaded[0]);
+                assert!(loaded[0].unmet_states.is_empty(), "{reason}");
+            }
         }
     }
 

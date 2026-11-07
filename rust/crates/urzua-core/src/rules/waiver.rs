@@ -88,11 +88,18 @@ pub fn waiver_matches_nothing(
                 // requires, or what `permanent` asks of a waiver without an
                 // expiry.
                 let mut unmet = Vec::new();
-                if !w.unmet.is_empty() {
-                    unmet.push(format!(
-                        "it lacks {}, which its type requires (`effective_requires`)",
-                        w.unmet.join(", ")
-                    ));
+                for (i, field) in w.unmet.iter().enumerate() {
+                    unmet.push(match w.unmet_states.get(i) {
+                        Some(FieldState::Placeholder) => format!(
+                            "its {field} is a placeholder (unedited template text), not a real value, and its type requires one (`effective_requires`)"
+                        ),
+                        Some(FieldState::Pending) => format!(
+                            "its {field} is a declared pending value, not a real one, and its type requires one (`effective_requires`)"
+                        ),
+                        _ => format!(
+                            "it lacks {field}, which its type requires (`effective_requires`)"
+                        ),
+                    });
                 }
                 let mut field = w.unmet.first().map(String::as_str);
                 if let Permanence::Refused(refusal) = &w.permanence {
@@ -165,6 +172,7 @@ mod tests {
             scope: scope.into(),
             expires: expires.map(str::to_string),
             unmet: Vec::new(),
+            unmet_states: Vec::new(),
             permanence: crate::waiver::Permanence::Ungoverned,
         }
     }
