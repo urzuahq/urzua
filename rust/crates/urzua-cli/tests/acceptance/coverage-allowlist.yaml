@@ -1,0 +1,18 @@
+# Rules the acceptance suite has no failing case for (SPEC-4, "Coverage gate").
+# A rule here is exempt from the gate; every other rule in ALL_RULES must have a
+# case that expects its finding and fails with the rule off.
+#
+# The list only shrinks. Add a failing case, then delete the rule's entry here.
+# An entry is also stale, and fails the gate, once its rule has a failing case or
+# has left the rule table. A rule the table gains later can never be listed:
+# the gate checks every entry against the fixed ceiling in `coverage_gate.rs`.
+- rule: claim.status-agreement
+  reason: only runs clean in the suite; a failing case needs a claim file outside the corpus naming a record whose Status disagrees, and the planted claim paths are not built yet. Covered by the claim integration tests.
+- rule: embodiment.back-pointer-decision-accepted
+  reason: only runs clean in the suite; a failing case needs a source file citing a not-yet-implementable record under declared back_pointer_paths. Covered by the back-pointer integration tests.
+- rule: config.schema-version-outdated
+  reason: its case expects the finding but cannot be mutation-proven, because a version-1 config has no rules table to switch the rule off in (the case says so in mutation_exempt). Covered by schema_version_integration.
+- rule: index.freshness
+  reason: a failing case cannot be mutation-proven yet, because switching the rule off leaves its `indexes` option on a disabled rule and the config is rejected (exit 2). Covered by index_freshness_integration.
+- rule: identity.open-pr-collision
+  reason: no acceptance case; it judges only a --base run against open pull requests, which the corpus runner cannot stage offline.

@@ -27,6 +27,8 @@
 //! rule executes but not that it can fire), and a rule no case names.
 
 mod common;
+#[path = "acceptance/coverage_gate.rs"]
+mod coverage_gate;
 
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
@@ -899,13 +901,15 @@ fn main() {
     println!("acceptance: {total} cases, {pass} ok, {gaps} known-gap, {fail} failed");
     // A name filter runs part of the suite, so the coverage of the rest is
     // unknown and is not reported.
+    let mut gate_failed = false;
     if filter.is_none() {
         report_coverage(&proven);
+        gate_failed = !enforce_coverage_gate(&proven);
     }
     // A name filter (`cargo test <name>` passes it to every target) may
     // legitimately match no case; only an unfiltered run with no cases fails.
     let empty_unfiltered = total == 0 && filter.is_none();
-    if fail > 0 || empty_unfiltered {
+    if fail > 0 || empty_unfiltered || gate_failed {
         if empty_unfiltered {
             println!("acceptance: no cases ran");
         }
@@ -913,12 +917,46 @@ fn main() {
     }
 }
 
+/// The coverage gate (SPEC-4): a rule with no failing case fails the run unless
+/// it is on the committed allow-list, which may only shrink. Returns whether
+/// the gate passed.
+fn enforce_coverage_gate(proven: &std::collections::BTreeMap<String, Tier>) -> bool {
+    let detected: std::collections::BTreeSet<&str> = proven
+        .iter()
+        .filter(|(_, t)| **t == Tier::Detects)
+        .map(|(r, _)| r.as_str())
+        .collect();
+    let allow = match coverage_gate::parse(coverage_gate::ALLOW_LIST) {
+        Ok(a) => a,
+        Err(e) => {
+            println!("acceptance coverage gate: {e}");
+            return false;
+        }
+    };
+    let bad = coverage_gate::violations(
+        urzua_core::rules::ALL_RULES,
+        &detected,
+        &allow,
+        coverage_gate::CEILING,
+    );
+    for b in &bad {
+        println!("acceptance coverage gate FAIL: {b}");
+    }
+    if bad.is_empty() {
+        println!(
+            "acceptance coverage gate: ok ({} rules on the allow-list)",
+            allow.len()
+        );
+    }
+    bad.is_empty()
+}
+
 /// States, for every shipped rule, how far the acceptance suite proves it:
 /// a failing case (the case expects the rule's finding and fails with the rule
 /// off), only a run (the rule executed over a population, or a case asserted
 /// what it did, but no case expects it to report), or no case at all.
-/// Printed on every unfiltered run: the gap is reported, not enforced, because
-/// a rule another change adds has no case yet. Unit and integration tests may
+/// Printed on every unfiltered run; `enforce_coverage_gate` fails the run for a
+/// rule with no failing case that is not on the allow-list. Unit and integration tests may
 /// still cover a rule listed here; this report is about the acceptance layer.
 fn report_coverage(proven: &std::collections::BTreeMap<String, Tier>) {
     let all = urzua_core::rules::ALL_RULES;
