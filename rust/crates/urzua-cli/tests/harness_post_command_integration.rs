@@ -91,7 +91,7 @@ fn post(dir: &Path) -> serde_json::Value {
 }
 
 fn post_with(dir: &Path, path: Option<&Path>) -> serde_json::Value {
-    let mut c = Command::new(env!("CARGO_BIN_EXE_urzua"));
+    let mut c = common::urzua();
     c.args(["harness", "run", "post-command"]).current_dir(dir);
     if let Some(p) = path {
         c.env("PATH", p);
@@ -440,7 +440,7 @@ fn when_check_cannot_run_the_report_says_the_effect_on_records_was_not_judged() 
 fn it_never_blocks_whatever_it_finds_or_cannot_judge() {
     // Every `post` above asserts exit 0; this pins the unreadable request.
     let dir = fixture("garbage", CONFIG, GOOD);
-    let mut c = Command::new(env!("CARGO_BIN_EXE_urzua"));
+    let mut c = common::urzua();
     c.args(["harness", "run", "post-command"]).current_dir(&dir);
     let out = run_with_stdin(&mut c, "not json");
     assert_eq!(out.status.code(), Some(0), "{out:?}");
@@ -450,7 +450,7 @@ fn it_never_blocks_whatever_it_finds_or_cannot_judge() {
 // ------------------------------------------------------ the adapter wiring
 
 fn install(dir: &Path) {
-    let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
+    let out = common::urzua()
         .args(["harness", "install"])
         .current_dir(dir)
         .output()

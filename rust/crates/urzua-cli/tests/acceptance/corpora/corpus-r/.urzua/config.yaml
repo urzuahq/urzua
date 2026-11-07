@@ -1,0 +1,16 @@
+schema_version: 2
+rules:
+  header.required-fields: error
+  field.leading-reserved-indicator: error
+  date.field-order:
+    level: error
+    date_order: [{earlier: Date, later: Accepted-on}]
+record_types:
+  adr:
+    dir: docs/adr
+    prefix: ADR
+    header_shape: yaml-frontmatter
+    required_fields: [Status, Author]
+    known_fields: [Status, Author, Date, Accepted-on]
+    pointer_fields: []
+    narrative_fields: []

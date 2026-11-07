@@ -77,7 +77,7 @@ fn repo(name: &str, config: &str, records: &[(&str, &str, &str)]) -> common::Tem
 }
 
 fn check(dir: &Path) -> (i32, serde_json::Value) {
-    let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
+    let out = common::urzua()
         .args(["check", "docs/"])
         .current_dir(dir)
         .output()
@@ -595,7 +595,7 @@ fn assert_load_error(name: &str, config: &str, needle: &str) {
         config,
         &[("docs/milestones/MILE-1-a.md", "Planned", "")],
     );
-    let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
+    let out = common::urzua()
         .args(["check", "docs/"])
         .current_dir(&dir)
         .output()

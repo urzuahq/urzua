@@ -18,7 +18,7 @@ fn git(dir: &Path, args: &[&str]) {
 }
 
 fn run_urzua(dir: &Path, args: &[&str]) -> std::process::Output {
-    Command::new(env!("CARGO_BIN_EXE_urzua"))
+    common::urzua()
         .args(args)
         .current_dir(dir)
         .output()
@@ -160,7 +160,7 @@ fn a_path_scoped_check_blames_only_the_records_in_scope() {
     );
     let blames = |args: &[&str]| -> String {
         let _ = std::fs::remove_file(&log);
-        let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
+        let out = common::urzua()
             .args(args)
             .current_dir(&dir)
             .env("PATH", &path)

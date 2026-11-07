@@ -22,7 +22,7 @@ fn commit_all(dir: &Path) {
 
 fn run_stdin(dir: &Path, args: &[&str], stdin: &str) -> std::process::Output {
     use std::io::Write;
-    let mut child = Command::new(env!("CARGO_BIN_EXE_urzua"))
+    let mut child = common::urzua()
         .args(args)
         .current_dir(dir)
         .stdin(std::process::Stdio::piped())

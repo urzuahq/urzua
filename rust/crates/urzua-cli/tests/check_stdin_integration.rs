@@ -18,7 +18,7 @@ fn git(dir: &Path, args: &[&str]) {
 
 fn run_stdin(dir: &Path, args: &[&str], stdin: &str) -> std::process::Output {
     use std::io::Write;
-    let mut child = Command::new(env!("CARGO_BIN_EXE_urzua"))
+    let mut child = common::urzua()
         .args(args)
         .current_dir(dir)
         .stdin(std::process::Stdio::piped())
@@ -177,7 +177,7 @@ fn a_rule_that_cannot_report_on_a_record_is_not_applicable_and_not_reported() {
     let config = CONFIG.replace("rules: {", "rules: {type.no-declared-spec: warn, ");
     std::fs::write(dir.join(".urzua/config.yaml"), config).unwrap();
     let whole = json(
-        &Command::new(env!("CARGO_BIN_EXE_urzua"))
+        &common::urzua()
             .arg("check")
             .current_dir(&dir)
             .output()

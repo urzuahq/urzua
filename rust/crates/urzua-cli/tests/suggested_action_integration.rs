@@ -18,7 +18,7 @@ fn git(dir: &Path, args: &[&str]) {
 }
 
 fn urzua(dir: &Path, args: &[&str]) -> std::process::Output {
-    Command::new(env!("CARGO_BIN_EXE_urzua"))
+    common::urzua()
         .args(args)
         .current_dir(dir)
         .output()
@@ -750,7 +750,7 @@ fn the_editor_hook_output_is_not_wired_to_findings() {
     // `fix --stdin-path` (ADR-69) reads `repairs`; it never carries findings or
     // a suggested_action.
     let dir = command_repo("hook");
-    let mut child = Command::new(env!("CARGO_BIN_EXE_urzua"))
+    let mut child = common::urzua()
         .args(["fix", "--stdin-path", "docs/milestones/MILE-2-b.md"])
         .current_dir(&dir)
         .stdin(std::process::Stdio::piped())

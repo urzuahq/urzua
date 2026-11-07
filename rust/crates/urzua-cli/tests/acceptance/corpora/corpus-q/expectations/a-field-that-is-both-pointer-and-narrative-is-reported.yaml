@@ -1,0 +1,9 @@
+id: a-field-that-is-both-pointer-and-narrative-is-reported
+corpus: corpus-q
+invocation: [--config, .urzua/pointer-overlap.yaml, check]
+# A field in both pointer_fields and narrative_fields: Blocked-on is listed in both lists, though a field must be exactly one.
+# The finding is on the configuration, and it is a failing case: with the rule
+# off nothing else reports it.
+expect_exit: 1
+expect_findings:
+  - {rule: config.pointer-narrative-overlap, severity: error, file: .urzua/pointer-overlap.yaml}

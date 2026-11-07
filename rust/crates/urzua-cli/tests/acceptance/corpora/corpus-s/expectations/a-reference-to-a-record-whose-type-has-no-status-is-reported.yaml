@@ -1,0 +1,9 @@
+id: a-reference-to-a-record-whose-type-has-no-status-is-reported
+corpus: corpus-s
+invocation: [check]
+# ADR-4 implements NOTE-1, whose type declares no Status, so no rule that reads the target's status can ever judge it.
+expect_exit: 1
+expect_findings:
+  - {rule: relation.target-status-undeclared, severity: error, file: docs/adr/ADR-4-cites-a-note.md, message_contains: "NOTE-1"}
+expect_no_findings:
+  - {rule: relation.target-status-undeclared, file: docs/adr/ADR-3-leans-on-old.md}

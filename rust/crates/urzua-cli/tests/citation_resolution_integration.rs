@@ -39,7 +39,7 @@ fn fixture(name: &str, rules: &str, records: &[(&str, &str)]) -> common::TempDir
 }
 
 fn check(dir: &Path) -> (i32, serde_json::Value) {
-    let output = Command::new(env!("CARGO_BIN_EXE_urzua"))
+    let output = common::urzua()
         .args(["check", "docs/"])
         .current_dir(dir)
         .output()
@@ -172,7 +172,7 @@ fn an_external_id_under_no_declared_prefix_fails_the_config_load() {
         "{ citation.resolution: { level: error, external_ids: [\"FOO-1\"] } }",
         &[("ADR-1-x.md", "---\nStatus: Accepted\n---\n# 1 — X\n")],
     );
-    let output = std::process::Command::new(env!("CARGO_BIN_EXE_urzua"))
+    let output = std::process::common::urzua()
         .args(["check", "docs/"])
         .current_dir(&dir)
         .output()
@@ -327,7 +327,7 @@ fn a_non_reference_field_no_type_lists_fails_the_config_load() {
         "{ citation.resolution: { level: error, non_reference_field: Nope } }",
         &[("ADR-1-x.md", "---\nStatus: Accepted\n---\n# 1 — X\n")],
     );
-    let output = Command::new(env!("CARGO_BIN_EXE_urzua"))
+    let output = common::urzua()
         .args(["check", "docs/"])
         .current_dir(&dir)
         .output()
@@ -410,7 +410,7 @@ fn without_non_reference_field_there_is_no_second_population() {
 #[test]
 fn the_field_entry_population_is_exercised_on_this_repositorys_own_corpus_observed_failing() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-    let output = Command::new(env!("CARGO_BIN_EXE_urzua"))
+    let output = common::urzua()
         .args(["check"])
         .current_dir(&root)
         .output()

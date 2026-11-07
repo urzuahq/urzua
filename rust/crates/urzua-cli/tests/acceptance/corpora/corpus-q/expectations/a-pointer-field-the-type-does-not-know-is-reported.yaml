@@ -1,0 +1,9 @@
+id: a-pointer-field-the-type-does-not-know-is-reported
+corpus: corpus-q
+invocation: [--config, .urzua/pointer-not-known.yaml, check]
+# A pointer field the type does not declare: pointer_fields lists Feeds-into, which is absent from required_fields and known_fields.
+# The finding is on the configuration, and it is a failing case: with the rule
+# off nothing else reports it.
+expect_exit: 1
+expect_findings:
+  - {rule: config.pointer-field-not-known, severity: error, file: .urzua/pointer-not-known.yaml}

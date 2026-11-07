@@ -1,0 +1,8 @@
+id: the-run-examines-this-corpus-and-no-other
+corpus: corpus-m
+invocation: [check, docs/]
+# Shares its id with the case of the same name in corpus-c (see there).
+expect_exit: 1
+expect_json:
+  - {at: /files_examined, equals: 6}
+mutation_exempt: asserts which corpus was examined; no rule's absence changes the count of records read.

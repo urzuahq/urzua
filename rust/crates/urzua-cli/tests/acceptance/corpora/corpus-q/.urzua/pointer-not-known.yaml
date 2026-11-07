@@ -1,0 +1,13 @@
+schema_version: 2
+rules:
+  header.required-fields: error
+  config.pointer-field-not-known: error
+record_types:
+  note:
+    dir: records
+    prefix: NOTE
+    header_shape: yaml-frontmatter
+    required_fields: [Status]
+    known_fields: [Status, Owner]
+    pointer_fields: [Feeds-into]
+    narrative_fields: []

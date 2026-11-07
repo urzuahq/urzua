@@ -63,7 +63,7 @@ fn corpus(name: &str, config: &str, records: &[(&str, &str)]) -> common::TempDir
 }
 
 fn run(dir: &Path) -> (bool, serde_json::Value) {
-    let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
+    let out = common::urzua()
         .arg("check")
         .current_dir(dir)
         .output()
@@ -137,7 +137,7 @@ fn two_types_declaring_the_role_are_refused_at_load() {
         type_block("waiver", "docs/waiver", true)
     ));
     let dir = corpus("two", &cfg, &[]);
-    let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
+    let out = common::urzua()
         .arg("check")
         .current_dir(&dir)
         .output()
@@ -247,7 +247,7 @@ fn effective_requires_on_a_type_without_the_role_is_refused_at_load() {
         "  waiver:\n    dir: docs/waiver\n    effective_requires: [Reason]\n    required_fields: [Rule, Scope, Reason]\n    header_shape: yaml-frontmatter\n",
     );
     let dir = corpus("req-norole", &cfg, &[]);
-    let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
+    let out = common::urzua()
         .arg("check")
         .current_dir(&dir)
         .output()

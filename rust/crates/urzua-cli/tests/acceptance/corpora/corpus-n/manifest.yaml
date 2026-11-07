@@ -1,0 +1,7 @@
+fixtures:
+  - path: .urzua/config.yaml
+    irregularity: the config the corpus is validated under, declaring that a substantive or structural revision row must change Version; not a record.
+  - path: docs/specs/SPEC-1-queue.md
+    irregularity: none at the base commit; the case's change adds a substantive row and leaves Version at 0.1.
+  - path: docs/specs/SPEC-2-stream.md
+    irregularity: none at the base commit; the case's change adds a substantive row and bumps Version, as the rule asks.

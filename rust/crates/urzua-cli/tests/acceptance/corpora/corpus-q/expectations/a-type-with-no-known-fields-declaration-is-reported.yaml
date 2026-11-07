@@ -1,0 +1,9 @@
+id: a-type-with-no-known-fields-declaration-is-reported
+corpus: corpus-q
+invocation: [--config, .urzua/known-fields.yaml, check]
+# A type that never declares known_fields: known_fields is absent, not even an explicit empty list, so the type's field set is unstated.
+# The finding is on the configuration, and it is a failing case: with the rule
+# off nothing else reports it.
+expect_exit: 1
+expect_findings:
+  - {rule: config.known-fields-declaration-missing, severity: error, file: .urzua/known-fields.yaml}

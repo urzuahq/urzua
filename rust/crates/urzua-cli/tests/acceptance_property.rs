@@ -68,7 +68,7 @@ impl Repo {
     }
 
     fn check(&self) -> Value {
-        let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
+        let out = common::urzua()
             .arg("check")
             .current_dir(&self.dir)
             .output()

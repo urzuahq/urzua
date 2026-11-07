@@ -1,0 +1,9 @@
+id: a-claim-the-other-record-does-not-return-is-reported
+corpus: corpus-s
+invocation: [check]
+# ADR-2 declares `Supersedes: ADR-1` in a pair that requires reciprocity, but ADR-1 carries no `Superseded-by: ADR-2`.
+expect_exit: 1
+expect_findings:
+  - {rule: relation.pair-reciprocity, severity: error, file: docs/adr/ADR-2-new.md, message_contains: "ADR-1"}
+expect_no_findings:
+  - {rule: relation.pair-reciprocity, file: docs/adr/ADR-1-old.md}

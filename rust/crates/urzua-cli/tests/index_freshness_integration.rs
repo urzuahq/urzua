@@ -48,7 +48,7 @@ fn commit_all(dir: &Path) {
 }
 
 fn check(dir: &Path) -> (std::process::Output, serde_json::Value) {
-    let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
+    let out = common::urzua()
         .arg("check")
         .current_dir(dir)
         .output()
@@ -153,7 +153,7 @@ fn the_rule_does_not_load_without_indexes_or_with_a_bad_format() {
     ] {
         let dir = repo(name, declaration);
         commit_all(&dir);
-        let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
+        let out = common::urzua()
             .arg("check")
             .current_dir(&dir)
             .output()
@@ -168,7 +168,7 @@ fn the_rule_does_not_load_without_indexes_or_with_a_bad_format() {
 }
 
 fn index_cmd(dir: &Path, apply: bool) -> (i32, serde_json::Value) {
-    let mut cmd = Command::new(env!("CARGO_BIN_EXE_urzua"));
+    let mut cmd = common::urzua();
     cmd.arg("index").current_dir(dir);
     if apply {
         cmd.arg("--apply");

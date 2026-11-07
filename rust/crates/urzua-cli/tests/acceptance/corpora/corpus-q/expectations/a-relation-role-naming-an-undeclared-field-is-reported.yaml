@@ -1,0 +1,9 @@
+id: a-relation-role-naming-an-undeclared-field-is-reported
+corpus: corpus-q
+invocation: [--config, .urzua/relation-field.yaml, check]
+# A relation role renamed to a field the type does not declare: relation_fields.status is State, which is in neither required_fields nor known_fields.
+# The finding is on the configuration, and it is a failing case: with the rule
+# off nothing else reports it.
+expect_exit: 1
+expect_findings:
+  - {rule: config.relation-field-not-known, severity: error, file: .urzua/relation-field.yaml}

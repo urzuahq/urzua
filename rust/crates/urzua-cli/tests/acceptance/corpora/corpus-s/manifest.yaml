@@ -1,0 +1,15 @@
+fixtures:
+  - path: .urzua/config.yaml
+    irregularity: the config the corpus is validated under; the adr type declares no spec, and a supersession pair requires reciprocity; not a record.
+  - path: docs/adr/ADR-1-old.md
+    irregularity: Status Superseded, and it carries no Superseded-by naming ADR-2, which claims to supersede it.
+  - path: docs/adr/ADR-2-new.md
+    irregularity: declares Supersedes ADR-1, a claim ADR-1 does not return.
+  - path: docs/adr/ADR-3-leans-on-old.md
+    irregularity: implements ADR-1, which is Superseded.
+  - path: docs/adr/ADR-4-cites-a-note.md
+    irregularity: implements NOTE-1, whose record type declares no Status.
+  - path: docs/adr/ADR-5-prose-pointer.md
+    irregularity: its Implements field holds a reference followed by prose.
+  - path: docs/notes/NOTE-1-a-note.md
+    irregularity: none -- a regular record of a type that declares no Status field.

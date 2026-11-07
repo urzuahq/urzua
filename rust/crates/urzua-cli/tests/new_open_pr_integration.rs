@@ -28,7 +28,7 @@ fn git(dir: &Path, args: &[&str]) -> String {
 }
 
 fn urzua_in(dir: &Path, args: &[&str]) -> std::process::Output {
-    Command::new(env!("CARGO_BIN_EXE_urzua"))
+    common::urzua()
         .args(args)
         .current_dir(dir)
         .env("GIT_ALLOW_PROTOCOL", "file:ext")
@@ -360,7 +360,7 @@ fn the_report_states_that_separate_clones_are_not_seen() {
 fn two_runs_started_together_take_two_different_numbers() {
     let w = world("concurrent", ON, "");
     let spawn = || {
-        Command::new(env!("CARGO_BIN_EXE_urzua"))
+        common::urzua()
             .args(["new", "bug", "Same time", "--by", "tester"])
             .current_dir(&w.work)
             .stdout(std::process::Stdio::piped())

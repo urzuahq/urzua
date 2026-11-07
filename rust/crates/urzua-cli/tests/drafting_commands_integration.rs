@@ -96,6 +96,7 @@ fn run_step(dir: &Path, script: &str, title: &str, record: &str) -> Output {
         .env("TITLE", title)
         .env("RECORD", record)
         .env("URZUA", env!("CARGO_BIN_EXE_urzua"))
+        .env("PATH", common::path_with_stub_gh())
         .current_dir(dir)
         .output()
         .expect("bash should run")
@@ -265,7 +266,7 @@ fn a_field_urzua_new_did_not_write_is_refused() {
 }
 
 fn sweep_examined(dir: &Path) -> u64 {
-    let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
+    let out = common::urzua()
         .args(["check"])
         .current_dir(dir)
         .output()
@@ -409,7 +410,7 @@ fn a_milestone_draft_carries_the_required_section_and_check_refuses_one_without_
 #[test]
 fn this_repository_runs_on_the_installed_bundle_with_no_drift_and_no_hook_scripts() {
     let root = repo_root();
-    let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
+    let out = common::urzua()
         .args(["harness", "status"])
         .current_dir(&root)
         .output()
@@ -441,7 +442,7 @@ fn an_agent_edit_to_the_files_that_enforce_the_gate_is_denied_in_this_repository
             "event": "edit", "tool": "Write", "paths": [path], "content": "x\n",
             "actor": actor, "cwd": root.to_string_lossy(),
         });
-        let mut child = Command::new(env!("CARGO_BIN_EXE_urzua"))
+        let mut child = common::urzua()
             .args(["harness", "run", "edit"])
             .env_remove("URZUA_HOOK_OVERRIDE")
             .env_remove("URZUA_HOOK_REASON")

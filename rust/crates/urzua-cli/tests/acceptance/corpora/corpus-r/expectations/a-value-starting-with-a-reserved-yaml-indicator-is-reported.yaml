@@ -1,0 +1,10 @@
+id: a-value-starting-with-a-reserved-yaml-indicator-is-reported
+corpus: corpus-r
+invocation: [check]
+# ADR-1's Author is '@ana'. A leading @ is a YAML reserved indicator, so the value
+# is only readable because it is quoted; the rule names the character and the field.
+expect_exit: 1
+expect_findings:
+  - {rule: field.leading-reserved-indicator, severity: error, file: docs/adr/ADR-1-decorated-author.md, message_contains: "@"}
+expect_no_findings:
+  - {rule: field.leading-reserved-indicator, file: docs/adr/ADR-3-in-order.md}

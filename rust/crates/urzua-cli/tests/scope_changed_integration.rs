@@ -80,7 +80,7 @@ fn fixture(name: &str, config: &str) -> common::TempDir {
 }
 
 fn urzua(dir: &Path, args: &[&str]) -> (i32, serde_json::Value) {
-    let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
+    let out = common::urzua()
         .args(args)
         .current_dir(dir)
         .output()
@@ -123,7 +123,7 @@ fn scope_notices(v: &serde_json::Value) -> Vec<&serde_json::Value> {
 
 fn stdin(dir: &Path, args: &[&str], text: &str) -> (i32, serde_json::Value) {
     use std::io::Write;
-    let mut child = Command::new(env!("CARGO_BIN_EXE_urzua"))
+    let mut child = common::urzua()
         .args(args)
         .current_dir(dir)
         .stdin(std::process::Stdio::piped())

@@ -85,7 +85,7 @@ fn run(cmd: &mut Command, root: &Path, stdin: &str) -> Output {
 /// command the installed settings carry, run the way the agent runs it.
 fn adapter(root: &Path, name: &str, env: &[(&str, &str)]) -> serde_json::Value {
     if !root.join(".claude/settings.json").exists() {
-        let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
+        let out = common::urzua()
             .args(["harness", "install"])
             .current_dir(root)
             .output()
@@ -137,7 +137,7 @@ fn core(root: &Path, args: &[&str], env: &[(&str, &str)], stdin: &str) -> (i32, 
     if !ovr.is_empty() {
         request["override"] = ovr.into();
     }
-    let mut c = Command::new(env!("CARGO_BIN_EXE_urzua"));
+    let mut c = common::urzua();
     c.args(["harness", "run", "edit"])
         .env_remove("URZUA_HOOK_OVERRIDE")
         .env_remove("URZUA_HOOK_REASON");
@@ -473,7 +473,7 @@ fn a_rule_anchored_outside_the_record_is_listed_as_not_judged() {
 const LOGGED: &str = "schema_version: 2\noverride_log: .urzua/override-log.md\nrules: {header.required-fields: error, override.unreviewed: warn}\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\", \"Date\"]\n";
 
 fn urzua_check(dir: &Path) -> serde_json::Value {
-    let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
+    let out = common::urzua()
         .arg("check")
         .current_dir(dir)
         .output()

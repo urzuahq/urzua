@@ -48,7 +48,7 @@ fn fixture(name: &str, config: &str) -> common::TempDir {
 }
 
 fn urzua(dir: &Path, args: &[&str]) -> Command {
-    let mut c = Command::new(env!("CARGO_BIN_EXE_urzua"));
+    let mut c = common::urzua();
     c.args(args).current_dir(dir);
     c
 }

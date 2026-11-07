@@ -20,8 +20,13 @@
 //! `expect_rules_ran`), and the runner re-runs it with each of those rules
 //! switched off in the case's own config; the case must then FAIL. A case that
 //! proves no rule says why in `mutation_exempt`. The rules proven this way are
-//! reported against `ALL_RULES`, and the ones no case proves are listed, so a
-//! gap in coverage is visible on every run instead of silent.
+//! reported against `ALL_RULES` in three tiers, so a gap in coverage is visible
+//! on every run instead of silent: a rule with a failing case (a case that
+//! expects the rule's finding and fails with the rule off), a rule that only
+//! ran (asserted through `expect_rules_ran` or `proves`, so the case shows the
+//! rule executes but not that it can fire), and a rule no case names.
+
+mod common;
 
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
@@ -163,8 +168,19 @@ struct Fixture {
     irregularity: String,
 }
 
-/// A case's outcome and the rules whose mutation proof held.
-type CaseResult = (Outcome, Vec<String>);
+/// What a case's passing mutation proof shows about a rule.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+enum Tier {
+    /// The case asserts the rule's finding, and fails with the rule off.
+    Detects,
+    /// The case asserts the rule ran (or what it did) and fails with the rule
+    /// off, but expects no finding from it.
+    RanOnly,
+}
+
+/// A case's outcome and the rules whose mutation proof held, with what each
+/// proof shows.
+type CaseResult = (Outcome, Vec<(String, Tier)>);
 
 enum Outcome {
     Pass,
@@ -319,6 +335,43 @@ fn config_with_rule_off(text: &str, rule: &str) -> Result<String, String> {
     yaml_serde::to_string(&doc).map_err(|e| e.to_string())
 }
 
+/// The name a case's scratch repository and mutated config share: process,
+/// corpus and case, then the rule switched off. Two corpora may each declare a
+/// case with one id (a private corpus merged in through
+/// `URZUA_ACCEPTANCE_EXTRA` can), and cases run on several threads, so a name
+/// keyed on the id alone would be one directory that the second case deletes
+/// from under the first. The corpus directory name is part of the key, as it is
+/// in the duplicate-id check.
+fn scratch_stem(corpus_dir: &Path, case: &Case, mutate: Option<&str>) -> String {
+    format!(
+        "urzua-acceptance-{}-{}-{}{}",
+        std::process::id(),
+        corpus_dir
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_default(),
+        case.id,
+        mutate.map(|r| format!("-off-{r}")).unwrap_or_default()
+    )
+}
+
+/// Queue entries that would share a scratch directory, as messages. Empty while
+/// `scratch_stem` keeps corpus and case in the name.
+fn scratch_collisions(queue: &[(String, PathBuf, Case)]) -> Vec<String> {
+    let mut seen: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    let mut out = Vec::new();
+    for (name, dir, case) in queue {
+        let stem = scratch_stem(dir, case, None);
+        if let Some(first) = seen.insert(stem.clone(), format!("[{name}] {}", case.id)) {
+            out.push(format!(
+                "[{name}] {} and {first} would share the scratch directory {stem}",
+                case.id
+            ));
+        }
+    }
+    out
+}
+
 /// Removes a case's temporary repository on every exit path, including the
 /// early returns when copying, git setup or a setup step fails.
 struct TempDir(PathBuf);
@@ -354,12 +407,7 @@ fn evaluate(case: &Case, corpus_dir: &Path, mutate: Option<&str>) -> Result<Vec<
     let (cwd, temp) = if case.corpus == "@repo" {
         (repo_root(), None)
     } else {
-        let t = std::env::temp_dir().join(format!(
-            "urzua-acceptance-{}-{}{}",
-            std::process::id(),
-            case.id,
-            mutate.map(|r| format!("-off-{r}")).unwrap_or_default()
-        ));
+        let t = std::env::temp_dir().join(scratch_stem(corpus_dir, case, mutate));
         let _ = std::fs::remove_dir_all(&t);
         let guard = TempDir(t.clone());
         std::fs::create_dir_all(&t).map_err(|e| e.to_string())?;
@@ -411,7 +459,7 @@ fn evaluate(case: &Case, corpus_dir: &Path, mutate: Option<&str>) -> Result<Vec<
         }
     };
     let run = |args: &[String]| {
-        Command::new(env!("CARGO_BIN_EXE_urzua"))
+        common::urzua()
             .args(args)
             .current_dir(&cwd)
             .output()
@@ -433,11 +481,8 @@ fn evaluate(case: &Case, corpus_dir: &Path, mutate: Option<&str>) -> Result<Vec<
         };
         let text = std::fs::read_to_string(&source)
             .map_err(|e| format!("mutation: cannot read {}: {e}", source.display()))?;
-        let path = std::env::temp_dir().join(format!(
-            "urzua-acceptance-{}-{}-off-{rule}.yaml",
-            std::process::id(),
-            case.id
-        ));
+        let path =
+            std::env::temp_dir().join(format!("{}.yaml", scratch_stem(corpus_dir, case, mutate)));
         std::fs::write(&path, config_with_rule_off(&text, rule)?).map_err(|e| e.to_string())?;
         let value = path.to_string_lossy().to_string();
         match at {
@@ -659,7 +704,18 @@ fn run_case(case: &Case, corpus_dir: &Path) -> CaseResult {
                 .to_string(),
         );
     }
-    let mut proven = Vec::new();
+    let tier_of = |rule: &String| {
+        if case
+            .expect_findings
+            .iter()
+            .any(|m| m.rule.as_ref() == Some(rule))
+        {
+            Tier::Detects
+        } else {
+            Tier::RanOnly
+        }
+    };
+    let mut proven: Vec<(String, Tier)> = Vec::new();
     // `expect_rules_ran` asserts the same way for every rule it lists, so one
     // sampled rule is switched off to show the assertion can fail; the rest
     // are counted once that held. Findings and `proves` are mutated one by one.
@@ -676,14 +732,14 @@ fn run_case(case: &Case, corpus_dir: &Path) -> CaseResult {
                 .iter()
                 .any(|m| m.rule.as_ref() == Some(rule));
         if only_ran && sampled.as_ref() != Some(rule) {
-            proven.push(rule.clone());
+            proven.push((rule.clone(), Tier::RanOnly));
             continue;
         }
         match evaluate(case, corpus_dir, Some(rule)) {
             Ok(m) if m.is_empty() => problems.push(format!(
                 "passes with {rule} switched off, so it does not prove {rule}"
             )),
-            Ok(_) => proven.push(rule.clone()),
+            Ok(_) => proven.push((rule.clone(), tier_of(rule))),
             Err(e) => problems.push(format!("mutation of {rule}: {e}")),
         }
     }
@@ -785,6 +841,11 @@ fn main() {
         }
     }
 
+    for c in scratch_collisions(&queue) {
+        println!("FAIL  {c}");
+        fail += 1;
+    }
+
     // Cases are independent (each owns a throwaway repo), so run them on a few
     // threads; results are printed in discovery order, so output is stable.
     let next = std::sync::atomic::AtomicUsize::new(0);
@@ -808,11 +869,15 @@ fn main() {
     });
     let results = results.into_inner().unwrap();
 
-    let mut proven: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    let mut proven: std::collections::BTreeMap<String, Tier> = std::collections::BTreeMap::new();
     for ((name, _, case), result) in queue.iter().zip(results) {
         total += 1;
         let (outcome, rules) = result.expect("every queued case ran");
-        proven.extend(rules);
+        for (rule, tier) in rules {
+            // A rule with a failing case anywhere stays `Detects`.
+            let best = proven.entry(rule).or_insert(tier);
+            *best = (*best).min(tier);
+        }
         match outcome {
             Outcome::Pass => {
                 pass += 1;
@@ -848,23 +913,35 @@ fn main() {
     }
 }
 
-/// States which shipped rules have an acceptance case whose mutation proof
-/// held and which have none. Printed on every unfiltered run: the gap is
-/// reported, not enforced, because a rule another change adds has no case yet.
-fn report_coverage(proven: &std::collections::BTreeSet<String>) {
+/// States, for every shipped rule, how far the acceptance suite proves it:
+/// a failing case (the case expects the rule's finding and fails with the rule
+/// off), only a run (the rule executed over a population, or a case asserted
+/// what it did, but no case expects it to report), or no case at all.
+/// Printed on every unfiltered run: the gap is reported, not enforced, because
+/// a rule another change adds has no case yet. Unit and integration tests may
+/// still cover a rule listed here; this report is about the acceptance layer.
+fn report_coverage(proven: &std::collections::BTreeMap<String, Tier>) {
     let all = urzua_core::rules::ALL_RULES;
-    let uncovered: Vec<&str> = all
-        .iter()
-        .copied()
-        .filter(|r| !proven.contains(*r))
-        .collect();
+    let with = |want: Option<Tier>| -> Vec<&str> {
+        all.iter()
+            .copied()
+            .filter(|r| proven.get(*r).copied() == want)
+            .collect()
+    };
+    let detected = with(Some(Tier::Detects));
+    let ran_only = with(Some(Tier::RanOnly));
+    let uncovered = with(None);
     println!(
-        "acceptance coverage: {} of {} rules have a case that fails with the rule off",
-        all.len() - uncovered.len(),
+        "acceptance coverage: {} of {} rules have a failing case (a case that expects the rule's finding and fails with the rule off)",
+        detected.len(),
         all.len()
     );
-    if uncovered.is_empty() {
-        return;
+    println!(
+        "acceptance coverage: {} rules ran clean only (a case shows the rule runs, none expects it to report):",
+        ran_only.len()
+    );
+    for r in ran_only {
+        println!("  ran-only   {r}");
     }
     println!(
         "acceptance coverage: {} rules have NO acceptance case:",
