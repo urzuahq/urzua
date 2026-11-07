@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6NNNZJ92WC419AF3NQP471H
-Status: Accepted
+Status: Shipped
 Embodiment: Verified
 Realized-by: code:.urzua/config.yaml, code:rust/crates/urzua-core/src/rules/roadmap.rs, test:rust/crates/urzua-cli/tests/condition_type_integration.rs, test:rust/crates/urzua-cli/tests/work_types_integration.rs
 Date: 2026-11-05
-Version: '0.5'
+Version: '0.6'
 Author: beauwilliams
 Subject: 'The `condition` record type -- a dependency on a fact that is observed rather than built, declared in configuration alone.'
 Parent: —
@@ -126,3 +126,4 @@ whether the Signal is precise is a reviewer's judgement, as for any section (`SP
 > | 2026-11-07 | Bumped to `0.4`. Status changed from Draft to Accepted. **Why:** Maintainer decision, 2026-11-07: the maintainer approved moving this spec to `Shipped`, and the lifecycle moves one step at a time (`Draft` to `Accepted` to `Shipped`). | **substantive** |
 > | 2026-11-07 | Bumped to `0.5`. Realized-by names the implementing code and tests, ready for `Shipped` (`MILE-7`). **Why:** Maintainer decision, 2026-11-07: moving this spec to `Shipped` requires `Embodiment` and `Realized-by`. | **structural** |
 > | 2026-11-07 | Tool-authored (by beauwilliams, identity: gh-verified, actor: agent): recomputed `Embodiment` from `Realized-by: code:.urzua/config.yaml, code:rust/crates/urzua-core/src/rules/roadmap.rs, test:rust/crates/urzua-cli/tests/condition_type_integration.rs, test:rust/crates/urzua-cli/tests/work_types_integration.rs` -- stated `Not started` disagreed with the computed value `Verified`. | **structural** |
+> | 2026-11-07 | Bumped to `0.6`. Status changed from Accepted to Shipped. **Why:** Maintainer decision, 2026-11-07: its `Realized-by` evidence computes `Verified`, and each section was checked against the built code and tests. | **substantive** |

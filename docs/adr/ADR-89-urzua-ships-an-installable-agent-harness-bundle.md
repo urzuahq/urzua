@@ -417,6 +417,25 @@ Open question 1 is answered for this repository: its `authority` table gates `Ac
 `Retired` status). An in-place edit of an Accepted ADR's Decision text stays handled by the amendment
 convention and is not gated. The Status of this ADR stays Accepted.
 
+## Amendment (2026-11-07): a guardrail name the build does not ship is a load error
+
+Accepted by the maintainer on 2026-11-07.
+
+Section 3 keeps an unknown key or guardrail name as a problem that `harness install`, `doctor` and the
+session-start hook report, and lets the configuration load. For a guardrail name that is wrong: the gate
+guardrails (`acceptance`, `protected-paths`) are the security-relevant ones, and a misspelled name
+(`acceptence`) leaves the one meant switched off while `urzua check`, the CI gate, runs as if it were
+configured, and `NEEDS_AUTHORITY` validation is skipped because the real guardrail is not enabled. The
+decision is now: **an unknown name under `harness.guardrails` is a configuration load error for every
+command**, so `check` exits 2. The message names the unknown name and, when one is close, the nearest valid
+name (`acceptence`: did you mean `acceptance`?), and lists the names the build ships. An unknown key
+elsewhere in `harness`, or an unknown key inside a known guardrail, is still kept and reported, not a load
+error. `urzua doctor` reports the bad name as a failed `config-parses`, and its `config-parses` line no longer
+says "no unrecognized keys" while the harness table holds unrecognized entries; it counts them and points to
+`harness-config`. A broken file still fails the way section 2 says for a configuration that does not load
+(the editor hook reads `harness.guardrails.editor-hook` from the raw file). The Status of this ADR stays
+Accepted.
+
 ## Amendment (2026-11-07, proposed, pending maintainer acceptance): the settings command, the repository an edit is judged in, and what the harness keeps
 
 Proposed in the third review of the harness (2026-11-07); it is not accepted until the maintainer accepts it.
@@ -474,4 +493,5 @@ The Decision is unchanged; this corrects statements above and records what the r
 > | 2026-11-06 | Added an `## Amendment (2026-11-06)`, accepted by the maintainer on 2026-11-06: `require_evidence` is a config option the repository sets, the gate action always passes `--actors`, and this repository leaves it off (an action cannot set a rule option); open question 1 answered (this repository gates `Accepted`, `Rejected`, `Superseded` and `Retired` for ADRs and `Accepted`, `Rejected` and `Superseded` for RFCs). `Status` stays Accepted. **Why:** Maintainer decisions, 2026-11-06, on the review of pull request 374. | **substantive** |
 > | 2026-11-06 | Accepted-risk list brought in line with the harness after a second-pass review; the decision is unchanged. A Bash write to a protected path, and any change the same command commits, is now reported by the post-command check (route 2 shrinks from silent to reported; routes 1 and 2 are still not prevented); the settings file outside the install stays unreported. An adapter failure no longer defeats `on_unjudged: deny` for `acceptance` and `protected-paths`. **Why:** the review found the report claimed more than the check did, and the adapter failing open where the configuration said deny. | **structural** |
 > | 2026-11-06 | Accepted-risk list revised after the maintainer decided on 2026-11-06 to close the remaining guardrail gaps in Phase 0; the decision is unchanged. NotebookEdit and file-writing MCP tools now reach the editor hook, a Bash write to a gitignored protected file is reported by content hash, gate matching uses Unicode case folding, and a hard link is judged as the file it shares an inode with (Unix). Route 2 (the shell edit of a guardrail) joins route 1 and now includes the agent's local settings file under `.claude`; `--no-verify`, a pull request that changes its own workflow and an agent acting under the maintainer's token stay; a fifth item states what remains of the hook's reading (hard links off Unix, no Unicode normalisation, an MCP call with no path, no baseline before session start, user-level settings). A repeat of an already-reported change is silent and is documented, not changed. **Why:** the second-pass review left these gaps; the list now says exactly what remains. | **structural** |
+> | 2026-11-07 | Added an `## Amendment (2026-11-07)`, accepted by the maintainer on 2026-11-07: a `harness.guardrails` name the build does not ship is a config load error for every command (`check` exits 2) with the nearest valid name suggested, and `doctor`'s `config-parses` line no longer says "no unrecognized keys" beside unrecognized harness entries. `Status` stays Accepted. **Why:** Maintainer decision, 2026-11-07, on the core-model review. | **substantive** |
 > | 2026-11-07 | Added a proposed `## Amendment (2026-11-07)`, pending maintainer acceptance, after the third review of the harness: the settings command resolves the project root from `CLAUDE_PROJECT_DIR` or the outermost configuration above the current directory and refuses an edit under `on_unjudged: deny` when it cannot run the translator; an edit is judged by the outermost governed repository with symlinks followed, a dangling link included; the harness protects its own cache, lock, override log and git hooks from the edit tools; session-start compares the installed files, hook entries and `disableAllHooks` with the lock; MCP calls are read for every path-like string. The Accepted-risk list gains items 6 to 8 (a Bash write to the harness's own files, an unreadable configuration in the shell fallback, a nested repository with its own configuration), and items 1 and 5 are widened (`--assume-unchanged` is now reported; local settings and a swap between check and write are named). `Status` stays Accepted. **Why:** the third review found the wrapper failing open outside the project root, a dangling link and a nested repository escaping the gates, and several silent routes. | **substantive** |

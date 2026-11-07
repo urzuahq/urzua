@@ -312,7 +312,16 @@ pub fn run(config: Option<PathBuf>) -> ExitCode {
                 layer: None,
                 state: None,
                 status: DoctorStatus::Ok,
-                message: "config parses (no unrecognized keys)".to_string(),
+                // The harness table keeps its unrecognized keys as problems
+                // rather than refusing to load (`ADR-89`); `harness-config`
+                // below names them, so this line must not deny them.
+                message: match c.harness.as_ref().map_or(0, |h| h.problems.len()) {
+                    0 => "config parses (no unrecognized keys)".to_string(),
+                    n => format!(
+                        "config parses ({n} unrecognized harness {}, named under harness-config)",
+                        if n == 1 { "entry" } else { "entries" }
+                    ),
+                },
             });
             c
         }
