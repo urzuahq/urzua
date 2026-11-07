@@ -5,7 +5,7 @@ Phase: '0'
 Track: schema-governance
 Implements: SPEC-1
 Blocked-on: —
-Realized-by: code:rust/crates/urzua-cli/src/commands/fix.rs, code:rust/crates/urzua-cli/src/discovery.rs, code:rust/crates/urzua-core/src/fix.rs, test:rust/crates/urzua-cli/tests/fix_paths_integration.rs, test:rust/crates/urzua-cli/tests/fix_stdin_integration.rs, test:rust/crates/urzua-cli/tests/fix_drift_git_integration.rs
+Realized-by: test:rust/crates/urzua-cli/tests/fix_paths_integration.rs#a_path_limits_the_examination_and_the_repairs_to_that_record@sha256:1d68f8b2b3b4fd9d4e016bc501bb737f8cbd5020539c18d5715810a487b11d64, test:rust/crates/urzua-cli/tests/fix_paths_integration.rs#apply_with_a_path_writes_only_that_record@sha256:6a6bd813c8ecc1469d291ffacee27334fc97fa448aaa85659241f31d48121a4b, test:rust/crates/urzua-cli/tests/fix_stdin_integration.rs#stdin_content_is_judged_and_nothing_is_written@sha256:b58fff42500a5af8b609994213ea808b694859a99325333fee4fcf0f2d4a0d8e, test:rust/crates/urzua-cli/tests/fix_revision_log_required_integration.rs#not_required_apply_writes_the_field_without_a_log_row@sha256:a4bfebcb43ef2b6530b1fdb08d5c368d66371daa9ef78219c10b5cdef75fd16c, code:.urzua/config.yaml, code:rust/crates/urzua-cli/src/commands/fix.rs
 ---
 # 159 — Urzua fix scoped to given paths, prospective content, and apply without a revision log
 
@@ -19,7 +19,11 @@ Make `urzua fix` accept a path argument or prospective content, make `--apply` w
 
 ## Done means
 
-`urzua fix <path>` examines and repairs only that path; prospective content on stdin is judged without writing; `--apply` does not need a revision log section; a single-file run completes in well under a second on a large corpus; and the capability is exercised by urzua's own `.urzua/config.yaml` and records in this repository, not only by unit tests.
+- `urzua fix <path>` examines and repairs only that path. — evidence: test:rust/crates/urzua-cli/tests/fix_paths_integration.rs#a_path_limits_the_examination_and_the_repairs_to_that_record@sha256:1d68f8b2b3b4fd9d4e016bc501bb737f8cbd5020539c18d5715810a487b11d64, test:rust/crates/urzua-cli/tests/fix_paths_integration.rs#apply_with_a_path_writes_only_that_record@sha256:6a6bd813c8ecc1469d291ffacee27334fc97fa448aaa85659241f31d48121a4b
+- Prospective content on stdin is judged without writing. — evidence: test:rust/crates/urzua-cli/tests/fix_stdin_integration.rs#stdin_content_is_judged_and_nothing_is_written@sha256:b58fff42500a5af8b609994213ea808b694859a99325333fee4fcf0f2d4a0d8e
+- `--apply` does not need a revision log section. — evidence: test:rust/crates/urzua-cli/tests/fix_revision_log_required_integration.rs#not_required_apply_writes_the_field_without_a_log_row@sha256:a4bfebcb43ef2b6530b1fdb08d5c368d66371daa9ef78219c10b5cdef75fd16c
+- A single-file run completes in well under a second on a large corpus. — waived: process-outcome -- the revision log records the measurement (one record 0.15s, one stdin path 0.13s, whole corpus 0.78s on this corpus); no test asserts a time bound
+- The capability is exercised by urzua's own `.urzua/config.yaml` and records in this repository, not only by unit tests. — evidence: code:.urzua/config.yaml, code:rust/crates/urzua-cli/src/commands/fix.rs
 
 > **Revision log**
 >
@@ -32,3 +36,4 @@ Make `urzua fix` accept a path argument or prospective content, make `--apply` w
 > | 2026-11-04 | Progress, part 2b of 2: `urzua fix --stdin-path <path>` judges proposed content from stdin without writing, for a path that need not exist yet, with drift for that record alone (whole-corpus 0.89s, one stdin path 0.13s on this corpus); repairs carry a `line`. An example editor hook is `.git-hooks/examples/editor-fix-hook.sh`. The revision-log `required` declaration remains. **Why:** the maintainer-approved design for an editor hook. | **substantive** |
 > | 2026-11-04 | Progress, part 2c of 2 (part 2 complete): a type's `revision_log` takes `required: true|false` (default `true`); `urzua fix --apply` writes the field without a log row where it is `false`, and where it is `true` a record with no section fails naming the record and the identity looked for. Declared (`true`) on `adr` in this repository's `.urzua/config.yaml`. **Why:** an adopter's records have no revision log section. | **substantive** |
 > | 2026-11-04 | `Realized-by` added and `Status` Planned -> Done. **Why:** the work is merged in #214 (drift gated on the rule, git failures and shallow clones surfaced), #226 (`fix [PATHS...]` scopes examination, drift and repair), #229 (`fix --stdin-path` judges proposed content without writing) and #232; the maintainer relayed on 2026-11-04 that the milestone is fully delivered. | **structural** |
+> | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |

@@ -5,7 +5,7 @@ Phase: '0'
 Track: schema-governance
 Implements: SPEC-1
 Blocked-on: —
-Realized-by: code:rust/crates/urzua-core/src/rules/citation.rs, test:rust/crates/urzua-cli/tests/citation_resolution_integration.rs
+Realized-by: test:rust/crates/urzua-cli/tests/citation_resolution_integration.rs#a_declared_external_id_is_skipped_and_counted_eligible_not_out_of_scope_end_to_end@sha256:875b30329e618920af9b34b27bc53a46f8d7a160816c8529bc914242d1aeb7ff, spec:docs/specs/SPEC-3-configuration.md, code:.urzua/config.yaml, test:rust/crates/urzua-cli/tests/acceptance/corpora/corpus-zero/expectations/own-config-citation-rules-run.yaml
 ---
 # 156 — Citation.resolution marks prefixed ids as external
 
@@ -19,7 +19,10 @@ An external identifier such as `RFC-4122` collides with a record prefix `RFC` an
 
 ## Done means
 
-A declared external-id pattern makes a matching citation skip resolution; a non-matching dangling id is still reported; documented with a fixture of a colliding standard number; and the capability is exercised by urzua's own `.urzua/config.yaml` and records in this repository, not only by unit tests.
+- A declared external-id pattern makes a matching citation skip resolution. — evidence: test:rust/crates/urzua-cli/tests/citation_resolution_integration.rs#a_declared_external_id_is_skipped_and_counted_eligible_not_out_of_scope_end_to_end@sha256:875b30329e618920af9b34b27bc53a46f8d7a160816c8529bc914242d1aeb7ff
+- A non-matching dangling id is still reported. — evidence: test:rust/crates/urzua-cli/tests/citation_resolution_integration.rs#a_declared_external_id_is_skipped_and_counted_eligible_not_out_of_scope_end_to_end@sha256:875b30329e618920af9b34b27bc53a46f8d7a160816c8529bc914242d1aeb7ff
+- The behaviour is documented with a fixture of a colliding standard number. — evidence: test:rust/crates/urzua-cli/tests/citation_resolution_integration.rs#a_declared_external_id_is_skipped_and_counted_eligible_not_out_of_scope_end_to_end@sha256:875b30329e618920af9b34b27bc53a46f8d7a160816c8529bc914242d1aeb7ff, spec:docs/specs/SPEC-3-configuration.md
+- The capability is exercised by urzua's own `.urzua/config.yaml` and records in this repository, not only by unit tests. — evidence: code:.urzua/config.yaml, test:rust/crates/urzua-cli/tests/acceptance/corpora/corpus-zero/expectations/own-config-citation-rules-run.yaml
 
 > **Revision log**
 >
@@ -30,3 +33,4 @@ A declared external-id pattern makes a matching citation skip resolution; a non-
 > | 2026-11-04 | Own-repo rollout: `citation.resolution` is enabled in this repository's `.urzua/config.yaml` at `warn`, with `external_ids: ["RFC-822", "RFC-4122"]` -- the only two real external ids among the 44 citations of 11 ids first reported. The rest were reworded where the text is a living record, and covered by narrow waivers where the id is a record that existed under an old numbering, or an illustration inside a frozen decision. `Status` is untouched. **Why:** the Done-when requires own-repo exercise, which the previous row left as a separate decision; the maintainer has now made it. | **substantive** |
 > | 2026-11-04 | Follow-up: `citation.resolution` takes the optional `skip_revision_log` option, reading the type's declared `revision_log` identity as `citation.path-exists` does; enabled in this repository's config, which let the `MILE-151` row cite `WAIVER-0001` as it originally did (reworded in #221 against the append-only rule of `RFC-6`). `SPEC-3` 0.44 and `SPEC-2` 0.56. **Why:** a revision log is history and must not be edited to satisfy a citation check. | **substantive** |
 > | 2026-11-04 | `Realized-by` added and `Status` Planned -> Done. **Why:** the work is merged in #223, #190: `citation.resolution` takes `external_ids`. Checked against this record's Done means and the code; the record never carried its own delivery evidence, and `status.delivery-agreement` (`MILE-183`) reads evidence under a not-done `Status` as a disagreement. | **structural** |
+> | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |
