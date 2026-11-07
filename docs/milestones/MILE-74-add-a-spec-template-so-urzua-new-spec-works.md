@@ -1,11 +1,11 @@
 ---
-Status: InProgress
+Status: Done
 Stable-Id: 01M1YSM7BNRXXTYMV4TF93EAG4
 Phase: '0'
 Track: roadmap-tracking
 Implements: SPEC-1
 Blocked-on: —
-Realized-by: code:.urzua/templates/spec.md, test:rust/crates/urzua-cli/tests/own_config_integration.rs#new_opens_a_spec_title_with_its_declared_prefix_and_other_types_with_the_bare_number@sha256:0680736422297fcaf5d3546bba11345d9e102a325d1c28b438954a204af48876, test:rust/crates/urzua-cli/tests/new_integration.rs#new_emits_yaml_frontmatter_when_configured_even_with_a_blockquote_template_present@sha256:abbf083803b8a4fe62e6e7b933ffdec9e9964180b452f0a00334eaca302cfbd0, code:.urzua/config.yaml
+Realized-by: code:.urzua/templates/spec.md, test:rust/crates/urzua-cli/tests/own_config_integration.rs#new_opens_a_spec_title_with_its_declared_prefix_and_other_types_with_the_bare_number@sha256:0680736422297fcaf5d3546bba11345d9e102a325d1c28b438954a204af48876, test:rust/crates/urzua-cli/tests/new_integration.rs#new_emits_yaml_frontmatter_when_configured_even_with_a_blockquote_template_present@sha256:abbf083803b8a4fe62e6e7b933ffdec9e9964180b452f0a00334eaca302cfbd0, code:.urzua/config.yaml, code:rust/crates/urzua-core/src/new_record.rs#render_synthetic_yaml@sha256:cc95937d293de5fd0ce20d95ebd31f9ac39da1c34372ac523d37d51b14c7f356, test:rust/crates/urzua-cli/tests/own_config_integration.rs#a_spec_scaffolded_by_new_passes_check_without_an_edit_observed_failing@sha256:25baa15c9d28ec6c4ed061da303c4232955d33f15daafdf4ded2d86a1e51d51e, test:rust/crates/urzua-cli/tests/new_integration.rs#new_fills_the_declared_title_and_starting_version_fields_observed_failing@sha256:1f499bfa082fd14a7071a6cc736cb71784ba883aea0049923ddc340e3d43e263
 Non-reference-ids: SPEC-7
 ---
 # 74 — Add a spec template so urzua new spec works
@@ -39,7 +39,7 @@ this project is built around -- can't be created through `urzua new` at all.
 
 - `.urzua/templates/spec.md` exists. — evidence: code:.urzua/templates/spec.md
 - `urzua new spec` writes a record rather than failing for want of a template. — evidence: test:rust/crates/urzua-cli/tests/own_config_integration.rs#new_opens_a_spec_title_with_its_declared_prefix_and_other_types_with_the_bare_number@sha256:0680736422297fcaf5d3546bba11345d9e102a325d1c28b438954a204af48876, test:rust/crates/urzua-cli/tests/new_integration.rs#new_emits_yaml_frontmatter_when_configured_even_with_a_blockquote_template_present@sha256:abbf083803b8a4fe62e6e7b933ffdec9e9964180b452f0a00334eaca302cfbd0
-- The record `urzua new spec` writes passes `check`.
+- The record `urzua new spec` writes passes `check`. — evidence: code:rust/crates/urzua-core/src/new_record.rs#render_synthetic_yaml@sha256:cc95937d293de5fd0ce20d95ebd31f9ac39da1c34372ac523d37d51b14c7f356, test:rust/crates/urzua-cli/tests/own_config_integration.rs#a_spec_scaffolded_by_new_passes_check_without_an_edit_observed_failing@sha256:25baa15c9d28ec6c4ed061da303c4232955d33f15daafdf4ded2d86a1e51d51e, test:rust/crates/urzua-cli/tests/new_integration.rs#new_fills_the_declared_title_and_starting_version_fields_observed_failing@sha256:1f499bfa082fd14a7071a6cc736cb71784ba883aea0049923ddc340e3d43e263
 - The canonical spec field set the template carries is decided, with `Author` required. — evidence: code:.urzua/config.yaml, code:.urzua/templates/spec.md
 
 > **Revision log**
@@ -52,3 +52,5 @@ this project is built around -- can't be created through `urzua new` at all.
 > | 2026-11-05 | Added the `Non-reference-ids` header field declaring `SPEC-7`. **Why:** the text names this id as history or illustration, not as citations of a record; the declaration states that on the record itself, so a new unresolved citation in this file is reported, where a file-wide `citation.resolution` waiver had silenced every one (`BUG-190`, `ADR-75`). The field carries no decision; the milestone is unchanged. | **structural** |
 > | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |
 > | 2026-11-07 | `Status` `Done` -> `InProgress`. Status set from its Done-means items (ADR-96, MILE-215): unresolved item 3. **Why:** the item has no evidence clause, and `DoneWithUnresolvedItems` forbids `Done` while an item is unresolved; `fix` never downgrades, so the status is set by hand to the computed value. | **structural** |
+> | 2026-11-07 | `urzua new spec` now writes a record that passes `check`: the `spec` type declares `relation_fields.title: Subject` and `revision_log.version_bump.initial: "0.1"`, so `new` fills the `Subject` with the title and the `Version` with `0.1` instead of leaving both blank (`SPEC-3`, `SPEC-12`, `SPEC-18`). Both keys are optional and an undeclared config is unchanged. **Why:** the item was unresolved and the claim was false: the scaffold failed `field.quality` on a blank `Version` and `Subject` before anyone edited it. | **substantive** |
+> | 2026-11-07 | Tool-authored (by beauwilliams, identity: gh-verified, actor: agent): recomputed `Status` from `the Done means items (4 of 4 items resolved) computes to Implemented` -- stated `InProgress` disagreed with the computed value `Done`. | **structural** |

@@ -257,6 +257,8 @@ pub fn run(
         status_field: type_config.relation_field(urzua_core::config::RelationRole::Status),
         date_field: type_config.date_field(),
         author_field: type_config.author_field(),
+        title_field: type_config.title_field(),
+        initial_version: type_config.initial_version(),
         title: &title,
         stable_id: stable_id.as_str(),
         author: &identity.name,
