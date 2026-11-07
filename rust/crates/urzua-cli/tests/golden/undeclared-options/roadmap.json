@@ -1,0 +1,163 @@
+{
+  "status": "ok",
+  "roadmap": {
+    "schema": 1,
+    "pairs": [
+      "sequencing"
+    ],
+    "waves": [
+      [
+        "ADR-1",
+        "ADR-2",
+        "ADR-3",
+        "FACT-1",
+        "MILE-2",
+        "TASK-1",
+        "TASK-4"
+      ],
+      [
+        "MILE-3",
+        "TASK-3"
+      ]
+    ],
+    "ready": [
+      "ADR-1",
+      "ADR-2",
+      "ADR-3",
+      "FACT-1",
+      "MILE-2",
+      "TASK-1",
+      "TASK-4"
+    ],
+    "critical_path": [
+      "FACT-1",
+      "MILE-3"
+    ],
+    "records": {
+      "ADR-1": {
+        "type": "adr",
+        "status": "Accepted",
+        "wave": 0,
+        "ready": true,
+        "blocked": false,
+        "blocked_by": [],
+        "blocks": []
+      },
+      "ADR-2": {
+        "type": "adr",
+        "status": "Accepted",
+        "wave": 0,
+        "ready": true,
+        "blocked": false,
+        "blocked_by": [],
+        "blocks": []
+      },
+      "ADR-3": {
+        "type": "adr",
+        "status": "Draft",
+        "wave": 0,
+        "ready": true,
+        "blocked": false,
+        "blocked_by": [],
+        "blocks": []
+      },
+      "FACT-1": {
+        "type": "fact",
+        "status": "Open",
+        "wave": 0,
+        "ready": true,
+        "blocked": false,
+        "blocked_by": [],
+        "blocks": [
+          "MILE-3",
+          "TASK-3"
+        ]
+      },
+      "MILE-2": {
+        "type": "milestone",
+        "status": "Planned",
+        "wave": 0,
+        "ready": true,
+        "blocked": false,
+        "blocked_by": [],
+        "blocks": [
+          "MILE-3"
+        ]
+      },
+      "MILE-3": {
+        "type": "milestone",
+        "status": "InProgress",
+        "wave": 1,
+        "ready": false,
+        "blocked": true,
+        "blocked_by": [
+          "FACT-1",
+          "MILE-2"
+        ],
+        "blocks": []
+      },
+      "TASK-1": {
+        "type": "task",
+        "status": "Planned",
+        "wave": 0,
+        "ready": true,
+        "blocked": false,
+        "blocked_by": [],
+        "blocks": []
+      },
+      "TASK-3": {
+        "type": "task",
+        "status": "Planned",
+        "wave": 1,
+        "ready": false,
+        "blocked": true,
+        "blocked_by": [
+          "FACT-1"
+        ],
+        "blocks": []
+      },
+      "TASK-4": {
+        "type": "task",
+        "status": "Planned",
+        "wave": 0,
+        "ready": true,
+        "blocked": false,
+        "blocked_by": [],
+        "blocks": []
+      }
+    },
+    "groups": [],
+    "needs_replan": [],
+    "cycles": [],
+    "notes": [
+      {
+        "kind": "unresolved-claim",
+        "record": "ADR-3",
+        "pair": "sequencing",
+        "field": "Depends-on",
+        "message": "ADR-3: Depends-on 'ADR-9' names no record, so it orders nothing"
+      },
+      {
+        "kind": "no-status-vocabulary",
+        "record": "ADR-1",
+        "pair": null,
+        "field": "Status",
+        "message": "ADR-1: type 'adr' declares no status vocabulary, so it is read as open"
+      },
+      {
+        "kind": "no-status-vocabulary",
+        "record": "ADR-2",
+        "pair": null,
+        "field": "Status",
+        "message": "ADR-2: type 'adr' declares no status vocabulary, so it is read as open"
+      },
+      {
+        "kind": "no-status-vocabulary",
+        "record": "ADR-3",
+        "pair": null,
+        "field": "Status",
+        "message": "ADR-3: type 'adr' declares no status vocabulary, so it is read as open"
+      }
+    ]
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "status": "ok",
+  "path": "docs/adr/ADR-1-a.md",
+  "governing_records": [],
+  "population": {
+    "unit": "record",
+    "eligible": 13,
+    "examined": 13,
+    "out_of_scope": 0,
+    "unreadable": 0
+  }
+}

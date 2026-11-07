@@ -1,0 +1,193 @@
+{
+  "status": "findings-present",
+  "files_examined": 13,
+  "records_read_by_any_rule": 13,
+  "rules_executed": [
+    {
+      "rule": "header.required-fields",
+      "population": {
+        "unit": "field",
+        "eligible": 18,
+        "examined": 18,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "pointer.resolution",
+      "population": {
+        "unit": "field",
+        "eligible": 24,
+        "examined": 5,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "sequence.cycle",
+      "population": {
+        "unit": "field",
+        "eligible": 24,
+        "examined": 5,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "sequence.status-agreement",
+      "population": {
+        "unit": "record",
+        "eligible": 7,
+        "examined": 7,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "embodiment.locator-exists",
+      "population": {
+        "unit": "field",
+        "eligible": 6,
+        "examined": 2,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "status.delivery-agreement",
+      "population": {
+        "unit": "record",
+        "eligible": 3,
+        "examined": 3,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "embodiment.locator-on-back-pointer-path",
+      "population": {
+        "unit": "field",
+        "eligible": 6,
+        "examined": 2,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    }
+  ],
+  "rules_selected": null,
+  "scope": {
+    "source": "tracked-sweep",
+    "base": null,
+    "record_types": [
+      "adr",
+      "fact",
+      "milestone",
+      "task",
+      "waiver"
+    ]
+  },
+  "blocking": true,
+  "findings": [
+    {
+      "rule": "header.required-fields",
+      "severity": "error",
+      "file": "docs/adr/ADR-2-b.md",
+      "line": null,
+      "message": "missing required header field 'Author' for record type 'adr'",
+      "waived": "docs/waiver/WAIVER-1-x.md",
+      "suggested_action": {
+        "kind": "edit-field",
+        "op": "set",
+        "target": {
+          "file": "docs/adr/ADR-2-b.md",
+          "field": "Author"
+        }
+      }
+    },
+    {
+      "rule": "pointer.resolution",
+      "severity": "warning",
+      "file": "docs/adr/ADR-3-c.md",
+      "line": null,
+      "message": "Depends-on: ADR-9 does not resolve to any discovered record",
+      "suggested_action": {
+        "kind": "edit-field",
+        "op": "set",
+        "target": {
+          "file": "docs/adr/ADR-3-c.md",
+          "field": "Depends-on"
+        }
+      }
+    },
+    {
+      "rule": "sequence.status-agreement",
+      "severity": "error",
+      "file": "docs/milestones/MILE-3-c.md",
+      "line": null,
+      "message": "MILE-3 is blocked by FACT-1 (Open), MILE-2 (Planned) but Status is 'InProgress', which claims progress; state a status that does not claim progress (InProgress)",
+      "suggested_action": {
+        "kind": "edit-field",
+        "op": "set",
+        "target": {
+          "file": "docs/milestones/MILE-3-c.md",
+          "field": "Status"
+        }
+      }
+    },
+    {
+      "rule": "sequence.status-agreement",
+      "severity": "error",
+      "file": "docs/tasks/TASK-2-b.md",
+      "line": null,
+      "message": "TASK-2 is blocked by TASK-1 (Planned) but Status is 'Done', which claims progress; state a status that does not claim progress (Done)",
+      "suggested_action": {
+        "kind": "edit-field",
+        "op": "set",
+        "target": {
+          "file": "docs/tasks/TASK-2-b.md",
+          "field": "Status"
+        }
+      }
+    },
+    {
+      "rule": "status.delivery-agreement",
+      "severity": "warning",
+      "file": "docs/milestones/MILE-1-a.md",
+      "line": null,
+      "message": "Status is 'Done', but the evidence computes to 'Not started', from no evidence (the record has no Realized-by field and no back-pointer cites it): add the evidence that delivered it"
+    },
+    {
+      "rule": "status.delivery-agreement",
+      "severity": "warning",
+      "file": "docs/milestones/MILE-2-b.md",
+      "line": null,
+      "message": "Status is 'Planned', but the evidence computes to 'Verified', from Realized-by: the work reads as delivered; set Status to 'Done' (`urzua fix --apply` does)",
+      "suggested_action": {
+        "kind": "run-command",
+        "target": {
+          "argv": [
+            "urzua",
+            "fix",
+            "--apply",
+            "--ids",
+            "docs/milestones/MILE-2-b.md"
+          ]
+        }
+      }
+    },
+    {
+      "rule": "embodiment.locator-on-back-pointer-path",
+      "severity": "warning",
+      "file": "docs/adr/ADR-1-a.md",
+      "line": null,
+      "message": "Realized-by names 'src/a.rs' (code:), a file under back_pointer_paths: a `Implements: ADR-1` comment in that file is read automatically and counts as the same tier, so it cannot go stale away from the code; add the comment first, then drop this locator from Realized-by; keep the locator only where a comment cannot be written"
+    }
+  ]
+}
