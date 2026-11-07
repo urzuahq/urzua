@@ -1,5 +1,5 @@
 ---
-Status: Done
+Status: InProgress
 Stable-Id: 01M1Y5JFS4DE9EE9HFVD4H4QHP
 Phase: '0'
 Track: section-checks
@@ -56,3 +56,4 @@ it reads as an exemption or a requirement is which way the condition points.
 > | 2026-11-04 | `Blocked-on` cleared: `MILE-98` is Done. `Status` stays Planned. The require-by-state half is now buildable as a declaration with no new code: `statuses.require` (`MILE-132`, `MILE-137`) already ties a field to the statuses that need it, and `bug` uses it for `Regression-test`. Declaring `require: [{when: [Accepted], fields: [Embodiment, Realized-by]}]` on the `spec` type was tried against this repository and reports 28 findings across the 14 Accepted specs that carry neither field; it was not kept. **Why:** two things stand between the try and a Done milestone. The `spec` vocabulary has only `Draft` and `Accepted`, so `Accepted` cannot tell a spec whose work shipped from one that is only agreed, and the declaration needs a status that says *shipped* (a vocabulary decision for the maintainer). And the 14 specs need their `Embodiment` and `Realized-by` backfilled before the rule can be enabled at `error`. | **substantive** |
 > | 2026-11-04 | `Status` `Planned` -> `Done`; `Realized-by` set. **Why:** the require-by-state half is built as configuration alone, with no engine change: this repository's `spec` type declares `Shipped` after `Accepted` and `statuses.require` for `Embodiment` and `Realized-by`, and `spec_shipped_integration.rs` shows a `Shipped` spec without them reported by `status.required-field-missing` while `Draft` and `Accepted` specs are not. Together with the exemption half (`sections.exempt_statuses`, in use on `adr` and `milestone`), that meets Done means. No spec is `Shipped` yet; moving one is the maintainer's call (`SPEC-18`). | **substantive** |
 > | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |
+> | 2026-11-07 | `Status` `Done` -> `InProgress`. Status set from its Done-means items (ADR-96, MILE-215): unresolved item 3. **Why:** the item has no evidence clause, and `DoneWithUnresolvedItems` forbids `Done` while an item is unresolved; `fix` never downgrades, so the status is set by hand to the computed value. | **structural** |

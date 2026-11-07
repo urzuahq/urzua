@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6K40RCPZCY5R863JS9SQ766
-Status: Done
+Status: InProgress
 Phase: '0'
 Track: schema-governance
 Implements: SPEC-22
@@ -33,3 +33,4 @@ Ordering: independent of `MILE-171`; do it first if a small change is wanted, si
 > | 2026-11-04 | Filed at Phase 0. **Why:** maintainer decision of 2026-11-04 pulled foundation work into Phase 0 (Phase 0 is parity on a solid codebase, `SPEC-1`'s Phase 0 exit); filed from the foundation review of the same date, whose evidence is cited above as read at that commit. | **substantive** |
 > | 2026-11-04 | Delivered in full; `Status: Done` with `Realized-by`. `audit`, `explain`, `export`, `graph` and both `migrate` subcommands open through `Session::open` and return `Result<ExitCode, String>` from an inner function wrapped by `emit_or_not_run`. `check` (`Session::open_with`, its argv-override and `--base` steps as the adjust closure), `fix` (`Session::open`) and `new` (`Workspace::open`) take the same preamble but keep their many other could-not-run arms in place, so their bodies stay `ExitCode`-returning; `index` and `refs refresh`, which repeated the same preamble, use `Workspace`/`Session::load` too. `doctor` keeps its own root lookup because a missing or broken config is a report of its own, not a could-not-run. `could_not_run_integration.rs` pins the exit code and exact JSON of a missing repository, a missing config and an unreadable tracked record for every command, and was written and passing before the refactor. **Why:** the Done-when. | **substantive** |
 > | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |
+> | 2026-11-07 | `Status` `Done` -> `InProgress`. Status set from its Done-means items (ADR-96, MILE-215): unresolved item 4. **Why:** the item has no evidence clause, and `DoneWithUnresolvedItems` forbids `Done` while an item is unresolved; `fix` never downgrades, so the status is set by hand to the computed value. | **structural** |

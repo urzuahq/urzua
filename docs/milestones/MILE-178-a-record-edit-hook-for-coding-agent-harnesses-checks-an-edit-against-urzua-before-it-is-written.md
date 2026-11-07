@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6K4FKKANSVK5ZE3JZ0MCX9Y
-Status: Done
+Status: InProgress
 Phase: '0'
 Track: governance-process
 Implements: RFC-7, ADR-69
@@ -41,3 +41,4 @@ This milestone builds the parts of `RFC-7` section 2 and section 3 (first bullet
 > | 2026-11-05 | `Blocked-on` cleared. **Why:** `MILE-12` is now `Done`, so nothing blocks this record. | **structural** |
 > | 2026-11-06 | `Realized-by` now names `rust/crates/urzua-cli/src/harness/run.rs` (the engine core) and `.claude/hooks/urzua-claude-code.py` (the installed translator) in place of the two deleted scripts. **Why:** `MILE-204` deleted the script this record cited; the engine core and the installed translator are the code that now carries the behavior. | **substantive** |
 > | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |
+> | 2026-11-07 | `Status` `Done` -> `InProgress`. Status set from its Done-means items (ADR-96, MILE-215): unresolved item 6. **Why:** the item has no evidence clause, and `DoneWithUnresolvedItems` forbids `Done` while an item is unresolved; `fix` never downgrades, so the status is set by hand to the computed value. | **structural** |

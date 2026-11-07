@@ -1,6 +1,6 @@
 ---
 default: minor
-closes: [MILE-194]
+closes: []
 ---
 
 A rule can now be set to `level: info`. Its findings are reported and counted like a warning's, with

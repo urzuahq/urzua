@@ -332,6 +332,21 @@ record_types:
         unevidenced_tiers: ["Not started"]
         not_done: ["Planned", "InProgress"]
         set_status: "Done"
+        # A milestone's Done means is a checklist whose items each name their
+        # evidence, and its status is computed from the items (ADR-96,
+        # MILE-215). The bug type is not itemised.
+        items:
+          section: "Done means"
+          clause_separator: " — "
+          evidence_marker: "evidence:"
+          waiver_marker: "waived:"
+          partial_status: "InProgress"
+          resolving_tiers: ["Specified", "Implemented", "Verified"]
+          waiver_categories:
+            - {name: not-applicable}
+            - {name: superseded-by-decision, cite: required}
+            - {name: deferred-to, cite: required, expires: required}
+            - {name: process-outcome}
     # Every milestone, open or closed, states its Done means (maintainer
     # decision of 2026-11-04): a Done milestone is judged against it and not
     # against its What. A WontDo milestone is set aside on purpose, as a

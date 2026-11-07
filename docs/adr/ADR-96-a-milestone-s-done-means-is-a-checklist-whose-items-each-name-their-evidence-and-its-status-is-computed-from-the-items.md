@@ -7,6 +7,7 @@ Author: beauwilliams
 Deciders: beauwilliams
 Embodiment: Implemented
 Supersedes / Superseded-by: null
+Non-reference-ids: WAIVER-0051
 ---
 # 96 — A milestone's Done means is a checklist whose items each name their evidence, and its status is computed from the items
 
@@ -216,6 +217,14 @@ Answered on 2026-11-07 from the independent review of this ADR, as decided. The 
 3. **No per-item dependencies.** Decided: the wait stays item-blind; a milestone that needs another's third item is split.
 4. **`Specified` counts in `resolving_tiers`, with a guard.** Decided: a `spec:` locator resolves an item, but at least one item must resolve at a `delivered_tiers` tier (`r_d >= 1`) for the milestone to compute delivered or partial. A spec-only milestone stays as it is today.
 
+## Amendment (2026-11-07): the severity floor and the waivable flag are shown by `urzua rules`, not `urzua explain`
+
+*Status of this amendment: proposed, pending maintainer acceptance. Found by the independent review of the `MILE-215` migration. `Status` stays `Accepted` and the Decision text above is unchanged.*
+
+Section 2 says of `DoneWithUnresolvedItems` that "`urzua explain` prints the floor", and that the rule table marks the variant `waivable: false`. Neither is true of `explain`. `urzua explain <path>` answers which records govern a file or scope (`SPEC-13`): it takes a path, reads no rule, and its report holds no severity floor and no waivable flag. Both are printed by `urzua rules`, which lists every rule's variants with `severity_floor` and `waivable` (`commands/rules.rs`); `urzua rules` reads the rule table, so it shows them for the build, not for one finding.
+
+The gap is in the ADR's wording, and the behaviour it names exists under another command. Giving `explain` a second mode that takes a rule id would be a new input form on a public command, with its own `SPEC-13` text and a changeset; that is a design decision, not a correction, so it is not made here. The proposal is to read "`urzua explain` prints the floor" as "`urzua rules` prints the floor and the waivable flag", which is what the engine does and what `SPEC-2`'s generated rule table already documents. If the maintainer wants the floor on `explain`, that is a separate milestone under this ADR.
+
 ## References
 
 - `ADR-84` -- a record's status follows its declared evidence field (the mechanism extended); `ADR-83` -- blocked is derived only, `progress` statuses; `ADR-86` -- the permanent-waiver vocabulary shape reused for item waivers.
@@ -232,3 +241,4 @@ Answered on 2026-11-07 from the independent review of this ADR, as decided. The 
 > | 2026-11-07 | Amended while Proposed, from the independent review of the same day (three blockers). **Why:** (1) the ADR now names the guaranteed error finding `DoneWithUnresolvedItems`, gives its message contract, an error floor, `waivable: false` (the rule-level `permanent` category does not apply to it) and two ADR-73 actions in place of `Exempt`; (2) the item syntax is a grammar with worked examples: nested lists, a single separator-plus-marker form, the Realized-by comma rule, the waiver cite; (3) inline waivers get ADR-86's honesty: `status.waived-item-stale`, a checked and expiring `deferred-to`. The four open questions are recorded as decided (inline waivers with the stale check; no auto-reopen; no per-item dependencies; `Specified` in `resolving_tiers` with an `r_d >= 1` guard), and the migration is split out as `MILE-215`. Status stays Proposed; the maintainer approves before it is Accepted. | **substantive** |
 > | 2026-11-07 | Status changed from Proposed to Accepted. **Why:** Maintainer decision, 2026-11-07. | **substantive** |
 > | 2026-11-07 | Tool-authored (by beauwilliams, identity: gh-verified, actor: agent): recomputed `Embodiment` from `no Realized-by field; cited by source back-pointers` -- stated no value disagreed with the computed value `Implemented`. | **structural** |
+> | 2026-11-07 | Amendment added, proposed and pending maintainer acceptance: the severity floor and `waivable: false` of `DoneWithUnresolvedItems` are printed by `urzua rules`, not `urzua explain` as section 2 says. **Why:** a reviewer of the `MILE-215` migration found `explain` takes a path and shows neither; making it show them is a new input form on a public command, so the correction is recorded here for the maintainer to accept or to turn into a milestone. The Decision text is unchanged. | **structural** |

@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6DEN888K1W3TG4P3CZ0P5KN
-Status: Done
+Status: InProgress
 Phase: '0'
 Track: schema-governance
 Realized-by: code:rust/crates/urzua-core/src/rules.rs, code:rust/crates/urzua-core/src/rules/catalog.rs, code:rust/crates/urzua-core/src/rules/shared.rs, code:rust/crates/urzua-core/src/rules/header.rs, code:rust/crates/urzua-core/src/rules/type_scope.rs, code:rust/crates/urzua-core/src/rules/declaration.rs, code:rust/crates/urzua-core/src/rules/identity.rs, code:rust/crates/urzua-core/src/rules/pointer.rs, code:rust/crates/urzua-core/src/rules/relation.rs, code:rust/crates/urzua-core/src/rules/section.rs, code:rust/crates/urzua-core/src/rules/embodiment.rs, test:rust/crates/urzua-cli/tests/check_integration.rs
@@ -34,3 +34,4 @@ Every lane on the roadmap edits `rules.rs`, so parallel work on sections, values
 > | 2026-11-04 | `Realized-by` added and `Status` Planned -> Done. **Why:** the work is merged in #152: `rules.rs` is a thin root over fourteen submodules under `rules/`, with no change in behaviour. Checked against this record's Done means and the code; the record never carried its own delivery evidence, and `status.delivery-agreement` (`MILE-183`) reads evidence under a not-done `Status` as a disagreement. | **structural** |
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. The criteria are those the delivered work met, checked against `Realized-by` and the code; `Status` stays Done. | **structural** |
 > | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |
+> | 2026-11-07 | `Status` `Done` -> `InProgress`. Status set from its Done-means items (ADR-96, MILE-215): unresolved item 3. **Why:** the item has no evidence clause, and `DoneWithUnresolvedItems` forbids `Done` while an item is unresolved; `fix` never downgrades, so the status is set by hand to the computed value. | **structural** |

@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6NH5S2Q1Q7MC6REKNXV9Y7C
-Status: Done
+Status: InProgress
 Phase: '0'
 Track: governance-process
 Implements: ADR-87
@@ -38,3 +38,4 @@ A `level: info` for rules (and `field_levels`), a `FindingSeverity::Info` serial
 > | 2026-11-05 | Filed. **Why:** `ADR-87` (Proposed) decides the `info` level on a maintainer decision of 2026-11-05 and no milestone builds it; it is also what lets `MILE-189`'s Done means be met here. | **substantive** |
 > | 2026-11-05 | Built: `level: info` for a rule, a `field_levels` entry and a boundary `severity`; `FindingSeverity::Info` serialized `"info"`; a rule set to `info` caps every declared severity at `info` (point 10); every level-to-severity mapping is exhaustive (`RuleLevel::severity`, `BoundarySeverity::severity`), so `published_paths` at any level no longer falls back to `error`; `fail_on: info` and any other unrecognised level are refused at load. `.urzua/config.yaml` enables `MILE-189`'s rule at `info` and `urzua check` exits 0 with its findings reported. `SPEC-2` and `SPEC-3` describe the level. `Realized-by` added and `Status` set to `Done`. **Why:** every item of Done means is met and exercised in this repository's configuration. | **substantive** |
 > | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |
+> | 2026-11-07 | `Status` `Done` -> `InProgress`. Status set from its Done-means items (ADR-96, MILE-215): unresolved item 3. **Why:** the item has no evidence clause, and `DoneWithUnresolvedItems` forbids `Done` while an item is unresolved; `fix` never downgrades, so the status is set by hand to the computed value. | **structural** |
