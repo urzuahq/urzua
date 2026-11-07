@@ -100,4 +100,5 @@ This directory holds urzua's ADRs, one `ADR-N-slug.md` file each. This index is 
 - [urzua new skips a number an open pull request already took, from fetched pull refs, opt in, and check flags a shared id](ADR-93-urzua-new-skips-a-number-an-open-pull-request-already-took-from-fetched-pull-refs-opt-in-and-check-flags-a-shared-id.md)
 - [The revision log declares its class vocabulary and its class column on the record type](ADR-94-the-revision-log-declares-its-class-vocabulary-and-its-class-column-on-the-record-type.md)
 - [The release pull request is opened by a GitHub App token, and main is protected with ci required](ADR-95-the-release-pull-request-is-opened-by-a-github-app-token-and-main-is-protected-with-ci-required.md)
+- [A milestone's Done means is a checklist whose items each name their evidence, and its status is computed from the items](ADR-96-a-milestone-s-done-means-is-a-checklist-whose-items-each-name-their-evidence-and-its-status-is-computed-from-the-items.md)
 <!-- urzua:index:end -->
