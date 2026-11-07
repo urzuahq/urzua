@@ -109,6 +109,8 @@ mod tests {
             override_log: None,
             block_on: None,
             attestation: Default::default(),
+            new: Default::default(),
+            discovery: Default::default(),
             harness: None,
             authority: None,
             rules: std::collections::BTreeMap::new(),

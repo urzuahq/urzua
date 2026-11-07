@@ -2,6 +2,16 @@ schema_version: 2
 # Warnings fail this repository's own CI (MILE-145): the zero-warning state
 # must not regress. Both checks.yml steps read this, whole-repo and --base.
 fail_on: warning
+# `urzua new` fetches pull-request head refs and skips the numbers they hold, and
+# the sibling worktrees' (ADR-93, MILE-89); the gate fetches the same refs for
+# identity.open-pr-collision. Plain git: no gh, no API.
+new:
+  check_open_prs: true
+# Govern the records an author has written and not yet staged (ADR-92, MILE-206):
+# discovery includes untracked, non-ignored files directly under a declared
+# record directory, so a plain `check` and the gate read a draft before `git add`.
+discovery:
+  include_untracked: true
 # The Embodiment vocabulary (MILE-144): the states evidence computes to, highest
 # tier first, and the evidence category that lifts a record to each. The engine
 # knows no state name; `claims_built` marks the states that say work was built.
@@ -554,6 +564,9 @@ rules:
   type.no-declared-spec: warn
   type.dir-matches-nothing: warn
   identity.collision: error
+  # An added record that shares a number with a fetched pull request (ADR-93). A
+  # warning, because plain git cannot tell a closed pull request from an open one.
+  identity.open-pr-collision: warn
   type.record-outside-declared-dir: warn
   config.pointer-declaration-missing: error
   config.companion-declaration-missing: error

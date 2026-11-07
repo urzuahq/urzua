@@ -11,6 +11,9 @@ use urzua_core::locator::{FileText, SharedText};
 
 pub(crate) struct FileTexts {
     root: PathBuf,
+    /// The configuration discovery reads (`ADR-92`): the tracked files a
+    /// directory or glob locator matches are the files `check` itself examines.
+    config: urzua_core::config::Config,
     cache: RefCell<HashMap<String, SharedText>>,
     /// The tracked files, discovered on first use: only a directory or glob
     /// locator needs them (`BUG-176`).
@@ -18,9 +21,10 @@ pub(crate) struct FileTexts {
 }
 
 impl FileTexts {
-    pub fn new(root: PathBuf) -> Self {
+    pub fn new(root: PathBuf, config: &urzua_core::config::Config) -> Self {
         FileTexts {
             root,
+            config: config.clone(),
             cache: RefCell::new(HashMap::new()),
             tracked: OnceCell::new(),
         }
@@ -31,7 +35,7 @@ impl FileTexts {
     /// disk: its kind and the files it covers, sorted.
     pub fn locator_files(&self, path: &str) -> Result<urzua_core::locator::LocatorFiles, String> {
         let (list, set) = self.tracked.get_or_init(|| {
-            let list = urzua_io::discover_tracked_files(&self.root)
+            let list = crate::discovery::discover_files(&self.root, &self.config)
                 .map(|d| d.paths)
                 .unwrap_or_default();
             let set = list.iter().cloned().collect();

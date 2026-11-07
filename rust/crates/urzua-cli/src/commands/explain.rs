@@ -71,7 +71,7 @@ fn explain_coverage(
     notices: &mut Vec<Notice>,
 ) -> Result<Option<CoverageExplanation>, String> {
     use urzua_core::rules::{LocatorExistsOpts, RULE_EMBODIMENT_LOCATOR_EXISTS};
-    let texts = crate::file_texts::FileTexts::new(repo_root.to_path_buf());
+    let texts = crate::file_texts::FileTexts::new(repo_root.to_path_buf(), config);
     let located = texts
         .locator_files(&parsed.path)
         .map_err(|e| format!("'{}': the glob {e}", parsed.path))?;
@@ -122,7 +122,7 @@ fn explain_scope(
     parsed: &locator::Locator,
     scope: &locator::Scope,
 ) -> Result<ScopeExplanation, String> {
-    let texts = crate::file_texts::FileTexts::new(repo_root.to_path_buf());
+    let texts = crate::file_texts::FileTexts::new(repo_root.to_path_buf(), config);
     let text = match &*texts.get(&parsed.path) {
         FileText::Text(t) => t.clone(),
         FileText::NotUtf8 => {

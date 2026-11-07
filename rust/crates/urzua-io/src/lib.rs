@@ -57,6 +57,58 @@ pub struct DiscoveredFiles {
     /// let a record vanish in silence (BUG-82).
     pub unstaged_deletions: std::collections::HashSet<PathBuf>,
     pub source: DiscoverySource,
+    /// The untracked, non-ignored files [`UntrackedInclusion`] added to `paths`
+    /// (`ADR-92`); empty when no inclusion was asked for. Carried separately so
+    /// a report can count them and `--base` can treat them as added.
+    pub untracked_included: std::collections::HashSet<PathBuf>,
+}
+
+/// What a repository that opts in (`discovery.include_untracked`, `ADR-92`)
+/// has discovery add: the untracked, non-ignored files directly under
+/// `dirs` that `governs` accepts. `governs` is the caller's own ownership rule,
+/// the one that loads records, so what discovery adds is exactly what would
+/// load; this crate knows no record type.
+pub struct UntrackedInclusion<'a> {
+    /// The declared record directories, repository-relative.
+    pub dirs: &'a [PathBuf],
+    /// Whether a repository-relative path is a file some record type governs.
+    pub governs: &'a dyn Fn(&Path) -> bool,
+}
+
+/// The untracked, non-ignored files that sit directly in one of `inclusion.dirs`
+/// and that `inclusion.governs` accepts, sorted. Git's own ignore rules decide
+/// "non-ignored" (`.gitignore`, `.git/info/exclude`, the global excludes), and
+/// `-z` keeps a non-ASCII path verbatim (`BUG-87`).
+pub fn untracked_governed_files(
+    repo_root: &Path,
+    inclusion: &UntrackedInclusion<'_>,
+) -> Result<Vec<PathBuf>, DiscoveryError> {
+    if inclusion.dirs.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut args: Vec<String> = ["ls-files", "--others", "--exclude-standard", "-z", "--"]
+        .iter()
+        .map(|a| a.to_string())
+        .collect();
+    args.extend(inclusion.dirs.iter().map(|d| {
+        // A literal directory, not a pathspec pattern.
+        format!(":(literal){}/", d.display())
+    }));
+    let args: Vec<&str> = args.iter().map(String::as_str).collect();
+    let listed = run_git(repo_root, &args)?;
+    let mut out: Vec<PathBuf> = listed
+        .split('\0')
+        .filter(|l| !l.is_empty())
+        .map(PathBuf::from)
+        .filter(|p| {
+            p.parent()
+                .is_some_and(|parent| inclusion.dirs.iter().any(|d| d == parent))
+        })
+        .filter(|p| (inclusion.governs)(p))
+        .collect();
+    out.sort();
+    out.dedup();
+    Ok(out)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -71,10 +123,19 @@ pub enum DiscoverySource {
     GitDiff,
 }
 
-/// Discover files git tracks or has staged, at or below `repo_root`. Never a
-/// raw filesystem walk: an untracked scratch file must never appear here, or
-/// a single stray file changes what every run examines.
-pub fn discover_tracked_files(repo_root: &Path) -> Result<DiscoveredFiles, DiscoveryError> {
+/// Discover the files a run reads, at or below `repo_root`: the files git
+/// tracks or has staged, plus, when `untracked` is given (a repository that set
+/// `discovery.include_untracked`, `ADR-92`), the untracked, non-ignored record
+/// files directly under its declared directories. With `None` an untracked
+/// scratch file never appears here, so a single stray file does not change what
+/// every run examines (`ADR-56`). Never a raw filesystem walk either way: the
+/// untracked set is git's own listing, restricted to the declared directories
+/// and the caller's ownership rule, and the paths it adds are returned in
+/// [`DiscoveredFiles::untracked_included`] as well as in `paths`.
+pub fn discover_tracked_files(
+    repo_root: &Path,
+    untracked: Option<&UntrackedInclusion<'_>>,
+) -> Result<DiscoveredFiles, DiscoveryError> {
     // `-z`, so paths arrive NUL-separated and verbatim. With `core.quotepath`
     // at its default git C-quotes any path holding a non-ASCII byte -- the
     // name arrives wrapped in quotes with the bytes escaped, its parent never
@@ -128,11 +189,23 @@ pub fn discover_tracked_files(repo_root: &Path) -> Result<DiscoveredFiles, Disco
     paths.sort();
     paths.dedup();
 
+    let mut untracked_included = std::collections::HashSet::new();
+    if let Some(inclusion) = untracked {
+        let known: std::collections::HashSet<&PathBuf> = paths.iter().collect();
+        untracked_included = untracked_governed_files(repo_root, inclusion)?
+            .into_iter()
+            .filter(|p| !known.contains(p))
+            .collect();
+        paths.extend(untracked_included.iter().cloned());
+        paths.sort();
+    }
+
     Ok(DiscoveredFiles {
         paths,
         staged_deletions,
         unstaged_deletions: std::collections::HashSet::new(),
         source: DiscoverySource::GitTracked,
+        untracked_included,
     })
 }
 
@@ -152,12 +225,26 @@ pub struct GitChanges {
     pub added: std::collections::HashSet<PathBuf>,
 }
 
+impl GitChanges {
+    /// Counts untracked records as added (`ADR-92` clause 6): a file with no
+    /// merge-base copy is new by definition, so it is in `changed` and `added`
+    /// exactly as a staged addition is.
+    pub fn add_untracked<'a>(&mut self, paths: impl IntoIterator<Item = &'a PathBuf>) {
+        for path in paths {
+            self.changed.insert(path.clone());
+            self.added.insert(path.clone());
+        }
+    }
+}
+
 /// Every path that differs between the merge base of `base` and `HEAD` and
 /// the working tree, repository-relative (`MILE-123`). Merge base, not the
 /// ref's tip: a pull request must not be charged for what its base branch
 /// gained since the fork. The working tree, not `HEAD`: staged and unstaged
 /// edits to tracked files are changes a local run must see. Untracked files
-/// are not reported, matching the tracked-only discovery (`ADR-6`).
+/// are not reported here, matching the tracked-only discovery (`ADR-6`); a
+/// repository that includes them (`ADR-92`) adds them with
+/// [`GitChanges::add_untracked`], so they count as added.
 ///
 /// Renames are reported as a deletion plus an addition (`--no-renames`), so
 /// the new name is always listed on its own. A deleted path is listed too,
@@ -223,6 +310,174 @@ pub fn changed_paths_since(repo_root: &Path, base: &str) -> Result<GitChanges, D
         deleted,
         added,
     })
+}
+
+/// The files directly in each of `dirs` at each of `commits`, as repository-relative
+/// paths (`dir/name`), keyed by commit. One `git cat-file --batch-check` process
+/// resolves every `commit:dir` to a tree, and `git ls-tree` then runs once per
+/// *distinct* tree: the pull-request heads of a large repository mostly share a
+/// directory's tree with `main`, so listing each tip separately (hundreds of
+/// processes) is what made the open-pull-request check slow. A commit with no such
+/// directory has no entry for it.
+pub fn files_in_dirs_at_commits(
+    repo_root: &Path,
+    commits: &[String],
+    dirs: &[String],
+) -> Result<std::collections::HashMap<String, Vec<String>>, String> {
+    use std::collections::HashMap;
+    use std::io::Write;
+    let mut wanted: Vec<(&String, &String)> = Vec::new();
+    for commit in commits {
+        for dir in dirs {
+            wanted.push((commit, dir));
+        }
+    }
+    let mut child = Command::new("git")
+        .arg("-C")
+        .arg(repo_root)
+        .args(["cat-file", "--batch-check"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("could not run git: {e}"))?;
+    let mut stdin = child.stdin.take().expect("piped stdin");
+    let input: String = wanted
+        .iter()
+        .map(|(c, d)| format!("{c}:{}\n", d.trim_end_matches('/')))
+        .collect();
+    // Written on its own thread: a full output pipe must not block the input.
+    let writer = std::thread::spawn(move || {
+        let _ = stdin.write_all(input.as_bytes());
+    });
+    let out = child
+        .wait_with_output()
+        .map_err(|e| format!("could not read git: {e}"))?;
+    let _ = writer.join();
+    if !out.status.success() {
+        return Err(format!(
+            "git cat-file failed: {}",
+            String::from_utf8_lossy(&out.stderr).trim()
+        ));
+    }
+    let text = String::from_utf8_lossy(&out.stdout);
+    let answers: Vec<&str> = text.lines().collect();
+    if answers.len() != wanted.len() {
+        return Err("git cat-file answered a different number of lines than asked".to_string());
+    }
+    // The distinct trees, in first-seen order.
+    let mut distinct: Vec<&str> = Vec::new();
+    let mut seen: std::collections::HashSet<&str> = std::collections::HashSet::new();
+    let mut tree_of: Vec<Option<&str>> = Vec::with_capacity(wanted.len());
+    for answer in &answers {
+        let mut parts = answer.split(' ');
+        match (parts.next(), parts.next()) {
+            (Some(oid), Some("tree")) => {
+                if seen.insert(oid) {
+                    distinct.push(oid);
+                }
+                tree_of.push(Some(oid));
+            }
+            _ => tree_of.push(None),
+        }
+    }
+    let listed = list_trees(repo_root, &distinct)?;
+    let mut result: HashMap<String, Vec<String>> = HashMap::new();
+    for ((commit, dir), tree) in wanted.iter().zip(tree_of) {
+        let Some(oid) = tree else {
+            continue;
+        };
+        let dir = dir.trim_end_matches('/');
+        result
+            .entry((*commit).clone())
+            .or_default()
+            .extend(listed[oid].iter().map(|n| format!("{dir}/{n}")));
+    }
+    Ok(result)
+}
+
+/// The names of the files (not directories or submodules) directly in each tree,
+/// read in one `git cat-file --batch` process: a repository with hundreds of pull
+/// requests has over a thousand distinct trees, and a `git ls-tree` process for
+/// each took longer than the rest of a `check` run.
+fn list_trees<'a>(
+    repo_root: &Path,
+    oids: &[&'a str],
+) -> Result<std::collections::HashMap<&'a str, Vec<String>>, String> {
+    use std::io::Write;
+    let width = match run_git(repo_root, &["rev-parse", "--show-object-format"])
+        .map_err(|e| e.to_string())?
+        .trim()
+    {
+        "sha256" => 32,
+        _ => 20,
+    };
+    let mut child = Command::new("git")
+        .arg("-C")
+        .arg(repo_root)
+        .args(["cat-file", "--batch"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("could not run git: {e}"))?;
+    let mut stdin = child.stdin.take().expect("piped stdin");
+    let input: String = oids.iter().map(|o| format!("{o}\n")).collect();
+    let writer = std::thread::spawn(move || {
+        let _ = stdin.write_all(input.as_bytes());
+    });
+    let out = child
+        .wait_with_output()
+        .map_err(|e| format!("could not read git: {e}"))?;
+    let _ = writer.join();
+    if !out.status.success() {
+        return Err(format!(
+            "git cat-file failed: {}",
+            String::from_utf8_lossy(&out.stderr).trim()
+        ));
+    }
+    let bytes = out.stdout;
+    let bad = || "git cat-file --batch printed an object this tool cannot read".to_string();
+    let mut listed = std::collections::HashMap::new();
+    let mut at = 0usize;
+    for oid in oids {
+        // `<oid> tree <size>\n`, then <size> bytes, then `\n`.
+        let eol = bytes[at..]
+            .iter()
+            .position(|b| *b == b'\n')
+            .ok_or_else(bad)?;
+        let header = std::str::from_utf8(&bytes[at..at + eol]).map_err(|_| bad())?;
+        let size: usize = header
+            .rsplit(' ')
+            .next()
+            .and_then(|n| n.parse().ok())
+            .ok_or_else(bad)?;
+        if !header.contains(" tree ") {
+            return Err(bad());
+        }
+        let body = bytes
+            .get(at + eol + 1..at + eol + 1 + size)
+            .ok_or_else(bad)?;
+        at += eol + 1 + size + 1;
+        let mut names = Vec::new();
+        let mut i = 0;
+        while i < body.len() {
+            // `<mode> <name>\0<raw oid>`
+            let space = body[i..].iter().position(|b| *b == b' ').ok_or_else(bad)?;
+            let mode = &body[i..i + space];
+            let nul = body[i + space..]
+                .iter()
+                .position(|b| *b == 0)
+                .ok_or_else(bad)?;
+            let name = String::from_utf8_lossy(&body[i + space + 1..i + space + nul]).into_owned();
+            i += space + nul + 1 + width;
+            if mode != b"40000" && mode != b"160000" {
+                names.push(name);
+            }
+        }
+        listed.insert(*oid, names);
+    }
+    Ok(listed)
 }
 
 /// A file as it was at `commit`: how a deleted record is read once it is
@@ -959,7 +1214,7 @@ mod tests {
         // filesystem walk would find it, and the check must not.
         fs::write(tmp.join("scratch.md"), "untracked scratch file").unwrap();
 
-        let result = discover_tracked_files(&tmp).expect("discovery should succeed");
+        let result = discover_tracked_files(&tmp, None).expect("discovery should succeed");
         let names: Vec<_> = result
             .paths
             .iter()
@@ -1013,7 +1268,7 @@ mod tests {
             .output()
             .unwrap();
 
-        let result = discover_tracked_files(&tmp).expect("discovery should succeed");
+        let result = discover_tracked_files(&tmp, None).expect("discovery should succeed");
         let names: Vec<_> = result
             .paths
             .iter()
@@ -1037,12 +1292,91 @@ mod tests {
         );
     }
 
+    /// `ADR-92`: with an inclusion, discovery adds the untracked, non-ignored
+    /// files directly under the declared directories that the caller's rule
+    /// governs, and nothing else; without one, none.
+    #[test]
+    fn an_inclusion_adds_only_untracked_non_ignored_files_the_rule_governs() {
+        let tmp = Scratch::new("urzua-io-include");
+        fs::create_dir_all(tmp.0.join("docs/adr/deeper")).unwrap();
+        fs::create_dir_all(tmp.0.join("notes")).unwrap();
+        init_repo(&tmp);
+        fs::write(tmp.join(".gitignore"), "docs/adr/ignored.md\n").unwrap();
+        fs::write(tmp.join("docs/adr/tracked.md"), "t").unwrap();
+        for args in [&["add", "-A"][..], &["commit", "-q", "-m", "init"][..]] {
+            Command::new("git")
+                .args(args)
+                .current_dir(&tmp)
+                .output()
+                .unwrap();
+        }
+        for p in [
+            "docs/adr/draft.md",
+            "docs/adr/ignored.md",
+            "docs/adr/scratch.txt",
+            "docs/adr/deeper/deep.md",
+            "notes/outside.md",
+        ] {
+            fs::write(tmp.join(p), "x").unwrap();
+        }
+        let dirs = vec![PathBuf::from("docs/adr")];
+        let governs = |p: &Path| p.extension().is_some_and(|e| e == "md");
+        let inclusion = UntrackedInclusion {
+            dirs: &dirs,
+            governs: &governs,
+        };
+
+        let with = discover_tracked_files(&tmp, Some(&inclusion)).unwrap();
+        let names: Vec<String> = with.paths.iter().map(|p| p.display().to_string()).collect();
+        assert!(
+            names.contains(&"docs/adr/draft.md".to_string()),
+            "{names:?}"
+        );
+        assert!(
+            names.contains(&"docs/adr/tracked.md".to_string()),
+            "{names:?}"
+        );
+        for not_included in [
+            "docs/adr/ignored.md",
+            "docs/adr/scratch.txt",
+            "docs/adr/deeper/deep.md",
+            "notes/outside.md",
+        ] {
+            assert!(
+                !names.contains(&not_included.to_string()),
+                "{not_included}: {names:?}"
+            );
+        }
+        assert_eq!(
+            with.untracked_included,
+            std::collections::HashSet::from([PathBuf::from("docs/adr/draft.md")])
+        );
+
+        let without = discover_tracked_files(&tmp, None).unwrap();
+        assert!(without.untracked_included.is_empty());
+        assert!(!without.paths.contains(&PathBuf::from("docs/adr/draft.md")));
+    }
+
+    #[test]
+    fn untracked_files_count_as_added_in_a_change_set() {
+        let mut changes = GitChanges {
+            merge_base: "abc".to_string(),
+            changed: std::collections::HashSet::new(),
+            deleted: std::collections::HashSet::new(),
+            added: std::collections::HashSet::new(),
+        };
+        let draft = PathBuf::from("docs/adr/draft.md");
+        changes.add_untracked([&draft]);
+        assert!(changes.changed.contains(&draft) && changes.added.contains(&draft));
+        assert!(!changes.deleted.contains(&draft));
+    }
+
     #[test]
     fn a_missing_git_repo_is_a_reported_error_not_a_silent_empty_list() {
         let tmp = Scratch::new("urzua-io-notgit");
         fs::create_dir_all(&tmp).unwrap();
 
-        let result = discover_tracked_files(&tmp);
+        let result = discover_tracked_files(&tmp, None);
         assert!(
             result.is_err(),
             "a directory with no git repo must error, not return an empty list silently"

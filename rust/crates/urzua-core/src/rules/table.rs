@@ -989,6 +989,27 @@ pub const RULE_TABLE: &[RuleDef] = &[
         },
     },
     RuleDef {
+        id: RULE_IDENTITY_OPEN_PR_COLLISION,
+        description: "A record a `--base` diff adds shares its type and number with a file on a fetched pull-request head ref under a different `Stable-Id` (`ADR-93`, `MILE-89`): two branches filed the same number from one `main`, and each looks valid alone. The refs are the ones `urzua new` fetches into `refs/urzua/pr/<segment>/*` with `new.check_open_prs`; `check` never fetches, so with none present the rule notices how to fetch them and its population counts zero refs, never a clean run over nothing. A head whose file for that id carries the record's own `Stable-Id` is the same record and is not a collision, so a pull request is not flagged against itself nor against its own merged copy. Plain git cannot tell an open pull request from a closed one, so a closed, unmerged head can still hold a number a new record legitimately took: the finding is a warning, which still gates under `fail_on: warning`, and the path out is a waiver whose `Reason` names that pull request, or a renumber with `urzua migrate ids`. Judges the changed set: `not-applicable` on a run with no `--base`. Opt-in.",
+        scope: Scope::Records,
+        anchor: Anchor::Record,
+        judges: Judges::ChangedSet,
+        needs_identity_index: false,
+        requires_relation_pairs: false,
+        requires_acyclic_pair: false,
+        requires_override_log: false,
+        requires_authority: false,
+        reads_declaration: None,
+        header_none: HeaderNone::Exempt("reads the filename identifier and the Stable-Id, only on a --base run"),
+        options: &[],
+        actions: &[
+            VariantAction::new("open-pr-collision", ActionDecl::Exempt("the fix is a renumber (`urzua migrate ids`) or a waiver naming a closed pull request; neither is a field edit")),
+        ],
+        phase: Phase::Main,
+        companion: None,
+        run: |c| open_pr_collision(c.records, c.added_paths, c.pull_ref_claims),
+    },
+    RuleDef {
         id: RULE_TYPE_RECORD_OUTSIDE_DECLARED_DIR,
         description: "A record-shaped tracked path that no type's `dir` claimed (`BUG-62`) — a config written before `RFC-35` silently loses coverage on upgrade otherwise.",
         scope: Scope::Files,
@@ -2034,6 +2055,7 @@ mod tests {
             judged(Judges::ChangedSet),
             vec![
                 RULE_REVISION_LOG_VERSION_BUMP_REQUIRED,
+                RULE_IDENTITY_OPEN_PR_COLLISION,
                 RULE_STATUS_TRANSITION_ALLOWED
             ]
         );

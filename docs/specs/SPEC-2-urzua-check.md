@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5GM1RYRRX2XVMZ0ZAK
-Version: '0.113'
+Version: '0.115'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs, code:rust/crates/urzua-core/src/rules.rs, test:rust/crates/urzua-cli/tests/check_integration.rs, test:rust/crates/urzua-cli/tests/fail_on_integration.rs
@@ -140,6 +140,27 @@ missing target keeps `edit-field` `set`; an untracked one declares an exemption 
 because the repair is `git add` and `run-command` is closed to `urzua` commands. Tracking the file clears
 the finding.
 
+**Untracked records are the repository's choice** (`ADR-92`, `MILE-206`). The default above stands: a
+repository that sets nothing governs tracked files only, and an untracked scratch file is not examined.
+Two things follow from that being a choice and not a rule:
+
+- **`discovery.include_untracked: true`** (`SPEC-3`) makes discovery also return the untracked,
+  non-ignored files directly in a declared record directory that the type owns (the filename rules
+  `load_records` applies). Git's own ignore rules decide "non-ignored" (`.gitignore`,
+  `.git/info/exclude`, the global excludes), and a file outside every declared directory is never added.
+  It is one function, `discover_tracked_files`, which gains the configuration as input, so `check`, the
+  locator matcher, `init` and every other command read the same set. The scope source stays
+  `tracked-sweep`.
+- **Without it, nothing is silent.** A plain `check` adds one info notice, `discovery.untracked-skipped`,
+  naming the untracked records under a declared directory that it did not examine: at most 20 paths and
+  the count. It is emitted only when there is something to list, not for a record named on argv (examined,
+  `BUG-24`), and not for a `--stdin-path` run; under a path argument only the records below it are listed.
+  Info does not gate, so `fail_on: warning` is unaffected.
+
+With the option on, a directory argument examines the untracked records below it, because the sweep it
+scopes includes them; with it off the directory case is the one `BUG-24` pins. A named file keeps its
+`BUG-24` behaviour whichever way the option is set (source `argv`).
+
 Explicit paths on argv override discovery and are used as given -- for a directly-named file. A
 directory argument still scopes the tracked-only sweep rather than walking the filesystem raw
 (`BUG-24`): the "never a raw directory walk" guarantee above governs a directory argument the same as
@@ -155,7 +176,7 @@ resolution, `identity.collision` and `filename.identity-pattern`.
 
 | `scope.source` | Meaning | `base` | Produced today |
 |---|---|---|---|
-| `tracked-sweep` | the tracked record set | `null` | **yes** |
+| `tracked-sweep` | the tracked record set, plus the untracked record files when `discovery.include_untracked` is set | `null` | **yes** |
 | `git-diff` | changed against a base ref | the ref | **yes** (`MILE-123`) |
 | `argv` | a directly-named file not in the tracked set | `null` | **yes** (`BUG-24`) |
 | `stdin` | one record's proposed content read from stdin | `null` | **yes** (`MILE-191`) |
@@ -167,7 +188,9 @@ table is the declared vocabulary those modes will use when built, and is marked 
 misled into branching on a value no run produces.
 
 `base` is always present in `scope`: the ref as the caller gave it for a `git-diff` run, `null` for
-every other source.
+every other source. So are `include_untracked` (a boolean: whether the configuration set
+`discovery.include_untracked`) and `untracked_included` (how many untracked records that option added
+to the run's files, `0` with it off), so a consumer can tell the two corpora apart.
 
 **`stdin` scope** (`MILE-191`, `ADR-78`) is selected by `urzua check --stdin-path <path>`, the
 prospective-content form of `check` that `fix --stdin-path` is for `fix` (`SPEC-8`). It reads the
@@ -203,8 +226,11 @@ not a reading scope, exactly as a path argument is (`BUG-60`):
 
 - The changed set is every path that differs between the merge base of `<ref>` and `HEAD` and the
   working tree, so a branch is not charged for what its base gained since the fork, and staged and
-  unstaged edits to tracked files count. Untracked files never do (the tracked-only guarantee
-  above). A rename is a deletion plus an addition, and a deleted path is simply not a record any
+  unstaged edits to tracked files count. Untracked files do not (the tracked-only guarantee
+  above), except the untracked records a repository includes with `discovery.include_untracked`: they
+  have no merge-base copy, so they are in the changed set and the added set exactly as a staged addition
+  is, and the diff rules (`scope: changed`) judge a draft the way they judge a staged one (`ADR-92`). A
+  rename is a deletion plus an addition, and a deleted path is simply not a record any
   more. A tracked record missing from the working tree that nothing has staged for deletion (an `rm`,
   or a `mv` before `git add`) is treated the same way, as removed, and a `missing-record` warning
   notice names it, so a record never vanishes in silence and the run is not `not-run`.
@@ -251,7 +277,9 @@ not a reading scope, exactly as a path argument is (`BUG-60`):
   unrelated histories.
 - `--base` together with a directly-named file git does not track is refused (exit 2): the diff
   lists tracked paths only, so the file could not be examined, and dropping it silently is the
-  failure `BUG-24` fixed.
+  failure `BUG-24` fixed. The refusal applies only to a file the run would not include: with
+  `discovery.include_untracked` a named untracked record under a declared directory is in the diff as
+  an addition and is examined (`ADR-92`).
 
 A `null` base is not "no scope" — a full sweep legitimately has one. Any consumer keying "did this
 run" on a missing base is reading the wrong field, and the sources exist so it does not have to.
@@ -314,6 +342,7 @@ which stays only for what genuinely isn't built yet.
 | `narrative-field.stale` | A type's config-declared `narrative_fields` pointer (e.g. a milestone's `Blocked-on`) resolves to a target whose `Status` has reached a terminal state (e.g. a cited bug is now `Fixed`) — a signal to re-examine (ADR-42, generalized beyond `Blocked-on` by MILE-90/ADR-44). `terminal_statuses` is declared per repository. |
 | `type.dir-matches-nothing` | A type's declared `dir` does not exist at all (`BUG-56`'s hazard for `dir`, no load-time guard). An existing, empty directory is a legitimate declared-but-unused state and is not flagged. Also reports a type’s `exclude_files` entry that names no tracked file directly in its `dir` (`MILE-150`), so a stale exclusion is visible. Reports each `extra_dirs` entry that does not exist (`MILE-130`). |
 | `identity.collision` | Two records resolving to the same identifier — a corpus error the index cannot represent, reported rather than papered over (`BUG-79`). |
+| `identity.open-pr-collision` | A record a `--base` diff adds shares its type and number with a file on a fetched pull-request head ref under a different `Stable-Id` (`ADR-93`, `MILE-89`): two branches filed the same number from one `main`, and each looks valid alone. The refs are the ones `urzua new` fetches into `refs/urzua/pr/<segment>/*` with `new.check_open_prs`; `check` never fetches, so with none present the rule notices how to fetch them and its population counts zero refs, never a clean run over nothing. A head whose file for that id carries the record's own `Stable-Id` is the same record and is not a collision, so a pull request is not flagged against itself nor against its own merged copy. Plain git cannot tell an open pull request from a closed one, so a closed, unmerged head can still hold a number a new record legitimately took: the finding is a warning, which still gates under `fail_on: warning`, and the path out is a waiver whose `Reason` names that pull request, or a renumber with `urzua migrate ids`. Judges the changed set: `not-applicable` on a run with no `--base`. Opt-in. |
 | `type.record-outside-declared-dir` | A record-shaped tracked path that no type's `dir` claimed (`BUG-62`) — a config written before `RFC-35` silently loses coverage on upgrade otherwise. |
 | `type.no-declared-spec` | Which configured types currently have no `spec` pointer declared at all (ADR-41/ADR-43) — a signal to review, never a mandate; a type can permanently have none declared. |
 | `header.pointer-field-clean` | A type's `pointer_fields` entries are clean, comma-separated references only, format-enforced (MILE-90/ADR-44) — an empty entry between commas or freeform trailing prose is flagged. Never applies to `narrative_fields`, which tolerate prose. |
@@ -404,7 +433,7 @@ but the JSON object below, so a consumer never has to find it inside prose.
     }
   ],
   "rules_selected": null,
-  "scope": { "source": "tracked-sweep", "base": null, "record_types": ["adr", "bug", "rfc"] },
+  "scope": { "source": "tracked-sweep", "base": null, "record_types": ["adr", "bug", "rfc"], "include_untracked": false, "untracked_included": 0 },
   "blocking": false,
   "findings": [
     {
@@ -492,7 +521,12 @@ while some rule is enabled and ran: that is `"ok"` with `files_examined: 0` and 
 is non-fatal observations (`Info`/`Warning` only) that never affect `status` or the exit code, omitted
 entirely when empty. When the suppression type declares `permanent` (`SPEC-3`), `check` always adds an info
 notice with the subject `permanent-waivers` counting the permanent waivers in effect by category
-(`ADR-86`). The same is true of a `Finding`'s own `waived` field, omitted unless a waiver
+(`ADR-86`). Two more info notices belong to discovery (`ADR-92`): `discovery.untracked-skipped`, above,
+when the option is off, and `discovery.untracked-not-drift-judged` when it is on. A record with no git
+history (an untracked file, a staged-new one, an unborn `HEAD`) has no date for its `Realized-by` line, so
+`embodiment.consistency` cannot say that a cited file changed since: it does not judge the record for
+drift, and the notice gives the count of such records that carry a locator, so the skip is disclosed and
+not inferred. A record is judged by drift once it has a commit. The same is true of a `Finding`'s own `waived` field, omitted unless a waiver
 covers it.
 
 Every finding's `file` is relative to the repository root, including a finding about the configuration
@@ -623,6 +657,7 @@ declares `known_fields` keeps the `append` variant.
 | `type.dir-matches-nothing` | `extra-dir-missing` | `edit-config` `set` |
 | `type.dir-matches-nothing` | `dir-missing` | `edit-config` `set` |
 | `identity.collision` | `identifier-collision` | exempt: the fix is a renumber, and no action kind addresses a rename yet (`urzua migrate ids` exists) |
+| `identity.open-pr-collision` | `open-pr-collision` | exempt: the fix is a renumber (`urzua migrate ids`) or a waiver naming a closed pull request; neither is a field edit |
 | `type.record-outside-declared-dir` | `record-outside-declared-dir` | exempt: the fix is a move, and no action kind addresses a move yet |
 | `type.no-declared-spec` | `no-declared-spec` | exempt: a signal to review, never a mandate |
 | `header.pointer-field-clean` | `pointer-field-not-clean` | `edit-field` `set` |
@@ -991,4 +1026,6 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-06 | Bumped to `0.110`. `relation.target-status-undeclared` and `config.companion-declaration-missing` follow the same rule as the two field-not-known rules: for a type declaring no `known_fields` the suggested `edit-config` is a `set` of the full list the type's records use plus the field(s) in question (`-declare-set` variants), not an `append` that would create a one-item list. **Why:** review of the same-day change found the same one-field append in these two rules. | **substantive** |
 > | 2026-11-06 | Bumped to `0.111`. `embodiment.locator-promotion-candidate` lists the `scope` option (`ADR-90`, `MILE-203`): with `scope: changed` a locator is reported only when a record the `--base` diff adds or changes cites it, the finding sits on that changed record and names every citer, a plain `check` reports none, and the unchanged citers are counted in `deferred_by_scope`. The rule's table row is regenerated. **Why:** a repository that enables the nudge at `info` should not see it on records nobody edited; ADR-90 permits the option on a record-level rule. | **substantive** |
 > | 2026-11-06 | Bumped to `0.112`. A tracked record missing from the working tree and not staged for deletion is judged as removed and named in a `missing-record` warning notice, where it made the whole run `not-run`; a `--rules` selection reads the back-pointer sources and published boundary files only for the rules that read them. **Why:** Phase 0 hardening from a second adopter switchover -- one `rm` stopped every check and the editor hook could not judge, and a header-only rule paid for scanning every source file. | **substantive** |
-> | 2026-11-07 | Bumped to `0.113`. `urzua rules` prints a fifth `judges` value, `anchor-scoped`, for a rule that reads other records as context and reports only on changed ones; `embodiment.locator-promotion-candidate` carries it and, under `scope: changed`, emits one finding per changed citer, so `check <path>`, `--stdin-path` and a file-scoped waiver each see the finding on their own record. **Why:** the accepted 2026-11-07 amendment to `ADR-90`, points 4 and 5. | **substantive** |
+> | 2026-11-07 | Bumped to `0.113`. §Discovery states `discovery.include_untracked` (`SPEC-3`): with it, untracked, non-ignored record files directly in a declared directory join the run's files (source still `tracked-sweep`), `--base` counts them as added, and a named file keeps its `BUG-24` treatment; without it, a plain `check` adds the info notice `discovery.untracked-skipped` naming the untracked records it skipped. `scope` gains the always-present `include_untracked` and `untracked_included`. The info notice `discovery.untracked-not-drift-judged` counts records with a locator and no history that drift did not judge. **Why:** `MILE-206` / `ADR-92`; `ADR-56` stands for the default and carries the amendment. | **substantive** |
+> | 2026-11-07 | Bumped to `0.114`. Adds the opt-in rule `identity.open-pr-collision` (`ADR-93`, `MILE-89`): under `--base`, a warning for an added record whose type and number a fetched pull-request ref under `refs/urzua/pr` holds with a different `Stable-Id`; `not-applicable` without `--base`; a head carrying the record's own `Stable-Id` is not a collision; `check` never fetches, and with no refs fetched the rule adds a notice saying how and its population (unit `pull-ref`) counts zero. The rule table is regenerated. **Why:** `MILE-89` / `ADR-93`. | **substantive** |
+> | 2026-11-07 | Bumped to `0.115`. `urzua rules` prints a fifth `judges` value, `anchor-scoped`, for a rule that reads other records as context and reports only on changed ones; `embodiment.locator-promotion-candidate` carries it and, under `scope: changed`, emits one finding per changed citer, so `check <path>`, `--stdin-path` and a file-scoped waiver each see the finding on their own record. **Why:** the accepted 2026-11-07 amendment to `ADR-90`, points 4 and 5. | **substantive** |
