@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.106'
+Version: '0.107'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs, test:rust/crates/urzua-cli/tests/field_levels_integration.rs
@@ -1276,7 +1276,7 @@ Readings of what `RFC-48` leaves open, decided in `ADR-76`:
   and does not hide a real cycle among the claims that resolve. An edge into a record whose header
   cannot be read is dropped too, so a cycle through such a record is not seen; the record is disclosed
   in the rule's population.
-- **One graph per pair.** A loop that crosses two acyclic pairs is not detected by `sequence.cycle`.
+- **One graph per pair, except `roadmap.pairs`.** `sequence.cycle` reads each `acyclic` pair on its own, so a loop that crosses two acyclic pairs is not detected, unless both pairs are named in `roadmap.pairs`: those are read as one graph and the loop is reported (below).
 - **One finding per record on a cycle.** A large cycle yields one finding per member, by design, so a
   diff-scoped run that examines one member still sees it.
 - **Overlap.** When a pair field is also one of the type's `pointer_fields`, `sequence.unresolved-blocker`
@@ -2139,3 +2139,4 @@ proves this configuration produces the three findings.
 > | 2026-11-07 | Bumped to `0.104`. `date.field-valid`'s `date_fields` entries are validated at load: a blank entry or one that no record type declares is an error, as `date_order` already was. **Why:** a typo ran with no eligible slot and no notice. | **substantive** |
 > | 2026-11-07 | Bumped to `0.105`. An `authority.gates` `paths` entry is normalised like `published_paths`, and one that could match nothing (`.`, a backslash) is a load error. **Why:** hardening review: `./.agent` loaded and gated nothing, for `diff.decider-required` and the `protected-paths` guardrail alike. | **substantive** |
 > | 2026-11-07 | Bumped to `0.106`. A `harness.guardrails` name the build does not ship is a config load error for every command, suggesting the nearest valid name; unknown keys elsewhere in `harness` are still kept and reported. **Why:** `ADR-89` amendment of 2026-11-07, maintainer decision from the core-model review. | **substantive** |
+> | 2026-11-07 | Bumped to `0.107`. The `sequence.cycle` bullet "One graph per pair" no longer says a loop across two acyclic pairs is never detected: it is reported when both pairs are named in `roadmap.pairs`. **Why:** the bullet contradicted `ADR-82`, `MILE-192` and the `roadmap.pairs` bullet below it; `ADR-76`'s matching Decision text carries a proposed amendment. | **substantive** |

@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5BCRKD027XA81J0Q8Q
-Version: '0.14'
+Version: '0.15'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -27,9 +27,12 @@ record_types:
   waiver:
     dir: "docs/waiver"
     role: suppression
-    required_fields: ["Rule", "Scope", "Reason"]
+    # A waiver with no Reason suppresses nothing.
+    effective_requires: [Reason]
+    identity: {from: filename, pattern: '^(?P<prefix>WAIVER)-(?P<number>\d{4})-(?P<slug>.+)$'}
+    required_fields: ["Rule", "Scope", "Reason", "Stable-Id"]
     header_shape: "yaml-frontmatter"
-    known_fields: ["Stable-Id", "Expires", "Category", "Justified-by"]
+    known_fields: ["Expires", "Category", "Justified-by"]
     spec: "SPEC-10"
     pointer_fields: ["Justified-by"]
     narrative_fields: []
@@ -158,3 +161,4 @@ record is edited later.
 > | 2026-11-06 | Bumped to `0.12`. States that `Expires` is compared against the current UTC date, not the machine's local date. **Why:** maintainer decision of 2026-11-05: every date comparison uses UTC; the engine had read local time here and UTC for the claim-age clock. | **substantive** |
 > | 2026-11-07 | Bumped to `0.13`. `Expires` is validated as a real calendar date and compared as a date; a month 13-99 or day 32-99 no longer sorts above every real date, and a value that is not a calendar date expires immediately, the finding saying it is not a calendar date. **Why:** hardening review: `Expires: 2026-99-99` kept a waiver active forever. | **substantive** |
 > | 2026-11-07 | Bumped to `0.14`. A required field (`effective_requires`) is a placeholder only when its whole trimmed value equals a declared `pending` value or the template's text for it; the word "pending" inside real prose is a real reason, and the built-in placeholder words count only when they are the whole value (`TBD`, `TODO` alone are placeholders; "TBD until the upstream fix ships" is a real reason). `waiver.matches-nothing` says "is a placeholder" or "is a declared pending value" for such a field, and "lacks" only for an absent or blank one. **Why:** maintainer decision of 2026-11-07, from the core-model review. | **substantive** |
+> | 2026-11-07 | Bumped to `0.15`. The Schema block matches the declaration this repository runs: `Stable-Id` is a required field rather than a known one, and `identity` and `effective_requires: [Reason]` are shown. **Why:** the block had fallen behind the configuration; `effective_requires` was described in prose only. | **substantive** |

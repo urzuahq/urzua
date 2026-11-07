@@ -114,6 +114,13 @@ for as long as that key is read.
    URL), and whether boundaries can be derived rather than declared. Both stay open `RFC-11` questions.
    This decision reports the violation and rewrites nothing.
 
+## Amendment (2026-11-07): the five open questions were resolved as drafted
+
+The list above, headed "Not decided here, for the maintainer before this is Accepted", was written while the
+ADR was Proposed. The maintainer accepted the ADR on 2026-11-05 with the drafted choices, so each of the five
+reads as the Decision and the proposals in that list state them. `Status` stays `Accepted` and the Decision
+text above is unchanged.
+
 ## Reversibility
 
 Moderate. The boundary entry is additive config and `published_paths` keeps working, so adopters who
@@ -154,3 +161,4 @@ matchers is cheap to keep and costly to lose, because merging them silently infl
 > |---|---|---|
 > | 2026-11-05 | Drafted as Proposed. **Why:** maintainer decision of 2026-11-05 to build `RFC-11` sections 1 to 3 for `MILE-125`; building part of an RFC needs its own decision record, and the maintainer approves before it is Accepted. | **substantive** |
 > | 2026-11-05 | Status changed from Proposed to Accepted, with the drafted choices on RFC-11's gaps. **Why:** Maintainer decision, 2026-11-05. | **substantive** |
+> | 2026-11-07 | Amendment added: the five questions listed as open in the Decision were resolved as drafted when the ADR was accepted. **Why:** the Decision still carried "for the maintainer before this is Accepted" after acceptance; `Status` stays `Accepted` and the Decision text is unchanged. | **structural** |

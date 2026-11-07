@@ -79,6 +79,9 @@ record_types:
       - "Deciders"
       - "Stable-Id"
     header_shape: "yaml-frontmatter"
+    # The fields `urzua new` fills with today and the author (MILE-176). Named here so the
+    # declaration is read from this repository's config; they equal the defaults.
+    relation_fields: {date: "Date", author: "Author"}
     known_fields:
       - "Embodiment"
       - "Realized-by"
@@ -135,6 +138,7 @@ record_types:
     # unexamined, not a configuration that reaches nothing.
     sections:
       from: headings
+      depth: 2
       required:
         - {name: Context}
         - {name: Decision}
@@ -148,6 +152,9 @@ record_types:
       - "Author"
       - "Stable-Id"
     header_shape: "yaml-frontmatter"
+    # The fields `urzua new` fills with today and the author (MILE-176). Named here so the
+    # declaration is read from this repository's config; they equal the defaults.
+    relation_fields: {date: "Date", author: "Author"}
     known_fields:
       - "Accepted-on"
       - "Supersedes / Superseded-by"
@@ -186,6 +193,7 @@ record_types:
     # headings). A Rejected proposal still made its case, so none is exempt.
     sections:
       from: headings
+      depth: 2
       required:
         - {name: Summary}
         - {name: Motivation}
@@ -206,6 +214,9 @@ record_types:
       - "Subject"
       - "Stable-Id"
     header_shape: "yaml-frontmatter"
+    # The fields `urzua new` fills with today and the author (MILE-176). Named here so the
+    # declaration is read from this repository's config; they equal the defaults.
+    relation_fields: {date: "Date", author: "Author"}
     known_fields:
       - "Embodiment"
       - "Realized-by"
