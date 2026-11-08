@@ -590,9 +590,10 @@ impl Report for InitReport {
     }
 }
 
-/// Never clobbers an existing config; `--dry-run` produces byte-identical
-/// output to the real run, differing only in whether the file is actually
-/// written.
+/// Never clobbers an existing config; `--dry-run` proposes the config the
+/// real run writes (its `config_yaml` is byte-identical to the written file)
+/// and differs in the report's `dry_run` and `written` fields, and in the real
+/// run omitting `config_yaml` rather than echoing the file back.
 pub fn run(config: Option<PathBuf>, dry_run: bool) -> ExitCode {
     let repo_root = match find_repo_root(&[PathBuf::from(".")]) {
         Ok(root) => root,
