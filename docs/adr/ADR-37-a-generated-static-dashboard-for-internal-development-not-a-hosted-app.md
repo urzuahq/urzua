@@ -2,7 +2,7 @@
 Status: Accepted
 Stable-Id: 01M1YTZ48KK60554GSFTN46E5F
 Embodiment: Drift detected
-Realized-by: code:scripts/generate-dashboard.py
+Realized-by: code:scripts/generate-dashboard.py@sha256:1fcbc09112b61edca0f8c721fda79412ed2b1541a4e41e4ce777b18d1d3685ab
 Date: 2026-09-07
 Accepted-on: 2026-09-07
 Author: beauwilliams
@@ -88,3 +88,4 @@ above as out of scope, not left to happen by accretion.
 > | 2026-11-04 | `Embodiment` recomputed by `urzua fix`: `Drift detected`. **Why:** every file named in `Realized-by` has changed since this line was last verified, and this pass did not re-verify it, so the record states the drift instead of a stale `Verified`; the Decision is unchanged. | **substantive** |
 > | 2026-11-04 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:scripts/generate-dashboard.py` -- stated `Verified` disagreed with the computed value. | **structural** |
 > | 2026-11-04 | Backfilled `Accepted-on` from git history, commit 340919acc. | **structural** |
+> | 2026-11-08 | Pinned (attested by beauwilliams, identity: gh-verified, actor: agent): 1 locators pinned, 1 file-level, 0 scoped. Evidence: scripts/generate-dashboard.py@sha256:1fcbc09112b6 Reason: Pinned the files as they are now after checking each against the record it evidences: header.rs still parses the declared YAML frontmatter shape (ADR-17), fix.rs still has detect_repairs (ADR-19), urzua-id still builds ULID stable ids (ADR-21), main.rs still prints JSON with no --format flag on check (ADR-23), urzua-io still resolves the attesting identity in the ADR-31 order, scripts/generate-dashboard.py still generates the static dashboard (ADR-37), report.rs still defines Report and Notice and main.rs still emits them (ADR-46), publish-release.yml still verifies the tree it ships through checks.yml (ADR-47), knope.toml still releases from changesets (ADR-48), and ci.yml still gates changesets on .github/release-paths (ADR-49). **Why:** a claim is renewed only over pinned code and test evidence. | **structural** |
