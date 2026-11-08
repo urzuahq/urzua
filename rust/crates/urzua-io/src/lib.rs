@@ -1075,9 +1075,10 @@ impl BlameCache {
                     })
                 })
                 .collect();
-            handles
-                .into_iter()
-                .flat_map(|h| h.join().unwrap_or_default())
+            wanted
+                .chunks(chunk)
+                .zip(handles)
+                .flat_map(|(part, h)| blamed_or_each(&self.repo_root, part, contents, h.join()))
                 .collect()
         });
         let mut cached = self.lines.lock().unwrap_or_else(|e| e.into_inner());
@@ -1121,6 +1122,28 @@ impl BlameCache {
             .insert(commit.to_string(), time);
         time
     }
+}
+
+/// A blame thread's answers, or -- when the thread panicked -- each of its lines
+/// asked of git on its own, so an error surfaces exactly as
+/// [`commit_for_line_in`] reports it rather than as "no commit".
+fn blamed_or_each(
+    repo_root: &Path,
+    part: &[(&PathBuf, Vec<usize>)],
+    contents: Option<&str>,
+    joined: std::thread::Result<Vec<(PathBuf, Vec<(usize, LineBlame)>)>>,
+) -> Vec<(PathBuf, Vec<(usize, LineBlame)>)> {
+    joined.unwrap_or_else(|_| {
+        part.iter()
+            .map(|(p, lines)| {
+                let each = lines
+                    .iter()
+                    .map(|l| (*l, commit_for_line_in(repo_root, p, *l, contents)))
+                    .collect();
+                ((*p).clone(), each)
+            })
+            .collect()
+    })
 }
 
 /// `git blame --porcelain` of `lines` of `path` (of `contents` when given) in
@@ -2286,5 +2309,91 @@ mod tests {
             cache.commit_for_line(Path::new("doc.md"), 2, Some(proposed)),
             commit_for_line_in(&tmp, Path::new("doc.md"), 2, Some(proposed))
         );
+    }
+
+    #[test]
+    fn a_panicked_blame_thread_falls_back_to_asking_git_per_line() {
+        let tmp = Scratch::new("urzua-io-blame-panic");
+        init_repo(&tmp);
+        fs::write(tmp.join("doc.md"), "one\ntwo\n").unwrap();
+        let commit = commit_all(&tmp, "add two lines");
+
+        let path = PathBuf::from("doc.md");
+        let part = [(&path, vec![1, 2, 9])];
+        let panicked = std::thread::spawn(|| -> Vec<(PathBuf, Vec<(usize, LineBlame)>)> {
+            panic!("simulated blame thread panic")
+        })
+        .join();
+        assert!(panicked.is_err());
+        let answers = blamed_or_each(&tmp, &part, None, panicked);
+        assert_eq!(answers.len(), 1);
+        let lines = &answers[0].1;
+        assert_eq!(lines[0].1, Ok(Some(commit.clone())));
+        assert_eq!(lines[1].1, Ok(Some(commit)));
+        // A line past the end is the error commit_for_line_in gives, not Ok(None).
+        assert_eq!(lines[2].1, commit_for_line_in(&tmp, &path, 9, None));
+        assert!(lines[2].1.is_err());
+    }
+
+    /// Every line of `path` blamed in one batch answers as `commit_for_line_in`.
+    fn assert_batch_matches_single(repo: &Path, path: &str, lines: usize) {
+        let cache = BlameCache::new(repo);
+        let work: Vec<(PathBuf, usize)> = (1..=lines).map(|l| (PathBuf::from(path), l)).collect();
+        cache.prefetch(&work, None);
+        for (p, line) in &work {
+            let single = commit_for_line_in(repo, p, *line, None);
+            assert!(
+                matches!(single, Ok(Some(_))),
+                "{path} line {line}: {single:?}"
+            );
+            assert_eq!(
+                cache.commit_for_line(p, *line, None),
+                single,
+                "{path} line {line}"
+            );
+        }
+    }
+
+    #[test]
+    fn batched_blame_matches_single_line_blame_across_a_rename() {
+        let tmp = Scratch::new("urzua-io-blame-rename");
+        init_repo(&tmp);
+        fs::write(tmp.join("old.md"), "a\nb\nc\n").unwrap();
+        commit_all(&tmp, "add old");
+        fs::rename(tmp.join("old.md"), tmp.join("new.md")).unwrap();
+        fs::write(tmp.join("new.md"), "a\nb CHANGED\nc\nd\n").unwrap();
+        commit_all(&tmp, "rename and edit");
+        assert_batch_matches_single(&tmp, "new.md", 4);
+    }
+
+    #[test]
+    fn batched_blame_matches_single_line_blame_for_crlf_lines() {
+        let tmp = Scratch::new("urzua-io-blame-crlf");
+        init_repo(&tmp);
+        fs::write(tmp.join("crlf.md"), "a\r\nb\r\nc\r\n").unwrap();
+        commit_all(&tmp, "add crlf");
+        fs::write(tmp.join("crlf.md"), "a\r\nb2\r\nc\r\n").unwrap();
+        commit_all(&tmp, "edit b");
+        assert_batch_matches_single(&tmp, "crlf.md", 3);
+    }
+
+    #[test]
+    fn batched_blame_matches_single_line_blame_in_a_shallow_clone() {
+        let tmp = Scratch::new("urzua-io-blame-shallow");
+        init_repo(&tmp);
+        fs::write(tmp.join("doc.md"), "a\nb\nc\n").unwrap();
+        commit_all(&tmp, "first");
+        fs::write(tmp.join("doc.md"), "a\nb2\nc\n").unwrap();
+        commit_all(&tmp, "second");
+        let clone = Scratch::new("urzua-io-blame-shallow-clone");
+        let status = Command::new("git")
+            .args(["clone", "--quiet", "--depth", "1"])
+            .arg(format!("file://{}", tmp.display()))
+            .arg(&*clone)
+            .status()
+            .unwrap();
+        assert!(status.success());
+        // Every line is a boundary commit in the shallow history.
+        assert_batch_matches_single(&clone, "doc.md", 3);
     }
 }

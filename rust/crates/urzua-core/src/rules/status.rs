@@ -251,7 +251,7 @@ pub fn judge_delivery(
             status_field: status_field.to_string(),
             status: status.to_string(),
             tier: judged.tier.clone(),
-            evidence: format!("the Done means items ({})", judged.counts()),
+            evidence: format!("the {} items ({})", items_decl.section, judged.counts()),
             disagreement,
             items: Some(judged),
         });
@@ -407,8 +407,8 @@ pub fn status_delivery_agreement(
                         .iter()
                         .map(|u| {
                             format!(
-                                "{id} is {} but Done means item {} \"{}\" is unresolved: {}",
-                                judged.status, u.n, u.text, u.cause
+                                "{id} is {} but {} item {} \"{}\" is unresolved: {}",
+                                judged.status, items_section(config, &record.record_type), u.n, u.text, u.cause
                             )
                         })
                         .collect();

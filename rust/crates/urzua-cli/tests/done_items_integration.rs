@@ -1084,6 +1084,10 @@ fn invalid_items_declarations_are_refused_at_load() {
             "not a declared embodiment tier",
         ),
         (
+            ITEMS.replace("[Specified, Implemented, Verified]", "[Implemented]"),
+            "`delivery.delivered_tiers` names 'Verified', which is not in `delivery.items.resolving_tiers` (Implemented)",
+        ),
+        (
             ITEMS.replace(
                 "evidence_marker: \"evidence:\"",
                 "evidence_marker: \"waived:\"",
@@ -1290,4 +1294,121 @@ fn the_roadmap_leaves_items_off_a_record_of_an_undeclared_type() {
             .is_none(),
         "{report}"
     );
+}
+
+// ------------------------------------------------ round 4: delivery items
+
+#[test]
+fn a_waived_item_whose_evidence_does_not_exist_yet_is_not_a_locator_defect() {
+    let body = "- A second chain builds. — evidence: test:tests/nope.rs — waived: deferred-to (MILE-9, 2999-01-31) -- no runner until MILE-9\n- It builds. — evidence: code:src/gone.rs\n";
+    let dir = repo(
+        "waived-missing",
+        &config(ITEMS, "error"),
+        &[(1, milestone("InProgress", "", body))],
+    );
+    let report = parsed(&run(&dir, &["check"]));
+    let found = findings(&report, "embodiment.locator-exists");
+    assert_eq!(
+        found.len(),
+        1,
+        "only the unwaived item is a defect: {report}"
+    );
+    let message = found[0]["message"].as_str().unwrap();
+    assert!(message.contains("src/gone.rs"), "{message}");
+    assert!(!message.contains("nope.rs"), "{message}");
+}
+
+/// A type that names its section something else gets messages in that name.
+#[test]
+fn messages_use_the_declared_section_name() {
+    let cfg = config(&ITEMS.replace("\"Done means\"", "\"Done when\""), "error")
+        .replace("{name: Done means}", "{name: Done when}");
+    let content = "---\nStatus: Done\nRealized-by: code:src/a.rs\n---\n# X\n\n## Done when\n\n- It builds. — evidence: code:src/gone.rs\n- It is waived. — waived: not-applicable -- nope\n\n## Revision log\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-11-04 | Filed. | **substantive** |\n";
+    let dir = repo("section-name", &cfg, &[(1, content.to_string())]);
+    let report = parsed(&run(&dir, &["check"]));
+    let mut texts: Vec<String> = report["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|f| f["message"].as_str().unwrap().to_string())
+        .collect();
+    texts.extend(
+        report["notices"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|n| n["message"].as_str().unwrap().to_string()),
+    );
+    assert!(
+        texts
+            .iter()
+            .any(|m| m.contains("a Done when item (line 9)")),
+        "{texts:?}"
+    );
+    assert!(
+        texts
+            .iter()
+            .any(|m| m.contains("is Done but Done when item 1")),
+        "{texts:?}"
+    );
+    assert!(
+        texts
+            .iter()
+            .any(|m| m.contains("Done when item 2") && m.contains("is waived")),
+        "{texts:?}"
+    );
+    assert!(
+        texts.iter().any(|m| m.contains("waived Done when item(s)")),
+        "{texts:?}"
+    );
+    assert!(texts.iter().all(|m| !m.contains("Done means")), "{texts:?}");
+}
+
+/// An absolute or `..` locator is never probed on disk: it is "not in the
+/// working tree", not "exists but is not tracked".
+#[test]
+fn a_locator_outside_the_repository_is_not_probed() {
+    // A target the test owns, in a directory beside the repository, removed on drop.
+    let outside = common::TempDir::new("urzua-items-outside-target");
+    std::fs::write(outside.join("target.txt"), "x\n").unwrap();
+    let absolute = outside.join("target.txt");
+    let name = outside.file_name().unwrap().to_string_lossy().to_string();
+    let body = format!(
+        "- A. — evidence: code:{}\n- B. — evidence: code:../{name}/target.txt\n",
+        absolute.display()
+    );
+    let dir = repo(
+        "outside-probe",
+        &config(ITEMS, "error"),
+        &[(1, milestone("InProgress", "", &body))],
+    );
+    let report = parsed(&run(&dir, &["check"]));
+    let found = findings(&report, "embodiment.locator-exists");
+    assert_eq!(found.len(), 2, "{report}");
+    for f in found {
+        let m = f["message"].as_str().unwrap();
+        assert!(m.contains("not in the working tree"), "{m}");
+        assert!(!m.contains("not tracked"), "{m}");
+    }
+}
+
+/// A waiver that has expired no longer excuses an item whose evidence is missing.
+#[test]
+fn an_expired_waiver_does_not_excuse_missing_evidence() {
+    let live = "- Later. — evidence: code:src/gone.rs — waived: deferred-to (MILE-9, 2999-01-31) -- carried\n";
+    let expired = "- Later. — evidence: code:src/gone.rs — waived: deferred-to (MILE-9, 2020-01-31) -- carried\n";
+    let count = |name: &str, body: &str| {
+        let dir = repo(
+            name,
+            &config(ITEMS, "error"),
+            &[
+                (1, milestone("InProgress", "", body)),
+                (9, milestone("Planned", "", "- Open.\n")),
+            ],
+        );
+        let report = parsed(&run(&dir, &["check"]));
+        findings(&report, "embodiment.locator-exists").len()
+    };
+    assert_eq!(count("waiver-live", live), 0);
+    assert_eq!(count("waiver-expired", expired), 1);
 }
