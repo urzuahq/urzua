@@ -12,11 +12,12 @@
     ".claude/commands/done.md": "sha256:e607ac3ef6e1144febf0314e1818edc4540141014b5a45cf148a66ab89c3c592",
     ".claude/commands/milestone.md": "sha256:2161bb31386a73e1c5550878e98578721160aeb5efd0881b49c07fd96ec9d129",
     ".claude/commands/repin.md": "sha256:6371aa2831adb7a491ad46467abf987bdd28e1523906c8b4e8700cdae24c006b",
+    ".claude/commands/reverify.md": "sha256:5fd282809f8aea750c3700b443d4a16535fd93e179234a62832570b391aabb5d",
     ".claude/commands/rfc.md": "sha256:d8b3308af758e3e4e7835d8bae793811c585aad0fb64f312c0f2f1a087f83fca",
     ".claude/commands/spec.md": "sha256:3b7fcb49f0893a3b6388c75406ac5f8d1be5ccb5ca2dc9c59fc3dee08079a96c",
     ".claude/commands/waiver.md": "sha256:188690a392b5a9734644b848814b5c569d436dcd6dbdd8e68087c8d13304b287",
     ".claude/hooks/urzua-claude-code.py": "sha256:7cfe1524464a735bf700cf203b173aec821274887a34a0efa60b868c7d34e7bc",
-    ".claude/hooks/urzua-record.sh": "sha256:5221a2b5ece8cee3df8d24dfe5edd3fde2f67b8a6b4d3d7635cd58643391422a"
+    ".claude/hooks/urzua-record.sh": "sha256:5d1699781206c880f6123b09a1fa2da5c5cdef11bd157034dc07024204eec37e"
   },
   "entries": [
     {

@@ -3,7 +3,7 @@
 //! `urzua harness install`, and `/amend`, `/repin` and `/done` are thin wrappers
 //! over urzua commands. A command carries no record type, field or status of
 //! its own; `/done` sets a status only through `urzua fix --apply`, and never
-//! one an `authority` gate names; `/repin` passes `--actor agent`.
+//! one an `authority` gate names; `/repin` and `/reverify` pass `--actor agent`.
 //! Real git-repo fixtures and the real binary.
 
 mod common;
@@ -90,7 +90,7 @@ fn read(dir: &Path, rel: &str) -> String {
 #[test]
 fn install_generates_a_drafting_command_for_every_declared_type_and_the_lifecycle_commands() {
     let dir = installed("generate", BASE);
-    for name in ["milestone", "note", "amend", "repin", "done"] {
+    for name in ["milestone", "note", "amend", "repin", "reverify", "done"] {
         assert!(
             dir.join(format!(".claude/commands/{name}.md")).is_file(),
             "{name}"
@@ -162,7 +162,7 @@ fn no_generated_command_names_a_field_or_status_of_the_configuration() {
         "Stable-Id",
     ];
     literals.sort();
-    for name in ["milestone", "note", "amend", "repin", "done"] {
+    for name in ["milestone", "note", "amend", "repin", "reverify", "done"] {
         let text = read(&dir, &format!(".claude/commands/{name}.md"));
         for word in &literals {
             assert!(!text.contains(word), "{name}.md restates `{word}`");
@@ -325,6 +325,90 @@ fn repin_passes_actor_agent_and_prints_the_line_for_the_pr_body() {
             && stderr.contains("the helper gained"),
         "{stderr}"
     );
+}
+
+// -------------------------------------------------------------- /reverify
+
+fn with_expiry_rule(name: &str) -> common::TempDir {
+    let config = BASE
+        .replace(
+            "rules:\n",
+            "rules:\n  embodiment.claim-expired:\n    level: warn\n    anchor_field: Last-audited\n    require_pin: [code]\n    periods:\n      - {type: milestone, status: [Done], days: 1}\n",
+        )
+        .replace(
+            "known_fields: [\"Realized-by\"]",
+            "known_fields: [\"Realized-by\", \"Last-audited\"]",
+        );
+    let dir = installed(name, &config);
+    let path = "docs/milestones/MILE-1-x.md";
+    let text = read(&dir, path).replace("Status: Planned", "Status: Done");
+    std::fs::write(dir.join(path), text).unwrap();
+    git(&dir, &["commit", "-qam", "done"]);
+    dir
+}
+
+fn reverify(dir: &Path, reason: &str) -> Output {
+    Command::new("bash")
+        .arg(dir.join(HELPER))
+        .args(["reverify", "docs/milestones/MILE-1-x.md", reason])
+        .env("URZUA", env!("CARGO_BIN_EXE_urzua"))
+        .env("PATH", common::path_with_stub_gh())
+        .env("URZUA_BY", "tester")
+        .current_dir(dir)
+        .output()
+        .unwrap()
+}
+
+#[test]
+fn reverify_refuses_an_empty_reason_and_changes_nothing() {
+    let dir = with_expiry_rule("reverify-empty");
+    let before = read(&dir, "docs/milestones/MILE-1-x.md");
+    for reason in ["", "   "] {
+        let out = reverify(&dir, reason);
+        assert!(!out.status.success());
+        assert!(String::from_utf8_lossy(&out.stderr).contains("reason"));
+    }
+    assert_eq!(read(&dir, "docs/milestones/MILE-1-x.md"), before);
+}
+
+#[test]
+fn reverify_lists_the_review_passes_actor_agent_and_prints_the_lines_for_the_pr_body() {
+    let dir = with_expiry_rule("reverify-ok");
+    let out = reverify(&dir, "read a.rs against the item; the claim holds");
+    assert!(
+        out.status.success(),
+        "{}\n{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let text = read(&dir, "docs/milestones/MILE-1-x.md");
+    assert!(text.contains("Last-audited: "), "{text}");
+    assert!(text.contains("@sha256:"), "{text}");
+    assert!(text.matches("actor: agent").count() == 2, "{text}");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("will-pin")
+            && stderr.contains("Pinned: docs/milestones/MILE-1-x.md")
+            && stderr.contains("Re-verified: docs/milestones/MILE-1-x.md")
+            && stderr.contains("read a.rs against the item"),
+        "{stderr}"
+    );
+}
+
+#[test]
+fn reverify_refuses_changed_evidence_and_says_nothing_was_renewed() {
+    let dir = with_expiry_rule("reverify-changed");
+    let path = "docs/milestones/MILE-1-x.md";
+    let text = read(&dir, path).replace(
+        "Realized-by: code:src/a.rs",
+        &format!("Realized-by: {STALE}"),
+    );
+    std::fs::write(dir.join(path), &text).unwrap();
+    git(&dir, &["commit", "-qam", "stale pin"]);
+    let out = reverify(&dir, "looked at it");
+    assert!(!out.status.success());
+    assert!(String::from_utf8_lossy(&out.stderr).contains("nothing was renewed"));
+    assert_eq!(read(&dir, path), text);
 }
 
 // ----------------------------------------------------------------- /amend

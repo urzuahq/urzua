@@ -6,6 +6,7 @@
 #   urzua-record.sh finish <record>          guard, stage, regenerate indexes, run `urzua check`
 #   urzua-record.sh amend-finish <record>    an amendment only adds; stage, run `urzua check`
 #   urzua-record.sh repin <record> <reason>  `urzua fix --rebaseline`, only with a reason
+#   urzua-record.sh reverify <record> <reason>  `urzua reverify`, only with a reason
 #   urzua-record.sh done <record>            `urzua fix --apply`: the engine's computed value
 #
 # This script holds no schema knowledge: no record type, header field, state value or
@@ -130,6 +131,31 @@ repin)
   echo "Re-pin: $path -- $reason" >&2
   echo "urzua-record: list the line above in the pull request body for the reviewer" >&2
   ;;
+reverify)
+  [ $# -ge 2 ] || { echo "usage: urzua-record.sh reverify <record> <reason>" >&2; exit 2; }
+  path="$2"
+  reason="${3:-}"
+  if [ -z "$(printf '%s' "$reason" | tr -d '[:space:]')" ]; then
+    echo "urzua-record: refusing; a renewal needs a non-empty reason that says what you checked, not that the claim was old" >&2
+    exit 1
+  fi
+  by="${URZUA_BY:-$(git config user.name || true)}"
+  [ -n "$by" ] || { echo "urzua-record: no identity; set URZUA_BY to the person who authorised the renewal" >&2; exit 2; }
+  echo "urzua-record: the review of $path (read every locator and span it lists before going on):" >&2
+  review="$("$bin" reverify --ids "$path")" && rc=0 || rc=$?
+  printf '%s\n' "$review" >&2
+  out="$("$bin" reverify --apply --ids "$path" --by "$by" --actor agent --reason "$reason")" && rc=0 || rc=$?
+  printf '%s\n' "$out"
+  printf '%s\n' "$out" | grep -q '"status": "applied"' || {
+    echo "urzua-record: nothing was renewed for $path" >&2; exit 1; }
+  [ "$rc" -eq 0 ] || exit "$rc"
+  git add -- "$path"
+  if printf '%s\n' "$review" | grep -q '"check": "will-pin"'; then
+    echo "Pinned: $path -- $reason" >&2
+  fi
+  echo "Re-verified: $path -- $reason" >&2
+  echo "urzua-record: list every Pinned and Re-verified line above in the pull request body for the reviewer" >&2
+  ;;
 done)
   [ $# -eq 2 ] || { echo "usage: urzua-record.sh done <record>" >&2; exit 2; }
   path="$2"
@@ -154,7 +180,7 @@ done)
   exit "$rc"
   ;;
 *)
-  echo "usage: urzua-record.sh new|finish|amend-finish|repin|done ..." >&2
+  echo "usage: urzua-record.sh new|finish|amend-finish|repin|reverify|done ..." >&2
   exit 2
   ;;
 esac
