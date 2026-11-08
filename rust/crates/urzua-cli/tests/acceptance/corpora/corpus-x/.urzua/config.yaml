@@ -1,0 +1,31 @@
+schema_version: 2
+fail_on: warning
+rules:
+  header.required-fields: error
+  embodiment.claim-expired:
+    level: warn
+    anchor_field: Last-audited
+    require_pin: [code, test]
+    max_batch: 3
+    periods:
+      - {type: milestone, status: [Done], days: 30}
+      - {type: adr, status: [Accepted], days: 36500}
+record_types:
+  milestone:
+    dir: docs/milestones
+    prefix: MILE
+    header_shape: yaml-frontmatter
+    required_fields: [Status]
+    known_fields: [Realized-by, Last-audited]
+    statuses:
+      values: [Planned, Done]
+      success: [Done]
+  adr:
+    dir: docs/adr
+    prefix: ADR
+    header_shape: yaml-frontmatter
+    required_fields: [Status]
+    known_fields: [Realized-by, Last-audited]
+    statuses:
+      values: [Proposed, Accepted]
+      success: [Accepted]
