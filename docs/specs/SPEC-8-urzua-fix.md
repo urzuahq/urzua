@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5Q0XVK27P5T8FN72BN
-Version: '0.37'
+Version: '0.38'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/commands/fix.rs@sha256:751d9bdf6982199d0f6d175573217be840075d809b58378370dba39a3b29fd55, code:rust/crates/urzua-core/src/fix.rs@sha256:88c815c0639acb367ed1471e6a249d646048741862208ac678c4a1e372a61518, test:rust/crates/urzua-cli/tests/fix_paths_integration.rs@sha256:73cb06a1782f02abeaf6c0795632ed1d1939633d72f67033247120656c6927d2, test:rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs@sha256:27c91b75ad614811aa87db203bafedcadf05c64de434957d0859e2af55659bf0, test:rust/crates/urzua-cli/tests/fix_drift_integration.rs@sha256:ff69343ca324400bde79c266372f9a213728d4d4ef8202beca6e12e54aa35352
+Realized-by: code:rust/crates/urzua-cli/src/commands/fix.rs@sha256:841885614c384744d7dc00eff8f1b76f9c95288dceeac2bc0a46a89bbd5d75d0, code:rust/crates/urzua-core/src/fix.rs@sha256:88c815c0639acb367ed1471e6a249d646048741862208ac678c4a1e372a61518, test:rust/crates/urzua-cli/tests/fix_paths_integration.rs@sha256:73cb06a1782f02abeaf6c0795632ed1d1939633d72f67033247120656c6927d2, test:rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs@sha256:27c91b75ad614811aa87db203bafedcadf05c64de434957d0859e2af55659bf0, test:rust/crates/urzua-cli/tests/fix_drift_integration.rs@sha256:ff69343ca324400bde79c266372f9a213728d4d4ef8202beca6e12e54aa35352
 Author: beauwilliams
 Subject: '`urzua fix` -- detecting and applying Embodiment corrections computed from evidence.'
 Implements: ADR-15, ADR-18, ADR-19, ADR-20
@@ -476,3 +476,5 @@ asserted by test, not assumed by convention.
 > | 2026-11-08 | Bumped to `0.36`. `urzua reverify` lists, dates and renews a milestone whose evidence is only its Done-means item clauses, pinning the item locators; the refusal for a record with no evidence names both sources. **Why:** `ADR-97` amendment of 2026-11-08. | **substantive** |
 > | 2026-11-08 | Bumped to `0.37`. `fix` and `reverify` reports carry `as_of`; the global `--as-of` applies to their detect modes and is refused with `--apply`. **Why:** maintainer decision of 2026-11-08 (the second `ADR-97` amendment of that date). | **substantive** |
 > | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/fix.rs` 5a67695c913d -> 751d9bdf6982. Reason: Read the diff of each re-pinned file. commands/fix.rs: the FixReport construction gains as_of; no other change. Nothing this record relies on changed. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: unspecified): re-pinned `rust/crates/urzua-cli/src/commands/fix.rs` 751d9bdf6982 -> 841885614c38. Reason: Re-pinned after checking the delta in each pinned file or range against what this record evidences: fix.rs gained excused_evidence_notice, the info notice with the count of lines the ignore_marker kept out of evidence, emitted by fix; nothing else in fix changed. The behaviour this record evidences is unchanged. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
+> | 2026-11-08 | Bumped to `0.38`. The pin on `rust/crates/urzua-cli/src/commands/fix.rs` was re-baselined (the `Re-baselined` row above) after `urzua fix` gained an info notice counting the lines a declared back-pointer `ignore_marker` kept out of evidence; no behaviour this spec describes changes. **Why:** `ADR-80` amendment of 2026-11-08. | **structural** |
