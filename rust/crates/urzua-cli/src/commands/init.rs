@@ -201,15 +201,11 @@ pub fn infer_header_shapes(
         .filter(|(n, _)| *n > 0)
         .map(|(n, what)| format!("{n} {what}"))
         .collect();
-        notices.push(Notice {
-            severity: NoticeSeverity::Warning,
-            subject: NOTICE_HEADER_SHAPE.to_string(),
-            message: format!(
+        notices.push(Notice::new(NoticeSeverity::Warning, NOTICE_HEADER_SHAPE.to_string(), format!(
                 "yaml-frontmatter is proposed for {}, the only header shape urzua reads; {yaml} record(s) parse under it and {} are not read by any rule until their headers are rewritten as YAML frontmatter; the proposed config declares no `required_fields`, so `check` is silent about them: add `required_fields: [Status]` (or another field every record carries) to this type and `header.required-fields` reports each unreadable record",
                 rt.dir,
                 unread.join(", ")
-            ),
-        });
+            )));
     }
     notices
 }
@@ -253,14 +249,10 @@ pub fn drop_headerless(
         .iter()
         .map(|rt| format!("{} ({} file(s))", rt.dir, rt.record_count))
         .collect();
-    let notice = Notice {
-        severity: NoticeSeverity::Warning,
-        subject: NOTICE_INIT_SCAN.to_string(),
-        message: format!(
+    let notice = Notice::new(NoticeSeverity::Warning, NOTICE_INIT_SCAN.to_string(), format!(
             "not proposed, because no file in these directories has a header, so they hold pages rather than records: {}; declare a record type by hand if one of them is a record directory",
             listed.join(", ")
-        ),
-    };
+        ));
     (kept, vec![notice])
 }
 
@@ -431,14 +423,10 @@ fn drop_prefix_clashes(
     let notices = if clashes.is_empty() {
         Vec::new()
     } else {
-        vec![Notice {
-            severity: NoticeSeverity::Warning,
-            subject: NOTICE_INIT_SCAN.to_string(),
-            message: format!(
+        vec![Notice::new(NoticeSeverity::Warning, NOTICE_INIT_SCAN.to_string(), format!(
                 "not proposed, because two record types may not share a prefix: {}; declare it by hand with a prefix of its own",
                 clashes.join(", ")
-            ),
-        }]
+            ))]
     };
     (kept, notices)
 }
@@ -482,14 +470,10 @@ fn withheld_rule_notices() -> Vec<Notice> {
             format!("{} (declare `{}`)", rules.join(", "), declaration.key())
         })
         .collect();
-    vec![Notice {
-        severity: NoticeSeverity::Info,
-        subject: NOTICE_RULE_APPLICABILITY.to_string(),
-        message: format!(
+    vec![Notice::new(NoticeSeverity::Info, NOTICE_RULE_APPLICABILITY.to_string(), format!(
             "not proposed, because each reads a per-type declaration init does not infer and would examine no record until it exists: {}; declare it on a record type, then enable the rule",
             clauses.join("; ")
-        ),
-    }]
+        ))]
 }
 
 /// Built through the real serializer rather than string-concatenated, so a
@@ -653,40 +637,28 @@ fn propose_record_types(
     let (mut proposed, mut notices) =
         drop_headerless(repo_root, discovered, detect_record_types(discovered));
     if config_exists {
-        notices.push(Notice {
-            severity: NoticeSeverity::Info,
-            subject: NOTICE_INIT_SCAN.to_string(),
-            message: format!(
+        notices.push(Notice::new(NoticeSeverity::Info, NOTICE_INIT_SCAN.to_string(), format!(
                 "{} already exists; this dry run shows what adopt would propose and nothing was written",
                 config_path.display()
-            ),
-        });
+            )));
     }
     let (unnumbered, headers_only) =
         detect_unnumbered_record_types(repo_root, discovered, &proposed);
     if !headers_only.is_empty() {
-        notices.push(Notice {
-            severity: NoticeSeverity::Info,
-            subject: NOTICE_INIT_SCAN.to_string(),
-            message: format!(
+        notices.push(Notice::new(NoticeSeverity::Info, NOTICE_INIT_SCAN.to_string(), format!(
                 "not proposed, because their files carry headers but no status field, so they look like pages rather than records: {}; declare a record type by hand if one of them is a record directory",
                 headers_only.join(", ")
-            ),
-        });
+            )));
     }
     if !unnumbered.is_empty() {
-        notices.push(Notice {
-            severity: NoticeSeverity::Info,
-            subject: NOTICE_INIT_SCAN.to_string(),
-            message: format!(
+        notices.push(Notice::new(NoticeSeverity::Info, NOTICE_INIT_SCAN.to_string(), format!(
                 "proposed from headers alone, because their file names carry no record number: {}; check that each is a record directory",
                 unnumbered
                     .iter()
                     .map(|rt| rt.dir.as_str())
                     .collect::<Vec<_>>()
                     .join(", ")
-            ),
-        });
+            )));
         proposed.extend(unnumbered);
     }
     // Disambiguation (above, on base name only) can still collide: a

@@ -28,6 +28,7 @@ pub fn run(config_path: Option<PathBuf>) -> ExitCode {
                 severity: NoticeSeverity::Warning,
                 subject: NOTICE_SUBJECT.to_string(),
                 message: "`urzua audit` is deprecated and now runs exactly `urzua check` over the configured rules; call `urzua check` instead (`urzua check --rules pointer.resolution,relation.supersession-reciprocity` for the narrower report `audit` used to give). It is removed in the next release.".to_string(),
+                detail: None,
             }],
             ..Default::default()
         },

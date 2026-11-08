@@ -237,6 +237,7 @@ pub fn unevidenced_successes(
                         },
                         subject: record.path.display().to_string(),
                         message,
+                        detail: None,
                     });
                 }
             }
@@ -267,6 +268,7 @@ pub fn unevidenced_successes(
                 severity: crate::report::NoticeSeverity::Warning,
                 subject: record.path.display().to_string(),
                 message,
+                detail: None,
             })
         })
         .collect()

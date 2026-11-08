@@ -232,6 +232,7 @@ fn explain_coverage(
                 "'{}' is a {kind} locator and `{RULE_EMBODIMENT_LOCATOR_EXISTS}` does not accept that kind; add `{kind}` to its `locator_kinds` option to cite it in `Realized-by`",
                 parsed.path
             ),
+            detail: None,
         });
         return Ok(None);
     }

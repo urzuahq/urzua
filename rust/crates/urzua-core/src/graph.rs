@@ -57,6 +57,7 @@ pub fn read_population(
             unreadable.len(),
             unreadable.join(", ")
         ),
+        detail: None,
     });
     (population, notice)
 }

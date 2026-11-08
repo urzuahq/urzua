@@ -62,6 +62,7 @@ pub fn schema_report(
                     "{}: header did not parse -- excluded from this preview, not counted as failing",
                     record.path.display()
                 ),
+                detail: None,
             });
             return Outcome::Unreadable;
         }
