@@ -70,6 +70,24 @@ pub fn scan_marker(
     out
 }
 
+/// The one ignore marker both back-pointer rules and the evidence collector
+/// share (`ADR-80` amendment): the one declared on
+/// `embodiment.back-pointer-resolution`, else the one on
+/// `embodiment.back-pointer-decision-accepted`, each only while enabled. Config
+/// load refuses two different values.
+pub fn back_pointer_ignore_marker(config: &Config) -> Option<String> {
+    [
+        RULE_EMBODIMENT_BACK_POINTER_RESOLUTION,
+        RULE_EMBODIMENT_BACK_POINTER_DECISION_ACCEPTED,
+    ]
+    .iter()
+    .find_map(|rule| {
+        config
+            .enabled_rule_opts::<IgnoreMarkerOpts>(rule)
+            .and_then(|o| o.ignore_marker)
+    })
+}
+
 /// What a scan under a declared ignore marker found (`ADR-80` amendment).
 #[derive(Debug, Default)]
 pub struct MarkerScan {
@@ -109,15 +127,16 @@ pub fn scan_marker_excusing(
     out
 }
 
-/// The 1-indexed lines that carry the ignore marker but no back-pointer of
-/// either kind: a marker that excuses nothing (`ADR-80`).
+/// The 1-indexed lines that carry the ignore marker but no back-pointer the
+/// rule reads (`read_markers`): a marker that excuses nothing (`ADR-80`).
 fn unused_marker_lines(
     content: &str,
     prefixes: &[String],
     path: &std::path::Path,
     ignore: &str,
+    read_markers: &[&str],
 ) -> Vec<usize> {
-    let pointer_lines: std::collections::BTreeSet<usize> = [MARKER_IMPLEMENTS, MARKER_VERIFIES]
+    let pointer_lines: std::collections::BTreeSet<usize> = read_markers
         .iter()
         .flat_map(|m| scan_marker(path, content, prefixes, m))
         .map(|p| p.line)
@@ -259,6 +278,9 @@ pub struct BackPointerEvidence {
     pub code: HashSet<PathBuf>,
     /// `Verifies:` in a file under a `test_paths` entry: test tier (`MILE-146`).
     pub test: HashSet<PathBuf>,
+    /// Lines a declared `ignore_marker` kept out of the evidence (`ADR-80`
+    /// amendment), so a command that reports no population can still say so.
+    pub excused_lines: usize,
 }
 
 impl BackPointerEvidence {
@@ -294,9 +316,7 @@ pub fn back_pointer_evidence(
         .filter(|b| b.kind == crate::config::BoundaryKind::Published)
         .collect();
     // A line the declared `ignore_marker` excuses is not evidence either.
-    let ignore = config
-        .enabled_rule_opts::<IgnoreMarkerOpts>(RULE_EMBODIMENT_BACK_POINTER_RESOLUTION)
-        .and_then(|o| o.ignore_marker);
+    let ignore = back_pointer_ignore_marker(config);
     let ignore = ignore.as_deref();
     for file in files {
         if !source_paths
@@ -311,6 +331,7 @@ pub fn back_pointer_evidence(
         };
         let implements =
             scan_marker_excusing(&file.path, content, &prefixes, MARKER_IMPLEMENTS, ignore);
+        let mut excused = implements.excused.clone();
         for pointer in implements.kept {
             if let Some(record) = index.get(&crate::values::RecordId::new(&pointer.id)) {
                 evidence.code.insert(record.path.clone());
@@ -319,12 +340,14 @@ pub fn back_pointer_evidence(
         if is_test_file(&file.path, test_paths) {
             let verifies =
                 scan_marker_excusing(&file.path, content, &prefixes, MARKER_VERIFIES, ignore);
+            excused.extend(&verifies.excused);
             for pointer in verifies.kept {
                 if let Some(record) = index.get(&crate::values::RecordId::new(&pointer.id)) {
                     evidence.test.insert(record.path.clone());
                 }
             }
         }
+        evidence.excused_lines += excused.len();
     }
     evidence
 }
@@ -410,7 +433,7 @@ pub fn embodiment_back_pointer_resolution(
     const RULE_ID: &str = RULE_EMBODIMENT_BACK_POINTER_RESOLUTION;
     let prefixes = declared_prefixes(config);
     let mut findings = Vec::new();
-    let ignore = config.rule_opts::<IgnoreMarkerOpts>(RULE_ID).ignore_marker;
+    let ignore = back_pointer_ignore_marker(config);
     let ignore = ignore.as_deref();
     let mut excused_lines = 0;
 
@@ -439,7 +462,12 @@ pub fn embodiment_back_pointer_resolution(
             .collect();
         excused_lines += excused.len();
         if let Some(marker) = ignore {
-            for line in unused_marker_lines(content, &prefixes, &file.path, marker) {
+            let read: &[&str] = if is_test_file(&file.path, test_paths) {
+                &[MARKER_IMPLEMENTS, MARKER_VERIFIES]
+            } else {
+                &[MARKER_IMPLEMENTS]
+            };
+            for line in unused_marker_lines(content, &prefixes, &file.path, marker, read) {
                 findings.push(unused_marker_finding(
                     RULE_ID,
                     "back-pointer-marker-unused",
@@ -522,8 +550,13 @@ pub fn embodiment_back_pointer_decision_accepted(
     let prefixes = declared_prefixes(config);
     let declared = super::status::statuses_by_type(config);
     let mut findings = Vec::new();
-    let ignore = config.rule_opts::<IgnoreMarkerOpts>(RULE_ID).ignore_marker;
+    let ignore = back_pointer_ignore_marker(config);
     let ignore = ignore.as_deref();
+    // The shared marker's unused lines are reported once: by the resolution
+    // rule while it is enabled (it knows the test class), else here.
+    let reports_unused = config
+        .enabled_rule_opts::<IgnoreMarkerOpts>(RULE_EMBODIMENT_BACK_POINTER_RESOLUTION)
+        .is_none();
     let mut excused_lines = 0;
     let mut unused: Vec<Finding> = Vec::new();
     let mut push = |variant: &'static str, pointer: &BackPointer, message: String| {
@@ -561,8 +594,10 @@ pub fn embodiment_back_pointer_decision_accepted(
         let scanned =
             scan_marker_excusing(&file.path, content, &prefixes, MARKER_IMPLEMENTS, ignore);
         excused_lines += scanned.excused.len();
-        if let Some(marker) = ignore {
-            for line in unused_marker_lines(content, &prefixes, &file.path, marker) {
+        if let Some(marker) = ignore.filter(|_| reports_unused) {
+            for line in
+                unused_marker_lines(content, &prefixes, &file.path, marker, &[MARKER_IMPLEMENTS])
+            {
                 unused.push(unused_marker_finding(
                     RULE_ID,
                     "decision-marker-unused",
@@ -686,8 +721,13 @@ mod tests {
     #[test]
     fn a_marker_on_a_line_without_a_back_pointer_is_unused() {
         let text = expand("// @I ADR-1 skip-me\nfn a() {} // skip-me\n");
-        let unused =
-            unused_marker_lines(&text, &prefixes(), std::path::Path::new("a.rs"), "skip-me");
+        let unused = unused_marker_lines(
+            &text,
+            &prefixes(),
+            std::path::Path::new("a.rs"),
+            "skip-me",
+            &[MARKER_IMPLEMENTS],
+        );
         assert_eq!(unused, vec![2]);
     }
 

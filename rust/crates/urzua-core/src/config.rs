@@ -3161,6 +3161,32 @@ pub fn parse_with_document_models(
     // Declared boundaries (`ADR-80`): structure, then the one spelling of each
     // path. A boundary that cannot be matched would be a rule that never
     // reports, so every reason is a load error.
+    // The two back-pointer rules share one marker (`ADR-80`): a differing pair
+    // would make a line both excused and not.
+    {
+        let declared = |rule: &str| {
+            config
+                .rules
+                .get(rule)
+                .filter(|s| s.level != RuleLevel::Off)
+                .and_then(|s| s.ignore_marker.clone())
+        };
+        let (a, b) = (
+            crate::rules::RULE_EMBODIMENT_BACK_POINTER_RESOLUTION,
+            crate::rules::RULE_EMBODIMENT_BACK_POINTER_DECISION_ACCEPTED,
+        );
+        if let (Some(x), Some(y)) = (declared(a), declared(b)) {
+            if x != y {
+                return Err(ConfigError::InvalidBoundary {
+                    rule: a.to_string(),
+                    option: "ignore_marker",
+                    reason: format!(
+                        "is '{x}' but '{b}' declares '{y}'; the two back-pointer rules share one marker, declare the same text on both or on one"
+                    ),
+                });
+            }
+        }
+    }
     for (name, setting) in config.rules.iter_mut() {
         let owner = crate::rules::rule_accepts_option(name, "boundaries");
         for (option, present, accepted) in [
@@ -3182,6 +3208,25 @@ pub fn parse_with_document_models(
         // (`ADR-80`): the boundary rule and both back-pointer rules.
         if setting.level != RuleLevel::Off {
             if let Some(marker) = &setting.ignore_marker {
+                // A marker inside a back-pointer keyword would sit in the
+                // citation itself and excuse every back-pointer (`ADR-80`).
+                let keywords = [
+                    crate::rules::MARKER_IMPLEMENTS,
+                    crate::rules::MARKER_VERIFIES,
+                ];
+                if crate::rules::rule_accepts_option(name, "test_paths")
+                    || crate::rules::rule_accepts_option(name, "accepted_statuses")
+                {
+                    if let Some(k) = keywords.iter().find(|k| k.contains(marker.as_str())) {
+                        return Err(ConfigError::InvalidBoundary {
+                            rule: name.clone(),
+                            option: "ignore_marker",
+                            reason: format!(
+                                "'{marker}' is part of the back-pointer keyword '{k}' and would excuse every back-pointer; declare text that appears in no keyword"
+                            ),
+                        });
+                    }
+                }
                 if marker.trim().is_empty() || marker.trim() != marker || marker.contains('\n') {
                     return Err(ConfigError::InvalidBoundary {
                         rule: name.clone(),
@@ -5881,6 +5926,39 @@ record_types:
             assert_eq!(ok.rules[rule].ignore_marker.as_deref(), Some("urzua:allow"));
             assert!(parse(&cfg("\"  \"")).is_err(), "{rule}");
         }
+    }
+
+    #[test]
+    fn the_back_pointer_ignore_marker_must_not_be_part_of_a_back_pointer_keyword() {
+        for marker in [
+            "Implements:",
+            "Implements",
+            "ies:",
+            "s",
+            "Verifies:",
+            "Verif",
+        ] {
+            let cfg = format!(
+                "schema_version: 2\nrecord_types:\n  adr:\n    dir: docs/adr\nrules:\n  embodiment.back-pointer-resolution:\n    level: error\n    back_pointer_paths: [src]\n    ignore_marker: \"{marker}\"\n"
+            );
+            assert!(parse(&cfg).is_err(), "{marker}");
+        }
+    }
+
+    #[test]
+    fn the_two_back_pointer_rules_may_not_declare_different_markers() {
+        let cfg = |a: &str, b: &str| {
+            format!(
+                "schema_version: 2\nrecord_types:\n  adr:\n    dir: docs/adr\nrules:\n  embodiment.back-pointer-resolution:\n    level: error\n    back_pointer_paths: [src]\n    ignore_marker: \"{a}\"\n  embodiment.back-pointer-decision-accepted:\n    level: error\n    back_pointer_paths: [src]\n    ignore_marker: \"{b}\"\n"
+            )
+        };
+        assert!(parse(&cfg("one", "one")).is_ok());
+        let err = parse(&cfg("one", "two")).unwrap_err().to_string();
+        assert!(
+            err.contains("back-pointer-resolution")
+                && err.contains("back-pointer-decision-accepted"),
+            "{err}"
+        );
     }
 
     fn index_config(indexes: &str) -> String {

@@ -171,6 +171,7 @@ pub fn run(config_path: Option<PathBuf>, args: FixArgs) -> ExitCode {
         Ok(evidence) => evidence,
         Err(e) => return emit(&CouldNotRun::from(e)),
     };
+    drift_notices.extend(excused_evidence_notice(&back_pointed));
     // The derived-blocked records (`ADR-96` section 7): `fix` writes no
     // `progress` status to one. Computed only when a type is opted in.
     let blocked = if scoped.iter().any(|r| r.items.is_some()) {
@@ -351,6 +352,23 @@ pub(crate) fn validate_reason(
         ),
         (_, r) => Ok(r.unwrap_or_default().to_string()),
     }
+}
+
+/// The info notice that says how many lines a declared back-pointer
+/// `ignore_marker` kept out of the evidence a command read (`ADR-80`), or none
+/// when no line was excused.
+pub(crate) fn excused_evidence_notice(
+    evidence: &urzua_core::rules::BackPointerEvidence,
+) -> Option<urzua_core::report::Notice> {
+    let n = evidence.excused_lines;
+    (n > 0).then(|| urzua_core::report::Notice {
+        severity: urzua_core::report::NoticeSeverity::Info,
+        subject: urzua_core::rules::RULE_EMBODIMENT_BACK_POINTER_RESOLUTION.to_string(),
+        message: format!(
+            "ignore_marker -- {n} line{} excused from back-pointer evidence; a line carrying the declared marker is not counted as evidence",
+            if n == 1 { "" } else { "s" }
+        ),
+    })
 }
 
 /// What the back-pointer scan finds in the tree, for the delivery tiers.

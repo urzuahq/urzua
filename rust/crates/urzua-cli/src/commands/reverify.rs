@@ -20,8 +20,8 @@ use urzua_core::reverify::{
 use urzua_core::rules::{self, ClaimExpiredOpts, ClaimSkip};
 
 use crate::commands::fix::{
-    back_pointer_evidence, identity_notices, into_failures, resolve_attestation, validate_reason,
-    ResolvedAttestation,
+    back_pointer_evidence, excused_evidence_notice, identity_notices, into_failures,
+    resolve_attestation, validate_reason, ResolvedAttestation,
 };
 use crate::emit;
 use crate::session::Session;
@@ -317,7 +317,11 @@ pub fn run(config_path: Option<PathBuf>, args: ReverifyArgs) -> ExitCode {
             records: reviewed.into_iter().map(|r| r.review).collect(),
             failed: into_failures(failed),
             identity: None,
-            notices: drift_notices(&drift, &measures.problems),
+            notices: {
+                let mut notices = drift_notices(&drift, &measures.problems);
+                notices.extend(excused_evidence_notice(&back_pointed));
+                notices
+            },
         });
     };
 
@@ -404,6 +408,7 @@ pub fn run(config_path: Option<PathBuf>, args: ReverifyArgs) -> ExitCode {
         identity,
         &drift,
         &measures.problems,
+        excused_evidence_notice(&back_pointed),
     ))
 }
 
@@ -417,6 +422,7 @@ fn apply_report(
     identity: ResolvedAttestation,
     drift: &crate::discovery::DriftedRecords,
     problems: &[String],
+    excused: Option<Notice>,
 ) -> ReverifyReport {
     let status = if !failed.is_empty() {
         FixStatus::PartialFailure
@@ -425,6 +431,7 @@ fn apply_report(
     };
     let mut notices: Vec<Notice> = identity_notices(Some(&identity));
     notices.extend(drift_notices(drift, problems));
+    notices.extend(excused);
     ReverifyReport {
         status,
         mode: "apply",
