@@ -395,6 +395,20 @@ fn reverify_lists_the_review_passes_actor_agent_and_prints_the_lines_for_the_pr_
     );
 }
 
+/// The helper runs under `set -o pipefail`. `printf ... | grep -q` there is a race: `grep -q`
+/// exits on its first match and a `printf` still writing is killed by SIGPIPE, so the whole
+/// condition reads false although the text matched (the `Pinned:` line went missing about once
+/// in a thousand runs under load). A match is tested on a here-string, which has no writer to kill.
+#[test]
+fn the_helper_never_tests_a_match_through_a_pipe_into_grep_q() {
+    let script = include_str!("../bundle/claude-code/files/.claude/hooks/urzua-record.sh");
+    let piped: Vec<&str> = script
+        .lines()
+        .filter(|l| !l.trim_start().starts_with('#') && l.contains("| grep -q"))
+        .collect();
+    assert!(piped.is_empty(), "{piped:#?}");
+}
+
 #[test]
 fn reverify_refuses_changed_evidence_and_says_nothing_was_renewed() {
     let dir = with_expiry_rule("reverify-changed");
