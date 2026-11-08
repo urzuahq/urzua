@@ -5,7 +5,7 @@ Phase: '0'
 Track: header-format
 Implements: ADR-33
 Blocked-on: —
-Realized-by: code:.urzua/config.yaml, code:.github/workflows/checks.yml
+Realized-by: code:.urzua/config.yaml@sha256:151830e5926d1887be39a723d110744ff5e2ae8c408bb114a90ba3e2b8316a2e, code:.github/workflows/checks.yml@sha256:4afa5fe0db59c78f2954f105354af9f42c4fef044c7a0e960384c59aa880313d
 ---
 # 3 — Convert this repo's own docs to yaml-frontmatter
 
@@ -21,8 +21,8 @@ The actual dogfooding step ADR-33 named as the real forcing function for this wo
 
 ## Done means
 
-- Every record type configured in this repository's `.urzua/config.yaml` declares `header_shape: yaml-frontmatter`. — evidence: code:.urzua/config.yaml
-- Every ADR, RFC, spec, milestone and bug record parses under it, and `urzua check` over this repository reports no unreadable header. — evidence: code:.github/workflows/checks.yml
+- Every record type configured in this repository's `.urzua/config.yaml` declares `header_shape: yaml-frontmatter`. — evidence: code:.urzua/config.yaml@sha256:151830e5926d1887be39a723d110744ff5e2ae8c408bb114a90ba3e2b8316a2e
+- Every ADR, RFC, spec, milestone and bug record parses under it, and `urzua check` over this repository reports no unreadable header. — evidence: code:.github/workflows/checks.yml@sha256:4afa5fe0db59c78f2954f105354af9f42c4fef044c7a0e960384c59aa880313d
 - The conversion was a one-time pass that shipped no tool, and nothing below the header changed. — waived: process-outcome -- a property of the one-time conversion of 2026-09-08, verified at the time by a before/after field-set comparison against every file (see the revision log); the scratch tool was never committed, so no file can evidence it now
 
 > **Revision log**
@@ -34,3 +34,4 @@ The actual dogfooding step ADR-33 named as the real forcing function for this wo
 > | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-183`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. The criteria are those the delivered work met, checked against `Realized-by` and the code; `Status` stays Done. | **structural** |
 > | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |
+> | 2026-11-08 | Pinned (attested by beauwilliams, identity: gh-verified, actor: agent): 2 locators pinned, 2 file-level, 0 scoped. Evidence: .urzua/config.yaml@sha256:151830e5926d, .github/workflows/checks.yml@sha256:4afa5fe0db59 Reason: Pinned the files as they are now after checking each against the record it evidences: fix.rs and the changeset still carry the attestation identity source and actor kind into the revision row (MILE-201), settings.json still runs check after a Bash command (MILE-202), config.rs, report.rs, table.rs and config.yaml still carry the scope: changed option and its deferred-by-scope count (MILE-203), settings.json and urzua-claude-code.py still run on the installed harness bundle (MILE-204), config.rs, file_texts.rs, session.rs and init.rs still read discovery.include_untracked (MILE-206), config.rs, revision_log.rs, both fix files and the corpus-w and corpus-zero expectations still read the declared class vocabulary and column (MILE-213), delivery_items.rs, status.rs, fix.rs, urzua-record.sh, done.md and the corpus-v files still compute a milestone's status from its items (MILE-214), the corpus-zero expectation files and checks.yml still gate the migrated corpus (MILE-215), config.yaml, sequence.rs and relation.rs still declare and check the acyclic Depends-on pair (MILE-27), and config.yaml still declares every type as yaml-frontmatter with checks.yml gating it (MILE-3). **Why:** a claim is renewed only over pinned code and test evidence. | **structural** |
