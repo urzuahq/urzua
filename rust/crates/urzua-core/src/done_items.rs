@@ -142,6 +142,14 @@ pub struct Waiver {
     pub reason: String,
 }
 
+impl Waiver {
+    /// The waiver's expiry date has come. `today` is empty when the caller has
+    /// none, and nothing is then judged expired.
+    pub fn is_expired(&self, today: &str) -> bool {
+        !today.is_empty() && self.date.as_deref().is_some_and(|d| d <= today)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Item {
     /// Position in the section, from 1.

@@ -723,12 +723,10 @@ pub fn status_waived_item_stale(
                         Some(_) => {}
                     }
                 }
-                if let Some(date) = &waiver.date {
-                    if !today.is_empty() && date.as_str() <= today {
-                        push(format!(
-                            "its expiry {date} has come: extend it with a new date, or resolve the item"
-                        ));
-                    }
+                if let Some(date) = waiver.date.as_ref().filter(|_| waiver.is_expired(today)) {
+                    push(format!(
+                        "its expiry {date} has come: extend it with a new date, or resolve the item"
+                    ));
                 }
             }
             Outcome::Examined

@@ -1368,22 +1368,21 @@ fn messages_use_the_declared_section_name() {
 /// working tree", not "exists but is not tracked".
 #[test]
 fn a_locator_outside_the_repository_is_not_probed() {
+    // A target the test owns, in a directory beside the repository, removed on drop.
+    let outside = common::TempDir::new("urzua-items-outside-target");
+    std::fs::write(outside.join("target.txt"), "x\n").unwrap();
+    let absolute = outside.join("target.txt");
+    let name = outside.file_name().unwrap().to_string_lossy().to_string();
+    let body = format!(
+        "- A. — evidence: code:{}\n- B. — evidence: code:../{name}/target.txt\n",
+        absolute.display()
+    );
     let dir = repo(
         "outside-probe",
         &config(ITEMS, "error"),
-        &[(
-            1,
-            milestone(
-                "InProgress",
-                "",
-                "- A. — evidence: code:/etc/hostname\n- B. — evidence: code:../outside-probe-target.txt\n",
-            ),
-        )],
+        &[(1, milestone("InProgress", "", &body))],
     );
-    let target = dir.join("../outside-probe-target.txt");
-    std::fs::write(&target, "x\n").unwrap();
     let report = parsed(&run(&dir, &["check"]));
-    let _ = std::fs::remove_file(&target);
     let found = findings(&report, "embodiment.locator-exists");
     assert_eq!(found.len(), 2, "{report}");
     for f in found {
@@ -1391,4 +1390,25 @@ fn a_locator_outside_the_repository_is_not_probed() {
         assert!(m.contains("not in the working tree"), "{m}");
         assert!(!m.contains("not tracked"), "{m}");
     }
+}
+
+/// A waiver that has expired no longer excuses an item whose evidence is missing.
+#[test]
+fn an_expired_waiver_does_not_excuse_missing_evidence() {
+    let live = "- Later. — evidence: code:src/gone.rs — waived: deferred-to (MILE-9, 2999-01-31) -- carried\n";
+    let expired = "- Later. — evidence: code:src/gone.rs — waived: deferred-to (MILE-9, 2020-01-31) -- carried\n";
+    let count = |name: &str, body: &str| {
+        let dir = repo(
+            name,
+            &config(ITEMS, "error"),
+            &[
+                (1, milestone("InProgress", "", body)),
+                (9, milestone("Planned", "", "- Open.\n")),
+            ],
+        );
+        let report = parsed(&run(&dir, &["check"]));
+        findings(&report, "embodiment.locator-exists").len()
+    };
+    assert_eq!(count("waiver-live", live), 0);
+    assert_eq!(count("waiver-expired", expired), 1);
 }

@@ -141,6 +141,28 @@ pub fn embodiment_locator_exists(
     read: &dyn Fn(&str) -> crate::locator::SharedText,
     untracked_on_disk: &dyn Fn(&str) -> bool,
 ) -> (RuleExecution, Vec<Finding>) {
+    embodiment_locator_exists_on(
+        records,
+        config,
+        tracked,
+        present,
+        read,
+        untracked_on_disk,
+        "",
+    )
+}
+
+/// `embodiment.locator-exists` as of `today` (empty when the caller has none):
+/// a waived item is excused only while its waiver has not expired.
+pub fn embodiment_locator_exists_on(
+    records: &[Record],
+    config: &Config,
+    tracked: &[PathBuf],
+    present: &dyn Fn(&str) -> bool,
+    read: &dyn Fn(&str) -> crate::locator::SharedText,
+    untracked_on_disk: &dyn Fn(&str) -> bool,
+    today: &str,
+) -> (RuleExecution, Vec<Finding>) {
     use crate::locator;
     const RULE_ID: &str = RULE_EMBODIMENT_LOCATOR_EXISTS;
     let mut findings = Vec::new();
@@ -176,11 +198,16 @@ pub fn embodiment_locator_exists(
             // A Done-means item clause (`ADR-96`) is evidence too, held to the
             // same test; a record with item clauses and no `Realized-by` is
             // still examined.
+            // A waiver that has expired no longer excuses it.
             let clauses: Vec<(&crate::done_items::Clause, bool)> = record
                 .items
                 .iter()
                 .flat_map(|i| i.items.iter())
-                .filter_map(|i| i.evidence.as_ref().map(|c| (c, i.waiver.is_some())))
+                .filter_map(|i| {
+                    i.evidence
+                        .as_ref()
+                        .map(|c| (c, i.waiver.as_ref().is_some_and(|w| !w.is_expired(today))))
+                })
                 .filter(|(c, _)| c.valid)
                 .collect();
             let value = match declared_value(record, field) {

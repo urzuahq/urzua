@@ -432,9 +432,10 @@ pub fn apply_reverify(
             }
         }
         if !placed {
-            return Err(format!(
-                "the unpinned locator '{}' is no longer on the '{}' line or in a {} item clause -- the record may have changed since the review",
-                pin.display, review.field, review.items_section
+            return Err(unplaced_pin_message(
+                &pin.display,
+                &review.field,
+                &review.items_section,
             ));
         }
     }
@@ -474,9 +475,24 @@ fn set_anchor(doc: &mut LineDoc, field: &str, today: &str) -> Result<(), String>
     Ok(())
 }
 
+/// Why a first pin found no place to go, naming the type's declared item section.
+fn unplaced_pin_message(display: &str, field: &str, section: &str) -> String {
+    format!(
+        "the unpinned locator '{display}' is no longer on the '{field}' line or in a {section} item clause -- the record may have changed since the review"
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_unplaced_pin_message_names_the_declared_section() {
+        let m = unplaced_pin_message("code:src/a.rs", "Realized-by", "Done when");
+        assert!(m.contains("in a Done when item clause"), "{m}");
+        assert!(m.contains("'Realized-by' line"), "{m}");
+        assert!(!m.contains("Done means"), "{m}");
+    }
 
     const H: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 

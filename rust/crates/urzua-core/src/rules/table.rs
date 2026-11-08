@@ -882,13 +882,14 @@ pub const RULE_TABLE: &[RuleDef] = &[
                 let path = std::path::Path::new(p);
                 !tracked.contains(path) && (c.may_exist)(path)
             };
-            embodiment_locator_exists(
+            embodiment_locator_exists_on(
                 c.records,
                 c.config,
                 c.tracked_paths,
                 &present,
                 c.read_text,
                 &untracked_on_disk,
+                c.run.today,
             )
         },
     },
