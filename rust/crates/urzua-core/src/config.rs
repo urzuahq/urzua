@@ -436,8 +436,10 @@ pub struct RuleSetting {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub boundaries: Option<Vec<Boundary>>,
     /// The text that, on a line inside a boundary, excuses that line alone
-    /// (`ADR-80`). Declared, never compiled in. Only meaningful to
-    /// `boundary.published-path-reference`.
+    /// (`ADR-80`). Declared, never compiled in. Meaningful to
+    /// `boundary.published-path-reference` and, for a back-pointer on the line,
+    /// to `embodiment.back-pointer-resolution` and
+    /// `embodiment.back-pointer-decision-accepted` (`ADR-80` amendment).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ignore_marker: Option<String>,
     /// The generated index artifacts `index.freshness` compares against the
@@ -2534,6 +2536,66 @@ pub fn parse(content: &str) -> Result<Config, ConfigError> {
     parse_with_document_models(content).map(|(config, _)| config)
 }
 
+/// The declared `ignore_marker` (`ADR-80`): only the boundary rule and the two
+/// back-pointer rules take one; it is one non-blank line with no padding; on a
+/// back-pointer rule it is not part of a back-pointer keyword (it would sit in
+/// every citation and excuse them all); and the two back-pointer rules, which
+/// share one marker with the evidence collector, may not declare different ones.
+fn validate_ignore_markers(config: &Config) -> Result<(), ConfigError> {
+    let bad = |rule: &str, reason: String| ConfigError::InvalidBoundary {
+        rule: rule.to_string(),
+        option: "ignore_marker",
+        reason,
+    };
+    let keywords = [
+        crate::rules::MARKER_IMPLEMENTS,
+        crate::rules::MARKER_VERIFIES,
+    ];
+    let back_pointer_rules = [
+        crate::rules::RULE_EMBODIMENT_BACK_POINTER_RESOLUTION,
+        crate::rules::RULE_EMBODIMENT_BACK_POINTER_DECISION_ACCEPTED,
+    ];
+    let mut declared: Vec<(&str, &str)> = Vec::new();
+    for (name, setting) in &config.rules {
+        let Some(marker) = setting.ignore_marker.as_deref() else {
+            continue;
+        };
+        if !crate::rules::rule_accepts_option(name, "ignore_marker") {
+            return Err(ConfigError::OptionNotApplicable {
+                rule: name.clone(),
+                option: "ignore_marker".to_string(),
+            });
+        }
+        if setting.level == RuleLevel::Off {
+            continue;
+        }
+        if marker.trim().is_empty() || marker.trim() != marker || marker.contains('\n') {
+            return Err(bad(
+                name,
+                "must be non-blank text on one line with no surrounding whitespace".to_string(),
+            ));
+        }
+        if back_pointer_rules.contains(&name.as_str()) {
+            if let Some(k) = keywords.iter().find(|k| k.contains(marker)) {
+                return Err(bad(
+                    name,
+                    format!("'{marker}' is part of the back-pointer keyword '{k}' and would excuse every back-pointer; declare text that appears in no keyword"),
+                ));
+            }
+            declared.push((name, marker));
+        }
+    }
+    if let [(a, x), (b, y)] = declared.as_slice() {
+        if x != y {
+            return Err(bad(
+                a,
+                format!("is '{x}' but '{b}' declares '{y}'; the two back-pointer rules share one marker, declare the same text on both or on one"),
+            ));
+        }
+    }
+    Ok(())
+}
+
 /// `parse`, plus each record type's declared document model (RFC-33 layer 1,
 /// MILE-98). The declaration is validated here, so every command that loads a
 /// config rejects a bad one. The raw declarations ride on `RecordTypeConfig`
@@ -3338,18 +3400,14 @@ fn validate_boundaries(config: &mut Config) -> Result<(), ConfigError> {
     // Declared boundaries (`ADR-80`): structure, then the one spelling of each
     // path. A boundary that cannot be matched would be a rule that never
     // reports, so every reason is a load error.
+    validate_ignore_markers(config)?;
     for (name, setting) in config.rules.iter_mut() {
         let owner = crate::rules::rule_accepts_option(name, "boundaries");
-        for (option, present) in [
-            ("boundaries", setting.boundaries.is_some()),
-            ("ignore_marker", setting.ignore_marker.is_some()),
-        ] {
-            if present && !owner {
-                return Err(ConfigError::OptionNotApplicable {
-                    rule: name.clone(),
-                    option: option.to_string(),
-                });
-            }
+        if setting.boundaries.is_some() && !owner {
+            return Err(ConfigError::OptionNotApplicable {
+                rule: name.clone(),
+                option: "boundaries".to_string(),
+            });
         }
         if !owner || setting.level == RuleLevel::Off {
             continue;
@@ -3368,14 +3426,6 @@ fn validate_boundaries(config: &mut Config) -> Result<(), ConfigError> {
             option,
             reason,
         };
-        if let Some(marker) = &setting.ignore_marker {
-            if marker.trim().is_empty() || marker.trim() != marker || marker.contains('\n') {
-                return Err(bad(
-                    "ignore_marker",
-                    "must be non-blank text on one line with no surrounding whitespace".to_string(),
-                ));
-            }
-        }
         for (idx, boundary) in setting.boundaries.iter_mut().flatten().enumerate() {
             let at = format!("entry {idx}");
             if boundary.reason.trim().is_empty() {
@@ -6101,6 +6151,56 @@ record_types:
             parse(cfg).unwrap_err(),
             ConfigError::OptionNotApplicable { .. }
         ));
+    }
+
+    #[test]
+    fn the_back_pointer_rules_accept_a_valid_ignore_marker_and_refuse_a_blank_one() {
+        for rule in [
+            "embodiment.back-pointer-resolution",
+            "embodiment.back-pointer-decision-accepted",
+        ] {
+            let cfg = |marker: &str| {
+                format!(
+                    "schema_version: 2\nrecord_types:\n  adr:\n    dir: docs/adr\nrules:\n  {rule}:\n    level: error\n    back_pointer_paths: [src]\n    ignore_marker: {marker}\n"
+                )
+            };
+            let ok = parse(&cfg("\"urzua:allow\"")).unwrap();
+            assert_eq!(ok.rules[rule].ignore_marker.as_deref(), Some("urzua:allow"));
+            assert!(parse(&cfg("\"  \"")).is_err(), "{rule}");
+        }
+    }
+
+    #[test]
+    fn the_back_pointer_ignore_marker_must_not_be_part_of_a_back_pointer_keyword() {
+        for marker in [
+            "Implements:",
+            "Implements",
+            "ies:",
+            "s",
+            "Verifies:",
+            "Verif",
+        ] {
+            let cfg = format!(
+                "schema_version: 2\nrecord_types:\n  adr:\n    dir: docs/adr\nrules:\n  embodiment.back-pointer-resolution:\n    level: error\n    back_pointer_paths: [src]\n    ignore_marker: \"{marker}\"\n"
+            );
+            assert!(parse(&cfg).is_err(), "{marker}");
+        }
+    }
+
+    #[test]
+    fn the_two_back_pointer_rules_may_not_declare_different_markers() {
+        let cfg = |a: &str, b: &str| {
+            format!(
+                "schema_version: 2\nrecord_types:\n  adr:\n    dir: docs/adr\nrules:\n  embodiment.back-pointer-resolution:\n    level: error\n    back_pointer_paths: [src]\n    ignore_marker: \"{a}\"\n  embodiment.back-pointer-decision-accepted:\n    level: error\n    back_pointer_paths: [src]\n    ignore_marker: \"{b}\"\n"
+            )
+        };
+        assert!(parse(&cfg("one", "one")).is_ok());
+        let err = parse(&cfg("one", "two")).unwrap_err().to_string();
+        assert!(
+            err.contains("back-pointer-resolution")
+                && err.contains("back-pointer-decision-accepted"),
+            "{err}"
+        );
     }
 
     fn index_config(indexes: &str) -> String {

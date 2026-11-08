@@ -20,8 +20,8 @@ use urzua_core::reverify::{
 use urzua_core::rules::{self, ClaimExpiredOpts, ClaimSkip};
 
 use crate::commands::fix::{
-    back_pointer_evidence, identity_notices, into_failures, resolve_attestation, validate_reason,
-    ResolvedAttestation,
+    back_pointer_evidence, excused_evidence_notice, identity_notices, into_failures,
+    resolve_attestation, validate_reason, ResolvedAttestation,
 };
 use crate::emit;
 use crate::session::Session;
@@ -318,7 +318,7 @@ pub fn run(config_path: Option<PathBuf>, args: ReverifyArgs) -> ExitCode {
             records: reviewed.into_iter().map(|r| r.review).collect(),
             failed: into_failures(failed),
             identity: None,
-            notices: drift_notices(&drift, &measures.problems),
+            notices: drift_notices(&drift, &measures.problems, &back_pointed),
         });
     };
 
@@ -402,8 +402,7 @@ pub fn run(config_path: Option<PathBuf>, args: ReverifyArgs) -> ExitCode {
         pin_only,
         reason,
         identity,
-        &drift,
-        &measures.problems,
+        drift_notices(&drift, &measures.problems, &back_pointed),
     ))
 }
 
@@ -415,8 +414,7 @@ fn apply_report(
     pin_only: bool,
     reason: String,
     identity: ResolvedAttestation,
-    drift: &crate::discovery::DriftedRecords,
-    problems: &[String],
+    drift_notices: Vec<Notice>,
 ) -> ReverifyReport {
     let status = if !failed.is_empty() {
         FixStatus::PartialFailure
@@ -424,7 +422,7 @@ fn apply_report(
         FixStatus::Applied
     };
     let mut notices: Vec<Notice> = identity_notices(Some(&identity));
-    notices.extend(drift_notices(drift, problems));
+    notices.extend(drift_notices);
     ReverifyReport {
         as_of: crate::as_of(),
         status,
@@ -439,14 +437,20 @@ fn apply_report(
     }
 }
 
-fn drift_notices(drift: &crate::discovery::DriftedRecords, problems: &[String]) -> Vec<Notice> {
+fn drift_notices(
+    drift: &crate::discovery::DriftedRecords,
+    problems: &[String],
+    back_pointed: &rules::BackPointerEvidence,
+) -> Vec<Notice> {
     let mut all = drift.git_problems.clone();
     for p in problems {
         if !all.contains(p) {
             all.push(p.clone());
         }
     }
-    crate::discovery::drift_notices(drift.shallow, &all)
+    let mut notices = crate::discovery::drift_notices(drift.shallow, &all);
+    notices.extend(excused_evidence_notice(back_pointed));
+    notices
 }
 
 /// The commits that touched an unpinned locator's file since the record's

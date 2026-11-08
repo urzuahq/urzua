@@ -159,6 +159,21 @@ impl RuleOpts for DecisionAcceptedOpts {
     }
 }
 
+/// The declared inline ignore marker of a back-pointer rule (`ADR-80`
+/// amendment): the text that excuses the one line it is on.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct IgnoreMarkerOpts {
+    pub ignore_marker: Option<String>,
+}
+
+impl RuleOpts for IgnoreMarkerOpts {
+    fn from_setting(s: &RuleSetting) -> Self {
+        IgnoreMarkerOpts {
+            ignore_marker: s.ignore_marker.clone(),
+        }
+    }
+}
+
 /// `embodiment.locator-exists`: the locator kinds accepted and the kinds that
 /// may carry a pin (`BUG-176`). Both default to `[file]`, so a repository that
 /// declares neither accepts exactly what it always did.
