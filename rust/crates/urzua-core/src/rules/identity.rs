@@ -132,6 +132,7 @@ pub fn identity_collision_notices(collisions: &[IdentifierCollision<'_>]) -> Vec
                     "{id} resolves to more than one record ({}) -- any rule resolving a reference to it may examine an arbitrary one of them, not necessarily the one a reference meant",
                     paths.join(", ")
                 ),
+                detail: None,
             }
         })
         .collect()

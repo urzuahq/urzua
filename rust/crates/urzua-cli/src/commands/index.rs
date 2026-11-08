@@ -75,11 +75,11 @@ pub fn run(config_path: Option<PathBuf>, apply: bool) -> ExitCode {
     let notices = if apply || !changed {
         Vec::new()
     } else {
-        vec![Notice {
-            severity: NoticeSeverity::Info,
-            subject: "index".to_string(),
-            message: "run `urzua index --apply` to write the regenerated artifacts".to_string(),
-        }]
+        vec![Notice::new(
+            NoticeSeverity::Info,
+            "index".to_string(),
+            "run `urzua index --apply` to write the regenerated artifacts".to_string(),
+        )]
     };
     emit(&IndexReport {
         status,

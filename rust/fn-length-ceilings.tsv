@@ -14,7 +14,6 @@
 crates/urzua-cli/src/diff_scope.rs::examine	124
 crates/urzua-core/src/document_model.rs::RawRequiredSection::resolve	104
 crates/urzua-core/src/header.rs::parse_yaml_frontmatter	101
-crates/urzua-core/src/rules/back_pointer.rs::embodiment_back_pointer_decision_accepted	112
 crates/urzua-core/src/rules/boundary.rs::published_path_reference	205
 crates/urzua-core/src/rules/claim_expiry.rs::embodiment_claim_expired	143
 crates/urzua-core/src/rules/claim_expiry.rs::embodiment_claim_renewal_unattested	108

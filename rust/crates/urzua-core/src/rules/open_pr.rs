@@ -42,6 +42,7 @@ pub fn open_pr_missing_refs_notice(remote: &str, pattern: &str) -> Notice {
         message: format!(
             "no pull request refs are fetched under refs/urzua/pr, so the rule compared against nothing; `check` never fetches -- run `git fetch --no-tags {remote} '+{pattern}:refs/urzua/pr/{remote}/*'` (or `urzua new` with new.check_open_prs) first"
         ),
+        detail: None,
     }
 }
 

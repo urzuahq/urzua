@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5DB4YPSWZ6MQV85PQ7
-Version: '0.14'
+Version: '0.15'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/commands/explain.rs@sha256:15d3bc36d94402f876239986ac421f37cf23d558db6283c41f2eddbcf09ab71c, code:rust/crates/urzua-cli/src/commands/graph.rs@sha256:379b00875a633e9d8e59f690e2a12ce3ed3b0d5635d533f0a8242580041bfd0a, code:rust/crates/urzua-core/src/graph.rs@sha256:7d43a868a856d9b7024c1eb124ebb8344fd0e15145f744d01f2fcc19eb47c65e, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs@sha256:44fea1626a547a6d9226f09c5e9cd116aad2dfe384a082aaeb8eec2c74f22af5
+Realized-by: code:rust/crates/urzua-cli/src/commands/explain.rs@sha256:58f30c13d91ff0b4d4897789eb30192f843625c9f47ee1ac693c5fa491fb1f0f, code:rust/crates/urzua-cli/src/commands/graph.rs@sha256:379b00875a633e9d8e59f690e2a12ce3ed3b0d5635d533f0a8242580041bfd0a, code:rust/crates/urzua-core/src/graph.rs@sha256:03f7eed2679cc43971411a8874bb09e17c284a7f1b3a9c4accc15ace4cd518f6, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs@sha256:44fea1626a547a6d9226f09c5e9cd116aad2dfe384a082aaeb8eec2c74f22af5
 Author: beauwilliams
 Subject: '`urzua explain`/`urzua graph` -- read-only relationship queries over already-parsed data.'
 Implements: ADR-24, ADR-44
@@ -163,3 +163,5 @@ Both are stdout-JSON-always (ADR-23) and never write. `graph` reads `pointer_fie
 > | 2026-11-08 | Bumped to `0.13`. The pin this spec's `Realized-by` holds on `record_types_own_config_integration.rs` was re-baselined (the `Re-baselined` row above); no behaviour this spec describes changed. **Why:** a revision-log entry that adds a structural change needs a `Version` bump (`revision-log.version-bump-required`). | **structural** |
 > | 2026-11-08 | Bumped to `0.14`. `explain` on a path that is no file or directory, a glob or directory that matches no tracked file, and that no record cites, is `not-run` with the reason (a rule id given as a path also names `--rule`), where it was `ok` with an empty `governing_records` and the whole-corpus population. A deleted file a record still cites is explained as before. **Why:** the round-4 CLI review (S6): a typo read as "ungoverned" and claimed 586 records examined. | **substantive** |
 > | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/explain.rs` 9cdffc6765ee -> 15d3bc36d944. Reason: explain.rs now errors (not-run, exit 2) on a path or glob that matches no tracked file and is cited by no record, which this spec now documents; the rest of explain and graph is unchanged **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/explain.rs` 15d3bc36d944 -> 58f30c13d91f, `rust/crates/urzua-core/src/graph.rs` 7d43a868a856 -> 03f7eed2679c. Reason: Read the diff of each re-pinned file against main. cli/src/commands/explain.rs: Notice struct literals gained detail: None; no behaviour change; core/src/graph.rs: Notice struct literals gained detail: None; no behaviour change. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
+> | 2026-11-08 | Bumped to `0.15`. The pins this spec's `Realized-by` holds on files this change touched were re-baselined (the `Re-baselined` row above); no behaviour this spec describes changed. | **structural** |

@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5QF32RM76Y50THPQEG
-Version: '0.21'
+Version: '0.22'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -104,7 +104,9 @@ milestone derives them from its What and Why; a `Done` milestone states the crit
 reopened rather than left `Done`. Where it fits, the criteria include that the capability is exercised in
 the repository's own configuration and records, not only by unit tests. A `WontDo` milestone is exempt
 (`exempt_statuses`): it will never be done, so it has no criteria to meet. The template
-(`.urzua/templates/milestone.md`) carries the section, and `/milestone` fills it.
+(`.urzua/templates/milestone.md`) carries the section, scaffolded as list items (the shape a type that
+declares `statuses.delivery.items` requires) so a fresh `urzua new milestone` reports no
+`status.done-items-shape` finding before it is filled, and `/milestone` fills it.
 
 ## Done means as items (`ADR-96`, `MILE-214`)
 
@@ -328,3 +330,4 @@ to another record — nothing to check for resolution, no cycle risk, no new rul
 > | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/status_model.rs` 9cbbc69bdcdc -> ca68bc6df9e8. Reason: Read the diff of each pinned file since the old pin; the claim still holds. status_model.rs: the only change is that config load refuses a delivery whose delivered_tiers names a tier outside items.resolving_tiers; the state machine and the rest of the validation are unchanged. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
 > | 2026-11-08 | Bumped to `0.21`. The pins this spec's `Realized-by` holds on files changed in this change were re-baselined (the `Re-baselined` row above); no behaviour this spec describes changed. **Why:** a revision-log entry that adds a structural change needs a `Version` bump (`revision-log.version-bump-required`). | **structural** |
 > | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/status_model.rs` ca68bc6df9e8 -> 2d90f7140553. Reason: status_model.rs: since the previous pin only the delivered_tiers-subset check moved into a helper (check_delivered_tiers_resolve) to stay under the SPEC-22 function bound; behaviour is unchanged, so the claim still holds. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
+> | 2026-11-08 | Bumped to `0.22`. The milestone template scaffolds `## Done means` as placeholder list items instead of prose guidance. **Why:** a fresh `urzua new milestone` failed `status.done-items-shape` ("the section holds no list item") until filled, because the prose the template wrote is not an item; a test now scaffolds one and runs the rule. | **substantive** |

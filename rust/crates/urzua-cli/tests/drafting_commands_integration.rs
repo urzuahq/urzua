@@ -487,3 +487,25 @@ fn an_agent_edit_to_the_files_that_enforce_the_gate_is_denied_in_this_repository
         assert_eq!(code, 0, "{path}: {v}");
     }
 }
+
+/// A freshly scaffolded milestone reports no `status.done-items-shape` finding: the
+/// template scaffolds the list-item shape this repository's `statuses.delivery.items`
+/// accepts, so the only findings left are the placeholders still to be filled in
+/// (`Phase`, `Track`), not a shape error on the section the template itself wrote.
+#[test]
+fn a_fresh_milestone_scaffold_passes_the_done_items_shape_rule() {
+    let (dir, record, _) = scaffold("milestone.md", "Throwaway shape probe record");
+    let out = common::urzua()
+        .args(["check", "--rules", "status.done-items-shape"])
+        .arg(&record)
+        .current_dir(dir.path())
+        .output()
+        .unwrap();
+    let report: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(report["files_examined"], 1, "{report}");
+    assert!(
+        report["findings"].as_array().unwrap().is_empty(),
+        "a scaffolded milestone must not trip the shape rule: {report}"
+    );
+    assert!(out.status.success(), "{report}");
+}
