@@ -504,17 +504,10 @@ fn main() -> ExitCode {
         panic!("URZUA_TEST_PANIC set");
     }
 
-    let cli = match Cli::try_parse() {
+    let cli = match parse_cli() {
         Ok(cli) => cli,
-        Err(e) if matches!(e.kind(), ErrorKind::DisplayHelp | ErrorKind::DisplayVersion) => {
-            e.exit()
-        }
-        Err(e) => return emit(&CouldNotRun::from(e.to_string())),
+        Err(code) => return code,
     };
-
-    if let Err(message) = fix_evaluation_date(&cli) {
-        return emit(&CouldNotRun::from(message));
-    }
 
     match cli.command {
         Command::Check {
@@ -702,4 +695,18 @@ fn command_name(command: &Command) -> &'static str {
         Command::Fix { .. } => "fix",
         Command::Reverify { .. } => "reverify",
     }
+}
+
+/// Parses the command line and fixes the evaluation date; the error is the
+/// exit a refused invocation has already printed.
+fn parse_cli() -> Result<Cli, ExitCode> {
+    let cli = match Cli::try_parse() {
+        Ok(cli) => cli,
+        Err(e) if matches!(e.kind(), ErrorKind::DisplayHelp | ErrorKind::DisplayVersion) => {
+            e.exit()
+        }
+        Err(e) => return Err(emit(&CouldNotRun::from(e.to_string()))),
+    };
+    fix_evaluation_date(&cli).map_err(|message| emit(&CouldNotRun::from(message)))?;
+    Ok(cli)
 }

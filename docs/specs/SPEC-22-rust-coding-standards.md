@@ -1,5 +1,5 @@
 ---
-Version: '0.10'
+Version: '0.11'
 Date: 2026-09-23
 Status: Accepted
 Author: beauwilliams
@@ -199,20 +199,29 @@ not a membership in a second list, and no command names a rule id to treat it di
 an unregistered rule. Putting the property beside the rule is this spec's extract-on-the-second-
 occurrence rule applied to the registry (`MILE-171`).
 
-### A command's run is a composition of short stages
+### A function is at most 100 lines, everywhere, and the list of exceptions only shrinks
 
-A function in `urzua-cli/src/commands/check.rs` is at most 100 lines, counted from its signature to
-its closing brace. `check` is built as stages (`open_session`, `narrow`, `load_context`, `run_rules`,
-`scope_findings`, `status_and_examined`), and a stage that outgrows the bound is split into named
-helpers that each do one read or one disclosure, the way `load_context` composes
-`read_source_inputs`, `index_with_disclosures` and `read_diff_inputs`. A split keeps the order in
-which notices are emitted, because the report lists them in that order. The bound is measured, not
-reviewed: `size_tests` in `check.rs` reads the file's own source and fails on any function over it.
+A non-test function anywhere in the workspace is at most 100 lines, counted from its signature to
+its closing brace, in every crate's `src`. A command's `run` is a composition of short stages: `check`
+is built as `open_session`, `narrow`, `load_context`, `run_rules`, `scope_findings` and
+`status_and_examined`, and a stage that outgrows the bound is split into named helpers that each do one
+read or one disclosure, the way `load_context` composes `read_source_inputs`, `index_with_disclosures`
+and `read_diff_inputs`. A split keeps the order in which notices and errors are emitted, because the
+report and the config loader both surface the first problem in that order.
+
+The bound is measured, not reviewed. `fn_length_ratchet` (`rust/crates/urzua-cli/tests/`) reads every
+crate's source and compares each function with `rust/fn-length-ceilings.tsv`, the functions that were
+already over the bound when the gate was introduced, each with its length then, keyed by file and
+function path rather than by line number. It fails when a function that is not listed is over 100
+lines, when a listed function is longer than its ceiling, and when a listed function is now at most 100
+lines or shorter than its ceiling, so the entry must be deleted or lowered as a split lands. The list
+may only shrink: a new function is never added to it. Test code is not measured.
 
 **Why:** `check::run` once held repo and config discovery, scope merging, every read, every rule and
 the report in about 700 lines, so any change to one concern conflicted with every other and no stage
 could be tested alone (`MILE-172`). A bound that a test reads is the only form of it that survives
-the next feature.
+the next feature, and a ceiling list that can only shrink is how the functions that were already over it
+get split without the bound being waived in the meantime.
 
 ## What this spec does not do
 
@@ -259,3 +268,4 @@ the next feature.
 > | 2026-11-04 | Bumped to `0.8`. The I/O-in-discovery convention names the claim and index readers and the symlink policy as living there, and a command's verdict as a pure function (`derive_status`). **Why:** `MILE-172`: `check::run` held the filesystem walkers and a five-branch status derivation testable only end to end. | **substantive** |
 > | 2026-11-07 | Bumped to `0.9`. Added "A command's run is a composition of short stages": no function in `check.rs` exceeds 100 lines, enforced by a test that reads the file. **Why:** `MILE-172` asked for "a stated size bound" and none was stated; `load_context` was 205 lines and `execute` 130, so the bound is stated here and the two are split under it with no change to what `check` prints. | **substantive** |
 > | 2026-11-08 | Bumped to `0.10`. The error-types section says `urzua-id` has no error type. **Why:** the round-4 code-quality review (S6): `urzua_id::Error`, `urzua_core::Error` and `DisplayNumber` had no user and were removed, with `urzua-id`'s now-unused `thiserror` dependency; no behaviour changes. | **substantive** |
+> | 2026-11-08 | Bumped to `0.11`. The 100-line bound applies to every non-test function in the workspace, not only `check.rs`, enforced by the `fn_length_ratchet` test against a committed ceiling list (`rust/fn-length-ceilings.tsv`) that may only shrink; the `size_tests` test in `check.rs` is replaced by it. **Why:** maintainer decision 2026-11-08, after the round-4 code-quality review (S1) found 64 non-test functions over the bound, up to 896 lines, while only `check.rs` was enforced; the ceilings record today's lengths so the existing offenders can be split one at a time and nothing new can join them. | **substantive** |
