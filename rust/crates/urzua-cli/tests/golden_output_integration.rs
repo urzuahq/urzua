@@ -71,8 +71,8 @@ fn repo(name: &str) -> common::TempDir {
     dir
 }
 
-/// Drops what varies run to run or build to build: the root path, and the rules
-/// a build lists as `not-enabled`.
+/// Drops what varies run to run or build to build: the root path, the clock's
+/// evaluation date, and the rules a build lists as `not-enabled`.
 fn normalise(value: &mut Value, root: &str) {
     match value {
         Value::String(s) => *s = s.replace(root, "<ROOT>"),
@@ -80,6 +80,12 @@ fn normalise(value: &mut Value, root: &str) {
         Value::Object(map) => {
             if let Some(Value::Array(rules)) = map.get_mut("rules_executed") {
                 rules.retain(|r| r["status"] != "not-enabled");
+            }
+            // The evaluation date read from the clock is the day the test runs.
+            if let Some(Value::Object(as_of)) = map.get_mut("as_of") {
+                if as_of.get("source") == Some(&Value::String("clock".into())) {
+                    as_of.insert("date".into(), Value::String("<TODAY>".into()));
+                }
             }
             map.values_mut().for_each(|v| normalise(v, root));
         }
