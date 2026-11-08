@@ -5,7 +5,7 @@ Phase: '0'
 Track: schema-governance
 Implements: SPEC-1
 Blocked-on: —
-Realized-by: test:rust/crates/urzua-cli/tests/refs_integration.rs#a_declared_header_field_is_checked_end_to_end_and_only_when_declared@sha256:ca288cd98d9026d70c768cf8ea537ac934369039c667bdc01e546135092754e2, code:rust/crates/urzua-core/src/rules/citation.rs, test:rust/crates/urzua-core/src/config.rs#issue_refs_fields_must_be_declared_header_fields_and_never_blank@sha256:3c1d9033c06d0894d26493fddc21ead263fc5f9fd3141161aae4dbb825327fb7, code:.urzua/config.yaml
+Realized-by: test:rust/crates/urzua-cli/tests/refs_integration.rs#a_declared_header_field_is_checked_end_to_end_and_only_when_declared@sha256:ca288cd98d9026d70c768cf8ea537ac934369039c667bdc01e546135092754e2, code:rust/crates/urzua-core/src/rules/citation.rs@sha256:a1c156d0395a2bcad18f5763b56e31b48d622a534b15cf0795df9b08cfd4758a, test:rust/crates/urzua-core/src/config.rs#issue_refs_fields_must_be_declared_header_fields_and_never_blank@sha256:3c1d9033c06d0894d26493fddc21ead263fc5f9fd3141161aae4dbb825327fb7, code:.urzua/config.yaml@sha256:151830e5926d1887be39a723d110744ff5e2ae8c408bb114a90ba3e2b8316a2e
 ---
 # 184 — citation.issue-exists also checks declared header fields
 
@@ -19,10 +19,10 @@ The rule read only `reference_sections`, so a wrong PR number in a header field 
 
 ## Done means
 
-- A number or repository link in a declared header field that is not in the committed snapshot is a finding naming the field and its line. — evidence: test:rust/crates/urzua-cli/tests/refs_integration.rs#a_declared_header_field_is_checked_end_to_end_and_only_when_declared@sha256:ca288cd98d9026d70c768cf8ea537ac934369039c667bdc01e546135092754e2, code:rust/crates/urzua-core/src/rules/citation.rs
+- A number or repository link in a declared header field that is not in the committed snapshot is a finding naming the field and its line. — evidence: test:rust/crates/urzua-cli/tests/refs_integration.rs#a_declared_header_field_is_checked_end_to_end_and_only_when_declared@sha256:ca288cd98d9026d70c768cf8ea537ac934369039c667bdc01e546135092754e2, code:rust/crates/urzua-core/src/rules/citation.rs@sha256:a1c156d0395a2bcad18f5763b56e31b48d622a534b15cf0795df9b08cfd4758a
 - With no `fields` declared the rule behaves as before. — evidence: test:rust/crates/urzua-cli/tests/refs_integration.rs#a_declared_header_field_is_checked_end_to_end_and_only_when_declared@sha256:ca288cd98d9026d70c768cf8ea537ac934369039c667bdc01e546135092754e2
 - An undeclared or blank field name is a load error. — evidence: test:rust/crates/urzua-core/src/config.rs#issue_refs_fields_must_be_declared_header_fields_and_never_blank@sha256:3c1d9033c06d0894d26493fddc21ead263fc5f9fd3141161aae4dbb825327fb7, test:rust/crates/urzua-cli/tests/refs_integration.rs#a_declared_header_field_is_checked_end_to_end_and_only_when_declared@sha256:ca288cd98d9026d70c768cf8ea537ac934369039c667bdc01e546135092754e2
-- This repository declares `fields: ["Found-in"]`, the only header field here that carries PR numbers, and `urzua check` is clean. — evidence: code:.urzua/config.yaml
+- This repository declares `fields: ["Found-in"]`, the only header field here that carries PR numbers, and `urzua check` is clean. — evidence: code:.urzua/config.yaml@sha256:151830e5926d1887be39a723d110744ff5e2ae8c408bb114a90ba3e2b8316a2e
 
 > **Revision log**
 >
@@ -30,3 +30,4 @@ The rule read only `reference_sections`, so a wrong PR number in a header field 
 > |---|---|---|
 > | 2026-11-04 | Filed and delivered: `issue_refs.fields` (`SPEC-2`, `SPEC-3`), enabled for `Found-in` here; the snapshot was refreshed first and no dangling number was found. `Realized-by` and `Status: Done` set by the delivering change. **Why:** a wrong number in a header field passed unchecked; `MILE-143` was already Done, so this is a new milestone. | **structural** |
 > | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |
+> | 2026-11-08 | Pinned (attested by beauwilliams, identity: gh-verified, actor: agent): 2 locators pinned, 2 file-level, 0 scoped. Evidence: rust/crates/urzua-core/src/rules/citation.rs@sha256:a1c156d0395a, .urzua/config.yaml@sha256:151830e5926d Reason: Pinned the files as they are now after checking each against the record it evidences: commands/fix.rs still re-pins on review with an attributed row (MILE-181), config.yaml, the Makefile and roadmap.rs still declare and run urzua roadmap (MILE-182), status_model.rs, rules/status.rs and config.yaml still compute a milestone's status from its delivery evidence (MILE-183), citation.rs and config.yaml still check the declared header fields for cited numbers (MILE-184), config.yaml still carries the narrowed scoped pins (MILE-185), the four condition records still exist and are Open as the milestone says (MILE-187), override_log.rs, .urzua/override-log.md, table.rs and generate-rule-table.py still hold the override-log rule (MILE-188), locator_mechanism.rs, table.rs, config.yaml and generate-rule-table.py still hold the lighter-mechanism warning (MILE-189), BUG-99 is still the Fixed record the audit-fold item cites (MILE-190), and check.rs, settings.json and urzua-claude-code.py still judge one record's proposed content under --stdin-path (MILE-191). **Why:** a claim is renewed only over pinned code and test evidence. | **structural** |
