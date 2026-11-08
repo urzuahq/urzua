@@ -21,6 +21,9 @@ pub(crate) fn read_pin(
         if let Some(read) = read_files_pin(repo_root, config, texts, &locator.path) {
             return read;
         }
+        if !is_tracked_file(texts, &locator.path) {
+            return PinRead::Unreadable;
+        }
         return match urzua_io::sha256_hex_of_file(&repo_root.join(&locator.path)) {
             Some(hash) => PinRead::Current {
                 hash,
@@ -30,6 +33,9 @@ pub(crate) fn read_pin(
             None => PinRead::Unreadable,
         };
     };
+    if !is_tracked_file(texts, &locator.path) {
+        return PinRead::Unreadable;
+    }
     let text = match &*texts.get(&locator.path) {
         FileText::Missing => return PinRead::Unreadable,
         FileText::NotUtf8 => return PinRead::Failed(ScopeError::NotUtf8.to_string()),
@@ -52,6 +58,16 @@ pub(crate) fn read_pin(
             }
         }
     }
+}
+
+/// Whether `path` is a file inside the repository that git tracks: the same
+/// presence `embodiment.locator-exists` requires, so a pin is never hashed from
+/// a path outside the repository or one only the working tree has.
+fn is_tracked_file(texts: &FileTexts, path: &str) -> bool {
+    texts.confined(path).is_ok()
+        && texts
+            .locator_files(path)
+            .is_ok_and(|located| located.kind == Some(LocatorKind::File))
 }
 
 // BUG-176: a pin on a directory or glob hashes the sorted paths and content hashes of its files

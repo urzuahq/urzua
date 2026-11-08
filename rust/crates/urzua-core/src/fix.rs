@@ -694,22 +694,13 @@ pub fn apply_rebaseline(
     shape: &crate::config::RevisionLogShape,
 ) -> Result<String, String> {
     let mut doc = LineDoc::parse(content);
-    let prefix_key = format!("{}:", rebaseline.field);
-    // The evidence field's line, when the record has one, and the Done-means
-    // item clause lines a stale pin sits on (`ADR-96`).
-    let mut lines: Vec<usize> = Vec::new();
-    if rebaseline.line != 0 || rebaseline.item_lines.is_empty() {
-        let field_line = doc
-            .find_line(|l| l.trim_start().starts_with(&prefix_key))
-            .ok_or_else(|| {
-                format!(
-                    "could not find the '{}' line to edit -- the record may have changed since detect ran",
-                    rebaseline.field
-                )
-            })?;
-        lines.push(field_line);
-    }
-    lines.extend(&rebaseline.item_lines);
+    let lines = evidence_edit_lines(
+        &doc,
+        &rebaseline.field,
+        rebaseline.line,
+        &rebaseline.item_lines,
+        "detect ran",
+    )?;
     for pin in &rebaseline.pins {
         let old = format!("{}@sha256:{}", pin.spelling, pin.recorded_hash);
         let new = format!("{}@sha256:{}", pin.spelling, pin.current_hash);
@@ -729,21 +720,6 @@ pub fn apply_rebaseline(
         }
     }
 
-    let edited = doc.to_string();
-    let log = find_revision_log_entries(&edited, log_id, shape).ok_or_else(|| {
-        "record has no Revision log section -- refusing to re-baseline without one to record the attestation in".to_string()
-    })?;
-    let log = log.map_err(|problem| problem.message)?;
-    let Some(last_entry) = log.entries.last() else {
-        return Err(
-            "record's Revision log section has no existing rows to append after".to_string(),
-        );
-    };
-    let row_prefix = doc
-        .line(last_entry.line)
-        .and_then(table_row_prefix)
-        .unwrap_or("> ")
-        .to_string();
     let moved = rebaseline
         .pins
         .iter()
@@ -766,10 +742,97 @@ pub fn apply_rebaseline(
         "Re-baselined (attested by {}): re-pinned {moved}. Reason: {reason} **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds.",
         attestation.label()
     );
-    let new_row = log_row(&row_prefix, log.layout, shape, today, &narrative)?;
-    let last_line = last_entry.line;
-    doc.insert_after(last_line, new_row);
+    append_log_rows(&mut doc, log_id, shape, today, &[narrative], "re-baseline")?;
     Ok(doc.to_string())
+}
+
+/// The 1-based lines a pin edit may land on: the evidence field's line when the
+/// record has one (or has no item clauses to hold the evidence instead), then
+/// the Done-means item clause lines (`ADR-96`). `changed_since` finishes the
+/// "record may have changed since ..." refusal. Shared by `apply_rebaseline`
+/// and `reverify::apply_reverify`.
+pub(crate) fn evidence_edit_lines(
+    doc: &LineDoc,
+    field: &str,
+    field_line: usize,
+    item_lines: &[usize],
+    changed_since: &str,
+) -> Result<Vec<usize>, String> {
+    let mut lines: Vec<usize> = Vec::new();
+    if field_line != 0 || item_lines.is_empty() {
+        let key = format!("{field}:");
+        let at = doc
+            .find_line(|l| l.trim_start().starts_with(&key))
+            .ok_or_else(|| {
+                format!(
+                    "could not find the '{field}' line to edit -- the record may have changed since {changed_since}"
+                )
+            })?;
+        lines.push(at);
+    }
+    lines.extend(item_lines);
+    Ok(lines)
+}
+
+/// Why `content` has no revision log a tool row can be appended to, or `None`
+/// when it has one. `verb` finishes "refusing to ... without one to record the
+/// attestation in". `urzua reverify`'s detect asks this too, so it never offers
+/// a write that `--apply` would refuse.
+pub fn revision_log_refusal(
+    content: &str,
+    log_id: &crate::config::RevisionLogId,
+    shape: &crate::config::RevisionLogShape,
+    verb: &str,
+) -> Option<String> {
+    locate_revision_log(content, log_id, shape, verb).err()
+}
+
+fn locate_revision_log(
+    content: &str,
+    log_id: &crate::config::RevisionLogId,
+    shape: &crate::config::RevisionLogShape,
+    verb: &str,
+) -> Result<crate::rules::RevisionLog, String> {
+    let log = find_revision_log_entries(content, log_id, shape).ok_or_else(|| {
+        format!("record has no Revision log section -- refusing to {verb} without one to record the attestation in")
+    })?;
+    let log = log.map_err(|problem| problem.message)?;
+    if log.entries.is_empty() {
+        return Err(
+            "record's Revision log section has no existing rows to append after".to_string(),
+        );
+    }
+    Ok(log)
+}
+
+/// Appends one tool-authored row per narrative after the revision log's last
+/// row, in the log's own layout. Fails, changing nothing, when the log is
+/// missing, unreadable or has no row to append after.
+pub(crate) fn append_log_rows(
+    doc: &mut LineDoc,
+    log_id: &crate::config::RevisionLogId,
+    shape: &crate::config::RevisionLogShape,
+    today: &str,
+    narratives: &[String],
+    verb: &str,
+) -> Result<(), String> {
+    let log = locate_revision_log(&doc.to_string(), log_id, shape, verb)?;
+    let last_line = log.entries.last().map(|e| e.line).unwrap_or_default();
+    let prefix = doc
+        .line(last_line)
+        .and_then(table_row_prefix)
+        .unwrap_or("> ")
+        .to_string();
+    let mut rows = Vec::new();
+    for narrative in narratives {
+        rows.push(log_row(&prefix, log.layout, shape, today, narrative)?);
+    }
+    let mut after = last_line;
+    for row in rows {
+        doc.insert_after(after, row);
+        after += 1;
+    }
+    Ok(())
 }
 
 /// A tool-authored revision-log row, laid out by the log's own header

@@ -10,18 +10,19 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use urzua_core::config::{Config, RuleLevel};
-use urzua_core::fix::ActorKind;
+use urzua_core::fix::{revision_log_refusal, ActorKind};
 use urzua_core::record::Record;
-use urzua_core::report::{
-    census, CouldNotRun, FixFailure, FixStatus, Notice, NoticeSeverity, Outcome, PopulationUnit,
-};
+use urzua_core::report::{census, CouldNotRun, FixStatus, Notice, Outcome, PopulationUnit};
 use urzua_core::reverify::{
     apply_reverify, review_locators, FirstPin, LocatorCheck, LocatorsReview, RecordReview, Renewal,
     ReverifyPlan, ReverifyReport,
 };
 use urzua_core::rules::{self, ClaimExpiredOpts, ClaimSkip};
 
-use crate::commands::fix::{resolve_attestation, ResolvedAttestation};
+use crate::commands::fix::{
+    back_pointer_evidence, identity_notices, into_failures, resolve_attestation, validate_reason,
+    ResolvedAttestation,
+};
 use crate::emit;
 use crate::session::Session;
 
@@ -64,18 +65,13 @@ pub fn run(config_path: Option<PathBuf>, args: ReverifyArgs) -> ExitCode {
             "urzua reverify --force, --by, --actor and --reason belong to --apply: without it nothing is written, so they would be ignored (--ids alone narrows the review)",
         ));
     }
-    let reason = match (apply, reason.as_deref().map(str::trim)) {
-        (true, None | Some("")) => {
-            return emit(&CouldNotRun::from(
-                "urzua reverify --apply: pass --reason <what you checked>; a renewal with no reason is a rubber stamp",
-            ))
-        }
-        (_, Some(r)) if r.contains('|') || r.contains(['\n', '\r']) => {
-            return emit(&CouldNotRun::from(
-                "--reason must be one line without '|' (it is written into a revision-log table row)",
-            ))
-        }
-        (_, r) => r.unwrap_or_default().to_string(),
+    let reason = match validate_reason(
+        apply,
+        reason.as_deref(),
+        "urzua reverify --apply: pass --reason <what you checked>; a renewal with no reason is a rubber stamp",
+    ) {
+        Ok(r) => r,
+        Err(e) => return emit(&CouldNotRun::from(e)),
     };
     let session = match Session::open(config_path) {
         Ok(s) => s,
@@ -133,8 +129,9 @@ pub fn run(config_path: Option<PathBuf>, args: ReverifyArgs) -> ExitCode {
         .filter(|r| opts.periods.iter().any(|p| p.record_type == r.record_type))
         .collect();
     let mut failed: Vec<(PathBuf, String)> = Vec::new();
-    // `--force` selects by what the mode finds, never by name.
-    let by_name = !ids.is_empty() && !force;
+    // `--ids` names the records, with or without `--force` (which lifts only
+    // the `max_batch` cap and the need to name one).
+    let by_name = !ids.is_empty();
     let subset: Vec<Record> = if by_name {
         for id in &ids {
             if !listed.iter().any(|r| r.path.display().to_string() == *id) {
@@ -159,21 +156,10 @@ pub fn run(config_path: Option<PathBuf>, args: ReverifyArgs) -> ExitCode {
     let now = urzua_io::now_unix();
     let measures = crate::discovery::compute_claim_measures(&repo_root, &subset, &config, now);
     let drift = crate::discovery::compute_drifted_records(&repo_root, &subset, &config);
-    let back_pointed =
-        match crate::discovery::read_back_pointer_sources(&repo_root, &discovered, &config) {
-            Ok(Some(sources)) => {
-                let (index, _) = rules::build_index_reporting_collisions(&records);
-                rules::back_pointer_evidence(
-                    &sources.files,
-                    &sources.back_pointer_paths,
-                    &sources.test_paths,
-                    &config,
-                    &index,
-                )
-            }
-            Ok(None) => Default::default(),
-            Err(e) => return emit(&CouldNotRun::from(e)),
-        };
+    let back_pointed = match back_pointer_evidence(&repo_root, &discovered, &config, &records) {
+        Ok(evidence) => evidence,
+        Err(e) => return emit(&CouldNotRun::from(e)),
+    };
     let disagreeing = if enabled(rules::RULE_EMBODIMENT_CONSISTENCY) {
         embodiment_disagreements(
             &repo_root,
@@ -219,8 +205,8 @@ pub fn run(config_path: Option<PathBuf>, args: ReverifyArgs) -> ExitCode {
                     finding = Some(s.message(&record.record_type));
                 }
                 renewal = Some((s.age_days, s.days));
-                if s.level == RuleLevel::Error && actor == ActorKind::Agent {
-                    refused.push("a human actor is required where the period's level is error: --actor agent is refused for this record".to_string());
+                if s.level == RuleLevel::Error && actor != ActorKind::Human {
+                    refused.push("a human actor is required where the period's level is error: pass --actor human (--actor agent and an unspecified actor are refused for this record)".to_string());
                 }
             }
             Err(ClaimSkip::Unexamined(why)) => {
@@ -265,6 +251,16 @@ pub fn run(config_path: Option<PathBuf>, args: ReverifyArgs) -> ExitCode {
             if disagreeing.contains(&record.path) {
                 refused.push("the stated Embodiment disagrees with the one its locators compute to (embodiment.consistency would report it): run `urzua fix` first".to_string());
             }
+        }
+        // Detect never offers a write `--apply` would refuse: both modes append
+        // an attested row to the record's revision log.
+        let log_id = config.revision_log_id(&record.record_type);
+        let log_shape = config.revision_log_shape(&record.record_type);
+        match urzua_io::read_to_string(&repo_root.join(&record.path)) {
+            Ok(content) => {
+                refused.extend(revision_log_refusal(&content, &log_id, &log_shape, "write"))
+            }
+            Err(e) => refused.push(format!("could not read the record: {e}")),
         }
         let mut commits_since = Vec::new();
         if pin_only && !pins.is_empty() {
@@ -327,7 +323,7 @@ pub fn run(config_path: Option<PathBuf>, args: ReverifyArgs) -> ExitCode {
 
     if force && reviewed.len() > 1 {
         return emit(&CouldNotRun::from(format!(
-            "urzua reverify --force is refused when it selects more than one record ({} selected): a batch is named with --ids, never swept up",
+            "urzua reverify --force is refused when it selects more than one record ({} selected): it lifts max_batch for a single record and never batches",
             reviewed.len()
         )));
     }
@@ -427,15 +423,7 @@ fn apply_report(
     } else {
         FixStatus::Applied
     };
-    let mut notices: Vec<Notice> = identity
-        .warning
-        .into_iter()
-        .map(|message| Notice {
-            severity: NoticeSeverity::Warning,
-            subject: crate::NOTICE_IDENTITY.to_string(),
-            message,
-        })
-        .collect();
+    let mut notices: Vec<Notice> = identity_notices(Some(&identity));
     notices.extend(drift_notices(drift, problems));
     ReverifyReport {
         status,
@@ -448,13 +436,6 @@ fn apply_report(
         identity: Some(identity.report),
         notices,
     }
-}
-
-fn into_failures(failed: Vec<(PathBuf, String)>) -> Vec<FixFailure> {
-    failed
-        .into_iter()
-        .map(|(record, error)| FixFailure { record, error })
-        .collect()
 }
 
 fn drift_notices(drift: &crate::discovery::DriftedRecords, problems: &[String]) -> Vec<Notice> {
