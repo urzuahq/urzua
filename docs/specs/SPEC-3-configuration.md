@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.112'
+Version: '0.113'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs, test:rust/crates/urzua-cli/tests/field_levels_integration.rs
@@ -123,6 +123,10 @@ Two details carry weight:
   of one of those classes while its field equals the merge base's. `field` must be non-blank and
   `classes` a non-empty list of non-blank names, else the config fails to load; `version_bump` may
   stand alone like `required`. Enabling the rule when no type declares one is a load error.
+  `version_bump` also takes an optional `initial`, a non-blank version: `urzua new` writes it into
+  the `field` of a new record (`MILE-74`), and without it the field starts blank. `relation_fields`
+  takes an optional `title` beside `date` and `author`: the field `new` fills with the record's
+  title, subject to the same `config.relation-field-not-known` check.
   The declaration also takes four optional keys (`ADR-94`, `MILE-213`), each of which may stand alone:
 
   ```yaml
@@ -355,7 +359,10 @@ Two details carry weight:
       counted eligible and unexamined by both rules, not asked for the sections: set aside on purpose,
       so `config.scope-matches-nothing` does not report it (`BUG-187`). It is matched exactly against
       the type's declared status field. A record whose header cannot be read is counted unreadable,
-      never assumed exempt, and a record with no status is not exempt. Declaring it without
+      never assumed exempt, and a record with no status is not exempt. A listed status that no
+      record of the type holds sets nothing aside, and `type.dir-matches-nothing` reports it, naming
+      the type and the status (a type with no records at all is left to that rule's other checks).
+      Declaring it without
       `required`, a blank status, a duplicate section name, an unknown `shape`, `min_rows` missing
       from or `marker` misplaced on a shape, or an unknown key, is a load-time error.
     - Presence and shape are all either rule knows: neither judges whether a section's content is
@@ -2305,4 +2312,5 @@ proves this configuration produces the three findings.
 > | 2026-11-07 | Bumped to `0.109`. Documents the optional `revision_log` keys `classes`, `class_column`, `date_column` and `tool_class` (`ADR-94`, `MILE-213`): the class vocabulary, the header names of the class and date columns, and the class `urzua fix` writes, their engine defaults, and their load errors. A `\|` inside a log cell stays in its cell, and a row wider than its header is a finding when a column is declared. No `schema_version` bump. **Why:** `MILE-213`, the build of `ADR-94`; an undeclared config behaves as before. | **substantive** |
 > | 2026-11-07 | Bumped to `0.110`. Documents that a dependency caps the standing computed from `statuses.delivery.items` (a record whose items all resolve beside an unfinished dependency computes `partial_status`) and that `sequence.status-agreement` skips such a record with an info notice, so `partial_status` may stay a `progress` status. No new key; no `schema_version` bump. **Why:** the `ADR-96` amendment of 2026-11-07, accepted by the maintainer; a configuration without `items` or a sequencing pair is unchanged. | **substantive** |
 > | 2026-11-07 | Bumped to `0.111`. Documents `extension_prefixes` on `header.field-set-consistency` (`MILE-141`): the per-type extension prefix, its fallback to `allow_extension_prefix` for a type it does not name, and its load errors (empty or whitespace prefix, a collision with a declared field, an undeclared type or one without `known_fields`). **Why:** `MILE-141` Done means item 3, built on the maintainer's decision of 2026-11-07. | **substantive** |
-> | 2026-11-07 | Bumped to `0.112`. Documents `embodiment.claim-expired` and `embodiment.claim-renewal-unattested` (`ADR-97`, `MILE-129`): the `periods`, `anchor_field`, `require_pin` and `max_batch` options, the most-specific-entry rule, the computed tier, the `spread_days` first-cycle offset, the load errors, and that declaring `claim_max_age_days` beside the rule is refused. Off until declared. **Why:** `MILE-129`, the build of `ADR-97`. | **substantive** |
+> | 2026-11-07 | Bumped to `0.112`. `relation_fields.title` names the field `urzua new` fills with the record's title, and `revision_log.version_bump.initial` the version it writes into the `version_bump` field; both are optional and leave the field blank when undeclared. A status listed in `sections.exempt_statuses` that no record of the type holds is reported by `type.dir-matches-nothing`. **Why:** `MILE-74` -- a scaffolded spec failed `check` on a blank `Version` and `Subject` that `new` could have filled; `MILE-7` -- an exemption that sets nothing aside was silent. | **substantive** |
+> | 2026-11-07 | Bumped to `0.113`. Documents `embodiment.claim-expired` and `embodiment.claim-renewal-unattested` (`ADR-97`, `MILE-129`): the `periods`, `anchor_field`, `require_pin` and `max_batch` options, the most-specific-entry rule, the computed tier, the `spread_days` first-cycle offset, the load errors, and that declaring `claim_max_age_days` beside the rule is refused. Off until declared. **Why:** `MILE-129`, the build of `ADR-97`. | **substantive** |

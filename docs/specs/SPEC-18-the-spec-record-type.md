@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5GHR70MNKQTXHQJGJB
-Version: '0.13'
+Version: '0.14'
 Date: 2026-09-08
 Status: Shipped
 Embodiment: Verified
@@ -29,6 +29,7 @@ record_types:
     dir: "docs/specs"
     required_fields: ["Status", "Date", "Version", "Author", "Subject"]
     header_shape: "yaml-frontmatter"
+    relation_fields: {date: "Date", author: "Author", title: "Subject"}
     known_fields: ["Stable-Id", "Embodiment", "Realized-by", "Derives-from", "Implements", "Parent", "Last-audited"]
     statuses:
       values: ["Draft", "Accepted", "Shipped"]
@@ -47,7 +48,7 @@ record_types:
     revision_log:
       marker: "**Revision log**"
       required: true
-      version_bump: {field: "Version", classes: ["substantive", "structural"]}
+      version_bump: {field: "Version", classes: ["substantive", "structural"], initial: "0.1"}
     spec: "SPEC-18"
     pointer_fields: ["Derives-from", "Implements", "Parent"]
     narrative_fields: []
@@ -121,4 +122,5 @@ any other class, a new spec, or an unchanged log is not reported.
 > | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:.urzua/config.yaml, test:rust/crates/urzua-cli/tests/spec_shipped_integration.rs` -- stated `Not started` disagreed with the computed value `Verified`. | **structural** |
 > | 2026-11-05 | Bumped to `0.11`. Status changed from Accepted to Shipped. **Why:** Maintainer decision, 2026-11-05: its Realized-by evidence computes Verified and an independent review judged it sound. | **substantive** |
 > | 2026-11-05 | Bumped to `0.12`. The schema excerpt now shows the type as configured: `Realized-by` and `Last-audited` among the known fields, the `statuses` declaration (`initial`, the one-way `Draft` to `Accepted` to `Shipped` `transitions`, and `require` of `Embodiment` and `Realized-by` at `Shipped`), the required `Purpose` section and the `version_bump` declaration. A `Last-audited` row is added and the `Embodiment` / `Realized-by` row no longer says none but `SPEC-1` use them. **Why:** the excerpt predated `Shipped` and the lifecycle, so it did not show that the order cannot be reversed or what a `Shipped` spec must carry. | **substantive** |
-> | 2026-11-07 | Bumped to `0.13`. The `Last-audited` row says it is also the anchor of a claim's expiry (`embodiment.claim-expired`), written only by `urzua reverify`, and that the `adr`, `milestone` and `bug` types declare it the same way on opt-in. **Why:** `MILE-129`, the build of `ADR-97`; `ADR-97` section 2. | **substantive** |
+> | 2026-11-07 | Bumped to `0.13`. The schema excerpt declares `relation_fields.title: Subject` and `version_bump.initial: "0.1"`, so `urzua new spec` writes the title as the `Subject` and `0.1` as the `Version` and the scaffold passes `check` as written. **Why:** `MILE-74` -- a scaffolded spec failed `field.quality` on a blank `Version` and `Subject`. | **substantive** |
+> | 2026-11-07 | Bumped to `0.14`. The `Last-audited` row says it is also the anchor of a claim's expiry (`embodiment.claim-expired`), written only by `urzua reverify`, and that the `adr`, `milestone` and `bug` types declare it the same way on opt-in. **Why:** `MILE-129`, the build of `ADR-97`; `ADR-97` section 2. | **substantive** |

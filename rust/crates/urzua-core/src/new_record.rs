@@ -276,6 +276,12 @@ pub struct NewRecordParams<'a> {
     /// (`RecordTypeConfig::date_field`/`author_field`), not literals.
     pub date_field: &'a str,
     pub author_field: &'a str,
+    /// The field filled with the title, when the type declares one
+    /// (`RecordTypeConfig::title_field`).
+    pub title_field: Option<&'a str>,
+    /// The version field and the value it starts at, when the type declares
+    /// them (`RecordTypeConfig::initial_version`).
+    pub initial_version: Option<(&'a str, &'a str)>,
     pub title: &'a str,
     /// Always assigned (`ADR-21`): every record type gets one, whether or not
     /// the type's field set declares it.
@@ -332,29 +338,41 @@ pub fn render_synthetic_yaml(
         Value::String("Stable-Id".to_string()),
         Value::String(params.stable_id.to_string()),
     );
+    // The fields a declaration lets `new` fill beyond the date, author and
+    // status: the title and the starting version (`MILE-74`).
+    let declared_value = |field: &str| -> Option<Value> {
+        if Some(field) == params.title_field {
+            return Some(Value::String(params.title.to_string()));
+        }
+        params
+            .initial_version
+            .filter(|(version_field, _)| *version_field == field)
+            .map(|(_, value)| Value::String(value.to_string()))
+    };
+    let value_for = |field: &str| match field {
+        f if f == params.date_field => Value::String(params.today.to_string()),
+        f if f == params.author_field => Value::String(params.author.to_string()),
+        f if f == params.status_field => params
+            .initial_status
+            .map_or(Value::Null, |s| Value::String(s.to_string())),
+        f => declared_value(f).unwrap_or(Value::Null),
+    };
     for field in required_fields {
         // A type that requires `Stable-Id` already has the generated one above;
         // listing it again as a blank required field would overwrite it with null.
         if field == "Stable-Id" {
             continue;
         }
-        let value = match field.as_str() {
-            f if f == params.date_field => Value::String(params.today.to_string()),
-            f if f == params.author_field => Value::String(params.author.to_string()),
-            f if f == params.status_field => params
-                .initial_status
-                .map_or(Value::Null, |s| Value::String(s.to_string())),
-            _ => Value::Null,
-        };
-        mapping.insert(Value::String(field.clone()), value);
+        mapping.insert(Value::String(field.clone()), value_for(field));
     }
 
     // Fields the template's header names beyond the required ones (`BUG-188`),
-    // already filtered to those the type declares, stay blank for a human.
+    // already filtered to those the type declares, stay blank for a human,
+    // unless the type declares a value for them (`MILE-74`).
     for field in template_fields {
         let key = Value::String(field.clone());
         if !mapping.contains_key(&key) {
-            mapping.insert(key, Value::Null);
+            mapping.insert(key, declared_value(field).unwrap_or(Value::Null));
         }
     }
 
@@ -640,6 +658,8 @@ mod tests {
             status_field: "Status",
             date_field: "Date",
             author_field: "Author",
+            title_field: None,
+            initial_version: None,
             display_number: 1,
             title: "X",
             stable_id: "01ABC",
@@ -666,6 +686,8 @@ mod tests {
             status_field: "Status",
             date_field: "Date",
             author_field: "Author",
+            title_field: None,
+            initial_version: None,
             display_number: 1,
             title: "X",
             stable_id: "01ABC",
@@ -696,6 +718,8 @@ mod tests {
             status_field: "Status",
             date_field: "Date",
             author_field: "Author",
+            title_field: None,
+            initial_version: None,
             display_number: 4,
             title: "X",
             stable_id: "01ABC",
@@ -720,6 +744,8 @@ mod tests {
             status_field: "Status",
             date_field: "Date",
             author_field: "Author",
+            title_field: None,
+            initial_version: None,
             display_number: 1,
             title: "X",
             stable_id: "01ABC",
@@ -827,6 +853,8 @@ mod tests {
             status_field: "Status",
             date_field: "Created",
             author_field: "Owner",
+            title_field: None,
+            initial_version: None,
             title: "T",
             stable_id: "01ABC",
             author: "beau",
@@ -847,6 +875,45 @@ mod tests {
     }
 
     #[test]
+    fn the_declared_title_and_version_fields_are_filled_and_the_rest_stay_blank() {
+        let params = NewRecordParams {
+            display_number: 1,
+            h1_prefix: None,
+            h1_width: 0,
+            initial_status: None,
+            status_field: "Status",
+            date_field: "Date",
+            author_field: "Author",
+            title_field: Some("Subject"),
+            initial_version: Some(("Version", "0.1")),
+            title: "Probe scaffold",
+            stable_id: "01ABC",
+            author: "beau",
+            today: "2026-11-07",
+        };
+        let required = vec![
+            "Version".to_string(),
+            "Subject".to_string(),
+            "Other".to_string(),
+        ];
+        let rendered = render_synthetic_yaml(&params, &required, &[]);
+        assert!(rendered.contains("Subject: Probe scaffold"), "{rendered}");
+        assert!(
+            rendered.contains("Version: '0.1'") || rendered.contains("Version: \"0.1\""),
+            "a version stays a string: {rendered}"
+        );
+        assert!(rendered.contains("Other: null"), "{rendered}");
+        let undeclared = NewRecordParams {
+            title_field: None,
+            initial_version: None,
+            ..params
+        };
+        let rendered = render_synthetic_yaml(&undeclared, &required, &[]);
+        assert!(rendered.contains("Subject: null"), "{rendered}");
+        assert!(rendered.contains("Version: null"), "{rendered}");
+    }
+
+    #[test]
     fn the_status_field_starts_at_the_initial_status_and_stays_blank_without_one() {
         let mut params = NewRecordParams {
             display_number: 4,
@@ -856,6 +923,8 @@ mod tests {
             status_field: "State",
             date_field: "Date",
             author_field: "Author",
+            title_field: None,
+            initial_version: None,
             title: "T",
             stable_id: "01ABC",
             author: "a",

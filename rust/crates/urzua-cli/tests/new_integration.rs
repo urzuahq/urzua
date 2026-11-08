@@ -403,6 +403,34 @@ fn new_fills_differently_named_date_and_author_fields_from_the_declaration() {
     assert!(content.contains("Owner:"), "{content}");
 }
 
+/// MILE-74: a type may declare the field `new` fills with the title and the
+/// version a record starts at; both are written, and a type declaring neither
+/// still starts them blank.
+#[test]
+fn new_fills_the_declared_title_and_starting_version_fields_observed_failing() {
+    let dir = fixture_repo("title-version");
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\", \"Version\", \"Subject\", \"Gist\"]\n    header_shape: \"yaml-frontmatter\"\n    relation_fields:\n      title: \"Subject\"\n    revision_log:\n      version_bump: {field: \"Version\", classes: [\"substantive\"], initial: \"0.1\"}\n",
+    )
+    .unwrap();
+    commit_all(&dir);
+    let output = run_urzua(&dir, &["new", "adr", "Named subject", "--by", "somebody"]);
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let v: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let content = std::fs::read_to_string(dir.join(v["path"].as_str().unwrap())).unwrap();
+    assert!(content.contains("\nSubject: Named subject\n"), "{content}");
+    assert!(content.contains("\nVersion: '0.1'\n"), "{content}");
+    assert!(
+        content.contains("\nGist: null\n"),
+        "an undeclared field stays blank: {content}"
+    );
+}
+
 /// MILE-130: a type declaring `extra_dirs` is one numbering namespace, so
 /// `new` numbers past the highest id in any of its directories, and past one
 /// claimed in an extra directory on another branch.

@@ -77,6 +77,68 @@ pub fn section_required(
     )
 }
 
+/// The exemptions a configuration declares that no record uses (`MILE-7`): a
+/// status listed in a type's `sections.exempt_statuses` that none of the type's
+/// records holds sets nothing aside, so the declaration silently does nothing
+/// (a typo, a status that was renamed or never used). One finding per such
+/// status, on the configuration file, naming the type and the status.
+///
+/// A type with no records is `type.dir-matches-nothing`'s to report, and a
+/// header-less type has no status to match (its records are counted out of
+/// scope by `section.required` itself). Reported under `type.dir-matches-nothing`,
+/// the rule for a declaration that silently does nothing. A record whose header cannot be read
+/// holds no status that could match.
+pub fn section_exemptions_matching_nothing(
+    records: &[Record],
+    config: &Config,
+    config_path: &std::path::Path,
+) -> Vec<Finding> {
+    let mut findings = Vec::new();
+    for (name, rt) in &config.record_types {
+        let Some(decl) = declared_model(name, rt)
+            .ok()
+            .flatten()
+            .and_then(|m| m.sections)
+        else {
+            continue;
+        };
+        if decl.exempt_statuses.is_empty() || rt.has_no_header() {
+            continue;
+        }
+        let field = relation_field_name(config, name, RelationRole::Status);
+        let mut held: std::collections::BTreeSet<String> = Default::default();
+        let mut any = false;
+        for record in records.iter().filter(|r| &r.record_type == name) {
+            any = true;
+            if let crate::header::FieldRead::Present(value) = record.header.read_declared(field) {
+                held.insert(value.trim().to_string());
+            }
+        }
+        if !any {
+            continue;
+        }
+        for status in decl.exempt_statuses.iter().filter(|s| !held.contains(*s)) {
+            findings.push(Finding {
+                rule: RULE_TYPE_DIR_MATCHES_NOTHING.to_string(),
+                severity: FindingSeverity::Warning,
+                file: config_path.to_path_buf(),
+                line: None,
+                waived: None,
+                declared_severity: None,
+                suggested_action: None,
+                action_source: ActionSource::new("exempt-status-matches-nothing")
+                    .key_path(["record_types", name.as_str(), "sections", "exempt_statuses"]),
+                message: format!(
+                    "record type '{name}' declares `sections.exempt_statuses` entry '{status}', but \
+                     no '{name}' record has that status -- the exemption sets nothing aside; \
+                     remove it or correct the status"
+                ),
+            });
+        }
+    }
+    findings
+}
+
 pub fn section_shape(
     records: &[Record],
     config: &Config,
@@ -753,6 +815,49 @@ mod tests {
         assert!(scope.is_empty(), "{scope:?}");
         let (_, f) = run(section_required, REQ, &doc("Accepted", "## Other\n"));
         assert_eq!(f.len(), 2, "the same body under a live status is flagged");
+    }
+
+    #[test]
+    fn an_exemption_that_matches_no_record_is_a_finding_observed_failing() {
+        // `Withdrawn` is declared but no record holds it: the exemption does
+        // nothing, which must be said rather than left silent (`MILE-7`).
+        let r = record("docs/adr/ADR-1-x.md", "adr", &doc("Accepted", ""));
+        let f = section_exemptions_matching_nothing(
+            &[r],
+            &config(REQ),
+            std::path::Path::new(".urzua/config.yaml"),
+        );
+        assert_eq!(f.len(), 1, "{f:?}");
+        assert_eq!(f[0].rule, RULE_TYPE_DIR_MATCHES_NOTHING);
+        assert!(f[0].file.ends_with(".urzua/config.yaml"));
+        assert!(
+            f[0].message.contains("Withdrawn") && f[0].message.contains("adr"),
+            "{}",
+            f[0].message
+        );
+    }
+
+    #[test]
+    fn an_exemption_a_record_holds_is_not_reported() {
+        let r = record("docs/adr/ADR-1-x.md", "adr", &doc("Withdrawn", ""));
+        let f = section_exemptions_matching_nothing(
+            &[r],
+            &config(REQ),
+            std::path::Path::new(".urzua/config.yaml"),
+        );
+        assert!(f.is_empty(), "{f:?}");
+    }
+
+    #[test]
+    fn only_the_unmatched_status_of_several_is_reported() {
+        let r = record("docs/adr/ADR-1-x.md", "adr", &doc("Withdrawn", ""));
+        let f = section_exemptions_matching_nothing(
+            &[r],
+            &config("{from: headings, required: [{name: Context}], exempt_statuses: [Withdrawn, Retired]}"),
+            std::path::Path::new(".urzua/config.yaml"),
+        );
+        assert_eq!(f.len(), 1, "{f:?}");
+        assert!(f[0].message.contains("Retired"), "{}", f[0].message);
     }
 
     #[test]

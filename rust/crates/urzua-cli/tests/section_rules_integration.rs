@@ -190,6 +190,39 @@ const NESTED: &str = "    sections:
         - {name: Alternatives considered, level: 3, under: Proposal}
 ";
 
+/// `MILE-7`: an exemption no record uses sets nothing aside. It is reported on
+/// the configuration, not left a silent no-op, and a record in the exempt status
+/// clears it.
+#[test]
+fn an_exemption_that_matches_no_record_is_reported_observed_failing() {
+    let dir = fixture(
+        "exempt-unused",
+        "{ type.dir-matches-nothing: warn }",
+        SECTIONS,
+        &[("ADR-1-good.md", GOOD)],
+    );
+    let (_, report) = check(&dir);
+    let found = findings_of(&report, "type.dir-matches-nothing");
+    assert_eq!(found.len(), 1, "{report}");
+    assert!(found[0]["file"]
+        .as_str()
+        .unwrap()
+        .ends_with(".urzua/config.yaml"));
+    assert!(found[0]["message"].as_str().unwrap().contains("Withdrawn"));
+
+    let dir = fixture(
+        "exempt-used",
+        "{ type.dir-matches-nothing: warn }",
+        SECTIONS,
+        &[("ADR-1-good.md", GOOD), ("ADR-3-gone.md", WITHDRAWN)],
+    );
+    let (_, report) = check(&dir);
+    assert!(
+        findings_of(&report, "type.dir-matches-nothing").is_empty(),
+        "{report}"
+    );
+}
+
 #[test]
 fn a_required_h3_under_its_h2_is_checked_end_to_end() {
     let with = "---\nStatus: Accepted\n---\n\n# 1 — With\n\n## Proposal\n\np\n\n### Alternatives considered\n\na\n";
