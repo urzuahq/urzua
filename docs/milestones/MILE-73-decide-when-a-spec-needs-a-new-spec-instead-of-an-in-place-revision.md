@@ -18,7 +18,7 @@ already executed) and new capability needs documenting, is the right move an in-
 (the living-spec model RFC-6 currently describes) or a new spec (leaving the executed one frozen)?
 RFC-6's own Open Questions section names this exactly ("what does 'spec drifted enough to need a
 new ADR' actually look like operationally") and explicitly defers it to a follow-up RFC rather than
-answering it.
+answering it. This milestone answers the new-spec-or-revise question only; the drift-to-ADR question RFC-6 also names stays open and `MILE-50` holds it.
 
 ## Why
 
@@ -47,3 +47,4 @@ inconsistent precedent one spec at a time.
 > | 2026-11-07 | Left open: the item `RFC-6`'s open question points at the amended `ADR-14` rule is not made true. **Why:** `RFC-6`'s open questions ask when a spec has drifted enough to need a new ADR, and `ADR-14`'s amendment of 2026-09-07 says in terms that this is the question it leaves deferred; the amendment answers a different one (a new spec number or an in-place revision), which `RFC-6` never lists as open. Pointing the open question at the amendment would say it is resolved when it is not, so no pointer was added. Whether the item should name the question `RFC-6` actually asks, or be dropped as resting on a misreading, is the maintainer's call. | **substantive** |
 > | 2026-11-07 | The item "`RFC-6`'s open question points at the amended `ADR-14` rule" is amended to what is true. Maintainer decision of 2026-11-07. **Why:** the original claim was wrong. `RFC-6` asks when a spec has drifted enough to need a new ADR, and `ADR-14`'s amendment answers a different question (a new spec number or an in-place revision) and says it leaves that one deferred, so `RFC-6`'s question was never resolved by it and cannot point at it. The question stays open and `MILE-50`, which implements `RFC-6`, tracks it; the item now states that and cites `ADR-14` and `MILE-50`. | **substantive** |
 > | 2026-11-07 | `Kind: decision` added. **Why:** maintainer decision of 2026-11-07 (`ADR-96` amendment, milestone kinds): this milestone records a decision, so it is judged against a decided record (an Accepted decision or a Shipped spec) rather than a built tier. Its `Status` is computed from its Done means items by `urzua fix`, not set by hand. | **structural** |
+> | 2026-11-08 | The What now says the drift-to-ADR question RFC-6 names is not decided here and `MILE-50` holds it. **Why:** the What read as if this milestone resolved all of RFC-6's open question, while its Done means (amended 2026-11-07) deliberately leaves the drift question to `MILE-50`; the text now agrees with the item. | **structural** |

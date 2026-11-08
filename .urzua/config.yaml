@@ -742,6 +742,20 @@ rules:
       - {type: bug, status: [Fixed], days: 60, spread_days: 60}
       - {type: spec, status: [Shipped, Accepted], days: 60, spread_days: 60}
       - {type: adr, status: [Accepted], days: 90, spread_days: 90}
+  # ADR-96: a Done item's evidence is shape-checked (a leading checkbox, an unknown kind, a
+  # waiver that is not a locator clause), and a waived item is judged against the record that
+  # grounds it. Both are errors here because the milestone corpus is built on them (MILE-215).
+  status.done-items-shape: error
+  status.waived-item-stale: warn
+  # ADR-97 section 6: the companion of claim-expired. A hand-typed `Last-audited` extends a
+  # claim and a drift window, so one not written by `urzua reverify` is reported.
+  embodiment.claim-renewal-unattested: warn
+  # Declared off, not left undeclared (MILE-80): this repository has no pair with
+  # `cross_type: false`, no `section_shapes` declaration and no `application_paths`
+  # for a source-and-records diff, so each rule would have nothing to judge.
+  relation.cross-type-disallowed: off
+  section.shape: off
+  diff.source-and-records-mixed: off
   embodiment.locator-exists: error
   # Advisory (MILE-46, ADR-87): several ADRs citing one rule module is expected now that
   # the rule engine is split into modules (MILE-131), so the nudge is reported and counted
