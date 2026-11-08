@@ -5,7 +5,7 @@ Phase: '0'
 Track: governance-process
 Implements: SPEC-1
 Blocked-on: —
-Realized-by: code:.git-hooks/pre-push, code:Makefile, code:.github/workflows/checks.yml, test:rust/crates/urzua-cli/tests/fail_on_integration.rs#config_fail_on_warning_makes_a_warning_exit_1_with_unchanged_json_observed_failing@sha256:d1e8e19c3842276d697a34cbf386f69ca04921417026f4d0cc1a5f9a86219b04
+Realized-by: code:.git-hooks/pre-push@sha256:2e01e0e6b77f87884289ac46630dcee53c8363350f531764b90931616debde43, code:Makefile@sha256:fb9fda4c85083447873cd372df238eae66f507575c2257c8f275f2253e4ae436, code:.github/workflows/checks.yml@sha256:4afa5fe0db59c78f2954f105354af9f42c4fef044c7a0e960384c59aa880313d, test:rust/crates/urzua-cli/tests/fail_on_integration.rs#config_fail_on_warning_makes_a_warning_exit_1_with_unchanged_json_observed_failing@sha256:d1e8e19c3842276d697a34cbf386f69ca04921417026f4d0cc1a5f9a86219b04
 ---
 # 99 — The pre-push hook runs `urzua check`, not only fmt and clippy
 
@@ -45,10 +45,10 @@ what level the rules are declared at.
 
 ## Done means
 
-- `.git-hooks/pre-push` runs `cargo fmt --check`, `cargo clippy` and the records gate (it builds the release binary and runs `urzua check`). — evidence: code:.git-hooks/pre-push
-- The hook is installed by `make hooks-install`. — evidence: code:Makefile
-- `make records` builds the release binary and runs `urzua check` exactly as CI does, so a record `check` rejects does not reach a push. — evidence: code:Makefile, code:.github/workflows/checks.yml
-- The hook acts on what `check` returns under the configured `fail_on`. — evidence: test:rust/crates/urzua-cli/tests/fail_on_integration.rs#config_fail_on_warning_makes_a_warning_exit_1_with_unchanged_json_observed_failing@sha256:d1e8e19c3842276d697a34cbf386f69ca04921417026f4d0cc1a5f9a86219b04, code:.git-hooks/pre-push
+- `.git-hooks/pre-push` runs `cargo fmt --check`, `cargo clippy` and the records gate (it builds the release binary and runs `urzua check`). — evidence: code:.git-hooks/pre-push@sha256:2e01e0e6b77f87884289ac46630dcee53c8363350f531764b90931616debde43
+- The hook is installed by `make hooks-install`. — evidence: code:Makefile@sha256:fb9fda4c85083447873cd372df238eae66f507575c2257c8f275f2253e4ae436
+- `make records` builds the release binary and runs `urzua check` exactly as CI does, so a record `check` rejects does not reach a push. — evidence: code:Makefile@sha256:fb9fda4c85083447873cd372df238eae66f507575c2257c8f275f2253e4ae436, code:.github/workflows/checks.yml@sha256:4afa5fe0db59c78f2954f105354af9f42c4fef044c7a0e960384c59aa880313d
+- The hook acts on what `check` returns under the configured `fail_on`. — evidence: test:rust/crates/urzua-cli/tests/fail_on_integration.rs#config_fail_on_warning_makes_a_warning_exit_1_with_unchanged_json_observed_failing@sha256:d1e8e19c3842276d697a34cbf386f69ca04921417026f4d0cc1a5f9a86219b04, code:.git-hooks/pre-push@sha256:2e01e0e6b77f87884289ac46630dcee53c8363350f531764b90931616debde43
 
 > **Revision log**
 >
@@ -59,3 +59,4 @@ what level the rules are declared at.
 > | 2026-11-04 | `Realized-by` added and `Status` Planned -> Done. **Why:** the work is merged in #134: the pre-push hook runs `make records`, which runs `urzua check`. Checked against this record's Done means and the code; the record never carried its own delivery evidence, and `status.delivery-agreement` (`MILE-183`) reads evidence under a not-done `Status` as a disagreement. | **structural** |
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. The criteria are those the delivered work met, checked against `Realized-by` and the code; `Status` stays Done. | **structural** |
 > | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |
+> | 2026-11-08 | Pinned (attested by beauwilliams, identity: gh-verified, actor: agent): 3 locators pinned, 3 file-level, 0 scoped. Evidence: .git-hooks/pre-push@sha256:2e01e0e6b77f, Makefile@sha256:fb9fda4c8508, .github/workflows/checks.yml@sha256:4afa5fe0db59 Reason: Pinned the files as they are now after checking each against the record it evidences: declaration.rs and config.yaml still declare pointer_fields and narrative_fields per type (MILE-90), config.yaml still requires Subject on specs with checks.yml gating it (MILE-91), document_model.rs, both section.rs files, schema_version.rs and config.yaml still read the declared identity, fields and sections (MILE-98), .git-hooks/pre-push, the Makefile and checks.yml still run urzua check (MILE-99), waiver.rs, rules/waiver.rs and waiver_stale_integration.rs still implement the waiver type SPEC-10 describes, audit.rs and the own-config and check integration tests still implement SPEC-11, new.rs, new_record.rs and new_integration.rs still implement SPEC-12, explain.rs, both graph.rs files and the own-config test still implement SPEC-13, both migrate.rs files and check_integration.rs still implement SPEC-14, and doctor.rs and its tests still implement SPEC-15. **Why:** a claim is renewed only over pinned code and test evidence. | **structural** |
