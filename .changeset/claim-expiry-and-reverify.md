@@ -13,4 +13,5 @@ revision row. `urzua reverify` is the one attributed way to renew a claim: it re
 re-hashes every locator, refuses changed evidence, pins `code:` and `test:` locators that have no
 pin (`--pin-only` pins them and renews nothing), caps a batch at `max_batch` records under one
 shared reason, and records who renewed the claim and why. A configuration that declares neither
-rule loads and reports as before.
+rule loads and reports as before. The harness bundle gains a `/reverify` command and a `reverify` verb in its helper script,
+which refuse an empty reason, list the review and print the `Pinned:` and `Re-verified:` lines for the pull request body.
