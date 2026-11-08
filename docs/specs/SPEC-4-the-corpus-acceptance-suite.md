@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5N2PD9ZYBJPZHN05W7
-Version: '0.17'
+Version: '0.18'
 Date: 2026-08-20
 Status: Shipped
 Embodiment: Verified
@@ -368,6 +368,29 @@ Failing cases for rules that had only a clean run or no case, each with a mutati
   (`revision-log.change-class-required`), and a version bump that follows the declared class column
   (`revision-log.version-bump-required`).
 
+## CI shard protocol (`ADR-98`)
+
+The runner is one custom-harness process (`harness = false`), so nextest cannot partition it. CI runs it
+as several processes instead, controlled by three environment variables, which `.github/scripts/ci-tests.sh`
+sets and `.github/workflows/ci.yml` runs as the `acceptance` shards and the `acceptance-gate` job
+(`SPEC-20`):
+
+- **`URZUA_ACCEPTANCE_SHARD=i/n`** (`1 <= i <= n`): the cases are dealt round-robin in discovery order
+  and this process runs the ones at position `p` where `p mod n = i - 1`. Every case keeps its own
+  mutation proof and its corpus-and-case scratch directory, so a case behaves the same alone or in a
+  shard. An unset variable runs every case, as before.
+- **`URZUA_ACCEPTANCE_PROVEN_OUT=<file>`**: a shard cannot judge the coverage gate (a rule's failing case
+  may live in another shard), so it writes what it proved: a header line `shard i/n discovered D ran R`,
+  then one `rule<TAB>detects|ran-only` line per rule whose mutation proof held.
+- **`URZUA_ACCEPTANCE_MERGE=<dir>`**: reads every shard file in the directory and judges the coverage gate
+  (the allow-list and its shrink-only ceiling) over the union, where a rule with a failing case in any
+  shard counts as detected. The merge fails closed: a set that is not exactly shards `1..n` of one
+  discovery is refused, so a shard file that is missing, repeated, from a different shard count or
+  discovered-case count, or an empty directory, and a total of cases run that differs from the cases
+  discovered, are each an error naming the cause.
+
+The protocol lives in `rust/crates/urzua-cli/tests/acceptance/sharding.rs`.
+
 ## Success criteria
 
 1. Every case in the suite is executable and named in `expectations/`. A catalog entry marked "Not built" is
@@ -418,3 +441,4 @@ Failing cases for rules that had only a clean run or no case, each with a mutati
 > | 2026-11-08 | Pinned (attested by beauwilliams, identity: gh-verified, actor: agent): 2 locators pinned, 2 file-level, 0 scoped. Evidence: rust/crates/urzua-cli/tests/acceptance.rs@sha256:5268644d3380, rust/crates/urzua-cli/tests/acceptance_property.rs@sha256:776f499ed6f7 Reason: Pinned the files as they are now after checking each against the record it evidences: config.yaml and the own-config test still declare the adr, rfc, spec and condition types that SPEC-16, SPEC-17, SPEC-18 and SPEC-23 describe, with spec_shipped_integration.rs, rules/roadmap.rs, condition_type_integration.rs and work_types_integration.rs behind them, check.rs, rules.rs, check_integration.rs and fail_on_integration.rs still implement urzua check (SPEC-2), the workflows, the install-knope action and the release and gate test scripts still make up the pipeline SPEC-20 describes, the Makefile and checks.yml still dispatch the repository layout of SPEC-21, the harness modules, the bundled hook script and the harness integration tests still implement the request, verdict and adapter layout of SPEC-24, config.rs and the own-config and field-levels tests still implement SPEC-3, and acceptance.rs and acceptance_property.rs still implement SPEC-4. **Why:** a claim is renewed only over pinned code and test evidence. | **structural** |
 > | 2026-11-08 | Bumped to `0.17`. The `code:` and `test:` locators of `Realized-by` are now hash-pinned by `urzua reverify --pin-only` (the `Pinned` row above) and, where the record stated `Drift detected`, its `Embodiment` was recomputed (the tool-authored row above); no behaviour this spec describes changes. **Why:** `MILE-129`, `ADR-97` section 10: a claim is renewed only over pinned code and test evidence, so the corpus is pinned once before expiry is enabled. | **structural** |
 > | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/acceptance.rs` 5268644d3380 -> ae174f312e28. Reason: Read the diff of each pinned file since the pin taken earlier in this branch (the changes main landed in ADR-98's sharded CI and the milestone Kind amendment) and the claim still holds. acceptance.rs: acceptance.rs gained sharding (URZUA_ACCEPTANCE_SHARD, URZUA_ACCEPTANCE_PROVEN_OUT and a merge run under URZUA_ACCEPTANCE_MERGE) so each shard proves its cases and the coverage gate is judged over their union, and the cases, the mutation proof and the gate are unchanged. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
+> | 2026-11-08 | Bumped to `0.18`. Added the "CI shard protocol" section: `URZUA_ACCEPTANCE_SHARD`, `URZUA_ACCEPTANCE_PROVEN_OUT` and `URZUA_ACCEPTANCE_MERGE`, how the cases are dealt, what a shard file holds, and what makes the merge refuse a set. **Why:** the protocol was built by `ADR-98` and described only in `SPEC-20` and an ADR, while this spec, which owns the runner and its coverage gate, did not say that the gate is now judged over merged shard files. No behaviour of the runner changed. | **substantive** |

@@ -170,6 +170,26 @@ fn init_names_the_directories_it_did_not_propose() {
     );
 }
 
+/// The config a `--dry-run` proposes is byte-identical to the file the real run
+/// writes; the reports differ only in `dry_run`, `written` and the echoed content.
+#[test]
+fn init_dry_run_proposes_the_config_the_real_run_writes() {
+    let dir = realistic_repo("init-dry-run-matches-write");
+    let dry = json(&run_urzua(&dir, &["init", "--dry-run"]));
+    assert_eq!(dry["dry_run"], true);
+    assert!(!dir.join(".urzua/config.yaml").exists());
+    let proposed = dry["config_yaml"].as_str().unwrap().to_string();
+
+    let real = json(&run_urzua(&dir, &["init"]));
+    assert_eq!(real["dry_run"], false);
+    assert_eq!(real["written"], true);
+    assert_eq!(
+        std::fs::read_to_string(dir.join(".urzua/config.yaml")).unwrap(),
+        proposed
+    );
+    assert_eq!(dry["proposed"], real["proposed"]);
+}
+
 /// N1: `--dry-run` shows the proposal even when a config already exists, and
 /// still writes nothing.
 #[test]

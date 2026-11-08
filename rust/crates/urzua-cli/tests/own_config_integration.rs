@@ -12,6 +12,22 @@ fn own_config() -> String {
     std::fs::read_to_string(path).expect("repository config readable")
 }
 
+/// MILE-80: the repository's config declares a level for every rule the build
+/// ships, including the ones it declares `off`, so none is merely absent.
+#[test]
+fn own_config_declares_a_level_for_every_shipped_rule() {
+    let config = urzua_core::config::parse(&own_config()).expect("repository config parses");
+    let undeclared: Vec<&str> = urzua_core::rules::ALL_RULES
+        .iter()
+        .copied()
+        .filter(|id| !config.rules.contains_key(*id))
+        .collect();
+    assert!(
+        undeclared.is_empty(),
+        "rules with no declared level in .urzua/config.yaml: {undeclared:?}"
+    );
+}
+
 fn git(dir: &Path, args: &[&str]) {
     assert!(Command::new("git")
         .args(args)

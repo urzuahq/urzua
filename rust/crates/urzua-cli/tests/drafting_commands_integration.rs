@@ -135,7 +135,13 @@ fn fill(record: &Path) {
         } else if line.starts_with("## ") {
             in_body_guidance = true;
             out.push_str(line);
-            out.push_str("\n\nA concrete sentence drafted from the conversation.\n\n");
+            // A Done means section is a list of items in this repository's config
+            // (ADR-96); every other section is prose.
+            if line == "## Done means" {
+                out.push_str("\n\n- A concrete criterion drafted from the conversation.\n\n");
+            } else {
+                out.push_str("\n\nA concrete sentence drafted from the conversation.\n\n");
+            }
             continue;
         } else if in_body_guidance
             && !line.starts_with("> ")
@@ -388,7 +394,7 @@ fn a_milestone_draft_carries_the_required_section_and_check_refuses_one_without_
     let kept = std::fs::read_to_string(&path).unwrap();
     assert!(kept.lines().any(|l| l == "## Done means"), "{kept}");
     let without: String = kept.replace(
-        "## Done means\n\nA concrete sentence drafted from the conversation.\n\n",
+        "## Done means\n\n- A concrete criterion drafted from the conversation.\n\n",
         "",
     );
     assert_ne!(kept, without, "the fixture must have removed the section");
