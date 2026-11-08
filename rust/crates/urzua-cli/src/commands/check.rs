@@ -26,8 +26,7 @@ use urzua_core::report::{
 use urzua_core::rules;
 
 use crate::discovery::{
-    compute_drifted_records, path_is_inside_repo, read_claim_files, read_index_artifacts,
-    scope_to_requested_paths,
+    path_is_inside_repo, read_claim_files, read_index_artifacts, scope_to_requested_paths,
 };
 use crate::emit;
 use crate::gate::derive_status;
@@ -840,6 +839,7 @@ fn claim_path_notices(repo_root: &Path, opts: &rules::ClaimOpts) -> Result<Vec<N
 fn load_drift(
     session: &Session,
     scope: &ReportScope,
+    blame: &urzua_io::BlameCache,
 ) -> (crate::discovery::DriftedRecords, HashMap<PathBuf, u64>) {
     let (repo_root, config) = (&session.repo_root, &session.config);
     if enabled_setting(config, rules::RULE_EMBODIMENT_CONSISTENCY).is_none() {
@@ -869,14 +869,21 @@ fn load_drift(
     } else {
         session.records.as_slice()
     };
+    let now = urzua_io::now_unix();
     let mut drift = match prospective {
-        Some(p) => crate::discovery::compute_drifted_records_for_content(
-            repo_root, records, config, &p.content,
+        Some(p) => crate::discovery::compute_drifted_records_at(
+            repo_root,
+            records,
+            config,
+            now,
+            Some(&p.content),
+            blame,
         ),
-        None => compute_drifted_records(repo_root, records, config),
+        None => crate::discovery::compute_drifted_records_at(
+            repo_root, records, config, now, None, blame,
+        ),
     };
-    let (ages, problems) =
-        crate::discovery::compute_claim_ages(repo_root, records, config, urzua_io::now_unix());
+    let (ages, problems) = crate::discovery::compute_claim_ages(records, config, now, blame);
     for problem in problems {
         if !drift.git_problems.contains(&problem) {
             drift.git_problems.push(problem);
@@ -891,9 +898,10 @@ fn load_drift(
 fn load_claim_measures(
     session: &Session,
     scope: &ReportScope,
+    blame: &urzua_io::BlameCache,
     notices: &mut Vec<Notice>,
 ) -> (HashMap<PathBuf, i64>, HashMap<PathBuf, u64>) {
-    let (repo_root, config) = (&session.repo_root, &session.config);
+    let config = &session.config;
     let only: Vec<urzua_core::record::Record>;
     let records: &[urzua_core::record::Record] = if let Some(p) = scope.prospective.as_ref() {
         only = session
@@ -915,7 +923,7 @@ fn load_claim_measures(
         session.records.as_slice()
     };
     let measures =
-        crate::discovery::compute_claim_measures(repo_root, records, config, urzua_io::now_unix());
+        crate::discovery::compute_claim_measures(records, config, urzua_io::now_unix(), blame);
     notices.extend(crate::discovery::drift_notices(false, &measures.problems));
     (measures.line_times, measures.seeds)
 }
@@ -1140,13 +1148,16 @@ fn load_context<'a>(
         (&session.repo_root, &session.config, &session.discovered);
     let mut notices: Vec<Notice> = Vec::new();
     let sources = read_source_inputs(session, selection, &mut notices)?;
+    // One blame per file for the whole run, shared by drift, claim ages and
+    // claim measures.
+    let blame = urzua_io::BlameCache::new(repo_root);
 
     // Drift is read only by `embodiment.consistency`, so a selection that leaves
     // it out skips the git history it would cost.
     let drift_wanted =
         selection.is_none_or(|s| s.iter().any(|r| r == rules::RULE_EMBODIMENT_CONSISTENCY));
     let (drift, claim_ages) = if drift_wanted {
-        load_drift(session, scope)
+        load_drift(session, scope, &blame)
     } else {
         (Default::default(), HashMap::new())
     };
@@ -1161,7 +1172,7 @@ fn load_context<'a>(
     let claim_wanted = selection_wants(selection, &[rules::RULE_EMBODIMENT_CLAIM_EXPIRED])
         && enabled_setting(config, rules::RULE_EMBODIMENT_CLAIM_EXPIRED).is_some();
     let (claim_line_times, claim_seeds) = if claim_wanted {
-        load_claim_measures(session, scope, &mut notices)
+        load_claim_measures(session, scope, &blame, &mut notices)
     } else {
         (HashMap::new(), HashMap::new())
     };

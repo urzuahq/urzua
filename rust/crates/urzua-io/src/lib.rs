@@ -325,41 +325,17 @@ pub fn files_in_dirs_at_commits(
     dirs: &[String],
 ) -> Result<std::collections::HashMap<String, Vec<String>>, String> {
     use std::collections::HashMap;
-    use std::io::Write;
     let mut wanted: Vec<(&String, &String)> = Vec::new();
     for commit in commits {
         for dir in dirs {
             wanted.push((commit, dir));
         }
     }
-    let mut child = Command::new("git")
-        .arg("-C")
-        .arg(repo_root)
-        .args(["cat-file", "--batch-check"])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|e| format!("could not run git: {e}"))?;
-    let mut stdin = child.stdin.take().expect("piped stdin");
     let input: String = wanted
         .iter()
         .map(|(c, d)| format!("{c}:{}\n", d.trim_end_matches('/')))
         .collect();
-    // Written on its own thread: a full output pipe must not block the input.
-    let writer = std::thread::spawn(move || {
-        let _ = stdin.write_all(input.as_bytes());
-    });
-    let out = child
-        .wait_with_output()
-        .map_err(|e| format!("could not read git: {e}"))?;
-    let _ = writer.join();
-    if !out.status.success() {
-        return Err(format!(
-            "git cat-file failed: {}",
-            String::from_utf8_lossy(&out.stderr).trim()
-        ));
-    }
+    let out = cat_file_batch(repo_root, "--batch-check", input)?;
     let text = String::from_utf8_lossy(&out.stdout);
     let answers: Vec<&str> = text.lines().collect();
     if answers.len() != wanted.len() {
@@ -396,33 +372,24 @@ pub fn files_in_dirs_at_commits(
     Ok(result)
 }
 
-/// The names of the files (not directories or submodules) directly in each tree,
-/// read in one `git cat-file --batch` process: a repository with hundreds of pull
-/// requests has over a thousand distinct trees, and a `git ls-tree` process for
-/// each took longer than the rest of a `check` run.
-fn list_trees<'a>(
+/// Runs `git cat-file <mode>` over `input` and returns its output. The input is
+/// written on its own thread: a full output pipe must not block it.
+fn cat_file_batch(
     repo_root: &Path,
-    oids: &[&'a str],
-) -> Result<std::collections::HashMap<&'a str, Vec<String>>, String> {
+    mode: &str,
+    input: String,
+) -> Result<std::process::Output, String> {
     use std::io::Write;
-    let width = match run_git(repo_root, &["rev-parse", "--show-object-format"])
-        .map_err(|e| e.to_string())?
-        .trim()
-    {
-        "sha256" => 32,
-        _ => 20,
-    };
     let mut child = Command::new("git")
         .arg("-C")
         .arg(repo_root)
-        .args(["cat-file", "--batch"])
+        .args(["cat-file", mode])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
         .map_err(|e| format!("could not run git: {e}"))?;
     let mut stdin = child.stdin.take().expect("piped stdin");
-    let input: String = oids.iter().map(|o| format!("{o}\n")).collect();
     let writer = std::thread::spawn(move || {
         let _ = stdin.write_all(input.as_bytes());
     });
@@ -436,6 +403,26 @@ fn list_trees<'a>(
             String::from_utf8_lossy(&out.stderr).trim()
         ));
     }
+    Ok(out)
+}
+
+/// The names of the files (not directories or submodules) directly in each tree,
+/// read in one `git cat-file --batch` process: a repository with hundreds of pull
+/// requests has over a thousand distinct trees, and a `git ls-tree` process for
+/// each took longer than the rest of a `check` run.
+fn list_trees<'a>(
+    repo_root: &Path,
+    oids: &[&'a str],
+) -> Result<std::collections::HashMap<&'a str, Vec<String>>, String> {
+    let width = match run_git(repo_root, &["rev-parse", "--show-object-format"])
+        .map_err(|e| e.to_string())?
+        .trim()
+    {
+        "sha256" => 32,
+        _ => 20,
+    };
+    let input: String = oids.iter().map(|o| format!("{o}\n")).collect();
+    let out = cat_file_batch(repo_root, "--batch", input)?;
     let bytes = out.stdout;
     let bad = || "git cat-file --batch printed an object this tool cannot read".to_string();
     let mut listed = std::collections::HashMap::new();
@@ -989,31 +976,12 @@ pub fn commit_for_line_in(
     line: usize,
     contents: Option<&str>,
 ) -> Result<Option<String>, String> {
-    use std::io::Write;
     let mut cmd = Command::new("git");
     cmd.args(["blame", "-L", &format!("{line},{line}"), "--porcelain"]);
     if contents.is_some() {
         cmd.args(["--contents", "-"]);
     }
-    cmd.arg("--")
-        .arg(path)
-        .current_dir(repo_root)
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .stdin(if contents.is_some() {
-            std::process::Stdio::piped()
-        } else {
-            std::process::Stdio::null()
-        });
-    let mut child = cmd
-        .spawn()
-        .map_err(|e| format!("could not run git blame on {}: {e}", path.display()))?;
-    if let (Some(text), Some(mut stdin)) = (contents, child.stdin.take()) {
-        // A broken pipe means git exited early (no history); its status says why.
-        let _ = stdin.write_all(text.as_bytes());
-    }
-    let output = child
-        .wait_with_output()
+    let output = run_blame(cmd, path, repo_root, contents)
         .map_err(|e| format!("could not run git blame on {}: {e}", path.display()))?;
 
     if !output.status.success() {
@@ -1036,6 +1004,219 @@ pub fn commit_for_line_in(
         .next()
         .and_then(|l| l.split_whitespace().next())
         .map(|s| s.to_string()))
+}
+
+/// One line's blame: its commit, none, or why git could not say.
+type LineBlame = Result<Option<String>, String>;
+
+/// The cache key: file, proposed contents (if blamed against them) and line.
+type BlameKey = (PathBuf, Option<String>, usize);
+
+/// One `git blame` per file and one `git show` per commit for a whole run,
+/// instead of one process per line: a corpus of a thousand records costs as
+/// many blame processes as it has files. Each line's answer is the one
+/// [`commit_for_line_in`] gives for it. Make one per run, never reuse it after
+/// a file has changed.
+pub struct BlameCache {
+    repo_root: PathBuf,
+    lines: std::sync::Mutex<std::collections::HashMap<BlameKey, LineBlame>>,
+    times: std::sync::Mutex<std::collections::HashMap<String, Option<i64>>>,
+}
+
+impl BlameCache {
+    pub fn new(repo_root: &Path) -> Self {
+        BlameCache {
+            repo_root: repo_root.to_path_buf(),
+            lines: Default::default(),
+            times: Default::default(),
+        }
+    }
+
+    /// Blames every not yet cached `(file, line)` of `work` (against `contents`
+    /// when given): one `git blame` per file, with a `-L` range per wanted line
+    /// (so git stops tracing a line once it is resolved), the files on a few
+    /// threads. Later lookups of these lines spawn nothing.
+    pub fn prefetch(&self, work: &[(PathBuf, usize)], contents: Option<&str>) {
+        let key_contents = contents.map(str::to_string);
+        let mut wanted: Vec<(&PathBuf, Vec<usize>)> = Vec::new();
+        {
+            let cached = self.lines.lock().unwrap_or_else(|e| e.into_inner());
+            for (path, line) in work {
+                if cached.contains_key(&(path.clone(), key_contents.clone(), *line)) {
+                    continue;
+                }
+                match wanted.iter_mut().find(|(p, _)| *p == path) {
+                    Some((_, lines)) if lines.contains(line) => {}
+                    Some((_, lines)) => lines.push(*line),
+                    None => wanted.push((path, vec![*line])),
+                }
+            }
+        }
+        if wanted.is_empty() {
+            return;
+        }
+        let threads = std::thread::available_parallelism()
+            .map_or(4, |n| n.get())
+            .clamp(2, 8);
+        let chunk = wanted.len().div_ceil(threads);
+        let blamed: Vec<(PathBuf, Vec<(usize, LineBlame)>)> = std::thread::scope(|scope| {
+            let handles: Vec<_> = wanted
+                .chunks(chunk)
+                .map(|part| {
+                    scope.spawn(move || {
+                        part.iter()
+                            .map(|(p, lines)| {
+                                (
+                                    (*p).clone(),
+                                    blame_lines(&self.repo_root, p, lines, contents),
+                                )
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                })
+                .collect();
+            handles
+                .into_iter()
+                .flat_map(|h| h.join().unwrap_or_default())
+                .collect()
+        });
+        let mut cached = self.lines.lock().unwrap_or_else(|e| e.into_inner());
+        for (path, answers) in blamed {
+            for (line, answer) in answers {
+                cached.insert((path.clone(), key_contents.clone(), line), answer);
+            }
+        }
+    }
+
+    /// As [`commit_for_line_in`], from the cache (blaming the line on a miss).
+    pub fn commit_for_line(
+        &self,
+        path: &Path,
+        line: usize,
+        contents: Option<&str>,
+    ) -> Result<Option<String>, String> {
+        self.prefetch(&[(path.to_path_buf(), line)], contents);
+        self.lines
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(&(path.to_path_buf(), contents.map(str::to_string), line))
+            .cloned()
+            .unwrap_or(Ok(None))
+    }
+
+    /// [`commit_unix_time`], asked of git once per commit.
+    pub fn commit_unix_time(&self, commit: &str) -> Option<i64> {
+        if let Some(time) = self
+            .times
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(commit)
+        {
+            return *time;
+        }
+        let time = commit_unix_time(&self.repo_root, commit);
+        self.times
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(commit.to_string(), time);
+        time
+    }
+}
+
+/// `git blame --porcelain` of `lines` of `path` (of `contents` when given) in
+/// one process. When that one process fails for a reason other than "no
+/// history" -- a line outside the file, say -- each line is asked of git on its
+/// own, so every line reports exactly what [`commit_for_line_in`] reports.
+fn blame_lines(
+    repo_root: &Path,
+    path: &Path,
+    lines: &[usize],
+    contents: Option<&str>,
+) -> Vec<(usize, LineBlame)> {
+    let each = || {
+        lines
+            .iter()
+            .map(|l| (*l, commit_for_line_in(repo_root, path, *l, contents)))
+            .collect()
+    };
+    if lines.contains(&0) {
+        return each();
+    }
+    let mut cmd = Command::new("git");
+    cmd.args(["blame", "--porcelain"]);
+    for line in lines {
+        cmd.args(["-L", &format!("{line},{line}")]);
+    }
+    if contents.is_some() {
+        cmd.args(["--contents", "-"]);
+    }
+    let Ok(output) = run_blame(cmd, path, repo_root, contents) else {
+        return each();
+    };
+    if !output.status.success() {
+        if is_no_history_stderr(&String::from_utf8_lossy(&output.stderr)) {
+            return lines.iter().map(|l| (*l, Ok(None))).collect();
+        }
+        return each();
+    }
+    let commits = porcelain_line_commits(&String::from_utf8_lossy(&output.stdout));
+    lines
+        .iter()
+        .map(|l| match commits.get(l) {
+            Some(commit) => (*l, Ok(Some(commit.clone()))),
+            None => (*l, commit_for_line_in(repo_root, path, *l, contents)),
+        })
+        .collect()
+}
+
+/// Runs a prepared `git blame` for `path`, feeding `contents` on stdin if given.
+fn run_blame(
+    mut cmd: Command,
+    path: &Path,
+    repo_root: &Path,
+    contents: Option<&str>,
+) -> std::io::Result<std::process::Output> {
+    use std::io::Write;
+    cmd.arg("--")
+        .arg(path)
+        .current_dir(repo_root)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .stdin(if contents.is_some() {
+            Stdio::piped()
+        } else {
+            Stdio::null()
+        });
+    let mut child = cmd.spawn()?;
+    if let (Some(text), Some(mut stdin)) = (contents, child.stdin.take()) {
+        // A broken pipe means git exited early (no history); its status says why.
+        let _ = stdin.write_all(text.as_bytes());
+    }
+    child.wait_with_output()
+}
+
+/// The commit of each blamed line of `git blame --porcelain` output, by line.
+/// A line's group header is `<commit> <original line> <final line> [<group size>]`;
+/// the content lines start with a tab and the other headers with a word.
+fn porcelain_line_commits(porcelain: &str) -> std::collections::HashMap<usize, String> {
+    let mut commits = std::collections::HashMap::new();
+    for line in porcelain.lines().filter(|l| !l.starts_with('\t')) {
+        let mut parts = line.split_whitespace();
+        let (Some(commit), Some(original), Some(final_line)) =
+            (parts.next(), parts.next(), parts.next())
+        else {
+            continue;
+        };
+        let is_commit = commit.len() >= 40 && commit.bytes().all(|b| b.is_ascii_hexdigit());
+        if let (true, Ok(_), Ok(n)) = (
+            is_commit,
+            original.parse::<usize>(),
+            final_line.parse::<usize>(),
+        ) {
+            commits.insert(n, commit.to_string());
+        }
+    }
+    commits
 }
 
 /// The commits that touched `path` after `since` (exclusive), newest first, as
@@ -2066,6 +2247,44 @@ mod tests {
             commit_for_line(&tmp, &tmp.join("doc.md"), 2).unwrap(),
             Some(second),
             "line 2 was changed by the second commit"
+        );
+    }
+
+    #[test]
+    fn blame_cache_answers_every_line_as_commit_for_line_in_does() {
+        let tmp = Scratch::new("urzua-io-blame-cache");
+        fs::create_dir_all(&tmp).unwrap();
+        init_repo(&tmp);
+        fs::write(tmp.join("doc.md"), "one\ntwo\nthree\n").unwrap();
+        commit_all(&tmp, "add three lines");
+        fs::write(tmp.join("doc.md"), "one\ntwo CHANGED\nthree\n").unwrap();
+        commit_all(&tmp, "change line two");
+        fs::write(tmp.join("untracked.md"), "x\n").unwrap();
+
+        let cache = BlameCache::new(&tmp);
+        let doc = tmp.join("doc.md");
+        let work: Vec<(PathBuf, usize)> = [1, 2, 3, 0, 4]
+            .iter()
+            .map(|l| (PathBuf::from("doc.md"), *l))
+            .chain([(PathBuf::from("untracked.md"), 1)])
+            .collect();
+        cache.prefetch(&work, None);
+        for (path, line) in &work {
+            assert_eq!(
+                cache.commit_for_line(path, *line, None),
+                commit_for_line_in(&tmp, path, *line, None),
+                "{} line {line}",
+                path.display()
+            );
+        }
+        assert!(cache.commit_for_line(&doc, 2, None).unwrap().is_some());
+        // Proposed contents are a separate answer from the working tree's.
+        let proposed = "one\ntwo EDITED AGAIN\nthree\n";
+        let work = [(PathBuf::from("doc.md"), 2)];
+        cache.prefetch(&work, Some(proposed));
+        assert_eq!(
+            cache.commit_for_line(Path::new("doc.md"), 2, Some(proposed)),
+            commit_for_line_in(&tmp, Path::new("doc.md"), 2, Some(proposed))
         );
     }
 }
