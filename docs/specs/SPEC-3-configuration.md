@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.119'
+Version: '0.120'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:20203e6012242d88f80f6c8b86a74b96a02db16c1afb99391b3c8814d9245681, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:92a2b9ceca89133f30987a013734da66b9332c4e937a87e72e53571596e18093, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:3c8aa671582772499ab7345cdbfb5a4dc2c50462882851fb20f853992acfd57c
@@ -911,7 +911,8 @@ harness:
 - **A key the build does not know, and a guardrail the chosen adapter cannot provide, are
   reported, never skipped.** The configuration still loads with an unknown `harness` key (or an unknown key
   inside a guardrail), so a typo does not stop every command; `urzua harness install` refuses (exit 2,
-  nothing written) and `urzua doctor` warns. A guardrail turned on that no chosen adapter provides in this bundle version (`post-command`
+  nothing written), `urzua doctor` warns, and `urzua check` reports each one as a warning notice
+  (`SPEC-2`; reported, not an error, so the exit code does not move). A guardrail turned on that no chosen adapter provides in this bundle version (`post-command`
   until its milestone lands) is installed around and reported by
   `install`, `status` and `doctor`. A value of the wrong type (`enabled: yes-please`, `on_unjudged:
   sometimes`, `adapters: claude-code`) is a load error.
@@ -2346,3 +2347,4 @@ proves this configuration produces the three findings.
 > | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 18818ee3b226 -> df8b21e9c8a5. Reason: split parse_with_document_models, validate_relation_pairs, claim_expiry_problems and revision_log_problem in config.rs into named validation helpers (SPEC-22 100-line bound); behaviour unchanged, outputs byte-identical, validation order and messages pinned by the new validation_order_tests **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
 > | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` df8b21e9c8a5 -> 20203e601224. Reason: Read the diff of each pinned file or range since the old pin against what this record evidences: config.rs gained the validate_ignore_markers helper, called first in validate_boundaries, which accepts ignore_marker on embodiment.back-pointer-resolution and embodiment.back-pointer-decision-accepted, validates the marker (non-blank, one line, no padding) ahead of the boundary-only checks so it covers every rule that takes the option (this replaces the boundary rule's inline check, with the same errors), refuses a marker inside the Implements: or Verifies: keyword on the two back-pointer rules and refuses two different markers on them; no other option, parse or default changed. The claim this record evidences still holds. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
 > | 2026-11-08 | Bumped to `0.119`. Documents `ignore_marker` on `embodiment.back-pointer-resolution` and `embodiment.back-pointer-decision-accepted`: the boundary rule's option reused as one marker for both rules and the evidence collector (differing values are a load error), excusing the whole line (not reported, not judged, not evidence), a load-time guard against a marker inside a back-pointer keyword, disclosure as `excused_lines` and an `info` notice in `check`, `fix` and `reverify`, and an unused marker reported once per line; opt-in. **Why:** `ADR-80` amendment of 2026-11-08, accepted by the maintainer. | **substantive** |
+> | 2026-11-08 | Bumped to `0.120`. States that `urzua check` reports an unknown `harness` key, or an unknown key inside a guardrail, as a warning notice. **Why:** the `ADR-89` amendment of 2026-11-07 keeps these "reported, not an error", but only `harness install`, `doctor` and the session hook read them; a typo such as `enabeld` left the guardrail off while `check` was silent. | **substantive** |

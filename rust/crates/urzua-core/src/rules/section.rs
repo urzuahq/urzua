@@ -501,6 +501,7 @@ pub fn section_alias_notices(
                     paths.len(),
                     paths.join(", ")
                 ),
+                detail: None,
             }
         })
         .collect()

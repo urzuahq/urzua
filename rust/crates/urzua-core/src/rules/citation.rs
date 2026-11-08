@@ -400,6 +400,7 @@ pub fn non_reference_notices(
             parts.len(),
             parts.join("; ")
         ),
+        detail: None,
     }]
 }
 

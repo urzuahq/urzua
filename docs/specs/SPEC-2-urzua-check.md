@@ -1,9 +1,9 @@
 ---
 Stable-Id: 01M6R3NK5GM1RYRRX2XVMZ0ZAK
-Version: '0.133'
+Version: '0.134'
 Date: 2026-08-20
 Status: Shipped
-Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs@sha256:306697c24a53f0aeee43c9d7ad61a27a47a88f7147a09af17a161f43909d6879, code:rust/crates/urzua-core/src/rules.rs@sha256:355dd5bf590d2020ab967cb30501aa6ce610186c6631f22aa828831a6fbac0d4, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:5ab61b95fd5864a41566dee0d902fac000dca3552f90316331ecf90617c3f9b0, test:rust/crates/urzua-cli/tests/fail_on_integration.rs@sha256:4b1707f3b18aed7b018f8b80c55f1e2091ae19148f3de6c95435a8f5fee4cab7
+Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs@sha256:2a032b3eb3314723311ea44fd27fce039add2c1c94ea2a8325a14fcfac1597a4, code:rust/crates/urzua-core/src/rules.rs@sha256:355dd5bf590d2020ab967cb30501aa6ce610186c6631f22aa828831a6fbac0d4, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:5ab61b95fd5864a41566dee0d902fac000dca3552f90316331ecf90617c3f9b0, test:rust/crates/urzua-cli/tests/fail_on_integration.rs@sha256:4b1707f3b18aed7b018f8b80c55f1e2091ae19148f3de6c95435a8f5fee4cab7
 Embodiment: Verified
 Author: beauwilliams
 Subject: '`urzua check` -- discovery, rule execution, and the JSON output contract.'
@@ -626,7 +626,13 @@ is non-fatal observations (`Info`/`Warning` only) that never affect `status` or 
 entirely when empty. When the suppression type declares `permanent` (`SPEC-3`), `check` always adds an info
 notice with the subject `permanent-waivers` counting the permanent waivers in effect by category
 (`ADR-86`). Two more info notices belong to discovery (`ADR-92`): `discovery.untracked-skipped`, above,
-when the option is off, and `discovery.untracked-not-drift-judged` when it is on. A record with no git
+when the option is off, and `discovery.untracked-not-drift-judged` when it is on. A key the `harness`
+configuration carries that the build does not read (an unknown `harness` key, or an unknown key inside a
+known guardrail such as `enabeld`) adds one `warning` notice, whose `subject` is where the key sits
+(`harness` or `harness.guardrails.<name>`) and whose `detail` object holds `key` (a string), `nearest` (a string: the closest key
+the build reads, when one is close, else absent) and `valid` (a list of strings: the keys read at that place),
+for example `{"key": "enabeld", "nearest": "enabled", "valid": ["enabled", "..."]}`; `detail` values are strings or lists of strings (untagged: each serialises as a bare JSON string or a bare JSON list of strings); a notice with no `detail`
+omits the field (`ADR-89` amendment of 2026-11-07: reported, not an error). A record with no git
 history (an untracked file, a staged-new one, an unborn `HEAD`) has no date for its `Realized-by` line, so
 `embodiment.consistency` cannot say that a cited file changed since: it does not judge the record for
 drift, and the notice gives the count of such records that carry a locator, so the skip is disclosed and
@@ -1176,3 +1182,5 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-08 | Bumped to `0.132`. No contract changes: `check` blames each record file once per run instead of once per line, and its output is byte-identical; the re-baselined pin above records the code change. **Why:** the revision-log rule requires a version bump for a structural row. | **structural** |
 > | 2026-11-08 | Bumped to `0.133`. A back-pointer rule that declares `ignore_marker` (`ADR-80` amendment) reports the additive `excused_lines` population counter (present only when non-zero) and one `info` notice, in `check`, `fix` and `reverify`; the marker is shared by both rules and the evidence collector, and a marker on a line with no back-pointer the rule reads is reported once. The rule-table rows of `embodiment.back-pointer-resolution` and `embodiment.back-pointer-decision-accepted` are regenerated. **Why:** a per-line escape for a record-shaped literal inside a scanned test file; undeclared, nothing changes. | **substantive** |
 > | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/check.rs` 55045153ea1f -> 306697c24a53. Reason: Read the diff of each pinned file or range since the old pin against what this record evidences: check.rs gained excused_line_notices, one info notice per rule whose ignore_marker excused lines; the run stages are otherwise unchanged. The claim this record evidences still holds. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
+> | 2026-11-08 | Bumped to `0.134`. `check` reports an unknown key in the `harness` configuration as a warning notice with a structured `detail` (`key`, `nearest`, and `valid` as a list); `notices` gain an optional `detail` object of strings and string lists, omitted when empty. **Why:** only `harness install`, `doctor` and the session hook read `harness.problems`, so a misspelled guardrail key such as `enabeld` passed `check` silently. | **substantive** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/check.rs` 306697c24a53 -> 2a032b3eb331. Reason: Read the diff of each re-pinned file against main. cli/commands/check.rs: Notice literals use Notice::new or gain detail: None and check adds harness_key_notices (one warning notice per unknown harness key, with detail key, nearest and valid). **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |

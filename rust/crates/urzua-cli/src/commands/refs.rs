@@ -89,6 +89,7 @@ pub fn run_refresh(config_path: Option<PathBuf>) -> ExitCode {
             severity: NoticeSeverity::Info,
             subject: "refs".to_string(),
             message: "no GITHUB_TOKEN or GH_TOKEN was set; the request was unauthenticated and subject to the lower rate limit".to_string(),
+            detail: None,
         });
     }
     emit(&RefsRefreshReport {
