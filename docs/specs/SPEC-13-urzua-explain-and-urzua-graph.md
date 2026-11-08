@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5DB4YPSWZ6MQV85PQ7
-Version: '0.14'
+Version: '0.15'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -164,3 +164,4 @@ Both are stdout-JSON-always (ADR-23) and never write. `graph` reads `pointer_fie
 > | 2026-11-08 | Bumped to `0.14`. `explain` on a path that is no file or directory, a glob or directory that matches no tracked file, and that no record cites, is `not-run` with the reason (a rule id given as a path also names `--rule`), where it was `ok` with an empty `governing_records` and the whole-corpus population. A deleted file a record still cites is explained as before. **Why:** the round-4 CLI review (S6): a typo read as "ungoverned" and claimed 586 records examined. | **substantive** |
 > | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/explain.rs` 9cdffc6765ee -> 15d3bc36d944. Reason: explain.rs now errors (not-run, exit 2) on a path or glob that matches no tracked file and is cited by no record, which this spec now documents; the rest of explain and graph is unchanged **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
 > | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/explain.rs` 15d3bc36d944 -> 58f30c13d91f, `rust/crates/urzua-core/src/graph.rs` 7d43a868a856 -> 03f7eed2679c. Reason: Read the diff of each re-pinned file against main. cli/src/commands/explain.rs: Notice struct literals gained detail: None; no behaviour change; core/src/graph.rs: Notice struct literals gained detail: None; no behaviour change. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
+> | 2026-11-08 | Bumped to `0.15`. The pins this spec's `Realized-by` holds on files this change touched were re-baselined (the `Re-baselined` row above); no behaviour this spec describes changed. | **structural** |

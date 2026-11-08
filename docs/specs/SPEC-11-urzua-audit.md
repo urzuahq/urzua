@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5C6BXVCRM0Y2JS1DT5
-Version: '0.10'
+Version: '0.11'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -82,3 +82,4 @@ warning. The only difference between an `audit` report and the `check` report is
 > | 2026-11-08 | Bumped to `0.9`. The `Realized-by` pin on `check_integration.rs` was re-baselined (the `Re-baselined` row above) after its tests were changed to name real tracked files; no behaviour this spec describes changes. | **structural** |
 > | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/check_integration.rs` 8538aedb7492 -> 5ab61b95fd58. Reason: check_integration.rs: the only change is in pre_commit_hook_stops_a_planted_bad_header_with_the_real_binary, which now symlinks the urzua binary into the fixture instead of copying it (a copy raced a forking test thread and failed with ETXTBSY under load); the test's setup, planted defect and assertions are otherwise unchanged **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
 > | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/audit.rs` 80228f66e936 -> 7f54effa99c2. Reason: Read the diff of each re-pinned file against main. cli/src/commands/audit.rs: Notice struct literals gained detail: None or use Notice::new; no behaviour change. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
+> | 2026-11-08 | Bumped to `0.11`. The pins this spec's `Realized-by` holds on files this change touched were re-baselined (the `Re-baselined` row above); no behaviour this spec describes changed. | **structural** |
