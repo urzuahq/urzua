@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5Q0XVK27P5T8FN72BN
-Version: '0.34'
+Version: '0.35'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -343,25 +343,32 @@ declared and is `not-run` otherwise.
   (a locator outside `require_pin`, such as `spec:`, re-resolved and judged by git history only),
   `changed` or `unresolved`. `refused` lists why a record cannot be written; with `--pin-only`,
   `commits_since` lists the commits that touched an unpinned locator since the `Realized-by` line
-  was last touched. Nothing is written.
+  was last touched. A record whose revision log a row cannot be appended to (no log section, an unreadable
+  one, or one with no rows) is listed in `refused` with that reason, because both modes append an attested
+  row: detect never offers a write that `--apply` would refuse. Nothing is written.
 - **Apply** (`--apply`): the gates of `fix --apply` hold unchanged. `--ids` or `--force`, never
   implied; an `--ids` entry matching nothing fails; identity resolves under `attestation` (`--by`,
   the identity source, `--actor agent|human`); a lock; the pin hashes are read after the lock; a
   record with no revision log is refused. `--reason` is required, one line without `|` or a line
   break. `--apply` names at most `max_batch` records (a longer `--ids` list is `not-run` and names the
   cap, nothing is truncated), every row of a batch carries the same `--reason`, and the report prints
-  it once. `--force` is refused when it selects more than one record: a batch is named.
+  it once. `--force` lifts the `max_batch` cap for one record and is refused when it selects more than one; with
+  `--ids` it renews the named record only, never every expired claim.
 - **Refused, writing nothing for that record:** a locator that does not resolve; a pinned locator
   whose hash differs (run `fix --rebaseline`); drift by the git-history rule, inside
   `drift_grace_days` too (attesting over a file that changed and was not re-read is the rubber stamp
   this command exists to prevent); a stated `Embodiment` that `embodiment.consistency` would report;
-  a record the expiry rule does not judge or cannot date; a rule with no `anchor_field`; and
-  `--actor agent` where the matching entry's level is `error`.
+  a record the expiry rule does not judge or cannot date; a rule with no `anchor_field`; a record with
+  no usable revision log; and any actor but `--actor human` (`agent`, or none given) where the matching
+  entry's level is `error`.
 - **The pin step.** Every locator of a `require_pin` category without a pin is pinned first, in the
   locator's own spelling (file-level or scoped exactly as written, a scope is never invented) with
-  `@sha256:` and 64 lowercase hex of the content the tool just read, on the `Realized-by` line and in
+  `@sha256:` and 64 lowercase hex of the content the tool just read (a file the repository tracks and that sits
+  inside it: a path outside the repository, or one git does not track, does not resolve and refuses the
+  record, as `embodiment.locator-exists` judges it), on the `Realized-by` line and in
   Done-means item clauses. A `spec:` locator is not pinned: it cites a record with its own lifecycle,
-  is re-resolved, and the row counts it apart.
+  is re-resolved, and the row counts it apart. A first pin is written on the exact locator only: the pin
+  for `a.rs#Foo` is never spliced into `a.rs#Foo::bar` on the same line.
 - **`--pin-only`** pins the unpinned locators of the chosen records, allows the drift, writes the
   `Pinned` row and sets no date, so nothing is renewed: it is how an unpinned locator that drifted is
   pinned (`fix --rebaseline` has nothing to move there), and the one-off migration of a corpus. It
@@ -455,3 +462,4 @@ asserted by test, not assumed by convention.
 > | 2026-11-08 | Pinned (attested by beauwilliams, identity: gh-verified, actor: agent): 5 locators pinned, 5 file-level, 0 scoped. Evidence: rust/crates/urzua-cli/src/commands/fix.rs@sha256:04e1ba443038, rust/crates/urzua-core/src/fix.rs@sha256:c9cd87e7b00e, rust/crates/urzua-cli/tests/fix_paths_integration.rs@sha256:73cb06a1782f, rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs@sha256:27c91b75ad61, rust/crates/urzua-cli/tests/fix_drift_integration.rs@sha256:ff69343ca324 Reason: Pinned the files as they are now after checking each against the record it evidences: init.rs and check_integration.rs still implement and test urzua init adopt mode (SPEC-5), status_model.rs, the own-config test and status_delivery_integration.rs still implement the milestone type and its delivery status (SPEC-6), both fix.rs files and the paths, rebaseline and drift integration tests still implement urzua fix (SPEC-8), and config.yaml and the own-config tests still declare the bug type (SPEC-9). **Why:** a claim is renewed only over pinned code and test evidence. | **structural** |
 > | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/fix.rs` 04e1ba443038 -> 23e5e6b703b5. Reason: Read the diff of each pinned file since the pin taken earlier in this branch (the changes main landed in ADR-98's sharded CI and the milestone Kind amendment) and the claim still holds. fix.rs: with_locator_env now takes the records, which fix passes (one added argument, reformatted), and apply and rebaseline are unchanged. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
 > | 2026-11-08 | Bumped to `0.34`. The pins on this spec's `Realized-by` locators were re-baselined against the files as they are after the sharded CI and the milestone `Kind` amendment landed on main (the `Re-baselined` row above); no behaviour this spec describes changes. **Why:** `MILE-129`, `ADR-97`: every stale pin is re-pinned with its real delta before expiry is enabled. | **structural** |
+> | 2026-11-08 | Bumped to `0.35`. `urzua reverify` hardening: a locator outside the repository or untracked no longer resolves for a pin; a first pin is no longer spliced into a longer anchored locator (`a.rs#Foo::bar`); any actor but human is refused where the period's level is `error`; `--force --ids` renews the named record; detect lists a record with no usable revision log as refused. Documents the four. **Why:** the round-4 review findings on `reverify` (`ADR-97`); no change to what an accepted run writes. | **substantive** |
