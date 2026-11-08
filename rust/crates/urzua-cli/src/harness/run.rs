@@ -275,6 +275,21 @@ pub fn run_edit(config: Option<PathBuf>) -> ExitCode {
 /// protected path or a record of a gated type: the edit tool's own failure
 /// handles an absent `old_string` anywhere else, and the loud message stays.
 fn adapter_failure(config: Option<&Path>, request: &Request, why: &str) -> Verdict {
+    let path = request.paths.first().map(String::as_str);
+    if let Some(verdict) = targeted_denial(config, request, why) {
+        return verdict;
+    }
+    Verdict::new(
+        "allow-unjudged",
+        path,
+        format!("urzua harness: urzua did NOT judge this call ({why}). It is allowed; run 'urzua harness status' and 'urzua check' before committing."),
+    )
+}
+
+/// An agent's refusal of a request urzua cannot judge, when a guardrail set to
+/// `on_unjudged: deny` covers a path it names (or, with no path, a gate that
+/// denies what it cannot judge).
+fn targeted_denial(config: Option<&Path>, request: &Request, why: &str) -> Option<Verdict> {
     let here = std::env::current_dir().unwrap_or_default();
     let root = crate::discovery::find_repo_root(&[PathBuf::from(".")]).unwrap_or(here);
     let path = request.paths.first().map(String::as_str);
@@ -287,14 +302,7 @@ fn adapter_failure(config: Option<&Path>, request: &Request, why: &str) -> Verdi
             .iter()
             .find_map(|p| targeted_guardrail(config, &root, Path::new(p))),
     };
-    if let Some(guardrail) = guardrail {
-        return unjudged_as(guardrail, OnUnjudged::Deny, Actor::Agent, path, why);
-    }
-    Verdict::new(
-        "allow-unjudged",
-        path,
-        format!("urzua harness: urzua did NOT judge this call ({why}). It is allowed; run 'urzua harness status' and 'urzua check' before committing."),
-    )
+    guardrail.map(|g| unjudged_as(g, OnUnjudged::Deny, Actor::Agent, path, why))
 }
 
 /// The denying guardrail that covers `path`, read from the raw configuration
@@ -573,6 +581,37 @@ fn judge_edit(config: Option<PathBuf>, mut request: Request) -> Verdict {
     verdicts.swap_remove(at).1
 }
 
+/// The protected-path or acceptance gate's denial of an agent's write of
+/// `content` to `path`, judging the path as written, as it resolves and through
+/// hard links.
+fn gate_denial(
+    repo_root: &Path,
+    loaded: &Config,
+    path: &str,
+    content: &str,
+    request: &Request,
+) -> Option<Verdict> {
+    let lexical = crate::discovery::relative_to_root(repo_root, Path::new(path)).ok();
+    let resolved = resolved_rel(repo_root, Path::new(path));
+    // A hard link is the file it shares an inode with (Unix).
+    let mut entries = gate::protected_entries(loaded);
+    entries.extend(gate::engine_owned(loaded.override_log.as_deref()));
+    let linked = gate::hardlink_aliases(
+        repo_root,
+        Path::new(path),
+        &entries,
+        &gate::gated_record_dirs(loaded),
+    );
+    lexical
+        .iter()
+        .chain(resolved.iter().filter(|r| Some(*r) != lexical.as_ref()))
+        .chain(linked.iter())
+        .find_map(|rel| {
+            gate::judge(repo_root, loaded, rel, content)
+                .map(|denial| denied(&denial, &rel.to_string_lossy(), request))
+        })
+}
+
 /// Judges the edit in the repository the process is in.
 fn judge_edit_in(config: Option<PathBuf>, request: Request) -> Verdict {
     let actor = request.actor();
@@ -606,7 +645,17 @@ fn judge_edit_in(config: Option<PathBuf>, request: Request) -> Verdict {
     };
     let on = harness.on_unjudged("editor-hook");
     let [path] = request.paths.as_slice() else {
-        return unjudged(on, actor, None, "the request must name exactly one path");
+        let why = "the request must name exactly one path";
+        // Only an agent's request naming several paths is gated: a guardrail set
+        // to deny that covers one of the paths refuses it. A person's request, a
+        // request naming none, and an agent's that no guardrail covers are
+        // judged as a request urzua cannot judge.
+        if actor == Actor::Agent && on != OnUnjudged::Deny && request.paths.len() > 1 {
+            if let Some(verdict) = targeted_denial(config.as_deref(), &request, why) {
+                return verdict;
+            }
+        }
+        return unjudged(on, actor, None, why);
     };
     let Some(content) = request.content.clone() else {
         return unjudged(
@@ -665,33 +714,15 @@ fn config_unloadable(
     }
 }
 
-/// An agent's single-file write refused by the acceptance or protected-path
-/// gate, judged under the path as written, as resolved and as hard-linked.
+/// An agent's write refused by the acceptance or protected-path gate. A request
+/// that names several paths is malformed (SPEC-24), but a gated path among them
+/// still blocks: every path is judged and any denial wins.
 fn agent_gate_denial(repo_root: &Path, loaded: &Config, request: &Request) -> Option<Verdict> {
-    let ([path], Some(content)) = (request.paths.as_slice(), request.content.as_deref()) else {
-        return None;
-    };
-    let lexical = crate::discovery::relative_to_root(repo_root, Path::new(path)).ok();
-    let resolved = resolved_rel(repo_root, Path::new(path));
-    // A hard link is the file it shares an inode with (Unix).
-    let mut entries = gate::protected_entries(loaded);
-    entries.extend(gate::engine_owned(loaded.override_log.as_deref()));
-    let linked = gate::hardlink_aliases(
-        repo_root,
-        Path::new(path),
-        &entries,
-        &gate::gated_record_dirs(loaded),
-    );
-    for rel in lexical
+    let content = request.content.as_deref()?;
+    request
+        .paths
         .iter()
-        .chain(resolved.iter().filter(|r| Some(*r) != lexical.as_ref()))
-        .chain(linked.iter())
-    {
-        if let Some(denial) = gate::judge(repo_root, loaded, rel, content) {
-            return Some(denied(&denial, &rel.to_string_lossy(), request));
-        }
-    }
-    None
+        .find_map(|path| gate_denial(repo_root, loaded, path, content, request))
 }
 
 struct Judging<'a> {
