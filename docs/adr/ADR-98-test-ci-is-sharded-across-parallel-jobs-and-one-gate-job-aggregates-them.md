@@ -1,6 +1,7 @@
 ---
 Stable-Id: 01M6W6WSD9FV1NNZT9TBYMKJDM
-Status: Proposed
+Status: Accepted
+Accepted-on: 2026-11-08
 Date: 2026-11-07
 Author: beauwilliams
 Deciders: beauwilliams
@@ -22,7 +23,7 @@ Measured on CI (run 42420633044) and locally:
   149 s, and four more binaries at 38 to 45 s. Everything else is under 3 s per binary.
 - `cargo test` runs the 86 test binaries one after another, so the many fast ones wait behind each
   other and the heavy ones never overlap. Run through `cargo nextest` (one process per test, all
-  binaries scheduled together) the 2,088 non-acceptance tests took 3 m 45 s locally on four cores.
+  binaries scheduled together) the 2,088 non-acceptance tests took 3 m 45 s locally on four cores. Measured on CI after the change (run 42429110304, cold cache): 4 m 24 s end to end, against 14 to 15 minutes before; the nextest shard union is 2,111 tests and the acceptance shards run all 151 cases, checked against an unsharded run by the independent review on `#430`.
 - The `acceptance` runner is a custom harness (`harness = false`): one process, one suite-wide
   coverage gate (SPEC-4). nextest cannot list or partition it.
 - Fmt, clippy, the release build and the tests do not depend on each other, only on the checkout.
@@ -102,3 +103,4 @@ The `ci` name, which the ruleset requires, does not change. The only external ef
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-07 | Filed as Proposed. **Why:** maintainer request of 2026-11-07 to shard CI tests; the rust job took 14 to 15 minutes against a 15-minute timeout. | **substantive** |
+> | 2026-11-08 | Status changed from Proposed to Accepted; the measured CI time and the current test counts are recorded in the Context. **Why:** Maintainer decision, 2026-11-08. | **substantive** |
