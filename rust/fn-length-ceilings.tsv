@@ -27,7 +27,6 @@ crates/urzua-cli/src/harness/mod.rs::status	103
 crates/urzua-cli/src/harness/mod.rs::uninstall	108
 crates/urzua-cli/src/harness/mod.rs::update	207
 crates/urzua-cli/src/harness/post_command.rs::judge_changes	210
-crates/urzua-cli/src/harness/run.rs::judge_edit_in	101
 crates/urzua-cli/src/harness/run.rs::judge_record	188
 crates/urzua-cli/src/harness/run.rs::session_start	197
 crates/urzua-cli/src/main.rs::main	154

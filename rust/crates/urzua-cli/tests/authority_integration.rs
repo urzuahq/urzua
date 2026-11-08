@@ -158,8 +158,18 @@ fn run_edit(
     actor: &str,
     env: &[(&str, &str)],
 ) -> (i32, serde_json::Value) {
+    run_edit_paths(dir, &[path], content, actor, env)
+}
+
+fn run_edit_paths(
+    dir: &Path,
+    paths: &[&str],
+    content: &str,
+    actor: &str,
+    env: &[(&str, &str)],
+) -> (i32, serde_json::Value) {
     let request = serde_json::json!({
-        "event": "edit", "tool": "Write", "paths": [path], "content": content,
+        "event": "edit", "tool": "Write", "paths": paths, "content": content,
         "actor": actor, "cwd": dir.to_string_lossy(),
     });
     let mut c = urzua(dir, &["harness", "run", "edit"]);
@@ -329,6 +339,35 @@ fn an_agent_writing_a_protected_path_is_denied_and_a_person_is_not() {
         "agent",
         &[],
     );
+    assert_ne!(v["verdict"], "block", "{v}");
+}
+
+#[test]
+fn a_request_naming_several_paths_is_blocked_when_any_is_protected_in_either_order() {
+    let dir = fixture("multipath", &config());
+    for paths in [
+        ["docs/a.md", ".claude/settings.json"],
+        [".claude/settings.json", "docs/a.md"],
+    ] {
+        let (code, v) = run_edit_paths(&dir, &paths, "x", "agent", &[]);
+        assert_eq!(code, 1, "{paths:?}: {v}");
+        assert_eq!(v["verdict"], "block", "{paths:?}: {v}");
+        assert!(
+            v["message"].as_str().unwrap().contains("protected-paths"),
+            "{paths:?}: {v}"
+        );
+    }
+    // A person is not refused, and unprotected paths behave as before.
+    let (code, _) = run_edit_paths(
+        &dir,
+        &["docs/a.md", ".claude/settings.json"],
+        "x",
+        "human",
+        &[],
+    );
+    assert_eq!(code, 0);
+    let (code, v) = run_edit_paths(&dir, &["docs/a.md", "docs/b.md"], "x", "agent", &[]);
+    assert_eq!(code, 0, "{v}");
     assert_ne!(v["verdict"], "block", "{v}");
 }
 

@@ -573,6 +573,37 @@ fn judge_edit(config: Option<PathBuf>, mut request: Request) -> Verdict {
     verdicts.swap_remove(at).1
 }
 
+/// The protected-path or acceptance gate's denial of an agent's write of
+/// `content` to `path`, judging the path as written, as it resolves and through
+/// hard links.
+fn gate_denial(
+    repo_root: &Path,
+    loaded: &Config,
+    path: &str,
+    content: &str,
+    request: &Request,
+) -> Option<Verdict> {
+    let lexical = crate::discovery::relative_to_root(repo_root, Path::new(path)).ok();
+    let resolved = resolved_rel(repo_root, Path::new(path));
+    // A hard link is the file it shares an inode with (Unix).
+    let mut entries = gate::protected_entries(loaded);
+    entries.extend(gate::engine_owned(loaded.override_log.as_deref()));
+    let linked = gate::hardlink_aliases(
+        repo_root,
+        Path::new(path),
+        &entries,
+        &gate::gated_record_dirs(loaded),
+    );
+    lexical
+        .iter()
+        .chain(resolved.iter().filter(|r| Some(*r) != lexical.as_ref()))
+        .chain(linked.iter())
+        .find_map(|rel| {
+            gate::judge(repo_root, loaded, rel, content)
+                .map(|denial| denied(&denial, &rel.to_string_lossy(), request))
+        })
+}
+
 /// Judges the edit in the repository the process is in.
 fn judge_edit_in(config: Option<PathBuf>, request: Request) -> Verdict {
     let actor = request.actor();
@@ -611,25 +642,12 @@ fn judge_edit_in(config: Option<PathBuf>, request: Request) -> Verdict {
     // editor hook being on: an agent's move to a gated status, or write to a gated
     // path, is refused outright (`ADR-89` section 4).
     if actor == Actor::Agent {
-        if let ([path], Some(content)) = (request.paths.as_slice(), request.content.as_deref()) {
-            let lexical = crate::discovery::relative_to_root(&repo_root, Path::new(path)).ok();
-            let resolved = resolved_rel(&repo_root, Path::new(path));
-            // A hard link is the file it shares an inode with (Unix).
-            let mut entries = gate::protected_entries(&loaded);
-            entries.extend(gate::engine_owned(loaded.override_log.as_deref()));
-            let linked = gate::hardlink_aliases(
-                &repo_root,
-                Path::new(path),
-                &entries,
-                &gate::gated_record_dirs(&loaded),
-            );
-            for rel in lexical
-                .iter()
-                .chain(resolved.iter().filter(|r| Some(*r) != lexical.as_ref()))
-                .chain(linked.iter())
-            {
-                if let Some(denial) = gate::judge(&repo_root, &loaded, rel, content) {
-                    return denied(&denial, &rel.to_string_lossy(), &request);
+        if let Some(content) = request.content.as_deref() {
+            // A request that names several paths is malformed (SPEC-24), but a
+            // gated path among them still blocks: every path is judged.
+            for path in &request.paths {
+                if let Some(verdict) = gate_denial(&repo_root, &loaded, path, content, &request) {
+                    return verdict;
                 }
             }
         }
@@ -644,7 +662,11 @@ fn judge_edit_in(config: Option<PathBuf>, request: Request) -> Verdict {
     };
     let on = harness.on_unjudged("editor-hook");
     let [path] = request.paths.as_slice() else {
-        return unjudged(on, actor, None, "the request must name exactly one path");
+        let why = "the request must name exactly one path";
+        if on == OnUnjudged::Deny {
+            return unjudged(on, actor, None, why);
+        }
+        return adapter_failure(config.as_deref(), &request, why);
     };
     let Some(content) = request.content.clone() else {
         return unjudged(
