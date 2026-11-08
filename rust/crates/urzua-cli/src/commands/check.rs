@@ -532,6 +532,7 @@ fn execute(config_path: Option<PathBuf>, args: CheckArgs) -> Result<CheckReport,
         &scope.in_scope.iter().map(|p| p.as_path()).collect(),
     );
     Ok(CheckReport {
+        as_of: crate::as_of(),
         status,
         files_examined,
         records_read_by_any_rule,

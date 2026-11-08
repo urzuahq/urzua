@@ -7,6 +7,10 @@
   ],
   "exit": 1,
   "stdout": {
+    "as_of": {
+      "date": "<TODAY>",
+      "source": "clock"
+    },
     "blocking": true,
     "files_examined": 2,
     "findings": [

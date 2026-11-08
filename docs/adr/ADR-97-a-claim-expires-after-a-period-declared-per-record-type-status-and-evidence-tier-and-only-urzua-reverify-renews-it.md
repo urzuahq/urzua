@@ -501,6 +501,31 @@ The open questions of the first draft are settled in this revision, after the in
 - **Pinning a `spec:` locator.** Left unpinned for the reason in section 4. A repository that wants it
   adds `spec` to `require_pin`, and the cost of a pin that moves on every revision row is its own.
 
+## Amendment (2026-11-08): the evaluation date is an input, named by `--as-of`
+
+*Status of this amendment: accepted by the maintainer on 2026-11-08. `Status` stays `Accepted` and the Decision text above is unchanged.*
+
+The Decision measures a claim's age, and the rule table's waiver and status expiries, against the machine's current
+UTC date. No command took that date, so a verdict could not be reproduced on another day and an upcoming expiry could
+not be previewed. The maintainer decided on 2026-11-08 that the evaluation date is an input:
+
+1. A global option `--as-of YYYY-MM-DD` fixes the date every date comparison reads: a waiver's `Expires`, a claim's
+   age (`embodiment.claim-expired`, including an age taken from git history, measured to the end of that UTC day so
+   nothing dated on it is in the future), `status.waived-item-stale`, and the audit-grace window. Without the flag the
+   date is the machine's UTC date, read once per run; behaviour is unchanged.
+2. Every report of a command that compares dates carries a top-level `as_of` object, always present:
+   `{"date": "YYYY-MM-DD", "source": "flag" | "clock"}`. The field is additive.
+3. The wall clock is read in one place. Every consumer reads the evaluation date, so no comparison can depend on a date
+   `--as-of` cannot move; a test fails if a second call site appears.
+4. A malformed or impossible date (anything but a strict `YYYY-MM-DD` calendar date) is a structured `CouldNotRun`
+   with exit 2. `--as-of` is accepted by `check`, `audit`, `fix` and `reverify` in their read-only modes. It is refused
+   (exit 2, nothing written) with `fix --apply`, `fix --rebaseline --apply` and `reverify --apply`, because the revision
+   row and the anchor those write carry the real date and a different one would falsify the history; the preview is
+   `--as-of` without `--apply`, the write is `--apply` without it. It is refused by every command that compares no dates,
+   rather than accepted and ignored.
+
+Nothing else in the decision changes. `SPEC-1`, `SPEC-2` and `SPEC-8` carry the contract.
+
 ## References
 
 - `ADR-67`, `ADR-74` -- pins, the grace window, the claim age, scoped pins and the audit date this extends.
@@ -521,3 +546,4 @@ The open questions of the first draft are settled in this revision, after the in
 > | 2026-11-07 | Filed as Proposed. **Why:** maintainer direction of 2026-11-07 on `MILE-129`: improve the engine, make claim expiry configurable, and make a refresh a recorded re-verification with refreshed pins. | **substantive** |
 > | 2026-11-07 | Status changed from Proposed to Accepted. **Why:** Maintainer decision, 2026-11-07. | **substantive** |
 | 2026-11-07 | Amended after the independent review of PR 425 (still Proposed): a renewal requires a pin on every `code:` and `test:` locator (`require_pin`), written by `reverify` or `reverify --pin-only` under the attestation rules, with spec locators left unpinned; the first expiry is spread by a deterministic `spread_days` offset from the `Stable-Id`; agent renewal, pin-before-renewal and a capped batch with one shared reason are decided, no longer open; the corpus pin run (164 records, 502 locators) and the new first-cycle distribution are measured; the 30-day count and the two-act hash refresh are worded exactly. **Why:** the review found that unpinned locators made a renewal only as strong as the git-history heuristic and that `rebaseline` could not clear their drift (blocker), and that 258 of 339 first expiries fell on two days (should fix). | **substantive** |
+> | 2026-11-08 | Amendment added, accepted by the maintainer on 2026-11-08: the evaluation date is an input, a global `--as-of YYYY-MM-DD` echoed as the report's `as_of`, read by every date comparison from one clock, refused with `--apply`. The Decision text and `Status` are unchanged. **Why:** maintainer decision, 2026-11-08: a verdict must be reproducible and upcoming expiries previewable. | **substantive** |

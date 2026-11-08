@@ -60,6 +60,17 @@ pub(crate) fn emit<T: Report>(report: &T) -> ExitCode {
     report.exit_code()
 }
 
+/// The evaluation date this run compared against, for a report's `as_of`.
+pub(crate) fn as_of() -> urzua_core::report::AsOf {
+    urzua_core::report::AsOf {
+        date: urzua_io::today(),
+        source: match urzua_io::as_of_source() {
+            urzua_io::AsOfSource::Flag => urzua_core::report::AsOfSourceKind::Flag,
+            urzua_io::AsOfSource::Clock => urzua_core::report::AsOfSourceKind::Clock,
+        },
+    }
+}
+
 /// `--fail-on`'s values; mapped onto core's `FailOn`, which stays free of clap.
 #[derive(Clone, Copy, clap::ValueEnum)]
 enum FailOnArg {
@@ -86,6 +97,15 @@ struct Cli {
     /// Path to .urzua/config.yaml. Defaults to the nearest one at or above the cwd.
     #[arg(long, global = true)]
     config: Option<PathBuf>,
+
+    /// Evaluate every date comparison (waiver expiry, claim age, status
+    /// expiry) as of this UTC date, `YYYY-MM-DD`, instead of today. Echoed in
+    /// the report's `as_of`. Accepted by the read-only modes of `check`, `fix`
+    /// and `reverify` (and `audit`); refused with `--apply`, where it would
+    /// write a revision row with a false date, and by commands that compare
+    /// no dates.
+    #[arg(long, global = true, value_name = "YYYY-MM-DD")]
+    as_of: Option<String>,
 
     #[command(subcommand)]
     command: Command,
@@ -492,6 +512,10 @@ fn main() -> ExitCode {
         Err(e) => return emit(&CouldNotRun::from(e.to_string())),
     };
 
+    if let Err(message) = fix_evaluation_date(&cli) {
+        return emit(&CouldNotRun::from(message));
+    }
+
     match cli.command {
         Command::Check {
             base,
@@ -628,4 +652,54 @@ fn not_implemented(name: &str) -> ExitCode {
     emit(&CouldNotRun::from(format!(
         "`urzua {name}` is not implemented yet -- see docs/specs/SPEC-1-cli.md"
     )))
+}
+
+/// Applies `--as-of` before any command reads a date. A date is refused (exit
+/// 2) when it is malformed, when the command compares no dates, or when the
+/// command writes: a revision row or an anchor dated other than the real day
+/// would falsify the history it records.
+fn fix_evaluation_date(cli: &Cli) -> Result<(), String> {
+    let Some(value) = cli.as_of.as_deref() else {
+        return Ok(());
+    };
+    let (name, writes) = match &cli.command {
+        Command::Check { .. } => ("check", false),
+        Command::Audit => ("audit", false),
+        Command::Fix { apply, .. } => ("fix", *apply),
+        Command::Reverify { apply, .. } => ("reverify", *apply),
+        other => {
+            return Err(format!(
+                "--as-of is not accepted by `urzua {}`: it compares no dates against an evaluation date (it applies to check, audit, fix and reverify)",
+                command_name(other)
+            ))
+        }
+    };
+    if writes {
+        return Err(format!(
+            "--as-of cannot be combined with --apply on `urzua {name}`: the revision row and anchor it writes carry the real date, and a different one would falsify the history. Preview with --as-of and no --apply, then apply without it"
+        ));
+    }
+    urzua_io::set_as_of(value)
+}
+
+fn command_name(command: &Command) -> &'static str {
+    match command {
+        Command::New { .. } => "new",
+        Command::Check { .. } => "check",
+        Command::Explain { .. } => "explain",
+        Command::Graph => "graph",
+        Command::Roadmap => "roadmap",
+        Command::Audit => "audit",
+        Command::Migrate { .. } => "migrate",
+        Command::Export { .. } => "export",
+        Command::Import { .. } => "import",
+        Command::Init { .. } => "init",
+        Command::Harness { .. } => "harness",
+        Command::Doctor => "doctor",
+        Command::Rules => "rules",
+        Command::Index { .. } => "index",
+        Command::Refs { .. } => "refs",
+        Command::Fix { .. } => "fix",
+        Command::Reverify { .. } => "reverify",
+    }
 }

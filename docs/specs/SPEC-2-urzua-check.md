@@ -1,9 +1,9 @@
 ---
 Stable-Id: 01M6R3NK5GM1RYRRX2XVMZ0ZAK
-Version: '0.126'
+Version: '0.127'
 Date: 2026-08-20
 Status: Shipped
-Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs@sha256:c819006495f23fd9742941942eea3a7a4894f9eec67d3c3cfbf18561ede31f6b, code:rust/crates/urzua-core/src/rules.rs@sha256:355dd5bf590d2020ab967cb30501aa6ce610186c6631f22aa828831a6fbac0d4, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:f893cb99b8337c1172d3c4825859e00a0344dd4c35e6f013d802e509b1688ecb, test:rust/crates/urzua-cli/tests/fail_on_integration.rs@sha256:4b1707f3b18aed7b018f8b80c55f1e2091ae19148f3de6c95435a8f5fee4cab7
+Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs@sha256:6a5a03d24c288b16318abc7acb63a6fa05eb8b9a8ebe69222de54ed7d16b68f9, code:rust/crates/urzua-core/src/rules.rs@sha256:355dd5bf590d2020ab967cb30501aa6ce610186c6631f22aa828831a6fbac0d4, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:f893cb99b8337c1172d3c4825859e00a0344dd4c35e6f013d802e509b1688ecb, test:rust/crates/urzua-cli/tests/fail_on_integration.rs@sha256:4b1707f3b18aed7b018f8b80c55f1e2091ae19148f3de6c95435a8f5fee4cab7
 Embodiment: Verified
 Author: beauwilliams
 Subject: '`urzua check` -- discovery, rule execution, and the JSON output contract.'
@@ -502,9 +502,17 @@ Implements RFC-3, as amended by ADR-7 (real field names, not RFC-3's illustrativ
 ADR-26/ADR-46 (stdout is the only stream; there is no stderr rendering at all). Stdout carries nothing
 but the JSON object below, so a consumer never has to find it inside prose.
 
+`as_of` is the date every comparison in the run was made against (`ADR-97`, amendment of 2026-11-08):
+`{"date": "YYYY-MM-DD", "source": "flag" | "clock"}`, always present, directly after `status`. `--as-of
+YYYY-MM-DD` (global, accepted by `check` and `audit`) makes waiver `Expires`, claim age, status expiry and the
+audit grace read that date instead of the machine's UTC date; a claim age taken from git history is measured to
+the end of that day. A malformed date is a `not-run` report (exit 2). `--as-of` leaves everything else in the
+report unchanged.
+
 ```json
 {
   "status": "ok",
+  "as_of": { "date": "2026-11-08", "source": "clock" },
   "files_examined": 51,
   "records_read_by_any_rule": 51,
   "rules_executed": [
@@ -1144,3 +1152,5 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-07 | Bumped to `0.124`. Adds the opt-in rules `embodiment.claim-expired` (a claim expires after a period declared per record type, status and evidence tier, with a first-cycle `spread_days` offset; its finding offers `urzua reverify --ids <record>`) and `embodiment.claim-renewal-unattested` (on `--base`, an anchor date that moved with no `Re-verified` row, or was removed), both `ADR-97`; a `--base` run reads the merge-base copy of the changed records of the types the expiry rule lists. The rule-table and action-table rows are regenerated. **Why:** `MILE-129`, the build of `ADR-97`; undeclared, nothing changes. | **substantive** |
 > | 2026-11-08 | Pinned (attested by beauwilliams, identity: gh-verified, actor: agent): 4 locators pinned, 4 file-level, 0 scoped. Evidence: rust/crates/urzua-cli/src/commands/check.rs@sha256:c819006495f2, rust/crates/urzua-core/src/rules.rs@sha256:355dd5bf590d, rust/crates/urzua-cli/tests/check_integration.rs@sha256:f893cb99b833, rust/crates/urzua-cli/tests/fail_on_integration.rs@sha256:4b1707f3b18a Reason: Pinned the files as they are now after checking each against the record it evidences: config.yaml and the own-config test still declare the adr, rfc, spec and condition types that SPEC-16, SPEC-17, SPEC-18 and SPEC-23 describe, with spec_shipped_integration.rs, rules/roadmap.rs, condition_type_integration.rs and work_types_integration.rs behind them, check.rs, rules.rs, check_integration.rs and fail_on_integration.rs still implement urzua check (SPEC-2), the workflows, the install-knope action and the release and gate test scripts still make up the pipeline SPEC-20 describes, the Makefile and checks.yml still dispatch the repository layout of SPEC-21, the harness modules, the bundled hook script and the harness integration tests still implement the request, verdict and adapter layout of SPEC-24, config.rs and the own-config and field-levels tests still implement SPEC-3, and acceptance.rs and acceptance_property.rs still implement SPEC-4. **Why:** a claim is renewed only over pinned code and test evidence. | **structural** |
 > | 2026-11-08 | Bumped to `0.126`. The pins on this spec's `Realized-by` locators were re-baselined against the files as they are after the sharded CI and the milestone `Kind` amendment landed on main (the `Re-baselined` row above); no behaviour this spec describes changes. **Why:** `MILE-129`, `ADR-97`: every stale pin is re-pinned with its real delta before expiry is enabled. | **structural** |
+> | 2026-11-08 | Bumped to `0.127`. The report gains a top-level `as_of` and `check` accepts the global `--as-of`; the pins on this spec's `Realized-by` locators that moved with the change are re-baselined. **Why:** maintainer decision of 2026-11-08 (the `ADR-97` amendment). | **substantive** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/check.rs` c819006495f2 -> 6a5a03d24c28. Reason: Read the diff of each re-pinned file. commands/check.rs: the CheckReport construction gains as_of; no other change. Nothing this record relies on changed. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
