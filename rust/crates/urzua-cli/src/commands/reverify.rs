@@ -317,11 +317,7 @@ pub fn run(config_path: Option<PathBuf>, args: ReverifyArgs) -> ExitCode {
             records: reviewed.into_iter().map(|r| r.review).collect(),
             failed: into_failures(failed),
             identity: None,
-            notices: {
-                let mut notices = drift_notices(&drift, &measures.problems);
-                notices.extend(excused_evidence_notice(&back_pointed));
-                notices
-            },
+            notices: drift_notices(&drift, &measures.problems, &back_pointed),
         });
     };
 
@@ -406,9 +402,7 @@ pub fn run(config_path: Option<PathBuf>, args: ReverifyArgs) -> ExitCode {
         pin_only,
         reason,
         identity,
-        &drift,
-        &measures.problems,
-        excused_evidence_notice(&back_pointed),
+        drift_notices(&drift, &measures.problems, &back_pointed),
     ))
 }
 
@@ -420,9 +414,7 @@ fn apply_report(
     pin_only: bool,
     reason: String,
     identity: ResolvedAttestation,
-    drift: &crate::discovery::DriftedRecords,
-    problems: &[String],
-    excused: Option<Notice>,
+    drift_notices: Vec<Notice>,
 ) -> ReverifyReport {
     let status = if !failed.is_empty() {
         FixStatus::PartialFailure
@@ -430,8 +422,7 @@ fn apply_report(
         FixStatus::Applied
     };
     let mut notices: Vec<Notice> = identity_notices(Some(&identity));
-    notices.extend(drift_notices(drift, problems));
-    notices.extend(excused);
+    notices.extend(drift_notices);
     ReverifyReport {
         status,
         mode: "apply",
@@ -445,14 +436,20 @@ fn apply_report(
     }
 }
 
-fn drift_notices(drift: &crate::discovery::DriftedRecords, problems: &[String]) -> Vec<Notice> {
+fn drift_notices(
+    drift: &crate::discovery::DriftedRecords,
+    problems: &[String],
+    back_pointed: &rules::BackPointerEvidence,
+) -> Vec<Notice> {
     let mut all = drift.git_problems.clone();
     for p in problems {
         if !all.contains(p) {
             all.push(p.clone());
         }
     }
-    crate::discovery::drift_notices(drift.shallow, &all)
+    let mut notices = crate::discovery::drift_notices(drift.shallow, &all);
+    notices.extend(excused_evidence_notice(back_pointed));
+    notices
 }
 
 /// The commits that touched an unpinned locator's file since the record's

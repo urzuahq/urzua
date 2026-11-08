@@ -2501,6 +2501,66 @@ pub fn parse(content: &str) -> Result<Config, ConfigError> {
     parse_with_document_models(content).map(|(config, _)| config)
 }
 
+/// The declared `ignore_marker` (`ADR-80`): only the boundary rule and the two
+/// back-pointer rules take one; it is one non-blank line with no padding; on a
+/// back-pointer rule it is not part of a back-pointer keyword (it would sit in
+/// every citation and excuse them all); and the two back-pointer rules, which
+/// share one marker with the evidence collector, may not declare different ones.
+fn validate_ignore_markers(config: &Config) -> Result<(), ConfigError> {
+    let bad = |rule: &str, reason: String| ConfigError::InvalidBoundary {
+        rule: rule.to_string(),
+        option: "ignore_marker",
+        reason,
+    };
+    let keywords = [
+        crate::rules::MARKER_IMPLEMENTS,
+        crate::rules::MARKER_VERIFIES,
+    ];
+    let back_pointer_rules = [
+        crate::rules::RULE_EMBODIMENT_BACK_POINTER_RESOLUTION,
+        crate::rules::RULE_EMBODIMENT_BACK_POINTER_DECISION_ACCEPTED,
+    ];
+    let mut declared: Vec<(&str, &str)> = Vec::new();
+    for (name, setting) in &config.rules {
+        let Some(marker) = setting.ignore_marker.as_deref() else {
+            continue;
+        };
+        if !crate::rules::rule_accepts_option(name, "ignore_marker") {
+            return Err(ConfigError::OptionNotApplicable {
+                rule: name.clone(),
+                option: "ignore_marker".to_string(),
+            });
+        }
+        if setting.level == RuleLevel::Off {
+            continue;
+        }
+        if marker.trim().is_empty() || marker.trim() != marker || marker.contains('\n') {
+            return Err(bad(
+                name,
+                "must be non-blank text on one line with no surrounding whitespace".to_string(),
+            ));
+        }
+        if back_pointer_rules.contains(&name.as_str()) {
+            if let Some(k) = keywords.iter().find(|k| k.contains(marker)) {
+                return Err(bad(
+                    name,
+                    format!("'{marker}' is part of the back-pointer keyword '{k}' and would excuse every back-pointer; declare text that appears in no keyword"),
+                ));
+            }
+            declared.push((name, marker));
+        }
+    }
+    if let [(a, x), (b, y)] = declared.as_slice() {
+        if x != y {
+            return Err(bad(
+                a,
+                format!("is '{x}' but '{b}' declares '{y}'; the two back-pointer rules share one marker, declare the same text on both or on one"),
+            ));
+        }
+    }
+    Ok(())
+}
+
 /// `parse`, plus each record type's declared document model (RFC-33 layer 1,
 /// MILE-98). The declaration is validated here, so every command that loads a
 /// config rejects a bad one. The raw declarations ride on `RecordTypeConfig`
@@ -3161,81 +3221,14 @@ pub fn parse_with_document_models(
     // Declared boundaries (`ADR-80`): structure, then the one spelling of each
     // path. A boundary that cannot be matched would be a rule that never
     // reports, so every reason is a load error.
-    // The two back-pointer rules share one marker (`ADR-80`): a differing pair
-    // would make a line both excused and not.
-    {
-        let declared = |rule: &str| {
-            config
-                .rules
-                .get(rule)
-                .filter(|s| s.level != RuleLevel::Off)
-                .and_then(|s| s.ignore_marker.clone())
-        };
-        let (a, b) = (
-            crate::rules::RULE_EMBODIMENT_BACK_POINTER_RESOLUTION,
-            crate::rules::RULE_EMBODIMENT_BACK_POINTER_DECISION_ACCEPTED,
-        );
-        if let (Some(x), Some(y)) = (declared(a), declared(b)) {
-            if x != y {
-                return Err(ConfigError::InvalidBoundary {
-                    rule: a.to_string(),
-                    option: "ignore_marker",
-                    reason: format!(
-                        "is '{x}' but '{b}' declares '{y}'; the two back-pointer rules share one marker, declare the same text on both or on one"
-                    ),
-                });
-            }
-        }
-    }
+    validate_ignore_markers(&config)?;
     for (name, setting) in config.rules.iter_mut() {
         let owner = crate::rules::rule_accepts_option(name, "boundaries");
-        for (option, present, accepted) in [
-            ("boundaries", setting.boundaries.is_some(), owner),
-            (
-                "ignore_marker",
-                setting.ignore_marker.is_some(),
-                crate::rules::rule_accepts_option(name, "ignore_marker"),
-            ),
-        ] {
-            if present && !accepted {
-                return Err(ConfigError::OptionNotApplicable {
-                    rule: name.clone(),
-                    option: option.to_string(),
-                });
-            }
-        }
-        // The marker is one declared spelling on every rule that reads it
-        // (`ADR-80`): the boundary rule and both back-pointer rules.
-        if setting.level != RuleLevel::Off {
-            if let Some(marker) = &setting.ignore_marker {
-                // A marker inside a back-pointer keyword would sit in the
-                // citation itself and excuse every back-pointer (`ADR-80`).
-                let keywords = [
-                    crate::rules::MARKER_IMPLEMENTS,
-                    crate::rules::MARKER_VERIFIES,
-                ];
-                if crate::rules::rule_accepts_option(name, "test_paths")
-                    || crate::rules::rule_accepts_option(name, "accepted_statuses")
-                {
-                    if let Some(k) = keywords.iter().find(|k| k.contains(marker.as_str())) {
-                        return Err(ConfigError::InvalidBoundary {
-                            rule: name.clone(),
-                            option: "ignore_marker",
-                            reason: format!(
-                                "'{marker}' is part of the back-pointer keyword '{k}' and would excuse every back-pointer; declare text that appears in no keyword"
-                            ),
-                        });
-                    }
-                }
-                if marker.trim().is_empty() || marker.trim() != marker || marker.contains('\n') {
-                    return Err(ConfigError::InvalidBoundary {
-                        rule: name.clone(),
-                        option: "ignore_marker",
-                        reason: "must be non-blank text on one line with no surrounding whitespace"
-                            .to_string(),
-                    });
-                }
-            }
+        if setting.boundaries.is_some() && !owner {
+            return Err(ConfigError::OptionNotApplicable {
+                rule: name.clone(),
+                option: "boundaries".to_string(),
+            });
         }
         if !owner || setting.level == RuleLevel::Off {
             continue;

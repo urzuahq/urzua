@@ -171,6 +171,87 @@ fn unused_marker_finding(
     }
 }
 
+/// The unused-marker findings of one file: every line carrying `ignore` and none
+/// of the `read` markers' back-pointers.
+fn unused_marker_findings(
+    (rule, variant): (&str, &'static str),
+    file: &SourceFile,
+    content: &str,
+    (prefixes, ignore, read): (&[String], &str, &[&str]),
+) -> Vec<Finding> {
+    unused_marker_lines(content, prefixes, &file.path, ignore, read)
+        .into_iter()
+        .map(|line| unused_marker_finding(rule, variant, &file.path, line, ignore))
+        .collect()
+}
+
+/// The finding for a back-pointer citing a record that does not exist.
+fn unresolved_finding(pointer: BackPointer) -> Finding {
+    Finding {
+        rule: RULE_EMBODIMENT_BACK_POINTER_RESOLUTION.to_string(),
+        severity: FindingSeverity::Error,
+        file: pointer.file,
+        line: Some(pointer.line),
+        message: format!(
+            "back-pointer cites {}, which resolves to no record",
+            pointer.id
+        ),
+        waived: None,
+        declared_severity: None,
+        suggested_action: None,
+        action_source: ActionSource::new("back-pointer-unresolved"),
+    }
+}
+
+/// Whether the cited record's status permits implementation, as a finding
+/// variant and message when it does not or cannot be judged
+/// (`embodiment.back-pointer-decision-accepted`).
+fn decision_verdict(
+    pointer: &BackPointer,
+    target: &Record,
+    config: &Config,
+    (declared, accepted_fallback): (&HashMap<String, crate::status_model::StatusDecl>, &[String]),
+) -> Option<(&'static str, String)> {
+    let status_field = relation_field_name(
+        config,
+        &target.record_type,
+        crate::config::RelationRole::Status,
+    );
+    let status = target.header.get(status_field).map(str::trim).unwrap_or("");
+    // The type's own `implementable` list, then the rule's `accepted_statuses`;
+    // a terminal `success` is not "implementation allowed" (the engine holds no
+    // type knowledge).
+    let own = declared
+        .get(&target.record_type)
+        .map(|d| d.implementable.as_slice())
+        .filter(|l| !l.is_empty());
+    let accepted: Option<bool> = match own {
+        Some(list) => Some(list.iter().any(|s| s == status)),
+        None if accepted_fallback.is_empty() => None,
+        None => Some(accepted_fallback.iter().any(|s| s == status)),
+    };
+    match accepted {
+        Some(true) => None,
+        Some(false) => Some((
+            "decision-not-implementable",
+            format!(
+                "back-pointer cites {}, whose {status_field} is '{status}', not a status \
+                 at which implementation is permitted; the decision must be accepted before the code that \
+                 implements it lands",
+                pointer.id
+            ),
+        )),
+        None => Some((
+            "decision-unjudgeable",
+            format!(
+                "back-pointer cites {}, but type '{}' declares no implementable statuses and \
+                 the rule declares no accepted_statuses, so its status cannot be judged",
+                pointer.id, target.record_type
+            ),
+        )),
+    }
+}
+
 /// The text after the marker of the first comment on `line` that carries one.
 fn marker_rest<'a>(
     line: &'a str,
@@ -467,32 +548,16 @@ pub fn embodiment_back_pointer_resolution(
             } else {
                 &[MARKER_IMPLEMENTS]
             };
-            for line in unused_marker_lines(content, &prefixes, &file.path, marker, read) {
-                findings.push(unused_marker_finding(
-                    RULE_ID,
-                    "back-pointer-marker-unused",
-                    &file.path,
-                    line,
-                    marker,
-                ));
-            }
+            findings.extend(unused_marker_findings(
+                (RULE_ID, "back-pointer-marker-unused"),
+                file,
+                content,
+                (&prefixes, marker, read),
+            ));
         }
         for pointer in implements.kept.into_iter().chain(verifies.kept) {
             if !index.contains_key(&crate::values::RecordId::new(&pointer.id)) {
-                findings.push(Finding {
-                    rule: RULE_ID.to_string(),
-                    severity: FindingSeverity::Error,
-                    file: pointer.file,
-                    line: Some(pointer.line),
-                    message: format!(
-                        "back-pointer cites {}, which resolves to no record",
-                        pointer.id
-                    ),
-                    waived: None,
-                    declared_severity: None,
-                    suggested_action: None,
-                    action_source: ActionSource::new("back-pointer-unresolved"),
-                });
+                findings.push(unresolved_finding(pointer));
             }
         }
         Outcome::Examined
@@ -595,62 +660,22 @@ pub fn embodiment_back_pointer_decision_accepted(
             scan_marker_excusing(&file.path, content, &prefixes, MARKER_IMPLEMENTS, ignore);
         excused_lines += scanned.excused.len();
         if let Some(marker) = ignore.filter(|_| reports_unused) {
-            for line in
-                unused_marker_lines(content, &prefixes, &file.path, marker, &[MARKER_IMPLEMENTS])
-            {
-                unused.push(unused_marker_finding(
-                    RULE_ID,
-                    "decision-marker-unused",
-                    &file.path,
-                    line,
-                    marker,
-                ));
-            }
+            unused.extend(unused_marker_findings(
+                (RULE_ID, "decision-marker-unused"),
+                file,
+                content,
+                (&prefixes, marker, &[MARKER_IMPLEMENTS]),
+            ));
         }
         for pointer in scanned.kept {
             // A citation of no record is `embodiment.back-pointer-resolution`'s.
             let Some(target) = index.get(&crate::values::RecordId::new(&pointer.id)) else {
                 continue;
             };
-            let status_field = relation_field_name(
-                config,
-                &target.record_type,
-                crate::config::RelationRole::Status,
-            );
-            let status = target.header.get(status_field).map(str::trim).unwrap_or("");
-            // The type's own `implementable` list, then the rule's
-            // `accepted_statuses`; a terminal `success` is not "implementation
-            // allowed" (the engine holds no type knowledge).
-            let own = declared
-                .get(&target.record_type)
-                .map(|d| d.implementable.as_slice())
-                .filter(|l| !l.is_empty());
-            let accepted: Option<bool> = match own {
-                Some(list) => Some(list.iter().any(|s| s == status)),
-                None if accepted_fallback.is_empty() => None,
-                None => Some(accepted_fallback.iter().any(|s| s == status)),
-            };
-            match accepted {
-                Some(true) => {}
-                Some(false) => push(
-                    "decision-not-implementable",
-                    &pointer,
-                    format!(
-                        "back-pointer cites {}, whose {status_field} is '{status}', not a status \
-                         at which implementation is permitted; the decision must be accepted before the code that \
-                         implements it lands",
-                        pointer.id
-                    ),
-                ),
-                None => push(
-                    "decision-unjudgeable",
-                    &pointer,
-                    format!(
-                        "back-pointer cites {}, but type '{}' declares no implementable statuses and \
-                         the rule declares no accepted_statuses, so its status cannot be judged",
-                        pointer.id, target.record_type
-                    ),
-                ),
+            if let Some((variant, message)) =
+                decision_verdict(&pointer, target, config, (&declared, accepted_fallback))
+            {
+                push(variant, &pointer, message);
             }
         }
         Outcome::Examined

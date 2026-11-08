@@ -171,7 +171,6 @@ pub fn run(config_path: Option<PathBuf>, args: FixArgs) -> ExitCode {
         Ok(evidence) => evidence,
         Err(e) => return emit(&CouldNotRun::from(e)),
     };
-    drift_notices.extend(excused_evidence_notice(&back_pointed));
     // The derived-blocked records (`ADR-96` section 7): `fix` writes no
     // `progress` status to one. Computed only when a type is opted in.
     let blocked = if scoped.iter().any(|r| r.items.is_some()) {
@@ -201,7 +200,7 @@ pub fn run(config_path: Option<PathBuf>, args: FixArgs) -> ExitCode {
             (population, repairs, notices)
         },
     );
-    drift_notices.extend(unevidenced);
+    drift_notices.extend(with_excused_notice(unevidenced, &back_pointed));
 
     if !apply {
         let (repairs, unmatched) = narrow_to_ids(
@@ -369,6 +368,15 @@ pub(crate) fn excused_evidence_notice(
             if n == 1 { "" } else { "s" }
         ),
     })
+}
+
+/// `notices` with the excused-evidence notice (`excused_evidence_notice`) added.
+fn with_excused_notice(
+    mut notices: Vec<Notice>,
+    evidence: &urzua_core::rules::BackPointerEvidence,
+) -> Vec<Notice> {
+    notices.extend(excused_evidence_notice(evidence));
+    notices
 }
 
 /// What the back-pointer scan finds in the tree, for the delivery tiers.
