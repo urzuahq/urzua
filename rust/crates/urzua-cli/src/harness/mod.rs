@@ -410,6 +410,43 @@ fn harness_problems(env: &Env, adapters: &[String]) -> (Vec<String>, Vec<String>
     (unknown, unprovided)
 }
 
+/// `past` is the tense of an item state: what happened, or what a dry run would do.
+fn past(dry_run: bool, done: &'static str, would: &'static str) -> &'static str {
+    if dry_run {
+        would
+    } else {
+        done
+    }
+}
+
+/// The settings file `file`, loaded once into `shared` and kept there while an
+/// action merges, replaces or removes its entries.
+fn shared_settings<'a>(
+    root: &Path,
+    shared: &'a mut BTreeMap<String, Settings>,
+    file: &str,
+) -> Result<&'a mut Settings, String> {
+    match shared.entry(file.to_string()) {
+        std::collections::btree_map::Entry::Occupied(o) => Ok(o.into_mut()),
+        std::collections::btree_map::Entry::Vacant(v) => Ok(v.insert(load_settings(root, file)?)),
+    }
+}
+
+/// Opens the repository and its lock. A repository whose harness is not
+/// installed is a not-run; `hint` ends the message.
+fn open_installed(config: Option<PathBuf>, hint: &str) -> Result<(Env, Lock), ExitCode> {
+    let env = open(config).map_err(not_run)?;
+    match load_lock(&env) {
+        Ok(Some(lock)) => Ok((env, lock)),
+        Ok(None) => Err(not_run(format!(
+            "no {LOCK_PATH}: the harness is not installed{hint}"
+        ))),
+        Err(m) => Err(not_run(m)),
+    }
+}
+
+const INSTALL_HINT: &str = " (run `urzua harness install --adapter NAME`)";
+
 // ---------------------------------------------------------------- install
 
 pub fn run_install(config: Option<PathBuf>, adapter: Option<String>, dry_run: bool) -> ExitCode {
@@ -418,6 +455,15 @@ pub fn run_install(config: Option<PathBuf>, adapter: Option<String>, dry_run: bo
         Err(m) => return not_run(m),
     };
     emit(&install(&env, adapter, dry_run))
+}
+
+/// What an install has decided to write, collected before anything is written.
+#[derive(Default)]
+struct InstallPlan {
+    conflicts: Vec<String>,
+    file_writes: Vec<(String, String)>,
+    shared: BTreeMap<String, Settings>,
+    block_write: Option<(String, String)>,
 }
 
 fn install(env: &Env, flag: Option<String>, dry_run: bool) -> HarnessReport {
@@ -439,110 +485,23 @@ fn install(env: &Env, flag: Option<String>, dry_run: bool) -> HarnessReport {
         Err(m) => return report.refuse(m),
     };
     let old_lock = load_lock(env).unwrap_or(None);
-    let mut conflicts = Vec::new();
-
-    // Whole files: create, or leave if identical. A different file is a person's
-    // (or an older bundle's, which `update` replaces), never overwritten here.
-    let mut file_writes = Vec::new();
-    for (path, content) in &want.files {
-        match read(&env.root, path) {
-            Err(m) => return report.refuse(m),
-            Ok(None) => {
-                report.item(
-                    "file",
-                    path,
-                    None,
-                    if dry_run { "would-create" } else { "created" },
-                );
-                file_writes.push((path.clone(), content.clone()));
-            }
-            Ok(Some(existing)) if existing == *content => {
-                report.item("file", path, None, "unchanged");
-            }
-            Ok(Some(existing)) => {
-                let owned = old_lock
-                    .as_ref()
-                    .and_then(|l| l.files.get(path))
-                    .is_some_and(|h| *h == lock::hash(&existing));
-                report.item(
-                    "file",
-                    path,
-                    None,
-                    if owned { "out-of-date" } else { "modified" },
-                );
-                conflicts.push(if owned {
-                    format!("{path} is an older bundle file; run `urzua harness update`")
-                } else {
-                    format!("{path} exists and differs from the bundle; the install will not overwrite a file it does not own: move or delete it and install again")
-                });
-            }
-        }
-    }
-
-    // Hook entries merged into the shared settings file.
-    let mut shared: BTreeMap<String, Settings> = BTreeMap::new();
-    for (file, entry) in &want.entries {
-        if !shared.contains_key(file) {
-            match load_settings(&env.root, file) {
-                Ok(s) => {
-                    shared.insert(file.clone(), s);
-                }
-                Err(m) => return report.refuse(m),
-            }
-        }
-        let s = shared.get_mut(file).expect("just loaded");
-        let key = entry.key();
-        match settings::add(&mut s.doc, entry) {
-            Err(m) => return report.refuse(format!("{file}: {m}")),
-            Ok(settings::Merged::Added) => report.item(
-                "entry",
-                file,
-                Some(&key),
-                if dry_run { "would-merge" } else { "merged" },
-            ),
-            Ok(settings::Merged::Unchanged) => report.item("entry", file, Some(&key), "unchanged"),
-            Ok(settings::Merged::Edited) => {
-                report.item("entry", file, Some(&key), "modified");
-                conflicts.push(format!(
-                    "{file} holds an entry for '{key}' that differs from the bundle's (a person edited it, or it is an older bundle's); the install will not guess"
-                ));
-            }
-        }
-    }
-
-    // The marked instructions block.
-    let mut block_write = None;
-    match &want.block {
-        None => {
-            report.item("block", "", None, "not-configured");
-            report.notice(
-                NoticeSeverity::Info,
-                "harness.instructions_file is not set, so no agent-instructions block was written; the engine assumes no file name".to_string(),
-            );
-        }
-        Some((file, rendered)) => {
-            let text = match read(&env.root, file) {
-                Ok(t) => t.unwrap_or_default(),
-                Err(m) => return report.refuse(m),
-            };
-            match block::apply(&text, rendered) {
-                Err(m) => return report.refuse(format!("{file}: {m}")),
-                Ok(new) if new == text => report.item("block", file, None, "unchanged"),
-                Ok(new) => {
-                    report.item(
-                        "block",
-                        file,
-                        None,
-                        if dry_run { "would-write" } else { "written" },
-                    );
-                    block_write = Some((file.clone(), new));
-                }
-            }
-        }
+    let mut plan = InstallPlan::default();
+    let planned = plan_install_files(
+        env,
+        &want,
+        old_lock.as_ref(),
+        dry_run,
+        &mut report,
+        &mut plan,
+    )
+    .and_then(|()| plan_install_entries(env, &want, dry_run, &mut report, &mut plan))
+    .and_then(|()| plan_install_block(env, &want, dry_run, &mut report, &mut plan));
+    if let Err(m) = planned {
+        return report.refuse(m);
     }
 
     // A hand-copied first-generation editor hook wired beside the bundle's.
-    for (file, s) in &shared {
+    for (file, s) in &plan.shared {
         let legacy = settings::legacy_commands(&s.doc);
         if !legacy.is_empty() {
             report.notice(
@@ -551,7 +510,7 @@ fn install(env: &Env, flag: Option<String>, dry_run: bool) -> HarnessReport {
             );
         }
     }
-    if !conflicts.is_empty() {
+    if !plan.conflicts.is_empty() {
         // Nothing is written, so no item may say it was: report what the
         // install would do once the conflict is cleared.
         for item in &mut report.items {
@@ -563,9 +522,9 @@ fn install(env: &Env, flag: Option<String>, dry_run: bool) -> HarnessReport {
             }
             .to_string();
         }
-        return report.refuse(conflicts.join("; "));
+        return report.refuse(plan.conflicts.join("; "));
     }
-    for (file, s) in &shared {
+    for (file, s) in &plan.shared {
         if s.reformatted {
             report.notice(
                 NoticeSeverity::Warning,
@@ -578,6 +537,125 @@ fn install(env: &Env, flag: Option<String>, dry_run: bool) -> HarnessReport {
     }
     report.problems.extend(unprovided);
 
+    let new_lock = install_lock(&want, adapters);
+    report.item(
+        "lock",
+        LOCK_PATH,
+        None,
+        past(dry_run, "written", "would-write"),
+    );
+    if dry_run {
+        return report;
+    }
+    match write_install(env, &plan, &new_lock) {
+        Ok(()) => report,
+        Err(m) => report.refuse(m),
+    }
+}
+
+/// Whole files: create, or leave if identical. A different file is a person's
+/// (or an older bundle's, which `update` replaces), never overwritten here.
+fn plan_install_files(
+    env: &Env,
+    want: &Desired,
+    old_lock: Option<&Lock>,
+    dry_run: bool,
+    report: &mut HarnessReport,
+    plan: &mut InstallPlan,
+) -> Result<(), String> {
+    for (path, content) in &want.files {
+        match read(&env.root, path)? {
+            None => {
+                report.item("file", path, None, past(dry_run, "created", "would-create"));
+                plan.file_writes.push((path.clone(), content.clone()));
+            }
+            Some(existing) if existing == *content => {
+                report.item("file", path, None, "unchanged");
+            }
+            Some(existing) => {
+                let owned = old_lock
+                    .and_then(|l| l.files.get(path))
+                    .is_some_and(|h| *h == lock::hash(&existing));
+                report.item(
+                    "file",
+                    path,
+                    None,
+                    if owned { "out-of-date" } else { "modified" },
+                );
+                plan.conflicts.push(if owned {
+                    format!("{path} is an older bundle file; run `urzua harness update`")
+                } else {
+                    format!("{path} exists and differs from the bundle; the install will not overwrite a file it does not own: move or delete it and install again")
+                });
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Hook entries merged into the shared settings file.
+fn plan_install_entries(
+    env: &Env,
+    want: &Desired,
+    dry_run: bool,
+    report: &mut HarnessReport,
+    plan: &mut InstallPlan,
+) -> Result<(), String> {
+    for (file, entry) in &want.entries {
+        let s = shared_settings(&env.root, &mut plan.shared, file)?;
+        let key = entry.key();
+        match settings::add(&mut s.doc, entry) {
+            Err(m) => return Err(format!("{file}: {m}")),
+            Ok(settings::Merged::Added) => report.item(
+                "entry",
+                file,
+                Some(&key),
+                past(dry_run, "merged", "would-merge"),
+            ),
+            Ok(settings::Merged::Unchanged) => report.item("entry", file, Some(&key), "unchanged"),
+            Ok(settings::Merged::Edited) => {
+                report.item("entry", file, Some(&key), "modified");
+                plan.conflicts.push(format!(
+                    "{file} holds an entry for '{key}' that differs from the bundle's (a person edited it, or it is an older bundle's); the install will not guess"
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// The marked instructions block.
+fn plan_install_block(
+    env: &Env,
+    want: &Desired,
+    dry_run: bool,
+    report: &mut HarnessReport,
+    plan: &mut InstallPlan,
+) -> Result<(), String> {
+    match &want.block {
+        None => {
+            report.item("block", "", None, "not-configured");
+            report.notice(
+                NoticeSeverity::Info,
+                "harness.instructions_file is not set, so no agent-instructions block was written; the engine assumes no file name".to_string(),
+            );
+        }
+        Some((file, rendered)) => {
+            let text = read(&env.root, file)?.unwrap_or_default();
+            match block::apply(&text, rendered) {
+                Err(m) => return Err(format!("{file}: {m}")),
+                Ok(new) if new == text => report.item("block", file, None, "unchanged"),
+                Ok(new) => {
+                    report.item("block", file, None, past(dry_run, "written", "would-write"));
+                    plan.block_write = Some((file.clone(), new));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+fn install_lock(want: &Desired, adapters: Vec<String>) -> Lock {
     let mut new_lock = Lock::new(adapters);
     new_lock.adapters.sort();
     for (path, content) in &want.files {
@@ -592,143 +670,62 @@ fn install(env: &Env, flag: Option<String>, dry_run: bool) -> HarnessReport {
             hash: lock::hash(rendered),
         });
     }
-    report.item(
-        "lock",
-        LOCK_PATH,
-        None,
-        if dry_run { "would-write" } else { "written" },
-    );
-    if dry_run {
-        return report;
+    new_lock
+}
+
+fn write_install(env: &Env, plan: &InstallPlan, new_lock: &Lock) -> Result<(), String> {
+    for (path, content) in &plan.file_writes {
+        write(&env.root, path, content)?;
     }
-    let result = (|| {
-        for (path, content) in &file_writes {
-            write(&env.root, path, content)?;
-        }
-        for (file, s) in &shared {
-            save_settings(&env.root, file, s)?;
-        }
-        if let Some((file, text)) = &block_write {
-            write(&env.root, file, text)?;
-        }
-        write(&env.root, LOCK_PATH, &new_lock.to_text())
-    })();
-    match result {
-        Ok(()) => report,
-        Err(m) => report.refuse(m),
+    for (file, s) in &plan.shared {
+        save_settings(&env.root, file, s)?;
     }
+    if let Some((file, text)) = &plan.block_write {
+        write(&env.root, file, text)?;
+    }
+    write(&env.root, LOCK_PATH, &new_lock.to_text())
 }
 
 // ----------------------------------------------------------------- status
 
 pub fn run_status(config: Option<PathBuf>) -> ExitCode {
-    let env = match open(config) {
-        Ok(e) => e,
-        Err(m) => return not_run(m),
-    };
-    let lock = match load_lock(&env) {
-        Ok(Some(l)) => l,
-        Ok(None) => {
-            return not_run(format!(
-                "no {LOCK_PATH}: the harness is not installed (run `urzua harness install --adapter NAME`)"
-            ))
-        }
-        Err(m) => return not_run(m),
+    let (env, lock) = match open_installed(config, INSTALL_HINT) {
+        Ok(pair) => pair,
+        Err(code) => return code,
     };
     emit(&status(&env, &lock))
 }
 
+/// A status report and whether any item in it has drifted.
+struct StatusRun {
+    report: HarnessReport,
+    drift: bool,
+}
+
+impl StatusRun {
+    fn mark(&mut self, kind: &'static str, path: &str, key: Option<&str>, state: &str) {
+        self.drift |= state != "ok";
+        self.report.item(kind, path, key, state);
+    }
+}
+
 fn status(env: &Env, lock: &Lock) -> HarnessReport {
-    let mut report = HarnessReport::new("status", false, lock.adapters.clone());
-    let mut drift = false;
+    let mut run = StatusRun {
+        report: HarnessReport::new("status", false, lock.adapters.clone()),
+        drift: false,
+    };
     let want = match desired(env, &lock.adapters) {
         Ok(w) => w,
-        Err(m) => return report.refuse(m),
+        Err(m) => return run.report.refuse(m),
     };
-    let mut mark =
-        |report: &mut HarnessReport, kind, path: &str, key: Option<&str>, state: &str| {
-            drift |= state != "ok";
-            report.item(kind, path, key, state);
-        };
-    if lock.bundle_version != VERSION {
-        let state = "out-of-date";
-        let older = lock.bundle_version.as_str() < VERSION;
-        report.notice(
-            NoticeSeverity::Warning,
-            if older {
-                format!("the installed bundle is {} and this binary is {VERSION}: run `urzua harness update`", lock.bundle_version)
-            } else {
-                format!("the installed bundle is {} and this binary is only {VERSION}: update urzua", lock.bundle_version)
-            },
-        );
-        mark(&mut report, "lock", LOCK_PATH, None, state);
+    status_bundle_version(lock, &mut run);
+    let checked = status_files(env, lock, &want, &mut run)
+        .and_then(|()| status_entries(env, lock, &want, &mut run))
+        .and_then(|()| status_blocks(env, lock, &want, &mut run));
+    if let Err(m) = checked {
+        return run.report.refuse(m);
     }
-    for (path, locked) in &lock.files {
-        let state = match read(&env.root, path) {
-            Err(m) => return report.refuse(m),
-            Ok(None) => "missing",
-            Ok(Some(t)) if lock::hash(&t) != *locked => "modified",
-            Ok(Some(_)) => match want.files.get(path) {
-                Some(bundle) if lock::hash(bundle) != *locked => "out-of-date",
-                _ => "ok",
-            },
-        };
-        mark(&mut report, "file", path, None, state);
-    }
-    // A file the bundle now wants that the lock does not know yet (a command for
-    // a record type added since the install) is missing until `update` writes it.
-    // One that exists is a person's file under the bundle's name (`update` kept
-    // it): it is not missing, and it is not the install's until `update --force`.
-    for (path, bundle) in want
-        .files
-        .iter()
-        .filter(|(p, _)| !lock.files.contains_key(*p))
-    {
-        let state = match read(&env.root, path) {
-            Err(m) => return report.refuse(m),
-            Ok(None) => "missing",
-            Ok(Some(t)) if t == *bundle => "out-of-date",
-            Ok(Some(_)) => "modified",
-        };
-        mark(&mut report, "file", path, None, state);
-    }
-    let mut cache: BTreeMap<String, Option<J>> = BTreeMap::new();
-    for e in &lock.entries {
-        if !cache.contains_key(&e.file) {
-            let doc = match load_settings(&env.root, &e.file) {
-                Ok(s) => s.text.map(|_| s.doc),
-                Err(m) => return report.refuse(m),
-            };
-            cache.insert(e.file.clone(), doc);
-        }
-        let state = match cache[&e.file]
-            .as_ref()
-            .and_then(|doc| settings::find(doc, &e.event, &e.matcher, &e.handler))
-        {
-            None => "missing",
-            Some(h) if lock::hash(&h.compact()) != e.hash => "modified",
-            Some(_) => match want.entries.iter().find(|(f, w)| same(e, f, w)) {
-                Some((_, w)) if w.hash() != e.hash => "out-of-date",
-                _ => "ok",
-            },
-        };
-        mark(&mut report, "entry", &e.file, Some(&e.key()), state);
-    }
-    for b in &lock.blocks {
-        let state = match read(&env.root, &b.file) {
-            Err(m) => return report.refuse(m),
-            Ok(None) => "missing",
-            Ok(Some(t)) => match block::extract(&t) {
-                Err(_) | Ok(None) => "missing",
-                Ok(Some(found)) if lock::hash(found) != b.hash => "modified",
-                Ok(Some(_)) => match &want.block {
-                    Some((_, rendered)) if lock::hash(rendered) != b.hash => "out-of-date",
-                    _ => "ok",
-                },
-            },
-        };
-        mark(&mut report, "block", &b.file, None, state);
-    }
+    let StatusRun { mut report, drift } = run;
     report.notice(
         NoticeSeverity::Info,
         "a local settings file next to the project settings file (settings.local.json) and the user-level settings are neither read nor written: a hook entry wired only there is not seen".to_string(),
@@ -742,224 +739,181 @@ fn status(env: &Env, lock: &Lock) -> HarnessReport {
     report
 }
 
+fn status_bundle_version(lock: &Lock, run: &mut StatusRun) {
+    if lock.bundle_version == VERSION {
+        return;
+    }
+    let older = lock.bundle_version.as_str() < VERSION;
+    run.report.notice(
+        NoticeSeverity::Warning,
+        if older {
+            format!("the installed bundle is {} and this binary is {VERSION}: run `urzua harness update`", lock.bundle_version)
+        } else {
+            format!("the installed bundle is {} and this binary is only {VERSION}: update urzua", lock.bundle_version)
+        },
+    );
+    run.mark("lock", LOCK_PATH, None, "out-of-date");
+}
+
+fn status_files(env: &Env, lock: &Lock, want: &Desired, run: &mut StatusRun) -> Result<(), String> {
+    for (path, locked) in &lock.files {
+        let state = match read(&env.root, path)? {
+            None => "missing",
+            Some(t) if lock::hash(&t) != *locked => "modified",
+            Some(_) => match want.files.get(path) {
+                Some(bundle) if lock::hash(bundle) != *locked => "out-of-date",
+                _ => "ok",
+            },
+        };
+        run.mark("file", path, None, state);
+    }
+    // A file the bundle now wants that the lock does not know yet (a command for
+    // a record type added since the install) is missing until `update` writes it.
+    // One that exists is a person's file under the bundle's name (`update` kept
+    // it): it is not missing, and it is not the install's until `update --force`.
+    for (path, bundle) in want
+        .files
+        .iter()
+        .filter(|(p, _)| !lock.files.contains_key(*p))
+    {
+        let state = match read(&env.root, path)? {
+            None => "missing",
+            Some(t) if t == *bundle => "out-of-date",
+            Some(_) => "modified",
+        };
+        run.mark("file", path, None, state);
+    }
+    Ok(())
+}
+
+fn status_entries(
+    env: &Env,
+    lock: &Lock,
+    want: &Desired,
+    run: &mut StatusRun,
+) -> Result<(), String> {
+    let mut cache: BTreeMap<String, Option<J>> = BTreeMap::new();
+    for e in &lock.entries {
+        if !cache.contains_key(&e.file) {
+            let s = load_settings(&env.root, &e.file)?;
+            cache.insert(e.file.clone(), s.text.map(|_| s.doc));
+        }
+        let state = match cache[&e.file]
+            .as_ref()
+            .and_then(|doc| settings::find(doc, &e.event, &e.matcher, &e.handler))
+        {
+            None => "missing",
+            Some(h) if lock::hash(&h.compact()) != e.hash => "modified",
+            Some(_) => match want.entries.iter().find(|(f, w)| same(e, f, w)) {
+                Some((_, w)) if w.hash() != e.hash => "out-of-date",
+                _ => "ok",
+            },
+        };
+        run.mark("entry", &e.file, Some(&e.key()), state);
+    }
+    Ok(())
+}
+
+fn status_blocks(
+    env: &Env,
+    lock: &Lock,
+    want: &Desired,
+    run: &mut StatusRun,
+) -> Result<(), String> {
+    for b in &lock.blocks {
+        let state = match read(&env.root, &b.file)? {
+            None => "missing",
+            Some(t) => match block::extract(&t) {
+                Err(_) | Ok(None) => "missing",
+                Ok(Some(found)) if lock::hash(found) != b.hash => "modified",
+                Ok(Some(_)) => match &want.block {
+                    Some((_, rendered)) if lock::hash(rendered) != b.hash => "out-of-date",
+                    _ => "ok",
+                },
+            },
+        };
+        run.mark("block", &b.file, None, state);
+    }
+    Ok(())
+}
+
 // ----------------------------------------------------------------- update
 
 pub fn run_update(config: Option<PathBuf>, force: bool, dry_run: bool) -> ExitCode {
-    let env = match open(config) {
-        Ok(e) => e,
-        Err(m) => return not_run(m),
-    };
-    let lock = match load_lock(&env) {
-        Ok(Some(l)) => l,
-        Ok(None) => {
-            return not_run(format!(
-                "no {LOCK_PATH}: the harness is not installed (run `urzua harness install --adapter NAME`)"
-            ))
-        }
-        Err(m) => return not_run(m),
+    let (env, lock) = match open_installed(config, INSTALL_HINT) {
+        Ok(pair) => pair,
+        Err(code) => return code,
     };
     emit(&update(&env, &lock, force, dry_run))
 }
 
+/// An update in progress: the report, the lock it is building, and the writes
+/// it has decided on.
+struct UpdateRun<'a> {
+    env: &'a Env,
+    old: &'a Lock,
+    want: Desired,
+    force: bool,
+    dry_run: bool,
+    report: HarnessReport,
+    lock: Lock,
+    /// A file a person changed was left as it is.
+    kept: bool,
+    file_writes: Vec<(String, String)>,
+    deletes: Vec<String>,
+    shared: BTreeMap<String, Settings>,
+    block_writes: Vec<(String, String)>,
+}
+
 fn update(env: &Env, old: &Lock, force: bool, dry_run: bool) -> HarnessReport {
-    let mut report = HarnessReport::new("update", dry_run, old.adapters.clone());
+    let report = HarnessReport::new("update", dry_run, old.adapters.clone());
     let want = match desired(env, &old.adapters) {
         Ok(w) => w,
         Err(m) => return report.refuse(m),
     };
-    let mut lock = Lock::new(old.adapters.clone());
-    let mut kept = false;
-    let (mut file_writes, mut deletes) = (Vec::new(), Vec::new());
-    let past = |s: &'static str, would: &'static str| if dry_run { would } else { s };
-
-    for (path, content) in &want.files {
-        let locked = old.files.get(path);
-        let want_hash = lock::hash(content);
-        let state = match read(&env.root, path) {
-            Err(m) => return report.refuse(m),
-            Ok(None) => {
-                file_writes.push((path.clone(), content.clone()));
-                lock.files.insert(path.clone(), want_hash);
-                past("created", "would-create")
-            }
-            Ok(Some(t)) if t == *content => {
-                lock.files.insert(path.clone(), want_hash);
-                "unchanged"
-            }
-            Ok(Some(t)) if locked.is_some_and(|h| *h == lock::hash(&t)) || force => {
-                file_writes.push((path.clone(), content.clone()));
-                lock.files.insert(path.clone(), want_hash);
-                if locked.is_some_and(|h| *h == lock::hash(&t)) {
-                    past("updated", "would-update")
-                } else {
-                    past("forced", "would-force")
-                }
-            }
-            Ok(Some(_)) => {
-                kept = true;
-                // The old hash stays, so `status` keeps reporting the change.
-                if let Some(h) = locked {
-                    lock.files.insert(path.clone(), h.clone());
-                }
-                "kept-modified"
-            }
-        };
-        report.item("file", path, None, state);
-    }
-    for (path, locked) in &old.files {
-        if want.files.contains_key(path) {
-            continue;
-        }
-        match read(&env.root, path) {
-            Err(m) => return report.refuse(m),
-            Ok(None) => report.item("file", path, None, "gone"),
-            Ok(Some(t)) if lock::hash(&t) == *locked || force => {
-                deletes.push(path.clone());
-                report.item("file", path, None, past("removed", "would-remove"));
-            }
-            Ok(Some(_)) => {
-                kept = true;
-                lock.files.insert(path.clone(), locked.clone());
-                report.item("file", path, None, "kept-modified");
-            }
-        }
+    let mut run = UpdateRun {
+        env,
+        old,
+        want,
+        force,
+        dry_run,
+        report,
+        lock: Lock::new(old.adapters.clone()),
+        kept: false,
+        file_writes: Vec::new(),
+        deletes: Vec::new(),
+        shared: BTreeMap::new(),
+        block_writes: Vec::new(),
+    };
+    let planned = run
+        .wanted_files()
+        .and_then(|()| run.retired_files())
+        .and_then(|()| run.wanted_entries())
+        .and_then(|()| run.retired_entries())
+        .and_then(|()| run.block());
+    if let Err(m) = planned {
+        return run.report.refuse(m);
     }
 
-    let mut shared: BTreeMap<String, Settings> = BTreeMap::new();
-    for (file, entry) in &want.entries {
-        if !shared.contains_key(file) {
-            match load_settings(&env.root, file) {
-                Ok(s) => {
-                    shared.insert(file.clone(), s);
-                }
-                Err(m) => return report.refuse(m),
-            }
-        }
-        let s = shared.get_mut(file).expect("just loaded");
-        let key = entry.key();
-        let locked = old.entries.iter().find(|e| same(e, file, entry));
-        let found = settings::find(&s.doc, &entry.event, &entry.matcher, &entry.handler).cloned();
-        let state = match found {
-            None => {
-                let _ = settings::add(&mut s.doc, entry);
-                past("merged", "would-merge")
-            }
-            Some(h) if h == entry.hook => "unchanged",
-            Some(h) if locked.is_some_and(|l| l.hash == lock::hash(&h.compact())) || force => {
-                if let Err(m) = settings::replace(&mut s.doc, entry) {
-                    return report.refuse(format!("{file}: {m}"));
-                }
-                past("updated", "would-update")
-            }
-            Some(_) => {
-                kept = true;
-                "kept-modified"
-            }
-        };
-        report.item("entry", file, Some(&key), state);
-        let hash = if state == "kept-modified" {
-            locked
-                .map(|l| l.hash.clone())
-                .unwrap_or_else(|| entry.hash())
-        } else {
-            entry.hash()
-        };
-        lock.entries.push(entry_hash(file, entry, hash));
-    }
-    for e in &old.entries {
-        if want.entries.iter().any(|(f, w)| same(e, f, w)) {
-            continue;
-        }
-        let Some(s) = shared.get_mut(&e.file) else {
-            continue;
-        };
-        let key = e.key();
-        match settings::find(&s.doc, &e.event, &e.matcher, &e.handler) {
-            None => report.item("entry", &e.file, Some(&key), "gone"),
-            Some(h) if lock::hash(&h.compact()) == e.hash || force => {
-                settings::remove(&mut s.doc, &e.event, &e.matcher, &e.handler);
-                report.item(
-                    "entry",
-                    &e.file,
-                    Some(&key),
-                    past("removed", "would-remove"),
-                );
-            }
-            Some(_) => {
-                kept = true;
-                lock.entries.push(e.clone());
-                report.item("entry", &e.file, Some(&key), "kept-modified");
-            }
-        }
-    }
-
-    let mut block_writes: Vec<(String, String)> = Vec::new();
-    if let Some((file, rendered)) = &want.block {
-        let text = match read(&env.root, file) {
-            Ok(t) => t.unwrap_or_default(),
-            Err(m) => return report.refuse(m),
-        };
-        let locked = old.blocks.iter().find(|b| b.file == *file);
-        let current = match block::extract(&text) {
-            Ok(c) => c.map(str::to_string),
-            Err(m) => return report.refuse(format!("{file}: {m}")),
-        };
-        let state = match &current {
-            Some(c) if c == rendered => "unchanged",
-            Some(c) if locked.is_some_and(|l| l.hash == lock::hash(c)) || force => {
-                past("updated", "would-update")
-            }
-            Some(_) => "kept-modified",
-            None => past("written", "would-write"),
-        };
-        if state == "kept-modified" {
-            kept = true;
-            if let Some(l) = locked {
-                lock.blocks.push(l.clone());
-            }
-        } else {
-            lock.blocks.push(BlockHash {
-                file: file.clone(),
-                hash: lock::hash(rendered),
-            });
-            if state != "unchanged" {
-                match block::apply(&text, rendered) {
-                    Ok(new) => block_writes.push((file.clone(), new)),
-                    Err(m) => return report.refuse(format!("{file}: {m}")),
-                }
-            }
-        }
-        report.item("block", file, None, state);
-    }
-
-    report.item("lock", LOCK_PATH, None, past("written", "would-write"));
+    run.report.item(
+        "lock",
+        LOCK_PATH,
+        None,
+        past(dry_run, "written", "would-write"),
+    );
     let (unknown, unprovided) = harness_problems(env, &old.adapters);
     for p in unknown.iter().chain(&unprovided) {
-        report.notice(NoticeSeverity::Warning, p.clone());
+        run.report.notice(NoticeSeverity::Warning, p.clone());
     }
-    report.problems.extend(unknown);
-    report.problems.extend(unprovided);
+    run.report.problems.extend(unknown);
+    run.report.problems.extend(unprovided);
     if !dry_run {
-        let result = (|| {
-            for (path, content) in &file_writes {
-                write(&env.root, path, content)?;
-            }
-            for path in &deletes {
-                delete(&env.root, path)?;
-            }
-            for (file, s) in &shared {
-                save_settings(&env.root, file, s)?;
-            }
-            for (file, text) in &block_writes {
-                write(&env.root, file, text)?;
-            }
-            write(&env.root, LOCK_PATH, &lock.to_text())
-        })();
-        if let Err(m) = result {
-            return report.refuse(m);
+        if let Err(m) = run.apply() {
+            return run.report.refuse(m);
         }
     }
-    if kept {
+    let mut report = run.report;
+    if run.kept {
         report.notice(
             NoticeSeverity::Warning,
             "a file a person changed was left as it is (pass --force to overwrite it)".to_string(),
@@ -969,125 +923,258 @@ fn update(env: &Env, old: &Lock, force: bool, dry_run: bool) -> HarnessReport {
     report
 }
 
+impl UpdateRun<'_> {
+    /// Files the bundle wants: create, update what the lock owns, keep what a
+    /// person changed.
+    fn wanted_files(&mut self) -> Result<(), String> {
+        for (path, content) in &self.want.files {
+            let locked = self.old.files.get(path);
+            let want_hash = lock::hash(content);
+            let state = match read(&self.env.root, path)? {
+                None => {
+                    self.file_writes.push((path.clone(), content.clone()));
+                    self.lock.files.insert(path.clone(), want_hash);
+                    past(self.dry_run, "created", "would-create")
+                }
+                Some(t) if t == *content => {
+                    self.lock.files.insert(path.clone(), want_hash);
+                    "unchanged"
+                }
+                Some(t) if locked.is_some_and(|h| *h == lock::hash(&t)) || self.force => {
+                    self.file_writes.push((path.clone(), content.clone()));
+                    self.lock.files.insert(path.clone(), want_hash);
+                    if locked.is_some_and(|h| *h == lock::hash(&t)) {
+                        past(self.dry_run, "updated", "would-update")
+                    } else {
+                        past(self.dry_run, "forced", "would-force")
+                    }
+                }
+                Some(_) => {
+                    self.kept = true;
+                    // The old hash stays, so `status` keeps reporting the change.
+                    if let Some(h) = locked {
+                        self.lock.files.insert(path.clone(), h.clone());
+                    }
+                    "kept-modified"
+                }
+            };
+            self.report.item("file", path, None, state);
+        }
+        Ok(())
+    }
+
+    /// Files the old lock owns that the bundle no longer wants.
+    fn retired_files(&mut self) -> Result<(), String> {
+        for (path, locked) in &self.old.files {
+            if self.want.files.contains_key(path) {
+                continue;
+            }
+            match read(&self.env.root, path)? {
+                None => self.report.item("file", path, None, "gone"),
+                Some(t) if lock::hash(&t) == *locked || self.force => {
+                    self.deletes.push(path.clone());
+                    self.report.item(
+                        "file",
+                        path,
+                        None,
+                        past(self.dry_run, "removed", "would-remove"),
+                    );
+                }
+                Some(_) => {
+                    self.kept = true;
+                    self.lock.files.insert(path.clone(), locked.clone());
+                    self.report.item("file", path, None, "kept-modified");
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Hook entries the bundle wants in the shared settings files.
+    fn wanted_entries(&mut self) -> Result<(), String> {
+        for (file, entry) in &self.want.entries {
+            let s = shared_settings(&self.env.root, &mut self.shared, file)?;
+            let key = entry.key();
+            let locked = self.old.entries.iter().find(|e| same(e, file, entry));
+            let found =
+                settings::find(&s.doc, &entry.event, &entry.matcher, &entry.handler).cloned();
+            let state = match found {
+                None => {
+                    let _ = settings::add(&mut s.doc, entry);
+                    past(self.dry_run, "merged", "would-merge")
+                }
+                Some(h) if h == entry.hook => "unchanged",
+                Some(h)
+                    if locked.is_some_and(|l| l.hash == lock::hash(&h.compact())) || self.force =>
+                {
+                    if let Err(m) = settings::replace(&mut s.doc, entry) {
+                        return Err(format!("{file}: {m}"));
+                    }
+                    past(self.dry_run, "updated", "would-update")
+                }
+                Some(_) => {
+                    self.kept = true;
+                    "kept-modified"
+                }
+            };
+            self.report.item("entry", file, Some(&key), state);
+            let hash = if state == "kept-modified" {
+                locked
+                    .map(|l| l.hash.clone())
+                    .unwrap_or_else(|| entry.hash())
+            } else {
+                entry.hash()
+            };
+            self.lock.entries.push(entry_hash(file, entry, hash));
+        }
+        Ok(())
+    }
+
+    /// Entries the old lock owns that the bundle no longer wants.
+    fn retired_entries(&mut self) -> Result<(), String> {
+        for e in &self.old.entries {
+            if self.want.entries.iter().any(|(f, w)| same(e, f, w)) {
+                continue;
+            }
+            let Some(s) = self.shared.get_mut(&e.file) else {
+                continue;
+            };
+            let key = e.key();
+            match settings::find(&s.doc, &e.event, &e.matcher, &e.handler) {
+                None => self.report.item("entry", &e.file, Some(&key), "gone"),
+                Some(h) if lock::hash(&h.compact()) == e.hash || self.force => {
+                    settings::remove(&mut s.doc, &e.event, &e.matcher, &e.handler);
+                    self.report.item(
+                        "entry",
+                        &e.file,
+                        Some(&key),
+                        past(self.dry_run, "removed", "would-remove"),
+                    );
+                }
+                Some(_) => {
+                    self.kept = true;
+                    self.lock.entries.push(e.clone());
+                    self.report
+                        .item("entry", &e.file, Some(&key), "kept-modified");
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// The marked instructions block.
+    fn block(&mut self) -> Result<(), String> {
+        let Some((file, rendered)) = &self.want.block else {
+            return Ok(());
+        };
+        let text = read(&self.env.root, file)?.unwrap_or_default();
+        let locked = self.old.blocks.iter().find(|b| b.file == *file);
+        let current = match block::extract(&text) {
+            Ok(c) => c.map(str::to_string),
+            Err(m) => return Err(format!("{file}: {m}")),
+        };
+        let state = match &current {
+            Some(c) if c == rendered => "unchanged",
+            Some(c) if locked.is_some_and(|l| l.hash == lock::hash(c)) || self.force => {
+                past(self.dry_run, "updated", "would-update")
+            }
+            Some(_) => "kept-modified",
+            None => past(self.dry_run, "written", "would-write"),
+        };
+        if state == "kept-modified" {
+            self.kept = true;
+            if let Some(l) = locked {
+                self.lock.blocks.push(l.clone());
+            }
+        } else {
+            self.lock.blocks.push(BlockHash {
+                file: file.clone(),
+                hash: lock::hash(rendered),
+            });
+            if state != "unchanged" {
+                match block::apply(&text, rendered) {
+                    Ok(new) => self.block_writes.push((file.clone(), new)),
+                    Err(m) => return Err(format!("{file}: {m}")),
+                }
+            }
+        }
+        self.report.item("block", file, None, state);
+        Ok(())
+    }
+
+    fn apply(&self) -> Result<(), String> {
+        let root = &self.env.root;
+        for (path, content) in &self.file_writes {
+            write(root, path, content)?;
+        }
+        for path in &self.deletes {
+            delete(root, path)?;
+        }
+        for (file, s) in &self.shared {
+            save_settings(root, file, s)?;
+        }
+        for (file, text) in &self.block_writes {
+            write(root, file, text)?;
+        }
+        write(root, LOCK_PATH, &self.lock.to_text())
+    }
+}
+
 // -------------------------------------------------------------- uninstall
 
 pub fn run_uninstall(config: Option<PathBuf>, dry_run: bool) -> ExitCode {
-    let env = match open(config) {
-        Ok(e) => e,
-        Err(m) => return not_run(m),
-    };
-    let lock = match load_lock(&env) {
-        Ok(Some(l)) => l,
-        Ok(None) => {
-            return not_run(format!(
-                "no {LOCK_PATH}: the harness is not installed, nothing to remove"
-            ))
-        }
-        Err(m) => return not_run(m),
+    let (env, lock) = match open_installed(config, ", nothing to remove") {
+        Ok(pair) => pair,
+        Err(code) => return code,
     };
     emit(&uninstall(&env, &lock, dry_run))
 }
 
+/// An uninstall in progress: the report and the removals it has decided on.
+struct UninstallRun<'a> {
+    env: &'a Env,
+    lock: &'a Lock,
+    dry_run: bool,
+    report: HarnessReport,
+    /// A file or entry a person changed was left in place.
+    kept: bool,
+    deletes: Vec<String>,
+    shared: BTreeMap<String, Settings>,
+    block_writes: Vec<(String, String)>,
+}
+
 fn uninstall(env: &Env, lock: &Lock, dry_run: bool) -> HarnessReport {
-    let mut report = HarnessReport::new("uninstall", dry_run, lock.adapters.clone());
-    let past = |s: &'static str, would: &'static str| if dry_run { would } else { s };
-    let mut kept = false;
-    let mut deletes = Vec::new();
-
-    for (path, locked) in &lock.files {
-        let state = match read(&env.root, path) {
-            Err(m) => return report.refuse(m),
-            Ok(None) => "missing",
-            Ok(Some(t)) if lock::hash(&t) == *locked => {
-                deletes.push(path.clone());
-                past("removed", "would-remove")
-            }
-            Ok(Some(_)) => {
-                kept = true;
-                "kept-modified"
-            }
-        };
-        report.item("file", path, None, state);
+    let mut run = UninstallRun {
+        env,
+        lock,
+        dry_run,
+        report: HarnessReport::new("uninstall", dry_run, lock.adapters.clone()),
+        kept: false,
+        deletes: Vec::new(),
+        shared: BTreeMap::new(),
+        block_writes: Vec::new(),
+    };
+    let planned = run
+        .files()
+        .and_then(|()| run.entries())
+        .and_then(|()| run.blocks());
+    if let Err(m) = planned {
+        return run.report.refuse(m);
     }
-
-    let mut shared: BTreeMap<String, Settings> = BTreeMap::new();
-    for e in &lock.entries {
-        if !shared.contains_key(&e.file) {
-            match load_settings(&env.root, &e.file) {
-                Ok(s) => {
-                    shared.insert(e.file.clone(), s);
-                }
-                Err(m) => return report.refuse(m),
-            }
-        }
-        let s = shared.get_mut(&e.file).expect("just loaded");
-        let state = match settings::find(&s.doc, &e.event, &e.matcher, &e.handler) {
-            None => "missing",
-            Some(h) if lock::hash(&h.compact()) == e.hash => {
-                settings::remove(&mut s.doc, &e.event, &e.matcher, &e.handler);
-                past("removed", "would-remove")
-            }
-            Some(_) => {
-                kept = true;
-                "kept-modified"
-            }
-        };
-        report.item("entry", &e.file, Some(&e.key()), state);
-    }
-
-    let mut block_writes = Vec::new();
-    for b in &lock.blocks {
-        let text = match read(&env.root, &b.file) {
-            Err(m) => return report.refuse(m),
-            Ok(t) => t,
-        };
-        let state = match text.as_deref().map(|t| (t, block::extract(t))) {
-            None => "missing",
-            Some((_, Err(_) | Ok(None))) => "missing",
-            Some((t, Ok(Some(found)))) if lock::hash(found) == b.hash => {
-                match block::remove(t) {
-                    Ok(new) => block_writes.push((b.file.clone(), new)),
-                    Err(m) => return report.refuse(format!("{}: {m}", b.file)),
-                }
-                past("removed", "would-remove")
-            }
-            Some(_) => {
-                kept = true;
-                "kept-modified"
-            }
-        };
-        report.item("block", &b.file, None, state);
-    }
-    report.item("lock", LOCK_PATH, None, past("removed", "would-remove"));
+    run.report.item(
+        "lock",
+        LOCK_PATH,
+        None,
+        past(dry_run, "removed", "would-remove"),
+    );
 
     if !dry_run {
-        let result = (|| {
-            for path in &deletes {
-                delete(&env.root, path)?;
-            }
-            for (file, s) in &shared {
-                if s.doc.is_empty_container() && s.text.is_some() {
-                    // Nothing but what the install added: the file goes with it.
-                    delete(&env.root, file)?;
-                } else if s.text.is_some() {
-                    save_settings(&env.root, file, s)?;
-                }
-            }
-            for (file, text) in &block_writes {
-                if text.trim().is_empty() {
-                    delete(&env.root, file)?;
-                } else {
-                    write(&env.root, file, text)?;
-                }
-            }
-            // The lock goes last.
-            delete(&env.root, LOCK_PATH)
-        })();
-        if let Err(m) = result {
-            return report.refuse(m);
+        if let Err(m) = run.apply() {
+            return run.report.refuse(m);
         }
     }
-    if kept {
+    let mut report = run.report;
+    if run.kept {
         report.notice(
             NoticeSeverity::Warning,
             "a file or entry a person changed was left in place; remove it by hand".to_string(),
@@ -1095,6 +1182,92 @@ fn uninstall(env: &Env, lock: &Lock, dry_run: bool) -> HarnessReport {
         report = report.drift();
     }
     report
+}
+
+impl UninstallRun<'_> {
+    fn files(&mut self) -> Result<(), String> {
+        for (path, locked) in &self.lock.files {
+            let state = match read(&self.env.root, path)? {
+                None => "missing",
+                Some(t) if lock::hash(&t) == *locked => {
+                    self.deletes.push(path.clone());
+                    past(self.dry_run, "removed", "would-remove")
+                }
+                Some(_) => {
+                    self.kept = true;
+                    "kept-modified"
+                }
+            };
+            self.report.item("file", path, None, state);
+        }
+        Ok(())
+    }
+
+    fn entries(&mut self) -> Result<(), String> {
+        for e in &self.lock.entries {
+            let s = shared_settings(&self.env.root, &mut self.shared, &e.file)?;
+            let state = match settings::find(&s.doc, &e.event, &e.matcher, &e.handler) {
+                None => "missing",
+                Some(h) if lock::hash(&h.compact()) == e.hash => {
+                    settings::remove(&mut s.doc, &e.event, &e.matcher, &e.handler);
+                    past(self.dry_run, "removed", "would-remove")
+                }
+                Some(_) => {
+                    self.kept = true;
+                    "kept-modified"
+                }
+            };
+            self.report.item("entry", &e.file, Some(&e.key()), state);
+        }
+        Ok(())
+    }
+
+    fn blocks(&mut self) -> Result<(), String> {
+        for b in &self.lock.blocks {
+            let text = read(&self.env.root, &b.file)?;
+            let state = match text.as_deref().map(|t| (t, block::extract(t))) {
+                None => "missing",
+                Some((_, Err(_) | Ok(None))) => "missing",
+                Some((t, Ok(Some(found)))) if lock::hash(found) == b.hash => {
+                    match block::remove(t) {
+                        Ok(new) => self.block_writes.push((b.file.clone(), new)),
+                        Err(m) => return Err(format!("{}: {m}", b.file)),
+                    }
+                    past(self.dry_run, "removed", "would-remove")
+                }
+                Some(_) => {
+                    self.kept = true;
+                    "kept-modified"
+                }
+            };
+            self.report.item("block", &b.file, None, state);
+        }
+        Ok(())
+    }
+
+    fn apply(&self) -> Result<(), String> {
+        let root = &self.env.root;
+        for path in &self.deletes {
+            delete(root, path)?;
+        }
+        for (file, s) in &self.shared {
+            if s.doc.is_empty_container() && s.text.is_some() {
+                // Nothing but what the install added: the file goes with it.
+                delete(root, file)?;
+            } else if s.text.is_some() {
+                save_settings(root, file, s)?;
+            }
+        }
+        for (file, text) in &self.block_writes {
+            if text.trim().is_empty() {
+                delete(root, file)?;
+            } else {
+                write(root, file, text)?;
+            }
+        }
+        // The lock goes last.
+        delete(root, LOCK_PATH)
+    }
 }
 
 // --------------------------------------------------------------- adapters
@@ -1191,6 +1364,77 @@ fn authority_checks(config: &urzua_core::config::Config) -> Vec<(Level, &'static
     out
 }
 
+/// Whether the harness is installed and matches its lock.
+fn installed_checks(env: &Env) -> Vec<(Level, &'static str, String)> {
+    let mut out = Vec::new();
+    match load_lock(env) {
+        Err(m) => out.push((Level::Warn, "harness-installed", m)),
+        Ok(None) => out.push((
+            Level::Warn,
+            "harness-installed",
+            format!(
+                "harness is declared but {LOCK_PATH} does not exist: run `urzua harness install`"
+            ),
+        )),
+        Ok(Some(lock)) => {
+            let report = status(env, &lock);
+            let drifted: Vec<String> = report
+                .items
+                .iter()
+                .filter(|i| i.state != "ok")
+                .map(|i| {
+                    format!(
+                        "{} {} is {}",
+                        i.kind,
+                        i.key.as_deref().unwrap_or(&i.path),
+                        i.state
+                    )
+                })
+                .collect();
+            if drifted.is_empty() {
+                out.push((
+                    Level::Ok,
+                    "harness-installed",
+                    format!(
+                        "the bundle ({}) is installed and matches its lock",
+                        lock.bundle_version
+                    ),
+                ));
+            }
+            for d in drifted {
+                out.push((
+                    Level::Warn,
+                    "harness-installed",
+                    format!("{d} (run `urzua harness status`; `urzua harness update` repairs it)"),
+                ));
+            }
+        }
+    }
+    out
+}
+
+/// A hand-copied first-generation editor hook wired beside the bundle's.
+fn legacy_hook_checks(env: &Env, adapters: &[String]) -> Vec<(Level, &'static str, String)> {
+    let mut out = Vec::new();
+    if let Ok(want) = desired(env, adapters) {
+        let files: std::collections::BTreeSet<&String> =
+            want.entries.iter().map(|(f, _)| f).collect();
+        for file in files {
+            if let Ok(s) = load_settings(&env.root, file) {
+                let legacy = settings::legacy_commands(&s.doc);
+                if !legacy.is_empty() {
+                    out.push((
+                        Level::Warn,
+                        "harness-legacy-hook",
+                        settings::legacy_warning(file, &legacy),
+                    ));
+                }
+            }
+        }
+    }
+    out
+}
+
 /// What `urzua doctor` reports about the harness, when `harness` is declared:
 /// unknown keys, guardrails no adapter provides, whether and how well it is
 /// installed, and the escape hatch of a guardrail set to `on_unjudged: deny`.
@@ -1234,65 +1478,8 @@ pub(crate) fn doctor_checks(
             out.push((Level::Warn, "harness-config", unknown_adapter(name)));
         }
     }
-    match load_lock(&env) {
-        Err(m) => out.push((Level::Warn, "harness-installed", m)),
-        Ok(None) => out.push((
-            Level::Warn,
-            "harness-installed",
-            format!(
-                "harness is declared but {LOCK_PATH} does not exist: run `urzua harness install`"
-            ),
-        )),
-        Ok(Some(lock)) => {
-            let report = status(&env, &lock);
-            let drifted: Vec<String> = report
-                .items
-                .iter()
-                .filter(|i| i.state != "ok")
-                .map(|i| {
-                    format!(
-                        "{} {} is {}",
-                        i.kind,
-                        i.key.as_deref().unwrap_or(&i.path),
-                        i.state
-                    )
-                })
-                .collect();
-            if drifted.is_empty() {
-                out.push((
-                    Level::Ok,
-                    "harness-installed",
-                    format!(
-                        "the bundle ({}) is installed and matches its lock",
-                        lock.bundle_version
-                    ),
-                ));
-            }
-            for d in drifted {
-                out.push((
-                    Level::Warn,
-                    "harness-installed",
-                    format!("{d} (run `urzua harness status`; `urzua harness update` repairs it)"),
-                ));
-            }
-        }
-    }
-    if let Ok(want) = desired(&env, &adapters) {
-        let files: std::collections::BTreeSet<&String> =
-            want.entries.iter().map(|(f, _)| f).collect();
-        for file in files {
-            if let Ok(s) = load_settings(root, file) {
-                let legacy = settings::legacy_commands(&s.doc);
-                if !legacy.is_empty() {
-                    out.push((
-                        Level::Warn,
-                        "harness-legacy-hook",
-                        settings::legacy_warning(file, &legacy),
-                    ));
-                }
-            }
-        }
-    }
+    out.extend(installed_checks(&env));
+    out.extend(legacy_hook_checks(&env, &adapters));
     for g in GUARDRAILS {
         if harness.enabled(g.name)
             && harness.on_unjudged(g.name) == urzua_core::harness::OnUnjudged::Deny

@@ -265,6 +265,19 @@ impl Report for DoctorReport {
     }
 }
 
+impl DoctorCheck {
+    /// A check with no hook layer or state.
+    fn new(check: &str, status: DoctorStatus, message: String) -> Self {
+        DoctorCheck {
+            check: check.to_string(),
+            status,
+            message,
+            layer: None,
+            state: None,
+        }
+    }
+}
+
 /// Emits one report, JSON, unconditionally (ADR-23) -- BUG-4 was `doctor`
 /// printing `[OK]`/`[WARN]`/`[ERROR]` lines instead, the one command that
 /// hadn't caught up with every other command's output contract.
@@ -280,16 +293,14 @@ pub fn run(config: Option<PathBuf>) -> ExitCode {
     let config_path = config.unwrap_or_else(|| crate::discovery::default_config_path(&repo_root));
 
     if !config_path.exists() {
-        checks.push(DoctorCheck {
-            check: "config-exists".to_string(),
-            layer: None,
-            state: None,
-            status: DoctorStatus::Error,
-            message: format!(
+        checks.push(DoctorCheck::new(
+            "config-exists",
+            DoctorStatus::Error,
+            format!(
                 "{} does not exist -- run `urzua init` to adopt this corpus",
                 config_path.display()
             ),
-        });
+        ));
         return emit(&DoctorReport {
             status: DoctorStatus::Error,
             checks,
@@ -297,42 +308,36 @@ pub fn run(config: Option<PathBuf>) -> ExitCode {
             exit_code: 2,
         });
     }
-    checks.push(DoctorCheck {
-        check: "config-exists".to_string(),
-        layer: None,
-        state: None,
-        status: DoctorStatus::Ok,
-        message: format!("{} exists", config_path.display()),
-    });
+    checks.push(DoctorCheck::new(
+        "config-exists",
+        DoctorStatus::Ok,
+        format!("{} exists", config_path.display()),
+    ));
 
     let config = match load_config(&config_path) {
         Ok(c) => {
-            checks.push(DoctorCheck {
-                check: "config-parses".to_string(),
-                layer: None,
-                state: None,
-                status: DoctorStatus::Ok,
+            checks.push(DoctorCheck::new(
+                "config-parses",
+                DoctorStatus::Ok,
                 // The harness table keeps its unrecognized keys as problems
                 // rather than refusing to load (`ADR-89`); `harness-config`
                 // below names them, so this line must not deny them.
-                message: match c.harness.as_ref().map_or(0, |h| h.problems.len()) {
+                match c.harness.as_ref().map_or(0, |h| h.problems.len()) {
                     0 => "config parses (no unrecognized keys)".to_string(),
                     n => format!(
                         "config parses ({n} unrecognized harness {}, named under harness-config)",
                         if n == 1 { "entry" } else { "entries" }
                     ),
                 },
-            });
+            ));
             c
         }
         Err(e) => {
-            checks.push(DoctorCheck {
-                check: "config-parses".to_string(),
-                layer: None,
-                state: None,
-                status: DoctorStatus::Error,
-                message: format!("config does not parse: {e}"),
-            });
+            checks.push(DoctorCheck::new(
+                "config-parses",
+                DoctorStatus::Error,
+                format!("config does not parse: {e}"),
+            ));
             return emit(&DoctorReport {
                 status: DoctorStatus::Error,
                 checks,
@@ -342,14 +347,64 @@ pub fn run(config: Option<PathBuf>) -> ExitCode {
         }
     };
 
+    config_shape_checks(&config, &repo_root, &mut checks);
+    checks.push(ci_wired_check(&repo_root));
+
+    // Local hook layers (ADR-71, MILE-179). Warn, not error, when absent:
+    // a local layer is a convenience and only CI is the guarantee, so a clone
+    // without hooks is reported but does not fail doctor. A hook directory
+    // that cannot be read is an error: not-knowing is not the same as absent.
+    checks.extend(hook_checks(&repo_root));
+
+    // The agent harness (ADR-89), when the configuration declares one.
+    for (level, check, message) in crate::harness::doctor_checks(&repo_root, &config) {
+        checks.push(DoctorCheck::new(
+            check,
+            match level {
+                crate::harness::Level::Ok => DoctorStatus::Ok,
+                crate::harness::Level::Warn => DoctorStatus::Warn,
+            },
+            message,
+        ));
+    }
+
+    emit(&report_from(checks))
+}
+
+/// The report over every check: its status is the worst one, and an error
+/// exits 1.
+fn report_from(checks: Vec<DoctorCheck>) -> DoctorReport {
+    let has_error = checks.iter().any(|c| c.status == DoctorStatus::Error);
+    let has_warn = checks.iter().any(|c| c.status == DoctorStatus::Warn);
+    let status = if has_error {
+        DoctorStatus::Error
+    } else if has_warn {
+        DoctorStatus::Warn
+    } else {
+        DoctorStatus::Ok
+    };
+
+    DoctorReport {
+        status,
+        checks,
+        notices: Vec::new(),
+        exit_code: if has_error { 1 } else { 0 },
+    }
+}
+
+/// The checks on what the configuration declares: record types, enabled
+/// rules, and each type's directories and required fields.
+fn config_shape_checks(
+    config: &urzua_core::config::Config,
+    repo_root: &std::path::Path,
+    checks: &mut Vec<DoctorCheck>,
+) {
     if config.record_types.is_empty() {
-        checks.push(DoctorCheck {
-            check: "record-types-declared".to_string(),
-            layer: None,
-            state: None,
-            status: DoctorStatus::Error,
-            message: "no record_types declared -- check will never examine anything".to_string(),
-        });
+        checks.push(DoctorCheck::new(
+            "record-types-declared",
+            DoctorStatus::Error,
+            "no record_types declared -- check will never examine anything".to_string(),
+        ));
     }
 
     // Every rule is opt-in (ADR-53): a config enabling none makes `check`
@@ -360,64 +415,55 @@ pub fn run(config: Option<PathBuf>) -> ExitCode {
         .values()
         .all(|r| r.level == urzua_core::config::RuleLevel::Off)
     {
-        checks.push(DoctorCheck {
-            check: "rules-enabled".to_string(),
-            layer: None,
-            state: None,
-            status: DoctorStatus::Error,
-            message:
-                "no rule is enabled under `rules:` -- check will report not-run and examine nothing"
-                    .to_string(),
-        });
+        checks.push(DoctorCheck::new(
+            "rules-enabled",
+            DoctorStatus::Error,
+            "no rule is enabled under `rules:` -- check will report not-run and examine nothing"
+                .to_string(),
+        ));
     }
 
-    let type_names = config.sorted_type_names();
-    for name in type_names {
+    for name in config.sorted_type_names() {
         let cfg = &config.record_types[name];
         for dir in cfg.all_dirs() {
             if repo_root.join(dir).is_dir() {
-                checks.push(DoctorCheck {
-                    check: "record-type-dir".to_string(),
-                    layer: None,
-                    state: None,
-                    status: DoctorStatus::Ok,
-                    message: format!("record type '{name}' -> {dir} exists"),
-                });
+                checks.push(DoctorCheck::new(
+                    "record-type-dir",
+                    DoctorStatus::Ok,
+                    format!("record type '{name}' -> {dir} exists"),
+                ));
             } else {
-                checks.push(DoctorCheck {
-                    check: "record-type-dir".to_string(),
-                    layer: None,
-                    state: None,
-                    status: DoctorStatus::Error,
-                    message: format!(
-                        "record type '{name}' declares dir '{dir}', which does not exist"
-                    ),
-                });
+                checks.push(DoctorCheck::new(
+                    "record-type-dir",
+                    DoctorStatus::Error,
+                    format!("record type '{name}' declares dir '{dir}', which does not exist"),
+                ));
             }
         }
         if cfg.required_fields.is_empty() {
-            checks.push(DoctorCheck {
-                check: "record-type-required-fields".to_string(),
-                layer: None,
-                state: None,
-                status: DoctorStatus::Warn,
-                message: format!(
+            checks.push(DoctorCheck::new(
+                "record-type-required-fields",
+                DoctorStatus::Warn,
+                format!(
                     "record type '{name}' has no required_fields -- field.quality and field.pending will never fire for it"
                 ),
-            });
+            ));
         }
     }
+}
 
-    // Every workflow, not one by name. Reading `ci.yml` alone reported that a
-    // repository was unwired when its invocation lived in a differently named
-    // workflow (BUG-91).
-    //
-    // No error swallowed. "No workflow invokes the checker" and "the workflows
-    // could not be read" are different answers, and collapsing them reports
-    // confidently about a directory never opened -- the defect this check was
-    // just fixed for, one level down. Only an absent directory is a warning.
-    let workflows_dir = repo_root.join(".github/workflows");
-    let ci_wired: Result<bool, String> = match std::fs::read_dir(&workflows_dir) {
+/// Whether any workflow under `.github/workflows` invokes the checker.
+///
+/// Every workflow, not one by name. Reading `ci.yml` alone reported that a
+/// repository was unwired when its invocation lived in a differently named
+/// workflow (BUG-91).
+///
+/// No error swallowed. "No workflow invokes the checker" and "the workflows
+/// could not be read" are different answers, and collapsing them reports
+/// confidently about a directory never opened -- the defect this check was
+/// just fixed for, one level down. Only an absent directory is a warning.
+fn workflows_invoke_checker(workflows_dir: &std::path::Path) -> Result<bool, String> {
+    match std::fs::read_dir(workflows_dir) {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(false),
         Err(e) => Err(format!("could not read {}: {e}", workflows_dir.display())),
         Ok(entries) => {
@@ -457,70 +503,31 @@ pub fn run(config: Option<PathBuf>) -> ExitCode {
                 None => Ok(found),
             }
         }
-    };
-    match &ci_wired {
-        Err(message) => checks.push(DoctorCheck {
-            check: "ci-wired".to_string(),
-            layer: None,
-            state: None,
-            status: DoctorStatus::Error,
-            message: format!(
+    }
+}
+
+fn ci_wired_check(repo_root: &std::path::Path) -> DoctorCheck {
+    let workflows_dir = repo_root.join(".github/workflows");
+    match workflows_invoke_checker(&workflows_dir) {
+        Err(message) => DoctorCheck::new(
+            "ci-wired",
+            DoctorStatus::Error,
+            format!(
                 "{message} -- cannot tell whether the checker is wired in, which is not the same as it not being"
             ),
-        }),
-        Ok(true) => checks.push(DoctorCheck {
-            check: "ci-wired".to_string(),
-            layer: None,
-            state: None,
-            status: DoctorStatus::Ok,
-            message: "a workflow invokes `urzua check` or the urzua-gate action".to_string(),
-        }),
-        Ok(false) => checks.push(DoctorCheck {
-            check: "ci-wired".to_string(),
-            layer: None,
-            state: None,
-            status: DoctorStatus::Warn,
-            message: format!(
+        ),
+        Ok(true) => DoctorCheck::new(
+            "ci-wired",
+            DoctorStatus::Ok,
+            "a workflow invokes `urzua check` or the urzua-gate action".to_string(),
+        ),
+        Ok(false) => DoctorCheck::new(
+            "ci-wired",
+            DoctorStatus::Warn,
+            format!(
                 "no workflow in {} invokes `urzua check` or the urzua-gate action -- a check that exists but is never run reports nothing to anyone",
                 workflows_dir.display()
             ),
-        }),
+        ),
     }
-
-    // Local hook layers (ADR-71, MILE-179). Warn, not error, when absent:
-    // a local layer is a convenience and only CI is the guarantee, so a clone
-    // without hooks is reported but does not fail doctor. A hook directory
-    // that cannot be read is an error: not-knowing is not the same as absent.
-    checks.extend(hook_checks(&repo_root));
-
-    // The agent harness (ADR-89), when the configuration declares one.
-    for (level, check, message) in crate::harness::doctor_checks(&repo_root, &config) {
-        checks.push(DoctorCheck {
-            check: check.to_string(),
-            layer: None,
-            state: None,
-            status: match level {
-                crate::harness::Level::Ok => DoctorStatus::Ok,
-                crate::harness::Level::Warn => DoctorStatus::Warn,
-            },
-            message,
-        });
-    }
-
-    let has_error = checks.iter().any(|c| c.status == DoctorStatus::Error);
-    let has_warn = checks.iter().any(|c| c.status == DoctorStatus::Warn);
-    let status = if has_error {
-        DoctorStatus::Error
-    } else if has_warn {
-        DoctorStatus::Warn
-    } else {
-        DoctorStatus::Ok
-    };
-
-    emit(&DoctorReport {
-        status,
-        checks,
-        notices: Vec::new(),
-        exit_code: if has_error { 1 } else { 0 },
-    })
 }
