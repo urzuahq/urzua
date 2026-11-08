@@ -262,23 +262,31 @@ never accept a record or touch a guardrail rests on this file and on the person 
   The post-command check reports it and cannot stop it. It reports a gated status move, a changed protected
   path (a gitignored one such as `.claude/settings.local.json` included, found by content hash from the
   baseline `session-start` records), a record hidden with `git update-index --assume-unchanged` and a commit
-  the same command made. It reports a change once: the same
-  change made again, or one that is still there at the next check, is silent. That is deliberate;
+  the same command made on the checked-out branch (a commit on another branch or in a sibling worktree, and a
+  push of another ref, are not seen). It reports a change once: the same
+  change made again, or one that is still there at the next check, is silent. That is deliberate. An MCP tool
+  that runs a shell command is not a Bash call: it is neither judged nor reported;
 - skipping the commit hook with `git commit --no-verify`;
 - a pull request that changes its own workflow, since the gate runs from the head commit's workflow;
 - an agent acting under the maintainer's token: CI proves authorship, not who decided. A distinct agent
   identity with `CODEOWNERS` and branch protection is a future option, not configured;
 - what the editor hook cannot read: a hard link is resolved on Unix only (elsewhere a write is judged by its
   own name), names are not Unicode-normalised, an MCP tool whose input has no string a path can be read from
-  is not an edit it can see, a change made before `session-start` took the protected baseline is not
+  is not an edit it can see, an MCP tool that applies a patch or runs a shell command is an unparsed route, a change made before `session-start` took the protected baseline is not
   reported, the agent's user-level and local settings are neither protected nor read, and a link swapped
   between the judgement and the write is not seen;
 - a Bash command that writes what the edit tools cannot: `.urzua/cache`, `.urzua/harness.lock`, the override
   log, `.git/hooks` and `.git/config`. Nothing reports it;
 - without `python3` or the translator, the editor hook's command reads `.urzua/config.yaml` as text and
   refuses every edit if it finds `acceptance` or `protected-paths` enabled without `on_unjudged: allow`; a
-  configuration that scan misreads is read as not closed;
-- a nested repository with its own `.urzua/config.yaml`: the outermost one judges.
+  configuration that scan misreads is read as not closed, and an invalid or empty `.urzua/config.yaml` (only
+  a Bash write makes one, and it is reported) lets every edit through with a message;
+- a repository the session did not start in can add restrictions, never remove them: an edit is judged by
+  the session's repository and by every governed repository that holds the file, and a deny from any wins;
+- the agent-instructions block in this file is not a protected path: an edit tool can remove it with no
+  refusal, and only `urzua harness status` reports it modified;
+- a waiver record is not gated, so an edit-tool waiver can silence the CI gate for a gated move made by a
+  Bash command.
 
 Do none of these.
 
