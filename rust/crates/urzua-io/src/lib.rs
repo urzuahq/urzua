@@ -967,6 +967,40 @@ pub fn commit_for_line_in(
         .map(|s| s.to_string()))
 }
 
+/// The commits that touched `path` after `since` (exclusive), newest first, as
+/// `<short hash> <subject>`, at most 20: what `urzua reverify --pin-only` shows
+/// for an unpinned locator that drifted since its `Realized-by` line was last
+/// touched (`ADR-97` section 4). A git failure is an error, never "none".
+pub fn commits_touching_since(
+    repo_root: &Path,
+    since: &str,
+    path: &str,
+) -> Result<Vec<String>, String> {
+    let output = Command::new("git")
+        .args([
+            "--literal-pathspecs",
+            "log",
+            "--max-count=20",
+            "--format=%h %s",
+            &format!("{since}..HEAD"),
+            "--",
+            path,
+        ])
+        .current_dir(repo_root)
+        .output()
+        .map_err(|e| format!("could not run git log on {path}: {e}"))?;
+    if !output.status.success() {
+        return Err(format!(
+            "git log on {path} failed: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
+    }
+    Ok(String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .map(str::to_string)
+        .collect())
+}
+
 /// The commit that last touched a whole file -- used for locator paths,
 /// which (unlike a header field) aren't a single line (ADR-0032).
 pub fn last_commit_for_path(repo_root: &Path, path: &Path) -> Result<Option<String>, String> {

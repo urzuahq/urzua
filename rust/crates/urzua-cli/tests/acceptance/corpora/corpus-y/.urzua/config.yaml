@@ -1,0 +1,29 @@
+schema_version: 2
+fail_on: warning
+rules:
+  header.required-fields: error
+  embodiment.claim-expired:
+    level: info
+    anchor_field: Last-audited
+    require_pin: [code, test]
+    max_batch: 3
+    periods:
+      - {type: milestone, status: [Done], days: 30}
+  embodiment.claim-renewal-unattested: warn
+record_types:
+  milestone:
+    dir: docs/milestones
+    prefix: MILE
+    header_shape: yaml-frontmatter
+    required_fields: [Status]
+    known_fields: [Realized-by, Last-audited]
+    statuses:
+      values: [Planned, Done]
+      success: [Done]
+    revision_log:
+      marker: "**Revision log**"
+      required: true
+      classes: [substantive, structural]
+      class_column: Class
+      date_column: Date
+      tool_class: structural

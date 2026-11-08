@@ -2,7 +2,7 @@
 Stable-Id: 01M20SH9CXA18HFPABZJQY795D
 Status: Accepted
 Date: 2026-09-08
-Version: '0.22'
+Version: '0.23'
 Author: beauwilliams
 Subject: 'Repository agent guardrails -- mechanisms that constrain or guide an AI agent working in this repo; today, `AGENTS.md` and the drafting commands in `.claude/commands/`.'
 Implements: MILE-36
@@ -149,11 +149,14 @@ the engine and an adapter per agent that only translates. The contract is `SPEC-
   vendor names; the bundle directory, where an adapter names its vendor by design, is outside `src/`.
 - **Commands (`MILE-199`).** The install generates `.claude/commands/<type>.md` for every record type the
   configuration declares from one generic template (the type name and directory are the only things filled
-  in; no command names a field, status or section), and installs `/amend`, `/repin` and `/done` and the
+  in; no command names a field, status or section), and installs `/amend`, `/repin`, `/reverify` and `/done` and the
   helper `.claude/hooks/urzua-record.sh` they call (through `bash`, because the install does not set an executable bit). `/amend` only adds: it refuses any change to the Decision
   text, a removed list item or blank line included, and requires an added `## Amendment (date)` section and
   revision-log row. `/repin` refuses an empty reason, lists the stale pins, runs
   `urzua fix --rebaseline --apply --actor agent` and prints the `Re-pin:` line for the pull request body.
+  `/reverify` (`ADR-97`) refuses an empty reason, lists the `urzua reverify` review, runs
+  `urzua reverify --apply --actor agent` and prints the `Pinned:` (when it wrote a first pin) and `Re-verified:`
+  lines for the pull request body; it holds no schema knowledge and a changed pin is still `/repin`'s.
   `/done` runs `urzua fix --apply --actor agent` and never writes a state itself (`ADR-70`, amendment of
   2026-11-05); it stops when the engine computes nothing, and `fix` refuses a state an `authority` gate names.
   A type named like a lifecycle command is refused at install, and `urzua harness status` reports a command
@@ -281,3 +284,4 @@ and this section claims only what each place does.
 > | 2026-11-06 | Bumped to `0.20`. `harness install` reports a refused install honestly (every item `would-create`, `would-merge` or `would-write`, nothing `created`, `merged` or `written`) and no longer advises `update --force`, which needs an install; `install` and `doctor` (`harness-legacy-hook`) warn on a settings entry whose command names a hand-copied first-generation editor hook (a script with `record-edit` in its name). **Why:** Phase 0 hardening from a second adopter switchover -- a conflict reported success states for nothing written, and the old and new editor hooks both stayed wired. | **substantive** |
 > | 2026-11-06 | Bumped to `0.21`. The editor hook also covers NotebookEdit and any MCP tool whose input carries a file path and content (an MCP call it cannot read is refused under `on_unjudged: deny` only on a protected path or a gated record); gate matching uses Unicode case folding and resolves a hard link to the protected or gated file it shares an inode with (Unix); the post-command check reports a change to a gitignored protected file by content hash. The accepted-risk list is rewritten to what remains, and says a change is reported once. **Why:** the maintainer's decision of 2026-11-06 to close the guardrail gaps left by pull request 378 in Phase 0, under `ADR-89`. | **substantive** |
 > | 2026-11-07 | Bumped to `0.22`. The third review of the harness (`ADR-89` amendment of 2026-11-07): the settings command finds the project from `CLAUDE_PROJECT_DIR` or the outermost configuration, not the nearest git repository, and refuses an edit under `on_unjudged: deny` when it cannot run the translator; an edit is judged by the outermost governed repository with symlinks followed to the end, a dangling link included; MCP calls are read for every path-like string; the edit tools are refused for `.urzua/cache`, the lock, the override log and the git hooks; session-start compares the installed files, hook entries and `disableAllHooks` with the lock; the post-command check lists a record hidden with `--assume-unchanged`; the accepted-risk statement gains the Bash write to the harness's own files, the unreadable configuration in the shell fallback and the nested repository with its own configuration. **Why:** the third review found the wrapper failing open outside the project root, a dangling link and a nested repository escaping the gates, and several silent routes. | **substantive** |
+> | 2026-11-08 | Bumped to `0.23`. Adds the `/reverify` command and the `reverify` verb of the helper (`ADR-97` section 4, `MILE-129`): it refuses an empty reason, lists the review, passes `--actor agent` and prints the `Pinned:` and `Re-verified:` lines for the pull request body. **Why:** `ADR-97` lists the command beside `/repin`; the engine PR built `urzua reverify` without it. | **substantive** |

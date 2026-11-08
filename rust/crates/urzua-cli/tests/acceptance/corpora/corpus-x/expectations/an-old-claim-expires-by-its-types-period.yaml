@@ -1,0 +1,15 @@
+id: an-old-claim-expires-by-its-types-period
+corpus: corpus-x
+# The milestone's audit date is 2020-01-01 against a 30-day period for a Done
+# milestone: expired, with the review report as its action. The ADR has the same
+# date under a 36500-day period and is silent: the period is per type and status.
+invocation: [check]
+expect_exit: 1
+expect_findings:
+  - rule: embodiment.claim-expired
+    severity: warning
+    file: docs/milestones/MILE-1-expired-claim.md
+    message_contains: 'longer than the 30-day period'
+    suggested_action: {kind: run-command, target: {argv: [urzua, reverify, --ids, docs/milestones/MILE-1-expired-claim.md]}}
+expect_no_findings:
+  - {rule: embodiment.claim-expired, file: docs/adr/ADR-1-long-period.md}

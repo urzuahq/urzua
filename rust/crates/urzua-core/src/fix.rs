@@ -777,7 +777,7 @@ pub fn apply_rebaseline(
 /// class column, the narrative in the first remaining column, any other cell
 /// empty. A log with no such column left is refused, as one with no rows to
 /// append after is.
-fn log_row(
+pub(crate) fn log_row(
     prefix: &str,
     layout: crate::rules::LogLayout,
     shape: &crate::config::RevisionLogShape,

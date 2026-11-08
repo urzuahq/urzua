@@ -1,0 +1,9 @@
+fixtures:
+  - path: .urzua/config.yaml
+    irregularity: the config the corpus is validated under; declares embodiment.claim-expired (advisory) and embodiment.claim-renewal-unattested; not a record.
+  - path: src/a.rs
+    irregularity: none -- the source file the claims cite; not a record.
+  - path: docs/milestones/MILE-1-audited.md
+    irregularity: none at the base commit; the case's change moves its Last-audited date forward with no Re-verified row.
+  - path: docs/milestones/MILE-2-audited.md
+    irregularity: none at the base commit; the case's change moves its Last-audited date forward and adds the Re-verified row dated that day.

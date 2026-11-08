@@ -536,6 +536,25 @@ pub struct RuleSetting {
     /// `embodiment.consistency`; omitted means no age limit.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub claim_max_age_days: Option<u32>,
+    /// A declared date field holding the day a claim was last re-verified
+    /// (`YYYY-MM-DD`), written only by `urzua reverify` (`ADR-97`). Only
+    /// meaningful to `embodiment.claim-expired`; optional.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub anchor_field: Option<String>,
+    /// The evidence categories whose locators must be pinned before a claim is
+    /// renewed (`ADR-97`), as the `embodiment` declaration names them. Only
+    /// meaningful to `embodiment.claim-expired`; omitted means none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub require_pin: Option<Vec<String>>,
+    /// The most records one `urzua reverify --apply` may name (`ADR-97`). Only
+    /// meaningful to `embodiment.claim-expired`; omitted means 1.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_batch: Option<u32>,
+    /// The expiry period per record type, status and evidence tier
+    /// (`ADR-97`, `ADR-64`). Only meaningful to `embodiment.claim-expired`,
+    /// which needs at least one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub periods: Option<Vec<ClaimPeriod>>,
     /// `Embodiment` values a human sets that no evidence can compute
     /// (`Deprecated`, `Inactive`): a record stating one is not reported as
     /// drift (`MILE-148`). Only meaningful to `embodiment.consistency`;
@@ -604,6 +623,27 @@ pub struct RuleSetting {
     /// writes the snapshot.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub issue_refs: Option<IssueRefs>,
+}
+
+/// One `periods` entry of `embodiment.claim-expired` (`ADR-97`): a claim of a
+/// record of `type` (optionally in one of `status`, optionally computing to
+/// `tier`) expires `days` after its anchor. `spread_days` lengthens the first
+/// period of a record with no recorded audit date by a deterministic offset of
+/// `0..=spread_days` days; `level` is the entry's own, below the rule's.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ClaimPeriod {
+    #[serde(rename = "type")]
+    pub record_type: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tier: Option<String>,
+    pub days: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spread_days: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub level: Option<RuleLevel>,
 }
 
 /// `citation.issue-exists`'s structured option (`MILE-143`, `ADR-64`).
@@ -1576,6 +1616,12 @@ pub enum ConfigError {
     },
     #[error("rule '{rule}' option 'drift_audit_field' {reason}")]
     InvalidDriftAuditField { rule: String, reason: String },
+    #[error("rule '{rule}' option '{option}' {reason}")]
+    InvalidClaimExpiry {
+        rule: String,
+        option: &'static str,
+        reason: String,
+    },
     #[error("embodiment: {reason}")]
     InvalidEmbodiment { reason: String },
     #[error("locator_resolvers: {reason}")]
@@ -1843,6 +1889,169 @@ fn dir_escapes_repo(dir: &str) -> bool {
         })
 }
 
+/// Why an `embodiment.claim-expired` declaration cannot work (`ADR-97`): every
+/// entry, the pin categories, the batch size and the anchor are checked at load
+/// so a declaration that matches nothing or reads nothing is refused, never
+/// silently ignored.
+fn claim_expiry_problems(
+    name: &str,
+    setting: &RuleSetting,
+    config: &Config,
+) -> Result<(), ConfigError> {
+    let bad = |option: &'static str, reason: String| ConfigError::InvalidClaimExpiry {
+        rule: name.to_string(),
+        option,
+        reason,
+    };
+    if config
+        .rules
+        .get(crate::rules::RULE_EMBODIMENT_CONSISTENCY)
+        .is_some_and(|s| s.level != RuleLevel::Off && s.claim_max_age_days.is_some())
+    {
+        return Err(bad(
+            "periods",
+            format!(
+                "is declared together with {}'s claim_max_age_days: both would report the same claim twice, so declare one",
+                crate::rules::RULE_EMBODIMENT_CONSISTENCY
+            ),
+        ));
+    }
+    let periods = setting.periods.as_deref().unwrap_or_default();
+    if periods.is_empty() {
+        return Err(bad(
+            "periods",
+            "is missing or empty: the rule would expire nothing; give at least one entry"
+                .to_string(),
+        ));
+    }
+    let tiers: Vec<&str> = config.embodiment.evidence_states().collect();
+    for (n, entry) in periods.iter().enumerate() {
+        let at = format!("entry {n} (type '{}')", entry.record_type);
+        let Some(type_config) = config.record_types.get(&entry.record_type) else {
+            return Err(bad(
+                "periods",
+                format!("{at} names a record type that is not declared"),
+            ));
+        };
+        if entry.days == 0 {
+            return Err(bad(
+                "periods",
+                format!("{at} has days 0; a period is 1 day or more"),
+            ));
+        }
+        if entry.level == Some(RuleLevel::Off) {
+            return Err(bad(
+                "periods",
+                format!("{at} has the level 'off'; use 'info', 'warn' or 'error' (an entry is removed to switch it off)"),
+            ));
+        }
+        if let Some(statuses) = &entry.status {
+            if statuses.is_empty() {
+                return Err(bad("periods", format!("{at} has an empty status list")));
+            }
+            let declared = type_config.status_decl().map(|d| d.values);
+            for status in statuses {
+                if !declared.as_ref().is_some_and(|v| v.contains(status)) {
+                    return Err(bad(
+                        "periods",
+                        format!("{at} names the status '{status}', which the type does not declare in statuses.values"),
+                    ));
+                }
+            }
+        }
+        if let Some(tier) = &entry.tier {
+            if !tiers.contains(&tier.as_str()) {
+                return Err(bad(
+                    "periods",
+                    format!(
+                        "{at} names the tier '{tier}', which is not a state of the embodiment declaration ({})",
+                        tiers.join(", ")
+                    ),
+                ));
+            }
+        }
+        let locator_field = type_config.relation_field(RelationRole::EmbodimentLocator);
+        let declares = |field: &str| {
+            type_config
+                .declared_fields()
+                .iter()
+                .any(|f| f.as_str() == field)
+        };
+        if !declares(locator_field) {
+            return Err(bad(
+                "periods",
+                format!("{at} names a type that declares no '{locator_field}' field, so it has no claim to expire"),
+            ));
+        }
+        if let Some(anchor) = setting.anchor_field.as_deref() {
+            if !declares(anchor.trim()) {
+                return Err(bad(
+                    "anchor_field",
+                    format!("names '{anchor}', which {at} does not declare (required_fields or known_fields)"),
+                ));
+            }
+        }
+    }
+    if setting
+        .anchor_field
+        .as_deref()
+        .is_some_and(|a| a.trim().is_empty())
+    {
+        return Err(bad("anchor_field", "is blank".to_string()));
+    }
+    for (i, a) in periods.iter().enumerate() {
+        for b in &periods[i + 1..] {
+            let rank =
+                |p: &ClaimPeriod| usize::from(p.status.is_some()) + usize::from(p.tier.is_some());
+            let statuses_overlap = match (&a.status, &b.status) {
+                (Some(x), Some(y)) => x.iter().any(|s| y.contains(s)),
+                _ => true,
+            };
+            let tiers_overlap = match (&a.tier, &b.tier) {
+                (Some(x), Some(y)) => x == y,
+                _ => true,
+            };
+            if a.record_type == b.record_type
+                && rank(a) == rank(b)
+                && statuses_overlap
+                && tiers_overlap
+            {
+                return Err(bad(
+                    "periods",
+                    format!(
+                        "has two entries for type '{}' of equal specificity that can match the same record; narrow one with a status or a tier",
+                        a.record_type
+                    ),
+                ));
+            }
+        }
+    }
+    let categories: Vec<&str> = config
+        .embodiment
+        .tiers
+        .iter()
+        .map(|t| t.evidence.as_str())
+        .collect();
+    for category in setting.require_pin.iter().flatten() {
+        if !categories.contains(&category.trim()) {
+            return Err(bad(
+                "require_pin",
+                format!(
+                    "names the category '{category}', which the embodiment declaration does not use ({})",
+                    categories.join(", ")
+                ),
+            ));
+        }
+    }
+    if setting.max_batch == Some(0) {
+        return Err(bad(
+            "max_batch",
+            "is 0; a batch is 1 record or more".to_string(),
+        ));
+    }
+    Ok(())
+}
+
 /// Whether no record type needs the fallback status lists: each type either
 /// declares `statuses`, or declares no status field a rule could read (a
 /// suppression type with no `Status`). Such a type is never judged by a list.
@@ -2023,11 +2232,14 @@ fn option_field(name: &str, setting: &RuleSetting) -> Option<Vec<String>> {
 /// Rules that cannot be declared without their options. Adopt mode skips these
 /// rather than proposing a declaration that will not load (BUG-44).
 pub fn rule_requires_options(rule: &str) -> bool {
-    crate::rules::rule_def(rule).is_some_and(|d| {
-        d.options
-            .iter()
-            .any(|o| *o == "indexes" || RULE_OPTIONS.iter().any(|r| r.name == *o))
-    })
+    // The companion of the expiry rule is refused without the expiry rule
+    // (`ADR-97`), which is itself refused without `periods`.
+    rule == crate::rules::RULE_EMBODIMENT_CLAIM_RENEWAL_UNATTESTED
+        || crate::rules::rule_def(rule).is_some_and(|d| {
+            d.options.iter().any(|o| {
+                *o == "indexes" || *o == "periods" || RULE_OPTIONS.iter().any(|r| r.name == *o)
+            })
+        })
 }
 
 /// Why a decision-gate declaration (`MILE-133`) cannot work, or `None` when it
@@ -2816,6 +3028,43 @@ pub fn parse_with_document_models(
                     option: option.to_string(),
                 });
             }
+        }
+
+        // `ADR-97`: the expiry rule's own options are checked together, after
+        // the embodiment declaration and every record type are known.
+        for (option, present) in [
+            ("anchor_field", setting.anchor_field.is_some()),
+            ("require_pin", setting.require_pin.is_some()),
+            ("max_batch", setting.max_batch.is_some()),
+            ("periods", setting.periods.is_some()),
+        ] {
+            if present && !crate::rules::rule_accepts_option(name, option) {
+                return Err(ConfigError::OptionNotApplicable {
+                    rule: name.clone(),
+                    option: option.to_string(),
+                });
+            }
+        }
+        if setting.level != RuleLevel::Off
+            && name == crate::rules::RULE_EMBODIMENT_CLAIM_RENEWAL_UNATTESTED
+        {
+            let expiry = config
+                .rules
+                .get(crate::rules::RULE_EMBODIMENT_CLAIM_EXPIRED)
+                .filter(|s| s.level != RuleLevel::Off);
+            if expiry.and_then(|s| s.anchor_field.as_deref()).is_none() {
+                return Err(ConfigError::InvalidClaimExpiry {
+                    rule: name.clone(),
+                    option: "level",
+                    reason: format!(
+                        "is declared without {} and its anchor_field: the rule compares the anchor date and reads it from there",
+                        crate::rules::RULE_EMBODIMENT_CLAIM_EXPIRED
+                    ),
+                });
+            }
+        }
+        if setting.level != RuleLevel::Off && name == crate::rules::RULE_EMBODIMENT_CLAIM_EXPIRED {
+            claim_expiry_problems(name, setting, &config)?;
         }
 
         // An option-taking rule given no option does not fall back to a sane
@@ -5920,6 +6169,10 @@ mod option_table_tests {
         "drift_grace_days",
         "drift_audit_field",
         "claim_max_age_days",
+        "anchor_field",
+        "require_pin",
+        "max_batch",
+        "periods",
         "boundaries",
         "ignore_marker",
         "scope",

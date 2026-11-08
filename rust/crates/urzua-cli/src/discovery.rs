@@ -997,6 +997,87 @@ pub(crate) fn compute_claim_ages(
     (ages, problems)
 }
 
+/// What `embodiment.claim-expired` is handed beyond the records (`ADR-97`):
+/// the commit time of each record's `Realized-by` line, the seed of its
+/// first-cycle offset, and the git problems met.
+#[derive(Default)]
+pub(crate) struct ClaimMeasures {
+    pub line_times: HashMap<PathBuf, i64>,
+    pub seeds: HashMap<PathBuf, u64>,
+    pub problems: Vec<String>,
+}
+
+/// The first 8 bytes of the SHA-256 of a `Stable-Id`, as a big-endian number
+/// (`ADR-97` section 2): the whole of a record's offset seed.
+pub(crate) fn offset_seed(stable_id: &str) -> u64 {
+    let hex = urzua_io::sha256_hex_of_str(stable_id.trim());
+    u64::from_str_radix(&hex[..16], 16).unwrap_or(0)
+}
+
+/// Measures the records `embodiment.claim-expired` judges. A record with a
+/// valid audit date is dated by it and costs no `git blame`, as the rule reads.
+pub(crate) fn compute_claim_measures(
+    repo_root: &Path,
+    records: &[Record],
+    config: &Config,
+    now_unix: i64,
+) -> ClaimMeasures {
+    let opts: rules::ClaimExpiredOpts = config.rule_opts(rules::RULE_EMBODIMENT_CLAIM_EXPIRED);
+    let mut out = ClaimMeasures::default();
+    let mut work: Vec<(PathBuf, usize)> = Vec::new();
+    for record in records
+        .iter()
+        .filter(|r| opts.periods.iter().any(|p| p.record_type == r.record_type))
+    {
+        if let Some(id) = record.header.get_reserved("Stable-Id") {
+            out.seeds.insert(record.path.clone(), offset_seed(id));
+        }
+        let audited = opts
+            .anchor_field
+            .as_deref()
+            .and_then(|f| record.header.get(f))
+            .and_then(|v| rules::date_unix(v).ok())
+            .is_some_and(|unix| unix.div_euclid(DAY_SECS) <= now_unix.div_euclid(DAY_SECS));
+        if audited {
+            continue;
+        }
+        let locator_field = rules::relation_field_name(
+            config,
+            &record.record_type,
+            urzua_core::config::RelationRole::EmbodimentLocator,
+        );
+        if let Some(field) = record
+            .header
+            .fields
+            .iter()
+            .find(|f| f.key.as_str() == locator_field)
+        {
+            work.push((record.path.clone(), field.line));
+        }
+    }
+    let commits = blame_lines_parallel(repo_root, &work, None);
+    for ((path, _), commit) in work.into_iter().zip(commits) {
+        match commit {
+            // An all-zero hash is a line not committed yet: touched now.
+            Ok(Some(commit)) if commit.chars().all(|c| c == '0') => {
+                out.line_times.insert(path, now_unix);
+            }
+            Ok(Some(commit)) => {
+                if let Some(time) = urzua_io::commit_unix_time(repo_root, &commit) {
+                    out.line_times.insert(path, time);
+                }
+            }
+            Ok(None) => {}
+            Err(e) => {
+                if !out.problems.contains(&e) {
+                    out.problems.push(e);
+                }
+            }
+        }
+    }
+    out
+}
+
 /// Reads every tracked file under one of the declared path prefixes, for the
 /// rules that scan paths (`boundary.published-path-reference`,
 /// `embodiment.back-pointer-resolution`); `rule` names the caller in an I/O

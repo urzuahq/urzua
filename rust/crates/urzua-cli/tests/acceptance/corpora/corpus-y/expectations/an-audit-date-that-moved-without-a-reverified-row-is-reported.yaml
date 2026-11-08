@@ -1,0 +1,18 @@
+id: an-audit-date-that-moved-without-a-reverified-row-is-reported
+corpus: corpus-y
+# MILE-1's Last-audited moves from 2020-01-01 to 2020-06-01 with no revision row:
+# a date typed in by hand. MILE-2 moves the same way and gains the Re-verified row
+# dated that day, which is what `urzua reverify` writes: attested, so silent.
+commits:
+  - write:
+      docs/milestones/MILE-1-audited.md: "---\nStatus: Done\nLast-audited: 2020-06-01\nRealized-by: code:src/a.rs\n---\n# 1 - Audited\n\nA Done milestone last re-verified on 2020-01-01.\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2019-12-01 | Initial. | **structural** |\n"
+      docs/milestones/MILE-2-audited.md: "---\nStatus: Done\nLast-audited: 2020-06-01\nRealized-by: code:src/a.rs\n---\n# 2 - Audited\n\nA Done milestone last re-verified on 2020-01-01.\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2019-12-01 | Initial. | **structural** |\n> | 2020-06-01 | Re-verified (attested by ana, identity: asserted, actor: human): 1 locators re-resolved, 1 hash-checked, 0 spec locators checked by git history only. Evidence: src/a.rs@sha256:0123456789ab Reason: read it against the item. **Why:** the claim was 152 days old against a 30-day period. | **structural** |\n"
+invocation: [check, --base, base]
+expect_exit: 1
+expect_findings:
+  - rule: embodiment.claim-renewal-unattested
+    severity: warning
+    file: docs/milestones/MILE-1-audited.md
+    message_contains: 'no Re-verified revision row dated 2020-06-01'
+expect_no_findings:
+  - {rule: embodiment.claim-renewal-unattested, file: docs/milestones/MILE-2-audited.md}

@@ -299,6 +299,42 @@ enum Command {
         #[arg(long)]
         reason: Option<String>,
     },
+
+    /// Renew an expired claim (`ADR-97`): re-resolve and re-hash every
+    /// locator, refuse changed evidence, pin `code:` and `test:` locators that
+    /// have no pin, and record who renewed it and why. Read only by default;
+    /// `--apply` writes. A changed pin is `fix --rebaseline`'s; `--pin-only`
+    /// pins the unpinned locators and renews nothing.
+    Reverify {
+        /// Review (and, with --apply, renew) these records: repo-relative
+        /// paths. With none, the records whose claim has expired (or, with
+        /// --pin-only, those with an unpinned locator to pin).
+        #[arg(long, value_delimiter = ',')]
+        ids: Vec<String>,
+        /// Write the renewal. Requires --ids or --force, --reason, and an
+        /// identity (--by, or resolved from gh/git config). At most
+        /// `max_batch` records, every row carrying the same reason.
+        #[arg(long)]
+        apply: bool,
+        /// Pin the unpinned `code:` and `test:` locators and set no date: the
+        /// attested way to pin a corpus, or a drifted unpinned locator.
+        #[arg(long)]
+        pin_only: bool,
+        #[arg(long)]
+        by: Option<String>,
+        /// Who ran the command: `agent` or `human`; refused as `agent` where
+        /// the period's level is error. The caller's claim, not proof.
+        #[arg(long, value_enum)]
+        actor: Option<ActorArg>,
+        /// Select what the mode finds instead of naming records. Refused when
+        /// it selects more than one record: a batch is named, never swept up.
+        #[arg(long)]
+        force: bool,
+        /// What you checked, recorded in every row. Required by --apply: one
+        /// line, without `|`.
+        #[arg(long)]
+        reason: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -537,6 +573,26 @@ fn main() -> ExitCode {
         Command::Refs {
             target: RefsTarget::Refresh,
         } => commands::refs::run_refresh(cli.config),
+        Command::Reverify {
+            ids,
+            apply,
+            pin_only,
+            by,
+            actor,
+            force,
+            reason,
+        } => commands::reverify::run(
+            cli.config,
+            commands::reverify::ReverifyArgs {
+                ids,
+                apply,
+                pin_only,
+                by,
+                actor: actor.map_or(urzua_core::fix::ActorKind::Unspecified, Into::into),
+                force,
+                reason,
+            },
+        ),
         Command::Fix {
             paths,
             stdin_path,

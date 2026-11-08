@@ -124,6 +124,8 @@ Every applied write touches only the one field's line, byte-for-byte preserving 
 
 A pinned locator (`code:src/a.rs@sha256:...`) whose file changed is cleared the same way, by review: `urzua fix --rebaseline` lists each stale pin with its recorded and current hash, and `urzua fix --rebaseline --apply --ids <record> --by <who> --reason "<why it still holds>"` re-pins it and logs who attested and why.
 
+A claim can also expire. A repository that declares `embodiment.claim-expired` gives each record type, status and evidence tier a period; a claim older than its period is a finding, and `urzua reverify --ids <record>` lists what renewing it would re-check, locator by locator. `urzua reverify --apply --ids <record> --by <who> --reason "<what you checked>"` re-hashes the evidence, refuses a pin that changed (that is `fix --rebaseline`), pins `code:` and `test:` locators that have no pin, dates the claim, and logs who renewed it and why. See `SPEC-8` and `SPEC-3`.
+
 ## Run the gate in CI
 
 This repository ships a composite action that installs a pinned release (checksum and build provenance verified), checks the checkout has the history drift reads, runs `urzua check` and, on a pull request, `urzua check --base`, and reports the findings as inline annotations and one pull request comment that is updated in place:

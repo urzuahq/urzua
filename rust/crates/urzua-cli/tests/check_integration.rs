@@ -3481,6 +3481,9 @@ fn every_header_reading_rule_reports_a_header_none_type_as_out_of_scope() {
                 format!("{id}: {{level: error, back_pointer_paths: [\"docs/claims\"]}}")
             }
             "date.field-valid" => format!("{id}: {{level: error, date_fields: [\"Date\"]}}"),
+            "embodiment.claim-expired" => {
+                format!("{id}: {{level: error, anchor_field: Date, periods: [{{type: note, days: 30}}]}}")
+            }
             "override.unreviewed" => format!("{id}: error"),
             "date.field-order" => {
                 format!("{id}: {{level: error, date_order: [{{earlier: Date, later: Accepted-on}}]}}")
