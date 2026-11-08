@@ -1,5 +1,6 @@
 use super::relation::{pair_carried_by, pair_slot_claims, pair_slots};
 use super::*;
+use crate::status_model::StatusDecl;
 use std::collections::{BTreeMap, BTreeSet};
 
 /// Rule (`RFC-48`, `MILE-27`, `MILE-192`, `ADR-82`): a cycle in an `acyclic`
@@ -25,65 +26,9 @@ pub fn sequence_cycle(
     let mut findings = Vec::new();
     let slots = pair_slots(records, config, |p| p.acyclic);
     let declared = &config.roadmap.pairs;
-    // `None` is the merged roadmap graph; `Some(name)` a pair read alone.
-    fn group_of<'n>(declared: &[String], name: &'n str) -> Option<&'n str> {
-        (!declared.iter().any(|p| p == name)).then_some(name)
-    }
-
     let graphs = sequence_graphs(&slots, index).graphs;
-
-    let mut grouped: BTreeMap<Option<&str>, SequenceGraph> = BTreeMap::new();
-    for (pair, graph) in &graphs {
-        match group_of(declared, pair) {
-            Some(name) => {
-                grouped.insert(Some(name), graph.clone());
-            }
-            None => merge_into(grouped.entry(None).or_default(), graph),
-        }
-    }
-
-    // The records on a cycle, per group, each with the rest of its message.
-    let mut on_cycle: BTreeMap<(Option<&str>, crate::values::RecordId), CycleReport> =
-        BTreeMap::new();
-    for (group, graph) in &grouped {
-        for component in strongly_connected(graph) {
-            let looped = component.len() > 1
-                || graph
-                    .get(&component[0])
-                    .is_some_and(|next| next.contains(&component[0]));
-            if !looped {
-                continue;
-            }
-            for member in &component {
-                let Some(path) = shortest_cycle(graph, member) else {
-                    continue;
-                };
-                let text = path
-                    .iter()
-                    .map(|id| id.as_str())
-                    .collect::<Vec<_>>()
-                    .join(" -> ");
-                let report = match group {
-                    Some(name) => {
-                        let (forward, inverse) = config
-                            .relation_pairs
-                            .iter()
-                            .find(|p| p.name == *name)
-                            .map(|p| (p.forward.as_str(), p.inverse.as_str()))
-                            .unwrap_or_default();
-                        CycleReport {
-                            variant: "sequence-cycle",
-                            message: format!(
-                                "is on a cycle in acyclic pair '{name}' ({forward} -> {inverse}): {text}"
-                            ),
-                        }
-                    }
-                    None => cycle_over_roadmap_pairs(&graphs, declared, &path, &text),
-                };
-                on_cycle.insert((*group, member.clone()), report);
-            }
-        }
-    }
+    let grouped = grouped_graphs(&graphs, declared);
+    let on_cycle = cycle_reports(&grouped, &graphs, declared, config);
 
     let mut reported: BTreeSet<(Option<&str>, crate::values::RecordId)> = BTreeSet::new();
     let (population, examined_records) = scoped_census_records(
@@ -131,6 +76,80 @@ pub fn sequence_cycle(
         },
         findings,
     )
+}
+
+/// `None` is the merged roadmap graph; `Some(name)` a pair read alone.
+fn group_of<'n>(declared: &[String], name: &'n str) -> Option<&'n str> {
+    (!declared.iter().any(|p| p == name)).then_some(name)
+}
+
+/// The graphs `sequence.cycle` reads: the pairs `roadmap.pairs` names merged
+/// into one, every other pair on its own.
+fn grouped_graphs<'a>(
+    graphs: &BTreeMap<&'a str, SequenceGraph>,
+    declared: &[String],
+) -> BTreeMap<Option<&'a str>, SequenceGraph> {
+    let mut grouped: BTreeMap<Option<&str>, SequenceGraph> = BTreeMap::new();
+    for (pair, graph) in graphs {
+        match group_of(declared, pair) {
+            Some(name) => {
+                grouped.insert(Some(name), graph.clone());
+            }
+            None => merge_into(grouped.entry(None).or_default(), graph),
+        }
+    }
+    grouped
+}
+
+/// The records on a cycle, per group, each with the rest of its message.
+fn cycle_reports<'a>(
+    grouped: &BTreeMap<Option<&'a str>, SequenceGraph>,
+    graphs: &BTreeMap<&str, SequenceGraph>,
+    declared: &[String],
+    config: &Config,
+) -> BTreeMap<(Option<&'a str>, crate::values::RecordId), CycleReport> {
+    let mut on_cycle: BTreeMap<(Option<&str>, crate::values::RecordId), CycleReport> =
+        BTreeMap::new();
+    for (group, graph) in grouped {
+        for component in strongly_connected(graph) {
+            let looped = component.len() > 1
+                || graph
+                    .get(&component[0])
+                    .is_some_and(|next| next.contains(&component[0]));
+            if !looped {
+                continue;
+            }
+            for member in &component {
+                let Some(path) = shortest_cycle(graph, member) else {
+                    continue;
+                };
+                let text = path
+                    .iter()
+                    .map(|id| id.as_str())
+                    .collect::<Vec<_>>()
+                    .join(" -> ");
+                let report = match group {
+                    Some(name) => {
+                        let (forward, inverse) = config
+                            .relation_pairs
+                            .iter()
+                            .find(|p| p.name == *name)
+                            .map(|p| (p.forward.as_str(), p.inverse.as_str()))
+                            .unwrap_or_default();
+                        CycleReport {
+                            variant: "sequence-cycle",
+                            message: format!(
+                                "is on a cycle in acyclic pair '{name}' ({forward} -> {inverse}): {text}"
+                            ),
+                        }
+                    }
+                    None => cycle_over_roadmap_pairs(graphs, declared, &path, &text),
+                };
+                on_cycle.insert((*group, member.clone()), report);
+            }
+        }
+    }
+    on_cycle
 }
 
 struct CycleReport {
@@ -529,16 +548,10 @@ pub fn sequence_status_agreement(
     back_pointed: &BackPointerEvidence,
     env: &LocatorEnv<'_>,
 ) -> (RuleExecution, Vec<Finding>) {
-    const RULE_ID: &str = RULE_SEQUENCE_STATUS_AGREEMENT;
     let mut findings = Vec::new();
     let declared = statuses_by_type(config);
     let slots = pair_slots(records, config, |p| config.roadmap.pairs.contains(&p.name));
-    let SequenceGraphs {
-        graphs,
-        unreadable_dependencies,
-        unresolved_claimants,
-        unreadable_writers,
-    } = sequence_graphs(&slots, index);
+    let graphs = sequence_graphs(&slots, index);
 
     let candidates: Vec<&Record> = records
         .iter()
@@ -549,166 +562,214 @@ pub fn sequence_status_agreement(
         })
         .collect();
 
+    let agreement = StatusAgreement {
+        config,
+        declared: &declared,
+        index,
+        back_pointed,
+        env,
+        graphs: &graphs,
+    };
     let (population, examined_records) = scoped_census_records(
         config,
         PopulationUnit::Record,
         candidates,
         |record| *record,
-        |record| {
-            let decl = &declared[&record.record_type];
-            let Some(id) = record_id(record) else {
-                return Outcome::OutOfScope;
-            };
-            let id = crate::values::RecordId::new(&id);
-            let status_field = relation_field_name(
-                config,
-                &record.record_type,
-                crate::config::RelationRole::Status,
-            );
-            let status = match declared_value(record, status_field) {
-                Ok(v) if !v.trim().is_empty() => v.trim(),
-                Ok(_) => return Outcome::Absent,
-                Err(outcome) => return outcome,
-            };
-            // Every dependency over every declared pair that is not finished.
-            let mut open: Vec<String> = Vec::new();
-            for graph in graphs.values() {
-                for dependency in graph.get(&id).into_iter().flatten() {
-                    let Some(target) = index.get(dependency) else {
-                        continue;
-                    };
-                    let target_field = relation_field_name(
-                        config,
-                        &target.record_type,
-                        crate::config::RelationRole::Status,
-                    );
-                    let target_status = target.header.get(target_field).map(str::trim);
-                    let finished = target_status.is_some_and(|s| {
-                        declared
-                            .get(&target.record_type)
-                            .is_some_and(|d| d.is_success(s))
-                    });
-                    if !finished {
-                        let shown = format!(
-                            "{dependency} ({})",
-                            target_status
-                                .filter(|s| !s.is_empty())
-                                .unwrap_or("no status")
-                        );
-                        if !open.contains(&shown) {
-                            open.push(shown);
-                        }
-                    }
-                }
-            }
-            let blocked = !open.is_empty();
-            let mut push = |source: ActionSource, message: String| {
-                findings.push(Finding {
-                    rule: RULE_ID.to_string(),
-                    severity: FindingSeverity::Error,
-                    file: record.path.clone(),
-                    line: None,
-                    waived: None,
-                    declared_severity: None,
-                    suggested_action: None,
-                    action_source: source,
-                    message,
-                });
-            };
-            if blocked {
-                if decl.is_progress_status(status) {
-                    // A status that comes from the dependency cap is not out of
-                    // order: say so, and report nothing else for the record.
-                    let one_blocked = HashMap::from([(record.path.clone(), open.clone())]);
-                    let ctx = DeliveryContext {
-                        back_pointed,
-                        env,
-                        blocked: &one_blocked,
-                    };
-                    let capped = judge_delivery(record, config, decl, &ctx)
-                        .ok()
-                        .and_then(|judged| judged.items)
-                        .filter(|items| !items.capped_by.is_empty())
-                        .filter(|_| {
-                            decl.delivery
-                                .as_ref()
-                                .and_then(|d| d.items.as_ref())
-                                .is_some_and(|i| i.partial_status == status)
-                        });
-                    if let Some(items) = capped {
-                        findings.push(Finding {
-                            rule: RULE_ID.to_string(),
-                            severity: FindingSeverity::Info,
-                            file: record.path.clone(),
-                            line: None,
-                            waived: None,
-                            declared_severity: Some(FindingSeverity::Info),
-                            suggested_action: None,
-                            action_source: ActionSource::new("status-blocked-capped"),
-                            message: format!(
-                                "{id} is {status_field} '{status}', not out of order: all items proven ahead of dependency {}, which caps the status",
-                                items.capped_by.join(", ")
-                            ),
-                        });
-                        return Outcome::Examined;
-                    }
-                    let mut source =
-                        ActionSource::new("status-blocked-derived").field(status_field);
-                    // The computed answer, only when one status is declared for it
-                    // and the lifecycle lets this record move there: a finished
-                    // record's transitions do not lead back to a waiting state.
-                    if let [only] = decl.blocked.as_slice() {
-                        if !decl.is_success(status)
-                            && (!decl.has_transitions() || decl.allows(status, only))
-                        {
-                            source = source.text(only.clone());
-                        }
-                    }
-                    push(
-                        source,
-                        format!(
-                            "{id} is blocked by {} but {status_field} is '{status}', which claims progress; state a status that does not claim progress ({})",
-                            open.join(", "),
-                            decl.progress.join(", ")
-                        ),
-                    );
-                }
-            } else {
-                // "Nothing blocks it" is only known when every claim was read,
-                // and it is the answer both for a written blocked status (is it
-                // contradicted?) and for a progress status (is it contradicted
-                // by a blocker?), so a type declaring only `progress` is guarded
-                // too (`ADR-83`).
-                let judged = decl.is_blocked_status(status) || decl.is_progress_status(status);
-                if judged
-                    && (unreadable_dependencies.contains(&id)
-                        || unresolved_claimants.contains(&id)
-                        || unreadable_writers)
-                {
-                    return Outcome::Unreadable;
-                }
-                if decl.is_blocked_status(status) {
-                    push(
-                        ActionSource::new("status-blocked-unblocked").field(status_field),
-                        format!(
-                            "{status_field} is '{status}' but nothing blocks {id}: it has no dependency outside a success status; state the status it is in"
-                        ),
-                    );
-                }
-            }
-            Outcome::Examined
-        },
+        |record| agreement.judge(record, &mut findings),
     );
 
     (
         RuleExecution {
-            rule: RULE_ID.to_string(),
+            rule: RULE_SEQUENCE_STATUS_AGREEMENT.to_string(),
             population: Some(population),
             status: RuleStatus::Ran,
             examined_records,
         },
         findings,
     )
+}
+
+/// What `sequence.status-agreement` judges each record against.
+struct StatusAgreement<'a> {
+    config: &'a Config,
+    declared: &'a HashMap<String, StatusDecl>,
+    index: &'a RecordIndex<'a>,
+    back_pointed: &'a BackPointerEvidence,
+    env: &'a LocatorEnv<'a>,
+    graphs: &'a SequenceGraphs<'a>,
+}
+
+/// One `sequence.status-agreement` error on `record`.
+fn status_agreement_finding(record: &Record, source: ActionSource, message: String) -> Finding {
+    Finding {
+        rule: RULE_SEQUENCE_STATUS_AGREEMENT.to_string(),
+        severity: FindingSeverity::Error,
+        file: record.path.clone(),
+        line: None,
+        waived: None,
+        declared_severity: None,
+        suggested_action: None,
+        action_source: source,
+        message,
+    }
+}
+
+impl StatusAgreement<'_> {
+    fn judge(&self, record: &Record, findings: &mut Vec<Finding>) -> Outcome {
+        let decl = &self.declared[&record.record_type];
+        let Some(id) = record_id(record) else {
+            return Outcome::OutOfScope;
+        };
+        let id = crate::values::RecordId::new(&id);
+        let status_field = relation_field_name(
+            self.config,
+            &record.record_type,
+            crate::config::RelationRole::Status,
+        );
+        let status = match declared_value(record, status_field) {
+            Ok(v) if !v.trim().is_empty() => v.trim(),
+            Ok(_) => return Outcome::Absent,
+            Err(outcome) => return outcome,
+        };
+        let open = self.open_dependencies(&id);
+        if !open.is_empty() {
+            if decl.is_progress_status(status) {
+                return self.judge_blocked(record, &id, status, &open, findings);
+            }
+            return Outcome::Examined;
+        }
+        // "Nothing blocks it" is only known when every claim was read,
+        // and it is the answer both for a written blocked status (is it
+        // contradicted?) and for a progress status (is it contradicted
+        // by a blocker?), so a type declaring only `progress` is guarded
+        // too (`ADR-83`).
+        let judged = decl.is_blocked_status(status) || decl.is_progress_status(status);
+        if judged
+            && (self.graphs.unreadable_dependencies.contains(&id)
+                || self.graphs.unresolved_claimants.contains(&id)
+                || self.graphs.unreadable_writers)
+        {
+            return Outcome::Unreadable;
+        }
+        if decl.is_blocked_status(status) {
+            findings.push(status_agreement_finding(
+                record,
+                ActionSource::new("status-blocked-unblocked").field(status_field),
+                format!(
+                    "{status_field} is '{status}' but nothing blocks {id}: it has no dependency outside a success status; state the status it is in"
+                ),
+            ));
+        }
+        Outcome::Examined
+    }
+
+    /// Every dependency over every declared pair that is not finished, as
+    /// `ID (status)`.
+    fn open_dependencies(&self, id: &crate::values::RecordId) -> Vec<String> {
+        let mut open: Vec<String> = Vec::new();
+        for graph in self.graphs.graphs.values() {
+            for dependency in graph.get(id).into_iter().flatten() {
+                let Some(target) = self.index.get(dependency) else {
+                    continue;
+                };
+                let target_field = relation_field_name(
+                    self.config,
+                    &target.record_type,
+                    crate::config::RelationRole::Status,
+                );
+                let target_status = target.header.get(target_field).map(str::trim);
+                let finished = target_status.is_some_and(|s| {
+                    self.declared
+                        .get(&target.record_type)
+                        .is_some_and(|d| d.is_success(s))
+                });
+                if !finished {
+                    let shown = format!(
+                        "{dependency} ({})",
+                        target_status
+                            .filter(|s| !s.is_empty())
+                            .unwrap_or("no status")
+                    );
+                    if !open.contains(&shown) {
+                        open.push(shown);
+                    }
+                }
+            }
+        }
+        open
+    }
+
+    /// A blocked record in a status that claims progress: an info finding when
+    /// the status comes from the dependency cap, an error otherwise.
+    fn judge_blocked(
+        &self,
+        record: &Record,
+        id: &crate::values::RecordId,
+        status: &str,
+        open: &[String],
+        findings: &mut Vec<Finding>,
+    ) -> Outcome {
+        let decl = &self.declared[&record.record_type];
+        let status_field = relation_field_name(
+            self.config,
+            &record.record_type,
+            crate::config::RelationRole::Status,
+        );
+        // A status that comes from the dependency cap is not out of
+        // order: say so, and report nothing else for the record.
+        let one_blocked = HashMap::from([(record.path.clone(), open.to_vec())]);
+        let ctx = DeliveryContext {
+            back_pointed: self.back_pointed,
+            env: self.env,
+            blocked: &one_blocked,
+        };
+        let capped = judge_delivery(record, self.config, decl, &ctx)
+            .ok()
+            .and_then(|judged| judged.items)
+            .filter(|items| !items.capped_by.is_empty())
+            .filter(|_| {
+                decl.delivery
+                    .as_ref()
+                    .and_then(|d| d.items.as_ref())
+                    .is_some_and(|i| i.partial_status == status)
+            });
+        if let Some(items) = capped {
+            findings.push(Finding {
+                rule: RULE_SEQUENCE_STATUS_AGREEMENT.to_string(),
+                severity: FindingSeverity::Info,
+                file: record.path.clone(),
+                line: None,
+                waived: None,
+                declared_severity: Some(FindingSeverity::Info),
+                suggested_action: None,
+                action_source: ActionSource::new("status-blocked-capped"),
+                message: format!(
+                    "{id} is {status_field} '{status}', not out of order: all items proven ahead of dependency {}, which caps the status",
+                    items.capped_by.join(", ")
+                ),
+            });
+            return Outcome::Examined;
+        }
+        let mut source = ActionSource::new("status-blocked-derived").field(status_field);
+        // The computed answer, only when one status is declared for it
+        // and the lifecycle lets this record move there: a finished
+        // record's transitions do not lead back to a waiting state.
+        if let [only] = decl.blocked.as_slice() {
+            if !decl.is_success(status) && (!decl.has_transitions() || decl.allows(status, only)) {
+                source = source.text(only.clone());
+            }
+        }
+        findings.push(status_agreement_finding(
+            record,
+            source,
+            format!(
+                "{id} is blocked by {} but {status_field} is '{status}', which claims progress; state a status that does not claim progress ({})",
+                open.join(", "),
+                decl.progress.join(", ")
+            ),
+        ));
+        Outcome::Examined
+    }
 }
 
 #[cfg(test)]

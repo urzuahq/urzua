@@ -1,19 +1,17 @@
 use super::*;
 
-pub fn header_required_fields(
+/// Record-scoped findings -- an unparsed header, a duplicated key -- are
+/// about the record, not about any one slot, so they are emitted once per
+/// record. Decision 1's rule against reporting on a candidate you did not
+/// examine governs *per-slot* findings; a record-scoped finding explaining
+/// why its slots are unreadable is the opposite of a contradiction.
+fn record_scoped_header_findings(
     records: &[Record],
     config: &Config,
-) -> (RuleExecution, Vec<Finding>) {
-    let required_by_type = required_fields_by_type(config);
-    let required_by_type = &required_by_type;
+    required_by_type: &HashMap<String, Vec<String>>,
+    findings: &mut Vec<Finding>,
+) {
     const RULE_ID: &str = RULE_HEADER_REQUIRED_FIELDS;
-    let mut findings = Vec::new();
-
-    // Record-scoped findings -- an unparsed header, a duplicated key -- are
-    // about the record, not about any one slot, so they are emitted once per
-    // record. Decision 1's rule against reporting on a candidate you did not
-    // examine governs *per-slot* findings; a record-scoped finding explaining
-    // why its slots are unreadable is the opposite of a contradiction.
     for record in records {
         let Some(required) = required_by_type.get(&record.record_type) else {
             continue;
@@ -43,10 +41,10 @@ pub fn header_required_fields(
                 severity: FindingSeverity::Error,
                 file: record.path.clone(),
                 line: None,
- waived: None,
- declared_severity: None,
- suggested_action: None,
- action_source: ActionSource::new("header-region-missing"),
+                waived: None,
+                declared_severity: None,
+                suggested_action: None,
+                action_source: ActionSource::new("header-region-missing"),
                 message: format!(
                     "no header-shaped region found -- required fields {required:?} cannot be checked{detail}"
                 ),
@@ -60,14 +58,25 @@ pub fn header_required_fields(
                 severity: FindingSeverity::Error,
                 file: record.path.clone(),
                 line: None,
- waived: None,
- declared_severity: None,
- suggested_action: None,
- action_source: ActionSource::new("duplicate-key").field(dup.as_str()),
+                waived: None,
+                declared_severity: None,
+                suggested_action: None,
+                action_source: ActionSource::new("duplicate-key").field(dup.as_str()),
                 message: format!("header key '{dup}' appears more than once -- ambiguous which value is operative"),
             });
         }
     }
+}
+
+pub fn header_required_fields(
+    records: &[Record],
+    config: &Config,
+) -> (RuleExecution, Vec<Finding>) {
+    let required_by_type = required_fields_by_type(config);
+    let required_by_type = &required_by_type;
+    const RULE_ID: &str = RULE_HEADER_REQUIRED_FIELDS;
+    let mut findings = Vec::new();
+    record_scoped_header_findings(records, config, required_by_type, &mut findings);
 
     // The population is the declared slot: one `(record, required field)` pair
     // per field the record's type declares.
