@@ -165,17 +165,23 @@ jobs:
           annotate: "false"
           comment: "false"
 
+  # The one required check (ADR-95). It needs every other job and fails unless
+  # each one succeeded: a failure, a cancellation and a skip all fail it, so a
+  # shard that never started cannot read as a pass. The only job that may skip
+  # is `changeset`, which exists on pull requests alone.
   ci:
     name: ci
     needs: [rust, changeset, release-invariants, gate-action, gate-released]
     runs-on: ubuntu-latest
-    timeout-minutes: 1
+    timeout-minutes: 2
     if: always()
     steps:
-      - name: fail if any required job failed
-        run: |
-          if [ "${{ contains(needs.*.result, 'failure') }}" = "true" ] || \
-             [ "${{ contains(needs.*.result, 'cancelled') }}" = "true" ]; then
-            echo "one or more required jobs did not succeed"
-            exit 1
-          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+      - name: fail unless every required job succeeded
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+          ALLOW_SKIPPED: ${{ github.event_name != 'pull_request' && 'changeset' || '' }}
+        run: .github/scripts/ci-gate.sh --allow-skipped "$ALLOW_SKIPPED"

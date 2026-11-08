@@ -5,6 +5,11 @@
 //!
 //! A custom harness (`harness = false`), so the report is always printed.
 //!
+//! Sharding: `URZUA_ACCEPTANCE_SHARD=i/n` runs every n-th case and writes what
+//! it proved to `URZUA_ACCEPTANCE_PROVEN_OUT`; `URZUA_ACCEPTANCE_MERGE=<dir>`
+//! then judges the coverage gate over every shard's file and runs no case. See
+//! `acceptance/sharding.rs`.
+//!
 //! Private corpora: `URZUA_ACCEPTANCE_EXTRA` is a `:`-separated list of
 //! directories. Each is either one corpus (has `expectations/`) or a root of
 //! corpus directories. Unset, the runner says so and skips them.
@@ -29,6 +34,8 @@
 mod common;
 #[path = "acceptance/coverage_gate.rs"]
 mod coverage_gate;
+#[path = "acceptance/sharding.rs"]
+mod sharding;
 
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
@@ -771,8 +778,65 @@ fn corpus_dirs(root: &Path) -> Result<Vec<PathBuf>, String> {
     Ok(dirs)
 }
 
+/// The merge run: no case runs; every shard's proof is read from `dir` and the
+/// coverage gate is judged over their union.
+fn merge_main(dir: &Path) -> ! {
+    let mut texts = Vec::new();
+    let rd = std::fs::read_dir(dir).unwrap_or_else(|e| {
+        println!("acceptance merge: {}: {e}", dir.display());
+        std::process::exit(1)
+    });
+    for entry in rd.flatten() {
+        let p = entry.path();
+        if p.extension().is_some_and(|x| x == "proven") {
+            match std::fs::read_to_string(&p)
+                .map_err(|e| e.to_string())
+                .and_then(|t| sharding::decode(&t))
+            {
+                Ok(r) => texts.push(r),
+                Err(e) => {
+                    println!("acceptance merge: {}: {e}", p.display());
+                    std::process::exit(1);
+                }
+            }
+        }
+    }
+    let merged = match sharding::merge(&texts) {
+        Ok(m) => m,
+        Err(e) => {
+            println!("acceptance merge: {e}");
+            std::process::exit(1);
+        }
+    };
+    let proven: std::collections::BTreeMap<String, Tier> = merged
+        .into_iter()
+        .map(|(r, d)| (r, if d { Tier::Detects } else { Tier::RanOnly }))
+        .collect();
+    println!("acceptance merge: {} shards", texts.len());
+    report_coverage(&proven);
+    std::process::exit(if enforce_coverage_gate(&proven) { 0 } else { 1 });
+}
+
 fn main() {
     let filter: Option<String> = std::env::args().skip(1).find(|a| !a.starts_with('-'));
+    if let Ok(dir) = std::env::var("URZUA_ACCEPTANCE_MERGE") {
+        merge_main(Path::new(&dir));
+    }
+    let shard = match std::env::var("URZUA_ACCEPTANCE_SHARD") {
+        Ok(v) => match sharding::parse_shard(&v) {
+            Ok(s) => Some(s),
+            Err(e) => {
+                println!("acceptance: URZUA_ACCEPTANCE_SHARD: {e}");
+                std::process::exit(2);
+            }
+        },
+        Err(_) => None,
+    };
+    let proven_out = std::env::var("URZUA_ACCEPTANCE_PROVEN_OUT").ok();
+    if shard.is_some() && (proven_out.is_none() || filter.is_some()) {
+        println!("acceptance: a shard needs URZUA_ACCEPTANCE_PROVEN_OUT and takes no name filter");
+        std::process::exit(2);
+    }
     let mut roots = vec![Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/acceptance/corpora")];
     match std::env::var("URZUA_ACCEPTANCE_EXTRA") {
         Ok(v) if !v.trim().is_empty() => {
@@ -843,6 +907,15 @@ fn main() {
         }
     }
 
+    let discovered = queue.len();
+    if let Some(sh) = shard {
+        let mut position = 0;
+        queue.retain(|_| {
+            position += 1;
+            sharding::owns(sh, position - 1)
+        });
+    }
+
     for c in scratch_collisions(&queue) {
         println!("FAIL  {c}");
         fail += 1;
@@ -902,13 +975,32 @@ fn main() {
     // A name filter runs part of the suite, so the coverage of the rest is
     // unknown and is not reported.
     let mut gate_failed = false;
-    if filter.is_none() {
+    if let (Some(sh), Some(out)) = (shard, &proven_out) {
+        // A shard sees only its own cases, so the gate is judged by the merge.
+        let report = sharding::ShardReport {
+            shard: sh,
+            discovered,
+            ran: total,
+            proven: proven
+                .iter()
+                .map(|(r, t)| (r.clone(), *t == Tier::Detects))
+                .collect(),
+        };
+        if let Err(e) = std::fs::write(out, sharding::encode(&report)) {
+            println!("acceptance: cannot write {out}: {e}");
+            gate_failed = true;
+        }
+    } else if filter.is_none() {
         report_coverage(&proven);
         gate_failed = !enforce_coverage_gate(&proven);
     }
     // A name filter (`cargo test <name>` passes it to every target) may
     // legitimately match no case; only an unfiltered run with no cases fails.
     let empty_unfiltered = total == 0 && filter.is_none();
+    if shard.is_some() && total == 0 {
+        println!("acceptance: shard ran no cases");
+        gate_failed = true;
+    }
     if fail > 0 || empty_unfiltered || gate_failed {
         if empty_unfiltered {
             println!("acceptance: no cases ran");
