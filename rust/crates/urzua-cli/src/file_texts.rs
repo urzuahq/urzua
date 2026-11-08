@@ -122,12 +122,23 @@ pub(crate) fn with_locator_env<R>(
 mod tests {
     use super::*;
 
+    /// Removes the fixture directory on every exit path, a panic included.
+    struct Scratch(std::path::PathBuf);
+
+    impl Drop for Scratch {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
     /// A failed file listing is reported, not read as "every locator names
     /// nothing" (which would call each existing path missing).
     #[test]
     fn locator_files_reports_a_discovery_failure() {
-        let dir =
-            std::env::temp_dir().join(format!("urzua-filetexts-nogit-{}", std::process::id()));
+        let scratch = Scratch(
+            std::env::temp_dir().join(format!("urzua-filetexts-nogit-{}", std::process::id())),
+        );
+        let dir = scratch.0.clone();
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("a.rs"), "x\n").unwrap();
@@ -136,7 +147,6 @@ mod tests {
         let config = urzua_core::config::parse("schema_version: 2\nrecord_types:\n  adr:\n    dir: docs/adr\n    required_fields: [Status]\n").unwrap();
         let texts = FileTexts::new(dir.clone(), &config);
         let result = texts.locator_files("a.rs");
-        let _ = std::fs::remove_dir_all(&dir);
         let err = result.expect_err("a directory that is not a git checkout cannot be listed");
         assert!(
             err.contains("could not list the repository's files"),

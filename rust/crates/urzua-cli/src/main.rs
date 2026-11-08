@@ -205,7 +205,7 @@ enum Command {
 
     /// Adopt an existing corpus: propose and write `.urzua/config.yaml` from
     /// what's already there. Never clobbers, always idempotent, `--dry-run`
-    /// byte-identical to the real run. Stable-ID backfill is a separate
+    /// prints the config the real run would write. Stable-ID backfill is a separate
     /// step: `migrate ids`.
     Init {
         #[arg(long)]
