@@ -347,16 +347,16 @@ pub fn run(config_path: Option<PathBuf>, args: FixArgs) -> ExitCode {
 
 /// The identity an apply writes under: the attestation the revision rows
 /// carry, the report's account of it, and the notice for a replaced `--by`.
-struct ResolvedAttestation {
-    attestation: urzua_core::fix::Attestation,
-    report: urzua_core::report::AttestationReport,
-    warning: Option<String>,
+pub(crate) struct ResolvedAttestation {
+    pub(crate) attestation: urzua_core::fix::Attestation,
+    pub(crate) report: urzua_core::report::AttestationReport,
+    pub(crate) warning: Option<String>,
 }
 
 /// Resolve who attests under the configuration's `attestation` (`ADR-89`
 /// section 5, `MILE-201`). Runs before the lock and any write, so a refusal
 /// (`require_verified` with no `gh` answer) writes nothing.
-fn resolve_attestation(
+pub(crate) fn resolve_attestation(
     by: Option<&str>,
     actor: urzua_core::fix::ActorKind,
     repo_root: &std::path::Path,

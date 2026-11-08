@@ -30,6 +30,7 @@ mod property;
 pub mod record;
 pub mod refs_snapshot;
 pub mod report;
+pub mod reverify;
 pub mod rules;
 pub mod schema_version;
 pub mod section;

@@ -363,3 +363,44 @@ impl RuleOpts for LocatorMechanismOpts {
         }
     }
 }
+
+/// `embodiment.claim-expired` (`ADR-97`): the periods, the anchor field, the
+/// categories that must be pinned before a renewal and the batch cap, with the
+/// rule's own level, which is the ceiling for every entry.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ClaimExpiredOpts {
+    pub level: crate::config::RuleLevel,
+    pub anchor_field: Option<String>,
+    pub require_pin: Vec<String>,
+    pub max_batch: usize,
+    pub periods: Vec<crate::config::ClaimPeriod>,
+}
+
+impl Default for ClaimExpiredOpts {
+    fn default() -> Self {
+        ClaimExpiredOpts {
+            level: crate::config::RuleLevel::Off,
+            anchor_field: None,
+            require_pin: Vec::new(),
+            max_batch: 1,
+            periods: Vec::new(),
+        }
+    }
+}
+
+impl RuleOpts for ClaimExpiredOpts {
+    fn from_setting(s: &RuleSetting) -> Self {
+        ClaimExpiredOpts {
+            level: s.level,
+            anchor_field: s.anchor_field.as_ref().map(|a| a.trim().to_string()),
+            require_pin: s
+                .require_pin
+                .iter()
+                .flatten()
+                .map(|c| c.trim().to_string())
+                .collect(),
+            max_batch: s.max_batch.map_or(1, |n| n as usize),
+            periods: s.periods.clone().unwrap_or_default(),
+        }
+    }
+}

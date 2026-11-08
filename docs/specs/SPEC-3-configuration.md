@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.111'
+Version: '0.112'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs, test:rust/crates/urzua-cli/tests/field_levels_integration.rs
@@ -1615,6 +1615,78 @@ rules:
 Both options belong to `embodiment.consistency` alone; on any other rule they are the usual
 option-on-a-rule-that-does-not-take-it load error.
 
+### Claim expiry: `embodiment.claim-expired` (`ADR-97`, `MILE-129`)
+
+`embodiment.claim-expired` expires a claim after a period declared per record type, status and
+evidence tier, at the level the repository declares. It is opt-in: a configuration that does not
+declare it runs no new rule, reports nothing new and loads and reports as before, byte for byte.
+`claim_max_age_days` (above) is unchanged and stays supported; declaring both is a load error that
+names both, since they would report the same claim twice.
+
+```yaml
+rules:
+  embodiment.claim-expired:
+    level: warn               # info | warn | error; the ceiling for every entry below
+    anchor_field: Last-audited
+    require_pin: [code, test] # evidence categories whose locators must be pinned to be renewed
+    max_batch: 10             # most records one `reverify --apply` may name
+    periods:
+      - {type: milestone, status: [Done],              days: 45, spread_days: 45}
+      - {type: bug,       status: [Fixed],             days: 60, spread_days: 60}
+      - {type: spec,      status: [Shipped, Accepted], days: 60, spread_days: 60}
+      - {type: adr,       status: [Accepted],          days: 90, spread_days: 90}
+      # a narrower entry wins: spec-tier evidence only, a longer period, advisory
+      - {type: adr, status: [Accepted], tier: Specified, days: 180, level: info}
+```
+
+- **`periods`** is a list of maps (`ADR-64`, no string mini-language) and is required. An entry has
+  `type` (a declared record type that declares its evidence locator field), optional `status` (a list
+  of that type's `statuses.values`), optional `tier` (a state of the `embodiment` declaration, the
+  *computed* one: what the record's locators compute to, not the stated `Embodiment`, so a milestone
+  or bug that states none is judged), `days` (whole days, 1 or more), optional `spread_days` (whole
+  days, 0 or more, default 0) and optional `level`.
+- **The most specific entry wins.** `type`, `status` and `tier` outrank `type` and `status`, which
+  outrank `type` alone. Two entries of equal specificity that can match one record are a load error.
+  A record of a listed type that no entry matches is eligible and not examined.
+- **`level` per entry** is `info`, `warn` or `error`, defaults to the rule's and is held to it: the
+  rule's level is a ceiling, an entry cannot raise a finding above it (`ADR-87`). `off` is refused.
+- **`anchor_field`** names a field every listed type declares (`required_fields` or `known_fields`).
+  It is optional; without it a claim is dated by its `Realized-by` line only and `urzua reverify`
+  cannot renew it.
+- **`require_pin`** lists evidence categories as the `embodiment` declaration names them (`code`,
+  `test`, `spec` by default); an unknown one is a load error. It defaults to empty. `max_batch` is a
+  whole number, 1 or more, defaulting to 1. Both are read by `urzua reverify` (`SPEC-8`).
+- **Nothing is dropped silently.** An unknown type, status or tier, `days` of 0, an unknown key, an
+  `anchor_field` a listed type does not declare, a type with no locator field, an empty `periods`
+  and every option on any other rule are load errors. A `periods` entry that matches no record in the
+  repository is reported by `config.scope-matches-nothing`.
+- **Which records are judged.** A record of a listed type that has the type's evidence locator field
+  and whose status matches an entry. A record whose status is in the type's `claim_retained`, or that
+  states a `sticky_states` value of `embodiment.consistency`, is not. Unlike that rule the record
+  need not state `Embodiment`: a `Done` milestone's claim is its `Status`.
+- **Age and the anchor.** Age is whole UTC days from the claim's anchor to today. The anchor is the
+  date in `anchor_field` (`YYYY-MM-DD`, written only by `urzua reverify`), otherwise the date of the
+  commit that last touched the record's `Realized-by` line (`claim_max_age_days`' measure; a line
+  not yet committed is touched today). A malformed date, or one in the future, is reported
+  (`claim-anchor-invalid`) and falls back to the line. A claim expires when its age exceeds `days`
+  plus its offset.
+- **`spread_days`, the first expiry.** A record with no valid `anchor_field` date has its period
+  lengthened by a deterministic offset of 0 to `spread_days` days: the first 8 bytes of the SHA-256 of
+  its `Stable-Id` text as a big-endian number, modulo `spread_days + 1`. Nothing is written to the
+  record and no run date is stored, so every run and every machine agrees. The offset ends when the
+  record carries a valid date (after its first `reverify`), delays and never hastens, and is named in
+  the finding; a record with no `Stable-Id` gets 0 and the message says so. Absent `spread_days` gives
+  no offset.
+- **Drift and expiry are independent.** Both report on one record, `drift_grace_days` does not delay
+  expiry, and neither suppresses the other. A waiver suppresses the finding and does not renew the
+  claim; a waiver with no `Expires` is governed by the `permanent` declaration (`ADR-86`), which
+  closes permanence for a rule it does not list.
+- **`embodiment.claim-renewal-unattested`** is a second opt-in rule, declared beside it and needing
+  its `anchor_field`. On `check --base` it reports a changed record whose anchor date is newer than
+  its merge-base copy's and which gained no `Re-verified` revision row dated that day, or whose
+  anchor the merge-base copy carried and the branch removed. It is not-applicable without `--base`,
+  and cannot see a record that never carried the field or one new in the diff.
+
 ### Scoped evidence pins and locator resolvers (`ADR-74`, `MILE-185`)
 
 A `Realized-by` locator may carry a scope between its path and its pin, so a pin hashes one item
@@ -2233,3 +2305,4 @@ proves this configuration produces the three findings.
 > | 2026-11-07 | Bumped to `0.109`. Documents the optional `revision_log` keys `classes`, `class_column`, `date_column` and `tool_class` (`ADR-94`, `MILE-213`): the class vocabulary, the header names of the class and date columns, and the class `urzua fix` writes, their engine defaults, and their load errors. A `\|` inside a log cell stays in its cell, and a row wider than its header is a finding when a column is declared. No `schema_version` bump. **Why:** `MILE-213`, the build of `ADR-94`; an undeclared config behaves as before. | **substantive** |
 > | 2026-11-07 | Bumped to `0.110`. Documents that a dependency caps the standing computed from `statuses.delivery.items` (a record whose items all resolve beside an unfinished dependency computes `partial_status`) and that `sequence.status-agreement` skips such a record with an info notice, so `partial_status` may stay a `progress` status. No new key; no `schema_version` bump. **Why:** the `ADR-96` amendment of 2026-11-07, accepted by the maintainer; a configuration without `items` or a sequencing pair is unchanged. | **substantive** |
 > | 2026-11-07 | Bumped to `0.111`. Documents `extension_prefixes` on `header.field-set-consistency` (`MILE-141`): the per-type extension prefix, its fallback to `allow_extension_prefix` for a type it does not name, and its load errors (empty or whitespace prefix, a collision with a declared field, an undeclared type or one without `known_fields`). **Why:** `MILE-141` Done means item 3, built on the maintainer's decision of 2026-11-07. | **substantive** |
+> | 2026-11-07 | Bumped to `0.112`. Documents `embodiment.claim-expired` and `embodiment.claim-renewal-unattested` (`ADR-97`, `MILE-129`): the `periods`, `anchor_field`, `require_pin` and `max_batch` options, the most-specific-entry rule, the computed tier, the `spread_days` first-cycle offset, the load errors, and that declaring `claim_max_age_days` beside the rule is refused. Off until declared. **Why:** `MILE-129`, the build of `ADR-97`. | **substantive** |

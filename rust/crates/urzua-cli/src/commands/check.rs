@@ -81,6 +81,11 @@ struct Context<'a> {
     back_pointed: rules::BackPointerEvidence,
     drift: crate::discovery::DriftedRecords,
     claim_ages: HashMap<PathBuf, u64>,
+    /// `embodiment.claim-expired`'s inputs (`ADR-97`): the commit time of each
+    /// record's `Realized-by` line and its first-cycle offset seed.
+    claim_line_times: HashMap<PathBuf, i64>,
+    claim_seeds: HashMap<PathBuf, u64>,
+    now_unix: i64,
     refs_snapshot: Result<RefsSnapshot, String>,
     record_index: rules::RecordIndex<'a>,
     collisions: Vec<rules::IdentifierCollision<'a>>,
@@ -106,30 +111,39 @@ struct Context<'a> {
 
 /// `revision-log.version-bump-required` judges a changed record against the
 /// merge base's copy, so that copy is read here (`BUG-51`) and handed over as
-/// data. Only the changed records of a type declaring a bump are read; a
-/// record new in the diff has no merge-base copy and gets no entry.
+/// data; so does `embodiment.claim-renewal-unattested` (`ADR-97`), for the
+/// records of the types `embodiment.claim-expired` lists. Only the changed
+/// records one of them reads are read; a record new in the diff has no
+/// merge-base copy and gets no entry.
 fn load_base_text(
     session: &Session,
     changes: Option<&urzua_io::GitChanges>,
     notices: &mut Vec<Notice>,
 ) -> Result<HashMap<PathBuf, String>, String> {
     let mut out = HashMap::new();
-    let (Some(changes), Some(_)) = (
-        changes,
-        enabled_setting(
-            &session.config,
-            rules::RULE_REVISION_LOG_VERSION_BUMP_REQUIRED,
-        ),
-    ) else {
+    let Some(changes) = changes else {
         return Ok(out);
     };
+    let config = &session.config;
+    let bump = enabled_setting(config, rules::RULE_REVISION_LOG_VERSION_BUMP_REQUIRED).is_some();
+    let renewal =
+        enabled_setting(config, rules::RULE_EMBODIMENT_CLAIM_RENEWAL_UNATTESTED).is_some();
+    if !bump && !renewal {
+        return Ok(out);
+    }
+    let expiry: rules::ClaimExpiredOpts = config.rule_opts(rules::RULE_EMBODIMENT_CLAIM_EXPIRED);
     for record in &session.records {
-        let declares = session
-            .config
-            .record_types
-            .get(&record.record_type)
-            .is_some_and(|t| t.version_bump().is_some());
-        if !declares || !changes.changed.contains(&record.path) {
+        let wanted_by_bump = bump
+            && config
+                .record_types
+                .get(&record.record_type)
+                .is_some_and(|t| t.version_bump().is_some());
+        let wanted_by_renewal = renewal
+            && expiry
+                .periods
+                .iter()
+                .any(|p| p.record_type == record.record_type);
+        if !(wanted_by_bump || wanted_by_renewal) || !changes.changed.contains(&record.path) {
             continue;
         }
         // A path added since the merge base (a rename's new name too) has no
@@ -145,7 +159,12 @@ fn load_base_text(
             }
             Err(e) => notices.push(Notice {
                 severity: NoticeSeverity::Warning,
-                subject: rules::RULE_REVISION_LOG_VERSION_BUMP_REQUIRED.to_string(),
+                subject: if wanted_by_bump {
+                    rules::RULE_REVISION_LOG_VERSION_BUMP_REQUIRED
+                } else {
+                    rules::RULE_EMBODIMENT_CLAIM_RENEWAL_UNATTESTED
+                }
+                .to_string(),
                 message: format!(
                     "{}: could not read the merge base's copy, so the record is not examined: {e}",
                     record.path.display()
@@ -250,6 +269,9 @@ impl<'a> Context<'a> {
             drifted: &self.drift.drifted,
             fresh: &self.drift.fresh,
             claim_ages: &self.claim_ages,
+            claim_line_times: &self.claim_line_times,
+            claim_seeds: &self.claim_seeds,
+            now_unix: self.now_unix,
             base_text: &self.base_text,
             changed_paths: self.changed_paths.as_deref(),
             added_paths: self.added_paths.as_deref(),
@@ -862,6 +884,41 @@ fn load_drift(
     (drift, ages)
 }
 
+/// `embodiment.claim-expired`'s measures for the records the run reports on
+/// (`ADR-97`): under a path or diff scope the others are not blamed, and a
+/// proposed record (`--stdin-path`) has no commit for its line to be dated by.
+fn load_claim_measures(
+    session: &Session,
+    scope: &ReportScope,
+    notices: &mut Vec<Notice>,
+) -> (HashMap<PathBuf, i64>, HashMap<PathBuf, u64>) {
+    let (repo_root, config) = (&session.repo_root, &session.config);
+    let only: Vec<urzua_core::record::Record>;
+    let records: &[urzua_core::record::Record] = if let Some(p) = scope.prospective.as_ref() {
+        only = session
+            .records
+            .iter()
+            .filter(|r| r.path == p.path)
+            .cloned()
+            .collect();
+        &only
+    } else if !scope.whole_corpus() {
+        only = session
+            .records
+            .iter()
+            .filter(|r| scope.in_scope.contains(&r.path))
+            .cloned()
+            .collect();
+        &only
+    } else {
+        session.records.as_slice()
+    };
+    let measures =
+        crate::discovery::compute_claim_measures(repo_root, records, config, urzua_io::now_unix());
+    notices.extend(crate::discovery::drift_notices(false, &measures.problems));
+    (measures.line_times, measures.seeds)
+}
+
 /// Whether a run with this `--rules` selection (`None`: every enabled rule) runs
 /// any of `ids`.
 fn selection_wants(selection: Option<&[String]>, ids: &[&str]) -> bool {
@@ -1100,6 +1157,14 @@ fn load_context<'a>(
         &drift.git_problems,
     ));
 
+    let claim_wanted = selection_wants(selection, &[rules::RULE_EMBODIMENT_CLAIM_EXPIRED])
+        && enabled_setting(config, rules::RULE_EMBODIMENT_CLAIM_EXPIRED).is_some();
+    let (claim_line_times, claim_seeds) = if claim_wanted {
+        load_claim_measures(session, scope, &mut notices)
+    } else {
+        (HashMap::new(), HashMap::new())
+    };
+
     let (record_index, collisions) = index_with_disclosures(session, &mut notices);
     let back_pointed = cited_records(sources.back_pointer_sources.as_ref(), config, &record_index);
     let refs_snapshot = load_refs_with_notice(config, repo_root, &mut notices);
@@ -1119,6 +1184,9 @@ fn load_context<'a>(
             back_pointed,
             drift,
             claim_ages,
+            claim_line_times,
+            claim_seeds,
+            now_unix: urzua_io::now_unix(),
             refs_snapshot,
             record_index,
             collisions,

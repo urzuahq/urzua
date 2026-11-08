@@ -36,6 +36,10 @@ pub enum Evidence {
 }
 
 impl Evidence {
+    pub fn as_str(self) -> &'static str {
+        self.name()
+    }
+
     fn name(self) -> &'static str {
         match self {
             Evidence::Test => "test",

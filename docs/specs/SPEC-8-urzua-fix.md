@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5Q0XVK27P5T8FN72BN
-Version: '0.32'
+Version: '0.33'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -324,6 +324,68 @@ the same `PATHS` scoping.
   and no bare `\r`: `sed -n 'a,bp' file | tr -d '\r' | sed -z 's/\n$//' | sha256sum`.
 - It cannot be combined with `--stdin-path`, and `--reason` without `--rebaseline` is `not-run`.
 
+## Renewing a claim (`urzua reverify`, `ADR-97`)
+
+`urzua reverify` is the one attributed way to renew a claim that `embodiment.claim-expired`
+(`SPEC-3`) reports. It follows `fix --rebaseline`: review first, then apply. It needs that rule
+declared and is `not-run` otherwise.
+
+- **Two acts, by design.** `reverify` never moves an existing pin: it re-checks that each pin still
+  matches and dates the claim. A changed pin is moved by `fix --rebaseline`, with its own reason,
+  and only then does `reverify` renew. The one hash it writes is a *first* pin on a locator that has
+  none, because a claim is not renewed over evidence that only git history vouches for.
+- **Detect** (`urzua reverify [--ids <record>,...]`, read only). With no `--ids` it lists the
+  records whose claim has expired; with `--pin-only`, those with an unpinned locator to pin; with
+  `--ids`, any record of a listed type, expired or not. Each record carries `finding` (the expiry
+  message), `age_days`, `period_days`, and `locators`: per locator `locator`, `category`, `resolved`,
+  `pinned`, `recorded_hash`, `current_hash`, `check` and, for a scoped one, `span` with its text, so
+  the reviewer reads the content they attest. `check` is `hash-checked`, `will-pin`, `history-only`
+  (a locator outside `require_pin`, such as `spec:`, re-resolved and judged by git history only),
+  `changed` or `unresolved`. `refused` lists why a record cannot be written; with `--pin-only`,
+  `commits_since` lists the commits that touched an unpinned locator since the `Realized-by` line
+  was last touched. Nothing is written.
+- **Apply** (`--apply`): the gates of `fix --apply` hold unchanged. `--ids` or `--force`, never
+  implied; an `--ids` entry matching nothing fails; identity resolves under `attestation` (`--by`,
+  the identity source, `--actor agent|human`); a lock; the pin hashes are read after the lock; a
+  record with no revision log is refused. `--reason` is required, one line without `|` or a line
+  break. `--apply` names at most `max_batch` records (a longer `--ids` list is `not-run` and names the
+  cap, nothing is truncated), every row of a batch carries the same `--reason`, and the report prints
+  it once. `--force` is refused when it selects more than one record: a batch is named.
+- **Refused, writing nothing for that record:** a locator that does not resolve; a pinned locator
+  whose hash differs (run `fix --rebaseline`); drift by the git-history rule, inside
+  `drift_grace_days` too (attesting over a file that changed and was not re-read is the rubber stamp
+  this command exists to prevent); a stated `Embodiment` that `embodiment.consistency` would report;
+  a record the expiry rule does not judge or cannot date; a rule with no `anchor_field`; and
+  `--actor agent` where the matching entry's level is `error`.
+- **The pin step.** Every locator of a `require_pin` category without a pin is pinned first, in the
+  locator's own spelling (file-level or scoped exactly as written, a scope is never invented) with
+  `@sha256:` and 64 lowercase hex of the content the tool just read, on the `Realized-by` line and in
+  Done-means item clauses. A `spec:` locator is not pinned: it cites a record with its own lifecycle,
+  is re-resolved, and the row counts it apart.
+- **`--pin-only`** pins the unpinned locators of the chosen records, allows the drift, writes the
+  `Pinned` row and sets no date, so nothing is renewed: it is how an unpinned locator that drifted is
+  pinned (`fix --rebaseline` has nothing to move there), and the one-off migration of a corpus. It
+  refuses a pinned locator whose hash differs and a record with nothing to pin, never doing nothing
+  silently. Its reason names the real delta, as a re-pin's does.
+- **What is written.** `anchor_field` is set to today (UTC), added to the header when absent.
+  `Status` and `Embodiment` are not touched: a reverify dates a claim and never lifts it. Revision rows
+  of the type's `tool_class`:
+  `Pinned (attested by NAME, identity: SOURCE, actor: ACTOR): N locators pinned, F file-level, Q scoped. Evidence: <locator>@sha256:<12 hex>, ... Reason: <reason> **Why:** a claim is renewed only over pinned code and test evidence.`
+  and
+  `Re-verified (attested by NAME, identity: SOURCE, actor: ACTOR): N locators re-resolved, P hash-checked, S spec locators checked by git history only. Evidence: ... Reason: <reason> **Why:** the claim was <age> days old against a <days>-day period.`
+  A record pinned and renewed in one run gets both rows, in that order, with the one reason. A
+  repository with no `require_pin` gets `H unpinned locators checked by git history only` for `S spec
+  locators ...`.
+- **Who may renew.** An agent may renew and may pin when an independent reviewer reads the pull
+  request's `Pinned:` and `Re-verified:` lines and confirms each reason matches what was read
+  (the re-pin decision of 2026-11-05); the engine records the actor and cannot verify the reviewer.
+- **What proves a renewal.** The tool proves that every locator resolves, every pin still matches,
+  every `require_pin` locator is pinned, and the record agrees with its computed `Embodiment`. It
+  records who attested and what it saw. It does not prove that a person read the code: the reason is
+  the reviewer's judgement.
+- The exit codes are `fix`'s: 0 for a review or an applied batch, 1 for a refused or failed record,
+  2 for `not-run`.
+
 ## Purity boundary
 
 `urzua-core::fix::apply_repair` is a pure `&str -> Result<String, String>` transform. The CLI
@@ -389,3 +451,4 @@ asserted by test, not assumed by convention.
 > | 2026-11-07 | Bumped to `0.30`. Detect mode (no `--apply`) honours `--ids`: the report lists only the named records and an `--ids` entry that matches no pending repair (no stale pin, under `--rebaseline`) is a `partial-failure`, as under `--apply`; `--force`, `--by` and `--actor` without `--apply` are usage errors (exit 2) instead of being ignored. **Why:** maintainer decision of 2026-11-07, from the CLI review. | **substantive** |
 > | 2026-11-07 | Bumped to `0.31`. The `Status` repair for a type that declares `statuses.delivery.items`: `fix` computes from the Done-means items, writes `set_status` or `partial_status` with the item counts in the row, never downgrades a `success` status, writes no `progress` status to a derived-blocked record, and `--rebaseline` re-pins a pin inside an item clause. **Why:** `MILE-214`, `ADR-96`. | **substantive** |
 > | 2026-11-07 | Bumped to `0.32`. `fix --apply` and `fix --rebaseline` write the type's `revision_log.tool_class` (default `structural`) in place of the literal, laid out by the log's header: the date in the date column, the class in the class column, the narrative in the first remaining column, any other cell empty; a log with no column left for the narrative, or whose declared column is missing or repeated, is refused. **Why:** `MILE-213`, the build of `ADR-94` and the 2026-11-07 amendment to `ADR-15`; a vocabulary without `structural` would have the tool write a row its own rule rejects. | **substantive** |
+> | 2026-11-07 | Bumped to `0.33`. Documents `urzua reverify` (`ADR-97`, `MILE-129`): the review report, the refusals, the pin step and `--pin-only`, the batch cap and the one shared reason, the actor rule, and the `Pinned` and `Re-verified` revision rows. **Why:** `MILE-129`, the build of `ADR-97`. | **substantive** |

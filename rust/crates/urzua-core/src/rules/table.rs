@@ -657,6 +657,77 @@ pub const RULE_TABLE: &[RuleDef] = &[
         },
     },
     RuleDef {
+        id: RULE_EMBODIMENT_CLAIM_EXPIRED,
+        description: "A claim expires after a period declared per record type, status and evidence tier (`ADR-97`, `MILE-129`). Opt-in: a configuration that does not declare the rule runs nothing new and loads and reports as before. `periods` is a list of `{type, status?, tier?, days, spread_days?, level?}`; the most specific entry wins (type, status and tier outrank type and status, which outrank type alone), two entries of equal specificity that can match one record are a load error, and a record of a listed type that no entry matches is eligible and not examined. The `tier` is the one the record's locators compute to under the `embodiment` declaration, so a milestone or bug that states no `Embodiment` is judged too; a record whose status is in the type's `claim_retained`, or that states a `sticky_states` value, is not. A claim's age is whole UTC days from its anchor: the date in the declared `anchor_field` (`YYYY-MM-DD`, written only by `urzua reverify`; a malformed or future date is reported and ignored), otherwise the date of the commit that last touched the `Realized-by` line. A record with no valid anchor date has its first period lengthened by a deterministic offset of 0 to `spread_days` days, the first 8 bytes of the SHA-256 of its `Stable-Id` as a big-endian number modulo `spread_days + 1`, so a corpus rewritten on one day does not expire on one day; the offset ends with the first valid anchor date and a record with no `Stable-Id` gets 0. A finding is reported at the entry's `level`, held to the rule's own, and offers `urzua reverify --ids <record>` (a review report, not a write). `require_pin` (evidence categories that must be pinned before a renewal) and `max_batch` (most records one `reverify --apply` names) are read by that command. Drift and expiry are independent: both report on one record, `drift_grace_days` does not delay expiry, and a waiver suppresses the finding without renewing the claim (a waiver with no `Expires` is governed by the `permanent` declaration, `ADR-86`). Declaring this rule together with `claim_max_age_days` on `embodiment.consistency` is a load error.",
+        scope: Scope::Records,
+        anchor: Anchor::Record,
+        judges: Judges::OneRecord,
+        needs_identity_index: false,
+        requires_relation_pairs: false,
+        requires_acyclic_pair: false,
+        requires_override_log: false,
+        requires_authority: false,
+        reads_declaration: None,
+        header_none: HeaderNone::OutOfScope,
+        options: &["anchor_field", "require_pin", "max_batch", "periods", "scope"],
+        population: PopulationUnit::Record,
+        actions: &[
+            VariantAction::new("claim-expired", ActionDecl::RUN_COMMAND),
+            VariantAction::new("claim-anchor-invalid", ActionDecl::FIELD_SET),
+        ],
+        phase: Phase::Main,
+        companion: None,
+        run: |c| {
+            embodiment_claim_expired(
+                c.records,
+                c.config,
+                changed_only(c.config, RULE_EMBODIMENT_CLAIM_EXPIRED, c.changed_paths).as_ref(),
+                c.back_pointed,
+                &ClaimInputs {
+                    now_unix: c.now_unix,
+                    line_times: c.claim_line_times,
+                    seeds: c.claim_seeds,
+                },
+            )
+        },
+    },
+    RuleDef {
+        id: RULE_EMBODIMENT_CLAIM_RENEWAL_UNATTESTED,
+        description: "On a `--base` run, a changed record whose `anchor_field` (declared by `embodiment.claim-expired`) is newer than in its merge-base copy and which gained no `Re-verified` revision row dated that day, or whose `anchor_field` the merge-base copy carried and the branch removed (`ADR-97` section 6). Prevention is not claimed, detection is: a date in a text file can be typed, and only `urzua reverify` writes the row that says who renewed the claim and what the tool checked. It cannot see a record that never carried the field, nor one new in the diff (no merge-base copy), and not-applicable on a run with no `--base`. Needs `embodiment.claim-expired` with an `anchor_field`; opt-in; its level is the repository's.",
+        scope: Scope::Records,
+        anchor: Anchor::Record,
+        judges: Judges::OneRecord,
+        needs_identity_index: false,
+        requires_relation_pairs: false,
+        requires_acyclic_pair: false,
+        requires_override_log: false,
+        requires_authority: false,
+        reads_declaration: None,
+        header_none: HeaderNone::Exempt("judges a changed record against its merge-base copy, only on a --base run"),
+        options: &["scope"],
+        population: PopulationUnit::Record,
+        actions: &[
+            VariantAction::new("claim-renewal-unattested", ActionDecl::Exempt("the remedy is a judgement: undo the hand-typed date, or have someone re-verify the claim with `urzua reverify`, which writes the row")),
+        ],
+        phase: Phase::Main,
+        companion: None,
+        run: |c| {
+            embodiment_claim_renewal_unattested(
+                c.records,
+                c.config,
+                c.full_text,
+                c.base_text,
+                c.changed_paths,
+                changed_only(
+                    c.config,
+                    RULE_EMBODIMENT_CLAIM_RENEWAL_UNATTESTED,
+                    c.changed_paths,
+                )
+                .as_ref(),
+            )
+        },
+    },
+    RuleDef {
         id: RULE_EMBODIMENT_REQUIRES_ACCEPTED_STATUS,
         description: "A record whose `Status` is not an accepted status states an `Embodiment` the `embodiment` declaration marks `claims_built` (`MILE-138`): a decision not yet made cannot have been built. The accepted statuses are the type's declared `statuses.success`; a type declaring none uses the rule's `accepted_statuses` option, and with neither the type is not examined. Any other state, including the drift state and a sticky one, is not flagged, and a record missing either field is left to the header rules. Opt-in; the population counts the records the rule could judge.",
         scope: Scope::Records,
@@ -2265,6 +2336,8 @@ mod tests {
         assert_eq!(
             listing,
             vec![
+                RULE_EMBODIMENT_CLAIM_EXPIRED,
+                RULE_EMBODIMENT_CLAIM_RENEWAL_UNATTESTED,
                 RULE_EMBODIMENT_LOCATOR_PROMOTION_CANDIDATE,
                 RULE_EMBODIMENT_LOCATOR_ON_BACK_POINTER_PATH
             ]

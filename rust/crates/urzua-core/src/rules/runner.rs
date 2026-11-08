@@ -71,6 +71,13 @@ pub struct RuleCtx<'a> {
     pub drifted: &'a HashSet<PathBuf>,
     pub fresh: &'a HashSet<PathBuf>,
     pub claim_ages: &'a HashMap<PathBuf, u64>,
+    /// The commit time of each record's `Realized-by` line, read only while
+    /// `embodiment.claim-expired` is enabled (`ADR-97`).
+    pub claim_line_times: &'a HashMap<PathBuf, i64>,
+    /// Each record's first-cycle offset seed (`ADR-97` section 2).
+    pub claim_seeds: &'a HashMap<PathBuf, u64>,
+    /// Now, in seconds since the epoch: the one clock the expiry rule reads.
+    pub now_unix: i64,
     /// The merge base's text of each changed record (`--base`), read by the
     /// caller; a record new in the diff has no entry. Empty without `--base`.
     pub base_text: &'a HashMap<PathBuf, String>,
