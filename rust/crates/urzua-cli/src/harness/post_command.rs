@@ -62,6 +62,8 @@ const PROTECTED_FILE: &str = ".urzua/cache/protected-hashes.json";
 #[derive(Deserialize, Default)]
 struct Request {
     cwd: Option<String>,
+    #[serde(default)]
+    project_dir: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -141,7 +143,7 @@ fn judge(config: Option<PathBuf>) -> PostVerdict {
     // A command that ran inside a nested repository (`git init sub && cd sub`)
     // is still the governed repository's session.
     if config.is_none() {
-        super::run::enter_governed_cwd();
+        super::run::enter_governed_cwd(request.project_dir.as_deref());
     }
 
     // The commit the last check saw, and the files committed since: a command

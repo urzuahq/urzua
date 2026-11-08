@@ -319,9 +319,21 @@ pub(crate) fn sibling_worktrees(repo_root: &Path) -> Result<Vec<PathBuf>, String
 mod tests {
     use super::*;
 
+    /// Removes the fixture directory on every exit path, a panic included.
+    struct Scratch(std::path::PathBuf);
+
+    impl Drop for Scratch {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
     #[test]
     fn a_lock_whose_owner_is_gone_is_taken_and_leaves_no_guard_behind() {
-        let dir = std::env::temp_dir().join(format!("urzua-lock-{}", std::process::id()));
+        let scratch =
+            Scratch(std::env::temp_dir().join(format!("urzua-lock-{}", std::process::id())));
+        let dir = scratch.0.clone();
+        let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         assert!(Command::new("git")
             .arg("-C")
@@ -347,6 +359,5 @@ mod tests {
         }
         assert!(!lock.exists());
         assert!(!dir.join(".git/urzua-new.lock.reap").exists());
-        let _ = std::fs::remove_dir_all(&dir);
     }
 }

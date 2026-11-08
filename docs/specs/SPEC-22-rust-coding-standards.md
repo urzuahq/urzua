@@ -1,5 +1,5 @@
 ---
-Version: '0.9'
+Version: '0.10'
 Date: 2026-09-23
 Status: Accepted
 Author: beauwilliams
@@ -165,8 +165,8 @@ comment with a truth value that outlives the commit that wrote it.
 ### Error types: `thiserror` at a library boundary, a plain message at the CLI boundary
 
 `DiscoveryError`, `ConfigError`, and similar are `#[derive(thiserror::Error)]` enums naming exactly
-what failed and where, used by every library crate (`urzua-core`, `urzua-io`, `urzua-id`,
-`urzua-agdr`). `urzua-cli`'s own command functions return `Result<T, String>` at their own internal
+what failed and where, used by every library crate that has errors to report (`urzua-core`, `urzua-io`,
+`urzua-agdr`); `urzua-id` has none. `urzua-cli`'s own command functions return `Result<T, String>` at their own internal
 boundaries, where the message *is* the full user-facing text and nothing downstream inspects the
 error's shape — it terminates in `CouldNotRun::from` and is never matched on.
 
@@ -258,3 +258,4 @@ the next feature.
 > | 2026-11-04 | Bumped to `0.7`. The convention names the options a rule accepts as a table field. **Why:** `MILE-171` step 4: the config loader kept its own list of which rule owns which option. | **substantive** |
 > | 2026-11-04 | Bumped to `0.8`. The I/O-in-discovery convention names the claim and index readers and the symlink policy as living there, and a command's verdict as a pure function (`derive_status`). **Why:** `MILE-172`: `check::run` held the filesystem walkers and a five-branch status derivation testable only end to end. | **substantive** |
 > | 2026-11-07 | Bumped to `0.9`. Added "A command's run is a composition of short stages": no function in `check.rs` exceeds 100 lines, enforced by a test that reads the file. **Why:** `MILE-172` asked for "a stated size bound" and none was stated; `load_context` was 205 lines and `execute` 130, so the bound is stated here and the two are split under it with no change to what `check` prints. | **substantive** |
+> | 2026-11-08 | Bumped to `0.10`. The error-types section says `urzua-id` has no error type. **Why:** the round-4 code-quality review (S6): `urzua_id::Error`, `urzua_core::Error` and `DisplayNumber` had no user and were removed, with `urzua-id`'s now-unused `thiserror` dependency; no behaviour changes. | **substantive** |

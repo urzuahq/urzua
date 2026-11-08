@@ -159,6 +159,22 @@ nothing until a person fills it in.*
     (does a generated draft preserve the review property) is answered here for `waive`: yes, because the
     draft suppresses nothing until a person writes the reason.
 
+## Amendment (2026-11-08): a finding the drafts themselves resolve is skipped
+
+Status: accepted by the maintainer on 2026-11-08. Point 3 gains one exclusion; nothing else in this
+decision changes.
+
+A dry run of an adoption with no waiver directory yet showed the command would draft a waiver for a
+finding that exists only because no waiver record exists, a directory that matches nothing. Writing the
+first draft makes that finding disappear, so its draft would waive nothing and would be reported at once
+by `waiver.matches-nothing`.
+
+Point 3 is amended: before writing, the command judges the tree as it would be with the drafts written,
+read from memory and not from disk. A finding that is absent from that judgment is not drafted; it is
+listed in `skipped` with the reason that the drafts resolve it. The engine names no rule for this: any
+finding the drafts resolve is skipped the same way, and each one is reported, never dropped silently.
+`MILE-205` builds it.
+
 ## Reversibility
 
 Easy for the command, which is additive and writes only ordinary waiver records; removing it leaves every
@@ -212,3 +228,4 @@ the report fields and the choice of `Pending` as the fallback value, which a rep
 > | 2026-11-05 | The milestone that builds this is `MILE-205`, renumbered from `MILE-204` after a numbering collision. | **structural** |
 > | 2026-11-05 | Records-only amendment after review (PR #364). Relaxing `statuses` needs both `status_model.rs:35` and `:368`, and the readers of `values` (`config.rs:1597` and others) are named. The command refuses when a repository declares no `permanent` and does not require `Expires` (point 9). Recorded as decided: fall back to `Pending`, plain `--path`, info findings skipped, one waiver per rule and file. `ADR-73` cited as compatible. **Why:** independent review found the serde failure and an accidental-permanent-waiver gap. Status stays Proposed. | **substantive** |
 > | 2026-11-06 | Status changed from Proposed to Accepted. **Why:** Maintainer decision, 2026-11-06. | **substantive** |
+> | 2026-11-08 | Amended: point 3 skips, and lists in `skipped`, a finding that writing the drafts would itself resolve, judged on the tree with the drafts in memory. **Why:** Maintainer decision, 2026-11-08, after an adoption dry run showed a draft for a finding that exists only because no waiver record does yet. | **substantive** |
