@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5EEDKBJSNGJHTYE0QZ
-Version: '0.12'
+Version: '0.13'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified

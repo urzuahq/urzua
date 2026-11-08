@@ -4,7 +4,7 @@ Status: Shipped
 Embodiment: Verified
 Realized-by: code:rust/crates/urzua-cli/src/harness/run.rs@sha256:e57de4cc3e3eafa549f39d134ddd4b33208ca1b796d32e7e2e59dd23f2b01ab2, code:rust/crates/urzua-cli/src/harness/post_command.rs@sha256:979ccfeb8f625be08fb6c4356e0c12f1f05f890da3b91afcfe462865acd05ed7, code:rust/crates/urzua-cli/src/harness/gate.rs@sha256:d9406ea2a413f93078af968dcb2706714574b4e7f6ddbff246ebee822293bf61, code:rust/crates/urzua-cli/src/harness/lock.rs@sha256:d95536046dc453a9dded803a4c6f5080fd0473bf450ead9a0d9d8b9eab444272, code:rust/crates/urzua-cli/src/harness/mod.rs@sha256:afb5fd5f5e077e28b1aa8b8142251250214d18b23dda62ba61c27c0a9b55f56c, code:rust/crates/urzua-cli/bundle/claude-code/files/.claude/hooks/urzua-claude-code.py@sha256:373e2943485885f9f2dfd94117f1b069e659686b2c84ef732c2ed4d087dfc18b, test:rust/crates/urzua-cli/tests/harness_integration.rs@sha256:a58fc1281940313e145569aab9f3f2b61c48941aa55bce291510421958edf88b, test:rust/crates/urzua-cli/tests/harness_hardening_integration.rs@sha256:3fce82fe079e94138ac5dd9a510d9439e2b3207ccdaaa4b893123296cfca2d77, test:rust/crates/urzua-cli/tests/harness_post_command_integration.rs@sha256:6cb58686cab75beb6c9557ae82f39cb58e01ced5098e3fcff489ff6703ad9d0c, test:rust/crates/urzua-cli/tests/harness_install_report_integration.rs@sha256:e8e84117796424e74024ea6ad186cf80e637a908d6d25ef2e6ac3b068a0ca272
 Date: 2026-11-06
-Version: '0.16'
+Version: '0.17'
 Author: beauwilliams
 Subject: 'The neutral request and verdict `urzua harness run` speaks, the adapter directory layout of the embedded bundle, and the lock file.'
 Implements: ADR-89
