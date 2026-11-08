@@ -272,3 +272,85 @@ fn init_writes_the_file_named_by_config() {
     let again = run_urzua(&dir, &["--config", target.to_str().unwrap(), "init"]);
     assert_eq!(again.status.code(), Some(2));
 }
+
+/// A repository with prefixed records, a README beside them and one record
+/// still written in the removed blockquote form.
+fn readme_and_old_form_repo(name: &str) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-cli-test-{name}"));
+    git(&dir, &["init", "-q"]);
+    git(&dir, &["config", "user.email", "test@example.com"]);
+    git(&dir, &["config", "user.name", "test"]);
+    for n in ["ADR-1-first", "ADR-2-second"] {
+        write(
+            &dir,
+            &format!("docs/adr/{n}.md"),
+            "---\nStatus: Accepted\n---\n# Title\n",
+        );
+    }
+    write(
+        &dir,
+        "docs/adr/ADR-3-old.md",
+        "# ADR-3\n\n> **Status:** Accepted\n",
+    );
+    write(&dir, "docs/adr/README.md", "# Decisions\n");
+    git(&dir, &["add", "-A"]);
+    git(&dir, &["commit", "-q", "-m", "fixture"]);
+    dir
+}
+
+#[test]
+fn init_excludes_a_readme_in_a_record_directory_observed_failing() {
+    let dir = readme_and_old_form_repo("init-readme");
+    let report = json(&run_urzua(&dir, &["init"]));
+    let config = std::fs::read_to_string(dir.join(".urzua/config.yaml")).unwrap();
+    assert!(config.contains("exclude_files"), "{config}");
+    assert!(config.contains("README.md"), "{config}");
+    assert_eq!(report["proposed"][0]["exclude_files"][0], "README.md");
+
+    let checked = json(&run_urzua(&dir, &["check"]));
+    assert!(
+        !checked.to_string().contains("README.md"),
+        "check says nothing about the README: {checked}"
+    );
+}
+
+#[test]
+fn init_without_a_readme_writes_no_exclude_files() {
+    let dir = realistic_repo("init-no-readme");
+    run_urzua(&dir, &["init"]);
+    let config = std::fs::read_to_string(dir.join(".urzua/config.yaml")).unwrap();
+    assert!(!config.contains("exclude_files"), "{config}");
+}
+
+/// Adopter S3: the header warning must state what `check` does. With the
+/// `required_fields: []` init writes, `check` is silent about an old-form
+/// header, so the warning says so and names the config that makes it report.
+#[test]
+fn the_old_form_warning_says_check_is_silent_until_required_fields_is_declared() {
+    let dir = readme_and_old_form_repo("init-old-form-warning");
+    let report = json(&run_urzua(&dir, &["init", "--dry-run"]));
+    let notices = report["notices"].to_string();
+    assert!(
+        !notices.contains("will be reported as unreadable"),
+        "the promise check does not keep is gone: {notices}"
+    );
+    assert!(notices.contains("required_fields"), "{notices}");
+
+    // The sentence is true: silent as written, loud once declared.
+    run_urzua(&dir, &["init"]);
+    let silent = json(&run_urzua(&dir, &["check"]));
+    assert!(
+        !silent.to_string().contains("ADR-3-old"),
+        "check is silent about the old form as init writes the config: {silent}"
+    );
+    let path = dir.join(".urzua/config.yaml");
+    let config = std::fs::read_to_string(&path)
+        .unwrap()
+        .replace("required_fields: []", "required_fields: [Status]");
+    std::fs::write(&path, config).unwrap();
+    let loud = json(&run_urzua(&dir, &["check"]));
+    assert!(
+        loud.to_string().contains("ADR-3-old"),
+        "declaring required_fields makes check report it: {loud}"
+    );
+}

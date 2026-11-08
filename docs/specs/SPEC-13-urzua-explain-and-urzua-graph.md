@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5DB4YPSWZ6MQV85PQ7
-Version: '0.13'
+Version: '0.14'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/commands/explain.rs@sha256:9cdffc6765ee8a93e35d7690d4b9628dd10bb525704b0982a310213165c2133c, code:rust/crates/urzua-cli/src/commands/graph.rs@sha256:379b00875a633e9d8e59f690e2a12ce3ed3b0d5635d533f0a8242580041bfd0a, code:rust/crates/urzua-core/src/graph.rs@sha256:7d43a868a856d9b7024c1eb124ebb8344fd0e15145f744d01f2fcc19eb47c65e, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs@sha256:44fea1626a547a6d9226f09c5e9cd116aad2dfe384a082aaeb8eec2c74f22af5
+Realized-by: code:rust/crates/urzua-cli/src/commands/explain.rs@sha256:15d3bc36d94402f876239986ac421f37cf23d558db6283c41f2eddbcf09ab71c, code:rust/crates/urzua-cli/src/commands/graph.rs@sha256:379b00875a633e9d8e59f690e2a12ce3ed3b0d5635d533f0a8242580041bfd0a, code:rust/crates/urzua-core/src/graph.rs@sha256:7d43a868a856d9b7024c1eb124ebb8344fd0e15145f744d01f2fcc19eb47c65e, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs@sha256:44fea1626a547a6d9226f09c5e9cd116aad2dfe384a082aaeb8eec2c74f22af5
 Author: beauwilliams
 Subject: '`urzua explain`/`urzua graph` -- read-only relationship queries over already-parsed data.'
 Implements: ADR-24, ADR-44
@@ -33,6 +33,8 @@ file (`ADR-74`). Given `urzua explain <path>#<scope>` the report also carries `s
 route for a scoped pin, and it shows the resolved span because an early end (a `}` in a string)
 cannot be detected by the engine. A scope that does not resolve, a file that is not UTF-8 and a
 locator carrying an anchor are `not-run` with the reason.
+
+A path that names no file or directory in the working tree, matches no glob and that no record cites in `Realized-by` is `not-run` too (`urzua explain nosuchfile.rs`), and says so, because a typo otherwise reads as an ungoverned file with the whole corpus as its examined population. A path that is a rule id adds `use urzua explain --rule <id>`. A glob or directory argument that matches no tracked file and that no record cites (`urzua explain 'nonexist/**/*.rs'`) is `not-run` the same way, whether or not the config accepts its locator kind. A file that was deleted but is still cited by a record is a legitimate query and is explained as before.
 
 A path that is absolute, climbs out of the repository with `..`, or resolves through a symlink to a file outside it is `not-run`, whether or not it exists, and nothing is read from it. The same confinement applies to every path the tool reads or writes on a name from the arguments or the configuration (`index`, `fix`, `migrate ids`, `refs refresh`, `init`).
 
@@ -159,3 +161,5 @@ Both are stdout-JSON-always (ADR-23) and never write. `graph` reads `pointer_fie
 > | 2026-11-08 | Bumped to `0.12`. The `code:` and `test:` locators of `Realized-by` are now hash-pinned by `urzua reverify --pin-only` (the `Pinned` row above) and, where the record stated `Drift detected`, its `Embodiment` was recomputed (the tool-authored row above); no behaviour this spec describes changes. **Why:** `MILE-129`, `ADR-97` section 10: a claim is renewed only over pinned code and test evidence, so the corpus is pinned once before expiry is enabled. | **structural** |
 > | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/record_types_own_config_integration.rs` 7caa23975490 -> 44fea1626a54. Reason: Read the diff of each pinned file since the old pin and the claim still holds. record_types_own_config_integration.rs: the milestone fixture's Done means is now a list item instead of a prose sentence (the repository config checks Done means as items), and the helper that swaps in items replaces that item; no assertion changed. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
 > | 2026-11-08 | Bumped to `0.13`. The pin this spec's `Realized-by` holds on `record_types_own_config_integration.rs` was re-baselined (the `Re-baselined` row above); no behaviour this spec describes changed. **Why:** a revision-log entry that adds a structural change needs a `Version` bump (`revision-log.version-bump-required`). | **structural** |
+> | 2026-11-08 | Bumped to `0.14`. `explain` on a path that is no file or directory, a glob or directory that matches no tracked file, and that no record cites, is `not-run` with the reason (a rule id given as a path also names `--rule`), where it was `ok` with an empty `governing_records` and the whole-corpus population. A deleted file a record still cites is explained as before. **Why:** the round-4 CLI review (S6): a typo read as "ungoverned" and claimed 586 records examined. | **substantive** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/explain.rs` 9cdffc6765ee -> 15d3bc36d944. Reason: explain.rs now errors (not-run, exit 2) on a path or glob that matches no tracked file and is cited by no record, which this spec now documents; the rest of explain and graph is unchanged **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
