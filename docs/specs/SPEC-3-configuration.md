@@ -1665,8 +1665,9 @@ rules:
   whole number, 1 or more, defaulting to 1. Both are read by `urzua reverify` (`SPEC-8`).
 - **Nothing is dropped silently.** An unknown type, status or tier, `days` of 0, an unknown key, an
   `anchor_field` a listed type does not declare, a type with no locator field, an empty `periods`
-  and every option on any other rule are load errors. A `periods` entry that matches no record in the
-  repository is reported by `config.scope-matches-nothing`.
+  and every option on any other rule are load errors. A `periods` entry whose type holds claims
+  (a record with a locator) and covers none of them is reported by `config.scope-matches-nothing`; an
+  entry for a type with no claim yet is not, as an empty corpus reports nothing for any rule.
 - **Which records are judged.** A record of a listed type that has the type's evidence locator field
   and whose status matches an entry. A record whose status is in the type's `claim_retained`, or that
   states a `sticky_states` value of `embodiment.consistency`, is not. Unlike that rule the record

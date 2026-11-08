@@ -674,6 +674,18 @@ fn an_entry_that_matches_no_record_is_reported() {
         ),
     )
     .unwrap();
+    // An ADR that holds a claim, none of it covered by the Superseded entry.
+    std::fs::write(
+        dir.join(A1),
+        record(
+            "ADR-1",
+            "Accepted",
+            "01BBBBBBBBBBBBBBBBBBBBBBBB",
+            "",
+            "code:src/a.rs",
+        ),
+    )
+    .unwrap();
     commit_all(&dir, 1);
     let parsed = json(&run_urzua(&dir, &["check"]));
     let found = findings(&parsed, "config.scope-matches-nothing");
