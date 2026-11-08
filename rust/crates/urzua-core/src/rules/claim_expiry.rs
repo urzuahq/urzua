@@ -344,12 +344,30 @@ pub fn embodiment_claim_expired(
         .filter_map(|r| standing_of(r).ok())
         .map(|s| s.entry)
         .collect();
+    // An entry is a declaration that reaches nothing only when its type holds
+    // claims (a record with a locator) and none is one the entry covers; a type
+    // with no claim yet has nothing for the entry to match, as an empty corpus
+    // has nothing for any rule.
+    let has_claims = |record_type: &str| {
+        listed.iter().any(|r| {
+            r.record_type == record_type
+                && r.header
+                    .get(relation_field_name(
+                        config,
+                        &r.record_type,
+                        crate::config::RelationRole::EmbodimentLocator,
+                    ))
+                    .is_some_and(|v| !v.trim().is_empty())
+        })
+    };
+    let unmatched_entries = opts
+        .periods
+        .iter()
+        .enumerate()
+        .filter(|(n, p)| !matched.contains(n) && has_claims(&p.record_type))
+        .count();
     let mut candidates: Vec<Candidate<'_>> = listed.into_iter().map(Candidate::Record).collect();
-    candidates.extend(
-        (0..opts.periods.len())
-            .filter(|n| !matched.contains(n))
-            .map(|_| Candidate::Entry),
-    );
+    candidates.extend((0..unmatched_entries).map(|_| Candidate::Entry));
     let (population, examined_records) = census_records(
         PopulationUnit::Record,
         candidates,
