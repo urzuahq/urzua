@@ -2,7 +2,7 @@
 Status: Fixed
 Stable-Id: 01M1ZF57J080NMEH2FZ6W6E044
 Found-in: planning MILE-79 (a guarded edit command), reasoning through why the ADR-38 incident (Author silently reverted to a placeholder, undetected until a much later corpus-wide check) wasn't caught by field.quality despite field.quality running on every check
-Realized-by: code:rust/crates/urzua-core/src/field_state.rs@sha256:d46c56def01e7dbcfee70b6c994f022fb02a22b138bea50167028e46c232ceed, test:rust/crates/urzua-core/src/field_state.rs@sha256:d46c56def01e7dbcfee70b6c994f022fb02a22b138bea50167028e46c232ceed, test:rust/crates/urzua-core/src/rules.rs@sha256:355dd5bf590d2020ab967cb30501aa6ce610186c6631f22aa828831a6fbac0d4, test:rust/crates/urzua-core/src/field_state.rs#retired_project_placeholder_conventions_are_placeholder_not_present@sha256:93bd89a306f7a4462d5e6d89612bb354976646abfd0502a4018b5934a54ae327, test:rust/crates/urzua-core/src/rules/field.rs#field_quality_flags_a_retired_placeholder_as_an_error@sha256:6ebe9d8381f273a3e0fd683f0f1fcefa7e281a7d1184d41ba953b9954eeef647
+Realized-by: code:rust/crates/urzua-core/src/field_state.rs@sha256:d46c56def01e7dbcfee70b6c994f022fb02a22b138bea50167028e46c232ceed, test:rust/crates/urzua-core/src/field_state.rs@sha256:d46c56def01e7dbcfee70b6c994f022fb02a22b138bea50167028e46c232ceed, test:rust/crates/urzua-core/src/field_state.rs#retired_project_placeholder_conventions_are_placeholder_not_present@sha256:93bd89a306f7a4462d5e6d89612bb354976646abfd0502a4018b5934a54ae327, test:rust/crates/urzua-core/src/rules/field.rs#field_quality_flags_a_retired_placeholder_as_an_error@sha256:6ebe9d8381f273a3e0fd683f0f1fcefa7e281a7d1184d41ba953b9954eeef647
 ---
 # 5 — field_state's placeholder tokens missed this project's own retired conventions
 
@@ -48,3 +48,4 @@ value's own status in the corpus changes, not just left as a historical snapshot
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-05 | `Regression-test` moved into `Realized-by` as 2 `test:` locators and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |
+> | 2026-11-08 | `Realized-by` lost `test:rust/crates/urzua-core/src/rules.rs`, which the pin run had just pinned. **Why:** review of PR 433: `rules.rs` is now a module root holding shared test fixtures and no test about placeholder tokens, so pinning it vouched for nothing this record claims. The four remaining locators still evidence the fix: the `field_state.rs` code and test, `retired_project_placeholder_conventions_are_placeholder_not_present` and `field_quality_flags_a_retired_placeholder_as_an_error`. | **substantive** |
