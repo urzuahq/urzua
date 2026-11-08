@@ -36,6 +36,7 @@ engine, so it belongs in Phase 1.
 - The command exits 2 and writes nothing when `Reason` is not in `effective_requires`, when the chosen value classifies as `Present`, when `pending` holds only patterns, or when the type neither declares `permanent` nor lists `Expires` in `effective_requires`; the last message names the fix (declare `permanent`, or require `Expires`). Each is a test.
 - Findings of `waiver.matches-nothing`, findings with no file, and findings already named by a waiver with the same rule and scope are listed in `skipped` with a reason; a second `--apply` writes nothing.
 - Info findings are skipped and not listed in `skipped`.
+- A finding that writing the drafts would itself resolve (judged on the tree with the drafts in memory, for example a waiver directory that matches nothing before the first waiver exists) is not drafted and is listed in `skipped` with that reason (`ADR-91` amendment of 2026-11-08); a test plants it.
 - `--rule` with an unknown id exits 2.
 - `--path` takes plain paths (a file or directory prefix, no glob), and a filter that matches nothing is in `unmatched_filters`.
 - The scaffold is shared with `urzua new`, not duplicated; `new`'s tests are unchanged.
@@ -50,3 +51,4 @@ engine, so it belongs in Phase 1.
 > | 2026-11-05 | Renumbered from `MILE-204` to `MILE-205`: two parallel PRs (#362, #364) both took 204, and the harness cutover milestone keeps it. **Why:** an id is unique per type. | **structural** |
 > | 2026-11-05 | Amended with `ADR-91` after review: both `status_model.rs:35` and `:368` are relaxed and the readers of `values` checked; the command also refuses without `permanent` or `Expires` required; info findings skipped; `--path` is plain paths. Phase 1 confirmed. **Why:** independent review of PR #364. | **substantive** |
 > | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |
+> | 2026-11-08 | Done means gains the item for findings the drafts resolve. **Why:** `ADR-91` amendment of 2026-11-08, maintainer decision. | **substantive** |

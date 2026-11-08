@@ -445,6 +445,30 @@ pinned stays pinned. Two consequences are named, not hidden:
 on the other types), the rule table and `urzua rules`, a minor changeset, and the
 repository's own `.urzua/config.yaml` and `known_fields`. The implementation is `MILE-129`'s.
 
+## Amendment (2026-11-08): a milestone whose evidence is its Done-means items is judged, aged and renewed like one with a `Realized-by` line
+
+*Status of this amendment: accepted by the maintainer on 2026-11-08. Drafted 2026-11-08 at the maintainer's request (the expiry rule must see a milestone's Done-means item evidence). `Status` stays `Accepted` and the Decision text above is unchanged.*
+
+The Decision judges a record that states the `EmbodimentLocator` field (`Realized-by`). A milestone whose
+delivery is declared as Done-means items (`ADR-84`) can carry its evidence in the item evidence clauses and
+state no `Realized-by` at all. Such a record was reported as "not examined: no locator field", so its claim
+never expired, was never listed by `urzua reverify`, and could not be renewed. The reading of the evidence
+is already one function for drift and pinning (`evidence_text`: the field plus the item locators); expiry
+alone did not use it.
+
+Now:
+
+- A record is judged when its field or its item evidence clauses give any evidence. Only a record with
+  neither stays not examined, and the reason reads "no locator field and no Done-means item evidence clause".
+- The age counts from the first evidence line: the `Realized-by` line when the field holds a value, else the
+  first Done-means item evidence clause, else (a field present and empty, no items) the field's own line. The
+  empty field with item evidence therefore anchors on the first item line. `urzua reverify`, the rule and
+  the claim measurement use the one function, `evidence_anchor_line`.
+- Renewal is unchanged: the pins go on the item locators (`require_pin` applies to them as to field
+  locators), and the audit date is written to the declared `anchor_field`.
+- A record that states a `Realized-by` is judged exactly as before; with no item-evidence record in a
+  repository, its `check` and `reverify` output does not change.
+
 ## Reversibility
 
 Moderate. The engine change is additive and off until declared: removing the rule and the command
@@ -521,3 +545,4 @@ The open questions of the first draft are settled in this revision, after the in
 > | 2026-11-07 | Filed as Proposed. **Why:** maintainer direction of 2026-11-07 on `MILE-129`: improve the engine, make claim expiry configurable, and make a refresh a recorded re-verification with refreshed pins. | **substantive** |
 > | 2026-11-07 | Status changed from Proposed to Accepted. **Why:** Maintainer decision, 2026-11-07. | **substantive** |
 | 2026-11-07 | Amended after the independent review of PR 425 (still Proposed): a renewal requires a pin on every `code:` and `test:` locator (`require_pin`), written by `reverify` or `reverify --pin-only` under the attestation rules, with spec locators left unpinned; the first expiry is spread by a deterministic `spread_days` offset from the `Stable-Id`; agent renewal, pin-before-renewal and a capped batch with one shared reason are decided, no longer open; the corpus pin run (164 records, 502 locators) and the new first-cycle distribution are measured; the 30-day count and the two-act hash refresh are worded exactly. **Why:** the review found that unpinned locators made a renewal only as strong as the git-history heuristic and that `rebaseline` could not clear their drift (blocker), and that 258 of 339 first expiries fell on two days (should fix). | **substantive** |
+> | 2026-11-08 | Amendment added: a milestone whose evidence is its Done-means item clauses is judged, aged from its first evidence line and renewed by `reverify` with pins on the item locators; a record with neither a field nor item evidence stays not examined. The Decision text and `Status` are unchanged. **Why:** such a milestone never expired and `reverify` could not renew it, though drift and pinning already read its item evidence; accepted by the maintainer on 2026-11-08. | **substantive** |

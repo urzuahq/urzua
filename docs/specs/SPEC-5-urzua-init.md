@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5PKKQRJF9WFZJA105B
-Version: '0.14'
+Version: '0.15'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/commands/init.rs@sha256:67c76e30cba7112dd2c91b69e51f8f00ca5bf3bd27dba043fe38eb4dfd63a75f, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:f893cb99b8337c1172d3c4825859e00a0344dd4c35e6f013d802e509b1688ecb
+Realized-by: code:rust/crates/urzua-cli/src/commands/init.rs@sha256:c2bce6397ea2e1da7d9a1f3ab810e116094b40ed11fda3a3886d179739fc1a91, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:8538aedb749292d7641c037df67b6e667d5087b0c8dca95682fef065a8429a00
 Author: beauwilliams
 Subject: '`urzua init` -- the adopt-existing-corpus path and `.urzua/` layout.'
 Implements: RFC-1
@@ -80,10 +80,15 @@ setup for a repository with no records yet are `MILE-114`'s scope, not this spec
 `blockquote` and `bold-list` shapes were removed, `MILE-85`). For each proposed type it parses the
 existing records with the real header parser and counts those whose header is YAML frontmatter at the
 very start of the record; a record written in a removed form, or with no readable header, is counted
-in a `header-shape` notice that names the form (`2 in the removed bold-list form`), because `check`
-reports each such record as unreadable until its header is rewritten as YAML frontmatter. A type whose
-records are all frontmatter gets no notice. A type with no records is proposed `yaml-frontmatter`.
-Each `proposed` entry reports the chosen `header_shape`.
+in a `header-shape` notice that names the form (`2 in the removed bold-list form`), which no rule reads
+until its header is rewritten as YAML frontmatter. The proposed config declares no `required_fields`, so
+`check` does not mention such a record; the notice says so and names the fix, declaring a field every
+record carries (`required_fields: [Status]`) on the type, after which `header.required-fields` reports
+each one. A type whose records are all frontmatter gets no notice. A type with no records is proposed
+`yaml-frontmatter`.
+Each `proposed` entry reports the chosen `header_shape`. When a proposed directory holds a `README.md`
+directly, which is never a record, the type is written with `exclude_files: [README.md]` and its `proposed`
+entry lists `exclude_files`; a directory with no README writes no `exclude_files`.
 
 ## Proposed rules
 
@@ -193,4 +198,6 @@ adopt should infer rules or only structure, and multi-corpus-per-repo).
 > | 2026-11-08 | Bumped to `0.13`. The `code:` and `test:` locators of `Realized-by` are now hash-pinned by `urzua reverify --pin-only` (the `Pinned` row above) and, where the record stated `Drift detected`, its `Embodiment` was recomputed (the tool-authored row above); no behaviour this spec describes changes. **Why:** `MILE-129`, `ADR-97` section 10: a claim is renewed only over pinned code and test evidence, so the corpus is pinned once before expiry is enabled. | **structural** |
 > | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/init.rs` efe3f3739082 -> 08dfadd3cae6. Reason: Read the diff of each pinned file since the old pin and the claim still holds. init.rs: only the doc comment on run changed, to say the config a dry run proposes is byte-identical to the file the real run writes and that the reports differ in dry_run, written and the echoed config_yaml; no code changed. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
 > | 2026-11-08 | Bumped to `0.14`. The pins this spec's `Realized-by` holds on files changed in this change were re-baselined (the `Re-baselined` row above); no behaviour this spec describes changed. **Why:** a revision-log entry that adds a structural change needs a `Version` bump (`revision-log.version-bump-required`). | **structural** |
-> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/init.rs` 08dfadd3cae6 -> 67c76e30cba7. Reason: Read the diff of each re-pinned file against main. cli/src/commands/init.rs: Notice struct literals gained detail: None; no behaviour change. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
+> | 2026-11-08 | Bumped to `0.15`. The `header-shape` notice states what `check` does (silent while `required_fields` is empty) and the config that makes it report, instead of promising a report that never came; `init` writes `exclude_files: [README.md]` for a proposed directory that holds a README. The written config for a corpus with no README, and every existing config, are unchanged. **Why:** the round-4 adopter review (S3, N1): the warning was not true, and every adopted corpus drew `filename.identity-pattern` warnings asking to rename its README. | **substantive** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/init.rs` 08dfadd3cae6 -> 5f376bdd1b6d, `rust/crates/urzua-cli/tests/check_integration.rs` f893cb99b833 -> 8538aedb7492. Reason: the tests in check_integration.rs now name real tracked files; the behaviour this record relies on is unchanged; init.rs now words the header-shape notice truthfully (check reports unreadable headers only when required_fields declares them), excludes README.md for a directory holding one, and carries the merged doc-comment edit from main; the behaviour this record relies on is unchanged **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/init.rs` 5f376bdd1b6d -> c2bce6397ea2. Reason: Read the diff of each re-pinned file against main. cli/src/commands/init.rs: Notice struct literals gained detail: None; no behaviour change. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |

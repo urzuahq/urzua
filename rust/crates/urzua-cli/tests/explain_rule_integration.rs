@@ -195,12 +195,70 @@ fn an_unknown_rule_id_far_from_every_rule_names_no_guess() {
 
 #[test]
 fn a_positional_argument_is_always_a_path_even_when_it_spells_a_rule_id() {
+    // A file that really has the spelling of a rule id is explained as a path.
     let dir = repo("positional", CONFIG);
+    std::fs::write(dir.join("status.delivery-agreement"), "x").unwrap();
+    git(&dir, &["add", "-A"]);
+    git(&dir, &["commit", "-q", "-m", "file"]);
     let (out, report) = run(&dir, &["explain", "status.delivery-agreement"]);
     assert_eq!(out.status.code(), Some(0), "{report}");
     assert_eq!(report["path"], "status.delivery-agreement", "{report}");
     assert!(report.get("rule").is_none(), "{report}");
     assert!(report["governing_records"].is_array(), "{report}");
+}
+
+#[test]
+fn a_path_that_names_no_file_and_no_cited_evidence_is_an_error() {
+    let dir = repo("nosuchfile", CONFIG);
+    let (out, report) = run(&dir, &["explain", "nosuchfile.rs"]);
+    assert_eq!(out.status.code(), Some(2), "{report}");
+    assert_eq!(report["status"], "not-run", "{report}");
+    assert!(
+        report.to_string().contains("nosuchfile.rs"),
+        "the error names the path: {report}"
+    );
+}
+
+#[test]
+fn a_glob_that_matches_nothing_and_is_cited_by_no_record_is_an_error() {
+    let dir = repo("nosuchglob", CONFIG);
+    let (out, report) = run(&dir, &["explain", "nonexist/**/*.rs"]);
+    assert_eq!(out.status.code(), Some(2), "{report}");
+    assert_eq!(report["status"], "not-run", "{report}");
+    assert!(
+        report.to_string().contains("nonexist/**/*.rs"),
+        "the error names the glob: {report}"
+    );
+}
+
+#[test]
+fn a_rule_id_given_as_a_path_is_an_error_that_points_at_rule() {
+    let dir = repo("ruleaspath", CONFIG);
+    let (out, report) = run(&dir, &["explain", "status.delivery-agreement"]);
+    assert_eq!(out.status.code(), Some(2), "{report}");
+    assert!(
+        report.to_string().contains("--rule"),
+        "the error says to use --rule: {report}"
+    );
+}
+
+#[test]
+fn a_deleted_file_that_a_record_still_cites_is_explained() {
+    let dir = repo("deleted-cited", CONFIG);
+    std::fs::write(
+        dir.join("docs/adr/ADR-2-b.md"),
+        "---\nStatus: Accepted\nRealized-by: code:src/gone.rs\n---\n# 2 \u{2014} B\n",
+    )
+    .unwrap();
+    git(&dir, &["add", "-A"]);
+    git(&dir, &["commit", "-q", "-m", "cites"]);
+    let (out, report) = run(&dir, &["explain", "src/gone.rs"]);
+    assert_eq!(out.status.code(), Some(0), "{report}");
+    assert_eq!(
+        report["governing_records"].as_array().map(Vec::len),
+        Some(1),
+        "{report}"
+    );
 }
 
 #[test]

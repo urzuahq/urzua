@@ -265,7 +265,13 @@ revision log):
    `.claude/settings.local.json` included, by content hash against a baseline taken at session start) and a
    commit the same command made, and a record changed after `git update-index --assume-unchanged` or
    `--skip-worktree` (found by comparing the file with the index). A change is reported once; the same change
-   again is silent, by design.
+   again is silent, by design. A commit is seen only on the checked-out branch: a commit made on another
+   branch or in a sibling worktree is silent until it lands on the session's `HEAD`, and a
+   `git push origin side:main` of another ref is never seen. An MCP tool that runs a shell command is not a
+   Bash tool call (the post-command matcher is `Bash` only): what it writes is neither judged nor reported.
+   A Bash write to the translator is caught at the next hook run, because every hook command checks the
+   translator's sha256 before running it (amendment of 2026-11-08), but the programs the command finds on
+   `PATH` (`python3`, `urzua`) are not verified.
 2. **`git commit --no-verify`**, which skips the commit hook.
 3. **A pull request that changes its own workflow.** The gate runs from the head commit's workflow, so a pull
    request can drop or weaken the gate step it is judged by. Only `CODEOWNERS` and branch protection, which
@@ -275,7 +281,8 @@ revision log):
 5. **The limits of what the editor hook can read.** A hard link is resolved to the protected or gated file on
    Unix only, and elsewhere is judged by its own name. Names are case-folded but not Unicode-normalised. An MCP
    tool call that names no string a path can be read from (a path encoded, split or computed) is not seen as an
-   edit, and an MCP server that resolves a relative path against its own directory instead of the session's is
+   edit; an MCP tool that applies a patch (a `patch` or `diff` field with `---` and `+++` headers) or runs a
+   shell command is an unparsed route, not judged and not reported; and an MCP server that resolves a relative path against its own directory instead of the session's is
    judged against the session's. A change made before the session's baseline was taken is not reported. The
    agent's user-level settings and the project's local settings file are neither protected nor read: a hook
    entry or `disableAllHooks` set only there is not seen by the session-start check. A link or file swapped
@@ -288,12 +295,23 @@ revision log):
 7. **The edit hook cannot run and the configuration cannot be read as text.** When python3 or the translator is
    missing, the settings command reads `.urzua/config.yaml` as text and refuses the edit only if it finds
    `acceptance` or `protected-paths` enabled without `on_unjudged: allow`; a configuration that scan misreads
-   (an unusual layout, a key spelled by an anchor or an include) is read as not closed. The refusal then
+   (an unusual layout, a key spelled by an anchor or an include) is read as not closed. The same holds when
+   the configuration is invalid or empty YAML (only a Bash write can make one, and the post-command check
+   reports it): the engine allows every edit with a message, because the gates are read from parseable YAML
+   and the text scan is not used on that path. The refusal then
    covers every edit tool call, not only a protected one, because without the translator the target is not
    known. The post-command and session-start commands can only state that they did not run.
-8. **A nested repository that has its own configuration.** An edit is judged by the outermost repository that
-   holds `.urzua/config.yaml`, so a nested repository's own gates are not consulted for an edit made from the
-   outer one.
+8. **Which repositories judge an edit.** An edit is judged by the session's own repository and by every
+   governed repository (a real git working tree with `.urzua/config.yaml`) that holds the file, inner or
+   outer, and a deny from any wins (amendment of 2026-11-08). A repository the session did not start in can
+   add restrictions and never remove them; one made with a Bash `git init` and a configuration can therefore
+   deny edits inside it, which costs the agent, not the guardrail.
+9. **The agent-instructions block is not a protected path.** The block in `AGENTS.md` (or the file
+   `harness.instructions_file` names) is a control this decision relies on, but an edit tool can remove it
+   with no refusal and no session-start note; only `urzua harness status` reports it `modified`.
+10. **A waiver record is not gated.** A waiver is an ordinary record, not a gated status, and
+    `diff.decider-required` and `override.unreviewed` are waivable, so an edit-tool waiver can silence the CI
+    gate for a gated move made by a Bash command. It adds no power beyond routes 1 and 4.
 
 What is claimed is therefore only this: through the edit tools (Write, Edit, MultiEdit, NotebookEdit and any MCP tool
 that carries a file path and content) an agent cannot move a gated record or write a
@@ -469,6 +487,56 @@ The Decision is unchanged; this corrects statements above and records what the r
 - **The MCP path reading.** An MCP tool call is read for every string that can name a file, at any depth and
   in any list, `file://` URIs included. A tool named for reading is left alone.
 
+## Amendment (2026-11-08): the repository an edit is judged in, and the translator's hash
+
+Proposed in the fourth review of the harness (2026-11-08) and accepted by the maintainer on 2026-11-08.
+The Decision is unchanged. This amends the "outermost" rule of the amendment of 2026-11-07, which let an
+agent replace the session's gates with two writes outside the repository.
+
+- **The repository an edit is judged in.** The rule "an edit is judged by the outermost governed repository"
+  is withdrawn. The outermost repository was attacker-controllable: an empty `P/.git` and a
+  `P/.urzua/config.yaml` written above the project (both are "outside the repository", so both were
+  allowed unjudged) became the governing repository, and the project's `.claude`, workflows, hook files and
+  ADR statuses were then judged by a configuration with no gates. The decision is now: **an edit is judged
+  against the session's own repository** (the one that holds the directory the session started in, which the
+  translator names in the request as `project_dir`, else the one that holds the current directory) **and
+  against every governed repository that holds the resolved file, inner or outer, and a deny from any of
+  them is the verdict.** A repository the session did not start in can add restrictions and never remove
+  them. A `.git` counts only when it is a real git working tree (`git rev-parse --show-toplevel` succeeds
+  there and names that directory), so an empty file or directory called `.git` makes nothing. Session-start
+  and the post-command check enter the session's own repository the same way, not the outermost one. The
+  settings command follows the same rule: it finds the translator from `CLAUDE_PROJECT_DIR` and, when that
+  is unset, from the nearest real git working tree at or above the current directory that holds both
+  `.urzua/config.yaml` and the translator (found with `git rev-parse --show-toplevel`, stepping outward past
+  a nested repository that holds neither), never from the outermost configuration. This replaces the
+  fallback of the amendment of 2026-11-07; a configuration written above the project, with or without a
+  `.git`, is never chosen over the project, and when the engine judges it can only add denies.
+- **The translator is verified before it runs.** Every hook command of the Claude Code adapter embeds the
+  sha256 of `.claude/hooks/urzua-claude-code.py`, written by `harness install` and `harness update` from the
+  bundle, and reads the file once, compares its hash and runs those bytes (nothing can swap the file between
+  the check and the run). On a mismatch the command does not run the file: it takes the same path as a
+  missing translator. The `edit` command refuses an agent's edit where `acceptance` or `protected-paths` is
+  enabled and not set to `on_unjudged: allow` (it reads `.urzua/config.yaml` as text), and otherwise states
+  that the hook did not run; the `post-command` and `session-start` commands state it. The message names the
+  mismatch. A Bash write to the translator therefore no longer silences every later report (accepted risk 1
+  said it was reported; it was not). `harness status` and the session-start check keep comparing the file
+  and the hook entry with the lock; `update` rewrites both, and `uninstall` removes them.
+- **MCP tools.** A tool named for reading is still judged when the call carries a key naming an output
+  (`output`, `out`, `dest`, `target`, `save` and the like) or a content key (`content`, `text`, `body`, `data`, `payload`, `value` and the like). A path string is trimmed,
+  cut at a NUL and normalised lexically (`.` and `..`) before its length is tested; a string that is too
+  long as written is a path only if it collapses to a shorter one, and is otherwise a candidate looked at
+  only for a refusal. An MCP tool that runs a shell command or applies a patch stays an unparsed route
+  (accepted risks 1 and 5): it is not judged and not reported.
+- **Timeout.** The release build's `harness run edit` of an ADR in this repository's corpus took 5 to 7 seconds
+  on the review machine, against the host's default of 60 seconds for a command hook, so the settings do not
+  set a `timeout`. A host that kills the hook at its limit fails open; that is the host's behaviour, not
+  the guardrail's.
+- **The accepted-risk list** is made exact: a commit is seen only on the checked-out branch (route 1); a
+  Bash write to the translator is caught at the next hook run; an MCP shell or patch tool is unparsed (routes 1
+  and 5); the invalid-YAML case is named (route 7); route 8 is rewritten for the rule above; the
+  instructions block is not a protected path (route 9) and a waiver record is not gated (route 10).
+The Status of this ADR stays Accepted.
+
 ## References
 
 - `ADR-69`, `ADR-70`, `ADR-71`: the hook, drafting commands and layered gate this extends; `ADR-70` gains an
@@ -496,3 +564,5 @@ The Decision is unchanged; this corrects statements above and records what the r
 > | 2026-11-07 | Added an `## Amendment (2026-11-07)`, accepted by the maintainer on 2026-11-07: a `harness.guardrails` name the build does not ship is a config load error for every command (`check` exits 2) with the nearest valid name suggested, and `doctor`'s `config-parses` line no longer says "no unrecognized keys" beside unrecognized harness entries. `Status` stays Accepted. **Why:** Maintainer decision, 2026-11-07, on the core-model review. | **substantive** |
 > | 2026-11-07 | Added a proposed `## Amendment (2026-11-07)`, pending maintainer acceptance, after the third review of the harness: the settings command resolves the project root from `CLAUDE_PROJECT_DIR` or the outermost configuration above the current directory and refuses an edit under `on_unjudged: deny` when it cannot run the translator; an edit is judged by the outermost governed repository with symlinks followed, a dangling link included; the harness protects its own cache, lock, override log and git hooks from the edit tools; session-start compares the installed files, hook entries and `disableAllHooks` with the lock; MCP calls are read for every path-like string. The Accepted-risk list gains items 6 to 8 (a Bash write to the harness's own files, an unreadable configuration in the shell fallback, a nested repository with its own configuration), and items 1 and 5 are widened (`--assume-unchanged` is now reported; local settings and a swap between check and write are named). `Status` stays Accepted. **Why:** the third review found the wrapper failing open outside the project root, a dangling link and a nested repository escaping the gates, and several silent routes. | **substantive** |
 > | 2026-11-07 | Amendment (settings command, judged repository, harness-owned paths, override-log approval by PR review) accepted. **Why:** Maintainer decision, 2026-11-07. | **substantive** |
+> | 2026-11-08 | Added an `## Amendment (2026-11-08)`, accepted by the maintainer on 2026-11-08, after the fourth review of the harness: an edit is judged against the session's own repository and every governed repository that holds the file, and a deny from any wins (the "outermost" rule of the 2026-11-07 amendment is withdrawn, because two unjudged writes above the project minted a governing repository with no gates); a `.git` counts only when git accepts it; every hook command embeds the translator's sha256 and refuses to run a translator that differs; a read-named MCP tool is judged when the call names an output or carries content; MCP path strings are trimmed, NUL-cut and normalised before the length test. The Accepted-risk list is made exact (items 1, 5, 7 and 8 revised, items 9 and 10 added). `Status` stays Accepted. **Why:** Maintainer decisions, 2026-11-08, on the fourth review of the harness. | **substantive** |
+> | 2026-11-08 | Corrected the `## Amendment (2026-11-08)` after review of pull request 438: with `CLAUDE_PROJECT_DIR` unset, the settings command resolves the nearest real git working tree that holds the configuration and the translator, not the outermost configuration (which let a configuration written above the project take the wrapper); `body`, `data`, `payload` and `value` join the content keys. `Status` stays Accepted. **Why:** the independent review found the wrapper still taking an outer configuration. | **substantive** |

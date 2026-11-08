@@ -146,13 +146,43 @@ fn run_inner(config_path: Option<PathBuf>, path: String) -> Result<ExitCode, Fai
     let (scope, coverage) = match &parsed.scope {
         None => (
             None,
-            explain_coverage(&repo_root, &config, &parsed, &mut notices)?,
+            explain_coverage(
+                &repo_root,
+                &config,
+                &parsed,
+                governing_records.is_empty(),
+                &mut notices,
+            )?,
         ),
         Some(scope) => (
             Some(explain_scope(&repo_root, &config, &parsed, scope)?),
             None,
         ),
     };
+
+    // A path that names no file or directory, matches no glob and that no record
+    // cites is a typo or a rule id, not an ungoverned file. A deleted file that
+    // a record still cites stays a legitimate query.
+    if governing_records.is_empty()
+        && scope.is_none()
+        && coverage.is_none()
+        && notices.is_empty()
+        && !repo_root.join(&parsed.path).exists()
+    {
+        let hint = if rule_def(&parsed.path).is_some() {
+            format!(
+                "; '{}' is a rule id, use `urzua explain --rule {}`",
+                parsed.path, parsed.path
+            )
+        } else {
+            String::new()
+        };
+        return Err(format!(
+            "'{}' is not a file or directory in this repository and no record cites it as evidence{hint}",
+            parsed.path
+        )
+        .into());
+    }
 
     Ok(emit(&ExplainReport {
         status: ReportStatus::Ok,
@@ -174,6 +204,7 @@ fn explain_coverage(
     repo_root: &std::path::Path,
     config: &urzua_core::config::Config,
     parsed: &locator::Locator,
+    uncited: bool,
     notices: &mut Vec<Notice>,
 ) -> Result<Option<CoverageExplanation>, String> {
     use urzua_core::rules::{LocatorExistsOpts, RULE_EMBODIMENT_LOCATOR_EXISTS};
@@ -184,6 +215,14 @@ fn explain_coverage(
     let Some(kind) = located.kind.filter(|k| *k != LocatorKind::File) else {
         return Ok(None);
     };
+    // A glob or directory that matches no tracked file and that no record cites
+    // is a typo, whether or not the config accepts its kind.
+    if located.files.is_empty() && uncited {
+        return Err(format!(
+            "'{}' matches no tracked file in the working tree and no record cites it as evidence",
+            parsed.path
+        ));
+    }
     let opts: LocatorExistsOpts = config.rule_opts(RULE_EMBODIMENT_LOCATOR_EXISTS);
     if !opts.locator_kinds.contains(&kind) {
         notices.push(Notice {

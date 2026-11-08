@@ -868,7 +868,7 @@ fn graph_and_explain_report_a_population_and_name_an_unreadable_record_observed_
     .unwrap();
     commit_all(&dir);
 
-    for args in [&["graph"][..], &["explain", "src/nonexistent.rs"][..]] {
+    for args in [&["graph"][..], &["explain", "docs/adr/ADR-1-a.md"][..]] {
         let output = run_urzua(&dir, args);
         assert_eq!(output.status.code(), Some(0), "{args:?}");
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -904,7 +904,7 @@ fn graph_and_explain_on_an_empty_corpus_report_a_zero_population_with_no_notice(
     std::fs::write(dir.join("README.md"), "fixture").unwrap();
     commit_all(&dir);
 
-    for args in [&["graph"][..], &["explain", "src/a.rs"][..]] {
+    for args in [&["graph"][..], &["explain", "README.md"][..]] {
         let output = run_urzua(&dir, args);
         let stdout = String::from_utf8_lossy(&output.stdout);
         let parsed = assert_valid_json_object(&stdout);
