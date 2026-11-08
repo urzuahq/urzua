@@ -16,11 +16,11 @@ fn own_config() -> String {
 /// ships, including the ones it declares `off`, so none is merely absent.
 #[test]
 fn own_config_declares_a_level_for_every_shipped_rule() {
-    let config = own_config();
+    let config = urzua_core::config::parse(&own_config()).expect("repository config parses");
     let undeclared: Vec<&str> = urzua_core::rules::ALL_RULES
         .iter()
         .copied()
-        .filter(|id| !config.contains(&format!("\n  {id}:")))
+        .filter(|id| !config.rules.contains_key(*id))
         .collect();
     assert!(
         undeclared.is_empty(),

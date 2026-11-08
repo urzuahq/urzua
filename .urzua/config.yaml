@@ -752,7 +752,9 @@ rules:
   embodiment.claim-renewal-unattested: warn
   # Declared off, not left undeclared (MILE-80): this repository has no pair with
   # `cross_type: false`, no `section_shapes` declaration and no `application_paths`
-  # for a source-and-records diff, so each rule would have nothing to judge.
+  # for a source-and-records diff, so each rule would have nothing to judge. A rule
+  # declared `off` reports `not-enabled` exactly as an undeclared one does; the
+  # declaration only records that leaving it off was a choice.
   relation.cross-type-disallowed: off
   section.shape: off
   diff.source-and-records-mixed: off

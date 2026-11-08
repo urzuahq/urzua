@@ -4,7 +4,7 @@ Version: '0.16'
 Date: 2026-09-08
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:.urzua/config.yaml@sha256:0a00038a6388dad87ffcee8feed341d76d205e3750b766c551c6020616aa815b, test:rust/crates/urzua-cli/tests/spec_shipped_integration.rs@sha256:b03ddbc2eacaccee634b27b070f66f6a730197313c3b114a882becc342acb7a8
+Realized-by: code:.urzua/config.yaml@sha256:3d51c2fac8b7db084ddd22714140fed4bffbecccd0c6da48dff8404129cf6de2, test:rust/crates/urzua-cli/tests/spec_shipped_integration.rs@sha256:b03ddbc2eacaccee634b27b070f66f6a730197313c3b114a882becc342acb7a8
 Author: beauwilliams
 Subject: 'The `spec` record type -- schema, required fields (including this one, `Subject`), and lifecycle.'
 Parent: —
@@ -129,3 +129,4 @@ any other class, a new spec, or an unchanged log is not reported.
 > | 2026-11-08 | Bumped to `0.15`. The pins on this spec's `Realized-by` locators were re-baselined against the files as they are after the sharded CI and the milestone `Kind` amendment landed on main (the `Re-baselined` row above); no behaviour this spec describes changes. **Why:** `MILE-129`, `ADR-97`: every stale pin is re-pinned with its real delta before expiry is enabled. | **structural** |
 > | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` 0b59c6dfc8b9 -> 0a00038a6388. Reason: Read the diff of each pinned file since the old pin and the claim still holds. config.yaml: this change declares status.done-items-shape (error), status.waived-item-stale (warn) and embodiment.claim-renewal-unattested (warn) and declares relation.cross-type-disallowed, section.shape and diff.source-and-records-mixed as off; every other declaration is unchanged. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
 > | 2026-11-08 | Bumped to `0.16`. The pins this spec's `Realized-by` holds on files changed in this change were re-baselined (the `Re-baselined` row above); no behaviour this spec describes changed. **Why:** a revision-log entry that adds a structural change needs a `Version` bump (`revision-log.version-bump-required`). | **structural** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` 0a00038a6388 -> 3d51c2fac8b7. Reason: Read the diff of each pinned file since the old pin and the claim still holds. config.yaml: only the comment above the three rules declared off changed, to say they report `not-enabled` exactly as an undeclared rule does; no declaration changed. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
