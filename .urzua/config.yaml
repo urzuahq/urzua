@@ -227,8 +227,10 @@ record_types:
       - "Stable-Id"
     header_shape: "yaml-frontmatter"
     # The fields `urzua new` fills with today and the author (MILE-176). Named here so the
-    # declaration is read from this repository's config; they equal the defaults.
-    relation_fields: {date: "Date", author: "Author"}
+    # declaration is read from this repository's config; they equal the defaults. `title`
+    # names the field it fills with the record's title: a spec's Subject, so a scaffold
+    # is not born failing `field.quality` on a blank required field (MILE-74).
+    relation_fields: {date: "Date", author: "Author", title: "Subject"}
     known_fields:
       - "Embodiment"
       - "Realized-by"
@@ -267,7 +269,7 @@ record_types:
       class_column: Class
       date_column: Date
       tool_class: structural
-      version_bump: {field: "Version", classes: ["substantive", "structural"]}
+      version_bump: {field: "Version", classes: ["substantive", "structural"], initial: "0.1"}
     pointer_fields:
       - "Derives-from"
       - "Implements"
@@ -639,7 +641,12 @@ rules:
   # when they disagree.
   status.delivery-agreement: error
   header.required-fields: error
-  header.field-set-consistency: warn
+  # A condition's own extension prefix (MILE-141): `ext-` keys pass the closed
+  # key set on that type; every other type stays on the closed set.
+  header.field-set-consistency:
+    level: warn
+    extension_prefixes:
+      condition: "ext-"
   header.pointer-field-clean: warn
   type.no-declared-spec: warn
   type.dir-matches-nothing: warn

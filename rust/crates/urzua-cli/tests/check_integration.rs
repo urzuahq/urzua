@@ -228,6 +228,104 @@ fn doctor_errors_when_no_rule_is_enabled() {
     assert!(stdout.contains("rules-enabled"), "stdout: {stdout}");
 }
 
+/// The `checks` entries of a `doctor` run that carry `id`, as `(status, message)`.
+fn doctor_checks_named(dir: &Path, id: &str) -> (Option<i32>, Vec<(String, String)>) {
+    let output = run_urzua(dir, &["doctor"]);
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap_or_else(|e| {
+        panic!(
+            "doctor must print JSON ({e}): {}",
+            String::from_utf8_lossy(&output.stdout)
+        )
+    });
+    let found = report["checks"]
+        .as_array()
+        .expect("checks")
+        .iter()
+        .filter(|c| c["check"] == id)
+        .map(|c| {
+            (
+                c["status"].as_str().unwrap().to_string(),
+                c["message"].as_str().unwrap().to_string(),
+            )
+        })
+        .collect();
+    (output.status.code(), found)
+}
+
+fn doctor_fixture(name: &str, config: &str) -> common::TempDir {
+    let dir = fixture_repo(name);
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::write(dir.join(".urzua/config.yaml"), config).unwrap();
+    dir
+}
+
+/// A config declaring no record type examines nothing, whatever rules it
+/// enables: `doctor` names that as an error (check `record-types-declared`).
+#[test]
+fn doctor_errors_when_no_record_type_is_declared() {
+    let dir = doctor_fixture(
+        "doctor-no-types",
+        "schema_version: 2\nrules: {field.quality: error}\nrecord_types: {}\n",
+    );
+    commit_all(&dir);
+    let (code, found) = doctor_checks_named(&dir, "record-types-declared");
+    assert_eq!(code, Some(1), "{found:?}");
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert_eq!(found[0].0, "error");
+    assert!(found[0].1.contains("no record_types"), "{found:?}");
+
+    let healthy = doctor_fixture(
+        "doctor-some-types",
+        "schema_version: 2\nrules: {field.quality: error}\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\"]\n",
+    );
+    std::fs::create_dir_all(healthy.join("docs/adr")).unwrap();
+    commit_all(&healthy);
+    let (_, found) = doctor_checks_named(&healthy, "record-types-declared");
+    assert!(
+        found.is_empty(),
+        "a declared type raises no such check: {found:?}"
+    );
+}
+
+/// Each declared record directory is checked: one that exists is `ok`, one that
+/// does not is an error naming the type and the directory (check `record-type-dir`).
+#[test]
+fn doctor_reports_each_record_type_directory_as_present_or_missing() {
+    let dir = doctor_fixture(
+        "doctor-type-dir",
+        "schema_version: 2\nrules: {field.quality: error}\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\"]\n  rfc:\n    dir: \"docs/rfc\"\n    required_fields: [\"Status\"]\n",
+    );
+    std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
+    commit_all(&dir);
+    let (code, found) = doctor_checks_named(&dir, "record-type-dir");
+    assert_eq!(code, Some(1), "{found:?}");
+    assert_eq!(found.len(), 2, "{found:?}");
+    let adr = found.iter().find(|c| c.1.contains("'adr'")).expect("adr");
+    assert_eq!(adr.0, "ok", "{found:?}");
+    let rfc = found.iter().find(|c| c.1.contains("'rfc'")).expect("rfc");
+    assert_eq!(rfc.0, "error", "{found:?}");
+    assert!(rfc.1.contains("docs/rfc"), "{found:?}");
+}
+
+/// A type with no `required_fields` is a warning (the field rules never fire for
+/// it), not an error, so `doctor` still exits 0; a type that requires some is
+/// not mentioned (check `record-type-required-fields`).
+#[test]
+fn doctor_warns_about_a_record_type_with_no_required_fields() {
+    let dir = doctor_fixture(
+        "doctor-required-fields",
+        "schema_version: 2\nrules: {field.quality: error}\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n  rfc:\n    dir: \"docs/rfc\"\n    required_fields: [\"Status\"]\n",
+    );
+    std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
+    std::fs::create_dir_all(dir.join("docs/rfc")).unwrap();
+    commit_all(&dir);
+    let (code, found) = doctor_checks_named(&dir, "record-type-required-fields");
+    assert_eq!(code, Some(0), "a warning does not fail doctor: {found:?}");
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert_eq!(found[0].0, "warn");
+    assert!(found[0].1.contains("'adr'"), "{found:?}");
+}
+
 /// `doctor` reads the global `--config`, as every other command does: a
 /// healthy default config must not hide a broken one named on the command line.
 #[test]

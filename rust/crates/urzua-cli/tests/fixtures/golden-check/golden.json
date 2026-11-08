@@ -1,0 +1,105 @@
+{
+  "blocking": true,
+  "files_examined": 11,
+  "findings": [
+    {
+      "file": "docs/adr/ADR-5-fifth-decision.md",
+      "line": null,
+      "message": "missing required header field 'Date' for record type 'adr'",
+      "rule": "header.required-fields",
+      "severity": "error"
+    },
+    {
+      "file": "docs/adr/ADR-2-second-decision.md",
+      "line": null,
+      "message": "Derives-from: ADR-9 does not resolve to any discovered record",
+      "rule": "pointer.resolution",
+      "severity": "error"
+    },
+    {
+      "file": "docs/adr/ADR-3-third-decision.md",
+      "line": null,
+      "message": "field 'Author' is Placeholder -- not a real, present value",
+      "rule": "field.quality",
+      "severity": "error"
+    },
+    {
+      "file": "docs/adr/ADR-5-fifth-decision.md",
+      "line": null,
+      "message": "field 'Date' is Blank -- not a real, present value",
+      "rule": "field.quality",
+      "severity": "error"
+    },
+    {
+      "file": "docs/milestones/MILE-2-second-milestone.md",
+      "line": null,
+      "message": "Realized-by names 'src/missing.rs', which is not in the working tree",
+      "rule": "embodiment.locator-exists",
+      "severity": "error"
+    },
+    {
+      "file": "docs/adr/ADR-4-fourth-decision.md",
+      "line": 6,
+      "message": "field 'Implemented-by' is not declared (required_fields or known_fields) for record type 'adr'",
+      "rule": "header.field-set-consistency",
+      "severity": "warning"
+    },
+    {
+      "file": "docs/adr/ADR-6-sixth-decision.md",
+      "line": null,
+      "message": "field 'Status' is \"Accepted \" -- the surrounding whitespace is part of the value, so any exact comparison against 'Accepted' fails",
+      "rule": "field.untrimmed-value",
+      "severity": "warning"
+    },
+    {
+      "file": "docs/adr/ADR-6-sixth-decision.md",
+      "line": null,
+      "message": "identifier ADR-6 is claimed by 2 records (docs/adr/ADR-6-sixth-decision.md, docs/adr/ADR-6-sixth-twin.md) -- a reference to it resolves to only one of them",
+      "rule": "identity.collision",
+      "severity": "error"
+    },
+    {
+      "file": "docs/adr/ADR-6-sixth-twin.md",
+      "line": null,
+      "message": "identifier ADR-6 is claimed by 2 records (docs/adr/ADR-6-sixth-decision.md, docs/adr/ADR-6-sixth-twin.md) -- a reference to it resolves to only one of them",
+      "rule": "identity.collision",
+      "severity": "error"
+    },
+    {
+      "file": "docs/adr/nested/ADR-7-seventh-decision.md",
+      "line": null,
+      "message": "sits below a declared record type's dir but not directly in it, so no type owns it and no rule examines it",
+      "rule": "type.record-outside-declared-dir",
+      "severity": "warning"
+    },
+    {
+      "file": ".urzua/config.yaml",
+      "line": null,
+      "message": "record type 'adr' has no declared spec -- add `spec = \"SPEC-N\"` once one exists, or leave undeclared if ADR-41's editorial judgment says one isn't warranted",
+      "rule": "type.no-declared-spec",
+      "severity": "warning"
+    },
+    {
+      "file": ".urzua/config.yaml",
+      "line": null,
+      "message": "record type 'milestone' has no declared spec -- add `spec = \"SPEC-N\"` once one exists, or leave undeclared if ADR-41's editorial judgment says one isn't warranted",
+      "rule": "type.no-declared-spec",
+      "severity": "warning"
+    },
+    {
+      "file": "docs/milestones/MILE-4-fourth-milestone.md",
+      "line": null,
+      "message": "Implements entry \"ADR-1 (draft)\" isn't a clean reference -- pointer fields should hold only comma-separated reference IDs (e.g. \"RFC-1\", not \"RFC-1 (Accepted)\"); pointer.resolution already reports a resolved target's live Status",
+      "rule": "header.pointer-field-clean",
+      "severity": "warning"
+    },
+    {
+      "file": ".urzua/config.yaml",
+      "line": null,
+      "message": "record type 'adr' declares only one of pointer_fields/narrative_fields -- declare both explicitly, even as `[]`, since omitting one is not the same as declaring zero fields of that kind",
+      "rule": "config.pointer-declaration-missing",
+      "severity": "warning"
+    }
+  ],
+  "status": "findings-present"
+}

@@ -102,6 +102,48 @@ fn new_opens_a_spec_title_with_its_declared_prefix_and_other_types_with_the_bare
     );
 }
 
+/// MILE-74, observed failing: `urzua new spec` wrote `Version` and `Subject`
+/// blank, so the record it made failed `check` before anyone touched it. The spec
+/// type now declares the field `new` fills with the title and the version a
+/// record starts at, and the scaffold passes `check` as written.
+#[test]
+fn a_spec_scaffolded_by_new_passes_check_without_an_edit_observed_failing() {
+    let template = std::fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../.urzua/templates/spec.md"),
+    )
+    .expect("the spec template is readable");
+    let dir = repo("spec-scaffold", &[(".urzua/templates/spec.md", &template)]);
+    let out = urzua(&dir, &["new", "spec", "A fresh record", "--by", "tester"]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let written = std::fs::read_dir(dir.join("docs/specs"))
+        .unwrap()
+        .filter_map(Result::ok)
+        .map(|e| e.path())
+        .find(|p| p.to_string_lossy().contains("a-fresh-record"))
+        .expect("a spec file");
+    let content = std::fs::read_to_string(&written).unwrap();
+    assert!(content.contains("\nSubject: A fresh record\n"), "{content}");
+    assert!(content.contains("\nVersion: '0.1'\n"), "{content}");
+
+    let out = urzua(&dir, &["check", "docs/"]);
+    let report: serde_json::Value = serde_json::from_slice(&out.stdout).expect("JSON on stdout");
+    let own: Vec<String> = report["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|f| f["file"].as_str().unwrap().contains("a-fresh-record"))
+        .map(|f| format!("{} {}", f["rule"], f["message"]))
+        .collect();
+    assert!(
+        own.is_empty(),
+        "the scaffold must pass check as written: {own:?}"
+    );
+}
+
 fn bug(status: &str, found_in: &str, extra: &str) -> String {
     format!(
         "---\nStable-Id: 01M6JS58VTV16JK13MJWQZTPG7\nStatus: {status}\nFound-in: {found_in}\n{extra}---\n# 1 — A bug\n\n## What was wrong\n\nx\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Filed. | **structural** |\n"

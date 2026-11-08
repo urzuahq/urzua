@@ -201,11 +201,15 @@ fn each_command_drafts_a_record_that_check_examined_and_passes() {
         // The check examined the record (not a clean run over nothing) and was clean.
         let report: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
         assert_eq!(report["files_examined"], 1, "{command}: {report}");
-        assert_eq!(
-            report["findings"].as_array().unwrap().len(),
-            0,
-            "{command}: {report}"
-        );
+        // A finding the repository has waived (a configuration finding is kept by every
+        // scope) is reported but does not make the run unclean.
+        let unwaived = report["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|f| f["waived"].is_null())
+            .count();
+        assert_eq!(unwaived, 0, "{command}: {report}");
         assert!(stderr.contains("examined 1 record"), "{command}: {stderr}");
 
         // The record, and the regenerated index when the type declares one, are staged.
