@@ -248,7 +248,11 @@ fn judge_delivery_items(input: &DeliveryInput<'_>) -> DeliveryJudgement {
         status_field: status_field.to_string(),
         status: status.to_string(),
         tier: judged.tier.clone(),
-        evidence: format!("the Done means items ({})", judged.counts()),
+        evidence: format!(
+            "the {} items ({})",
+            delivery.items.as_ref().expect("checked by the caller").section,
+            judged.counts()
+        ),
         disagreement,
         items: Some(judged),
     }
@@ -519,8 +523,12 @@ fn unresolved_items_report(
         .iter()
         .map(|u| {
             format!(
-                "{id} is {} but Done means item {} \"{}\" is unresolved: {}",
-                judged.status, u.n, u.text, u.cause
+                "{id} is {} but {} item {} \"{}\" is unresolved: {}",
+                judged.status,
+                items_section(config, &record.record_type),
+                u.n,
+                u.text,
+                u.cause
             )
         })
         .collect();
