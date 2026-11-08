@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5GM1RYRRX2XVMZ0ZAK
-Version: '0.129'
+Version: '0.130'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs@sha256:c819006495f23fd9742941942eea3a7a4894f9eec67d3c3cfbf18561ede31f6b, code:rust/crates/urzua-core/src/rules.rs@sha256:355dd5bf590d2020ab967cb30501aa6ce610186c6631f22aa828831a6fbac0d4, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:5ab61b95fd5864a41566dee0d902fac000dca3552f90316331ecf90617c3f9b0, test:rust/crates/urzua-cli/tests/fail_on_integration.rs@sha256:4b1707f3b18aed7b018f8b80c55f1e2091ae19148f3de6c95435a8f5fee4cab7
@@ -1150,4 +1150,4 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-08 | Bumped to `0.127`. The `Realized-by` pin on `check_integration.rs` was re-baselined (the `Re-baselined` row above) after its tests were changed to name real tracked files; no behaviour this spec describes changes. | **structural** |
 > | 2026-11-08 | Bumped to `0.128`. `embodiment.claim-expired` judges a record whose evidence is only its Done-means item evidence clauses, counting its age from the first evidence line. **Why:** `ADR-97` amendment of 2026-11-08 -- such a milestone never expired and `urzua reverify` could not renew it. | **substantive** |
 > | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/check_integration.rs` 8538aedb7492 -> 5ab61b95fd58. Reason: check_integration.rs: the only change is in pre_commit_hook_stops_a_planted_bad_header_with_the_real_binary, which now symlinks the urzua binary into the fixture instead of copying it (a copy raced a forking test thread and failed with ETXTBSY under load); the test's setup, planted defect and assertions are otherwise unchanged **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
-> | 2026-11-08 | Bumped to `0.129`. `embodiment.locator-exists` does not examine an item whose valid, unexpired waiver holds while its evidence does not resolve (an expired waiver no longer excuses it) (`ADR-96`), and never probes a locator that resolves outside the repository; item messages name the type's declared `items.section`. **Why:** round-4 review of the delivery items. | **substantive** |
+> | 2026-11-08 | Bumped to `0.130`. `embodiment.locator-exists` does not examine an item whose valid, unexpired waiver holds while its evidence does not resolve (an expired waiver no longer excuses it) (`ADR-96`), and never probes a locator that resolves outside the repository; item messages name the type's declared `items.section`. **Why:** round-4 review of the delivery items. | **substantive** |
