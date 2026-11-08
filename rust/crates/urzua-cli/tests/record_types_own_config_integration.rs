@@ -66,7 +66,7 @@ fn check_rules(dir: &Path, file: &str) -> Vec<String> {
 
 fn milestone(status: &str, extra: &str, done_means: bool) -> String {
     let section = if done_means {
-        "\n## Done means\n\nIt works.\n"
+        "\n## Done means\n\n- It works.\n"
     } else {
         ""
     };
@@ -77,7 +77,7 @@ fn milestone(status: &str, extra: &str, done_means: bool) -> String {
 
 /// A milestone whose Done means is the given list of items.
 fn milestone_with_items(status: &str, items: &str) -> String {
-    milestone(status, "", true).replace("It works.\n", items)
+    milestone(status, "", true).replace("- It works.\n", items)
 }
 
 // ---- SPEC-6: the milestone type

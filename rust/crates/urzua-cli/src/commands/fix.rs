@@ -67,18 +67,13 @@ pub fn run(config_path: Option<PathBuf>, args: FixArgs) -> ExitCode {
             "urzua fix --reason belongs to --rebaseline: a Tier 1 repair records its computation, not a reason",
         ));
     }
-    let reason = match (rebaseline && apply, reason.as_deref().map(str::trim)) {
-        (true, None | Some("")) => {
-            return emit(&CouldNotRun::from(
-                "urzua fix --rebaseline --apply: pass --reason <why the evidence still holds>; a re-pin without a reason is a rubber stamp",
-            ))
-        }
-        (_, Some(r)) if r.contains('|') || r.contains(['\n', '\r']) => {
-            return emit(&CouldNotRun::from(
-                "--reason must be one line without '|' (it is written into a revision-log table row)",
-            ))
-        }
-        (_, r) => r.unwrap_or_default().to_string(),
+    let reason = match validate_reason(
+        rebaseline && apply,
+        reason.as_deref(),
+        "urzua fix --rebaseline --apply: pass --reason <why the evidence still holds>; a re-pin without a reason is a rubber stamp",
+    ) {
+        Ok(r) => r,
+        Err(e) => return emit(&CouldNotRun::from(e)),
     };
 
     if stdin_path.is_some()
@@ -172,21 +167,10 @@ pub fn run(config_path: Option<PathBuf>, args: FixArgs) -> ExitCode {
         }
     };
     let mut drift_notices = crate::discovery::drift_notices(drift.shallow, &drift.git_problems);
-    let back_pointed =
-        match crate::discovery::read_back_pointer_sources(&repo_root, &discovered, &config) {
-            Ok(Some(sources)) => {
-                let (index, _) = urzua_core::rules::build_index_reporting_collisions(&records);
-                urzua_core::rules::back_pointer_evidence(
-                    &sources.files,
-                    &sources.back_pointer_paths,
-                    &sources.test_paths,
-                    &config,
-                    &index,
-                )
-            }
-            Ok(None) => Default::default(),
-            Err(e) => return emit(&CouldNotRun::from(e)),
-        };
+    let back_pointed = match back_pointer_evidence(&repo_root, &discovered, &config, &records) {
+        Ok(evidence) => evidence,
+        Err(e) => return emit(&CouldNotRun::from(e)),
+    };
     // The derived-blocked records (`ADR-96` section 7): `fix` writes no
     // `progress` status to one. Computed only when a type is opted in.
     let blocked = if scoped.iter().any(|r| r.items.is_some()) {
@@ -350,6 +334,70 @@ pub fn run(config_path: Option<PathBuf>, args: FixArgs) -> ExitCode {
     ))
 }
 
+/// The `--reason` of an attributed write: required (and said so with
+/// `required_message`) when `required`, always one line without `|` because it
+/// is written into a revision-log table row. Shared by `fix --rebaseline` and
+/// `reverify`.
+pub(crate) fn validate_reason(
+    required: bool,
+    reason: Option<&str>,
+    required_message: &str,
+) -> Result<String, String> {
+    match (required, reason.map(str::trim)) {
+        (true, None | Some("")) => Err(required_message.to_string()),
+        (_, Some(r)) if r.contains('|') || r.contains(['\n', '\r']) => Err(
+            "--reason must be one line without '|' (it is written into a revision-log table row)"
+                .to_string(),
+        ),
+        (_, r) => Ok(r.unwrap_or_default().to_string()),
+    }
+}
+
+/// What the back-pointer scan finds in the tree, for the delivery tiers.
+pub(crate) fn back_pointer_evidence(
+    repo_root: &std::path::Path,
+    discovered: &urzua_io::DiscoveredFiles,
+    config: &urzua_core::config::Config,
+    records: &[urzua_core::record::Record],
+) -> Result<urzua_core::rules::BackPointerEvidence, String> {
+    Ok(
+        match crate::discovery::read_back_pointer_sources(repo_root, discovered, config)? {
+            Some(sources) => {
+                let (index, _) = urzua_core::rules::build_index_reporting_collisions(records);
+                urzua_core::rules::back_pointer_evidence(
+                    &sources.files,
+                    &sources.back_pointer_paths,
+                    &sources.test_paths,
+                    config,
+                    &index,
+                )
+            }
+            None => Default::default(),
+        },
+    )
+}
+
+/// The report's `failed` list from `(record, error)` pairs.
+pub(crate) fn into_failures(failed: Vec<(PathBuf, String)>) -> Vec<FixFailure> {
+    failed
+        .into_iter()
+        .map(|(record, error)| FixFailure { record, error })
+        .collect()
+}
+
+/// The notice for a replaced `--by`, when the attestation carries one.
+pub(crate) fn identity_notices(identity: Option<&ResolvedAttestation>) -> Vec<Notice> {
+    identity
+        .and_then(|i| i.warning.clone())
+        .into_iter()
+        .map(|message| Notice {
+            severity: NoticeSeverity::Warning,
+            subject: NOTICE_IDENTITY.to_string(),
+            message,
+        })
+        .collect()
+}
+
 /// The identity an apply writes under: the attestation the revision rows
 /// carry, the report's account of it, and the notice for a replaced `--by`.
 pub(crate) struct ResolvedAttestation {
@@ -488,19 +536,10 @@ fn build_report(
         repairs,
         rebaselines,
         failed_pins,
-        failed: failed
-            .into_iter()
-            .map(|(record, error)| FixFailure { record, error })
-            .collect(),
+        failed: into_failures(failed),
         identity: identity.as_ref().map(|i| i.report.clone()),
-        notices: identity
-            .and_then(|i| i.warning)
+        notices: identity_notices(identity.as_ref())
             .into_iter()
-            .map(|message| Notice {
-                severity: NoticeSeverity::Warning,
-                subject: NOTICE_IDENTITY.to_string(),
-                message,
-            })
             .chain(extra_notices)
             .collect(),
     }
