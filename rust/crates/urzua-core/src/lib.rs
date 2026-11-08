@@ -54,11 +54,3 @@ pub enum FieldState {
     /// Field holds a real value.
     Present,
 }
-
-#[derive(Debug, thiserror::Error)]
-pub enum Error {
-    #[error("unrecognized status: {0}")]
-    UnknownStatus(String),
-    #[error("unrecognized embodiment: {0}")]
-    UnknownEmbodiment(String),
-}

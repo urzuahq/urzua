@@ -154,6 +154,30 @@ fn run_inner(config_path: Option<PathBuf>, path: String) -> Result<ExitCode, Fai
         ),
     };
 
+    // A path that names no file or directory, matches no glob and that no record
+    // cites is a typo or a rule id, not an ungoverned file. A deleted file that
+    // a record still cites stays a legitimate query.
+    if governing_records.is_empty()
+        && scope.is_none()
+        && coverage.is_none()
+        && notices.is_empty()
+        && !repo_root.join(&parsed.path).exists()
+    {
+        let hint = if rule_def(&parsed.path).is_some() {
+            format!(
+                "; '{}' is a rule id, use `urzua explain --rule {}`",
+                parsed.path, parsed.path
+            )
+        } else {
+            String::new()
+        };
+        return Err(format!(
+            "'{}' is not a file or directory in this repository and no record cites it as evidence{hint}",
+            parsed.path
+        )
+        .into());
+    }
+
     Ok(emit(&ExplainReport {
         status: ReportStatus::Ok,
         path: parsed.path.clone(),

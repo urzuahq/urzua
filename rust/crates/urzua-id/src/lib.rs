@@ -1,4 +1,4 @@
-//! Stable record identifiers and display numbers.
+//! Stable record identifiers.
 //!
 //! Authors never choose an identifier (ADR-0003). A record gets a stable,
 //! time-ordered, collision-free ID at creation with no coordination; the
@@ -18,16 +18,6 @@
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct StableId(String);
 
-/// Human-facing sequential number, e.g. `42` rendered as `42`.
-///
-/// Presentation only. Assigned at merge time, may change, and nothing may
-/// depend on it. Unpadded (ADR-0036): zero-padding to a fixed width doesn't
-/// actually solve lexicographic-sort ordering permanently -- it only defers
-/// the break to the point a type crosses that width, and breaks worse then
-/// (mixed-width filenames). Unpadded is at least consistent forever.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct DisplayNumber(pub u32);
-
 impl StableId {
     /// A fresh, collision-free identifier. No coordination needed — this is
     /// the whole point (ADR-0003): twenty concurrent branches each call this
@@ -39,22 +29,6 @@ impl StableId {
     pub fn as_str(&self) -> &str {
         &self.0
     }
-}
-
-impl std::fmt::Display for DisplayNumber {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum Error {
-    #[error("malformed stable id: {0}")]
-    Malformed(String),
-    /// Two records claiming one identity. Unrecoverable corruption in a system
-    /// whose value is being a trustworthy record — never auto-resolve.
-    #[error("duplicate stable id {0} claimed by {1} and {2}")]
-    Duplicate(String, String, String),
 }
 
 #[cfg(test)]
@@ -74,11 +48,5 @@ mod tests {
         std::thread::sleep(std::time::Duration::from_millis(2));
         let b = StableId::generate();
         assert!(a.as_str() < b.as_str());
-    }
-
-    #[test]
-    fn display_number_is_never_zero_padded() {
-        assert_eq!(DisplayNumber(7).to_string(), "7");
-        assert_eq!(DisplayNumber(1234).to_string(), "1234");
     }
 }

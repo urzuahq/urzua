@@ -24,6 +24,26 @@ pub struct ProposedRecordType {
     /// The header shape proposed for the type: always `yaml-frontmatter`, the
     /// only shape with a reader (MILE-85).
     pub header_shape: HeaderShape,
+    /// Bare file names in the directory that are not records and are written
+    /// to the type's `exclude_files`: a `README.md` is not a record, and
+    /// without the exclusion every identity rule asks for it to be renamed.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub exclude_files: Vec<String>,
+}
+
+/// The one non-record file `init` excludes by name. `exclude_files` takes bare,
+/// exact file names, so only this spelling is matched.
+const EXCLUDED_README: &str = "README.md";
+
+/// `["README.md"]` when the tracked set holds one directly in `dir`.
+fn excluded_files_in(discovered: &[PathBuf], dir: &Path) -> Vec<String> {
+    discovered
+        .iter()
+        .any(|rel| {
+            rel.parent() == Some(dir) && rel.file_name().is_some_and(|n| n == EXCLUDED_README)
+        })
+        .then(|| vec![EXCLUDED_README.to_string()])
+        .unwrap_or_default()
 }
 
 /// Propose one record type per directory holding record-shaped files. Adopt
@@ -101,12 +121,14 @@ pub fn detect_record_types(discovered: &[PathBuf]) -> Vec<ProposedRecordType> {
                 Some(first) if seen.iter().all(|p| p == first) => first.clone(),
                 _ => None,
             };
+            let exclude_files = excluded_files_in(discovered, &dir);
             ProposedRecordType {
                 name,
                 dir: dir.to_string_lossy().to_string(),
                 record_count,
                 prefix,
                 header_shape: HeaderShape::YamlFrontmatter,
+                exclude_files,
             }
         })
         .collect()
@@ -183,7 +205,7 @@ pub fn infer_header_shapes(
             severity: NoticeSeverity::Warning,
             subject: NOTICE_HEADER_SHAPE.to_string(),
             message: format!(
-                "yaml-frontmatter is proposed for {}, the only header shape urzua reads; {yaml} record(s) parse under it and {} will be reported as unreadable by `check` until their headers are rewritten as YAML frontmatter",
+                "yaml-frontmatter is proposed for {}, the only header shape urzua reads; {yaml} record(s) parse under it and {} are not read by any rule until their headers are rewritten as YAML frontmatter; the proposed config declares no `required_fields`, so `check` is silent about them: add `required_fields: [Status]` (or another field every record carries) to this type and `header.required-fields` reports each unreadable record",
                 rt.dir,
                 unread.join(", ")
             ),
@@ -335,12 +357,14 @@ pub fn detect_unnumbered_record_types(
         if !taken.insert(name.clone()) {
             continue;
         }
+        let exclude_files = excluded_files_in(discovered, &dir);
         out.push(ProposedRecordType {
             name,
             dir: dir.to_string_lossy().to_string(),
             record_count: total,
             prefix: None,
             header_shape: HeaderShape::YamlFrontmatter,
+            exclude_files,
         });
     }
     (out, headers_only)
@@ -495,6 +519,17 @@ pub fn render_config_yaml(proposed: &[ProposedRecordType]) -> String {
         // nothing (BUG-61).
         if let Some(prefix) = &rt.prefix {
             entry.insert(Value::from("prefix"), Value::from(prefix.as_str()));
+        }
+        if !rt.exclude_files.is_empty() {
+            entry.insert(
+                Value::from("exclude_files"),
+                Value::Sequence(
+                    rt.exclude_files
+                        .iter()
+                        .map(|f| Value::from(f.as_str()))
+                        .collect(),
+                ),
+            );
         }
         types.insert(Value::from(rt.name.as_str()), Value::Mapping(entry));
     }
@@ -824,6 +859,7 @@ mod tests {
             record_count: 1,
             prefix: None,
             header_shape: HeaderShape::YamlFrontmatter,
+            exclude_files: vec![],
         }]);
         let parsed = urzua_core::config::parse(&rendered)
             .expect("init must never emit a config it cannot read back");
@@ -881,6 +917,7 @@ mod tests {
             record_count: 1,
             prefix: None,
             header_shape: HeaderShape::YamlFrontmatter,
+            exclude_files: vec![],
         }]);
         assert!(!rendered.contains("claim.status-agreement"), "{rendered}");
         assert!(!rendered.contains("pointer.target-status"), "{rendered}");
@@ -899,6 +936,7 @@ mod tests {
                 record_count: 1,
                 prefix: None,
                 header_shape: HeaderShape::YamlFrontmatter,
+                exclude_files: vec![],
             })
             .collect();
         assert_eq!(render_config_yaml(&proposed), render_config_yaml(&proposed));
@@ -912,6 +950,7 @@ mod tests {
             record_count: 2,
             prefix: Some("ADR".to_string()),
             header_shape: HeaderShape::YamlFrontmatter,
+            exclude_files: vec![],
         }];
         let yaml = render_config_yaml(&proposed);
         assert!(
@@ -930,6 +969,7 @@ mod tests {
                 record_count: 2,
                 prefix: Some("ADR".to_string()),
                 header_shape: HeaderShape::YamlFrontmatter,
+                exclude_files: vec![],
             },
             ProposedRecordType {
                 name: "note".to_string(),
@@ -937,6 +977,7 @@ mod tests {
                 record_count: 1,
                 prefix: None,
                 header_shape: HeaderShape::YamlFrontmatter,
+                exclude_files: vec![],
             },
         ];
         let yaml = render_config_yaml(&proposed);
@@ -955,6 +996,7 @@ mod tests {
             record_count: 9,
             prefix: None,
             header_shape: HeaderShape::YamlFrontmatter,
+            exclude_files: vec![],
         }];
         let yaml = render_config_yaml(&proposed);
         assert!(
@@ -992,6 +1034,7 @@ mod tests {
             record_count: 3,
             prefix: Some("ADR".to_string()),
             header_shape: HeaderShape::YamlFrontmatter,
+            exclude_files: vec![],
         }];
         let yaml = render_config_yaml(&proposed);
         for rule in [
