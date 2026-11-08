@@ -220,6 +220,18 @@ fn a_path_that_names_no_file_and_no_cited_evidence_is_an_error() {
 }
 
 #[test]
+fn a_glob_that_matches_nothing_and_is_cited_by_no_record_is_an_error() {
+    let dir = repo("nosuchglob", CONFIG);
+    let (out, report) = run(&dir, &["explain", "nonexist/**/*.rs"]);
+    assert_eq!(out.status.code(), Some(2), "{report}");
+    assert_eq!(report["status"], "not-run", "{report}");
+    assert!(
+        report.to_string().contains("nonexist/**/*.rs"),
+        "the error names the glob: {report}"
+    );
+}
+
+#[test]
 fn a_rule_id_given_as_a_path_is_an_error_that_points_at_rule() {
     let dir = repo("ruleaspath", CONFIG);
     let (out, report) = run(&dir, &["explain", "status.delivery-agreement"]);

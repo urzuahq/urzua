@@ -4,7 +4,7 @@ Version: '0.14'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/commands/init.rs@sha256:efe3f3739082148a47756ba8d8a4b6e8dc7d85f66edb3748c63e7a7e5f01c96c, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:f893cb99b8337c1172d3c4825859e00a0344dd4c35e6f013d802e509b1688ecb
+Realized-by: code:rust/crates/urzua-cli/src/commands/init.rs@sha256:00f2e89c759e91911e624bdd32a9d20f7bc4b27f118d86dd020bc38677ac50ea, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:8538aedb749292d7641c037df67b6e667d5087b0c8dca95682fef065a8429a00
 Author: beauwilliams
 Subject: '`urzua init` -- the adopt-existing-corpus path and `.urzua/` layout.'
 Implements: RFC-1
@@ -82,9 +82,10 @@ existing records with the real header parser and counts those whose header is YA
 very start of the record; a record written in a removed form, or with no readable header, is counted
 in a `header-shape` notice that names the form (`2 in the removed bold-list form`), which no rule reads
 until its header is rewritten as YAML frontmatter. The proposed config declares no `required_fields`, so
-`check` does not mention such a record; the notice says so and names the fix, declaring a field every record
-carries (`required_fields: [Status]`) on the type, after which `header.required-fields` reports each one. A type whose
-records are all frontmatter gets no notice. A type with no records is proposed `yaml-frontmatter`.
+`check` does not mention such a record; the notice says so and names the fix, declaring a field every
+record carries (`required_fields: [Status]`) on the type, after which `header.required-fields` reports
+each one. A type whose records are all frontmatter gets no notice. A type with no records is proposed
+`yaml-frontmatter`.
 Each `proposed` entry reports the chosen `header_shape`. When a proposed directory holds a `README.md`
 directly, which is never a record, the type is written with `exclude_files: [README.md]` and its `proposed`
 entry lists `exclude_files`; a directory with no README writes no `exclude_files`.
@@ -196,3 +197,4 @@ adopt should infer rules or only structure, and multi-corpus-per-repo).
 > | 2026-11-08 | Tool-authored (by beauwilliams, identity: gh-verified, actor: agent): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-cli/src/commands/init.rs@sha256:efe3f3739082148a47756ba8d8a4b6e8dc7d85f66edb3748c63e7a7e5f01c96c, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:f893cb99b8337c1172d3c4825859e00a0344dd4c35e6f013d802e509b1688ecb` -- stated `Drift detected` disagreed with the computed value `Verified`. | **structural** |
 > | 2026-11-08 | Bumped to `0.13`. The `code:` and `test:` locators of `Realized-by` are now hash-pinned by `urzua reverify --pin-only` (the `Pinned` row above) and, where the record stated `Drift detected`, its `Embodiment` was recomputed (the tool-authored row above); no behaviour this spec describes changes. **Why:** `MILE-129`, `ADR-97` section 10: a claim is renewed only over pinned code and test evidence, so the corpus is pinned once before expiry is enabled. | **structural** |
 > | 2026-11-08 | Bumped to `0.14`. The `header-shape` notice states what `check` does (silent while `required_fields` is empty) and the config that makes it report, instead of promising a report that never came; `init` writes `exclude_files: [README.md]` for a proposed directory that holds a README. The written config for a corpus with no README, and every existing config, are unchanged. **Why:** the round-4 adopter review (S3, N1): the warning was not true, and every adopted corpus drew `filename.identity-pattern` warnings asking to rename its README. | **substantive** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/init.rs` efe3f3739082 -> 00f2e89c759e, `rust/crates/urzua-cli/tests/check_integration.rs` f893cb99b833 -> 8538aedb7492. Reason: the tests in check_integration.rs now name real tracked files (and the header-shape notice wording changed); the behaviour this record relies on is unchanged; init.rs now words the header-shape notice truthfully (check reports unreadable headers only when required_fields declares them) and excludes README.md for a directory holding one; the behaviour this record relies on is unchanged **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |

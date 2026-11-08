@@ -146,7 +146,13 @@ fn run_inner(config_path: Option<PathBuf>, path: String) -> Result<ExitCode, Fai
     let (scope, coverage) = match &parsed.scope {
         None => (
             None,
-            explain_coverage(&repo_root, &config, &parsed, &mut notices)?,
+            explain_coverage(
+                &repo_root,
+                &config,
+                &parsed,
+                governing_records.is_empty(),
+                &mut notices,
+            )?,
         ),
         Some(scope) => (
             Some(explain_scope(&repo_root, &config, &parsed, scope)?),
@@ -198,6 +204,7 @@ fn explain_coverage(
     repo_root: &std::path::Path,
     config: &urzua_core::config::Config,
     parsed: &locator::Locator,
+    uncited: bool,
     notices: &mut Vec<Notice>,
 ) -> Result<Option<CoverageExplanation>, String> {
     use urzua_core::rules::{LocatorExistsOpts, RULE_EMBODIMENT_LOCATOR_EXISTS};
@@ -208,6 +215,14 @@ fn explain_coverage(
     let Some(kind) = located.kind.filter(|k| *k != LocatorKind::File) else {
         return Ok(None);
     };
+    // A glob or directory that matches no tracked file and that no record cites
+    // is a typo, whether or not the config accepts its kind.
+    if located.files.is_empty() && uncited {
+        return Err(format!(
+            "'{}' matches no tracked file in the working tree and no record cites it as evidence",
+            parsed.path
+        ));
+    }
     let opts: LocatorExistsOpts = config.rule_opts(RULE_EMBODIMENT_LOCATOR_EXISTS);
     if !opts.locator_kinds.contains(&kind) {
         notices.push(Notice {
