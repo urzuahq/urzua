@@ -548,6 +548,7 @@ not be previewed. The maintainer decided on 2026-11-08 that the evaluation date 
    row and the anchor those write carry the real date and a different one would falsify the history; the preview is
    `--as-of` without `--apply`, the write is `--apply` without it. It is refused by every command that compares no dates,
    rather than accepted and ignored.
+5. Elapsed-seconds measures follow the same instant: `claim_max_age_days` and the audit grace measure elapsed seconds, and under `--as-of` those seconds run to 23:59:59 UTC of the stated day, so `--as-of <today>` can read up to one day older than the real clock; day-bucketed claim expiry (`embodiment.claim-expired`) is unchanged.
 
 Nothing else in the decision changes. `SPEC-1`, `SPEC-2` and `SPEC-8` carry the contract.
 
