@@ -174,19 +174,16 @@ pub fn date_from_days(days: i64) -> String {
     format!("{y:04}-{m:02}-{d:02}")
 }
 
-/// Measures one record's claim, or says why it has no standing. `line_time` is
-/// the commit time of the record's `Realized-by` line and `seed` the first 8
-/// bytes of the SHA-256 of its `Stable-Id` as a big-endian number, both read by
-/// the caller (the core opens no file and links no hash).
-pub fn claim_standing(
+/// The `periods` entry that judges `record`, or why none does: the record has no
+/// locator field, holds a retained or sticky state, or no entry matches. It
+/// needs no clock and no history, so a claim that cannot be dated is still known
+/// to be covered by its entry.
+pub fn covering_entry<'a>(
     record: &Record,
     config: &Config,
-    opts: &ClaimExpiredOpts,
+    opts: &'a ClaimExpiredOpts,
     tier: &str,
-    now_unix: i64,
-    line_time: Option<i64>,
-    seed: Option<u64>,
-) -> Result<ClaimStanding, ClaimSkip> {
+) -> Result<(usize, &'a ClaimPeriod, String), ClaimSkip> {
     use crate::config::RelationRole::{EmbodimentState, Status};
     let status_field = relation_field_name(config, &record.record_type, Status);
     let locator_field = relation_field_name(
@@ -225,6 +222,28 @@ pub fn claim_standing(
     else {
         return Err(ClaimSkip::Unexamined("no period matches"));
     };
+    Ok((entry_index, entry, status.to_string()))
+}
+
+/// Measures one record's claim, or says why it has no standing. `line_time` is
+/// the commit time of the record's `Realized-by` line and `seed` the first 8
+/// bytes of the SHA-256 of its `Stable-Id` as a big-endian number, both read by
+/// the caller (the core opens no file and links no hash).
+pub fn claim_standing(
+    record: &Record,
+    config: &Config,
+    opts: &ClaimExpiredOpts,
+    tier: &str,
+    now_unix: i64,
+    line_time: Option<i64>,
+    seed: Option<u64>,
+) -> Result<ClaimStanding, ClaimSkip> {
+    let locator_field = relation_field_name(
+        config,
+        &record.record_type,
+        crate::config::RelationRole::EmbodimentLocator,
+    );
+    let (entry_index, entry, status) = covering_entry(record, config, opts, tier)?;
     let today_day = now_unix.div_euclid(DAY_SECS);
     let mut anchor_problem = None;
     let mut anchor = None;
@@ -280,7 +299,7 @@ pub fn claim_standing(
     };
     Ok(ClaimStanding {
         entry: entry_index,
-        status: status.to_string(),
+        status,
         tier: tier.to_string(),
         days: entry.days,
         spread_days: spread,
@@ -341,8 +360,12 @@ pub fn embodiment_claim_expired(
     };
     let matched: HashSet<usize> = listed
         .iter()
-        .filter_map(|r| standing_of(r).ok())
-        .map(|s| s.entry)
+        .filter_map(|r| {
+            let tier = computed_tier(r, config, back_pointed);
+            covering_entry(r, config, &opts, &tier)
+                .ok()
+                .map(|(n, ..)| n)
+        })
         .collect();
     // An entry is a declaration that reaches nothing only when its type holds
     // claims (a record with a locator) and none is one the entry covers; a type

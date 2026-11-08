@@ -699,6 +699,74 @@ fn an_entry_that_matches_no_record_is_reported() {
 }
 
 #[test]
+fn an_entry_for_a_type_that_holds_no_claim_yet_is_not_reported() {
+    let rule = "    level: warn\n    periods:\n      - {type: milestone, status: [Done], days: 30}\n      - {type: adr, status: [Accepted], days: 30}\n";
+    let extra = "  config.scope-matches-nothing: warn\n";
+    let dir = fixture("no-claims", &config(rule, extra));
+    std::fs::write(
+        dir.join(M1),
+        record(
+            "MILE-1",
+            "Done",
+            "01AAAAAAAAAAAAAAAAAAAAAAAA",
+            "",
+            "code:src/a.rs",
+        ),
+    )
+    .unwrap();
+    commit_all(&dir, 1);
+    let parsed = json(&run_urzua(&dir, &["check"]));
+    assert!(
+        findings(&parsed, "config.scope-matches-nothing").is_empty(),
+        "{parsed}"
+    );
+}
+
+#[test]
+fn an_entry_covering_a_claim_that_cannot_be_dated_is_not_reported_as_matching_nothing() {
+    // The records are staged and never committed, so no `Realized-by` line has a
+    // commit to date it by: the claims are unreadable to the rule, yet each is
+    // covered by its entry, so no entry reaches nothing.
+    let extra = "  config.scope-matches-nothing: warn\n";
+    let dir = fixture("undatable", &config(RULE, extra));
+    std::fs::write(
+        dir.join(M1),
+        record(
+            "MILE-1",
+            "Done",
+            "01AAAAAAAAAAAAAAAAAAAAAAAA",
+            "",
+            "code:src/a.rs",
+        ),
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join(A1),
+        record(
+            "ADR-1",
+            "Accepted",
+            "01BBBBBBBBBBBBBBBBBBBBBBBB",
+            "",
+            "code:src/a.rs",
+        ),
+    )
+    .unwrap();
+    git(&dir, &["add", "-A"]);
+    let parsed = json(&run_urzua(&dir, &["check"]));
+    assert!(
+        findings(&parsed, "config.scope-matches-nothing").is_empty(),
+        "{parsed}"
+    );
+    let exec = parsed["rules_executed"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| e["rule"] == EXPIRED)
+        .unwrap();
+    assert_eq!(exec["population"]["unreadable"], 2, "{exec}");
+}
+
+#[test]
 fn a_waiver_without_an_expiry_cannot_exempt_the_rule_when_permanent_does_not_list_it_observed_failing(
 ) {
     let extra = "  waiver.matches-nothing: warn\n";
