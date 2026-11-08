@@ -129,6 +129,7 @@ pub fn run(config_path: Option<PathBuf>, apply: bool) -> ExitCode {
             severity: NoticeSeverity::Info,
             subject: "index".to_string(),
             message: "run `urzua index --apply` to write the regenerated artifacts".to_string(),
+            detail: None,
         }]
     };
     emit(&IndexReport {

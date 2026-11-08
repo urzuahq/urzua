@@ -749,6 +749,11 @@ pub struct Notice {
     pub severity: NoticeSeverity,
     pub subject: String,
     pub message: String,
+    /// Structured fields a reader can branch on without parsing `message`
+    /// (for example the offending `key` and its `nearest` valid key). Omitted
+    /// from the output when a notice carries none.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detail: Option<std::collections::BTreeMap<String, String>>,
 }
 
 /// Every command's report implements this (ADR-0046): `urzua-cli`'s
@@ -1440,6 +1445,7 @@ mod tests {
             severity: NoticeSeverity::Warning,
             subject: "test".to_string(),
             message: "a non-fatal observation".to_string(),
+            detail: None,
         }
     }
 

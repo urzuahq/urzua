@@ -109,6 +109,7 @@ impl HarnessReport {
             severity,
             subject: "harness".to_string(),
             message,
+            detail: None,
         });
     }
 

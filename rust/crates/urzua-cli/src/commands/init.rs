@@ -187,6 +187,7 @@ pub fn infer_header_shapes(
                 rt.dir,
                 unread.join(", ")
             ),
+            detail: None,
         });
     }
     notices
@@ -238,6 +239,7 @@ pub fn drop_headerless(
             "not proposed, because no file in these directories has a header, so they hold pages rather than records: {}; declare a record type by hand if one of them is a record directory",
             listed.join(", ")
         ),
+        detail: None,
     };
     (kept, vec![notice])
 }
@@ -414,6 +416,7 @@ fn drop_prefix_clashes(
                 "not proposed, because two record types may not share a prefix: {}; declare it by hand with a prefix of its own",
                 clashes.join(", ")
             ),
+            detail: None,
         }]
     };
     (kept, notices)
@@ -465,6 +468,7 @@ fn withheld_rule_notices() -> Vec<Notice> {
             "not proposed, because each reads a per-type declaration init does not infer and would examine no record until it exists: {}; declare it on a record type, then enable the rule",
             clauses.join("; ")
         ),
+        detail: None,
     }]
 }
 
@@ -632,6 +636,7 @@ pub fn run(config: Option<PathBuf>, dry_run: bool) -> ExitCode {
                 "{} already exists; this dry run shows what adopt would propose and nothing was written",
                 config_path.display()
             ),
+            detail: None,
         });
     }
     let (unnumbered, headers_only) =
@@ -644,6 +649,7 @@ pub fn run(config: Option<PathBuf>, dry_run: bool) -> ExitCode {
                 "not proposed, because their files carry headers but no status field, so they look like pages rather than records: {}; declare a record type by hand if one of them is a record directory",
                 headers_only.join(", ")
             ),
+            detail: None,
         });
     }
     if !unnumbered.is_empty() {
@@ -658,6 +664,7 @@ pub fn run(config: Option<PathBuf>, dry_run: bool) -> ExitCode {
                     .collect::<Vec<_>>()
                     .join(", ")
             ),
+            detail: None,
         });
         proposed.extend(unnumbered);
     }

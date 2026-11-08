@@ -169,6 +169,7 @@ fn load_base_text(
                     "{}: could not read the merge base's copy, so the record is not examined: {e}",
                     record.path.display()
                 ),
+                detail: None,
             }),
         }
     }
@@ -234,6 +235,7 @@ pub(crate) fn load_templates(
             message: "field.quality: template_placeholders is declared but no \
                       .urzua/templates/<type>.md exists for any record type -- the option reads nothing"
                 .to_string(),
+                detail: None,
         });
     }
     Ok(templates)
@@ -452,6 +454,7 @@ fn load_waivers(
                 "the waiver template '{}' could not be read ({e}); a Reason still holding the template's text is not recognised as a placeholder",
                 template_path.display()
             ),
+            detail: None,
         }),
     }
     let waivers = urzua_core::waiver::load_suppressions(&session.records, &suppression_type);
@@ -489,6 +492,7 @@ fn execute(config_path: Option<PathBuf>, args: CheckArgs) -> Result<CheckReport,
     )?;
     let (mut context, mut notices) = load_context(session, &scope, selection.as_deref())?;
     notices.extend(untracked_notices(session, &scope, &context.drift));
+    notices.extend(harness_key_notices(session.config.harness.as_ref()));
     notices.extend(actors_notices(
         &session.config,
         actors.is_some(),
@@ -546,6 +550,44 @@ fn execute(config_path: Option<PathBuf>, args: CheckArgs) -> Result<CheckReport,
     })
 }
 
+/// One warning notice per key the `harness` configuration carries that this
+/// build does not read (`ADR-89` amendment of 2026-11-07: reported, not an
+/// error). Each names where the key sits (`subject`), the key, and the nearest
+/// valid key when one is close, as `detail` fields a reader can branch on.
+fn harness_key_notices(harness: Option<&urzua_core::harness::HarnessDecl>) -> Vec<Notice> {
+    let Some(harness) = harness else {
+        return Vec::new();
+    };
+    harness
+        .unknown_keys
+        .iter()
+        .map(|u| {
+            let hint = u
+                .nearest
+                .as_ref()
+                .map(|n| format!("; did you mean '{n}'?"))
+                .unwrap_or_default();
+            let mut detail = std::collections::BTreeMap::new();
+            detail.insert("key".to_string(), u.key.clone());
+            if let Some(n) = &u.nearest {
+                detail.insert("nearest".to_string(), n.clone());
+            }
+            detail.insert("valid".to_string(), u.valid.join(", "));
+            Notice {
+                severity: NoticeSeverity::Warning,
+                subject: u.subject.clone(),
+                message: format!(
+                    "{} has the key '{}', which this build does not read{hint} (it reads: {}); the setting has no effect",
+                    u.subject,
+                    u.key,
+                    u.valid.join(", ")
+                ),
+                detail: Some(detail),
+            }
+        })
+        .collect()
+}
+
 /// What the untracked-records option owes the reader (`ADR-92`). Without it, one
 /// info notice naming the untracked records under a declared directory that the
 /// run did not examine; with it, one counting the included records whose
@@ -572,6 +614,7 @@ fn untracked_notices(
                     severity: NoticeSeverity::Warning,
                     subject: crate::discovery::NOTICE_UNTRACKED_SKIPPED.to_string(),
                     message: format!("could not list the untracked records: {e}"),
+                    detail: None,
                 }]
             }
         };
@@ -603,6 +646,7 @@ fn scope_changed_notices(executions: &[RuleExecution], why: &str) -> Vec<Notice>
                     "scope: changed -- {deferred} slot{} not judged ({why}); this rule judges only the records a --base diff adds or changes",
                     if deferred == 1 { "" } else { "s" }
                 ),
+                detail: None,
             })
         })
         .collect()
@@ -639,6 +683,7 @@ fn permanent_waivers_notice(
         severity: NoticeSeverity::Info,
         subject: crate::NOTICE_PERMANENT_WAIVERS.to_string(),
         message: format!("{total} permanent waiver{plural} in effect{breakdown}"),
+        detail: None,
     })
 }
 
@@ -806,6 +851,7 @@ fn claim_path_notices(repo_root: &Path, opts: &rules::ClaimOpts) -> Result<Vec<N
                 message: format!(
                     "claim.status-agreement: claim_paths entry '{prefix}' does not exist -- the rule has no input"
                 ),
+                detail: None,
             }),
             Err(e) => {
                 return Err(format!(
@@ -1262,6 +1308,7 @@ fn load_pull_ref_claims(
                 message: format!(
                     "could not read the fetched pull request refs ({e}), so the rule compared against nothing"
                 ),
+                detail: None,
             });
             Default::default()
         }
@@ -1337,6 +1384,7 @@ fn actors_notices(
         severity: NoticeSeverity::Warning,
         subject: rule.to_string(),
         message: format!("the --actors file was read by no rule: {why}"),
+        detail: None,
     }]
 }
 
@@ -1385,6 +1433,7 @@ fn refs_notice(snapshot_path: &str, snapshot: &RefsSnapshot) -> Notice {
             snapshot.issues.len(),
             snapshot.pulls.len(),
         ),
+        detail: None,
     }
 }
 
@@ -1585,6 +1634,7 @@ fn empty_diff_notice(reached_before_narrowing: usize, changed_paths: usize, base
         severity: NoticeSeverity::Info,
         subject: "scope".to_string(),
         message,
+        detail: None,
     }
 }
 

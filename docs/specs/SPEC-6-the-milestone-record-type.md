@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5QF32RM76Y50THPQEG
-Version: '0.20'
+Version: '0.21'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -104,7 +104,9 @@ milestone derives them from its What and Why; a `Done` milestone states the crit
 reopened rather than left `Done`. Where it fits, the criteria include that the capability is exercised in
 the repository's own configuration and records, not only by unit tests. A `WontDo` milestone is exempt
 (`exempt_statuses`): it will never be done, so it has no criteria to meet. The template
-(`.urzua/templates/milestone.md`) carries the section, and `/milestone` fills it.
+(`.urzua/templates/milestone.md`) carries the section, scaffolded as list items (the shape a type that
+declares `statuses.delivery.items` requires) so a fresh `urzua new milestone` reports no
+`status.done-items-shape` finding before it is filled, and `/milestone` fills it.
 
 ## Done means as items (`ADR-96`, `MILE-214`)
 
@@ -325,3 +327,4 @@ to another record — nothing to check for resolution, no cycle risk, no new rul
 > | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/status_model.rs` 744b341a578a -> 9cbbc69bdcdc. Reason: Read the diff of each pinned file since the pin taken earlier in this branch (the changes main landed in ADR-98's sharded CI and the milestone Kind amendment) and the claim still holds. status_model.rs: status_model.rs gained validate_kind, which refuses a statuses.delivery.items.kind declaration that would be inert (a blank or undeclared field, no kinds, an unreachable delivered tier), and the state machine, success terminals and transitions are unchanged. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
 > | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/record_types_own_config_integration.rs` 7caa23975490 -> 44fea1626a54. Reason: Read the diff of each pinned file since the old pin and the claim still holds. record_types_own_config_integration.rs: the milestone fixture's Done means is now a list item instead of a prose sentence (the repository config checks Done means as items), and the helper that swaps in items replaces that item; no assertion changed. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
 > | 2026-11-08 | Bumped to `0.20`. The pin this spec's `Realized-by` holds on `record_types_own_config_integration.rs` was re-baselined (the `Re-baselined` row above); no behaviour this spec describes changed. **Why:** a revision-log entry that adds a structural change needs a `Version` bump (`revision-log.version-bump-required`). | **structural** |
+> | 2026-11-08 | Bumped to `0.21`. The milestone template scaffolds `## Done means` as placeholder list items instead of prose guidance. **Why:** a fresh `urzua new milestone` failed `status.done-items-shape` ("the section holds no list item") until filled, because the prose the template wrote is not an item; a test now scaffolds one and runs the rule. | **substantive** |

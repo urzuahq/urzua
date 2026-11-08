@@ -5,6 +5,8 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/urzuahq/urzua?utm_source=oss&utm_medium=github&utm_campaign=urzuahq%2Furzua&labelColor=171717&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews)](https://coderabbit.ai)
 
+The verifiable specification layer for agent-authored change: it checks the records a change traces back to and orders work from their declared dependencies. It never reads the change.
+
 **Your agent just wrote a record of a decision it made. Is it structured data, or prose that happens to have a `Status:` line at the top?**
 
 Urzua is a machine-native engine for structured records: decision logs, specs, incident reviews, a project's own backlog, and any record type with a lifecycle and relationships to other records. Every command returns a `status` and a list of typed `findings`: `"status": "findings-present"` is a value an agent branches on, `findings[]` is a list it loops over and filters by `severity`. Nothing needs interpreting first, and there's no guessing whether "3 issues" means stop or continue.
@@ -257,7 +259,7 @@ code moves underneath it. The first half is the
 framing; the second half is this engine.
 
 [RFC-27](docs/rfc/RFC-27-urzua-s-position-in-agentic-change-management-one-engine-one-philosophy.md)
-(`Draft`) is that position as a record, including the boundary test separating engine scope from a
+(`Accepted`) is that position as a record, including the boundary test separating engine scope from a
 deferred ecosystem of tools built *around* the engine. The engine stays complete with none of that
 ecosystem built.
 

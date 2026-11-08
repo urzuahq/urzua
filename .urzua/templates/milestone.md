@@ -19,10 +19,8 @@ research finding that surfaced it, if there is one.
 
 ## Done means
 
-The concrete, checkable criteria that make this milestone done, as one or more bullets a reviewer can verify
-against the repository. Name the observable result (the command, rule or file and what it reports), not a
-restatement of the What. Where it fits, include that the capability is exercised in urzua's own
-`.urzua/config.yaml` and corpus, not only by unit tests.
+- Replace this item with one criterion a reviewer can verify against the repository: name the observable result (the command, rule or file and what it reports), not a restatement of the What.
+- Add one item per criterion. Where it fits, include an item that the capability is exercised in urzua's own `.urzua/config.yaml` and corpus, not only by unit tests.
 
 > **Revision log**
 >

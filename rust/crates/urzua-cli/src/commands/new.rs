@@ -88,6 +88,7 @@ pub fn run(
                     severity: NoticeSeverity::Warning,
                     subject: NOTICE_PULL_REFS.to_string(),
                     message,
+                    detail: None,
                 });
             }
         }
@@ -100,6 +101,7 @@ pub fn run(
                 message: format!(
                     "the numbering lock was not taken ({why}); a concurrent `urzua new` could take the same number"
                 ),
+                detail: None,
             }),
             LockOutcome::TimedOut(why) => return emit(&CouldNotRun::from(why)),
         }
@@ -107,6 +109,7 @@ pub fn run(
             severity: NoticeSeverity::Info,
             subject: NOTICE_PULL_REFS.to_string(),
             message: "separate clones are not scanned: a record created and not pushed in another clone of this repository is invisible to numbering, and to the fetch".to_string(),
+            detail: None,
         });
     }
 
@@ -349,6 +352,7 @@ pub fn run(
         severity: NoticeSeverity::Warning,
         subject: NOTICE_IDENTITY.to_string(),
         message,
+        detail: None,
     }));
     if !admits_stable_id {
         notices.push(Notice {
@@ -359,6 +363,7 @@ pub fn run(
                  `Stable-Id`, yet every record type gets one (ADR-21); the new record carries it and \
                  `header.field-set-consistency` will report it until `Stable-Id` is added to the type's `known_fields`"
             ),
+            detail: None,
         });
     }
 
@@ -406,6 +411,7 @@ fn assign_display_number(
                     "numbering from the working tree only; could not read other refs ({reason}). \
                      A number claimed on an unmerged branch will not be seen."
                 ),
+                detail: None,
             });
             return urzua_core::new_record::next_display_number_by(filenames, number_of)
                 .map(|number| (number, Vec::new()));
@@ -423,6 +429,7 @@ fn assign_display_number(
                                 "worktree {} is listed by git but its directory is missing; skipped",
                                 path.display()
                             ),
+                            detail: None,
                         });
                         continue;
                     }
@@ -446,6 +453,7 @@ fn assign_display_number(
                 message: format!(
                     "could not list the worktrees ({why}); a number drafted and untracked in a sibling worktree will not be seen"
                 ),
+                detail: None,
             }),
         }
     }

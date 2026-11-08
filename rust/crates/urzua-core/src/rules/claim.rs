@@ -339,6 +339,7 @@ pub fn claim_field_notices(claims: &[(String, String)], opts: &ClaimOpts) -> Vec
                 not_fragments.len(),
                 not_fragments.join(", ")
             ),
+            detail: None,
         });
     }
     if !opts.verb_claims {
@@ -348,6 +349,7 @@ pub fn claim_field_notices(claims: &[(String, String)], opts: &ClaimOpts) -> Vec
             message: format!(
                 "the closing-verb reading is off (`verb_claims: false`): only `{key}` is read for claims and no prose is"
             ),
+            detail: None,
         });
         if !opts.strict {
             notices.push(Notice {
@@ -356,6 +358,7 @@ pub fn claim_field_notices(claims: &[(String, String)], opts: &ClaimOpts) -> Vec
                 message: format!(
                     "`verb_claims: false` is set without `strict`, so a fragment that lacks `{key}` carries no claim and nothing reports it; set `strict: true` to require the key"
                 ),
+                detail: None,
             });
         }
         return notices;
@@ -371,6 +374,7 @@ pub fn claim_field_notices(claims: &[(String, String)], opts: &ClaimOpts) -> Vec
         message: format!(
             "the closing-verb reading found {verb_claims} closing-verb claim(s) in prose; with `{key}` declared it is a deprecated convenience, and no claim is read from prose by `{key}`"
         ),
+        detail: None,
     });
     notices
 }

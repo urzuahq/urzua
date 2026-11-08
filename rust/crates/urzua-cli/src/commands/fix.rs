@@ -394,6 +394,7 @@ pub(crate) fn identity_notices(identity: Option<&ResolvedAttestation>) -> Vec<No
             severity: NoticeSeverity::Warning,
             subject: NOTICE_IDENTITY.to_string(),
             message,
+            detail: None,
         })
         .collect()
 }

@@ -1,6 +1,7 @@
 ---
 Stable-Id: 01M28K3SWK8FGBR1R4N3GJH15S
-Status: Draft
+Status: Accepted
+Accepted-on: 2026-11-08
 Date: 2026-09-11
 Author: beauwilliams
 ---
@@ -159,8 +160,21 @@ whether this position is defensible:
   specification is structurally circular; directional evidence on a planted-bug corpus, not
   conclusive, and cited here at that strength.
 
+## Amendment, 2026-11-08: where `urzua roadmap` sits, and the one-line description
+
+Accepted by the maintainer on 2026-11-08, with this clarification of section 2's test.
+
+Read literally, "does this make a record more verifiable, or does it add a capability around records" would put `urzua roadmap` (`ADR-82`; `MILE-182`, `MILE-187`, `MILE-192`, `MILE-196`) outside the engine, because it does not make any record more verifiable. **`urzua roadmap` is engine scope.** The test is read with this second limb: a command is also in scope when it is a pure function of the records' own declared fields and keeps no state of its own. `roadmap` computes waves, the ready set and the critical path only from the `Depends-on` and `Blocks` fields a record declares and the statuses its type declares, writes nothing, needs no service and calls no model. It is the same kind of derived reading as `Embodiment` and the `blocked` status, which section 2 already counts as engine scope. What stays out is unchanged: a capability that holds its own state about the work (a tracker, a board, an assignment, a schedule), consumes anything but the records, or needs a service to run.
+
+The one-line description of the engine, used verbatim by `urzua --help` and the first paragraph of `README.md`, is:
+
+> The verifiable specification layer for agent-authored change: it checks the records a change traces back to and orders work from their declared dependencies. It never reads the change.
+
+Changing the help text and the README to that sentence reword the description of existing commands; they add, rename and rescope none, so the non-goal below stands.
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-11 | Initial RFC, `Status: Draft`. Filed after the README's `Where this is going` section asserted this position with no record behind it. | **structural** |
+> | 2026-11-08 | Status changed from Draft to Accepted; added the amendment of 2026-11-08 stating that `urzua roadmap` is engine scope and fixing the one-line description. **Why:** Maintainer decision, 2026-11-08. | **substantive** |

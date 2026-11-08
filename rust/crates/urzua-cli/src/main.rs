@@ -79,7 +79,7 @@ impl From<FailOnArg> for urzua_core::config::FailOn {
 #[derive(Parser)]
 #[command(
     name = "urzua",
-    about = "The decision layer for engineering orgs running AI agents",
+    about = "The verifiable specification layer for agent-authored change: it checks the records a change traces back to and orders work from their declared dependencies. It never reads the change.",
     version
 )]
 struct Cli {

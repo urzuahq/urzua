@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.116'
+Version: '0.117'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:18818ee3b2262e4f5dd6b5960d7f874a5662afaabf772f15c82441d7cc7c2df0, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:92a2b9ceca89133f30987a013734da66b9332c4e937a87e72e53571596e18093, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:3c8aa671582772499ab7345cdbfb5a4dc2c50462882851fb20f853992acfd57c
@@ -911,7 +911,8 @@ harness:
 - **A key the build does not know, and a guardrail the chosen adapter cannot provide, are
   reported, never skipped.** The configuration still loads with an unknown `harness` key (or an unknown key
   inside a guardrail), so a typo does not stop every command; `urzua harness install` refuses (exit 2,
-  nothing written) and `urzua doctor` warns. A guardrail turned on that no chosen adapter provides in this bundle version (`post-command`
+  nothing written), `urzua doctor` warns, and `urzua check` reports each one as a warning notice
+  (`SPEC-2`; reported, not an error, so the exit code does not move). A guardrail turned on that no chosen adapter provides in this bundle version (`post-command`
   until its milestone lands) is installed around and reported by
   `install`, `status` and `doctor`. A value of the wrong type (`enabled: yes-please`, `on_unjudged:
   sometimes`, `adapters: claude-code`) is a load error.
@@ -2342,3 +2343,4 @@ proves this configuration produces the three findings.
 > | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/own_config_integration.rs` cba8b084a518 -> 06fa48e432cb. Reason: Read the diff of each pinned file since the old pin and the claim still holds. own_config_integration.rs: one test added, own_config_declares_a_level_for_every_shipped_rule, which fails when a shipped rule has no declared level in the repository config; the existing tests are unchanged. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
 > | 2026-11-08 | Bumped to `0.116`. The pins this spec's `Realized-by` holds on files changed in this change were re-baselined (the `Re-baselined` row above); no behaviour this spec describes changed. **Why:** a revision-log entry that adds a structural change needs a `Version` bump (`revision-log.version-bump-required`). | **structural** |
 > | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/own_config_integration.rs` 06fa48e432cb -> 92a2b9ceca89. Reason: Read the diff of each pinned file since the old pin and the claim still holds. own_config_integration.rs: own_config_declares_a_level_for_every_shipped_rule now checks the parsed config's rule levels instead of text-matching the file; no other test changed. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
+> | 2026-11-08 | Bumped to `0.117`. States that `urzua check` reports an unknown `harness` key, or an unknown key inside a guardrail, as a warning notice. **Why:** the `ADR-89` amendment of 2026-11-07 keeps these "reported, not an error", but only `harness install`, `doctor` and the session hook read them; a typo such as `enabeld` left the guardrail off while `check` was silent. | **substantive** |

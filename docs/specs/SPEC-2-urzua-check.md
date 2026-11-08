@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5GM1RYRRX2XVMZ0ZAK
-Version: '0.126'
+Version: '0.127'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs@sha256:c819006495f23fd9742941942eea3a7a4894f9eec67d3c3cfbf18561ede31f6b, code:rust/crates/urzua-core/src/rules.rs@sha256:355dd5bf590d2020ab967cb30501aa6ce610186c6631f22aa828831a6fbac0d4, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:f893cb99b8337c1172d3c4825859e00a0344dd4c35e6f013d802e509b1688ecb, test:rust/crates/urzua-cli/tests/fail_on_integration.rs@sha256:4b1707f3b18aed7b018f8b80c55f1e2091ae19148f3de6c95435a8f5fee4cab7
@@ -608,7 +608,12 @@ is non-fatal observations (`Info`/`Warning` only) that never affect `status` or 
 entirely when empty. When the suppression type declares `permanent` (`SPEC-3`), `check` always adds an info
 notice with the subject `permanent-waivers` counting the permanent waivers in effect by category
 (`ADR-86`). Two more info notices belong to discovery (`ADR-92`): `discovery.untracked-skipped`, above,
-when the option is off, and `discovery.untracked-not-drift-judged` when it is on. A record with no git
+when the option is off, and `discovery.untracked-not-drift-judged` when it is on. A key the `harness`
+configuration carries that the build does not read (an unknown `harness` key, or an unknown key inside a
+known guardrail such as `enabeld`) adds one `warning` notice, whose `subject` is where the key sits
+(`harness` or `harness.guardrails.<name>`) and whose `detail` object holds `key`, `nearest` (the closest key
+the build reads, when one is close) and `valid` (the keys read at that place); a notice with no `detail`
+omits the field (`ADR-89` amendment of 2026-11-07: reported, not an error). A record with no git
 history (an untracked file, a staged-new one, an unborn `HEAD`) has no date for its `Realized-by` line, so
 `embodiment.consistency` cannot say that a cited file changed since: it does not judge the record for
 drift, and the notice gives the count of such records that carry a locator, so the skip is disclosed and
@@ -1144,3 +1149,4 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-07 | Bumped to `0.124`. Adds the opt-in rules `embodiment.claim-expired` (a claim expires after a period declared per record type, status and evidence tier, with a first-cycle `spread_days` offset; its finding offers `urzua reverify --ids <record>`) and `embodiment.claim-renewal-unattested` (on `--base`, an anchor date that moved with no `Re-verified` row, or was removed), both `ADR-97`; a `--base` run reads the merge-base copy of the changed records of the types the expiry rule lists. The rule-table and action-table rows are regenerated. **Why:** `MILE-129`, the build of `ADR-97`; undeclared, nothing changes. | **substantive** |
 > | 2026-11-08 | Pinned (attested by beauwilliams, identity: gh-verified, actor: agent): 4 locators pinned, 4 file-level, 0 scoped. Evidence: rust/crates/urzua-cli/src/commands/check.rs@sha256:c819006495f2, rust/crates/urzua-core/src/rules.rs@sha256:355dd5bf590d, rust/crates/urzua-cli/tests/check_integration.rs@sha256:f893cb99b833, rust/crates/urzua-cli/tests/fail_on_integration.rs@sha256:4b1707f3b18a Reason: Pinned the files as they are now after checking each against the record it evidences: config.yaml and the own-config test still declare the adr, rfc, spec and condition types that SPEC-16, SPEC-17, SPEC-18 and SPEC-23 describe, with spec_shipped_integration.rs, rules/roadmap.rs, condition_type_integration.rs and work_types_integration.rs behind them, check.rs, rules.rs, check_integration.rs and fail_on_integration.rs still implement urzua check (SPEC-2), the workflows, the install-knope action and the release and gate test scripts still make up the pipeline SPEC-20 describes, the Makefile and checks.yml still dispatch the repository layout of SPEC-21, the harness modules, the bundled hook script and the harness integration tests still implement the request, verdict and adapter layout of SPEC-24, config.rs and the own-config and field-levels tests still implement SPEC-3, and acceptance.rs and acceptance_property.rs still implement SPEC-4. **Why:** a claim is renewed only over pinned code and test evidence. | **structural** |
 > | 2026-11-08 | Bumped to `0.126`. The pins on this spec's `Realized-by` locators were re-baselined against the files as they are after the sharded CI and the milestone `Kind` amendment landed on main (the `Re-baselined` row above); no behaviour this spec describes changes. **Why:** `MILE-129`, `ADR-97`: every stale pin is re-pinned with its real delta before expiry is enabled. | **structural** |
+> | 2026-11-08 | Bumped to `0.127`. `check` reports an unknown key in the `harness` configuration as a warning notice with a structured `detail` (`key`, `nearest`, `valid`); `notices` gain an optional `detail` object, omitted when empty. **Why:** only `harness install`, `doctor` and the session hook read `harness.problems`, so a misspelled guardrail key such as `enabeld` passed `check` silently. | **substantive** |

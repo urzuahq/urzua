@@ -143,6 +143,23 @@ pub struct HarnessDecl {
     /// Keys and guardrails this build does not know, and values a guardrail
     /// does not take. Reported at install and by `doctor`, never skipped.
     pub problems: Vec<String>,
+    /// The unknown keys among `problems`, structured: where the key sits, what
+    /// it is, and the nearest key the build does read. `urzua check` reports
+    /// each as a warning notice (`ADR-89` amendment of 2026-11-07).
+    pub unknown_keys: Vec<UnknownKey>,
+}
+
+/// A key the build does not read, found inside `harness` or a known guardrail.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnknownKey {
+    /// Where it sits: `harness` or `harness.guardrails.<name>`.
+    pub subject: String,
+    pub key: String,
+    /// The valid key it is closest to, when one is close enough to be a likely
+    /// misspelling.
+    pub nearest: Option<String>,
+    /// The valid keys at that place.
+    pub valid: Vec<String>,
 }
 
 impl HarnessDecl {
@@ -246,17 +263,40 @@ impl<'de> Deserialize<'de> for HarnessDecl {
                                         }
                                     })
                                 }
-                                other => decl.problems.push(format!(
-                                    "harness.guardrails.{name} has the key '{other}', which it does not take"
-                                )),
+                                other => {
+                                    decl.problems.push(format!(
+                                        "harness.guardrails.{name} has the key '{other}', which it does not take"
+                                    ));
+                                    let valid: Vec<&str> = if info.takes_on_unjudged {
+                                        vec!["enabled", "on_unjudged"]
+                                    } else {
+                                        vec!["enabled"]
+                                    };
+                                    decl.unknown_keys.push(UnknownKey {
+                                        subject: format!("harness.guardrails.{name}"),
+                                        key: other.to_string(),
+                                        nearest: nearest_name(other, valid.iter().copied())
+                                            .map(str::to_string),
+                                        valid: valid.iter().map(|v| v.to_string()).collect(),
+                                    });
+                                }
                             }
                         }
                         decl.guardrails.insert(name, guardrail);
                     }
                 }
-                other => decl.problems.push(format!(
-                    "harness has the key '{other}', which this build does not know (it reads adapters, instructions_file, guardrails)"
-                )),
+                other => {
+                    decl.problems.push(format!(
+                        "harness has the key '{other}', which this build does not know (it reads adapters, instructions_file, guardrails)"
+                    ));
+                    let valid = ["adapters", "instructions_file", "guardrails"];
+                    decl.unknown_keys.push(UnknownKey {
+                        subject: "harness".to_string(),
+                        key: other.to_string(),
+                        nearest: nearest_name(other, valid.iter().copied()).map(str::to_string),
+                        valid: valid.iter().map(|v| v.to_string()).collect(),
+                    });
+                }
             }
         }
         Ok(decl)
@@ -477,5 +517,28 @@ mod tests {
             yaml_serde::from_str(&yaml_serde::to_string(config.harness.as_ref().unwrap()).unwrap())
                 .unwrap();
         assert_eq!(&again, config.harness.as_ref().unwrap());
+    }
+}
+
+#[cfg(test)]
+mod unknown_key_tests {
+    use super::*;
+
+    #[test]
+    fn an_unknown_key_is_kept_structured_with_its_nearest_valid_key() {
+        let h: HarnessDecl = yaml_serde::from_str(
+            "adaptors: [x]\nguardrails:\n  session-start: {enabeld: true}\n  editor-hook: {enabled: true, on_unjudged: deny, colour: red}\n",
+        )
+        .unwrap();
+        let find = |k: &str| h.unknown_keys.iter().find(|u| u.key == k).unwrap().clone();
+        let top = find("adaptors");
+        assert_eq!(top.subject, "harness");
+        assert_eq!(top.nearest.as_deref(), Some("adapters"));
+        let typo = find("enabeld");
+        assert_eq!(typo.subject, "harness.guardrails.session-start");
+        assert_eq!(typo.nearest.as_deref(), Some("enabled"));
+        assert_eq!(typo.valid, ["enabled"]);
+        assert_eq!(find("colour").nearest, None);
+        assert_eq!(h.unknown_keys.len(), h.problems.len());
     }
 }
