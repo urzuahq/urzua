@@ -250,7 +250,11 @@ fn judge_delivery_items(input: &DeliveryInput<'_>) -> DeliveryJudgement {
         tier: judged.tier.clone(),
         evidence: format!(
             "the {} items ({})",
-            delivery.items.as_ref().expect("checked by the caller").section,
+            delivery
+                .items
+                .as_ref()
+                .expect("checked by the caller")
+                .section,
             judged.counts()
         ),
         disagreement,
