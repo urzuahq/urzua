@@ -623,7 +623,7 @@ configuration carries that the build does not read (an unknown `harness` key, or
 known guardrail such as `enabeld`) adds one `warning` notice, whose `subject` is where the key sits
 (`harness` or `harness.guardrails.<name>`) and whose `detail` object holds `key` (a string), `nearest` (a string: the closest key
 the build reads, when one is close, else absent) and `valid` (a list of strings: the keys read at that place),
-for example `{"key": "enabeld", "nearest": "enabled", "valid": ["enabled", "..."]}`; `detail` values are strings or lists of strings; a notice with no `detail`
+for example `{"key": "enabeld", "nearest": "enabled", "valid": ["enabled", "..."]}`; `detail` values are strings or lists of strings (untagged: each serialises as a bare JSON string or a bare JSON list of strings); a notice with no `detail`
 omits the field (`ADR-89` amendment of 2026-11-07: reported, not an error). A record with no git
 history (an untracked file, a staged-new one, an unborn `HEAD`) has no date for its `Realized-by` line, so
 `embodiment.consistency` cannot say that a cited file changed since: it does not judge the record for
