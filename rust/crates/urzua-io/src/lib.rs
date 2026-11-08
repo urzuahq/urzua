@@ -1009,6 +1009,9 @@ pub fn commit_for_line_in(
 /// One line's blame: its commit, none, or why git could not say.
 type LineBlame = Result<Option<String>, String>;
 
+/// A file with the blame of each of its wanted lines.
+type FileBlames = Vec<(PathBuf, Vec<(usize, LineBlame)>)>;
+
 /// The cache key: file, proposed contents (if blamed against them) and line.
 type BlameKey = (PathBuf, Option<String>, usize);
 
@@ -1059,7 +1062,7 @@ impl BlameCache {
             .map_or(4, |n| n.get())
             .clamp(2, 8);
         let chunk = wanted.len().div_ceil(threads);
-        let blamed: Vec<(PathBuf, Vec<(usize, LineBlame)>)> = std::thread::scope(|scope| {
+        let blamed: FileBlames = std::thread::scope(|scope| {
             let handles: Vec<_> = wanted
                 .chunks(chunk)
                 .map(|part| {
@@ -1131,8 +1134,8 @@ fn blamed_or_each(
     repo_root: &Path,
     part: &[(&PathBuf, Vec<usize>)],
     contents: Option<&str>,
-    joined: std::thread::Result<Vec<(PathBuf, Vec<(usize, LineBlame)>)>>,
-) -> Vec<(PathBuf, Vec<(usize, LineBlame)>)> {
+    joined: std::thread::Result<FileBlames>,
+) -> FileBlames {
     joined.unwrap_or_else(|_| {
         part.iter()
             .map(|(p, lines)| {
@@ -2320,10 +2323,8 @@ mod tests {
 
         let path = PathBuf::from("doc.md");
         let part = [(&path, vec![1, 2, 9])];
-        let panicked = std::thread::spawn(|| -> Vec<(PathBuf, Vec<(usize, LineBlame)>)> {
-            panic!("simulated blame thread panic")
-        })
-        .join();
+        let panicked =
+            std::thread::spawn(|| -> FileBlames { panic!("simulated blame thread panic") }).join();
         assert!(panicked.is_err());
         let answers = blamed_or_each(&tmp, &part, None, panicked);
         assert_eq!(answers.len(), 1);
