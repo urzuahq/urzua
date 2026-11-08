@@ -38,20 +38,24 @@ fn git(dir: &Path, args: &[&str]) -> String {
 
 fn fixture(name: &str, config: &str) -> common::TempDir {
     let dir = common::TempDir::new(&format!("urzua-review3-{name}"));
+    populate(&dir, config);
+    dir
+}
+
+fn populate(dir: &Path, config: &str) {
     for d in ["docs/adr", ".urzua", ".claude", ".github/workflows"] {
         std::fs::create_dir_all(dir.join(d)).unwrap();
     }
-    git(&dir, &["init", "-q"]);
-    git(&dir, &["config", "user.email", "t@example.com"]);
-    git(&dir, &["config", "user.name", "t"]);
+    git(dir, &["init", "-q"]);
+    git(dir, &["config", "user.email", "t@example.com"]);
+    git(dir, &["config", "user.name", "t"]);
     std::fs::write(dir.join(".gitignore"), ".urzua/cache/\n").unwrap();
     std::fs::write(dir.join(".urzua/config.yaml"), config).unwrap();
     std::fs::write(dir.join(".claude/settings.json"), "{}\n").unwrap();
     std::fs::write(dir.join(".github/workflows/ci.yml"), "name: ci\n").unwrap();
     std::fs::write(dir.join(PATH_1), PROPOSED).unwrap();
-    git(&dir, &["add", "-A"]);
-    git(&dir, &["commit", "-q", "-m", "fixture"]);
-    dir
+    git(dir, &["add", "-A"]);
+    git(dir, &["commit", "-q", "-m", "fixture"]);
 }
 
 fn run_with_stdin(c: &mut Command, stdin: &str) -> Output {
@@ -59,12 +63,9 @@ fn run_with_stdin(c: &mut Command, stdin: &str) -> Output {
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     let mut child = c.spawn().unwrap();
-    child
-        .stdin
-        .take()
-        .unwrap()
-        .write_all(stdin.as_bytes())
-        .unwrap();
+    // A command that exits without reading its input (the shell fallback) closes
+    // the pipe first; that is not a failure of the test.
+    let _ = child.stdin.take().unwrap().write_all(stdin.as_bytes());
     child.wait_with_output().unwrap()
 }
 
@@ -524,8 +525,8 @@ fn session_start_compares_the_installed_files_the_hook_entries_and_the_kill_swit
     // An edited hook entry, still present by handler.
     let settings = std::fs::read_to_string(dir.join(".claude/settings.json")).unwrap();
     let edited = settings.replacen(
-        "exec python3 -I \\\"$t\\\" edit -- urzua harness run edit",
-        "true # urzua harness run edit",
+        "urzua harness run edit; c=$?;",
+        "urzua harness run edit; c=0;",
         1,
     );
     assert_ne!(edited, settings, "the fixture's command changed shape");
@@ -675,4 +676,375 @@ fn a_drafting_command_that_is_the_persons_own_is_reported_modified_not_missing()
     assert_eq!(state(&update).as_deref(), Some("kept-modified"), "{update}");
     let status = run(&["status"]);
     assert_eq!(state(&status).as_deref(), Some("modified"), "{status}");
+}
+
+// ------------------------------- round 4: the repository an edit is judged in
+
+/// A project at `P/proj` under a writable parent `P`, as the review's repro has it.
+fn nested_project(name: &str) -> (common::TempDir, PathBuf) {
+    let parent = common::TempDir::new(&format!("urzua-r4-{name}"));
+    let proj = parent.join("proj");
+    std::fs::create_dir_all(&proj).unwrap();
+    populate(&proj, &config(""));
+    (parent, proj)
+}
+
+fn run_edit_in(
+    process_cwd: &Path,
+    project_dir: Option<&Path>,
+    path: &Path,
+    content: &str,
+) -> (i32, serde_json::Value) {
+    let mut request = serde_json::json!({
+        "event": "edit", "tool": "Write", "paths": [path.to_string_lossy()], "content": content,
+        "actor": "agent", "cwd": process_cwd.to_string_lossy(),
+    });
+    if let Some(p) = project_dir {
+        request["project_dir"] = serde_json::json!(p.to_string_lossy());
+    }
+    let mut c = urzua();
+    c.args(["harness", "run", "edit"]).current_dir(process_cwd);
+    let out = run_with_stdin(&mut c, &request.to_string());
+    (out.status.code().unwrap(), json(&out))
+}
+
+/// The four edits the review denied before step 1 of its repro.
+fn assert_protected_edits_deny(proj: &Path, project_dir: Option<&Path>, why: &str) {
+    for (rel, content) in [
+        (".claude/settings.json", "{}\n"),
+        (".github/workflows/x.yml", "name: x\n"),
+        (".claude/hooks/urzua-claude-code.py", "import sys\n"),
+        (PATH_1, ACCEPTED),
+    ] {
+        let (code, v) = run_edit_in(proj, project_dir, &proj.join(rel), content);
+        assert_eq!(code, 1, "{why}: {rel}: {v}");
+    }
+}
+
+#[test]
+fn an_outer_repository_made_of_two_writes_does_not_replace_the_sessions_own_gates() {
+    // Observed before the fix: every one of these was allow-unjudged.
+    let (parent, proj) = nested_project("b1-minted");
+    assert_protected_edits_deny(&proj, Some(&proj), "before the writes");
+    // Step 1: an empty file named .git. Step 2: a configuration with no gates.
+    std::fs::write(parent.join(".git"), "").unwrap();
+    std::fs::create_dir_all(parent.join(".urzua")).unwrap();
+    std::fs::write(parent.join(".urzua/config.yaml"), "schema_version: 2\n").unwrap();
+    // Whether the request names the project, or only its directory is the cwd.
+    assert_protected_edits_deny(&proj, Some(&proj), "empty .git file, project named");
+    assert_protected_edits_deny(&proj, None, "empty .git file, cwd only");
+    // The process runs somewhere else under the minted parent.
+    std::fs::create_dir_all(parent.join("elsewhere")).unwrap();
+    for rel in [".claude/settings.json", PATH_1] {
+        let content = if rel == PATH_1 { ACCEPTED } else { "{}\n" };
+        let (code, v) = run_edit_in(
+            &parent.join("elsewhere"),
+            Some(&proj),
+            &proj.join(rel),
+            content,
+        );
+        assert_eq!(code, 1, "{rel}: {v}");
+    }
+}
+
+#[test]
+fn an_empty_git_directory_does_not_make_a_repository_either() {
+    let (parent, proj) = nested_project("b1-gitdir");
+    std::fs::create_dir_all(parent.join(".git")).unwrap();
+    std::fs::create_dir_all(parent.join(".urzua")).unwrap();
+    std::fs::write(parent.join(".urzua/config.yaml"), "schema_version: 2\n").unwrap();
+    assert_protected_edits_deny(&proj, Some(&proj), "empty .git directory");
+}
+
+#[test]
+fn a_real_outer_repository_with_no_gates_still_leaves_the_sessions_gates_in_force() {
+    let (parent, proj) = nested_project("b1-real-outer");
+    git(&parent, &["init", "-q"]);
+    std::fs::create_dir_all(parent.join(".urzua")).unwrap();
+    std::fs::write(parent.join(".urzua/config.yaml"), "schema_version: 2\n").unwrap();
+    assert_protected_edits_deny(&proj, Some(&proj), "real outer repository without gates");
+}
+
+#[test]
+fn every_governed_repository_that_holds_the_file_can_deny_it_inner_or_outer() {
+    // Outer session, inner governed repository with its own protected path.
+    let (_outer, proj) = nested_project("b1-inner");
+    let inner = proj.join("vendor");
+    std::fs::create_dir_all(&inner).unwrap();
+    populate(&inner, &config(""));
+    let (code, v) = run_edit_in(
+        &proj,
+        Some(&proj),
+        &inner.join(".claude/settings.json"),
+        "{}\n",
+    );
+    assert_eq!(code, 1, "the inner repository's own gate: {v}");
+    // Outer repository protects a path the session's repository does not.
+    let (parent, proj) = nested_project("b1-outer-more");
+    git(&parent, &["init", "-q"]);
+    std::fs::create_dir_all(parent.join(".urzua")).unwrap();
+    std::fs::write(
+        parent.join(".urzua/config.yaml"),
+        format!("{TYPES}harness:\n  guardrails:\n    protected-paths: {{enabled: true}}\nauthority:\n  deciders:\n    maintainers: {{logins: [Alice]}}\n  gates:\n    - {{paths: [\"proj/notes.txt\"], by: maintainers}}\n"),
+    )
+    .unwrap();
+    let (code, v) = run_edit_in(&proj, Some(&proj), &proj.join("notes.txt"), "x\n");
+    assert_eq!(code, 1, "the outer repository adds a restriction: {v}");
+}
+
+#[test]
+fn the_installed_settings_command_denies_the_minted_outer_repository_repro() {
+    let (parent, proj) = nested_project("b1-command");
+    install(&proj);
+    std::fs::write(parent.join(".git"), "").unwrap();
+    std::fs::create_dir_all(parent.join(".urzua")).unwrap();
+    std::fs::write(parent.join(".urzua/config.yaml"), "schema_version: 2\n").unwrap();
+    let payload = write_payload(&proj, &proj.join(".claude/settings.json"), "{}\n");
+    let v = run_command(&proj, &proj, Some(&proj), None, &payload);
+    assert_eq!(decision(&v), Some("deny"), "{v}");
+}
+
+// ------------------------------------- round 4 S1: the translator's own hash
+
+fn sha256_of(path: &Path) -> String {
+    let out = Command::new("python3")
+        .args([
+            "-I",
+            "-c",
+            "import hashlib,sys;print(hashlib.sha256(open(sys.argv[1],'rb').read()).hexdigest())",
+        ])
+        .arg(path)
+        .output()
+        .unwrap();
+    String::from_utf8_lossy(&out.stdout).trim().to_string()
+}
+
+fn status_of(dir: &Path) -> serde_json::Value {
+    let out = urzua()
+        .args(["harness", "status"])
+        .current_dir(dir)
+        .output()
+        .unwrap();
+    json(&out)
+}
+
+fn command_for(dir: &Path, handler: &str, cwd: &Path, payload: &str) -> String {
+    let mut c = Command::new("sh");
+    c.args(["-c", &hook_command(dir, handler)])
+        .current_dir(cwd)
+        .env("URZUA_BIN", env!("CARGO_BIN_EXE_urzua"))
+        .env("CLAUDE_PROJECT_DIR", dir);
+    let out = run_with_stdin(&mut c, payload);
+    assert_eq!(out.status.code(), Some(0), "{out:?}");
+    String::from_utf8_lossy(&out.stdout).to_string()
+}
+
+#[test]
+fn every_hook_command_embeds_the_translators_hash_and_refuses_a_translator_that_differs() {
+    let dir = fixture("s1", &config(""));
+    install(&dir);
+    let translator = dir.join(".claude/hooks/urzua-claude-code.py");
+    let hash = sha256_of(&translator);
+    for handler in ["edit", "post-command", "session-start"] {
+        assert!(hook_command(&dir, handler).contains(&hash), "{handler}");
+    }
+    assert_eq!(status_of(&dir)["status"], "ok", "installed");
+
+    // A translator that exits 0 without doing anything, and leaves a mark if it runs.
+    let mark = dir.join("translator-ran");
+    let original = std::fs::read_to_string(&translator).unwrap();
+    std::fs::write(
+        &translator,
+        format!(
+            "open({:?}, 'w').write('x')\nimport sys\nsys.exit(0)\n",
+            mark.to_string_lossy()
+        ),
+    )
+    .unwrap();
+    let edit = write_payload(&dir, &dir.join(".claude/settings.json"), "{}\n");
+    let out = command_for(&dir, "edit", &dir, &edit);
+    let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+    assert_eq!(decision(&v), Some("deny"), "{out}");
+    let reason = v["hookSpecificOutput"]["permissionDecisionReason"]
+        .as_str()
+        .unwrap();
+    assert!(reason.contains("does not match the sha256"), "{reason}");
+    let bash = serde_json::json!({"hook_event_name": "PostToolUse", "tool_name": "Bash", "cwd": dir.to_string_lossy(), "tool_input": {"command": "true"}}).to_string();
+    let out = command_for(&dir, "post-command", &dir, &bash);
+    assert!(
+        out.contains("does not match the sha256") && out.contains("NOT judged"),
+        "{out}"
+    );
+    let start =
+        serde_json::json!({"hook_event_name": "SessionStart", "cwd": dir.to_string_lossy()})
+            .to_string();
+    let out = command_for(&dir, "session-start", &dir, &start);
+    assert!(out.contains("does not match the sha256"), "{out}");
+    assert!(!mark.exists(), "the changed translator must not run");
+
+    // Where the configuration allows an unjudged edit the command states it.
+    // (The same configuration text is read by the shell, so rewrite it.)
+    let cfg = std::fs::read_to_string(dir.join(".urzua/config.yaml")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        config(", on_unjudged: allow"),
+    )
+    .unwrap();
+    let out = command_for(&dir, "edit", &dir, &edit);
+    let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+    assert_eq!(decision(&v), None, "{out}");
+    assert!(v["systemMessage"]
+        .as_str()
+        .unwrap()
+        .contains("does not match the sha256"));
+    std::fs::write(dir.join(".urzua/config.yaml"), cfg).unwrap();
+
+    // Restored, it runs again; `update` restores a changed one the same way.
+    std::fs::write(&translator, &original).unwrap();
+    let out = command_for(&dir, "edit", &dir, &edit);
+    let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+    assert_eq!(
+        decision(&v),
+        Some("deny"),
+        "judged by the engine again: {out}"
+    );
+    assert!(!v["hookSpecificOutput"]["permissionDecisionReason"]
+        .as_str()
+        .unwrap()
+        .contains("does not match"));
+}
+
+#[test]
+fn install_update_and_uninstall_keep_the_hash_consistent() {
+    let dir = fixture("s1-roundtrip", &config(""));
+    install(&dir);
+    let before = std::fs::read_to_string(dir.join(".claude/settings.json")).unwrap();
+    // update with nothing changed rewrites nothing.
+    let out = urzua()
+        .args(["harness", "update"])
+        .current_dir(&dir)
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(0), "{out:?}");
+    assert_eq!(
+        before,
+        std::fs::read_to_string(dir.join(".claude/settings.json")).unwrap()
+    );
+    // A translator changed by hand is drift; update --force restores both file and hash.
+    let translator = dir.join(".claude/hooks/urzua-claude-code.py");
+    let hash = sha256_of(&translator);
+    std::fs::write(&translator, "import sys\nsys.exit(0)\n").unwrap();
+    assert_ne!(status_of(&dir)["status"], "ok", "drift is reported");
+    let out = urzua()
+        .args(["harness", "update", "--force"])
+        .current_dir(&dir)
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(0), "{out:?}");
+    assert_eq!(sha256_of(&translator), hash);
+    assert!(hook_command(&dir, "edit").contains(&hash));
+    assert_eq!(status_of(&dir)["status"], "ok");
+    let out = urzua()
+        .args(["harness", "uninstall"])
+        .current_dir(&dir)
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(0), "{out:?}");
+    let left = std::fs::read_to_string(dir.join(".claude/settings.json")).unwrap_or_default();
+    assert!(!left.contains(&hash), "{left}");
+}
+
+// ---------------------------- round 4 S2 and S3: MCP shapes outside the name
+
+fn denies(dir: &Path, tool: &str, input: serde_json::Value) -> bool {
+    decision(&translate(dir, &mcp(dir, tool, input))) == Some("deny")
+}
+
+#[test]
+fn a_tool_named_for_reading_is_still_judged_when_the_call_names_an_output_or_carries_content() {
+    let dir = fixture("s2", &config(""));
+    let p = dir
+        .join(".claude/settings.json")
+        .to_string_lossy()
+        .to_string();
+    for (tool, input) in [
+        (
+            "mcp__x__fetch",
+            serde_json::json!({"url": "https://example.com/a", "output_path": p}),
+        ),
+        (
+            "mcp__x__get_file",
+            serde_json::json!({"id": "1", "save_to": p}),
+        ),
+        (
+            "mcp__x__query",
+            serde_json::json!({"sql": "select 1", "outfile": p}),
+        ),
+        (
+            "mcp__x__get",
+            serde_json::json!({"path": p, "content": "{}\n"}),
+        ),
+        (
+            "mcp__x__log",
+            serde_json::json!({"path": p, "content": "{}\n"}),
+        ),
+        (
+            "mcp__x__check_in",
+            serde_json::json!({"path": p, "content": "{}\n"}),
+        ),
+    ] {
+        assert!(denies(&dir, tool, input.clone()), "{tool}: {input}");
+    }
+    // Plain reads stay quiet.
+    for (tool, input) in [
+        ("mcp__x__get_file", serde_json::json!({"path": p})),
+        (
+            "mcp__x__fetch",
+            serde_json::json!({"url": "https://example.com/a"}),
+        ),
+        ("mcp__x__info", serde_json::json!({"path": p, "limit": 3})),
+    ] {
+        assert!(
+            translate(&dir, &mcp(&dir, tool, input.clone())).is_null(),
+            "{tool}: {input}"
+        );
+    }
+}
+
+#[test]
+fn an_mcp_path_is_read_after_trimming_and_normalising_whatever_the_wrapping() {
+    let dir = fixture("s3", &config(""));
+    let p = dir
+        .join(".claude/settings.json")
+        .to_string_lossy()
+        .to_string();
+    let long = format!("{}{}", "/.".repeat(2100), p);
+    assert!(long.len() > 4096);
+    for (label, path) in [
+        ("trailing newline", format!("{p}\n")),
+        ("leading space", format!(" {p}")),
+        ("trailing space and tab", format!("{p} \t")),
+        ("nul", format!("{p}\0ignored")),
+        ("over-long, collapses", long),
+        (
+            "dot segments",
+            format!("{}/docs/../.claude/./settings.json", dir.to_string_lossy()),
+        ),
+    ] {
+        assert!(
+            denies(
+                &dir,
+                "mcp__x__write_file",
+                serde_json::json!({"path": path, "content": "{}\n"})
+            ),
+            "{label}"
+        );
+    }
+    // An ordinary file with the same wrapping is not refused.
+    let ok = dir.join("notes.txt").to_string_lossy().to_string();
+    assert!(!denies(
+        &dir,
+        "mcp__x__write_file",
+        serde_json::json!({"path": format!(" {ok}\n"), "content": "x\n"})
+    ));
 }

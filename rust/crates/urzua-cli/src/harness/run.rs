@@ -40,13 +40,13 @@ enum Actor {
     Human,
 }
 
-#[derive(Deserialize, Default)]
+#[derive(Deserialize, Default, Clone)]
 struct OverrideRequest {
     name: Option<String>,
     reason: Option<String>,
 }
 
-#[derive(Deserialize, Default)]
+#[derive(Deserialize, Default, Clone)]
 struct Request {
     #[allow(dead_code)]
     event: Option<String>,
@@ -57,6 +57,11 @@ struct Request {
     content: Option<String>,
     actor: Option<String>,
     cwd: Option<String>,
+    /// The directory the session was started in (the translator's project
+    /// directory), when the adapter knows it: the repository the session
+    /// belongs to is judged first, whatever the file's own place suggests.
+    #[serde(default)]
+    project_dir: Option<String>,
     #[serde(rename = "override")]
     override_request: Option<OverrideRequest>,
     /// Set by an adapter whose translator could not build a request (an
@@ -313,79 +318,129 @@ fn targeted_guardrail(config: Option<&Path>, root: &Path, path: &Path) -> Option
         .find_map(|rel| raw.covers(rel, config_rel.as_deref()))
 }
 
-/// Enters the repository an edit is judged against. A path is judged by the
-/// outermost governed repository (a git working tree with `.urzua/config.yaml`)
-/// that holds the file the edit really writes, with symlinks followed (a link
-/// can land somewhere its own place does not suggest), else the one that holds
-/// the session's directory, else the one that holds the path as written. A
-/// nested repository that has no configuration of its own (`git init sub`, a
-/// vendored clone or a submodule) is therefore never the one chosen over the
-/// governed repository around it: judging the edit in it would find no gates,
-/// and a link from inside it to a protected file would go unjudged. An agent
-/// working in an added directory has a `cwd` outside the repository, and the
-/// edit is still the repository's.
-///
-/// A relative path is made absolute first, because the directory it is
-/// relative to is left.
-fn enter_file_repo(request: &mut Request, config: Option<&Path>) {
-    let Some(first) = request.paths.first() else {
-        return;
-    };
-    let Ok(cwd) = std::env::current_dir() else {
-        return;
-    };
-    let abs = |p: &str| {
-        let p = Path::new(p);
-        if p.is_absolute() {
-            p.to_path_buf()
-        } else {
-            cwd.join(p)
-        }
-    };
-    let first = abs(first);
-    // An explicit configuration path names the repository's file itself.
-    let governed = if config.is_some() {
-        None
+/// A relative path made absolute against `cwd`: the directory it is relative
+/// to is left when a repository is entered.
+fn absolute(cwd: &Path, p: &str) -> PathBuf {
+    let p = Path::new(p);
+    if p.is_absolute() {
+        p.to_path_buf()
     } else {
-        resolve_links(&first)
-            .as_deref()
-            .and_then(governed_root)
-            .or_else(|| governed_root(&cwd))
-            .or_else(|| governed_root(&first))
-    };
-    let root = governed.or_else(|| {
-        // Not inside a governed repository: the repository that holds the file.
-        if !Path::new(&request.paths[0]).is_absolute() {
-            return None;
-        }
-        let dir = first.ancestors().skip(1).find(|d| d.is_dir())?;
-        crate::discovery::find_repo_root(&[dir.to_path_buf()]).ok()
-    });
-    let Some(root) = root else { return };
-    if root.canonicalize().ok() != cwd.canonicalize().ok() {
-        request.paths = request
-            .paths
-            .iter()
-            .map(|p| abs(p).to_string_lossy().to_string())
-            .collect();
+        cwd.join(p)
     }
-    let _ = std::env::set_current_dir(root);
 }
 
-/// The outermost directory at or above `start` that is a git working tree and
-/// holds `.urzua/config.yaml`: the repository whose gates apply. `start` may be
-/// a file, or a path that does not exist yet (its nearest existing directory is
-/// used).
-pub(super) fn governed_root(start: &Path) -> Option<PathBuf> {
+/// The repositories an edit is judged against, in the order they are tried
+/// (`ADR-89`, amendment of 2026-11-08): the session's own repository (the one
+/// that holds the directory the session started in, else the one that holds the
+/// current directory), then every governed repository that holds the file the
+/// edit writes, inner or outer, with symlinks followed (a link can land
+/// somewhere its own place does not suggest). A deny from any of them is the
+/// verdict. A repository the session did not start in can therefore add
+/// restrictions and never remove them: two unjudged writes outside the
+/// session's repository (an empty `.git`, a `.urzua/config.yaml`) mint an outer
+/// "repository" that holds nothing the session's own gates do not still judge.
+fn judging_roots(request: &Request, cwd: &Path) -> Vec<PathBuf> {
+    let mut roots: Vec<PathBuf> = Vec::new();
+    let mut push = |r: PathBuf| {
+        if !roots.contains(&r) {
+            roots.push(r);
+        }
+    };
+    if let Some(r) = request
+        .project_dir
+        .as_deref()
+        .and_then(|d| nearest_governed_root(Path::new(d)))
+    {
+        push(r);
+    }
+    if let Some(r) = nearest_governed_root(cwd) {
+        push(r);
+    }
+    for p in &request.paths {
+        let abs = absolute(cwd, p);
+        for start in [resolve_links(&abs), Some(abs)].into_iter().flatten() {
+            for r in governed_roots(&start) {
+                push(r);
+            }
+        }
+    }
+    roots
+}
+
+/// Whether the file the edit writes is inside `root`, as written or once its
+/// links are followed.
+fn holds(root: &Path, cwd: &Path, request: &Request) -> bool {
+    let Ok(root) = root.canonicalize() else {
+        return false;
+    };
+    request.paths.iter().any(|p| {
+        let abs = absolute(cwd, p);
+        resolve_links(&abs).is_some_and(|r| r.starts_with(&root)) || abs.starts_with(&root)
+    })
+}
+
+/// The directories at or above `start` that are governed repositories,
+/// innermost first. `start` may be a file, or a path that does not exist yet
+/// (its nearest existing directory is used).
+pub(super) fn governed_roots(start: &Path) -> Vec<PathBuf> {
     let mut dir = start;
     while !dir.is_dir() {
-        dir = dir.parent()?;
+        match dir.parent() {
+            Some(p) => dir = p,
+            None => return Vec::new(),
+        }
     }
-    let dir = dir.canonicalize().ok()?;
+    let Ok(dir) = dir.canonicalize() else {
+        return Vec::new();
+    };
     dir.ancestors()
-        .filter(|d| d.join(".git").exists() && crate::discovery::default_config_path(d).is_file())
-        .last()
+        .filter(|d| crate::discovery::default_config_path(d).is_file() && is_git_root(d))
         .map(Path::to_path_buf)
+        .collect()
+}
+
+/// The nearest governed repository at or above `start`.
+pub(super) fn nearest_governed_root(start: &Path) -> Option<PathBuf> {
+    governed_roots(start).into_iter().next()
+}
+
+/// Whether `dir` is the top of a real git working tree: `.git` exists and git
+/// itself accepts it. An empty file or directory named `.git` is not one (git
+/// rejects it, or walks past it to a repository above), so a file an agent can
+/// write cannot make a directory a repository.
+fn is_git_root(dir: &Path) -> bool {
+    if !dir.join(".git").exists() {
+        return false;
+    }
+    let Ok(out) = std::process::Command::new("git")
+        .args(["-c", "safe.directory=*", "rev-parse", "--show-toplevel"])
+        .current_dir(dir)
+        .env_remove("GIT_DIR")
+        .env_remove("GIT_WORK_TREE")
+        .output()
+    else {
+        return false;
+    };
+    if !out.status.success() {
+        return false;
+    }
+    let top = String::from_utf8_lossy(&out.stdout);
+    match (Path::new(top.trim()).canonicalize(), dir.canonicalize()) {
+        (Ok(a), Ok(b)) => a == b,
+        _ => false,
+    }
+}
+
+/// The repository that holds the file when none of the governed ones does: the
+/// edit is judged there (it has no gates, and says so).
+fn plain_root(request: &Request, cwd: &Path) -> Option<PathBuf> {
+    let first = request.paths.first()?;
+    if !Path::new(first).is_absolute() {
+        return None;
+    }
+    let first = absolute(cwd, first);
+    let dir = first.ancestors().skip(1).find(|d| d.is_dir())?;
+    crate::discovery::find_repo_root(&[dir.to_path_buf()]).ok()
 }
 
 /// One step of walking a path.
@@ -478,7 +533,49 @@ fn judge_edit(config: Option<PathBuf>, mut request: Request) -> Verdict {
             );
         }
     }
-    enter_file_repo(&mut request, config.as_deref());
+    let Ok(cwd) = std::env::current_dir() else {
+        return judge_edit_in(config, request);
+    };
+    // An explicit configuration path names the repository's file itself.
+    let roots = if config.is_some() {
+        Vec::new()
+    } else {
+        judging_roots(&request, &cwd)
+    };
+    let root = roots
+        .first()
+        .cloned()
+        .or_else(|| plain_root(&request, &cwd));
+    let Some(first_root) = root else {
+        return judge_edit_in(config, request);
+    };
+    request.paths = request
+        .paths
+        .iter()
+        .map(|p| absolute(&cwd, p).to_string_lossy().to_string())
+        .collect();
+    if roots.is_empty() {
+        let _ = std::env::set_current_dir(first_root);
+        return judge_edit_in(config, request);
+    }
+    // Every repository judges; a deny from any wins. Otherwise the verdict is
+    // the first repository's that holds the file (the session's own first).
+    let mut verdicts: Vec<(bool, Verdict)> = Vec::new();
+    for root in &roots {
+        let _ = std::env::set_current_dir(root);
+        let verdict = judge_edit_in(config.clone(), request.clone());
+        if verdict.verdict == "block" {
+            return verdict;
+        }
+        verdicts.push((holds(root, &cwd, &request), verdict));
+    }
+    let at = verdicts.iter().position(|(held, _)| *held).unwrap_or(0);
+    verdicts.swap_remove(at).1
+}
+
+/// Judges the edit in the repository the process is in.
+fn judge_edit_in(config: Option<PathBuf>, request: Request) -> Verdict {
+    let actor = request.actor();
     if let Some(why) = &request.adapter_error {
         return adapter_failure(config.as_deref(), &request, why);
     }
@@ -921,15 +1018,21 @@ fn on_path(name: &str) -> bool {
     })
 }
 
-/// Moves into the outermost governed repository above the current directory,
-/// when there is one: a session whose directory is inside a nested repository
-/// still belongs to the governed repository around it.
-pub(super) fn enter_governed_cwd() {
-    if let Some(root) = std::env::current_dir()
-        .ok()
-        .as_deref()
-        .and_then(governed_root)
-    {
+/// Moves into the session's own governed repository: the one that holds the
+/// directory the session started in (`project_dir`), else the nearest above the
+/// current directory. A session whose directory is inside a nested repository
+/// with no configuration still belongs to the governed repository around it;
+/// a repository the session did not start in is never chosen over its own.
+pub(super) fn enter_governed_cwd(project_dir: Option<&str>) {
+    let root = project_dir
+        .and_then(|d| nearest_governed_root(Path::new(d)))
+        .or_else(|| {
+            std::env::current_dir()
+                .ok()
+                .as_deref()
+                .and_then(nearest_governed_root)
+        });
+    if let Some(root) = root {
         let _ = std::env::set_current_dir(root);
     }
 }
@@ -940,7 +1043,7 @@ pub fn run_session_start(config: Option<PathBuf>) -> ExitCode {
         let _ = std::env::set_current_dir(cwd);
     }
     if config.is_none() {
-        enter_governed_cwd();
+        enter_governed_cwd(request.project_dir.as_deref());
     }
     emit(&session_start(config))
 }
