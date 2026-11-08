@@ -437,7 +437,7 @@ fn delivery_finding(
     judged: &DeliveryJudgement,
 ) -> Option<Finding> {
     let mut line = None;
-    let (message, action_source) = match judged.disagreement.as_ref()? {
+    let (message, source) = match judged.disagreement.as_ref()? {
         // `urzua fix --apply` writes this repair (`SPEC-8`), so the
         // command is offered.
         DeliveryDisagreement::DeliveredButNotDone { set_status } => (
@@ -498,7 +498,7 @@ fn delivery_finding(
         waived: None,
         declared_severity: None,
         suggested_action: None,
-        action_source,
+        action_source: source,
         message,
     })
 }
