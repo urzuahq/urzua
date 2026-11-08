@@ -282,6 +282,7 @@ pub struct RecordReview {
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct ReverifyReport {
     pub status: crate::report::FixStatus,
+    pub as_of: crate::report::AsOf,
     /// `detect` writes nothing; `apply` wrote the records listed as applied.
     pub mode: &'static str,
     pub pin_only: bool,
