@@ -923,3 +923,76 @@ fn the_companion_rule_needs_the_expiry_rule() {
     let out = load_error("companion-alone", cfg);
     assert!(out.contains("embodiment.claim-expired"), "{out}");
 }
+
+const ITEMS_DELIVERY: &str = "      delivery:\n        delivered_tiers: [Implemented, Verified]\n        unevidenced_tiers: [\"Not started\"]\n        not_done: [Planned]\n        set_status: Done\n        items:\n          section: \"Done means\"\n          clause_separator: \" — \"\n          evidence_marker: \"evidence:\"\n          waiver_marker: \"waived:\"\n          partial_status: \"Planned\"\n          resolving_tiers: [Specified, Implemented, Verified]\n          waiver_categories:\n            - {name: not-applicable}\n";
+
+/// `config`, with the milestone type reading Done means as items.
+fn items_config() -> String {
+    let base = config(
+        RULE,
+        "  status.delivery-agreement: warn\n  status.done-items-shape: warn\n",
+    );
+    let marker = "      claim_retained: [Superseded]\n  adr:";
+    assert!(base.contains(marker));
+    base.replace(
+        marker,
+        &format!("      claim_retained: [Superseded]\n{ITEMS_DELIVERY}    sections:\n      from: headings\n      required:\n        - {{name: Done means}}\n  adr:"),
+    )
+}
+
+/// A milestone with no `Realized-by`, whose evidence is its Done means items.
+fn item_only_record(stable_id: &str, items: &str) -> String {
+    format!(
+        "---\nStable-Id: {stable_id}\nStatus: Done\n---\n# MILE-1: T\n\n## Done means\n\n{items}\n## Revision log\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Initial. | **structural** |\n"
+    )
+}
+
+#[test]
+fn a_milestone_whose_evidence_is_only_done_means_items_expires_after_its_period_observed_failing() {
+    let dir = fixture("itemonly", &items_config());
+    std::fs::write(
+        dir.join(M1),
+        item_only_record(
+            "01AAAAAAAAAAAAAAAAAAAAAAAA",
+            "- It is built. — evidence: code:src/a.rs\n",
+        ),
+    )
+    .unwrap();
+    commit_all(&dir, 40);
+    let parsed = json(&run_urzua(&dir, &["check"]));
+    let found = findings(&parsed, EXPIRED);
+    assert_eq!(found.len(), 1, "{parsed}");
+    assert!(
+        found[0]["message"].as_str().unwrap().contains("40 days"),
+        "{parsed}"
+    );
+}
+
+#[test]
+fn an_item_only_milestone_inside_its_period_is_silent() {
+    let dir = fixture("itemfresh", &items_config());
+    std::fs::write(
+        dir.join(M1),
+        item_only_record(
+            "01AAAAAAAAAAAAAAAAAAAAAAAA",
+            "- It is built. — evidence: code:src/a.rs\n",
+        ),
+    )
+    .unwrap();
+    commit_all(&dir, 5);
+    let parsed = json(&run_urzua(&dir, &["check"]));
+    assert!(findings(&parsed, EXPIRED).is_empty(), "{parsed}");
+}
+
+#[test]
+fn a_record_with_neither_a_locator_field_nor_item_evidence_stays_not_examined() {
+    let dir = fixture("noevidence", &items_config());
+    std::fs::write(
+        dir.join(M1),
+        item_only_record("01AAAAAAAAAAAAAAAAAAAAAAAA", "- It is built.\n"),
+    )
+    .unwrap();
+    commit_all(&dir, 40);
+    let parsed = json(&run_urzua(&dir, &["check"]));
+    assert!(findings(&parsed, EXPIRED).is_empty(), "{parsed}");
+}

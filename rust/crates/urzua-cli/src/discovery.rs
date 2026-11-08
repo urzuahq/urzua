@@ -1046,13 +1046,8 @@ pub(crate) fn compute_claim_measures(
             &record.record_type,
             urzua_core::config::RelationRole::EmbodimentLocator,
         );
-        if let Some(field) = record
-            .header
-            .fields
-            .iter()
-            .find(|f| f.key.as_str() == locator_field)
-        {
-            work.push((record.path.clone(), field.line));
+        if let Some(line) = rules::evidence_anchor_line(record, locator_field) {
+            work.push((record.path.clone(), line));
         }
     }
     let commits = blame_lines_parallel(repo_root, &work, None);

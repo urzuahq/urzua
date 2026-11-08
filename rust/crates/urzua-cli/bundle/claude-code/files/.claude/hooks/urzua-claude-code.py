@@ -32,10 +32,20 @@ that sits where the translator cannot place it cannot be turned into the file's
 new text, so it is an edit that was not judged: refused only where the target is
 a gated record or a protected path and the configuration says deny. A call to a
 tool named for reading (`read_file`, `list_directory`) is left alone, and so is
-a call with no string that names a file.
+a call with no string that names a file. A read-named tool is still judged when
+the call carries a key that names an output (`output_path`, `save_to`, `outfile`,
+`dest`, `target`) or a content key. A path string is trimmed, cut at a NUL and
+normalised lexically before its length is tested; a string too long as written is
+a path only if it collapses to a shorter one. A tool that applies a patch or runs a
+shell command is not read.
+
+It names the project to the engine: the directory it is installed in
+(`<dir>/.claude/hooks/`), as `project_dir`, when `<dir>` holds `.urzua/config.yaml`.
+The settings command checks this file's sha256 before running it.
 """
 import json
 import os
+import posixpath
 import re
 import subprocess
 import sys
@@ -45,7 +55,7 @@ EDIT_TOOLS = ("Write", "Edit", "MultiEdit", "NotebookEdit")
 
 # How an MCP tool names the file it writes and the text it writes. None of this
 # is rule knowledge: it only finds the paths and the content in a payload.
-MCP_CONTENT_KEYS = ("content", "contents", "file_text", "fileText", "text", "new_source")
+MCP_CONTENT_KEYS = ("content", "contents", "file_text", "fileText", "text", "new_source", "body", "data", "payload", "value")
 MCP_EDIT_KEYS = ("edits", "old_string", "new_string", "old_str", "new_str", "old_text", "new_text", "oldText", "newText", "patch", "diff", "changes", "operations", "insert_text", "replacement", "append")
 # A key names a path when one of its words is one of these (`filePath`, `from`,
 # `source_path`, `destination`, `uri`).
@@ -53,8 +63,25 @@ MCP_PATH_WORDS = {"path", "paths", "file", "files", "filepath", "filename", "sou
 MCP_PARTIAL_WORDS = {"append", "insert", "patch", "edit", "replace", "modify", "update", "move", "rename", "delete", "remove", "copy"}
 MCP_WRITE_WORDS = MCP_PARTIAL_WORDS | {"write", "create", "save", "put", "overwrite", "mv", "rm", "touch", "mkdir", "set", "upload"}
 MCP_READ_WORDS = {"read", "get", "list", "search", "find", "stat", "view", "show", "cat", "head", "tail", "fetch", "query", "describe", "info", "tree", "grep", "glob", "exists", "diff", "status", "log", "count", "check", "lookup", "browse", "inspect"}
+# A key that names where a call puts its output, even for a tool named for reading.
+MCP_DEST_WORDS = {"output", "out", "outfile", "outpath", "dest", "destination", "target", "save", "saveas", "into", "sink"}
 MCP_MAX_DEPTH = 24
+MCP_MAX_PATH = 4096
 MCP_MAX_LOOSE = 64
+
+
+def _project_dir():
+    """The directory this translator is installed in (`<dir>/.claude/hooks/`), when
+    it holds a configuration: the session's own project. The engine judges every
+    edit against it first, whatever the file's own place suggests."""
+    try:
+        d = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        return d if os.path.isfile(os.path.join(d, ".urzua", "config.yaml")) else None
+    except (NameError, OSError):
+        return None
+
+
+PROJECT_DIR = _project_dir()
 
 
 def out(obj):
@@ -114,7 +141,7 @@ def unjudged_result(message, argv, cwd, path, engine_failed, loud=True):
     says nothing unless it is refused."""
     paths = path if isinstance(path, list) else ([path] if path else [])
     if not engine_failed and argv:
-        request = {"event": "edit", "tool": None, "paths": paths, "content": None, "actor": "agent", "cwd": cwd, "adapter_error": message}
+        request = {"event": "edit", "tool": None, "paths": paths, "content": None, "actor": "agent", "cwd": cwd, "project_dir": PROJECT_DIR, "adapter_error": message}
         try:
             verdict = engine(argv, request, cwd)
             if verdict.get("verdict") == "block":
@@ -192,38 +219,62 @@ def words_of(text):
     return [w.lower() for w in re.findall(r"[A-Z]?[a-z]+|[A-Z]+(?![a-z])|[0-9]+", text)]
 
 
-def as_path(value):
-    """The file a string names, or None when it does not name one: a `file://`
-    URI is the path it carries; any other URL, a string with a newline and one
-    of an absurd length are not paths."""
-    if not isinstance(value, str) or not value.strip() or len(value) > 4096 or "\n" in value or "\0" in value:
-        return None
+def as_paths(value):
+    """What a string names as a file, as (path, extras): `path` is the value a
+    server would use once it trims surrounding whitespace and cuts a C string at
+    a NUL, or None when the string names no file; `extras` are the other readings
+    (the lexically normalised form a server such as Node's path.resolve uses, the
+    text with its NULs removed), which are looked at only for a refusal. A
+    `file://` URI is the path it carries; any other URL, and a string with a
+    newline inside it, are not paths. An over-long string is normalised first and
+    is a path only if that shortens it."""
+    if not isinstance(value, str):
+        return None, []
+    extras = []
+    if "\0" in value:
+        extras.append(value.replace("\0", ""))
+        value = value.split("\0", 1)[0]
+    value = value.strip()
+    if not value or "\n" in value:
+        return None, []
     if value.startswith("file://"):
-        return unquote(urlparse(value).path) or None
-    if re.match(r"^[A-Za-z][A-Za-z0-9+.-]*://", value):
-        return None
-    return value
+        value = unquote(urlparse(value).path)
+        if not value:
+            return None, []
+    elif re.match(r"^[A-Za-z][A-Za-z0-9+.-]*://", value):
+        return None, []
+    normal = posixpath.normpath(value)
+    if len(value) > MCP_MAX_PATH:
+        # Too long to be a path as written: only what it collapses to can be.
+        extras.append(value)
+        return (normal if len(normal) <= MCP_MAX_PATH else None), extras
+    if normal != value:
+        extras.append(normal)
+    return value, extras
 
 
 def mcp_scan(inp):
     """Every path-like string in an MCP tool's input, at any depth. Returns
     (records, loose, deep): one record per object, (paths, content, partial)
-    with the path fields of that object, its content text if any and whether it
-    carries an edit-shaped field; `loose` is every other short string, which may
+    with the path fields of that object, its content text if any, whether it
+    carries an edit-shaped field and which of its path fields name an output; `loose` is every other short string, which may
     still name a file; `deep` is whether the input nests beyond what is read."""
     records, loose, state = [], [], {"deep": False}
 
     def add(target, value):
-        p = as_path(value)
+        p, extras = as_paths(value)
         if p is not None and p not in target:
             target.append(p)
+        for e in extras:
+            if e not in loose and e not in target and len(e) <= 65536:
+                loose.append(e)
 
     def walk(node, depth, keyed):
         if depth > MCP_MAX_DEPTH:
             state["deep"] = True
             return
         if isinstance(node, dict):
-            paths, content, partial = [], None, False
+            paths, content, partial, dest = [], None, False, []
             for k, v in node.items():
                 if not isinstance(k, str):
                     continue
@@ -236,13 +287,17 @@ def mcp_scan(inp):
                     if isinstance(v, (dict, list)):
                         walk(v, depth + 1, False)
                     continue
-                if set(words_of(k)) & MCP_PATH_WORDS:
+                kw = set(words_of(k))
+                if kw & (MCP_PATH_WORDS | MCP_DEST_WORDS):
+                    into = [paths, dest] if kw & MCP_DEST_WORDS else [paths]
                     if isinstance(v, str):
-                        add(paths, v)
+                        for t in into:
+                            add(t, v)
                     elif isinstance(v, list):
                         for item in v:
                             if isinstance(item, str):
-                                add(paths, item)
+                                for t in into:
+                                    add(t, item)
                             else:
                                 walk(item, depth + 1, False)
                     else:
@@ -251,7 +306,7 @@ def mcp_scan(inp):
                     add(loose, v)
                 else:
                     walk(v, depth + 1, False)
-            records.append((paths, content, partial))
+            records.append((paths, content, partial, dest))
         elif isinstance(node, list):
             for item in node:
                 if isinstance(item, str):
@@ -272,12 +327,23 @@ def mcp_write(tool, inp):
     name = tool.rsplit("__", 1)[-1]
     words = set(words_of(name))
     write_like = bool(words & MCP_WRITE_WORDS)
-    if words & MCP_READ_WORDS and not write_like:
-        return None
     records, loose, deep = mcp_scan(inp)
+    if words & MCP_READ_WORDS and not write_like:
+        # A tool named for reading is left alone, unless the call carries a
+        # destination for its output or text to put somewhere: the name is the
+        # server's, the arguments are the call's.
+        kept = []
+        for paths, content, partial, dest in records:
+            if content is not None:
+                kept.append((paths, content, partial, dest))
+            elif dest:
+                kept.append((dest, None, True, dest))
+        if not kept:
+            return None
+        records, loose, deep = kept, [], False
     tool_partial = bool(words & MCP_PARTIAL_WORDS)
     items, rest = [], []
-    for paths, content, partial in records:
+    for paths, content, partial, _ in records:
         if len(paths) == 1 and content is not None and not partial and not tool_partial:
             items.append((paths[0], content))
         else:
@@ -285,7 +351,7 @@ def mcp_write(tool, inp):
     keyed = bool(items or rest)
     if not (keyed or loose or deep):
         return None
-    writes = write_like or tool_partial or any(c is not None or p for _, c, p in records)
+    writes = write_like or tool_partial or any(c is not None or p or d for _, c, p, d in records)
     return {"items": items, "rest": rest, "loose": [p for p in loose if p not in rest], "loud": keyed and writes, "deep": deep}
 
 
@@ -327,7 +393,7 @@ def engine(argv, request, cwd):
 def judge_mcp(tool, target, argv, cwd):
     results = []
     for path, content in target["items"]:
-        request = {"event": "edit", "tool": tool, "paths": [path], "content": content, "actor": "agent", "cwd": cwd}
+        request = {"event": "edit", "tool": tool, "paths": [path], "content": content, "actor": "agent", "cwd": cwd, "project_dir": PROJECT_DIR}
         try:
             verdict = engine(argv, request, cwd)
         except (OSError, ValueError, AttributeError):
@@ -368,12 +434,12 @@ def main():
         return stated(message, event)
     cwd = payload.get("cwd") or None
     if event == "session-start":
-        request = {"event": "session-start", "tool": None, "paths": [], "content": None, "actor": "agent", "cwd": cwd}
+        request = {"event": "session-start", "tool": None, "paths": [], "content": None, "actor": "agent", "cwd": cwd, "project_dir": PROJECT_DIR}
     elif event == "post-command":
         # Any Bash command. The engine reads git, never the command.
         if payload.get("tool_name") != "Bash":
             return 0
-        request = {"event": "post-command", "tool": "Bash", "paths": [], "content": None, "actor": "agent", "cwd": cwd}
+        request = {"event": "post-command", "tool": "Bash", "paths": [], "content": None, "actor": "agent", "cwd": cwd, "project_dir": PROJECT_DIR}
     else:
         tool = payload.get("tool_name")
         inp = payload.get("tool_input") or {}
@@ -392,7 +458,7 @@ def main():
                 content = proposed(tool, inp, path)
             except ValueError as e:
                 return unjudged_edit("urzua harness: urzua did NOT judge this edit (%s of %s: %s). It is allowed unless the configuration refuses an edit that was not judged; run 'urzua check' before committing." % (tool, path, e), argv, cwd, path, False)
-        request = {"event": "edit", "tool": tool, "paths": [path], "content": content, "actor": "agent", "cwd": cwd}
+        request = {"event": "edit", "tool": tool, "paths": [path], "content": content, "actor": "agent", "cwd": cwd, "project_dir": PROJECT_DIR}
     try:
         verdict = engine(argv, request, cwd)
     except (OSError, ValueError, AttributeError):

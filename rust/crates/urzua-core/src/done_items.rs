@@ -185,6 +185,17 @@ impl DoneItems {
         (!parts.is_empty()).then(|| parts.join(", "))
     }
 
+    /// The file lines that carry a valid evidence clause: the ones
+    /// [`DoneItems::locator_text`] reads.
+    pub fn valid_evidence_lines(&self) -> Vec<usize> {
+        self.items
+            .iter()
+            .filter_map(|i| i.evidence.as_ref())
+            .filter(|c| c.valid)
+            .map(|c| c.line)
+            .collect()
+    }
+
     /// The file lines that carry an evidence clause.
     pub fn evidence_lines(&self) -> Vec<usize> {
         self.items

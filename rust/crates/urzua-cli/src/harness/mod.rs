@@ -186,7 +186,7 @@ fn desired(env: &Env, adapters: &[String]) -> Result<Desired, String> {
                 want.files.insert(path, content);
             }
         }
-        let fragment = json::parse(adapter.settings_fragment)
+        let fragment = json::parse(&render_fragment(adapter)?)
             .map_err(|e| format!("the {name} settings fragment is invalid: {e}"))?;
         for entry in settings::entries(&fragment)? {
             want.entries.push((adapter.manifest().settings_file, entry));
@@ -200,6 +200,38 @@ fn desired(env: &Env, adapters: &[String]) -> Result<Desired, String> {
         want.block = Some((file, block::render(bundle::INSTRUCTIONS)));
     }
     Ok(want)
+}
+
+/// The adapter's settings fragment with every `{{sha256:PATH}}` replaced by the
+/// sha256 (hex) of the adapter's file installed at `PATH`. A hook command that
+/// runs an installed file embeds that file's hash this way and refuses to run
+/// the file when it no longer matches (`ADR-89`, amendment of 2026-11-08); the
+/// value is written by `install` and `update` and read back by `status`.
+fn render_fragment(adapter: &bundle::Adapter) -> Result<String, String> {
+    let mut text = adapter.settings_fragment.to_string();
+    while let Some(at) = text.find("{{sha256:") {
+        let rest = &text[at + "{{sha256:".len()..];
+        let end = rest.find("}}").ok_or_else(|| {
+            format!(
+                "the {} settings fragment has an unterminated {{{{sha256:",
+                adapter.name
+            )
+        })?;
+        let path = rest[..end].to_string();
+        let (_, content) = adapter
+            .files
+            .iter()
+            .find(|(p, _)| *p == path)
+            .ok_or_else(|| {
+                format!(
+                    "the {} settings fragment names {path}, which the adapter does not install",
+                    adapter.name
+                )
+            })?;
+        let marker = format!("{{{{sha256:{path}}}}}");
+        text = text.replace(&marker, &urzua_io::sha256_hex_of_str(content));
+    }
+    Ok(text)
 }
 
 /// The slash commands an adapter installs (`ADR-89` section 1): the one generic

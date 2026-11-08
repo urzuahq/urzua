@@ -11,3 +11,5 @@ expect_json:
 expect_rules_ran:
   - status.undeclared-value
   - status.required-field-missing
+  - status.done-items-shape
+  - status.waived-item-stale
