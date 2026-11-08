@@ -5,7 +5,7 @@
 //! is "a real Phase 1 feature" per ADR-0015, not a stub.
 
 use std::collections::HashSet;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::config::{Config, RelationRole};
 use crate::line_edit::{table_row_prefix, LineDoc};
@@ -575,31 +575,12 @@ pub fn detect_rebaselines(
                 // A scoped pin on a file that cannot be read cannot be
                 // re-pinned either: list it rather than skip it silently.
                 PinRead::Unreadable if locator.scope.is_some() => {
-                    let display = locator.display();
-                    if !failed
-                        .iter()
-                        .any(|f: &FailedPin| f.record == record.path && f.locator == display)
-                    {
-                        failed.push(FailedPin {
-                            record: record.path.clone(),
-                            locator: display,
-                            reason: format!("file not found or unreadable: {}", locator.path),
-                        });
-                    }
+                    let reason = format!("file not found or unreadable: {}", locator.path);
+                    note_failed_pin(&mut failed, &record.path, locator.display(), reason);
                 }
                 PinRead::Unreadable => {}
                 PinRead::Failed(reason) => {
-                    let display = locator.display();
-                    if !failed
-                        .iter()
-                        .any(|f: &FailedPin| f.record == record.path && f.locator == display)
-                    {
-                        failed.push(FailedPin {
-                            record: record.path.clone(),
-                            locator: display,
-                            reason,
-                        });
-                    }
+                    note_failed_pin(&mut failed, &record.path, locator.display(), reason);
                 }
                 PinRead::Current { hash, span, files } => {
                     if hash != recorded
@@ -651,6 +632,20 @@ pub fn detect_rebaselines(
         Outcome::Examined
     });
     (population, found, failed)
+}
+
+/// Lists a pin that could not be read once per record and locator.
+fn note_failed_pin(failed: &mut Vec<FailedPin>, record: &Path, locator: String, reason: String) {
+    if !failed
+        .iter()
+        .any(|f: &FailedPin| f.record == record && f.locator == locator)
+    {
+        failed.push(FailedPin {
+            record: record.to_path_buf(),
+            locator,
+            reason,
+        });
+    }
 }
 
 /// `line` with every whole-token occurrence of `old` (`spelling@sha256:hash`)

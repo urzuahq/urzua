@@ -580,12 +580,29 @@ fn validate_delivery(
     }
     if let Some(items) = &delivery.items {
         validate_items(rt, d, delivery, items, embodiment)?;
+        check_delivered_tiers_resolve(delivery, "delivery.items")?;
     }
     Ok(())
 }
 
 /// `statuses.delivery.items` is refused at load when it would be inert or
 /// ambiguous (`ADR-96` section 4, `BUG-44`): every error names the key.
+/// An item resolves only at a `resolving_tiers` tier, so a delivered tier
+/// outside that list is a tier no item could ever reach.
+fn check_delivered_tiers_resolve(delivery: &DeliveryDecl, key: &str) -> Result<(), String> {
+    match delivery
+        .delivered_tiers
+        .iter()
+        .find(|t| !delivery.resolving_tiers().contains(t))
+    {
+        Some(t) => Err(format!(
+            "type `delivery.delivered_tiers` names '{t}', which is not in `{key}.resolving_tiers` ({}): no item could resolve at it",
+            delivery.resolving_tiers().join(", ")
+        )),
+        None => Ok(()),
+    }
+}
+
 fn validate_items(
     rt: &RecordTypeConfig,
     d: &StatusDecl,
@@ -666,18 +683,6 @@ fn validate_items(
                 known.join(", ")
             ));
         }
-    }
-    // An item resolves only at a `resolving_tiers` tier, so a delivered tier
-    // outside that list is a tier no item could ever reach.
-    if let Some(t) = delivery
-        .delivered_tiers
-        .iter()
-        .find(|t| !delivery.resolving_tiers().contains(t))
-    {
-        return Err(format!(
-            "type `delivery.delivered_tiers` names '{t}', which is not in `{key}.resolving_tiers` ({}): no item could resolve at it",
-            delivery.resolving_tiers().join(", ")
-        ));
     }
     if let Some(kind) = &items.kind {
         validate_kind(rt, delivery, kind, embodiment)?;

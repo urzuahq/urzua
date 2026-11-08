@@ -85,14 +85,7 @@ pub fn review_locators(
             .find(|f| f.key.as_str() == field)
             .map_or(0, |f| f.line),
         items_section: crate::rules::items_section(config, &record.record_type),
-        item_lines: record
-            .items
-            .iter()
-            .flat_map(|i| i.items.iter())
-            .filter_map(|i| i.evidence.as_ref())
-            .filter(|c| c.valid)
-            .map(|c| c.line)
-            .collect(),
+        item_lines: valid_item_evidence_lines(record),
         locators: Vec::new(),
     };
     let Some(value) = evidence_text(record, field) else {
@@ -473,6 +466,18 @@ fn set_anchor(doc: &mut LineDoc, field: &str, today: &str) -> Result<(), String>
         None => doc.insert_after(closing - 1, format!("{field}: {today}")),
     }
     Ok(())
+}
+
+/// The lines of the record's valid Done-means item evidence clauses.
+fn valid_item_evidence_lines(record: &Record) -> Vec<usize> {
+    record
+        .items
+        .iter()
+        .flat_map(|i| i.items.iter())
+        .filter_map(|i| i.evidence.as_ref())
+        .filter(|c| c.valid)
+        .map(|c| c.line)
+        .collect()
 }
 
 /// Why a first pin found no place to go, naming the type's declared item section.
