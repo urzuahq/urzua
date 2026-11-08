@@ -267,3 +267,11 @@ fn locator_text_joins_every_valid_clause() {
         Some("code:a.rs, test:c.rs, spec:docs/x.md")
     );
 }
+
+#[test]
+fn valid_evidence_lines_skip_a_clause_that_does_not_parse() {
+    let d = parse("- a — evidence: `code:a.rs`\n- b — evidence: code:b.rs\n");
+    assert_eq!(d.evidence_lines().len(), 2);
+    assert_eq!(d.valid_evidence_lines().len(), 1);
+    assert_eq!(d.valid_evidence_lines()[0], d.evidence_lines()[1]);
+}

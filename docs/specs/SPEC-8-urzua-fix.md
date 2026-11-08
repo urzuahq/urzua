@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5Q0XVK27P5T8FN72BN
-Version: '0.35'
+Version: '0.36'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -358,7 +358,7 @@ declared and is `not-run` otherwise.
   whose hash differs (run `fix --rebaseline`); drift by the git-history rule, inside
   `drift_grace_days` too (attesting over a file that changed and was not re-read is the rubber stamp
   this command exists to prevent); a stated `Embodiment` that `embodiment.consistency` would report;
-  a record the expiry rule does not judge or cannot date; a rule with no `anchor_field`; a record with
+  a record the expiry rule does not judge (neither a `Realized-by` value nor a Done-means item evidence clause) or cannot date (no valid anchor date and no commit for its first evidence line: the `Realized-by` line, or the first item evidence clause); a rule with no `anchor_field`; a record with
   no usable revision log; and any actor but `--actor human` (`agent`, or none given) where the matching
   entry's level is `error`.
 - **The pin step.** Every locator of a `require_pin` category without a pin is pinned first, in the
@@ -464,3 +464,4 @@ asserted by test, not assumed by convention.
 > | 2026-11-08 | Bumped to `0.34`. The pins on this spec's `Realized-by` locators were re-baselined against the files as they are after the sharded CI and the milestone `Kind` amendment landed on main (the `Re-baselined` row above); no behaviour this spec describes changes. **Why:** `MILE-129`, `ADR-97`: every stale pin is re-pinned with its real delta before expiry is enabled. | **structural** |
 > | 2026-11-08 | Bumped to `0.35`. `urzua reverify` hardening: a locator outside the repository or untracked no longer resolves for a pin; a first pin is no longer spliced into a longer anchored locator (`a.rs#Foo::bar`); any actor but human is refused where the period's level is `error`; `--force --ids` renews the named record; detect lists a record with no usable revision log as refused. Documents the four. **Why:** the round-4 review findings on `reverify` (`ADR-97`); no change to what an accepted run writes. | **substantive** |
 > | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/fix.rs` 23e5e6b703b5 -> 5a67695c913d, `rust/crates/urzua-core/src/fix.rs` c9cd87e7b00e -> 88c815c0639a. Reason: Read the diff of each pinned file: core fix.rs moved apply_rebaseline's evidence-line lookup and revision-row tail into shared helpers (evidence_edit_lines, append_log_rows, revision_log_refusal) that apply_reverify also calls, with the same rows and error text; cli commands/fix.rs gained validate_reason, back_pointer_evidence, into_failures and identity_notices extracted from fix and reverify with the same behaviour; core reverify.rs calls the helpers and its first-pin matcher no longer splices into a longer anchored locator; cli commands/reverify.rs now refuses a record with no usable revision log in detect, refuses any non-human actor at an error-level period, and honours --ids under --force. Each claim these records make about those files still holds. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
+> | 2026-11-08 | Bumped to `0.36`. `urzua reverify` lists, dates and renews a milestone whose evidence is only its Done-means item clauses, pinning the item locators; the refusal for a record with no evidence names both sources. **Why:** `ADR-97` amendment of 2026-11-08. | **substantive** |

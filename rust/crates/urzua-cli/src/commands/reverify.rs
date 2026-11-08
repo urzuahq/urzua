@@ -215,7 +215,7 @@ pub fn run(config_path: Option<PathBuf>, args: ReverifyArgs) -> ExitCode {
                 ));
             }
             Err(ClaimSkip::NoAnchor) => {
-                refused.push("the claim cannot be dated: no valid anchor date and no commit for the Realized-by line (an untracked record?)".to_string());
+                refused.push("the claim cannot be dated: no valid anchor date and no commit for the first evidence line, the Realized-by line or the first Done-means item evidence clause (an untracked record?)".to_string());
             }
             Err(ClaimSkip::Unreadable) => refused.push("the header cannot be read".to_string()),
         }
