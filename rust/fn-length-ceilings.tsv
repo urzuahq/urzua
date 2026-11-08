@@ -41,10 +41,9 @@ crates/urzua-core/src/document_model.rs::RawRequiredSection::resolve	104
 crates/urzua-core/src/done_items.rs::build_item	115
 crates/urzua-core/src/done_items.rs::parse_items	123
 crates/urzua-core/src/done_items.rs::parse_waiver	121
-crates/urzua-core/src/fix.rs::detect_rebaselines	101
 crates/urzua-core/src/fix.rs::detect_repairs	134
 crates/urzua-core/src/header.rs::parse_yaml_frontmatter	101
-crates/urzua-core/src/reverify.rs::review_locators	108
+crates/urzua-core/src/reverify.rs::review_locators	102
 crates/urzua-core/src/rules/back_pointer.rs::embodiment_back_pointer_decision_accepted	112
 crates/urzua-core/src/rules/boundary.rs::published_path_reference	205
 crates/urzua-core/src/rules/citation.rs::citation_issue_exists	191
@@ -52,9 +51,8 @@ crates/urzua-core/src/rules/citation.rs::citation_non_reference	109
 crates/urzua-core/src/rules/claim.rs::claim_status_agreement	193
 crates/urzua-core/src/rules/claim_expiry.rs::embodiment_claim_expired	143
 crates/urzua-core/src/rules/claim_expiry.rs::embodiment_claim_renewal_unattested	108
-crates/urzua-core/src/rules/delivery_items.rs::status_waived_item_stale	105
+crates/urzua-core/src/rules/delivery_items.rs::status_waived_item_stale	104
 crates/urzua-core/src/rules/embodiment.rs::embodiment_consistency	158
-crates/urzua-core/src/rules/embodiment.rs::embodiment_locator_exists	124
 crates/urzua-core/src/rules/embodiment.rs::embodiment_locator_promotion_candidate	119
 crates/urzua-core/src/rules/embodiment.rs::locator_defect	154
 crates/urzua-core/src/rules/filename.rs::filename_identity_pattern	121

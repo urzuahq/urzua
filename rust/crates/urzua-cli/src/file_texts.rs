@@ -93,7 +93,10 @@ pub(crate) fn with_locator_env<R>(
 ) -> R {
     let texts = FileTexts::new(root.to_path_buf(), config);
     let set: HashSet<&std::path::Path> = tracked.iter().map(|p| p.as_path()).collect();
-    let exists = |p: &std::path::Path| root.join(p).try_exists().unwrap_or(true);
+    // A path that resolves outside the repository is never probed.
+    let exists = |p: &std::path::Path| {
+        urzua_io::confine_to_root(root, p).is_ok() && root.join(p).try_exists().unwrap_or(true)
+    };
     let present = |p: &str| {
         let path = std::path::Path::new(p);
         set.contains(path) && exists(path)
