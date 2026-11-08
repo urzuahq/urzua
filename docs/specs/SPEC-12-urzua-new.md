@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5C0WX34AQKF79DQDS5
-Version: '0.18'
+Version: '0.19'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -29,7 +29,11 @@ explicit `--by`, which wins over `git config user.name` -- SPEC-8's identity tie
 than redesigned), and the type's status field, which starts at the first value of the type's
 declared `statuses.values` (`MILE-151`). That is the vocabulary's entry state rather than a
 decision, so moving a record on from it stays a human's; a type that declares no `statuses` leaves
-the field blank. Every other field is a decision a human makes and stays blank.
+the field blank. A type may also name the field that takes the record's title
+(`relation_fields.title`, a spec's `Subject`) and the version a record starts at
+(`revision_log.version_bump.initial`, written into the `version_bump` field, a spec's `Version`), so a
+scaffold does not fail `field.quality` on a required field the tool could fill (`MILE-74`). Every
+other field is a decision a human makes and stays blank.
 
 If a checked-in template exists (`.urzua/templates/<type>.md`), its body scaffolding (the H1 and the
 sections beneath the header) is appended under the synthesized header; the template's own header, in
@@ -198,3 +202,4 @@ take content and parameters, returning a string.
 > | 2026-11-06 | Bumped to `0.16`. A type that requires `Stable-Id` gets the generated value in that field instead of a blank. **Why:** maintainer decision of 2026-11-05 made `Stable-Id` required on every record type in this repository, and the blank required field overwrote the generated identity. | **substantive** |
 > | 2026-11-07 | Bumped to `0.17`. §Display-number assignment documents the opt-in open-pull-request check (`new.check_open_prs`): the fetch of pull-request head refs into `refs/urzua/pr/<segment>/*` with plain git, one namespace per pattern; numbering that skips the numbers held there, including closed and merged pull requests, and in sibling worktrees (untracked files included); the `<git-common-dir>/urzua-new.lock` lock; the offline fallback with a notice and exit 0; and the report's always-present `pull_refs`. Separate clones are stated as the remaining limit. **Why:** `MILE-89` / `ADR-93`. | **substantive** |
 > | 2026-11-07 | Bumped to `0.18`. The numbers `new` skipped are reported in a top-level `skipped` list in the JSON, each with its reason (`open-pr <ref>`, `worktree <path>` or `local`), and no longer on stderr; the working-tree-only fallback is a warning notice (`new.numbering`). **Why:** Maintainer decision, 2026-11-07, recorded as an amendment to `ADR-93`: the stderr lines contradicted `ADR-46` decision 8. | **substantive** |
+> | 2026-11-07 | Bumped to `0.19`. `new` fills the field a type names under `relation_fields.title` with the record's title and the `revision_log.version_bump` field with `version_bump.initial`; a type declaring neither starts them blank as before. **Why:** `MILE-74` -- `urzua new spec` wrote a blank `Version` and `Subject`, so the record failed `check` before anyone edited it. | **substantive** |

@@ -1000,7 +1000,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_TYPE_DIR_MATCHES_NOTHING,
-        description: "A type's declared `dir` does not exist at all (`BUG-56`'s hazard for `dir`, no load-time guard). An existing, empty directory is a legitimate declared-but-unused state and is not flagged. Also reports a type\u{2019}s `exclude_files` entry that names no tracked file directly in its `dir` (`MILE-150`), so a stale exclusion is visible. Reports each `extra_dirs` entry that does not exist (`MILE-130`).",
+        description: "A type's declared `dir` does not exist at all (`BUG-56`'s hazard for `dir`, no load-time guard). An existing, empty directory is a legitimate declared-but-unused state and is not flagged. Also reports a type\u{2019}s `exclude_files` entry that names no tracked file directly in its `dir` (`MILE-150`), so a stale exclusion is visible. Reports each `extra_dirs` entry that does not exist (`MILE-130`). Reports each status a type's `sections.exempt_statuses` lists that none of the type's records holds (`MILE-7`), so an exemption that sets nothing aside is visible rather than silent.",
         scope: Scope::Config,
         anchor: Anchor::Config,
         judges: Judges::NotRecordLevel,
@@ -1017,6 +1017,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("exclude-files-matches-nothing", ActionDecl::CONFIG_SET),
             VariantAction::new("extra-dir-missing", ActionDecl::CONFIG_SET),
             VariantAction::new("dir-missing", ActionDecl::CONFIG_SET),
+            VariantAction::new("exempt-status-matches-nothing", ActionDecl::CONFIG_SET),
         ],
         phase: Phase::Main,
         companion: None,
@@ -1026,7 +1027,19 @@ pub const RULE_TABLE: &[RuleDef] = &[
                 *matched.entry(r.record_type.clone()).or_insert(0) += 1;
             }
             let dir_exists = |d: &str| (c.dir_exists)(d);
-            type_dir_matches_nothing(c.config, c.config_path, &matched, &dir_exists, c.live_paths)
+            let (execution, mut findings) = type_dir_matches_nothing(
+                c.config,
+                c.config_path,
+                &matched,
+                &dir_exists,
+                c.live_paths,
+            );
+            findings.extend(section_exemptions_matching_nothing(
+                c.records,
+                c.config,
+                c.config_path,
+            ));
+            (execution, findings)
         },
     },
     RuleDef {
