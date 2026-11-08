@@ -3,6 +3,7 @@ Status: InProgress
 Stable-Id: 01M1YSGQ9F9WXDWB2VJEQ657K4
 Phase: '1'
 Track: governance-process
+Kind: decision
 Implements: RFC-6, ADR-14
 Blocked-on: —
 Realized-by: spec:docs/adr/ADR-14-an-append-only-revision-log-not-edit-in-place.md, spec:docs/specs/SPEC-1-cli.md
@@ -43,3 +44,4 @@ inconsistent precedent one spec at a time.
 > | 2026-11-05 | Added the `Non-reference-ids` header field declaring `SPEC-7`. **Why:** the text names this id as history or illustration, not as citations of a record; the declaration states that on the record itself, so a new unresolved citation in this file is reported, where a file-wide `citation.resolution` waiver had silenced every one (`BUG-190`, `ADR-75`). The field carries no decision; the milestone is unchanged. | **structural** |
 > | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |
 > | 2026-11-07 | `Status` `Done` -> `InProgress`. Status set from its Done-means items (ADR-96, MILE-215): unresolved item 2. **Why:** the item has no evidence clause, and `DoneWithUnresolvedItems` forbids `Done` while an item is unresolved; `fix` never downgrades, so the status is set by hand to the computed value. | **structural** |
+> | 2026-11-07 | `Kind: decision` added. **Why:** maintainer decision of 2026-11-07 (`ADR-96` amendment, milestone kinds): this milestone records a decision, so it is judged against a decided record (an Accepted decision or a Shipped spec) rather than a built tier. Its `Status` is computed from its Done means items by `urzua fix`, not set by hand. | **structural** |

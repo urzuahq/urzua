@@ -157,6 +157,7 @@ pub fn add_item_counts(
         };
         let empty = crate::done_items::DoneItems::default();
         let judged = judge_items(
+            record,
             record.items.as_ref().unwrap_or(&empty),
             config,
             delivery,

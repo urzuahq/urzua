@@ -194,8 +194,12 @@ pub fn run(config_path: Option<PathBuf>, args: FixArgs) -> ExitCode {
     } else {
         Default::default()
     };
-    let (population, repairs, unevidenced) =
-        crate::file_texts::with_locator_env(&repo_root, &config, &discovered.paths, |env| {
+    let (population, repairs, unevidenced) = crate::file_texts::with_locator_env(
+        &repo_root,
+        &config,
+        &discovered.paths,
+        &records,
+        |env| {
             let ctx = urzua_core::rules::DeliveryContext {
                 back_pointed: &back_pointed,
                 env,
@@ -210,7 +214,8 @@ pub fn run(config_path: Option<PathBuf>, args: FixArgs) -> ExitCode {
                 &ctx,
             );
             (population, repairs, notices)
-        });
+        },
+    );
     drift_notices.extend(unevidenced);
 
     if !apply {

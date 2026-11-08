@@ -35,6 +35,46 @@ pub struct ItemsDecl {
     pub resolving_tiers: Option<Vec<String>>,
     #[serde(default)]
     pub waiver_categories: Vec<WaiverCategory>,
+    /// Opt-in per-record kind (`ADR-96`, amendment of 2026-11-07): a field of
+    /// the record names its kind, and each kind says which tiers count as
+    /// delivered. Omitted keeps one rule for every record.
+    #[serde(default)]
+    pub kind: Option<KindDecl>,
+}
+
+/// `statuses.delivery.items.kind`: the field that holds a record's kind and the
+/// vocabulary of kinds it may hold.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct KindDecl {
+    /// The header field holding the kind. It must be a field the type declares.
+    pub field: String,
+    pub kinds: Vec<KindEntry>,
+}
+
+/// One kind of the vocabulary. A kind that names nothing but its `name` is
+/// judged by the type's own `delivered_tiers`, as a record with no kind is.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct KindEntry {
+    pub name: String,
+    /// The tiers at which an item counts as delivered for this kind. Omitted
+    /// means the type's `delivered_tiers`. Each must also be a `resolving_tiers`
+    /// tier, or no item could reach it.
+    #[serde(default)]
+    pub delivered_tiers: Option<Vec<String>>,
+    /// How a record an item cites is held: `success` means a locator that
+    /// resolves to a record counts only while that record's status is one its
+    /// own type declares `success`, so a Proposed decision or a Draft spec
+    /// evidences nothing. Omitted reads no cited record's status.
+    #[serde(default)]
+    pub cited_records: Option<CitedRecords>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CitedRecords {
+    Success,
 }
 
 /// One declared waiver category, in the shape `ADR-86` gave the permanent
@@ -66,6 +106,15 @@ impl WaiverCategory {
 }
 
 impl ItemsDecl {
+    /// The declared entry for a kind value, `None` for an undeclared one.
+    pub fn kind_entry(&self, value: &str) -> Option<&KindEntry> {
+        self.kind
+            .as_ref()?
+            .kinds
+            .iter()
+            .find(|k| k.name == value.trim())
+    }
+
     pub fn category(&self, name: &str) -> Option<&WaiverCategory> {
         self.waiver_categories.iter().find(|c| c.name == name)
     }

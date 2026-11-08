@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.110'
+Version: '0.111'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs, test:rust/crates/urzua-cli/tests/own_config_integration.rs, test:rust/crates/urzua-cli/tests/field_levels_integration.rs
@@ -1948,6 +1948,13 @@ statuses:
       waiver_marker: "waived:"
       partial_status: "InProgress"     # in values and in not_done
       resolving_tiers: ["Specified", "Implemented", "Verified"]   # default: delivered_tiers
+      kind:                            # optional: a record declares its kind
+        field: "Kind"                  # a field the type declares
+        kinds:
+          - {name: build}              # names nothing: the type's delivered_tiers
+          - name: decision
+            delivered_tiers: ["Specified", "Implemented", "Verified"]   # each also in resolving_tiers
+            cited_records: success     # a cited record counts only at a `success` status of its type
       waiver_categories:
         - {name: not-applicable}
         - {name: superseded-by-decision, cite: required}
@@ -1965,6 +1972,19 @@ declared embodiment tier; a duplicate category or one whose name holds whitespac
 comma; an `expires: required` category without `cite: required` (a deferral needs a target); and
 `items` on a type whose `status.delivery-agreement` is off or not declared in `rules`, because that
 rule's `DoneWithUnresolvedItems` finding is what holds a status to the items.
+
+A record declares its kind (`ADR-96`, amendment of 2026-11-07): `kind.field` names the header field and
+`kind.kinds` is the vocabulary. A kind's `delivered_tiers` replaces the type's for the rule that a record
+needs at least one item resolved at a delivered tier, and for the delivered and partial standings, so a
+`decision` kind that counts `Specified` is done when every item resolves at `Specified` or higher. A kind
+that omits `delivered_tiers`, a record with no `Kind` and a type with no `kind` key all use the type's
+`delivered_tiers`. `cited_records: success` reads the status of a record an item cites: a locator that
+resolves to a record counts only while the record's status is one its own type declares `success`, so a
+Proposed decision or a Draft spec evidences nothing; a locator that is not a record is not judged by status.
+The keys are load-time errors when they would be inert: a `field` that is blank or that the type does not
+declare; no `kinds`, or a name listed twice; a `delivered_tiers` entry that is not a declared embodiment tier,
+that is not in `resolving_tiers` (no item could resolve at it) or that is in `unevidenced_tiers`. A `Kind`
+value outside the vocabulary is reported by `status.done-items-shape` and judged as no kind.
 
 A dependency caps the standing (`ADR-96`, amendment of 2026-11-07): where `items` is declared and
 `roadmap.pairs` names a sequencing pair, a record whose items all resolve but which has an unfinished
@@ -2225,3 +2245,4 @@ proves this configuration produces the three findings.
 > | 2026-11-07 | Bumped to `0.108`. Documents `statuses.delivery.items` (`ADR-96`, `MILE-214`): the opt-in per-item evidence for a type's Done means, its keys, its load errors and how the standing is computed from the items. **Why:** `MILE-214`, the engine of `ADR-96`; an undeclared config is unchanged. | **substantive** |
 > | 2026-11-07 | Bumped to `0.109`. Documents the optional `revision_log` keys `classes`, `class_column`, `date_column` and `tool_class` (`ADR-94`, `MILE-213`): the class vocabulary, the header names of the class and date columns, and the class `urzua fix` writes, their engine defaults, and their load errors. A `\|` inside a log cell stays in its cell, and a row wider than its header is a finding when a column is declared. No `schema_version` bump. **Why:** `MILE-213`, the build of `ADR-94`; an undeclared config behaves as before. | **substantive** |
 > | 2026-11-07 | Bumped to `0.110`. Documents that a dependency caps the standing computed from `statuses.delivery.items` (a record whose items all resolve beside an unfinished dependency computes `partial_status`) and that `sequence.status-agreement` skips such a record with an info notice, so `partial_status` may stay a `progress` status. No new key; no `schema_version` bump. **Why:** the `ADR-96` amendment of 2026-11-07, accepted by the maintainer; a configuration without `items` or a sequencing pair is unchanged. | **substantive** |
+> | 2026-11-07 | Bumped to `0.111`. Documents `statuses.delivery.items.kind`: a field and a vocabulary of kinds, each with optional `delivered_tiers` and `cited_records: success`, so a `decision` milestone is done when every item resolves at `Specified` or higher and cites only decided records; the load errors; opt-in. **Why:** the `ADR-96` amendment of 2026-11-07, accepted by the maintainer (`MILE-73`). | **substantive** |

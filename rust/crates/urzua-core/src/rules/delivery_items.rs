@@ -218,9 +218,78 @@ fn tier_rank(embodiment: &EmbodimentDecl, tier: &str) -> usize {
         .unwrap_or(embodiment.tiers.len())
 }
 
+/// How a record is judged, by its kind (`ADR-96`, amendment of 2026-11-07).
+struct KindRule<'a> {
+    /// The tiers at which an item counts as delivered.
+    delivered_tiers: &'a [String],
+    /// A locator that resolves to a record counts only while the record has
+    /// reached a `success` status of its own type.
+    cited_must_be_decided: bool,
+}
+
+/// The kind a record declares, as its header holds it: `None` when the type
+/// declares no kind, or the record names none, or names one outside the
+/// vocabulary (`status.done-items-shape` reports that one).
+pub fn declared_kind<'a>(
+    record: &Record,
+    decl: &'a ItemsDecl,
+) -> Option<&'a done_items::KindEntry> {
+    let kind = decl.kind.as_ref()?;
+    let value = record.header.get(kind.field.as_str())?.trim();
+    decl.kind_entry(value)
+}
+
+fn kind_rule<'a>(record: &Record, delivery: &'a DeliveryDecl, decl: &'a ItemsDecl) -> KindRule<'a> {
+    let entry = declared_kind(record, decl);
+    KindRule {
+        delivered_tiers: entry
+            .and_then(|k| k.delivered_tiers.as_deref())
+            .unwrap_or(&delivery.delivered_tiers),
+        cited_must_be_decided: entry
+            .is_some_and(|k| k.cited_records == Some(done_items::CitedRecords::Success)),
+    }
+}
+
+/// The first locator of a clause that resolves to a record which has not
+/// reached a `success` status of its own type, with the cause: `ADR-2 is
+/// Proposed`. A locator that is not a record is not judged here.
+fn undecided_record(
+    entries: &[crate::locator::LocatorEntry],
+    env: &LocatorEnv<'_>,
+) -> Option<String> {
+    let declared = statuses_by_type(env.config);
+    for entry in entries {
+        let path = entry
+            .parsed
+            .as_ref()
+            .map_or_else(|_| entry.raw.clone(), |l| l.path.clone());
+        let Some(cited) = env.records.iter().find(|r| r.path == Path::new(&path)) else {
+            continue;
+        };
+        let field = relation_field_name(
+            env.config,
+            &cited.record_type,
+            crate::config::RelationRole::Status,
+        );
+        let status = cited.header.get(field).map(str::trim).unwrap_or("");
+        let decided = declared
+            .get(&cited.record_type)
+            .is_some_and(|d| d.is_success(status));
+        if !decided {
+            return Some(format!(
+                "locator {path} is {} at status {}, which its type does not declare a success status",
+                record_label(cited),
+                if status.is_empty() { "(none)" } else { status }
+            ));
+        }
+    }
+    None
+}
+
 fn evidence_standing(
     item: &Item,
     config: &Config,
+    kind: &KindRule<'_>,
     delivery: &DeliveryDecl,
     env: &LocatorEnv<'_>,
 ) -> EvidenceStanding {
@@ -243,6 +312,11 @@ fn evidence_standing(
             return EvidenceStanding::Fails {
                 cause: format!("locator {path} does not exist"),
             };
+        }
+    }
+    if kind.cited_must_be_decided {
+        if let Some(cause) = undecided_record(&entries, env) {
+            return EvidenceStanding::Fails { cause };
         }
     }
     let tier = compute_embodiment(
@@ -275,12 +349,23 @@ fn evidence_standing(
 }
 
 /// Judges every item of a record against the tree (`ADR-96` section 2).
+///
+/// `record` supplies the kind it declares: for a `decision` kind the tiers that
+/// count as delivered, and whether the records its items cite must be decided.
 pub fn judge_items(
+    record: &Record,
     items: &DoneItems,
     config: &Config,
     delivery: &DeliveryDecl,
     env: &LocatorEnv<'_>,
 ) -> ItemsJudgement {
+    let kind = match &delivery.items {
+        Some(decl) => kind_rule(record, delivery, decl),
+        None => KindRule {
+            delivered_tiers: &delivery.delivered_tiers,
+            cited_must_be_decided: false,
+        },
+    };
     let standings: Vec<ItemStanding> = items
         .items
         .iter()
@@ -288,7 +373,7 @@ pub fn judge_items(
             n: item.n,
             line: item.line,
             text: item.text.clone(),
-            evidence: evidence_standing(item, config, delivery, env),
+            evidence: evidence_standing(item, config, &kind, delivery, env),
             waived: item.waiver.clone(),
         })
         .collect();
@@ -300,7 +385,7 @@ pub fn judge_items(
     };
     let resolved_delivered = resolved
         .iter()
-        .filter(|s| in_list(&delivery.delivered_tiers, &tier_of(s)))
+        .filter(|s| in_list(kind.delivered_tiers, &tier_of(s)))
         .count();
     let unresolved: Vec<UnresolvedItem> = standings
         .iter()
@@ -359,6 +444,7 @@ pub fn with_locator_env<R>(ctx: &RuleCtx<'_>, f: impl FnOnce(&LocatorEnv<'_>) ->
         present: &present,
         read: ctx.read_text,
         untracked_on_disk: &untracked,
+        records: ctx.records,
     };
     f(&env)
 }
@@ -464,6 +550,40 @@ pub fn status_done_items_shape(
                 .and_then(|d| d.items.as_ref())
                 .map(|i| i.section.clone())
                 .unwrap_or_default();
+            // A kind outside the declared vocabulary judges the record as one
+            // with no kind; say so instead of leaving the label inert.
+            if let Some(kind) = declared[&record.record_type]
+                .delivery
+                .as_ref()
+                .and_then(|d| d.items.as_ref())
+                .and_then(|i| i.kind.as_ref())
+            {
+                let value = record.header.get(kind.field.as_str()).map(str::trim);
+                if let Some(value) = value.filter(|v| !v.is_empty()) {
+                    if !kind.kinds.iter().any(|k| k.name == value) {
+                        findings.push(Finding {
+                            rule: RULE_ID.to_string(),
+                            severity: FindingSeverity::Error,
+                            file: record.path.clone(),
+                            line: None,
+                            waived: None,
+                            declared_severity: None,
+                            suggested_action: None,
+                            action_source: ActionSource::new("done-items-shape")
+                                .section(section.clone()),
+                            message: format!(
+                                "{} '{value}' is not a declared kind (one of: {}); the record is judged as one with no kind",
+                                kind.field,
+                                kind.kinds
+                                    .iter()
+                                    .map(|k| k.name.as_str())
+                                    .collect::<Vec<_>>()
+                                    .join(", ")
+                            ),
+                        });
+                    }
+                }
+            }
             for issue in &items.issues {
                 let place = issue.item.map_or(String::new(), |n| format!("item {n}: "));
                 findings.push(Finding {
@@ -546,7 +666,7 @@ pub fn status_waived_item_stale(
                 .as_ref()
                 .expect("opted in");
             let decl = delivery.items.as_ref().expect("opted in");
-            let judged = judge_items(items, config, delivery, env);
+            let judged = judge_items(record, items, config, delivery, env);
             for standing in &judged.items {
                 let Some(waiver) = &standing.waived else {
                     continue;
