@@ -275,6 +275,21 @@ pub fn run_edit(config: Option<PathBuf>) -> ExitCode {
 /// protected path or a record of a gated type: the edit tool's own failure
 /// handles an absent `old_string` anywhere else, and the loud message stays.
 fn adapter_failure(config: Option<&Path>, request: &Request, why: &str) -> Verdict {
+    let path = request.paths.first().map(String::as_str);
+    if let Some(verdict) = targeted_denial(config, request, why) {
+        return verdict;
+    }
+    Verdict::new(
+        "allow-unjudged",
+        path,
+        format!("urzua harness: urzua did NOT judge this call ({why}). It is allowed; run 'urzua harness status' and 'urzua check' before committing."),
+    )
+}
+
+/// An agent's refusal of a request urzua cannot judge, when a guardrail set to
+/// `on_unjudged: deny` covers a path it names (or, with no path, a gate that
+/// denies what it cannot judge).
+fn targeted_denial(config: Option<&Path>, request: &Request, why: &str) -> Option<Verdict> {
     let here = std::env::current_dir().unwrap_or_default();
     let root = crate::discovery::find_repo_root(&[PathBuf::from(".")]).unwrap_or(here);
     let path = request.paths.first().map(String::as_str);
@@ -287,14 +302,7 @@ fn adapter_failure(config: Option<&Path>, request: &Request, why: &str) -> Verdi
             .iter()
             .find_map(|p| targeted_guardrail(config, &root, Path::new(p))),
     };
-    if let Some(guardrail) = guardrail {
-        return unjudged_as(guardrail, OnUnjudged::Deny, Actor::Agent, path, why);
-    }
-    Verdict::new(
-        "allow-unjudged",
-        path,
-        format!("urzua harness: urzua did NOT judge this call ({why}). It is allowed; run 'urzua harness status' and 'urzua check' before committing."),
-    )
+    guardrail.map(|g| unjudged_as(g, OnUnjudged::Deny, Actor::Agent, path, why))
 }
 
 /// The denying guardrail that covers `path`, read from the raw configuration
@@ -638,10 +646,15 @@ fn judge_edit_in(config: Option<PathBuf>, request: Request) -> Verdict {
     let on = harness.on_unjudged("editor-hook");
     let [path] = request.paths.as_slice() else {
         let why = "the request must name exactly one path";
-        if on == OnUnjudged::Deny {
-            return unjudged(on, actor, None, why);
+        // Only an agent is gated: a guardrail set to deny that covers one of the
+        // paths refuses it. A person's request, and an agent's that none covers,
+        // is judged as a request urzua cannot judge.
+        if actor == Actor::Agent && on != OnUnjudged::Deny {
+            if let Some(verdict) = targeted_denial(config.as_deref(), &request, why) {
+                return verdict;
+            }
         }
-        return adapter_failure(config.as_deref(), &request, why);
+        return unjudged(on, actor, None, why);
     };
     let Some(content) = request.content.clone() else {
         return unjudged(
