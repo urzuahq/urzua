@@ -421,6 +421,7 @@ fn an_agent_naming_several_paths_under_allow_is_gated_by_what_they_name() {
     for paths in [
         vec!["docs/a.md", "docs/b.md"],
         vec!["docs/a.md", "docs/../docs/b.md"],
+        vec![],
     ] {
         let (code, v) = run_edit_paths(&dir, &paths, "x", "agent", &[]);
         assert_eq!(code, 0, "{paths:?}: {v}");

@@ -646,10 +646,11 @@ fn judge_edit_in(config: Option<PathBuf>, request: Request) -> Verdict {
     let on = harness.on_unjudged("editor-hook");
     let [path] = request.paths.as_slice() else {
         let why = "the request must name exactly one path";
-        // Only an agent is gated: a guardrail set to deny that covers one of the
-        // paths refuses it. A person's request, and an agent's that none covers,
-        // is judged as a request urzua cannot judge.
-        if actor == Actor::Agent && on != OnUnjudged::Deny {
+        // Only an agent's request naming several paths is gated: a guardrail set
+        // to deny that covers one of the paths refuses it. A person's request, a
+        // request naming none, and an agent's that no guardrail covers are
+        // judged as a request urzua cannot judge.
+        if actor == Actor::Agent && on != OnUnjudged::Deny && request.paths.len() > 1 {
             if let Some(verdict) = targeted_denial(config.as_deref(), &request, why) {
                 return verdict;
             }
