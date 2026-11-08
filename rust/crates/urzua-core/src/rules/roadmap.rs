@@ -7,8 +7,11 @@
 //! Implements: MILE-182
 
 use super::relation::{pair_carried_by, pair_slot_claims, pair_slots};
-use super::sequence::{merged_graph, sequence_graphs, strongly_connected, SequenceGraphs};
+use super::sequence::{
+    merged_graph, sequence_graphs, strongly_connected, SequenceGraph, SequenceGraphs,
+};
 use super::*;
+use crate::status_model::StatusDecl;
 use crate::values::RecordId;
 use serde::ser::SerializeMap;
 use serde::{Serialize, Serializer};
@@ -278,48 +281,56 @@ fn present(value: Option<&str>) -> Option<&str> {
         .filter(|v| !v.is_empty() && !crate::values::is_no_value_sentinel(v))
 }
 
-/// Compute the roadmap (`ADR-82`) from the loaded records and configuration.
-pub fn compute_roadmap(records: &[Record], config: &Config) -> Roadmap {
-    let pairs = config.roadmap.pairs.clone();
-    let mut roadmap = empty_roadmap(&pairs);
-    if pairs.is_empty() {
-        let message = if config.relation_pairs.iter().any(|p| p.acyclic) {
-            let available: Vec<&str> = config
-                .relation_pairs
-                .iter()
-                .filter(|p| p.acyclic)
-                .map(|p| p.name.as_str())
-                .collect();
-            format!(
-                "roadmap.pairs names no pair, so there is no roadmap; acyclic pair(s) available to name: {}",
-                available.join(", ")
-            )
-        } else {
-            "no relation pair declares `acyclic: true` and roadmap.pairs names none, so there is no sequencing relation and no roadmap".to_string()
-        };
-        roadmap.notes.push(RoadmapNote {
-            kind: NoteKind::NoSequencingPair,
-            record: None,
-            pair: None,
-            field: None,
-            message,
-        });
-        return roadmap;
+type Reasons = BTreeMap<RecordId, (ReplanReason, Option<RecordId>)>;
+type Dependents<'a> = BTreeMap<&'a RecordId, Vec<&'a RecordId>>;
+
+/// The scoped, classified graph every later roadmap step reads.
+struct Order<'a> {
+    index: &'a RecordIndex<'a>,
+    /// X -> {Y} reads "X depends on Y" over every declared pair.
+    depends: SequenceGraph,
+    scope: BTreeSet<RecordId>,
+    standing: BTreeMap<RecordId, Standing>,
+    written: BTreeMap<RecordId, Option<String>>,
+    open: BTreeSet<RecordId>,
+    open_work: BTreeSet<RecordId>,
+    work_types: Option<&'a Vec<String>>,
+}
+
+/// The note for a configuration that names no sequencing pair.
+fn no_pair_note(config: &Config) -> RoadmapNote {
+    let message = if config.relation_pairs.iter().any(|p| p.acyclic) {
+        let available: Vec<&str> = config
+            .relation_pairs
+            .iter()
+            .filter(|p| p.acyclic)
+            .map(|p| p.name.as_str())
+            .collect();
+        format!(
+            "roadmap.pairs names no pair, so there is no roadmap; acyclic pair(s) available to name: {}",
+            available.join(", ")
+        )
+    } else {
+        "no relation pair declares `acyclic: true` and roadmap.pairs names none, so there is no sequencing relation and no roadmap".to_string()
+    };
+    RoadmapNote {
+        kind: NoteKind::NoSequencingPair,
+        record: None,
+        pair: None,
+        field: None,
+        message,
     }
+}
 
-    let index = build_normalized_index(records);
-    let declared = statuses_by_type(config);
-    let slots = pair_slots(records, config, |p| pairs.contains(&p.name));
-    let SequenceGraphs { graphs, .. } = sequence_graphs(&slots, &index);
-    let mut notes: Vec<RoadmapNote> = Vec::new();
-
-    // One graph: X -> {Y} reads "X depends on Y" over every declared pair.
-    let mut depends = merged_graph(graphs.values());
-    // Every record a declared pair can say something about is in scope, linked
-    // or not: a record whose type declares a side of a pair, and every record
-    // an edge reaches.
+/// Every record a declared pair can say something about is in scope, linked
+/// or not: a record whose type declares a side of a pair, and every record
+/// an edge reaches. Each gets an entry in the graph.
+fn scoped_graph(
+    mut depends: SequenceGraph,
+    slots: &[super::relation::PairSlot<'_>],
+) -> (SequenceGraph, BTreeSet<RecordId>) {
     let mut scope: BTreeSet<RecordId> = depends.keys().cloned().collect();
-    for slot in &slots {
+    for slot in slots {
         if slot.record.header.is_unreadable() {
             continue;
         }
@@ -330,40 +341,57 @@ pub fn compute_roadmap(records: &[Record], config: &Config) -> Roadmap {
     for id in &scope {
         depends.entry(id.clone()).or_default();
     }
+    (depends, scope)
+}
 
-    let status_of = |id: &RecordId| -> (Option<String>, Standing, Option<&'static str>) {
-        let record = index[id];
-        let field = relation_field_name(
-            config,
-            &record.record_type,
-            crate::config::RelationRole::Status,
-        );
-        let status = present(record.header.get(field)).map(str::to_string);
-        let decl = declared.get(&record.record_type);
-        match (decl, &status) {
-            (None, _) => (
-                status,
-                Standing::Open,
-                Some("declares no status vocabulary"),
-            ),
-            (Some(_), None) => (status, Standing::Open, Some("states no Status")),
-            (Some(d), Some(s)) if d.success.iter().any(|v| v == s) => {
-                (status, Standing::Success, None)
-            }
-            (Some(d), Some(s)) if d.failure.iter().any(|v| v == s) => {
-                (status, Standing::Failure, None)
-            }
-            _ => (status, Standing::Open, None),
-        }
-    };
+/// Where one record stands in its own type's lifecycle: the written status,
+/// the standing, and why it is read as open when the type gives no answer.
+fn standing_of(
+    config: &Config,
+    index: &RecordIndex<'_>,
+    declared: &HashMap<String, StatusDecl>,
+    id: &RecordId,
+) -> (Option<String>, Standing, Option<&'static str>) {
+    let record = index[id];
+    let field = relation_field_name(
+        config,
+        &record.record_type,
+        crate::config::RelationRole::Status,
+    );
+    let status = present(record.header.get(field)).map(str::to_string);
+    let decl = declared.get(&record.record_type);
+    match (decl, &status) {
+        (None, _) => (
+            status,
+            Standing::Open,
+            Some("declares no status vocabulary"),
+        ),
+        (Some(_), None) => (status, Standing::Open, Some("states no Status")),
+        (Some(d), Some(s)) if d.success.iter().any(|v| v == s) => (status, Standing::Success, None),
+        (Some(d), Some(s)) if d.failure.iter().any(|v| v == s) => (status, Standing::Failure, None),
+        _ => (status, Standing::Open, None),
+    }
+}
 
+/// The standing and written status of every in-scope record present in the
+/// index, with a note for each type that gives no status vocabulary.
+fn read_standings(
+    config: &Config,
+    index: &RecordIndex<'_>,
+    declared: &HashMap<String, StatusDecl>,
+    scope: &BTreeSet<RecordId>,
+    notes: &mut Vec<RoadmapNote>,
+) -> (
+    BTreeMap<RecordId, Standing>,
+    BTreeMap<RecordId, Option<String>>,
+) {
     let mut standing: BTreeMap<RecordId, Standing> = BTreeMap::new();
     let mut written: BTreeMap<RecordId, Option<String>> = BTreeMap::new();
-    for id in &scope {
+    for id in scope {
         let Some(record) = index.get(id) else {
             continue;
         };
-        let (status, state, why) = status_of(id);
+        let (status, state, why) = standing_of(config, index, declared, id);
         if let Some(why) = why {
             let field = relation_field_name(
                 config,
@@ -384,29 +412,15 @@ pub fn compute_roadmap(records: &[Record], config: &Config) -> Roadmap {
         standing.insert(id.clone(), state);
         written.insert(id.clone(), status);
     }
-    let scope: BTreeSet<RecordId> = standing.keys().cloned().collect();
-    let state = |id: &RecordId| standing.get(id).copied().unwrap_or(Standing::Success);
-    let open: BTreeSet<RecordId> = scope
-        .iter()
-        .filter(|id| state(id) == Standing::Open)
-        .cloned()
-        .collect();
+    (standing, written)
+}
 
-    // The records the roadmap orders (`ADR-82`, Amendment of 2026-11-05):
-    // every type when `work_types` is absent. A non-work record stays in the
-    // graph and gates its dependents; it is never a subject of the output.
-    let work_types = config.roadmap.work_types.as_ref();
-    let is_work = |id: &RecordId| -> bool {
-        work_types.is_none_or(|types| types.contains(&index[id].record_type))
-    };
-    let open_work: BTreeSet<RecordId> = open.iter().filter(|id| is_work(id)).cloned().collect();
-
-    notes_about_claims(&slots, &index, &pairs, &mut notes);
-
-    // ---- cycles: strongly connected components of the whole declared graph.
+/// Cycles: the strongly connected components of the whole declared graph that
+/// loop, each in natural order, and the set of their members.
+fn find_cycles(depends: &SequenceGraph) -> (Vec<Vec<RecordId>>, BTreeSet<RecordId>) {
     let mut cycles: Vec<Vec<RecordId>> = Vec::new();
     let mut in_cycle: BTreeSet<RecordId> = BTreeSet::new();
-    for mut component in strongly_connected(&depends) {
+    for mut component in strongly_connected(depends) {
         let looped = component.len() > 1
             || depends
                 .get(&component[0])
@@ -418,92 +432,155 @@ pub fn compute_roadmap(records: &[Record], config: &Config) -> Roadmap {
         }
     }
     cycles.sort_by(|a, b| natural_cmp(a[0].as_str(), b[0].as_str()));
+    (cycles, in_cycle)
+}
 
-    // ---- exclusion: a cycle, a failed dependency, or a dependency kept out.
-    let deps_of = |id: &RecordId| -> &BTreeSet<RecordId> { &depends[id] };
-    let mut reason: BTreeMap<RecordId, (ReplanReason, Option<RecordId>)> = BTreeMap::new();
-    for id in &open {
-        if in_cycle.contains(id) {
-            reason.insert(id.clone(), (ReplanReason::Cycle, None));
-        } else if let Some(via) =
-            smallest(deps_of(id).iter().filter(|d| state(d) == Standing::Failure))
-        {
-            reason.insert(
-                id.clone(),
-                (ReplanReason::FailedDependency, Some(via.clone())),
-            );
-        }
-    }
-    // The least fixed point: an open record with a dependency kept out is kept out.
-    let mut excluded: BTreeSet<RecordId> = reason.keys().cloned().collect();
-    loop {
-        let more: Vec<RecordId> = open
+impl<'a> Order<'a> {
+    fn new(
+        config: &'a Config,
+        index: &'a RecordIndex<'a>,
+        depends: SequenceGraph,
+        standing: BTreeMap<RecordId, Standing>,
+        written: BTreeMap<RecordId, Option<String>>,
+    ) -> Self {
+        let scope: BTreeSet<RecordId> = standing.keys().cloned().collect();
+        let open: BTreeSet<RecordId> = scope
             .iter()
-            .filter(|id| {
-                !excluded.contains(*id) && deps_of(id).iter().any(|d| excluded.contains(d))
-            })
+            .filter(|id| standing.get(*id).copied().unwrap_or(Standing::Success) == Standing::Open)
             .cloned()
             .collect();
-        if more.is_empty() {
-            break;
-        }
-        excluded.extend(more);
+        let mut order = Order {
+            index,
+            depends,
+            scope,
+            standing,
+            written,
+            open,
+            open_work: BTreeSet::new(),
+            work_types: config.roadmap.work_types.as_ref(),
+        };
+        // The records the roadmap orders (`ADR-82`, Amendment of 2026-11-05):
+        // every type when `work_types` is absent. A non-work record stays in the
+        // graph and gates its dependents; it is never a subject of the output.
+        order.open_work = order
+            .open
+            .iter()
+            .filter(|id| order.is_work(id))
+            .cloned()
+            .collect();
+        order
     }
-    // Reasons for the indirect ones, each after every dependency it reads.
-    let mut pending: Vec<RecordId> = excluded
-        .iter()
-        .filter(|id| !reason.contains_key(*id))
-        .cloned()
-        .collect();
-    while !pending.is_empty() {
-        let (ready_now, rest): (Vec<RecordId>, Vec<RecordId>) =
-            pending.into_iter().partition(|id| {
-                deps_of(id)
+
+    fn state(&self, id: &RecordId) -> Standing {
+        self.standing.get(id).copied().unwrap_or(Standing::Success)
+    }
+
+    fn is_work(&self, id: &RecordId) -> bool {
+        self.work_types
+            .is_none_or(|types| types.contains(&self.index[id].record_type))
+    }
+
+    fn deps_of(&self, id: &RecordId) -> &BTreeSet<RecordId> {
+        &self.depends[id]
+    }
+
+    /// Exclusion: a cycle, a failed dependency, or a dependency kept out.
+    /// Returns the reason for each kept-out open record and the kept-out set.
+    fn exclusions(&self, in_cycle: &BTreeSet<RecordId>) -> (Reasons, BTreeSet<RecordId>) {
+        let mut reason: Reasons = BTreeMap::new();
+        for id in &self.open {
+            if in_cycle.contains(id) {
+                reason.insert(id.clone(), (ReplanReason::Cycle, None));
+            } else if let Some(via) = smallest(
+                self.deps_of(id)
+                    .iter()
+                    .filter(|d| self.state(d) == Standing::Failure),
+            ) {
+                reason.insert(
+                    id.clone(),
+                    (ReplanReason::FailedDependency, Some(via.clone())),
+                );
+            }
+        }
+        // The least fixed point: an open record with a dependency kept out is kept out.
+        let mut excluded: BTreeSet<RecordId> = reason.keys().cloned().collect();
+        loop {
+            let more: Vec<RecordId> = self
+                .open
+                .iter()
+                .filter(|id| {
+                    !excluded.contains(*id) && self.deps_of(id).iter().any(|d| excluded.contains(d))
+                })
+                .cloned()
+                .collect();
+            if more.is_empty() {
+                break;
+            }
+            excluded.extend(more);
+        }
+        self.indirect_reasons(&excluded, &mut reason);
+        (reason, excluded)
+    }
+
+    /// Reasons for the indirect exclusions, each after every dependency it reads.
+    fn indirect_reasons(&self, excluded: &BTreeSet<RecordId>, reason: &mut Reasons) {
+        let mut pending: Vec<RecordId> = excluded
+            .iter()
+            .filter(|id| !reason.contains_key(*id))
+            .cloned()
+            .collect();
+        while !pending.is_empty() {
+            let (ready_now, rest): (Vec<RecordId>, Vec<RecordId>) =
+                pending.into_iter().partition(|id| {
+                    self.deps_of(id)
+                        .iter()
+                        .filter(|d| excluded.contains(*d))
+                        .all(|d| reason.contains_key(d))
+                });
+            // A dependency graph with no cycle among these cannot stall; if it
+            // ever did, stop rather than loop.
+            if ready_now.is_empty() {
+                for id in rest {
+                    let via = smallest(self.deps_of(&id).iter().filter(|d| excluded.contains(*d)))
+                        .cloned();
+                    reason.insert(id, (ReplanReason::DependsOnExcluded, via));
+                }
+                break;
+            }
+            for id in ready_now {
+                let kept_out: Vec<&RecordId> = self
+                    .deps_of(&id)
                     .iter()
                     .filter(|d| excluded.contains(*d))
-                    .all(|d| reason.contains_key(d))
-            });
-        // A dependency graph with no cycle among these cannot stall; if it
-        // ever did, stop rather than loop.
-        if ready_now.is_empty() {
-            for id in rest {
-                let via = smallest(deps_of(&id).iter().filter(|d| excluded.contains(*d))).cloned();
-                reason.insert(id, (ReplanReason::DependsOnExcluded, via));
+                    .collect();
+                let cyclic: Vec<&RecordId> = kept_out
+                    .iter()
+                    .copied()
+                    .filter(|d| {
+                        matches!(
+                            reason[*d].0,
+                            ReplanReason::Cycle | ReplanReason::DependsOnCycle
+                        )
+                    })
+                    .collect();
+                let entry = if cyclic.is_empty() {
+                    (ReplanReason::DependsOnExcluded, smallest(kept_out).cloned())
+                } else {
+                    (ReplanReason::DependsOnCycle, smallest(cyclic).cloned())
+                };
+                reason.insert(id, entry);
             }
-            break;
+            pending = rest;
         }
-        for id in ready_now {
-            let kept_out: Vec<&RecordId> = deps_of(&id)
-                .iter()
-                .filter(|d| excluded.contains(*d))
-                .collect();
-            let cyclic: Vec<&RecordId> = kept_out
-                .iter()
-                .copied()
-                .filter(|d| {
-                    matches!(
-                        reason[*d].0,
-                        ReplanReason::Cycle | ReplanReason::DependsOnCycle
-                    )
-                })
-                .collect();
-            let entry = if cyclic.is_empty() {
-                (ReplanReason::DependsOnExcluded, smallest(kept_out).cloned())
-            } else {
-                (ReplanReason::DependsOnCycle, smallest(cyclic).cloned())
-            };
-            reason.insert(id, entry);
-        }
-        pending = rest;
     }
-    let included: BTreeSet<RecordId> = open_work.difference(&excluded).cloned().collect();
 
-    // The edges waves and the critical path read: a work record's dependencies
-    // contract through chains of non-work records, whatever their status, so a
-    // non-work record in between does not cut the ordering. Only the work
-    // records at the end of such a chain count. Gating is not contracted: a
-    // non-work record's own status is read from `blocked_by` and `reason`.
-    let reach = |from: &RecordId, edges: &dyn Fn(&RecordId) -> Vec<RecordId>| -> Vec<RecordId> {
+    /// The work records at the end of the chains of non-work records `edges`
+    /// leads through. The edges waves and the critical path read: a work
+    /// record's dependencies contract through chains of non-work records,
+    /// whatever their status, so a non-work record in between does not cut the
+    /// ordering. Gating is not contracted: a non-work record's own status is
+    /// read from `blocked_by` and `reason`.
+    fn reach(&self, from: &RecordId, edges: &dyn Fn(&RecordId) -> Vec<RecordId>) -> Vec<RecordId> {
         let mut found: BTreeSet<RecordId> = BTreeSet::new();
         let mut seen: BTreeSet<RecordId> = BTreeSet::new();
         let mut frontier = vec![from.clone()];
@@ -512,7 +589,7 @@ pub fn compute_roadmap(records: &[Record], config: &Config) -> Roadmap {
                 if next == *from || !seen.insert(next.clone()) {
                     continue;
                 }
-                if is_work(&next) {
+                if self.is_work(&next) {
                     found.insert(next);
                 } else {
                     frontier.push(next);
@@ -520,55 +597,59 @@ pub fn compute_roadmap(records: &[Record], config: &Config) -> Roadmap {
             }
         }
         found.into_iter().collect()
-    };
-    let work_deps_of =
-        |id: &RecordId| -> Vec<RecordId> { reach(id, &|at| deps_of(at).iter().cloned().collect()) };
+    }
 
-    // ---- waves: 1 + the deepest open dependency; a success dependency is ignored.
-    let mut wave: BTreeMap<RecordId, usize> = BTreeMap::new();
-    let mut waiting: Vec<&RecordId> = included.iter().collect();
-    while !waiting.is_empty() {
-        let mut rest = Vec::new();
-        for id in waiting.iter().copied() {
-            // A dependency kept out is not ordered; the record behind it is
-            // kept out too unless a non-work record in between is finished.
-            let open_deps: Vec<RecordId> = work_deps_of(id)
-                .into_iter()
-                .filter(|d| state(d) == Standing::Open && included.contains(d))
-                .collect();
-            if open_deps.iter().all(|d| wave.contains_key(d)) {
-                let w = open_deps.iter().map(|d| wave[d] + 1).max().unwrap_or(0);
-                wave.insert(id.clone(), w);
-            } else {
-                rest.push(id);
+    fn work_deps_of(&self, id: &RecordId) -> Vec<RecordId> {
+        self.reach(id, &|at| self.deps_of(at).iter().cloned().collect())
+    }
+
+    /// Waves: 1 + the deepest open dependency; a success dependency is ignored.
+    fn assign_waves(&self, included: &BTreeSet<RecordId>) -> BTreeMap<RecordId, usize> {
+        let mut wave: BTreeMap<RecordId, usize> = BTreeMap::new();
+        let mut waiting: Vec<&RecordId> = included.iter().collect();
+        while !waiting.is_empty() {
+            let mut rest = Vec::new();
+            for id in waiting.iter().copied() {
+                // A dependency kept out is not ordered; the record behind it is
+                // kept out too unless a non-work record in between is finished.
+                let open_deps: Vec<RecordId> = self
+                    .work_deps_of(id)
+                    .into_iter()
+                    .filter(|d| self.state(d) == Standing::Open && included.contains(d))
+                    .collect();
+                if open_deps.iter().all(|d| wave.contains_key(d)) {
+                    let w = open_deps.iter().map(|d| wave[d] + 1).max().unwrap_or(0);
+                    wave.insert(id.clone(), w);
+                } else {
+                    rest.push(id);
+                }
+            }
+            if rest.len() == waiting.len() {
+                break;
+            }
+            waiting = rest;
+        }
+        wave
+    }
+
+    /// Dependents of open records, and of every non-work record (a finished one
+    /// still sits between the work records it orders).
+    fn dependents(&self) -> Dependents<'_> {
+        let mut dependents: Dependents<'_> = BTreeMap::new();
+        for id in self
+            .scope
+            .iter()
+            .filter(|id| self.open.contains(*id) || !self.is_work(id))
+        {
+            for d in self.deps_of(id) {
+                dependents.entry(d).or_default().push(id);
             }
         }
-        if rest.len() == waiting.len() {
-            break;
-        }
-        waiting = rest;
-    }
-    let depth = wave.values().max().map_or(0, |m| m + 1);
-    let mut waves: Vec<Vec<String>> = vec![Vec::new(); depth];
-    for (id, w) in &wave {
-        waves[*w].push(id.as_str().to_string());
-    }
-    for layer in &mut waves {
-        layer.sort_by(|a, b| natural_cmp(a, b));
+        dependents
     }
 
-    // ---- per record: blocked_by, blocks, ready.
-    // Dependents of open records, and of every non-work record (a finished one
-    // still sits between the work records it orders).
-    let mut dependents: BTreeMap<&RecordId, Vec<&RecordId>> = BTreeMap::new();
-    for id in scope.iter().filter(|id| open.contains(*id) || !is_work(id)) {
-        for d in deps_of(id) {
-            dependents.entry(d).or_default().push(id);
-        }
-    }
-    let mut entries: Vec<(String, RoadmapRecord)> = Vec::new();
-    let mut ready: Vec<String> = Vec::new();
-    let blocked_work = |id: &RecordId| -> Vec<String> {
+    /// Every open work record that transitively depends on `id`.
+    fn blocked_work(&self, dependents: &Dependents<'_>, id: &RecordId) -> Vec<String> {
         let mut seen: BTreeSet<&RecordId> = BTreeSet::new();
         let mut frontier = vec![id];
         while let Some(at) = frontier.pop() {
@@ -580,48 +661,61 @@ pub fn compute_roadmap(records: &[Record], config: &Config) -> Roadmap {
         }
         names(
             seen.into_iter()
-                .filter(|n| open_work.contains(*n))
+                .filter(|n| self.open_work.contains(*n))
                 .map(RecordId::as_str),
         )
-    };
-    for id in sorted_naturally(open_work.iter()) {
-        let blocked_by = names(
-            deps_of(id)
-                .iter()
-                .filter(|d| state(d) != Standing::Success)
-                .map(RecordId::as_str),
-        );
-        let blocked = !blocked_by.is_empty();
-        // Ready is wave 0 and unblocked. With every type work that is just
-        // unblocked; a work record behind open work through a finished
-        // non-work record is unblocked but in a later wave, so not ready.
-        let is_ready = included.contains(id) && !blocked && wave.get(id) == Some(&0);
-        if is_ready {
-            ready.push(id.as_str().to_string());
-        }
-        entries.push((
-            id.as_str().to_string(),
-            RoadmapRecord {
-                record_type: index[id].record_type.clone(),
-                status: written.get(id).cloned().flatten(),
-                wave: wave.get(id).copied(),
-                ready: is_ready,
-                blocked,
-                blocked_by,
-                blocks: blocked_work(id),
-                items: None,
-            },
-        ));
     }
 
-    // ---- critical path: the longest chain of included records, and among the
-    // longest the lexicographically smallest id sequence, blocker first. Empty
-    // when nothing has an included dependency (maintainer decision, 2026-11-05).
-    let mut longest: BTreeMap<&RecordId, usize> = BTreeMap::new();
-    let mut by_wave: Vec<&RecordId> = included.iter().collect();
-    by_wave.sort_by_key(|id| std::cmp::Reverse(wave[*id]));
-    let next_of = |id: &RecordId| -> Vec<&RecordId> {
-        reach(id, &|at| {
+    /// Per record: blocked_by, blocks, ready.
+    fn record_entries(
+        &self,
+        included: &BTreeSet<RecordId>,
+        wave: &BTreeMap<RecordId, usize>,
+        dependents: &Dependents<'_>,
+    ) -> (Vec<(String, RoadmapRecord)>, Vec<String>) {
+        let mut entries: Vec<(String, RoadmapRecord)> = Vec::new();
+        let mut ready: Vec<String> = Vec::new();
+        for id in sorted_naturally(self.open_work.iter()) {
+            let blocked_by = names(
+                self.deps_of(id)
+                    .iter()
+                    .filter(|d| self.state(d) != Standing::Success)
+                    .map(RecordId::as_str),
+            );
+            let blocked = !blocked_by.is_empty();
+            // Ready is wave 0 and unblocked. With every type work that is just
+            // unblocked; a work record behind open work through a finished
+            // non-work record is unblocked but in a later wave, so not ready.
+            let is_ready = included.contains(id) && !blocked && wave.get(id) == Some(&0);
+            if is_ready {
+                ready.push(id.as_str().to_string());
+            }
+            entries.push((
+                id.as_str().to_string(),
+                RoadmapRecord {
+                    record_type: self.index[id].record_type.clone(),
+                    status: self.written.get(id).cloned().flatten(),
+                    wave: wave.get(id).copied(),
+                    ready: is_ready,
+                    blocked,
+                    blocked_by,
+                    blocks: self.blocked_work(dependents, id),
+                    items: None,
+                },
+            ));
+        }
+        (entries, ready)
+    }
+
+    /// The included work records that depend on `id`, through any chain of
+    /// non-work records.
+    fn next_of<'i>(
+        &self,
+        dependents: &Dependents<'_>,
+        included: &'i BTreeSet<RecordId>,
+        id: &RecordId,
+    ) -> Vec<&'i RecordId> {
+        self.reach(id, &|at| {
             dependents
                 .get(at)
                 .into_iter()
@@ -632,56 +726,130 @@ pub fn compute_roadmap(records: &[Record], config: &Config) -> Roadmap {
         .into_iter()
         .filter_map(|n| included.get(&n))
         .collect()
-    };
-    for id in by_wave {
-        let tail = next_of(id).iter().map(|n| longest[n]).max().unwrap_or(0);
-        longest.insert(id, tail + 1);
     }
-    let mut critical_path: Vec<String> = Vec::new();
-    // A chain needs an edge: when no included record has an included
-    // dependency every record is a chain of one, and naming one of them would
-    // present an arbitrary id as critical, so the path is empty.
-    if let Some(top) = longest.values().max().copied().filter(|top| *top > 1) {
-        let mut at = smallest(
-            longest
+
+    /// The critical path: the longest chain of included records, and among the
+    /// longest the lexicographically smallest id sequence, blocker first. Empty
+    /// when nothing has an included dependency (maintainer decision, 2026-11-05).
+    fn critical_path(
+        &self,
+        included: &BTreeSet<RecordId>,
+        wave: &BTreeMap<RecordId, usize>,
+        dependents: &Dependents<'_>,
+    ) -> Vec<String> {
+        let mut longest: BTreeMap<&RecordId, usize> = BTreeMap::new();
+        let mut by_wave: Vec<&RecordId> = included.iter().collect();
+        by_wave.sort_by_key(|id| std::cmp::Reverse(wave[*id]));
+        for id in by_wave {
+            let tail = self
+                .next_of(dependents, included, id)
                 .iter()
-                .filter(|(_, l)| **l == top)
-                .map(|(id, _)| *id),
-        );
-        while let Some(id) = at {
-            critical_path.push(id.as_str().to_string());
-            let want = longest[id] - 1;
-            at = smallest(next_of(id).into_iter().filter(|n| longest[n] == want));
+                .map(|n| longest[n])
+                .max()
+                .unwrap_or(0);
+            longest.insert(id, tail + 1);
         }
+        let mut critical_path: Vec<String> = Vec::new();
+        // A chain needs an edge: when no included record has an included
+        // dependency every record is a chain of one, and naming one of them would
+        // present an arbitrary id as critical, so the path is empty.
+        if let Some(top) = longest.values().max().copied().filter(|top| *top > 1) {
+            let mut at = smallest(
+                longest
+                    .iter()
+                    .filter(|(_, l)| **l == top)
+                    .map(|(id, _)| *id),
+            );
+            while let Some(id) = at {
+                critical_path.push(id.as_str().to_string());
+                let want = longest[id] - 1;
+                at = smallest(
+                    self.next_of(dependents, included, id)
+                        .into_iter()
+                        .filter(|n| longest[n] == want),
+                );
+            }
+        }
+        critical_path
     }
 
-    // ---- groups.
-    let fields = &config.roadmap.group_by;
-    let value_of = |id: &RecordId, field: &str| -> Option<String> {
-        present(index[id].header.get(field)).map(str::to_string)
-    };
-    let all: Vec<&RecordId> = open_work.iter().collect();
-    let groups = if fields.is_empty() {
-        Vec::new()
-    } else {
-        group(&all, fields, &value_of)
-    };
-    for field in fields {
-        if !open_work.iter().any(|id| value_of(id, field).is_some()) {
-            notes.push(RoadmapNote {
-                kind: NoteKind::GroupFieldUnset,
-                record: None,
-                pair: None,
-                field: Some(field.clone()),
-                message: format!(
-                    "no open record carries a value for group_by field '{field}', so every record is in its null bucket"
-                ),
-            });
+    /// The `group_by` buckets of the open work, with a note for each field no
+    /// open record carries.
+    fn groups(&self, config: &Config, notes: &mut Vec<RoadmapNote>) -> Vec<RoadmapGroup> {
+        let fields = &config.roadmap.group_by;
+        let value_of = |id: &RecordId, field: &str| -> Option<String> {
+            present(self.index[id].header.get(field)).map(str::to_string)
+        };
+        let all: Vec<&RecordId> = self.open_work.iter().collect();
+        let groups = if fields.is_empty() {
+            Vec::new()
+        } else {
+            group(&all, fields, &value_of)
+        };
+        for field in fields {
+            if !self
+                .open_work
+                .iter()
+                .any(|id| value_of(id, field).is_some())
+            {
+                notes.push(RoadmapNote {
+                    kind: NoteKind::GroupFieldUnset,
+                    record: None,
+                    pair: None,
+                    field: Some(field.clone()),
+                    message: format!(
+                        "no open record carries a value for group_by field '{field}', so every record is in its null bucket"
+                    ),
+                });
+            }
         }
+        groups
     }
 
-    // ---- notes that read the open set.
-    if open_work.is_empty() {
+    /// The open work records kept out of the waves, with why.
+    fn needs_replan(&self, reason: &Reasons) -> Vec<NeedsReplan> {
+        let mut needs_replan: Vec<NeedsReplan> = reason
+            .iter()
+            .filter(|(id, _)| self.open_work.contains(*id))
+            .map(|(id, (why, via))| NeedsReplan {
+                record: id.as_str().to_string(),
+                reason: *why,
+                via: via.as_ref().map(|v| v.as_str().to_string()),
+            })
+            .collect();
+        needs_replan.sort_by(|a, b| natural_cmp(&a.record, &b.record));
+        needs_replan
+    }
+
+    /// The waits the work is gated on. Absent unless `work_types` is declared.
+    fn waiting_on(&self, dependents: &Dependents<'_>) -> Option<Vec<WaitingOn>> {
+        self.work_types?;
+        Some(
+            sorted_naturally(
+                self.scope
+                    .iter()
+                    .filter(|id| !self.is_work(id) && self.state(id) != Standing::Success),
+            )
+            .into_iter()
+            .map(|id| WaitingOn {
+                record: id.as_str().to_string(),
+                record_type: self.index[id].record_type.clone(),
+                status: self.written.get(id).cloned().flatten(),
+                blocks: self.blocked_work(dependents, id),
+            })
+            .collect(),
+        )
+    }
+}
+
+/// Notes that read the open set, then every note sorted and de-duplicated.
+fn finish_notes(
+    order: &Order<'_>,
+    config: &Config,
+    slots: &[super::relation::PairSlot<'_>],
+    notes: &mut Vec<RoadmapNote>,
+) {
+    if order.open_work.is_empty() {
         notes.push(RoadmapNote {
             kind: NoteKind::NothingOpen,
             record: None,
@@ -692,8 +860,7 @@ pub fn compute_roadmap(records: &[Record], config: &Config) -> Roadmap {
                     .to_string(),
         });
     }
-    unstructured_waits(&open_work, &index, config, &slots, &mut notes);
-
+    unstructured_waits(&order.open_work, order.index, config, slots, notes);
     notes.sort_by(|a, b| {
         a.kind
             .cmp(&b.kind)
@@ -703,47 +870,60 @@ pub fn compute_roadmap(records: &[Record], config: &Config) -> Roadmap {
             .then_with(|| a.message.cmp(&b.message))
     });
     notes.dedup();
+}
 
-    let mut needs_replan: Vec<NeedsReplan> = reason
-        .iter()
-        .filter(|(id, _)| open_work.contains(*id))
-        .map(|(id, (why, via))| NeedsReplan {
-            record: id.as_str().to_string(),
-            reason: *why,
-            via: via.as_ref().map(|v| v.as_str().to_string()),
-        })
-        .collect();
-    needs_replan.sort_by(|a, b| natural_cmp(&a.record, &b.record));
+/// Compute the roadmap (`ADR-82`) from the loaded records and configuration.
+pub fn compute_roadmap(records: &[Record], config: &Config) -> Roadmap {
+    let pairs = config.roadmap.pairs.clone();
+    let mut roadmap = empty_roadmap(&pairs);
+    if pairs.is_empty() {
+        roadmap.notes.push(no_pair_note(config));
+        return roadmap;
+    }
+
+    let index = build_normalized_index(records);
+    let declared = statuses_by_type(config);
+    let slots = pair_slots(records, config, |p| pairs.contains(&p.name));
+    let SequenceGraphs { graphs, .. } = sequence_graphs(&slots, &index);
+    let mut notes: Vec<RoadmapNote> = Vec::new();
+
+    let (depends, scope) = scoped_graph(merged_graph(graphs.values()), &slots);
+    let (standing, written) = read_standings(config, &index, &declared, &scope, &mut notes);
+    let order = Order::new(config, &index, depends, standing, written);
+    notes_about_claims(&slots, &index, &pairs, &mut notes);
+
+    let (cycles, in_cycle) = find_cycles(&order.depends);
+    let (reason, excluded) = order.exclusions(&in_cycle);
+    let included: BTreeSet<RecordId> = order.open_work.difference(&excluded).cloned().collect();
+
+    let wave = order.assign_waves(&included);
+    let depth = wave.values().max().map_or(0, |m| m + 1);
+    let mut waves: Vec<Vec<String>> = vec![Vec::new(); depth];
+    for (id, w) in &wave {
+        waves[*w].push(id.as_str().to_string());
+    }
+    for layer in &mut waves {
+        layer.sort_by(|a, b| natural_cmp(a, b));
+    }
+
+    let dependents = order.dependents();
+    let (entries, ready) = order.record_entries(&included, &wave, &dependents);
+    let critical_path = order.critical_path(&included, &wave, &dependents);
+    let groups = order.groups(config, &mut notes);
+    finish_notes(&order, config, &slots, &mut notes);
 
     roadmap.waves = waves;
     roadmap.ready = ready;
     roadmap.critical_path = critical_path;
     roadmap.records = OrderedMap(entries);
     roadmap.groups = groups;
-    roadmap.needs_replan = needs_replan;
+    roadmap.needs_replan = order.needs_replan(&reason);
     roadmap.cycles = cycles
         .into_iter()
         .map(|c| c.iter().map(|i| i.as_str().to_string()).collect())
         .collect();
     roadmap.notes = notes;
-    // The waits the work is gated on. Absent unless the setting is declared.
-    if work_types.is_some() {
-        roadmap.waiting_on = Some(
-            sorted_naturally(
-                scope
-                    .iter()
-                    .filter(|id| !is_work(id) && state(id) != Standing::Success),
-            )
-            .into_iter()
-            .map(|id| WaitingOn {
-                record: id.as_str().to_string(),
-                record_type: index[id].record_type.clone(),
-                status: written.get(id).cloned().flatten(),
-                blocks: blocked_work(id),
-            })
-            .collect(),
-        );
-    }
+    roadmap.waiting_on = order.waiting_on(&dependents);
     roadmap
 }
 

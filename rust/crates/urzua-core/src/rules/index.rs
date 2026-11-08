@@ -195,6 +195,351 @@ fn record_title(record: &Record, full_text: &HashMap<PathBuf, String>) -> Option
     Some(title.trim().to_string())
 }
 
+/// Where `index.freshness` findings for one artifact go.
+struct IndexSink<'a> {
+    file: PathBuf,
+    findings: &'a mut Vec<Finding>,
+}
+
+impl IndexSink<'_> {
+    fn push(&mut self, variant: &'static str, line: Option<usize>, message: String) {
+        self.findings.push(Finding {
+            rule: RULE_INDEX_FRESHNESS.to_string(),
+            severity: FindingSeverity::Error,
+            file: self.file.clone(),
+            line,
+            message,
+            waived: None,
+            declared_severity: None,
+            suggested_action: None,
+            action_source: if variant == "index-stale" {
+                ActionSource::new(variant).argv(["urzua", "index", "--apply"])
+            } else {
+                ActionSource::new(variant)
+            },
+        });
+    }
+}
+
+/// The records an index of one type should list, by id and by file name. A
+/// file of the type's directory with no identifier (the index itself, a stray
+/// README) is not one of its records.
+struct ExpectedRecords<'a> {
+    all: Vec<&'a Record>,
+    by_id: HashMap<crate::values::RecordId, &'a Record>,
+    by_file: HashMap<&'a str, &'a Record>,
+}
+
+impl<'a> ExpectedRecords<'a> {
+    fn of_type(records: &'a [Record], record_type: &str) -> Self {
+        let all: Vec<&Record> = records
+            .iter()
+            .filter(|r| r.record_type == record_type && record_id(r).is_some())
+            .collect();
+        let by_id = all
+            .iter()
+            .filter_map(|r| record_id(r).map(|id| (crate::values::RecordId::new(&id), *r)))
+            .collect();
+        let by_file = all
+            .iter()
+            .filter_map(|r| Some((r.path.file_name()?.to_str()?, *r)))
+            .collect();
+        ExpectedRecords {
+            all,
+            by_id,
+            by_file,
+        }
+    }
+}
+
+/// The line range (first, last exclusive) the generated region covers, the
+/// whole file when no markers are declared. `None` after reporting a marker
+/// that is missing.
+fn index_region_bounds(
+    lines: &[&str],
+    spec: &IndexSpec,
+    sink: &mut IndexSink<'_>,
+) -> Option<(usize, usize)> {
+    let (Some(begin), Some(end)) = (&spec.begin, &spec.end) else {
+        return Some((0, lines.len()));
+    };
+    let find =
+        |marker: &str, from: usize| (from..lines.len()).find(|&i| lines[i].trim() == marker.trim());
+    let Some(b) = find(begin, 0) else {
+        sink.push(
+            "index-unregenerable",
+            None,
+            format!(
+                "the marker '{}' is missing from '{}'",
+                begin.trim(),
+                spec.path
+            ),
+        );
+        return None;
+    };
+    let Some(e) = find(end, b + 1) else {
+        sink.push(
+            "index-unregenerable",
+            None,
+            format!(
+                "the marker '{}' is missing from '{}' after '{}'",
+                end.trim(),
+                spec.path,
+                begin.trim()
+            ),
+        );
+        return None;
+    };
+    Some((b + 1, e))
+}
+
+/// Reads one entry starting at `region[at]` whose first line already matched
+/// as `head`, joining the further lines of a multi-line format. The entry is
+/// `None` when a line is missing or does not match (reported); the count is how
+/// many region lines the attempt consumed.
+fn read_entry<'l>(
+    head: Entry<'l>,
+    region: &[(usize, &'l str)],
+    at: usize,
+    format: &'l IndexFormat,
+    sink: &mut IndexSink<'_>,
+) -> (Option<Entry<'l>>, usize) {
+    let lineno = region[at].0;
+    let width = format.len();
+    let mut entry = head;
+    let mut consumed = 1;
+    for (k, segments) in format.iter().enumerate().skip(1) {
+        let Some((next_no, next)) = region.get(at + k).copied() else {
+            sink.push(
+                "index-stale",
+                Some(lineno),
+                format!(
+                    "the entry starting here is incomplete: the format has {width} lines and the region ends after {k}"
+                ),
+            );
+            return (None, consumed);
+        };
+        let Some(part) = match_entry(next, segments) else {
+            sink.push(
+                "index-stale",
+                Some(next_no),
+                format!(
+                    "line {} of the entry starting at line {lineno} does not match the format: {}",
+                    k + 1,
+                    next.trim()
+                ),
+            );
+            return (None, consumed);
+        };
+        entry.id = entry.id.or(part.id);
+        entry.file = entry.file.or(part.file);
+        entry.title = entry.title.or(part.title);
+        entry.fields.extend(part.fields);
+        consumed += 1;
+    }
+    (Some(entry), consumed)
+}
+
+/// Compares one listed entry with its record: the file name, each listed
+/// field and the title.
+fn compare_entry_to_record(
+    entry: &Entry<'_>,
+    lineno: usize,
+    record: &Record,
+    full_text: &HashMap<PathBuf, String>,
+    sink: &mut IndexSink<'_>,
+) {
+    let record_file = record.path.file_name().and_then(|n| n.to_str());
+    if let (Some(listed_file), Some(actual)) = (entry.file, record_file) {
+        if listed_file != actual {
+            sink.push(
+                "index-stale",
+                Some(lineno),
+                format!(
+                    "entry {} lists the file '{listed_file}', but the record is '{actual}'",
+                    entry.name()
+                ),
+            );
+        }
+    }
+    for (name, listed_value) in &entry.fields {
+        match record.header.get(name).map(str::trim) {
+            Some(actual) if actual == *listed_value => {}
+            Some(actual) => sink.push(
+                "index-stale",
+                Some(lineno),
+                format!(
+                    "entry {} lists {name} '{listed_value}', but the record's {name} is '{actual}'",
+                    entry.name()
+                ),
+            ),
+            None => sink.push(
+                "index-stale",
+                Some(lineno),
+                format!(
+                    "entry {} lists {name} '{listed_value}', but the record has no {name} field",
+                    entry.name()
+                ),
+            ),
+        }
+    }
+    if let (Some(listed_title), Some(actual)) = (entry.title, record_title(record, full_text)) {
+        if listed_title != actual {
+            sink.push(
+                "index-stale",
+                Some(lineno),
+                format!(
+                    "entry {} lists the title '{listed_title}', but the record's title is '{actual}'",
+                    entry.name()
+                ),
+            );
+        }
+    }
+}
+
+/// Reads the entries of the region, `K` non-blank lines at a time for a
+/// format of `K` lines. A line that does not start an entry is reported and
+/// skipped alone, so one stray line does not misalign every entry after it.
+/// Returns the records listed.
+fn check_region_entries(
+    region: &[(usize, &str)],
+    format: &IndexFormat,
+    spec: &IndexSpec,
+    expected: &ExpectedRecords<'_>,
+    full_text: &HashMap<PathBuf, String>,
+    sink: &mut IndexSink<'_>,
+) -> HashSet<PathBuf> {
+    let mut listed: HashSet<PathBuf> = HashSet::new();
+    let mut at = 0;
+    while at < region.len() {
+        let (lineno, line) = region[at];
+        let Some(head) = match_entry(line, &format[0]) else {
+            sink.push(
+                "index-stale",
+                Some(lineno),
+                format!(
+                    "line does not match the format '{}': {}",
+                    spec.format.trim_end(),
+                    line.trim()
+                ),
+            );
+            at += 1;
+            continue;
+        };
+        let (entry, consumed) = read_entry(head, region, at, format, sink);
+        at += consumed;
+        let Some(entry) = entry else {
+            continue;
+        };
+        let found = match (entry.id, entry.file) {
+            (Some(id), _) => expected
+                .by_id
+                .get(&crate::values::RecordId::new(id))
+                .copied(),
+            (None, Some(file)) => expected.by_file.get(file).copied(),
+            (None, None) => None,
+        };
+        let Some(record) = found else {
+            sink.push(
+                "index-stale",
+                Some(lineno),
+                format!(
+                    "entry {} names no {} record",
+                    entry.name(),
+                    spec.record_type
+                ),
+            );
+            continue;
+        };
+        if !listed.insert(record.path.clone()) {
+            sink.push(
+                "index-stale",
+                Some(lineno),
+                format!("entry {} is listed more than once", entry.name()),
+            );
+            continue;
+        }
+        compare_entry_to_record(&entry, lineno, record, full_text, sink);
+    }
+    listed
+}
+
+/// Compares one declared index artifact with the records of its type.
+fn check_index_artifact(
+    records: &[Record],
+    full_text: &HashMap<PathBuf, String>,
+    artifact: &IndexArtifact,
+    findings: &mut Vec<Finding>,
+) -> Outcome {
+    let spec = &artifact.spec;
+    let mut sink = IndexSink {
+        file: PathBuf::from(&spec.path),
+        findings,
+    };
+    let content = match &artifact.content {
+        IndexContent::Text(text) => text,
+        IndexContent::Missing => {
+            sink.push(
+                "index-stale",
+                None,
+                format!(
+                    "index file '{}' is missing; generate it or remove the declaration",
+                    spec.path
+                ),
+            );
+            return Outcome::Absent;
+        }
+        IndexContent::NotText => {
+            sink.push(
+                "index-unregenerable",
+                None,
+                format!(
+                    "index file '{}' is not text, so it was not compared",
+                    spec.path
+                ),
+            );
+            return Outcome::Unreadable;
+        }
+    };
+    let Ok(format) = parse_index_format(&spec.format) else {
+        // Refused at config load; reaching here means the caller skipped
+        // that, and a silent pass would hide it.
+        sink.push(
+            "index-unregenerable",
+            None,
+            format!("the format '{}' cannot be parsed", spec.format),
+        );
+        return Outcome::Absent;
+    };
+
+    let lines: Vec<&str> = content.lines().collect();
+    let Some((first, last)) = index_region_bounds(&lines, spec, &mut sink) else {
+        return Outcome::Absent;
+    };
+    let expected = ExpectedRecords::of_type(records, &spec.record_type);
+    let region: Vec<(usize, &str)> = lines[first..last]
+        .iter()
+        .enumerate()
+        .filter(|(_, l)| !l.trim().is_empty())
+        .map(|(offset, l)| (first + offset + 1, *l))
+        .collect();
+    let listed = check_region_entries(&region, &format, spec, &expected, full_text, &mut sink);
+    for record in &expected.all {
+        if !listed.contains(&record.path) {
+            sink.push(
+                "index-stale",
+                None,
+                format!(
+                    "{} has no entry in '{}'",
+                    record_id(record).unwrap_or_else(|| record.path.display().to_string()),
+                    spec.path
+                ),
+            );
+        }
+    }
+    Outcome::Examined
+}
+
 /// `index.freshness` (`MILE-139`): a committed index lists exactly the
 /// records of its type, with their current file name and title.
 ///
@@ -214,280 +559,15 @@ pub fn index_freshness(
     full_text: &HashMap<PathBuf, String>,
     artifacts: &[IndexArtifact],
 ) -> (RuleExecution, Vec<Finding>) {
-    const RULE_ID: &str = RULE_INDEX_FRESHNESS;
     let mut findings: Vec<Finding> = Vec::new();
-
     let population = census(
         PopulationUnit::File,
         artifacts.iter().collect(),
-        |artifact| {
-            let spec = &artifact.spec;
-            let file = PathBuf::from(&spec.path);
-            let mut push = |variant: &'static str, line: Option<usize>, message: String| {
-                findings.push(Finding {
-                    rule: RULE_ID.to_string(),
-                    severity: FindingSeverity::Error,
-                    file: file.clone(),
-                    line,
-                    message,
-                    waived: None,
-                    declared_severity: None,
-                    suggested_action: None,
-                    action_source: if variant == "index-stale" {
-                        ActionSource::new(variant).argv(["urzua", "index", "--apply"])
-                    } else {
-                        ActionSource::new(variant)
-                    },
-                });
-            };
-
-            let content = match &artifact.content {
-                IndexContent::Text(text) => text,
-                IndexContent::Missing => {
-                    push(
-                        "index-stale",
-                        None,
-                        format!(
-                            "index file '{}' is missing; generate it or remove the declaration",
-                            spec.path
-                        ),
-                    );
-                    return Outcome::Absent;
-                }
-                IndexContent::NotText => {
-                    push(
-                        "index-unregenerable",
-                        None,
-                        format!(
-                            "index file '{}' is not text, so it was not compared",
-                            spec.path
-                        ),
-                    );
-                    return Outcome::Unreadable;
-                }
-            };
-            let Ok(format) = parse_index_format(&spec.format) else {
-                // Refused at config load; reaching here means the caller skipped
-                // that, and a silent pass would hide it.
-                push(
-                    "index-unregenerable",
-                    None,
-                    format!("the format '{}' cannot be parsed", spec.format),
-                );
-                return Outcome::Absent;
-            };
-
-            let lines: Vec<&str> = content.lines().collect();
-            let (first, last) = match (&spec.begin, &spec.end) {
-                (Some(begin), Some(end)) => {
-                    let find = |marker: &str, from: usize| {
-                        (from..lines.len()).find(|&i| lines[i].trim() == marker.trim())
-                    };
-                    let Some(b) = find(begin, 0) else {
-                        push(
-                            "index-unregenerable",
-                            None,
-                            format!(
-                                "the marker '{}' is missing from '{}'",
-                                begin.trim(),
-                                spec.path
-                            ),
-                        );
-                        return Outcome::Absent;
-                    };
-                    let Some(e) = find(end, b + 1) else {
-                        push(
-                            "index-unregenerable",
-                            None,
-                            format!(
-                                "the marker '{}' is missing from '{}' after '{}'",
-                                end.trim(),
-                                spec.path,
-                                begin.trim()
-                            ),
-                        );
-                        return Outcome::Absent;
-                    };
-                    (b + 1, e)
-                }
-                _ => (0, lines.len()),
-            };
-
-            // A file of the type's directory with no identifier (the index
-            // itself, a stray README) is not one of its records.
-            let expected: Vec<&Record> = records
-                .iter()
-                .filter(|r| r.record_type == spec.record_type && record_id(r).is_some())
-                .collect();
-            let by_id: HashMap<crate::values::RecordId, &Record> = expected
-                .iter()
-                .filter_map(|r| record_id(r).map(|id| (crate::values::RecordId::new(&id), *r)))
-                .collect();
-            let by_file: HashMap<&str, &Record> = expected
-                .iter()
-                .filter_map(|r| Some((r.path.file_name()?.to_str()?, *r)))
-                .collect();
-
-            // Entries are read from the non-blank lines of the region, `K`
-            // lines at a time for a format of `K` lines. A line that does not
-            // start an entry is reported and skipped alone, so one stray line
-            // does not misalign every entry after it.
-            let region: Vec<(usize, &str)> = lines[first..last]
-                .iter()
-                .enumerate()
-                .filter(|(_, l)| !l.trim().is_empty())
-                .map(|(offset, l)| (first + offset + 1, *l))
-                .collect();
-            let width = format.len();
-            let mut listed: HashSet<PathBuf> = HashSet::new();
-            let mut at = 0;
-            while at < region.len() {
-                let (lineno, line) = region[at];
-                let Some(head) = match_entry(line, &format[0]) else {
-                    push(
-                        "index-stale",
-                        Some(lineno),
-                        format!(
-                            "line does not match the format '{}': {}",
-                            spec.format.trim_end(),
-                            line.trim()
-                        ),
-                    );
-                    at += 1;
-                    continue;
-                };
-                let mut entry = head;
-                let mut consumed = 1;
-                let mut complete = true;
-                for (k, segments) in format.iter().enumerate().skip(1) {
-                    let Some((next_no, next)) = region.get(at + k).copied() else {
-                        push(
-                            "index-stale",
-                            Some(lineno),
-                            format!(
-                                "the entry starting here is incomplete: the format has {width} lines and the region ends after {k}"
-                            ),
-                        );
-                        complete = false;
-                        break;
-                    };
-                    let Some(part) = match_entry(next, segments) else {
-                        push(
-                            "index-stale",
-                            Some(next_no),
-                            format!(
-                                "line {} of the entry starting at line {lineno} does not match the format: {}",
-                                k + 1,
-                                next.trim()
-                            ),
-                        );
-                        complete = false;
-                        break;
-                    };
-                    entry.id = entry.id.or(part.id);
-                    entry.file = entry.file.or(part.file);
-                    entry.title = entry.title.or(part.title);
-                    entry.fields.extend(part.fields);
-                    consumed += 1;
-                }
-                at += consumed;
-                if !complete {
-                    continue;
-                }
-                let found = match (entry.id, entry.file) {
-                    (Some(id), _) => by_id.get(&crate::values::RecordId::new(id)).copied(),
-                    (None, Some(file)) => by_file.get(file).copied(),
-                    (None, None) => None,
-                };
-                let Some(record) = found else {
-                    push(
-                        "index-stale",
-                        Some(lineno),
-                        format!(
-                            "entry {} names no {} record",
-                            entry.name(),
-                            spec.record_type
-                        ),
-                    );
-                    continue;
-                };
-                if !listed.insert(record.path.clone()) {
-                    push(
-                        "index-stale",
-                        Some(lineno),
-                        format!("entry {} is listed more than once", entry.name()),
-                    );
-                    continue;
-                }
-                let record_file = record.path.file_name().and_then(|n| n.to_str());
-                if let (Some(listed_file), Some(actual)) = (entry.file, record_file) {
-                    if listed_file != actual {
-                        push(
-                            "index-stale",
-                            Some(lineno),
-                            format!(
-                                "entry {} lists the file '{listed_file}', but the record is '{actual}'",
-                                entry.name()
-                            ),
-                        );
-                    }
-                }
-                for (name, listed_value) in &entry.fields {
-                    match record.header.get(name).map(str::trim) {
-                        Some(actual) if actual == *listed_value => {}
-                        Some(actual) => push(
-                            "index-stale",
-                            Some(lineno),
-                            format!(
-                                "entry {} lists {name} '{listed_value}', but the record's {name} is '{actual}'",
-                                entry.name()
-                            ),
-                        ),
-                        None => push(
-                            "index-stale",
-                            Some(lineno),
-                            format!(
-                                "entry {} lists {name} '{listed_value}', but the record has no {name} field",
-                                entry.name()
-                            ),
-                        ),
-                    }
-                }
-                if let (Some(listed_title), Some(actual)) =
-                    (entry.title, record_title(record, full_text))
-                {
-                    if listed_title != actual {
-                        push(
-                            "index-stale",
-                            Some(lineno),
-                            format!(
-                                "entry {} lists the title '{listed_title}', but the record's title is '{actual}'",
-                                entry.name()
-                            ),
-                        );
-                    }
-                }
-            }
-            for record in &expected {
-                if !listed.contains(&record.path) {
-                    push(
-                        "index-stale",
-                        None,
-                        format!(
-                            "{} has no entry in '{}'",
-                            record_id(record).unwrap_or_else(|| record.path.display().to_string()),
-                            spec.path
-                        ),
-                    );
-                }
-            }
-            Outcome::Examined
-        },
+        |artifact| check_index_artifact(records, full_text, artifact, &mut findings),
     );
-
     (
         RuleExecution {
-            rule: RULE_ID.to_string(),
+            rule: RULE_INDEX_FRESHNESS.to_string(),
             population: Some(population),
             status: RuleStatus::Ran,
             examined_records: Vec::new(),

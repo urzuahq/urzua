@@ -10,7 +10,6 @@ pub fn supersession_reciprocity(
     index: &RecordIndex,
     untracked: &UntrackedRecords,
 ) -> (RuleExecution, Vec<Finding>) {
-    const RULE_ID: &str = RULE_RELATION_SUPERSESSION_RECIPROCITY;
     let mut findings = Vec::new();
 
     // A record whose filename yields no id is eligible but unexaminable: the
@@ -20,107 +19,155 @@ pub fn supersession_reciprocity(
         config,
         &[crate::config::RelationRole::Supersession],
     );
+    let check = SupersessionCheck {
+        config,
+        index,
+        untracked,
+    };
 
     let (population, examined_records) = scoped_census_records(
         config,
         PopulationUnit::Field,
         slots,
         |record| *record,
-        |record| {
-            let field = relation_field_name(
-                config,
-                &record.record_type,
-                crate::config::RelationRole::Supersession,
-            );
-            let Some(id) = record_id(record) else {
-                return Outcome::OutOfScope;
-            };
-            let normalized_id = crate::values::RecordId::new(&id);
-            // Unreadable, not absent: the header did not parse, so this slot
-            // has no value to classify (BUG-125's shape, `field_quality`'s
-            // same guard).
-            if record.header.is_unreadable() {
-                return Outcome::Unreadable;
-            }
-            let Some(value) = record.header.get(field) else {
-                return Outcome::Absent;
-            };
-            // `—` is this corpus's written "nothing supersedes this", so the slot
-            // was answered. Skipping before counting left the reciprocating half of
-            // a correct pair uncounted.
-            if crate::values::is_no_value_sentinel(value) {
-                return Outcome::Examined;
-            }
-
-            for reference in extract_references(value) {
-                let Some(target) = index.get(&crate::values::RecordId::new(&reference)) else {
-                    let (variant, message) = unresolved_reference(
-                        field,
-                        &reference,
-                        untracked,
-                        ("supersession-unresolved", "supersession-untracked"),
-                        "",
-                    );
-                    findings.push(Finding {
-                        rule: RULE_ID.to_string(),
-                        severity: FindingSeverity::Error,
-                        file: record.path.clone(),
-                        line: None,
-                        waived: None,
-                        declared_severity: None,
-                        suggested_action: None,
-                        action_source: ActionSource::new(variant).field(field),
-                        message,
-                    });
-                    continue;
-                };
-                // The target's header not parsing is its own defect, already
-                // disclosed by that record's own `Unreadable` population entry
-                // (and `header.required-fields`) -- `.get()` returns `None` for
-                // an unreadable header exactly as it would for a genuinely
-                // absent field, so reading it unguarded would blame the citer
-                // for a failure that is entirely the target's.
-                if target.header.is_unreadable() {
-                    continue;
-                }
-                let target_field = relation_field_name(
-                    config,
-                    &target.record_type,
-                    crate::config::RelationRole::Supersession,
-                );
-                let target_value = target.header.get(target_field).unwrap_or("");
-                let target_names_back = extract_references(target_value)
-                    .iter()
-                    .any(|r| crate::values::RecordId::new(r) == normalized_id);
-                if !target_names_back {
-                    findings.push(Finding {
-                    rule: RULE_ID.to_string(),
-                    severity: FindingSeverity::Error,
-                    file: record.path.clone(),
-                    line: None,
- waived: None,
- declared_severity: None,
- suggested_action: None,
- action_source: ActionSource::new("supersession-unreciprocated").file(target.path.clone()).field(target_field).text(id.clone()),
-                    message: format!(
-                        "{field} claims a relation with {reference}, but {reference}'s {target_field} does not reciprocally name {id}"
-                    ),
-                });
-                }
-            }
-            Outcome::Examined
-        },
+        |record| check.judge(record, &mut findings),
     );
 
     (
         RuleExecution {
-            rule: RULE_ID.to_string(),
+            rule: RULE_RELATION_SUPERSESSION_RECIPROCITY.to_string(),
             population: Some(population),
             status: RuleStatus::Ran,
             examined_records,
         },
         findings,
     )
+}
+
+/// What `relation.supersession-reciprocity` resolves a claim against.
+struct SupersessionCheck<'a> {
+    config: &'a Config,
+    index: &'a RecordIndex<'a>,
+    untracked: &'a UntrackedRecords,
+}
+
+/// A record claiming a supersession: the record, the field it writes the claim
+/// in, and its id as written and normalised.
+struct Claimant<'a> {
+    record: &'a Record,
+    field: &'a str,
+    id: String,
+    normalized_id: crate::values::RecordId,
+}
+
+impl SupersessionCheck<'_> {
+    fn judge(&self, record: &Record, findings: &mut Vec<Finding>) -> Outcome {
+        let field = relation_field_name(
+            self.config,
+            &record.record_type,
+            crate::config::RelationRole::Supersession,
+        );
+        let Some(id) = record_id(record) else {
+            return Outcome::OutOfScope;
+        };
+        let normalized_id = crate::values::RecordId::new(&id);
+        // Unreadable, not absent: the header did not parse, so this slot
+        // has no value to classify (BUG-125's shape, `field_quality`'s
+        // same guard).
+        if record.header.is_unreadable() {
+            return Outcome::Unreadable;
+        }
+        let Some(value) = record.header.get(field) else {
+            return Outcome::Absent;
+        };
+        // `—` is this corpus's written "nothing supersedes this", so the slot
+        // was answered. Skipping before counting left the reciprocating half of
+        // a correct pair uncounted.
+        if crate::values::is_no_value_sentinel(value) {
+            return Outcome::Examined;
+        }
+        let claimant = Claimant {
+            record,
+            field,
+            id,
+            normalized_id,
+        };
+        for reference in extract_references(value) {
+            self.check_reference(&claimant, &reference, findings);
+        }
+        Outcome::Examined
+    }
+
+    fn check_reference(
+        &self,
+        claimant: &Claimant<'_>,
+        reference: &str,
+        findings: &mut Vec<Finding>,
+    ) {
+        let Claimant {
+            record,
+            field,
+            id,
+            normalized_id,
+        } = claimant;
+        let Some(target) = self.index.get(&crate::values::RecordId::new(reference)) else {
+            let (variant, message) = unresolved_reference(
+                field,
+                reference,
+                self.untracked,
+                ("supersession-unresolved", "supersession-untracked"),
+                "",
+            );
+            findings.push(Finding {
+                rule: RULE_RELATION_SUPERSESSION_RECIPROCITY.to_string(),
+                severity: FindingSeverity::Error,
+                file: record.path.clone(),
+                line: None,
+                waived: None,
+                declared_severity: None,
+                suggested_action: None,
+                action_source: ActionSource::new(variant).field(*field),
+                message,
+            });
+            return;
+        };
+        // The target's header not parsing is its own defect, already
+        // disclosed by that record's own `Unreadable` population entry
+        // (and `header.required-fields`) -- `.get()` returns `None` for
+        // an unreadable header exactly as it would for a genuinely
+        // absent field, so reading it unguarded would blame the citer
+        // for a failure that is entirely the target's.
+        if target.header.is_unreadable() {
+            return;
+        }
+        let target_field = relation_field_name(
+            self.config,
+            &target.record_type,
+            crate::config::RelationRole::Supersession,
+        );
+        let target_value = target.header.get(target_field).unwrap_or("");
+        let target_names_back = extract_references(target_value)
+            .iter()
+            .any(|r| crate::values::RecordId::new(r) == *normalized_id);
+        if !target_names_back {
+            findings.push(Finding {
+                rule: RULE_RELATION_SUPERSESSION_RECIPROCITY.to_string(),
+                severity: FindingSeverity::Error,
+                file: record.path.clone(),
+                line: None,
+                waived: None,
+                declared_severity: None,
+                suggested_action: None,
+                action_source: ActionSource::new("supersession-unreciprocated")
+                    .file(target.path.clone())
+                    .field(target_field)
+                    .text(id.clone()),
+                message: format!(
+                    "{field} claims a relation with {reference}, but {reference}'s {target_field} does not reciprocally name {id}"
+                ),
+            });
+        }
+    }
 }
 
 /// Rule (`RFC-45`/`ADR-63`): a resolved pointer/narrative reference's target
@@ -366,134 +413,173 @@ pub fn relation_pair_reciprocity(
     index: &RecordIndex,
     untracked: &UntrackedRecords,
 ) -> (RuleExecution, Vec<Finding>) {
-    const RULE_ID: &str = RULE_RELATION_PAIR_RECIPROCITY;
     let mut findings = Vec::new();
 
     let slots = pair_slots(records, config, |p| {
         p.reciprocity == crate::config::PairReciprocity::Required
     });
+    let check = PairReciprocityCheck {
+        config,
+        index,
+        untracked,
+    };
 
     let (population, examined_records) = scoped_census_records(
         config,
         PopulationUnit::Field,
         slots,
         |slot| slot.record,
-        |slot| {
-            let references = match pair_slot_claims(slot) {
-                Ok(references) => references,
-                Err(outcome) => return outcome,
-            };
-            let record = slot.record;
-            let field = slot.own_field();
-            let echo = slot.echo_field();
-            let id = record_id(record).unwrap_or_default();
-            let normalized_id = crate::values::RecordId::new(&id);
-            let mut excluded = 0;
-            let mut scoped_out = 0;
-            for reference in &references {
-                let Some(target) = index.get(&crate::values::RecordId::new(reference)) else {
-                    let (variant, message) = unresolved_reference(
-                        field,
-                        reference,
-                        untracked,
-                        ("pair-unresolved", "pair-untracked"),
-                        "",
-                    );
-                    findings.push(Finding {
-                        rule: RULE_ID.to_string(),
-                        severity: FindingSeverity::Error,
-                        file: record.path.clone(),
-                        line: None,
-                        waived: None,
-                        declared_severity: None,
-                        suggested_action: None,
-                        action_source: ActionSource::new(variant).field(field),
-                        message,
-                    });
-                    continue;
-                };
-                // Its own `Unreadable` entry discloses this; reading it here
-                // would blame the citer for the target's failure.
-                if target.header.is_unreadable() {
-                    continue;
-                }
-                if !slot.pair.cross_type && target.record_type != record.record_type {
-                    excluded += 1;
-                    continue;
-                }
-                // A target of a type outside a scoped pair cannot hold the
-                // inverse field, so the claim cannot be echoed: not an unechoed
-                // claim (`MILE-155`). Eligible and unexamined, not out of scope:
-                // the claim is legitimate and no edit to the configuration's
-                // reach is wrong, so `config.scope-matches-nothing` must not
-                // warn that the configuration cannot reach it.
-                if !pair_carried_by(slot.pair, &target.record_type) {
-                    excluded += 1;
-                    scoped_out += 1;
-                    continue;
-                }
-                let names_back = extract_references(target.header.get(echo).unwrap_or(""))
-                    .iter()
-                    .any(|r| crate::values::RecordId::new(r) == normalized_id);
-                if !names_back {
-                    // A claim from a record not yet at an accepted status is
-                    // provisional (`MILE-154`): the pair's own level applies
-                    // instead of the rule's. Anything else keeps the rule's.
-                    let declared_severity = provisional_severity(slot.pair, record, config);
-                    // A provisional claim the peer acknowledges in its declared
-                    // acknowledgement field is settled by the peer's own word
-                    // (`MILE-163`); a claim from any other status is not.
-                    if declared_severity.is_some()
-                        && acknowledges(slot.pair, target, &normalized_id)
-                    {
-                        continue;
-                    }
-                    let note = if declared_severity.is_some() {
-                        format!(
-                            " (provisional: {} is '{}')",
-                            status_field(record, config),
-                            claimant_status(record, config).unwrap_or_default()
-                        )
-                    } else {
-                        String::new()
-                    };
-                    findings.push(Finding {
-                        rule: RULE_ID.to_string(),
-                        severity: declared_severity.unwrap_or(FindingSeverity::Error),
-                        file: record.path.clone(),
-                        line: None,
-                        waived: None,
-                        declared_severity,
-                        suggested_action: None,
-                        action_source: ActionSource::new("pair-unreciprocated").file(target.path.clone()).field(echo).text(id.clone()),
-                        message: format!(
-                            "{field} claims a relation with {reference} (pair '{}'), but {reference}'s {echo} does not reciprocally name {id}{note}",
-                            slot.pair.name
-                        ),
-                    });
-                }
-            }
-            if !references.is_empty() && excluded == references.len() {
-                if scoped_out == excluded {
-                    Outcome::Absent
-                } else {
-                    Outcome::OutOfScope
-                }
-            } else {
-                Outcome::Examined
-            }
-        },
+        |slot| check.judge(slot, &mut findings),
     );
 
     (
         RuleExecution {
-            rule: RULE_ID.to_string(),
+            rule: RULE_RELATION_PAIR_RECIPROCITY.to_string(),
             population: Some(population),
             status: RuleStatus::Ran,
             examined_records,
         },
         findings,
     )
+}
+
+/// What `relation.pair-reciprocity` resolves a claim against.
+struct PairReciprocityCheck<'a> {
+    config: &'a Config,
+    index: &'a RecordIndex<'a>,
+    untracked: &'a UntrackedRecords,
+}
+
+/// How one claim of a slot counts toward the slot's outcome.
+enum ClaimEcho {
+    Checked,
+    /// Excluded from the rule (a cross-type claim of a pair that forbids it).
+    Excluded,
+    /// Excluded because the target's type is outside a scoped pair.
+    ScopedOut,
+}
+
+impl PairReciprocityCheck<'_> {
+    fn judge(&self, slot: &PairSlot<'_>, findings: &mut Vec<Finding>) -> Outcome {
+        let references = match pair_slot_claims(slot) {
+            Ok(references) => references,
+            Err(outcome) => return outcome,
+        };
+        let mut excluded = 0;
+        let mut scoped_out = 0;
+        for reference in &references {
+            match self.check_claim(slot, reference, findings) {
+                ClaimEcho::Checked => {}
+                ClaimEcho::Excluded => excluded += 1,
+                ClaimEcho::ScopedOut => {
+                    excluded += 1;
+                    scoped_out += 1;
+                }
+            }
+        }
+        if !references.is_empty() && excluded == references.len() {
+            if scoped_out == excluded {
+                Outcome::Absent
+            } else {
+                Outcome::OutOfScope
+            }
+        } else {
+            Outcome::Examined
+        }
+    }
+
+    fn check_claim(
+        &self,
+        slot: &PairSlot<'_>,
+        reference: &str,
+        findings: &mut Vec<Finding>,
+    ) -> ClaimEcho {
+        let record = slot.record;
+        let field = slot.own_field();
+        let echo = slot.echo_field();
+        let id = record_id(record).unwrap_or_default();
+        let normalized_id = crate::values::RecordId::new(&id);
+        let Some(target) = self.index.get(&crate::values::RecordId::new(reference)) else {
+            let (variant, message) = unresolved_reference(
+                field,
+                reference,
+                self.untracked,
+                ("pair-unresolved", "pair-untracked"),
+                "",
+            );
+            findings.push(Finding {
+                rule: RULE_RELATION_PAIR_RECIPROCITY.to_string(),
+                severity: FindingSeverity::Error,
+                file: record.path.clone(),
+                line: None,
+                waived: None,
+                declared_severity: None,
+                suggested_action: None,
+                action_source: ActionSource::new(variant).field(field),
+                message,
+            });
+            return ClaimEcho::Checked;
+        };
+        // Its own `Unreadable` entry discloses this; reading it here
+        // would blame the citer for the target's failure.
+        if target.header.is_unreadable() {
+            return ClaimEcho::Checked;
+        }
+        if !slot.pair.cross_type && target.record_type != record.record_type {
+            return ClaimEcho::Excluded;
+        }
+        // A target of a type outside a scoped pair cannot hold the
+        // inverse field, so the claim cannot be echoed: not an unechoed
+        // claim (`MILE-155`). Eligible and unexamined, not out of scope:
+        // the claim is legitimate and no edit to the configuration's
+        // reach is wrong, so `config.scope-matches-nothing` must not
+        // warn that the configuration cannot reach it.
+        if !pair_carried_by(slot.pair, &target.record_type) {
+            return ClaimEcho::ScopedOut;
+        }
+        let names_back = extract_references(target.header.get(echo).unwrap_or(""))
+            .iter()
+            .any(|r| crate::values::RecordId::new(r) == normalized_id);
+        if !names_back {
+            // A claim from a record not yet at an accepted status is
+            // provisional (`MILE-154`): the pair's own level applies
+            // instead of the rule's. Anything else keeps the rule's.
+            let declared_severity = provisional_severity(slot.pair, record, self.config);
+            // A provisional claim the peer acknowledges in its declared
+            // acknowledgement field is settled by the peer's own word
+            // (`MILE-163`); a claim from any other status is not.
+            if declared_severity.is_some() && acknowledges(slot.pair, target, &normalized_id) {
+                return ClaimEcho::Checked;
+            }
+            let note = if declared_severity.is_some() {
+                format!(
+                    " (provisional: {} is '{}')",
+                    status_field(record, self.config),
+                    claimant_status(record, self.config).unwrap_or_default()
+                )
+            } else {
+                String::new()
+            };
+            findings.push(Finding {
+                rule: RULE_RELATION_PAIR_RECIPROCITY.to_string(),
+                severity: declared_severity.unwrap_or(FindingSeverity::Error),
+                file: record.path.clone(),
+                line: None,
+                waived: None,
+                declared_severity,
+                suggested_action: None,
+                action_source: ActionSource::new("pair-unreciprocated")
+                    .file(target.path.clone())
+                    .field(echo)
+                    .text(id.clone()),
+                message: format!(
+                    "{field} claims a relation with {reference} (pair '{}'), but {reference}'s {echo} does not reciprocally name {id}{note}",
+                    slot.pair.name
+                ),
+            });
+        }
+        ClaimEcho::Checked
+    }
 }
 
 /// Rule (`RFC-47`, `MILE-122`): a claim crossing record types in a pair that
