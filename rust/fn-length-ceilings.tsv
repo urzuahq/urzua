@@ -11,25 +11,10 @@
 #     the entry, or lower it to the new length).
 # Print the current offenders in this format with:
 #   cargo test -p urzua-cli --test fn_length_ratchet -- --ignored --nocapture
-crates/urzua-cli/src/commands/doctor.rs::run	256
 crates/urzua-cli/src/commands/fix.rs::run	309
 crates/urzua-cli/src/commands/fix.rs::run_rebaseline	123
-crates/urzua-cli/src/commands/index.rs::run	121
-crates/urzua-cli/src/commands/init.rs::render_config_yaml	105
-crates/urzua-cli/src/commands/init.rs::run	162
-crates/urzua-cli/src/commands/migrate.rs::run_ids_inner	131
-crates/urzua-cli/src/commands/new.rs::run	357
 crates/urzua-cli/src/commands/reverify.rs::run	361
 crates/urzua-cli/src/diff_scope.rs::examine	124
-crates/urzua-cli/src/harness/mod.rs::doctor_checks	112
-crates/urzua-cli/src/harness/mod.rs::install	198
-crates/urzua-cli/src/harness/mod.rs::status	103
-crates/urzua-cli/src/harness/mod.rs::uninstall	108
-crates/urzua-cli/src/harness/mod.rs::update	207
-crates/urzua-cli/src/harness/post_command.rs::judge_changes	210
-crates/urzua-cli/src/harness/run.rs::judge_edit_in	101
-crates/urzua-cli/src/harness/run.rs::judge_record	188
-crates/urzua-cli/src/harness/run.rs::session_start	197
 crates/urzua-cli/src/main.rs::main	154
 crates/urzua-core/src/document_model.rs::RawRequiredSection::resolve	104
 crates/urzua-core/src/fix.rs::detect_repairs	134
