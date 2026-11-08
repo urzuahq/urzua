@@ -154,8 +154,8 @@ pub fn run(config_path: Option<PathBuf>, args: ReverifyArgs) -> ExitCode {
     };
 
     let now = urzua_io::now_unix();
-    let measures = crate::discovery::compute_claim_measures(&repo_root, &subset, &config, now);
-    let drift = crate::discovery::compute_drifted_records(&repo_root, &subset, &config);
+    let (measures, drift) =
+        crate::discovery::measure_claims_and_drift(&repo_root, &subset, &config, now);
     let back_pointed = match back_pointer_evidence(&repo_root, &discovered, &config, &records) {
         Ok(evidence) => evidence,
         Err(e) => return emit(&CouldNotRun::from(e)),
