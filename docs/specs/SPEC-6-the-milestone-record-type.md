@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5QF32RM76Y50THPQEG
-Version: '0.17'
+Version: '0.18'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -311,3 +311,4 @@ to another record — nothing to check for resolution, no cycle risk, no new rul
 > | 2026-11-07 | Bumped to `0.16`. Adds "Done means as items": the item grammar of `ADR-96` verbatim with its nine worked examples, for a type that declares `statuses.delivery.items`; the `Realized-by` row notes that delivery is then judged from the items. **Why:** `MILE-214`; this repository does not declare the option until `MILE-215`. | **substantive** |
 > | 2026-11-07 | Bumped to `0.17`. "Done means as items" says this repository declares the option, that an unfinished `Depends-on` target caps a milestone whose items all resolve at `InProgress`, and that `sequence.status-agreement` skips that `InProgress` with an info notice. The schema excerpt is unchanged. **Why:** the `ADR-96` amendment of 2026-11-07, accepted by the maintainer; `MILE-34` and `MILE-215` regain their `Depends-on`. | **substantive** |
 > | 2026-11-08 | Pinned (attested by beauwilliams, identity: gh-verified, actor: agent): 3 locators pinned, 3 file-level, 0 scoped. Evidence: rust/crates/urzua-core/src/status_model.rs@sha256:744b341a578a, rust/crates/urzua-cli/tests/record_types_own_config_integration.rs@sha256:7caa23975490, rust/crates/urzua-cli/tests/status_delivery_integration.rs@sha256:3e956fb6227c Reason: Pinned the files as they are now after checking each against the record it evidences: init.rs and check_integration.rs still implement and test urzua init adopt mode (SPEC-5), status_model.rs, the own-config test and status_delivery_integration.rs still implement the milestone type and its delivery status (SPEC-6), both fix.rs files and the paths, rebaseline and drift integration tests still implement urzua fix (SPEC-8), and config.yaml and the own-config tests still declare the bug type (SPEC-9). **Why:** a claim is renewed only over pinned code and test evidence. | **structural** |
+> | 2026-11-08 | Bumped to `0.18`. The `code:` and `test:` locators of `Realized-by` are now hash-pinned by `urzua reverify --pin-only` (the `Pinned` row above) and, where the record stated `Drift detected`, its `Embodiment` was recomputed (the tool-authored row above); no behaviour this spec describes changes. **Why:** `MILE-129`, `ADR-97` section 10: a claim is renewed only over pinned code and test evidence, so the corpus is pinned once before expiry is enabled. | **structural** |
