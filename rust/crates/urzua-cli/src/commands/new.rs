@@ -18,6 +18,10 @@ use super::new_refs::{self, FetchFailure, LockOutcome};
 use crate::session::Workspace;
 use crate::{emit, NOTICE_IDENTITY};
 
+fn fail(message: impl Into<String>) -> ExitCode {
+    emit(&CouldNotRun::from(message.into()))
+}
+
 pub fn run(
     config_path: Option<PathBuf>,
     record_type: String,
@@ -33,87 +37,338 @@ pub fn run(
         Err(e) => return emit(&CouldNotRun::from(e)),
     };
 
-    let Some(type_config) = config.record_types.get(&record_type) else {
-        return emit(&CouldNotRun::from(format!(
+    let type_config = match lookup_record_type(&config, &record_type, &config_path) {
+        Ok(t) => t,
+        Err(why) => return fail(why),
+    };
+
+    let opts = &config.new;
+    let mut notices: Vec<Notice> = Vec::new();
+    let mut pull = disabled_pull_report();
+    // Held to the end of the run: the file write happens under the lock.
+    let _lock = match scan_pull_requests(&repo_root, opts, &mut pull, &mut notices) {
+        Ok(lock) => lock,
+        Err(why) => return fail(why),
+    };
+
+    let dir = repo_root.join(&type_config.dir);
+    let Numbered {
+        declared,
+        compiled,
+        display_number,
+        skipped,
+    } = match number_record(
+        &repo_root,
+        &record_type,
+        type_config,
+        opts,
+        &mut pull,
+        &mut notices,
+    ) {
+        Ok(n) => n,
+        Err(why) => return fail(why),
+    };
+
+    let title = title.unwrap_or_else(|| "Title".to_string());
+    let (type_prefix, filename) = match build_filename(
+        &record_type,
+        type_config,
+        &title,
+        display_number,
+        declared.as_ref().zip(compiled.as_ref()),
+    ) {
+        Ok(pair) => pair,
+        Err(why) => return fail(why),
+    };
+
+    let stable_id = urzua_id::StableId::generate();
+    let today = urzua_io::today();
+    let identity = match urzua_io::resolve_identity(by.as_deref(), &repo_root) {
+        Ok(id) => id,
+        Err(e) => return fail(format!("could not resolve an identity: {e}")),
+    };
+
+    let content = render_record(&NewRecordInputs {
+        repo_root: &repo_root,
+        record_type: &record_type,
+        type_config,
+        compiled: compiled.as_ref(),
+        type_prefix: &type_prefix,
+        filename: &filename,
+        display_number,
+        title: &title,
+        stable_id: stable_id.as_str(),
+        author: &identity.name,
+        today: &today,
+    });
+
+    let file_path = dir.join(&filename);
+    if let Err(why) = write_new_file(&repo_root, &dir, &file_path, &content) {
+        return fail(why);
+    }
+
+    push_closing_notices(&mut notices, identity.warning, type_config, &record_type);
+
+    emit(&NewReport {
+        status: ReportStatus::Ok,
+        path: file_path
+            .strip_prefix(&repo_root)
+            .unwrap_or(&file_path)
+            .to_path_buf(),
+        display_number,
+        stable_id: Some(stable_id.as_str().to_string()),
+        pull_refs: pull,
+        skipped,
+        notices,
+    })
+}
+
+/// The type prefix and the file name of the new record.
+fn build_filename(
+    record_type: &str,
+    type_config: &urzua_core::config::RecordTypeConfig,
+    title: &str,
+    display_number: u32,
+    declared_identity: Option<(
+        &urzua_core::document_model::IdentityDecl,
+        &urzua_core::document_model::CompiledIdentity,
+    )>,
+) -> Result<(String, String), String> {
+    // A slug-less filename (`ADR-6-.md`) is not one the numbering scan or
+    // the identity index recognise as a record, so the next `new` would
+    // reissue the same number. Refuse before anything is written.
+    let slug = urzua_core::new_record::slugify(title);
+    if slug.is_empty() {
+        return Err(format!(
+            "title '{title}' has no ASCII letters or digits to build a filename slug from -- give it a title containing at least one"
+        ));
+    }
+    // Type prefix explicit in the filename (ADR-36). The type's configured
+    // `prefix` when it declares one (e.g. `MILE` for `milestone`), otherwise the
+    // type name itself, upper-cased.
+    let type_prefix = type_config
+        .prefix
+        .clone()
+        .unwrap_or_else(|| record_type.to_ascii_uppercase());
+    // Never zero-padded by default (ADR-36 amendment): padding doesn't solve
+    // lexicographic sort order permanently, only defers the break. A declared
+    // pattern that requires padding is the one reason to pad, and the name is
+    // fitted to it before anything is written.
+    let filename = match declared_identity {
+        Some((decl, identity)) => urzua_core::new_record::declared_file_name(
+            identity,
+            &decl.pattern,
+            &type_prefix,
+            display_number,
+            &slug,
+        )?,
+        None => format!("{type_prefix}-{display_number}-{slug}.md"),
+    };
+    Ok((type_prefix, filename))
+}
+
+fn lookup_record_type<'a>(
+    config: &'a urzua_core::config::Config,
+    record_type: &str,
+    config_path: &std::path::Path,
+) -> Result<&'a urzua_core::config::RecordTypeConfig, String> {
+    let Some(type_config) = config.record_types.get(record_type) else {
+        return Err(format!(
             "unrecognized record type '{record_type}' -- see [record_types] in {}",
             config_path.display()
-        )));
+        ));
     };
 
     // `none` declares this type has nowhere for a header, and therefore
     // nowhere to write a `Stable-Id` -- generating a record with no identity
     // would be worse than refusing (`ADR-50`).
     if type_config.header_shape == urzua_core::header::HeaderShape::None {
-        return emit(&CouldNotRun::from(format!(
+        return Err(format!(
             "record type '{record_type}' declares header_shape: none -- urzua new cannot generate an identity for a type with no header"
-        )));
+        ));
     }
+    Ok(type_config)
+}
 
-    // The open-pull-request check (`ADR-93`), only when the repository opts in: fetch
-    // the pull-request head refs, then take the numbering lock. The fetch comes first
-    // so the lock is not held across the network; the lock is held from here to the
-    // file write, and the directories are read under it.
-    let opts = &config.new;
-    let mut notices: Vec<Notice> = Vec::new();
-    let mut pull = PullRefsReport {
+/// What numbering a new record settles: the type's identity grammar and the
+/// number taken.
+struct Numbered {
+    declared: Option<urzua_core::document_model::IdentityDecl>,
+    compiled: Option<urzua_core::document_model::CompiledIdentity>,
+    display_number: u32,
+    skipped: Vec<SkippedReason>,
+}
+
+fn number_record(
+    repo_root: &std::path::Path,
+    record_type: &str,
+    type_config: &urzua_core::config::RecordTypeConfig,
+    opts: &NewDecl,
+    pull: &mut PullRefsReport,
+    notices: &mut Vec<Notice>,
+) -> Result<Numbered, String> {
+    let filenames = read_type_filenames(repo_root, type_config, record_type)?;
+    let (declared, compiled) = compile_declared_identity(record_type, type_config)?;
+    let (display_number, skipped) = number_for_new_record(
+        repo_root,
+        type_config,
+        &filenames,
+        compiled.as_ref(),
+        opts,
+        pull,
+        notices,
+    )
+    .map_err(|e| format!("record type '{record_type}': {e}"))?;
+    Ok(Numbered {
+        declared,
+        compiled,
+        display_number,
+        skipped,
+    })
+}
+
+fn disabled_pull_report() -> PullRefsReport {
+    PullRefsReport {
         fetched: false,
         reason: Some("disabled".to_string()),
         remote: None,
         refs: 0,
         worktrees_scanned: 0,
         skipped_numbers: Vec::new(),
+    }
+}
+
+/// The number the new record takes: past the highest in the type's
+/// directories and, with `new.check_open_prs`, past those open pull requests
+/// claim.
+fn number_for_new_record(
+    repo_root: &std::path::Path,
+    type_config: &urzua_core::config::RecordTypeConfig,
+    filenames: &[String],
+    compiled: Option<&urzua_core::document_model::CompiledIdentity>,
+    opts: &NewDecl,
+    pull: &mut PullRefsReport,
+    notices: &mut Vec<Notice>,
+) -> Result<(u32, Vec<SkippedReason>), String> {
+    let number_of = |name: &str| -> Option<u32> {
+        match compiled {
+            Some(identity) => urzua_core::new_record::declared_number(identity, name),
+            None => urzua_core::new_record::parse_record_filename(name).map(|(_, n)| n),
+        }
     };
-    let mut _lock = None;
-    if opts.check_open_prs {
-        pull.remote = Some(opts.remote.clone());
-        match new_refs::fetch_pull_refs(&repo_root, opts) {
-            Ok(()) => {
-                pull.fetched = true;
-                pull.reason = None;
-            }
-            Err(failure) => {
-                pull.reason = Some(failure.reason().to_string());
-                let detail = match &failure {
-                    FetchFailure::Offline(why) => format!("offline: {why}"),
-                    FetchFailure::Timeout => {
-                        format!("timed out after {}s", opts.fetch_timeout_seconds)
-                    }
-                };
-                let message = format!(
-                    "could not fetch pull request refs from '{}' ({detail}); numbering from the local refs, so a number claimed on an unfetched pull request will not be seen",
-                    opts.remote
-                );
-                eprintln!("urzua: {message}");
-                notices.push(Notice {
-                    severity: NoticeSeverity::Warning,
-                    subject: NOTICE_PULL_REFS.to_string(),
-                    message,
-                });
-            }
-        }
-        pull.refs = new_refs::count_pull_refs(&repo_root);
-        match new_refs::acquire_lock(&repo_root, opts.lock_timeout_seconds) {
-            LockOutcome::Held(lock) => _lock = Some(lock),
-            LockOutcome::Unavailable(why) => notices.push(Notice {
-                severity: NoticeSeverity::Warning,
-                subject: NOTICE_PULL_REFS.to_string(),
-                message: format!(
-                    "the numbering lock was not taken ({why}); a concurrent `urzua new` could take the same number"
-                ),
-            }),
-            LockOutcome::TimedOut(why) => return emit(&CouldNotRun::from(why)),
-        }
+    assign_display_number(
+        repo_root,
+        &type_config.all_dirs().collect::<Vec<_>>(),
+        filenames,
+        &number_of,
+        opts.check_open_prs.then_some(opts),
+        pull,
+        notices,
+    )
+}
+
+fn push_closing_notices(
+    notices: &mut Vec<Notice>,
+    identity_warning: Option<String>,
+    type_config: &urzua_core::config::RecordTypeConfig,
+    record_type: &str,
+) {
+    // Every record gets a `Stable-Id` (`ADR-21`). A closed field set
+    // (`known_fields`) that does not list it is a configuration inconsistency
+    // the author must resolve, so it is disclosed below rather than answered by
+    // writing a record with no identity (`BUG-182` had omitted it).
+    let admits_stable_id = type_config.known_fields.is_none()
+        || type_config
+            .declared_fields()
+            .contains(&urzua_core::values::FieldName::new("Stable-Id"));
+    notices.extend(identity_warning.into_iter().map(|message| Notice {
+        severity: NoticeSeverity::Warning,
+        subject: NOTICE_IDENTITY.to_string(),
+        message,
+    }));
+    if !admits_stable_id {
         notices.push(Notice {
-            severity: NoticeSeverity::Info,
-            subject: NOTICE_PULL_REFS.to_string(),
-            message: "separate clones are not scanned: a record created and not pushed in another clone of this repository is invisible to numbering, and to the fetch".to_string(),
+            severity: NoticeSeverity::Warning,
+            subject: "stable-id".to_string(),
+            message: format!(
+                "record type '{record_type}' declares a closed field set (`known_fields`) that does not list \
+                 `Stable-Id`, yet every record type gets one (ADR-21); the new record carries it and \
+                 `header.field-set-consistency` will report it until `Stable-Id` is added to the type's `known_fields`"
+            ),
         });
     }
+}
 
-    // One namespace across every directory the type declares (`MILE-130`):
-    // the number is taken past the highest in any of them. The primary `dir`
-    // must be readable; an extra directory that is absent holds no ids, so it
-    // is skipped with a notice (`type.dir-matches-nothing` reports it).
+/// The open-pull-request check (`ADR-93`), only when the repository opts in: fetch
+/// the pull-request head refs, then take the numbering lock. The fetch comes first
+/// so the lock is not held across the network; the lock is held from here to the
+/// file write, and the directories are read under it. An `Err` is a lock that
+/// timed out.
+fn scan_pull_requests(
+    repo_root: &std::path::Path,
+    opts: &NewDecl,
+    pull: &mut PullRefsReport,
+    notices: &mut Vec<Notice>,
+) -> Result<Option<new_refs::NumberingLock>, String> {
+    if !opts.check_open_prs {
+        return Ok(None);
+    }
+    let mut held = None;
+    pull.remote = Some(opts.remote.clone());
+    match new_refs::fetch_pull_refs(repo_root, opts) {
+        Ok(()) => {
+            pull.fetched = true;
+            pull.reason = None;
+        }
+        Err(failure) => {
+            pull.reason = Some(failure.reason().to_string());
+            let detail = match &failure {
+                FetchFailure::Offline(why) => format!("offline: {why}"),
+                FetchFailure::Timeout => {
+                    format!("timed out after {}s", opts.fetch_timeout_seconds)
+                }
+            };
+            let message = format!(
+                "could not fetch pull request refs from '{}' ({detail}); numbering from the local refs, so a number claimed on an unfetched pull request will not be seen",
+                opts.remote
+            );
+            eprintln!("urzua: {message}");
+            notices.push(Notice {
+                severity: NoticeSeverity::Warning,
+                subject: NOTICE_PULL_REFS.to_string(),
+                message,
+            });
+        }
+    }
+    pull.refs = new_refs::count_pull_refs(repo_root);
+    match new_refs::acquire_lock(repo_root, opts.lock_timeout_seconds) {
+        LockOutcome::Held(lock) => held = Some(lock),
+        LockOutcome::Unavailable(why) => notices.push(Notice {
+            severity: NoticeSeverity::Warning,
+            subject: NOTICE_PULL_REFS.to_string(),
+            message: format!(
+                "the numbering lock was not taken ({why}); a concurrent `urzua new` could take the same number"
+            ),
+        }),
+        LockOutcome::TimedOut(why) => return Err(why),
+    }
+    notices.push(Notice {
+        severity: NoticeSeverity::Info,
+        subject: NOTICE_PULL_REFS.to_string(),
+        message: "separate clones are not scanned: a record created and not pushed in another clone of this repository is invisible to numbering, and to the fetch".to_string(),
+    });
+    Ok(held)
+}
+
+/// One namespace across every directory the type declares (`MILE-130`):
+/// the number is taken past the highest in any of them. The primary `dir`
+/// must be readable; an extra directory that is absent holds no ids, so it
+/// is skipped with a notice (`type.dir-matches-nothing` reports it).
+fn read_type_filenames(
+    repo_root: &std::path::Path,
+    type_config: &urzua_core::config::RecordTypeConfig,
+    record_type: &str,
+) -> Result<Vec<String>, String> {
     let mut filenames: Vec<String> = Vec::new();
     for (index, declared_dir) in type_config.all_dirs().enumerate() {
         let dir = repo_root.join(declared_dir);
@@ -131,21 +386,28 @@ pub fn run(
             Err(e) if index == 0 && e.kind() == std::io::ErrorKind::NotFound => eprintln!(
                 "urzua: {declared_dir} does not exist yet; creating it for the first {record_type} record"
             ),
-            Err(e) => {
-                return emit(&CouldNotRun::from(format!(
-                    "could not read {}: {e}",
-                    dir.display()
-                )))
-            }
+            Err(e) => return Err(format!("could not read {}: {e}", dir.display())),
         }
     }
-    let dir = repo_root.join(&type_config.dir);
-    // The type's declared identity pattern, when it has one, decides which
-    // numbers are taken and what a conforming file name is (`MILE-151`): the
-    // generator reads the same grammar the checker does.
-    let declared = match urzua_core::document_model::declared_model(&record_type, type_config) {
+    Ok(filenames)
+}
+
+/// The type's declared identity pattern, when it has one, decides which
+/// numbers are taken and what a conforming file name is (`MILE-151`): the
+/// generator reads the same grammar the checker does.
+fn compile_declared_identity(
+    record_type: &str,
+    type_config: &urzua_core::config::RecordTypeConfig,
+) -> Result<
+    (
+        Option<urzua_core::document_model::IdentityDecl>,
+        Option<urzua_core::document_model::CompiledIdentity>,
+    ),
+    String,
+> {
+    let declared = match urzua_core::document_model::declared_model(record_type, type_config) {
         Ok(model) => model.and_then(|m| m.identity),
-        Err(e) => return emit(&CouldNotRun::from(e.to_string())),
+        Err(e) => return Err(e.to_string()),
     };
     let compiled = match declared
         .as_ref()
@@ -153,103 +415,40 @@ pub fn run(
         .transpose()
     {
         Ok(c) => c,
-        Err(e) => {
-            return emit(&CouldNotRun::from(format!(
-                "record type '{record_type}': {e}"
-            )))
-        }
+        Err(e) => return Err(format!("record type '{record_type}': {e}")),
     };
-    let number_of = |name: &str| -> Option<u32> {
-        match &compiled {
-            Some(identity) => urzua_core::new_record::declared_number(identity, name),
-            None => urzua_core::new_record::parse_record_filename(name).map(|(_, n)| n),
-        }
-    };
-    let (display_number, skipped) = match assign_display_number(
-        &repo_root,
-        &type_config.all_dirs().collect::<Vec<_>>(),
-        &filenames,
-        &number_of,
-        opts.check_open_prs.then_some(opts),
-        &mut pull,
-        &mut notices,
-    ) {
-        Ok(n) => n,
-        Err(e) => {
-            return emit(&CouldNotRun::from(format!(
-                "record type '{record_type}': {e}"
-            )))
-        }
-    };
+    Ok((declared, compiled))
+}
 
-    let title = title.unwrap_or_else(|| "Title".to_string());
-    // A slug-less filename (`ADR-6-.md`) is not one the numbering scan or
-    // the identity index recognise as a record, so the next `new` would
-    // reissue the same number. Refuse before anything is written.
-    let slug = urzua_core::new_record::slugify(&title);
-    if slug.is_empty() {
-        return emit(&CouldNotRun::from(format!(
-            "title '{title}' has no ASCII letters or digits to build a filename slug from -- give it a title containing at least one"
-        )));
-    }
-    // Type prefix explicit in the filename (ADR-36). The type's configured
-    // `prefix` when it declares one (e.g. `MILE` for `milestone`), otherwise the
-    // type name itself, upper-cased.
-    let type_prefix = type_config
-        .prefix
-        .clone()
-        .unwrap_or_else(|| record_type.to_ascii_uppercase());
-    // Never zero-padded by default (ADR-36 amendment): padding doesn't solve
-    // lexicographic sort order permanently, only defers the break. A declared
-    // pattern that requires padding is the one reason to pad, and the name is
-    // fitted to it before anything is written.
-    let filename = match (&compiled, &declared) {
-        (Some(identity), Some(decl)) => {
-            match urzua_core::new_record::declared_file_name(
-                identity,
-                &decl.pattern,
-                &type_prefix,
-                display_number,
-                &slug,
-            ) {
-                Ok(name) => name,
-                Err(e) => return emit(&CouldNotRun::from(e)),
-            }
-        }
-        _ => format!("{type_prefix}-{display_number}-{slug}.md"),
-    };
+/// What `render_record` needs to build the new record's text.
+struct NewRecordInputs<'a> {
+    repo_root: &'a std::path::Path,
+    record_type: &'a str,
+    type_config: &'a urzua_core::config::RecordTypeConfig,
+    compiled: Option<&'a urzua_core::document_model::CompiledIdentity>,
+    type_prefix: &'a str,
+    filename: &'a str,
+    display_number: u32,
+    title: &'a str,
+    stable_id: &'a str,
+    author: &'a str,
+    today: &'a str,
+}
 
-    // Every record gets a `Stable-Id` (`ADR-21`). A closed field set
-    // (`known_fields`) that does not list it is a configuration inconsistency
-    // the author must resolve, so it is disclosed below rather than answered by
-    // writing a record with no identity (`BUG-182` had omitted it).
-    let admits_stable_id = type_config.known_fields.is_none()
-        || type_config
-            .declared_fields()
-            .contains(&urzua_core::values::FieldName::new("Stable-Id"));
-    let stable_id = urzua_id::StableId::generate();
-    let today = urzua_io::today();
-    let identity = match urzua_io::resolve_identity(by.as_deref(), &repo_root) {
-        Ok(id) => id,
-        Err(e) => {
-            return emit(&CouldNotRun::from(format!(
-                "could not resolve an identity: {e}"
-            )))
-        }
-    };
-
+fn render_record(inputs: &NewRecordInputs) -> String {
+    let type_config = inputs.type_config;
+    let compiled = inputs.compiled;
     // The entry state of the type's own vocabulary, not a choice: moving a
     // record on from it stays a human decision.
     let status_decl = type_config.status_decl();
     let params = urzua_core::new_record::NewRecordParams {
-        display_number,
+        display_number: inputs.display_number,
         // The H1 id is padded exactly as the file name is: the width of the
         // `number` the declared pattern reads back from it (`BUG-188`).
         h1_width: compiled
-            .as_ref()
-            .and_then(|c| c.identify(&filename).number)
+            .and_then(|c| c.identify(inputs.filename).number)
             .map_or(0, |n| n.len()),
-        h1_prefix: compiled.as_ref().map(|_| type_prefix.as_str()),
+        h1_prefix: compiled.map(|_| inputs.type_prefix),
         initial_status: status_decl
             .as_ref()
             .and_then(|d| d.values.first())
@@ -259,10 +458,10 @@ pub fn run(
         author_field: type_config.author_field(),
         title_field: type_config.title_field(),
         initial_version: type_config.initial_version(),
-        title: &title,
-        stable_id: stable_id.as_str(),
-        author: &identity.name,
-        today: &today,
+        title: inputs.title,
+        stable_id: inputs.stable_id,
+        author: inputs.author,
+        today: inputs.today,
     };
 
     // BUG-3: the configured header_shape wins unconditionally -- a template
@@ -271,54 +470,56 @@ pub fn run(
     // frontmatter type still gets a template's body scaffolding (`## What`,
     // the revision log) when one exists; it just doesn't get the template's
     // header.
-    let template_path = repo_root
+    let template_path = inputs
+        .repo_root
         .join(".urzua/templates")
-        .join(format!("{record_type}.md"));
+        .join(format!("{}.md", inputs.record_type));
     // `none` returned above, so the only shape left is `yaml-frontmatter`
     // (MILE-85 removed the blockquote and bold-list shapes a template's own
     // header could once have been rendered in).
-    let content = {
-        let template = urzua_io::read_to_string(&template_path).ok();
-        // The header fields the template names beyond the required ones stay
-        // on the new record, blank, when the type declares them (`BUG-188`);
-        // one the type does not declare would only trip
-        // `header.field-set-consistency`, so it is left out.
-        let declared = type_config.declared_fields();
-        let template_fields: Vec<String> = template
-            .as_deref()
-            .map(urzua_core::new_record::template_header_fields)
-            .unwrap_or_default()
-            .into_iter()
-            .filter(|f| {
-                type_config.known_fields.is_none()
-                    || declared.contains(&urzua_core::values::FieldName::new(f.as_str()))
-            })
-            .collect();
-        let mut out = urzua_core::new_record::render_synthetic_yaml(
-            &params,
-            &type_config.required_fields,
-            &template_fields,
-        );
-        if let Some(template) = template {
-            if let Some(body) = urzua_core::new_record::template_body(&template) {
-                out.push('\n');
-                out.push_str(body);
-            }
+    let template = urzua_io::read_to_string(&template_path).ok();
+    // The header fields the template names beyond the required ones stay
+    // on the new record, blank, when the type declares them (`BUG-188`);
+    // one the type does not declare would only trip
+    // `header.field-set-consistency`, so it is left out.
+    let declared = type_config.declared_fields();
+    let template_fields: Vec<String> = template
+        .as_deref()
+        .map(urzua_core::new_record::template_header_fields)
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|f| {
+            type_config.known_fields.is_none()
+                || declared.contains(&urzua_core::values::FieldName::new(f.as_str()))
+        })
+        .collect();
+    let mut out = urzua_core::new_record::render_synthetic_yaml(
+        &params,
+        &type_config.required_fields,
+        &template_fields,
+    );
+    if let Some(template) = template {
+        if let Some(body) = urzua_core::new_record::template_body(&template) {
+            out.push('\n');
+            out.push_str(body);
         }
-        out
-    };
+    }
+    out
+}
 
-    let file_path = dir.join(&filename);
+/// Writes the record, refusing a path that leaves the repository and never
+/// overwriting an existing file.
+fn write_new_file(
+    repo_root: &std::path::Path,
+    dir: &std::path::Path,
+    file_path: &std::path::Path,
+    content: &str,
+) -> Result<(), String> {
     // A record directory that is (or sits below) a symlink out of the
     // repository must not receive the new file.
-    if let Err(e) = urzua_io::confine_to_root(&repo_root, &file_path) {
-        return emit(&CouldNotRun::from(e));
-    }
-    if let Err(e) = std::fs::create_dir_all(&dir) {
-        return emit(&CouldNotRun::from(format!(
-            "could not create {}: {e}",
-            dir.display()
-        )));
+    urzua_io::confine_to_root(repo_root, file_path)?;
+    if let Err(e) = std::fs::create_dir_all(dir) {
+        return Err(format!("could not create {}: {e}", dir.display()));
     }
     // `create_new` is atomic (matching `FixLock`'s own pattern) -- a
     // separate `exists()` check followed by `write` would leave a race
@@ -327,53 +528,16 @@ pub fn run(
     match std::fs::OpenOptions::new()
         .write(true)
         .create_new(true)
-        .open(&file_path)
+        .open(file_path)
         .and_then(|mut f| f.write_all(content.as_bytes()))
     {
-        Ok(()) => {}
-        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
-            return emit(&CouldNotRun::from(format!(
-                "{} already exists -- refusing to overwrite",
-                file_path.display()
-            )))
-        }
-        Err(e) => {
-            return emit(&CouldNotRun::from(format!(
-                "could not write {}: {e}",
-                file_path.display()
-            )))
-        }
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => Err(format!(
+            "{} already exists -- refusing to overwrite",
+            file_path.display()
+        )),
+        Err(e) => Err(format!("could not write {}: {e}", file_path.display())),
     }
-
-    notices.extend(identity.warning.into_iter().map(|message| Notice {
-        severity: NoticeSeverity::Warning,
-        subject: NOTICE_IDENTITY.to_string(),
-        message,
-    }));
-    if !admits_stable_id {
-        notices.push(Notice {
-            severity: NoticeSeverity::Warning,
-            subject: "stable-id".to_string(),
-            message: format!(
-                "record type '{record_type}' declares a closed field set (`known_fields`) that does not list \
-                 `Stable-Id`, yet every record type gets one (ADR-21); the new record carries it and \
-                 `header.field-set-consistency` will report it until `Stable-Id` is added to the type's `known_fields`"
-            ),
-        });
-    }
-
-    emit(&NewReport {
-        status: ReportStatus::Ok,
-        path: file_path
-            .strip_prefix(&repo_root)
-            .unwrap_or(&file_path)
-            .to_path_buf(),
-        display_number,
-        stable_id: Some(stable_id.as_str().to_string()),
-        pull_refs: pull,
-        skipped,
-        notices,
-    })
 }
 
 /// Numbers `new` in the working tree, then skips past any a local branch or
