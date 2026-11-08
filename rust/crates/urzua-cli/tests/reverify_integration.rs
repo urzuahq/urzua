@@ -824,3 +824,23 @@ fn a_record_with_no_locator_field_and_no_item_evidence_is_refused_with_the_reaso
     );
     assert_eq!(read(&dir, &path(1)), before);
 }
+
+#[test]
+fn reverify_discloses_the_lines_a_back_pointer_ignore_marker_excused() {
+    let extra = "  embodiment.back-pointer-resolution:\n    level: error\n    back_pointer_paths: [src]\n    ignore_marker: \"urzua:ignore\"\n";
+    let dir = fixture("excused-notice", &config(RULE, extra), 1);
+    std::fs::write(
+        dir.join("src/b.rs"),
+        "// Implements: MILE-1 urzua:ignore\nfn b() {}\n",
+    )
+    .unwrap();
+    commit_all(&dir, 40);
+    let parsed = json(&run_urzua(&dir, &["reverify"]));
+    assert!(
+        parsed["notices"].as_array().unwrap().iter().any(|n| {
+            let m = n["message"].as_str().unwrap_or("");
+            m.contains("ignore_marker") && m.contains("1 line")
+        }),
+        "{parsed}"
+    );
+}

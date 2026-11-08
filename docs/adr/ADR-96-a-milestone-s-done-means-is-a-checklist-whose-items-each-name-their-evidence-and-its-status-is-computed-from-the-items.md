@@ -273,6 +273,8 @@ The mode reads the rule table that `urzua rules` prints; it holds no second copy
 
 *Opt-in.* Omitting `pending` keeps today's behaviour byte for byte. A declaration with a blank entry, a duplicate or an invalid pattern is refused at load. This repository declares the placeholder text of its milestone template.
 
+*Caveat.* Whole-value entries match case-insensitively, but `{pattern: ...}` entries are case-sensitive regexes, and a real item that begins with a declared pattern is flagged as a placeholder, so patterns should be specific to the template's wording.
+
 *Consequences.* `SPEC-2` and `SPEC-3` document the key and the finding. It ships as a minor changeset: a new capability, off until declared.
 
 ## References

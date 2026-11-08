@@ -121,6 +121,40 @@ ADR was Proposed. The maintainer accepted the ADR on 2026-11-05 with the drafted
 reads as the Decision and the proposals in that list state them. `Status` stays `Accepted` and the Decision
 text above is unchanged.
 
+## Amendment (2026-11-08): the declared ignore marker also excuses a back-pointer line
+
+Accepted by the maintainer on 2026-11-08. `Status` stays `Accepted` and the Decision text above is unchanged.
+
+A test file under `back_pointer_paths` can hold a multi-line string literal whose line reads
+`// Implements:` followed by an id that does not exist. The back-pointer rules read it as a citation of a record that does not exist,
+and the only remedies were a file-level waiver or dropping the path, which loses the file's real
+citations. This ADR already owns the per-line escape (an `ignore_marker` declared in config, excusing the
+line it is on), so the option is reused rather than a second one invented:
+
+- `embodiment.back-pointer-resolution` and `embodiment.back-pointer-decision-accepted` accept
+  `ignore_marker` with the boundary rule's semantics: declared text, never compiled in, non-blank on one
+  line, excusing the line it appears on. The match is the boundary rule's own (one shared function), so the
+  marker means the same to all three rules.
+- **One marker.** The two back-pointer rules and the evidence collector share it: declared on either enabled
+  rule, it applies everywhere back-pointers are read (`check`, `urzua fix`, `urzua reverify`). Two different
+  values are a config load error naming both rules.
+- **The whole line is excused**, every id on it, including when the marker sits in the citation text
+  (`// Implements: ADR-1 <marker>`). To keep that from excusing everything, a marker that is empty,
+  whitespace, or equal to or contained in a back-pointer keyword (`Implements:`, `Verifies:`) is refused at
+  load.
+- A back-pointer on an excused line is not reported, is not counted as evidence (code or test tier, so a
+  delivery tier does not read it either), and is not judged for the cited record's status. A real citation
+  on another line of the same file is unaffected.
+- Nothing is hidden: the rule's population discloses the number of excused lines (`excused_lines`, present
+  only when non-zero), and `check`, `urzua fix` and `urzua reverify` each report an `info` notice with the
+  count. As for the boundary rule, a marker on a line carrying no back-pointer the rule reads is itself a
+  finding, reported once per line (by the resolution rule while it is enabled); a marker on a `Verifies:`
+  line in a file outside `test_paths`, where `Verifies:` is not read, excuses nothing and is reported.
+- Opt-in. A configuration that declares no marker reads and reports exactly as before.
+
+`ADR-66` fixes the `Implements:` marker and does not own an ignore option, so this ADR, which does, carries
+the amendment.
+
 ## Reversibility
 
 Moderate. The boundary entry is additive config and `published_paths` keeps working, so adopters who
@@ -162,3 +196,4 @@ matchers is cheap to keep and costly to lose, because merging them silently infl
 > | 2026-11-05 | Drafted as Proposed. **Why:** maintainer decision of 2026-11-05 to build `RFC-11` sections 1 to 3 for `MILE-125`; building part of an RFC needs its own decision record, and the maintainer approves before it is Accepted. | **substantive** |
 > | 2026-11-05 | Status changed from Proposed to Accepted, with the drafted choices on RFC-11's gaps. **Why:** Maintainer decision, 2026-11-05. | **substantive** |
 > | 2026-11-07 | Amendment added: the five questions listed as open in the Decision were resolved as drafted when the ADR was accepted. **Why:** the Decision still carried "for the maintainer before this is Accepted" after acceptance; `Status` stays `Accepted` and the Decision text is unchanged. | **structural** |
+> | 2026-11-08 | Amendment added: the declared `ignore_marker` is also accepted by `embodiment.back-pointer-resolution` and `embodiment.back-pointer-decision-accepted` as one marker shared with the evidence collector (differing values are a load error), excusing the whole line from reporting, status judgement and evidence, refused at load when it is empty or inside a back-pointer keyword, with the excused count disclosed in `check`, `fix` and `reverify` and an unused marker reported once per line; opt-in. Accepted by the maintainer on 2026-11-08; `Status` stays `Accepted` and the Decision text is unchanged. **Why:** a record-shaped literal inside a scanned test file had no per-line escape, only a file-level waiver or dropping the path, and this ADR already owns the per-line option. | **substantive** |

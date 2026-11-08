@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5QF32RM76Y50THPQEG
-Version: '0.21'
+Version: '0.22'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-core/src/status_model.rs@sha256:2d90f7140553963862e8373afda06aa9317378896f45e2b35887f2ed5f98df76, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs@sha256:44fea1626a547a6d9226f09c5e9cd116aad2dfe384a082aaeb8eec2c74f22af5, test:rust/crates/urzua-cli/tests/status_delivery_integration.rs@sha256:3e956fb6227ce9dd6f5fcc614a871d8c20ace9a4ba0169eaf3fee431b4e176a9
+Realized-by: code:rust/crates/urzua-core/src/status_model.rs@sha256:01c98f5a04ab2e9eddd45107327f56a207fa6305ab1f57a26fc3660a122f931e, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs@sha256:44fea1626a547a6d9226f09c5e9cd116aad2dfe384a082aaeb8eec2c74f22af5, test:rust/crates/urzua-cli/tests/status_delivery_integration.rs@sha256:3e956fb6227ce9dd6f5fcc614a871d8c20ace9a4ba0169eaf3fee431b4e176a9
 Author: beauwilliams
 Subject: 'The `milestone` record type -- this project''s own planned-work backlog as a checkable corpus.'
 Implements: ADR-34
@@ -328,3 +328,4 @@ to another record — nothing to check for resolution, no cycle risk, no new rul
 > | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/status_model.rs` 9cbbc69bdcdc -> ca68bc6df9e8. Reason: Read the diff of each pinned file since the old pin; the claim still holds. status_model.rs: the only change is that config load refuses a delivery whose delivered_tiers names a tier outside items.resolving_tiers; the state machine and the rest of the validation are unchanged. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
 > | 2026-11-08 | Bumped to `0.21`. The pins this spec's `Realized-by` holds on files changed in this change were re-baselined (the `Re-baselined` row above); no behaviour this spec describes changed. **Why:** a revision-log entry that adds a structural change needs a `Version` bump (`revision-log.version-bump-required`). | **structural** |
 > | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/status_model.rs` ca68bc6df9e8 -> 2d90f7140553. Reason: status_model.rs: since the previous pin only the delivered_tiers-subset check moved into a helper (check_delivered_tiers_resolve) to stay under the SPEC-22 function bound; behaviour is unchanged, so the claim still holds. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/status_model.rs` 2d90f7140553 -> 01c98f5a04ab. Reason: Read the diff of each pinned file since the old pin and the claim still holds. status_model.rs: DeliveryPending::matches is now pub(crate) and the delivery.items load validation also runs check_pending on the new optional pending list; no other behaviour changed. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
