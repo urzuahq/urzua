@@ -1729,16 +1729,10 @@ pub enum ConfigError {
     },
 }
 
-/// Why a declared `prefix` cannot head a recognized `PREFIX-N-slug.md`
-/// filename, or `None` when it can. Reuses the filename grammar
-/// (`parse_record_filename`): hyphen-separated segments, each non-empty
-/// upper-case/digits and not all digits (an all-digit segment would be read
-/// as the record number).
-/// Why a type's `revision_log` declaration cannot be used, or `None`: the
-/// identity (`MILE-167`), the version bump (`BUG-51`) and the vocabulary,
-/// columns and tool class (`ADR-94`).
-fn revision_log_problem(decl: &RevisionLogDecl) -> Option<String> {
-    let identity = match (&decl.marker, &decl.heading) {
+/// Why a revision-log declaration's identity (`marker` or `heading`) cannot be
+/// used, or `None`.
+fn revision_log_identity_problem(decl: &RevisionLogDecl) -> Option<&'static str> {
+    match (&decl.marker, &decl.heading) {
         (None, None)
             if decl.required.is_some()
                 || decl.version_bump.is_some()
@@ -1758,7 +1752,14 @@ fn revision_log_problem(decl: &RevisionLogDecl) -> Option<String> {
             Some("an identity spanning lines -- it would match no line")
         }
         _ => None,
-    };
+    }
+}
+
+/// Why a type's `revision_log` declaration cannot be used, or `None`: the
+/// identity (`MILE-167`), the version bump (`BUG-51`) and the vocabulary,
+/// columns and tool class (`ADR-94`).
+fn revision_log_problem(decl: &RevisionLogDecl) -> Option<String> {
+    let identity = revision_log_identity_problem(decl);
     if let Some(reason) = identity {
         return Some(reason.to_string());
     }
@@ -1842,6 +1843,11 @@ fn revision_log_problem(decl: &RevisionLogDecl) -> Option<String> {
     None
 }
 
+/// Why a declared `prefix` cannot head a recognized `PREFIX-N-slug.md`
+/// filename, or `None` when it can. Reuses the filename grammar
+/// (`parse_record_filename`): hyphen-separated segments, each non-empty
+/// upper-case/digits and not all digits (an all-digit segment would be read
+/// as the record number).
 fn prefix_problem(prefix: &str) -> Option<&'static str> {
     if prefix.is_empty() {
         return Some("is empty");
@@ -1889,6 +1895,130 @@ fn dir_escapes_repo(dir: &str) -> bool {
         })
 }
 
+/// The error for one option of an `embodiment.claim-expired` declaration.
+fn claim_expiry_error(rule: &str, option: &'static str, reason: String) -> ConfigError {
+    ConfigError::InvalidClaimExpiry {
+        rule: rule.to_string(),
+        option,
+        reason,
+    }
+}
+
+/// One `periods` entry of an `embodiment.claim-expired` declaration: a declared
+/// type, a positive period, a real level, status list and tier, a type that
+/// carries the locator field, and (with an anchor) a type that declares it.
+fn claim_period_problem(
+    bad: &dyn Fn(&'static str, String) -> ConfigError,
+    setting: &RuleSetting,
+    config: &Config,
+    n: usize,
+    entry: &ClaimPeriod,
+) -> Result<(), ConfigError> {
+    let tiers: Vec<&str> = config.embodiment.evidence_states().collect();
+    let at = format!("entry {n} (type '{}')", entry.record_type);
+    let Some(type_config) = config.record_types.get(&entry.record_type) else {
+        return Err(bad(
+            "periods",
+            format!("{at} names a record type that is not declared"),
+        ));
+    };
+    if entry.days == 0 {
+        return Err(bad(
+            "periods",
+            format!("{at} has days 0; a period is 1 day or more"),
+        ));
+    }
+    if entry.level == Some(RuleLevel::Off) {
+        return Err(bad(
+            "periods",
+            format!("{at} has the level 'off'; use 'info', 'warn' or 'error' (an entry is removed to switch it off)"),
+        ));
+    }
+    if let Some(statuses) = &entry.status {
+        if statuses.is_empty() {
+            return Err(bad("periods", format!("{at} has an empty status list")));
+        }
+        let declared = type_config.status_decl().map(|d| d.values);
+        for status in statuses {
+            if !declared.as_ref().is_some_and(|v| v.contains(status)) {
+                return Err(bad(
+                    "periods",
+                    format!("{at} names the status '{status}', which the type does not declare in statuses.values"),
+                ));
+            }
+        }
+    }
+    if let Some(tier) = &entry.tier {
+        if !tiers.contains(&tier.as_str()) {
+            return Err(bad(
+                "periods",
+                format!(
+                    "{at} names the tier '{tier}', which is not a state of the embodiment declaration ({})",
+                    tiers.join(", ")
+                ),
+            ));
+        }
+    }
+    let locator_field = type_config.relation_field(RelationRole::EmbodimentLocator);
+    let declares = |field: &str| {
+        type_config
+            .declared_fields()
+            .iter()
+            .any(|f| f.as_str() == field)
+    };
+    if !declares(locator_field) {
+        return Err(bad(
+            "periods",
+            format!("{at} names a type that declares no '{locator_field}' field, so it has no claim to expire"),
+        ));
+    }
+    if let Some(anchor) = setting.anchor_field.as_deref() {
+        if !declares(anchor.trim()) {
+            return Err(bad(
+                "anchor_field",
+                format!("names '{anchor}', which {at} does not declare (required_fields or known_fields)"),
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// No two `periods` entries of one type are equally specific and able to match
+/// the same record.
+fn claim_periods_overlap(
+    bad: &dyn Fn(&'static str, String) -> ConfigError,
+    periods: &[ClaimPeriod],
+) -> Result<(), ConfigError> {
+    for (i, a) in periods.iter().enumerate() {
+        for b in &periods[i + 1..] {
+            let rank =
+                |p: &ClaimPeriod| usize::from(p.status.is_some()) + usize::from(p.tier.is_some());
+            let statuses_overlap = match (&a.status, &b.status) {
+                (Some(x), Some(y)) => x.iter().any(|s| y.contains(s)),
+                _ => true,
+            };
+            let tiers_overlap = match (&a.tier, &b.tier) {
+                (Some(x), Some(y)) => x == y,
+                _ => true,
+            };
+            if a.record_type == b.record_type
+                && rank(a) == rank(b)
+                && statuses_overlap
+                && tiers_overlap
+            {
+                return Err(bad(
+                "periods",
+                format!(
+                    "has two entries for type '{}' of equal specificity that can match the same record; narrow one with a status or a tier",
+                    a.record_type
+                ),
+            ));
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Why an `embodiment.claim-expired` declaration cannot work (`ADR-97`): every
 /// entry, the pin categories, the batch size and the anchor are checked at load
 /// so a declaration that matches nothing or reads nothing is refused, never
@@ -1898,11 +2028,7 @@ fn claim_expiry_problems(
     setting: &RuleSetting,
     config: &Config,
 ) -> Result<(), ConfigError> {
-    let bad = |option: &'static str, reason: String| ConfigError::InvalidClaimExpiry {
-        rule: name.to_string(),
-        option,
-        reason,
-    };
+    let bad = |option: &'static str, reason: String| claim_expiry_error(name, option, reason);
     if config
         .rules
         .get(crate::rules::RULE_EMBODIMENT_CONSISTENCY)
@@ -1924,73 +2050,8 @@ fn claim_expiry_problems(
                 .to_string(),
         ));
     }
-    let tiers: Vec<&str> = config.embodiment.evidence_states().collect();
     for (n, entry) in periods.iter().enumerate() {
-        let at = format!("entry {n} (type '{}')", entry.record_type);
-        let Some(type_config) = config.record_types.get(&entry.record_type) else {
-            return Err(bad(
-                "periods",
-                format!("{at} names a record type that is not declared"),
-            ));
-        };
-        if entry.days == 0 {
-            return Err(bad(
-                "periods",
-                format!("{at} has days 0; a period is 1 day or more"),
-            ));
-        }
-        if entry.level == Some(RuleLevel::Off) {
-            return Err(bad(
-                "periods",
-                format!("{at} has the level 'off'; use 'info', 'warn' or 'error' (an entry is removed to switch it off)"),
-            ));
-        }
-        if let Some(statuses) = &entry.status {
-            if statuses.is_empty() {
-                return Err(bad("periods", format!("{at} has an empty status list")));
-            }
-            let declared = type_config.status_decl().map(|d| d.values);
-            for status in statuses {
-                if !declared.as_ref().is_some_and(|v| v.contains(status)) {
-                    return Err(bad(
-                        "periods",
-                        format!("{at} names the status '{status}', which the type does not declare in statuses.values"),
-                    ));
-                }
-            }
-        }
-        if let Some(tier) = &entry.tier {
-            if !tiers.contains(&tier.as_str()) {
-                return Err(bad(
-                    "periods",
-                    format!(
-                        "{at} names the tier '{tier}', which is not a state of the embodiment declaration ({})",
-                        tiers.join(", ")
-                    ),
-                ));
-            }
-        }
-        let locator_field = type_config.relation_field(RelationRole::EmbodimentLocator);
-        let declares = |field: &str| {
-            type_config
-                .declared_fields()
-                .iter()
-                .any(|f| f.as_str() == field)
-        };
-        if !declares(locator_field) {
-            return Err(bad(
-                "periods",
-                format!("{at} names a type that declares no '{locator_field}' field, so it has no claim to expire"),
-            ));
-        }
-        if let Some(anchor) = setting.anchor_field.as_deref() {
-            if !declares(anchor.trim()) {
-                return Err(bad(
-                    "anchor_field",
-                    format!("names '{anchor}', which {at} does not declare (required_fields or known_fields)"),
-                ));
-            }
-        }
+        claim_period_problem(&bad, setting, config, n, entry)?;
     }
     if setting
         .anchor_field
@@ -1999,33 +2060,7 @@ fn claim_expiry_problems(
     {
         return Err(bad("anchor_field", "is blank".to_string()));
     }
-    for (i, a) in periods.iter().enumerate() {
-        for b in &periods[i + 1..] {
-            let rank =
-                |p: &ClaimPeriod| usize::from(p.status.is_some()) + usize::from(p.tier.is_some());
-            let statuses_overlap = match (&a.status, &b.status) {
-                (Some(x), Some(y)) => x.iter().any(|s| y.contains(s)),
-                _ => true,
-            };
-            let tiers_overlap = match (&a.tier, &b.tier) {
-                (Some(x), Some(y)) => x == y,
-                _ => true,
-            };
-            if a.record_type == b.record_type
-                && rank(a) == rank(b)
-                && statuses_overlap
-                && tiers_overlap
-            {
-                return Err(bad(
-                    "periods",
-                    format!(
-                        "has two entries for type '{}' of equal specificity that can match the same record; narrow one with a status or a tier",
-                        a.record_type
-                    ),
-                ));
-            }
-        }
-    }
+    claim_periods_overlap(&bad, periods)?;
     let categories: Vec<&str> = config
         .embodiment
         .tiers
@@ -2521,77 +2556,32 @@ pub fn parse_with_document_models(
     validate_relation_pairs(&config)?;
     validate_roadmap(&config)?;
     validate_companion_fields(&config)?;
+    validate_record_types(&config)?;
+    validate_rule_names(&config)?;
+    validate_index_options(&config)?;
+    validate_issue_refs_options(&config)?;
+    validate_rule_settings(&config)?;
+    normalize_rule_paths(&mut config)?;
+    validate_boundaries(&mut config)?;
+    validate_external_ids(&config)?;
+    validate_claim_fields(&config)?;
+    validate_non_reference_fields(&config)?;
+    validate_test_paths(&config)?;
+    validate_rule_fields(&config)?;
+    Ok((config, models))
+}
+
+/// Record types: the values that reach filenames and discovery (directories,
+/// prefixes, `requires`, `permanent`, excluded files, the revision-log declaration).
+fn validate_record_types(config: &Config) -> Result<(), ConfigError> {
     // Values that reach filenames and discovery: validated here, once, so
     // every command (and `doctor`, which loads through this) agrees.
     let mut seen_prefix: std::collections::BTreeMap<String, &String> = Default::default();
     let mut seen_dir: std::collections::BTreeMap<std::path::PathBuf, &String> = Default::default();
     let mut suppression_type: Option<&String> = None;
     for (name, rt) in &config.record_types {
-        let mut own_dirs: std::collections::BTreeSet<std::path::PathBuf> = Default::default();
-        for dir in rt.all_dirs() {
-            if dir_names_nothing(dir) || dir_escapes_repo(dir) {
-                return Err(ConfigError::InvalidDir {
-                    record_type: name.clone(),
-                    dir: dir.to_string(),
-                });
-            }
-            // Discovery compares paths component by component, so a spelling
-            // with a `.` component, an empty one or a trailing slash names the
-            // directory without ever matching it (`BUG-168`).
-            let canonical = canonical_dir(dir);
-            if canonical != *dir {
-                return Err(ConfigError::NonCanonicalDir {
-                    record_type: name.clone(),
-                    dir: dir.to_string(),
-                    canonical,
-                });
-            }
-            let path: std::path::PathBuf = std::path::Path::new(&canonical).components().collect();
-            if !own_dirs.insert(path.clone()) {
-                return Err(ConfigError::DuplicateDir {
-                    record_type: name.clone(),
-                    dir: dir.to_string(),
-                });
-            }
-            if let Some(first) = seen_dir.insert(path, name) {
-                return Err(ConfigError::SharedDir {
-                    dir: dir.to_string(),
-                    first: first.clone(),
-                    second: name.clone(),
-                });
-            }
-        }
-        if let Some(requires) = &rt.effective_requires {
-            let reason = if rt.role != Some(TypeRole::Suppression) {
-                Some("but not `role: suppression` -- only the suppression type has suppressions that take effect".to_string())
-            } else if requires.is_empty() {
-                Some("as an empty list -- it would require nothing; omit it".to_string())
-            } else {
-                requires.iter().enumerate().find_map(|(i, f)| {
-                    if f.trim().is_empty() {
-                        Some("with a blank field name".to_string())
-                    } else if requires[..i].contains(f) {
-                        Some(format!("naming '{f}' twice"))
-                    } else if !rt
-                        .declared_fields()
-                        .iter()
-                        .any(|d| d.as_str() == f.as_str())
-                    {
-                        Some(format!(
-                            "naming '{f}', which is in neither `required_fields` nor `known_fields`"
-                        ))
-                    } else {
-                        None
-                    }
-                })
-            };
-            if let Some(reason) = reason {
-                return Err(ConfigError::InvalidEffectiveRequires {
-                    record_type: name.clone(),
-                    reason,
-                });
-            }
-        }
+        validate_type_dirs(name, rt, &mut seen_dir)?;
+        validate_effective_requires(name, rt)?;
         if let Some(entries) = &rt.permanent {
             if let Some(reason) = permanent_problem(rt, entries) {
                 return Err(ConfigError::InvalidPermanent {
@@ -2651,6 +2641,92 @@ pub fn parse_with_document_models(
             });
         }
     }
+    Ok(())
+}
+
+/// A record type's directories: real, inside the repository, in canonical
+/// spelling, listed once and not owned by another type.
+fn validate_type_dirs<'a>(
+    name: &'a String,
+    rt: &RecordTypeConfig,
+    seen_dir: &mut std::collections::BTreeMap<std::path::PathBuf, &'a String>,
+) -> Result<(), ConfigError> {
+    let mut own_dirs: std::collections::BTreeSet<std::path::PathBuf> = Default::default();
+    for dir in rt.all_dirs() {
+        if dir_names_nothing(dir) || dir_escapes_repo(dir) {
+            return Err(ConfigError::InvalidDir {
+                record_type: name.clone(),
+                dir: dir.to_string(),
+            });
+        }
+        // Discovery compares paths component by component, so a spelling
+        // with a `.` component, an empty one or a trailing slash names the
+        // directory without ever matching it (`BUG-168`).
+        let canonical = canonical_dir(dir);
+        if canonical != *dir {
+            return Err(ConfigError::NonCanonicalDir {
+                record_type: name.clone(),
+                dir: dir.to_string(),
+                canonical,
+            });
+        }
+        let path: std::path::PathBuf = std::path::Path::new(&canonical).components().collect();
+        if !own_dirs.insert(path.clone()) {
+            return Err(ConfigError::DuplicateDir {
+                record_type: name.clone(),
+                dir: dir.to_string(),
+            });
+        }
+        if let Some(first) = seen_dir.insert(path, name) {
+            return Err(ConfigError::SharedDir {
+                dir: dir.to_string(),
+                first: first.clone(),
+                second: name.clone(),
+            });
+        }
+    }
+    Ok(())
+}
+
+/// A suppression type's `requires`: only on that role, non-empty, each field
+/// declared and named once.
+fn validate_effective_requires(name: &str, rt: &RecordTypeConfig) -> Result<(), ConfigError> {
+    if let Some(requires) = &rt.effective_requires {
+        let reason = if rt.role != Some(TypeRole::Suppression) {
+            Some("but not `role: suppression` -- only the suppression type has suppressions that take effect".to_string())
+        } else if requires.is_empty() {
+            Some("as an empty list -- it would require nothing; omit it".to_string())
+        } else {
+            requires.iter().enumerate().find_map(|(i, f)| {
+                if f.trim().is_empty() {
+                    Some("with a blank field name".to_string())
+                } else if requires[..i].contains(f) {
+                    Some(format!("naming '{f}' twice"))
+                } else if !rt
+                    .declared_fields()
+                    .iter()
+                    .any(|d| d.as_str() == f.as_str())
+                {
+                    Some(format!(
+                        "naming '{f}', which is in neither `required_fields` nor `known_fields`"
+                    ))
+                } else {
+                    None
+                }
+            })
+        };
+        if let Some(reason) = reason {
+            return Err(ConfigError::InvalidEffectiveRequires {
+                record_type: name.to_string(),
+                reason,
+            });
+        }
+    }
+    Ok(())
+}
+
+/// Every rule name under `rules:` is one this build ships.
+fn validate_rule_names(config: &Config) -> Result<(), ConfigError> {
     // A misspelled rule name would otherwise be a check that silently never
     // runs, which is the failure direction this project treats as the worse
     // one (ADR-53).
@@ -2667,6 +2743,11 @@ pub fn parse_with_document_models(
             });
         }
     }
+    Ok(())
+}
+
+/// The `indexes` option: owner rule only, declared when the rule runs, each spec valid.
+fn validate_index_options(config: &Config) -> Result<(), ConfigError> {
     // `indexes` is the one structured option, so it is validated apart from
     // the list-of-strings table below.
     for (name, setting) in &config.rules {
@@ -2688,7 +2769,7 @@ pub fn parse_with_document_models(
             });
         };
         for spec in indexes {
-            if let Some(reason) = index_problem(spec, &config) {
+            if let Some(reason) = index_problem(spec, config) {
                 return Err(ConfigError::InvalidIndex {
                     rule: name.clone(),
                     path: spec.path.clone(),
@@ -2697,6 +2778,11 @@ pub fn parse_with_document_models(
             }
         }
     }
+    Ok(())
+}
+
+/// The `issue_refs` option: owner rule only, declared when the rule runs, each field known.
+fn validate_issue_refs_options(config: &Config) -> Result<(), ConfigError> {
     // `issue_refs` is structured too (`MILE-143`).
     for (name, setting) in &config.rules {
         let owner = crate::rules::rule_accepts_option(name, "issue_refs");
@@ -2736,372 +2822,460 @@ pub fn parse_with_document_models(
             }
         }
     }
-    // A list of blanks is an empty list wearing a value.
-    let declared = |v: Vec<String>| !v.is_empty() && v.iter().all(|s| !s.trim().is_empty());
+    Ok(())
+}
 
+/// The per-rule options: acceptance by the rule, the value checks of each option,
+/// then the options a running rule must declare.
+fn validate_rule_settings(config: &Config) -> Result<(), ConfigError> {
     for (name, setting) in &config.rules {
-        for opt in RULE_OPTIONS {
-            let present = option_field(opt.name, setting).is_some();
-            if present && !crate::rules::rule_accepts_option(name, opt.name) {
-                return Err(ConfigError::OptionNotApplicable {
-                    rule: name.clone(),
-                    option: opt.name.to_string(),
-                });
-            }
-        }
-        // `scope` is a scalar, which `option_field` does not read, so its
-        // acceptance is checked here (`ADR-90`). The value was validated when
-        // the setting was read.
-        if setting.scope.is_some() && !crate::rules::rule_accepts_option(name, "scope") {
-            return Err(ConfigError::OptionNotApplicable {
-                rule: name.clone(),
-                option: "scope".to_string(),
-            });
-        }
-        if setting.non_reference_field.is_some()
-            && !crate::rules::rule_accepts_option(name, "non_reference_field")
-        {
-            return Err(ConfigError::OptionNotApplicable {
-                rule: name.clone(),
-                option: "non_reference_field".to_string(),
-            });
-        }
-        for (option, present) in [
-            ("closes", setting.closes.is_some()),
-            ("strict", setting.strict.is_some()),
-            ("verb_claims", setting.verb_claims.is_some()),
-            ("require_evidence", setting.require_evidence.is_some()),
-        ] {
-            if present && !crate::rules::rule_accepts_option(name, option) {
-                return Err(ConfigError::OptionNotApplicable {
-                    rule: name.clone(),
-                    option: option.to_string(),
-                });
-            }
-        }
-        if setting.skip_revision_log.is_some()
-            && !crate::rules::rule_accepts_option(name, "skip_revision_log")
-        {
-            return Err(ConfigError::OptionNotApplicable {
-                rule: name.clone(),
-                option: "skip_revision_log".to_string(),
-            });
-        }
-        if setting.allow_extension_prefix.is_some()
-            && !crate::rules::rule_accepts_option(name, "allow_extension_prefix")
-        {
-            return Err(ConfigError::OptionNotApplicable {
-                rule: name.clone(),
-                option: "allow_extension_prefix".to_string(),
-            });
-        }
-        if let Some(prefixes) = &setting.extension_prefixes {
-            if !crate::rules::rule_accepts_option(name, "extension_prefixes") {
-                return Err(ConfigError::OptionNotApplicable {
-                    rule: name.clone(),
-                    option: "extension_prefixes".to_string(),
-                });
-            }
-            for (record_type, prefix) in prefixes {
-                if let Some(reason) = extension_prefix_problem(&config, record_type, prefix) {
-                    return Err(ConfigError::InvalidExtensionPrefix {
-                        rule: name.clone(),
-                        record_type: record_type.clone(),
-                        reason,
-                    });
-                }
-            }
-        }
-
-        if setting.pending_until_required.is_some()
-            && !crate::rules::rule_accepts_option(name, "pending_until_required")
-        {
-            return Err(ConfigError::OptionNotApplicable {
-                rule: name.clone(),
-                option: "pending_until_required".to_string(),
-            });
-        }
-
-        if setting.template_placeholders.is_some()
-            && !crate::rules::rule_accepts_option(name, "template_placeholders")
-        {
-            return Err(ConfigError::OptionNotApplicable {
-                rule: name.clone(),
-                option: "template_placeholders".to_string(),
-            });
-        }
-
-        if let (Some(fields), true) = (&setting.date_fields, setting.level != RuleLevel::Off) {
-            for entry in fields {
-                let bad = |reason: &str| ConfigError::InvalidDateFields {
-                    rule: name.clone(),
-                    entry: entry.clone(),
-                    reason: reason.to_string(),
-                };
-                let field = entry.trim();
-                if field.is_empty() {
-                    return Err(bad("names a blank field"));
-                }
-                let declared = config
-                    .record_types
-                    .values()
-                    .any(|t| t.declared_fields().iter().any(|f| f.as_str() == field));
-                if !declared {
-                    return Err(bad(
-                        "names a field that is not declared (required_fields or known_fields) by any record type, so it could never be examined",
-                    ));
-                }
-            }
-        }
-        if let (Some(orders), true) = (&setting.date_order, setting.level != RuleLevel::Off) {
-            for entry in orders {
-                let bad = |reason: String| ConfigError::InvalidDateOrder {
-                    rule: name.clone(),
-                    entry: format!("{{earlier: {}, later: {}}}", entry.earlier, entry.later),
-                    reason,
-                };
-                let (earlier, later) = (entry.earlier.trim(), entry.later.trim());
-                if earlier.is_empty() || later.is_empty() {
-                    return Err(bad("names a blank field".into()));
-                }
-                if earlier == later {
-                    return Err(bad("orders a field against itself".into()));
-                }
-                for field in [earlier, later] {
-                    let declared = config
-                        .record_types
-                        .values()
-                        .any(|t| t.declared_fields().iter().any(|f| f.as_str() == field));
-                    if !declared {
-                        return Err(bad(format!(
-                            "names '{field}', which is not a declared field (required_fields or known_fields) of any record type"
-                        )));
-                    }
-                }
-                let both = config.record_types.values().any(|t| {
-                    let d = t.declared_fields();
-                    d.iter().any(|f| f.as_str() == earlier) && d.iter().any(|f| f.as_str() == later)
-                });
-                if !both {
-                    return Err(bad(format!(
-                        "names '{earlier}' and '{later}', but no one record type declares both, so it could never compare"
-                    )));
-                }
-            }
-        }
-        if let Some(levels) = &setting.field_levels {
-            if !crate::rules::rule_accepts_option(name, "field_levels") {
-                return Err(ConfigError::OptionNotApplicable {
-                    rule: name.clone(),
-                    option: "field_levels".to_string(),
-                });
-            }
-            if levels.is_empty() {
-                return Err(ConfigError::InvalidFieldLevels {
-                    rule: name.clone(),
-                    reason: "is empty; name a field or remove the option".to_string(),
-                });
-            }
-            for (field, level) in levels {
-                if *level == RuleLevel::Off {
-                    return Err(ConfigError::InvalidFieldLevels {
-                        rule: name.clone(),
-                        reason: format!(
-                            "gives '{field}' the level 'off'; use 'info', 'warn' or 'error' (a field is switched off by not declaring it)"
-                        ),
-                    });
-                }
-                let declared = config
-                    .record_types
-                    .values()
-                    .any(|t| t.declared_fields().iter().any(|f| f.as_str() == field));
-                if !declared {
-                    return Err(ConfigError::InvalidFieldLevels {
-                        rule: name.clone(),
-                        reason: format!(
-                            "names '{field}', which is not a declared field (required_fields or known_fields) of any record type"
-                        ),
-                    });
-                }
-            }
-        }
-
-        for (option, present) in [
-            ("decision_types", setting.decision_types.is_some()),
-            ("fix_types", setting.fix_types.is_some()),
-            ("link_fields", setting.link_fields.is_some()),
-        ] {
-            if present && !crate::rules::rule_accepts_option(name, option) {
-                return Err(ConfigError::OptionNotApplicable {
-                    rule: name.clone(),
-                    option: option.to_string(),
-                });
-            }
-        }
-        if setting.level != RuleLevel::Off {
-            if let Some(reason) = decision_gate_problem(setting, &config) {
-                return Err(ConfigError::InvalidDecisionGate {
-                    rule: name.clone(),
-                    reason,
-                });
-            }
-        }
-
-        // A pin on a kind the rule rejects is a locator that is always
-        // reported, so `pinnable` may only narrow `locator_kinds` (`BUG-176`).
-        if setting.level != RuleLevel::Off {
-            let declared = setting
-                .locator_kinds
-                .clone()
-                .unwrap_or_else(|| vec![LocatorKind::File]);
-            for kind in setting.pinnable.iter().flatten() {
-                if !declared.contains(kind) {
-                    return Err(ConfigError::PinnableKindNotDeclared {
-                        rule: name.clone(),
-                        kind: kind.to_string(),
-                        declared: declared
-                            .iter()
-                            .map(ToString::to_string)
-                            .collect::<Vec<_>>()
-                            .join(", "),
-                    });
-                }
-            }
-        }
-
-        // A sticky state equal to a computed one would hide real drift: that
-        // state is exactly what the evidence can reproduce.
-        if setting.level != RuleLevel::Off {
-            for state in setting.sticky_states.iter().flatten() {
-                if config.embodiment.is_computed(state.trim()) {
-                    return Err(ConfigError::StickyStateIsComputed {
-                        rule: name.clone(),
-                        state: state.clone(),
-                    });
-                }
-            }
-        }
-
-        // The audit field only moves where the grace window counts from, so it
-        // is meaningless without a window, and a field no type declares would
-        // never be present (`MILE-166`).
-        if setting.level != RuleLevel::Off {
-            if let Some(field) = setting.drift_audit_field.as_deref() {
-                let field = field.trim();
-                let reason = if !crate::rules::rule_accepts_option(name, "drift_audit_field") {
-                    None
-                } else if setting.drift_grace_days.is_none() {
-                    Some(
-                        "needs 'drift_grace_days': it only changes where that window counts from"
-                            .to_string(),
-                    )
-                } else if field.is_empty() {
-                    Some("is blank".to_string())
-                } else if !config
-                    .record_types
-                    .values()
-                    .any(|t| t.declared_fields().iter().any(|f| f.as_str() == field))
-                {
-                    Some(format!(
-                        "names '{field}', which is not a declared field (required_fields or known_fields) of any record type"
-                    ))
-                } else {
-                    None
-                };
-                if let Some(reason) = reason {
-                    return Err(ConfigError::InvalidDriftAuditField {
-                        rule: name.clone(),
-                        reason,
-                    });
-                }
-            }
-        }
-
-        for (option, present) in [
-            ("drift_grace_days", setting.drift_grace_days.is_some()),
-            ("drift_audit_field", setting.drift_audit_field.is_some()),
-            ("claim_max_age_days", setting.claim_max_age_days.is_some()),
-        ] {
-            if present && !crate::rules::rule_accepts_option(name, option) {
-                return Err(ConfigError::OptionNotApplicable {
-                    rule: name.clone(),
-                    option: option.to_string(),
-                });
-            }
-        }
-
-        // `ADR-97`: the expiry rule's own options are checked together, after
-        // the embodiment declaration and every record type are known.
-        for (option, present) in [
-            ("anchor_field", setting.anchor_field.is_some()),
-            ("require_pin", setting.require_pin.is_some()),
-            ("max_batch", setting.max_batch.is_some()),
-            ("periods", setting.periods.is_some()),
-        ] {
-            if present && !crate::rules::rule_accepts_option(name, option) {
-                return Err(ConfigError::OptionNotApplicable {
-                    rule: name.clone(),
-                    option: option.to_string(),
-                });
-            }
-        }
-        if setting.level != RuleLevel::Off
-            && name == crate::rules::RULE_EMBODIMENT_CLAIM_RENEWAL_UNATTESTED
-        {
-            let expiry = config
-                .rules
-                .get(crate::rules::RULE_EMBODIMENT_CLAIM_EXPIRED)
-                .filter(|s| s.level != RuleLevel::Off);
-            if expiry.and_then(|s| s.anchor_field.as_deref()).is_none() {
-                return Err(ConfigError::InvalidClaimExpiry {
-                    rule: name.clone(),
-                    option: "level",
-                    reason: format!(
-                        "is declared without {} and its anchor_field: the rule compares the anchor date and reads it from there",
-                        crate::rules::RULE_EMBODIMENT_CLAIM_EXPIRED
-                    ),
-                });
-            }
-        }
-        if setting.level != RuleLevel::Off && name == crate::rules::RULE_EMBODIMENT_CLAIM_EXPIRED {
-            claim_expiry_problems(name, setting, &config)?;
-        }
-
-        // An option-taking rule given no option does not fall back to a sane
-        // default -- it inverts or goes inert, and both report success
-        // (BUG-44). `claim.status-agreement` with an empty `closed_statuses`
-        // treats every claim as a violation; with no `claim_paths` it scans
-        // nothing forever. A declined rule never runs, so `gated` never reads
-        // its options -- requiring them anyway would mean a rule could not be
-        // turned off without supplying values it will not use.
+        check_rule_option_applicability(name, setting, config)?;
+        check_rule_date_options(name, setting, config)?;
+        check_rule_field_levels(name, setting, config)?;
+        check_rule_decision_gate(name, setting, config)?;
+        check_rule_pinnable_kinds(name, setting)?;
+        check_rule_sticky_states(name, setting, config)?;
+        check_rule_drift_audit_field(name, setting, config)?;
+        check_rule_expiry_options(name, setting, config)?;
         if setting.level == RuleLevel::Off {
             continue;
         }
-        for opt in RULE_OPTIONS
-            .iter()
-            .filter(|o| crate::rules::rule_accepts_option(name, o.name))
-        {
-            // Non-empty *and* no blank entries, not merely present: an empty
-            // list is the harm each consequence describes, and a list of
-            // blanks is the same list wearing a value.
-            let value = option_field(opt.name, setting);
-            let ok = if opt.optional
-                || (opt.fallback_for_undeclared_statuses
-                    && no_type_needs_the_status_fallback(&config))
-            {
-                value.is_none_or(declared)
-            } else {
-                value.is_some_and(declared)
-            };
-            if !ok {
-                return Err(ConfigError::OptionRequired {
-                    rule: name.clone(),
-                    option: opt.name.to_string(),
-                    consequence: opt.consequence_if_missing,
+        check_rule_required_options(name, setting, config)?;
+    }
+    Ok(())
+}
+
+/// Which options a rule accepts, and the value checks of the plain ones.
+fn check_rule_option_applicability(
+    name: &str,
+    setting: &RuleSetting,
+    config: &Config,
+) -> Result<(), ConfigError> {
+    for opt in RULE_OPTIONS {
+        let present = option_field(opt.name, setting).is_some();
+        if present && !crate::rules::rule_accepts_option(name, opt.name) {
+            return Err(ConfigError::OptionNotApplicable {
+                rule: name.to_string(),
+                option: opt.name.to_string(),
+            });
+        }
+    }
+    // `scope` is a scalar, which `option_field` does not read, so its
+    // acceptance is checked here (`ADR-90`). The value was validated when
+    // the setting was read.
+    if setting.scope.is_some() && !crate::rules::rule_accepts_option(name, "scope") {
+        return Err(ConfigError::OptionNotApplicable {
+            rule: name.to_string(),
+            option: "scope".to_string(),
+        });
+    }
+    if setting.non_reference_field.is_some()
+        && !crate::rules::rule_accepts_option(name, "non_reference_field")
+    {
+        return Err(ConfigError::OptionNotApplicable {
+            rule: name.to_string(),
+            option: "non_reference_field".to_string(),
+        });
+    }
+    for (option, present) in [
+        ("closes", setting.closes.is_some()),
+        ("strict", setting.strict.is_some()),
+        ("verb_claims", setting.verb_claims.is_some()),
+        ("require_evidence", setting.require_evidence.is_some()),
+    ] {
+        if present && !crate::rules::rule_accepts_option(name, option) {
+            return Err(ConfigError::OptionNotApplicable {
+                rule: name.to_string(),
+                option: option.to_string(),
+            });
+        }
+    }
+    if setting.skip_revision_log.is_some()
+        && !crate::rules::rule_accepts_option(name, "skip_revision_log")
+    {
+        return Err(ConfigError::OptionNotApplicable {
+            rule: name.to_string(),
+            option: "skip_revision_log".to_string(),
+        });
+    }
+    if setting.allow_extension_prefix.is_some()
+        && !crate::rules::rule_accepts_option(name, "allow_extension_prefix")
+    {
+        return Err(ConfigError::OptionNotApplicable {
+            rule: name.to_string(),
+            option: "allow_extension_prefix".to_string(),
+        });
+    }
+    if let Some(prefixes) = &setting.extension_prefixes {
+        if !crate::rules::rule_accepts_option(name, "extension_prefixes") {
+            return Err(ConfigError::OptionNotApplicable {
+                rule: name.to_string(),
+                option: "extension_prefixes".to_string(),
+            });
+        }
+        for (record_type, prefix) in prefixes {
+            if let Some(reason) = extension_prefix_problem(config, record_type, prefix) {
+                return Err(ConfigError::InvalidExtensionPrefix {
+                    rule: name.to_string(),
+                    record_type: record_type.clone(),
+                    reason,
                 });
             }
         }
     }
+
+    if setting.pending_until_required.is_some()
+        && !crate::rules::rule_accepts_option(name, "pending_until_required")
+    {
+        return Err(ConfigError::OptionNotApplicable {
+            rule: name.to_string(),
+            option: "pending_until_required".to_string(),
+        });
+    }
+
+    if setting.template_placeholders.is_some()
+        && !crate::rules::rule_accepts_option(name, "template_placeholders")
+    {
+        return Err(ConfigError::OptionNotApplicable {
+            rule: name.to_string(),
+            option: "template_placeholders".to_string(),
+        });
+    }
+    Ok(())
+}
+
+/// `date_fields` and `date_order` name declared fields, for a rule that runs.
+fn check_rule_date_options(
+    name: &str,
+    setting: &RuleSetting,
+    config: &Config,
+) -> Result<(), ConfigError> {
+    if let (Some(fields), true) = (&setting.date_fields, setting.level != RuleLevel::Off) {
+        for entry in fields {
+            let bad = |reason: &str| ConfigError::InvalidDateFields {
+                rule: name.to_string(),
+                entry: entry.clone(),
+                reason: reason.to_string(),
+            };
+            let field = entry.trim();
+            if field.is_empty() {
+                return Err(bad("names a blank field"));
+            }
+            let declared = config
+                .record_types
+                .values()
+                .any(|t| t.declared_fields().iter().any(|f| f.as_str() == field));
+            if !declared {
+                return Err(bad(
+                    "names a field that is not declared (required_fields or known_fields) by any record type, so it could never be examined",
+                ));
+            }
+        }
+    }
+    if let (Some(orders), true) = (&setting.date_order, setting.level != RuleLevel::Off) {
+        for entry in orders {
+            let bad = |reason: String| ConfigError::InvalidDateOrder {
+                rule: name.to_string(),
+                entry: format!("{{earlier: {}, later: {}}}", entry.earlier, entry.later),
+                reason,
+            };
+            let (earlier, later) = (entry.earlier.trim(), entry.later.trim());
+            if earlier.is_empty() || later.is_empty() {
+                return Err(bad("names a blank field".into()));
+            }
+            if earlier == later {
+                return Err(bad("orders a field against itself".into()));
+            }
+            for field in [earlier, later] {
+                let declared = config
+                    .record_types
+                    .values()
+                    .any(|t| t.declared_fields().iter().any(|f| f.as_str() == field));
+                if !declared {
+                    return Err(bad(format!(
+                        "names '{field}', which is not a declared field (required_fields or known_fields) of any record type"
+                    )));
+                }
+            }
+            let both = config.record_types.values().any(|t| {
+                let d = t.declared_fields();
+                d.iter().any(|f| f.as_str() == earlier) && d.iter().any(|f| f.as_str() == later)
+            });
+            if !both {
+                return Err(bad(format!(
+                    "names '{earlier}' and '{later}', but no one record type declares both, so it could never compare"
+                )));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// `field_levels`: accepted by the rule, non-empty, no `off`, declared fields.
+fn check_rule_field_levels(
+    name: &str,
+    setting: &RuleSetting,
+    config: &Config,
+) -> Result<(), ConfigError> {
+    if let Some(levels) = &setting.field_levels {
+        if !crate::rules::rule_accepts_option(name, "field_levels") {
+            return Err(ConfigError::OptionNotApplicable {
+                rule: name.to_string(),
+                option: "field_levels".to_string(),
+            });
+        }
+        if levels.is_empty() {
+            return Err(ConfigError::InvalidFieldLevels {
+                rule: name.to_string(),
+                reason: "is empty; name a field or remove the option".to_string(),
+            });
+        }
+        for (field, level) in levels {
+            if *level == RuleLevel::Off {
+                return Err(ConfigError::InvalidFieldLevels {
+                    rule: name.to_string(),
+                    reason: format!(
+                        "gives '{field}' the level 'off'; use 'info', 'warn' or 'error' (a field is switched off by not declaring it)"
+                    ),
+                });
+            }
+            let declared = config
+                .record_types
+                .values()
+                .any(|t| t.declared_fields().iter().any(|f| f.as_str() == field));
+            if !declared {
+                return Err(ConfigError::InvalidFieldLevels {
+                    rule: name.to_string(),
+                    reason: format!(
+                        "names '{field}', which is not a declared field (required_fields or known_fields) of any record type"
+                    ),
+                });
+            }
+        }
+    }
+    Ok(())
+}
+
+/// The decision-gate options: accepted by the rule and a coherent gate.
+fn check_rule_decision_gate(
+    name: &str,
+    setting: &RuleSetting,
+    config: &Config,
+) -> Result<(), ConfigError> {
+    for (option, present) in [
+        ("decision_types", setting.decision_types.is_some()),
+        ("fix_types", setting.fix_types.is_some()),
+        ("link_fields", setting.link_fields.is_some()),
+    ] {
+        if present && !crate::rules::rule_accepts_option(name, option) {
+            return Err(ConfigError::OptionNotApplicable {
+                rule: name.to_string(),
+                option: option.to_string(),
+            });
+        }
+    }
+    if setting.level != RuleLevel::Off {
+        if let Some(reason) = decision_gate_problem(setting, config) {
+            return Err(ConfigError::InvalidDecisionGate {
+                rule: name.to_string(),
+                reason,
+            });
+        }
+    }
+    Ok(())
+}
+
+/// `pinnable` only narrows `locator_kinds`.
+fn check_rule_pinnable_kinds(name: &str, setting: &RuleSetting) -> Result<(), ConfigError> {
+    // A pin on a kind the rule rejects is a locator that is always
+    // reported, so `pinnable` may only narrow `locator_kinds` (`BUG-176`).
+    if setting.level != RuleLevel::Off {
+        let declared = setting
+            .locator_kinds
+            .clone()
+            .unwrap_or_else(|| vec![LocatorKind::File]);
+        for kind in setting.pinnable.iter().flatten() {
+            if !declared.contains(kind) {
+                return Err(ConfigError::PinnableKindNotDeclared {
+                    rule: name.to_string(),
+                    kind: kind.to_string(),
+                    declared: declared
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                });
+            }
+        }
+    }
+    Ok(())
+}
+
+/// A sticky state is never one the evidence computes.
+fn check_rule_sticky_states(
+    name: &str,
+    setting: &RuleSetting,
+    config: &Config,
+) -> Result<(), ConfigError> {
+    // A sticky state equal to a computed one would hide real drift: that
+    // state is exactly what the evidence can reproduce.
+    if setting.level != RuleLevel::Off {
+        for state in setting.sticky_states.iter().flatten() {
+            if config.embodiment.is_computed(state.trim()) {
+                return Err(ConfigError::StickyStateIsComputed {
+                    rule: name.to_string(),
+                    state: state.clone(),
+                });
+            }
+        }
+    }
+    Ok(())
+}
+
+/// `drift_audit_field` needs a window and a declared field.
+fn check_rule_drift_audit_field(
+    name: &str,
+    setting: &RuleSetting,
+    config: &Config,
+) -> Result<(), ConfigError> {
+    // The audit field only moves where the grace window counts from, so it
+    // is meaningless without a window, and a field no type declares would
+    // never be present (`MILE-166`).
+    if setting.level != RuleLevel::Off {
+        if let Some(field) = setting.drift_audit_field.as_deref() {
+            let field = field.trim();
+            let reason = if !crate::rules::rule_accepts_option(name, "drift_audit_field") {
+                None
+            } else if setting.drift_grace_days.is_none() {
+                Some(
+                    "needs 'drift_grace_days': it only changes where that window counts from"
+                        .to_string(),
+                )
+            } else if field.is_empty() {
+                Some("is blank".to_string())
+            } else if !config
+                .record_types
+                .values()
+                .any(|t| t.declared_fields().iter().any(|f| f.as_str() == field))
+            {
+                Some(format!(
+                    "names '{field}', which is not a declared field (required_fields or known_fields) of any record type"
+                ))
+            } else {
+                None
+            };
+            if let Some(reason) = reason {
+                return Err(ConfigError::InvalidDriftAuditField {
+                    rule: name.to_string(),
+                    reason,
+                });
+            }
+        }
+    }
+    Ok(())
+}
+
+/// The drift and claim-expiry options, checked together once every record type is known.
+fn check_rule_expiry_options(
+    name: &str,
+    setting: &RuleSetting,
+    config: &Config,
+) -> Result<(), ConfigError> {
+    for (option, present) in [
+        ("drift_grace_days", setting.drift_grace_days.is_some()),
+        ("drift_audit_field", setting.drift_audit_field.is_some()),
+        ("claim_max_age_days", setting.claim_max_age_days.is_some()),
+    ] {
+        if present && !crate::rules::rule_accepts_option(name, option) {
+            return Err(ConfigError::OptionNotApplicable {
+                rule: name.to_string(),
+                option: option.to_string(),
+            });
+        }
+    }
+
+    // `ADR-97`: the expiry rule's own options are checked together, after
+    // the embodiment declaration and every record type are known.
+    for (option, present) in [
+        ("anchor_field", setting.anchor_field.is_some()),
+        ("require_pin", setting.require_pin.is_some()),
+        ("max_batch", setting.max_batch.is_some()),
+        ("periods", setting.periods.is_some()),
+    ] {
+        if present && !crate::rules::rule_accepts_option(name, option) {
+            return Err(ConfigError::OptionNotApplicable {
+                rule: name.to_string(),
+                option: option.to_string(),
+            });
+        }
+    }
+    if setting.level != RuleLevel::Off
+        && name == crate::rules::RULE_EMBODIMENT_CLAIM_RENEWAL_UNATTESTED
+    {
+        let expiry = config
+            .rules
+            .get(crate::rules::RULE_EMBODIMENT_CLAIM_EXPIRED)
+            .filter(|s| s.level != RuleLevel::Off);
+        if expiry.and_then(|s| s.anchor_field.as_deref()).is_none() {
+            return Err(ConfigError::InvalidClaimExpiry {
+                rule: name.to_string(),
+                option: "level",
+                reason: format!(
+                    "is declared without {} and its anchor_field: the rule compares the anchor date and reads it from there",
+                    crate::rules::RULE_EMBODIMENT_CLAIM_EXPIRED
+                ),
+            });
+        }
+    }
+    if setting.level != RuleLevel::Off && name == crate::rules::RULE_EMBODIMENT_CLAIM_EXPIRED {
+        claim_expiry_problems(name, setting, config)?;
+    }
+    Ok(())
+}
+
+/// An option-taking rule given no option does not fall back to a sane
+/// default -- it inverts or goes inert, and both report success (`BUG-44`).
+/// `claim.status-agreement` with an empty `closed_statuses` treats every claim
+/// as a violation; with no `claim_paths` it scans nothing forever. The caller
+/// skips a declined rule, which never runs, so `gated` never reads its options
+/// -- requiring them anyway would mean a rule could not be turned off without
+/// supplying values it will not use.
+fn check_rule_required_options(
+    name: &str,
+    setting: &RuleSetting,
+    config: &Config,
+) -> Result<(), ConfigError> {
+    // A list of blanks is an empty list wearing a value.
+    let declared = |v: Vec<String>| !v.is_empty() && v.iter().all(|s| !s.trim().is_empty());
+    for opt in RULE_OPTIONS
+        .iter()
+        .filter(|o| crate::rules::rule_accepts_option(name, o.name))
+    {
+        // Non-empty *and* no blank entries, not merely present: an empty
+        // list is the harm each consequence describes, and a list of
+        // blanks is the same list wearing a value.
+        let value = option_field(opt.name, setting);
+        let ok = if opt.optional
+            || (opt.fallback_for_undeclared_statuses && no_type_needs_the_status_fallback(config))
+        {
+            value.is_none_or(declared)
+        } else {
+            value.is_some_and(declared)
+        };
+        if !ok {
+            return Err(ConfigError::OptionRequired {
+                rule: name.to_string(),
+                option: opt.name.to_string(),
+                consequence: opt.consequence_if_missing,
+            });
+        }
+    }
+    Ok(())
+}
+
+/// Published paths: refused when they cannot name a path in the repository, otherwise
+/// stored in their normalised form.
+fn normalize_rule_paths(config: &mut Config) -> Result<(), ConfigError> {
     // Published paths: reject what cannot name a path inside the repository,
     // then store the normalised form so the rule, its messages and its
     // findings all use the same spelling.
@@ -3156,6 +3330,11 @@ pub fn parse_with_document_models(
             }
         }
     }
+    Ok(())
+}
+
+/// Declared boundaries: structure, then the one spelling of each path.
+fn validate_boundaries(config: &mut Config) -> Result<(), ConfigError> {
     // Declared boundaries (`ADR-80`): structure, then the one spelling of each
     // path. A boundary that cannot be matched would be a rule that never
     // reports, so every reason is a load error.
@@ -3248,26 +3427,35 @@ pub fn parse_with_document_models(
             }
         }
     }
+    Ok(())
+}
+
+/// `external_ids` entries parse and sit under a declared record prefix.
+fn validate_external_ids(config: &Config) -> Result<(), ConfigError> {
     // `external_ids` entries must parse and sit under a declared record prefix:
     // an entry that can never match a citation is a rule option that is a
     // silent no-op.
-    {
-        let prefixes = crate::rules::declared_prefixes(&config);
-        for (name, setting) in &config.rules {
-            if setting.level == RuleLevel::Off {
-                continue;
-            }
-            for entry in setting.external_ids.iter().flatten() {
-                if let Err(reason) = crate::rules::parse_external_id(entry, &prefixes) {
-                    return Err(ConfigError::InvalidExternalId {
-                        rule: name.clone(),
-                        entry: entry.clone(),
-                        reason,
-                    });
-                }
+    let prefixes = crate::rules::declared_prefixes(config);
+    for (name, setting) in &config.rules {
+        if setting.level == RuleLevel::Off {
+            continue;
+        }
+        for entry in setting.external_ids.iter().flatten() {
+            if let Err(reason) = crate::rules::parse_external_id(entry, &prefixes) {
+                return Err(ConfigError::InvalidExternalId {
+                    rule: name.clone(),
+                    entry: entry.clone(),
+                    reason,
+                });
             }
         }
     }
+    Ok(())
+}
+
+/// `closes`, `strict` and `verb_claims`: a key the one-line reader can find, and the
+/// options that need it.
+fn validate_claim_fields(config: &Config) -> Result<(), ConfigError> {
     // `closes` names a frontmatter key, so it must be one the one-line reader
     // can find; `strict` judges the presence of that key, so it needs one. An
     // option that could never apply is refused, not ignored (`ADR-85`).
@@ -3305,6 +3493,11 @@ pub fn parse_with_document_models(
             ));
         }
     }
+    Ok(())
+}
+
+/// `non_reference_field` names a declared field no rule resolves or stale-checks.
+fn validate_non_reference_fields(config: &Config) -> Result<(), ConfigError> {
     // `non_reference_field` must name a field some type declares (the header is
     // a closed structure) that no rule resolves or stale-checks: a pointer,
     // narrative or relation-role field would read the ids as references, the
@@ -3352,6 +3545,11 @@ pub fn parse_with_document_models(
             }
         }
     }
+    Ok(())
+}
+
+/// A test path lies inside a back-pointer path, or is a glob.
+fn validate_test_paths(config: &Config) -> Result<(), ConfigError> {
     // A test path outside every back-pointer path is never scanned, so a
     // `Verifies:` there would be a silent no-op.
     for (name, setting) in &config.rules {
@@ -3376,6 +3574,11 @@ pub fn parse_with_document_models(
             }
         }
     }
+    Ok(())
+}
+
+/// `fields` names a declared pointer or narrative field.
+fn validate_rule_fields(config: &Config) -> Result<(), ConfigError> {
     // `fields` must name something the repository declared: a name matching no
     // declared pointer/narrative field excludes nothing and checks nothing,
     // which reads as a clean run.
@@ -3399,7 +3602,7 @@ pub fn parse_with_document_models(
             }
         }
     }
-    Ok((config, models))
+    Ok(())
 }
 
 /// What a relation pair requires of its two sides (`RFC-47`). `required` and
@@ -3618,7 +3821,22 @@ fn validate_roadmap(config: &Config) -> Result<(), ConfigError> {
 /// Load-time checks for `relation_pairs`: every misdeclaration is refused,
 /// because a pair that cannot run reads as a clean corpus.
 fn validate_relation_pairs(config: &Config) -> Result<(), ConfigError> {
-    let bad = |reason: String| Err(ConfigError::InvalidRelationPair { reason });
+    check_pair_fields(config)?;
+    check_pair_types(config)?;
+    check_pair_provisional(config)?;
+    check_pair_rule_requirements(config)?;
+    check_declared_keys(config)?;
+    check_rules_need_declarations(config)
+}
+
+/// The load error for a misdeclared relation pair or the keys checked beside it.
+fn invalid_relation_pair(reason: String) -> Result<(), ConfigError> {
+    Err(ConfigError::InvalidRelationPair { reason })
+}
+
+/// Every pair is named once, and each side is a distinct declared field.
+fn check_pair_fields(config: &Config) -> Result<(), ConfigError> {
+    let bad = invalid_relation_pair;
     let declared: std::collections::BTreeSet<&str> = config
         .record_types
         .values()
@@ -3659,6 +3877,12 @@ fn validate_relation_pairs(config: &Config) -> Result<(), ConfigError> {
             }
         }
     }
+    Ok(())
+}
+
+/// A pair scoped to types names configured types that carry one of its fields.
+fn check_pair_types(config: &Config) -> Result<(), ConfigError> {
+    let bad = invalid_relation_pair;
     // A pair scoped to types that do not exist, or that carry neither of its
     // fields, would examine nothing (ADR-7).
     for pair in &config.relation_pairs {
@@ -3693,6 +3917,12 @@ fn validate_relation_pairs(config: &Config) -> Result<(), ConfigError> {
             }
         }
     }
+    Ok(())
+}
+
+/// A provisional split names statuses some type declares, and an acknowledgement field that can be read.
+fn check_pair_provisional(config: &Config) -> Result<(), ConfigError> {
+    let bad = invalid_relation_pair;
     // A provisional split naming a status no type declares never applies,
     // which reads as a clean run (ADR-7).
     for pair in &config.relation_pairs {
@@ -3763,6 +3993,12 @@ fn validate_relation_pairs(config: &Config) -> Result<(), ConfigError> {
             }
         }
     }
+    Ok(())
+}
+
+/// A rule that needs relation pairs finds the pairs it examines.
+fn check_pair_rule_requirements(config: &Config) -> Result<(), ConfigError> {
+    let bad = invalid_relation_pair;
     // A sequencing rule with no acyclic pair to read examines nothing (ADR-7).
     if !config.relation_pairs.iter().any(|p| p.acyclic) {
         for rule in crate::rules::rule_ids_where(|d| d.requires_acyclic_pair) {
@@ -3815,6 +4051,13 @@ fn validate_relation_pairs(config: &Config) -> Result<(), ConfigError> {
             ));
         }
     }
+    Ok(())
+}
+
+/// The top-level keys read beside the pairs: `override_log`, `block_on`, `new`,
+/// `attestation`, `harness` and `authority`.
+fn check_declared_keys(config: &Config) -> Result<(), ConfigError> {
+    let bad = invalid_relation_pair;
     // The override log is declared, never defaulted: a path that names nothing or
     // leaves the repository could be neither written nor read (`MILE-188`).
     if let Some(path) = &config.override_log {
@@ -3890,6 +4133,12 @@ fn validate_relation_pairs(config: &Config) -> Result<(), ConfigError> {
     if let Some(problem) = config.authority.as_ref().and_then(|a| a.problem_in(config)) {
         return bad(problem);
     }
+    Ok(())
+}
+
+/// A rule enabled without the declaration it reads would examine nothing.
+fn check_rules_need_declarations(config: &Config) -> Result<(), ConfigError> {
+    let bad = invalid_relation_pair;
     // `diff.decider-required` reads the table: enabled without one it would
     // examine nothing and read as protection (`MILE-200`).
     for rule in crate::rules::rule_ids_where(|d| d.requires_authority) {
@@ -6318,5 +6567,317 @@ mod option_table_tests {
         assert_eq!(empty.fields, Some(Vec::new()));
         assert!(option_field("fields", &absent).is_none());
         assert_eq!(option_field("fields", &empty), Some(Vec::new()));
+    }
+}
+
+/// Characterisation of load-time validation order: a config carrying one
+/// fault per validation pass reports them one at a time, in a fixed order
+/// and with fixed messages. Fixing the reported fault reveals the next.
+#[cfg(test)]
+mod validation_order_tests {
+    use super::*;
+
+    /// A valid config. Every `@NAME` is a slot: `SLOTS` holds its valid
+    /// default and `FAULTS` the faulty value that replaces it.
+    const TEMPLATE: &str = "schema_version: 2
+@TOPA
+@TOPB
+@TOPC
+@TOPD
+record_types:
+  adr:
+    dir: @ADRDIR
+    required_fields: [Status]
+    known_fields: [Date, Accepted-on, Deciders, Reviewers, Blocks, Blocked-by, Realized-by]
+    pointer_fields: [Reviewers]
+@ADREXCL
+@ADRLOG
+@ADRPFX
+  bug:
+    dir: @BUGDIR
+@BUGPFX
+relation_pairs:
+  - {name: ok, forward: Blocks, inverse: Blocked-by, reciprocity: required@ACYC}
+@PAIRA
+@PAIRB
+@PAIRC
+rules:
+  index.freshness:
+    level: error
+    indexes: [{path: @IDXPATH, type: adr, format: '- {id}'}]
+  citation.issue-exists:
+    level: error
+    reference_sections: [References]
+    issue_refs: {snapshot: @SNAP, repository: o/r, forms: [number], fields: [@IRFIELD]}
+  date.field-valid:
+    level: error
+    date_fields: [@DATEF]
+@DVFL
+  date.field-order:
+    level: error
+    date_order: [{earlier: Date, later: @LATER}]
+  field.quality:
+    level: error
+    field_levels: {Deciders: @FQLEVEL}
+@FQCLOSE
+  embodiment.locator-exists:
+    level: error
+    locator_kinds: [file]
+    pinnable: [@PINKIND]
+  embodiment.claim-expired:
+    level: error
+    anchor_field: @ANCHOR
+    periods:
+@PERA
+@PERB
+      - {type: adr, days: 30}
+@PERC
+    require_pin: [@REQPIN]
+    max_batch: @BATCH
+  embodiment.consistency:
+    level: error
+    drift_grace_days: 3
+    drift_audit_field: @AUDIT
+  diff.source-requires-record:
+    level: error
+    source_paths: [@SRCPATH]
+    exclude_paths: [docs]
+  boundary.published-path-reference:
+    level: error
+    published_paths: [docs]
+    ignore_marker: @MARKER
+  citation.resolution:
+    level: error
+    external_ids: [@EXTID]
+    non_reference_field: @NONREF
+  claim.status-agreement:
+    level: error
+    claim_paths: [docs]
+    closed_statuses: [Done]
+    closes: @CLOSES
+  embodiment.back-pointer-resolution:
+    level: error
+    back_pointer_paths: [src]
+    test_paths: [@TESTPATH]
+  pointer.target-status:
+    level: error
+    not_in: [Done]
+    fields: [@PTRFIELD]
+  sequence.cycle:
+    level: error
+@RULEA
+@RULEB
+@RULEC
+@RULED
+@RULEE
+";
+
+    const SLOTS: &[(&str, &str)] = &[
+        ("@TOPA", ""),
+        ("@TOPB", ""),
+        ("@TOPC", ""),
+        ("@TOPD", ""),
+        ("@ADRDIR", "docs/adr"),
+        ("@ADREXCL", ""),
+        ("@ADRLOG", ""),
+        ("@ADRPFX", ""),
+        ("@BUGDIR", "docs/bug"),
+        ("@BUGPFX", ""),
+        ("@ACYC", ", acyclic: true"),
+        ("@PAIRA", ""),
+        ("@PAIRB", ""),
+        ("@PAIRC", ""),
+        ("@IDXPATH", "docs/index.md"),
+        ("@SNAP", "snap.json"),
+        ("@DATEF", "Date"),
+        ("@DVFL", ""),
+        ("@LATER", "Accepted-on"),
+        ("@FQLEVEL", "error"),
+        ("@FQCLOSE", ""),
+        ("@IRFIELD", "Date"),
+        ("@RULEE", ""),
+        ("@PINKIND", "file"),
+        ("@ANCHOR", "Date"),
+        ("@PERA", ""),
+        ("@PERB", ""),
+        ("@PERC", ""),
+        ("@REQPIN", "code"),
+        ("@BATCH", "5"),
+        ("@AUDIT", "Date"),
+        ("@SRCPATH", "src"),
+        ("@MARKER", "ok"),
+        ("@EXTID", "ADR-1"),
+        ("@NONREF", "Deciders"),
+        ("@CLOSES", "closes"),
+        ("@TESTPATH", "src/t.rs"),
+        ("@PTRFIELD", "Reviewers"),
+        ("@RULEA", ""),
+        ("@RULEB", ""),
+        ("@RULEC", ""),
+        ("@RULED", ""),
+    ];
+
+    /// `(slot, faulty value, message)` in the order the loader reports them.
+    const FAULTS: &[(&str, &str, &str)] = &[
+        ("@PAIRA", "  - {name: bad, forward: Nope, inverse: Nope2, reciprocity: required}",
+            "relation_pairs: pair 'bad' forward field 'Nope' is not in the required_fields or known_fields of any record type, so the pair could never examine a record",
+        ),
+        ("@PAIRB", "  - {name: typed, forward: Date, inverse: Accepted-on, reciprocity: required, types: [ghost]}",
+            "relation_pairs: pair 'typed' types names 'ghost', which is not a configured record type",
+        ),
+        ("@PAIRC", "  - {name: prov, forward: Reviewers, inverse: Deciders, reciprocity: required, provisional: {statuses: []}}",
+            "relation_pairs: pair 'prov' provisional.statuses must list at least one status",
+        ),
+        ("@ACYC", "",
+            "relation_pairs: rule 'sequence.cycle' is enabled but no relation_pairs entry declares `acyclic: true`, so it would examine nothing",
+        ),
+        ("@TOPA", "override_log: /abs/log.md",
+            "relation_pairs: override_log '/abs/log.md' is not a repository-relative file path",
+        ),
+        ("@TOPB", "block_on: nope",
+            "relation_pairs: block_on 'nope' is not one of introduced, all",
+        ),
+        ("@TOPC", "new:\n  fetch_timeout_seconds: 0",
+            "relation_pairs: new.fetch_timeout_seconds must be at least 1",
+        ),
+        ("@TOPD", "attestation:\n  identity: asserted\n  require_verified: true",
+            "relation_pairs: attestation.require_verified: true cannot be combined with identity: asserted, which takes --by as given and verifies nothing",
+        ),
+        ("@RULEA", "  diff.decider-required:\n    level: error",
+            "relation_pairs: rule 'diff.decider-required' is enabled but no top-level `authority` is declared, so it would judge no gate",
+        ),
+        ("@RULEB", "  override.unreviewed:\n    level: error",
+            "relation_pairs: rule 'override.unreviewed' is enabled but no `override_log` is declared, so it would read no log",
+        ),
+        ("@RULEC", "  revision-log.version-bump-required:\n    level: error",
+            "relation_pairs: rule 'revision-log.version-bump-required' is enabled but no record type declares revision_log.version_bump, so it would examine nothing",
+        ),
+        ("@ADRDIR", "docs/./adr",
+            "record type 'adr' declares dir 'docs/./adr', which is not in canonical form -- write 'docs/adr'",
+        ),
+        ("@ADREXCL", "    exclude_files: [\"a/b\"]",
+            "record type 'adr' declares exclude_files entry 'a/b', which is not a bare file name -- it would exclude nothing",
+        ),
+        ("@ADRLOG", "    revision_log: {}",
+            "record type 'adr' declares revision_log neither `marker` nor `heading` -- name one",
+        ),
+        ("@ADRPFX", "    prefix: \"bad-\"",
+            "record type 'adr' declares prefix 'bad-', which must be upper-case ASCII letters and digits in hyphen-separated segments",
+        ),
+        ("@BUGDIR", "docs/adr",
+            "record types 'adr' and 'bug' both own directory 'docs/adr' -- a directory holds one type's records",
+        ),
+        ("@BUGPFX", "    prefix: ADR",
+            "record types 'adr' and 'bug' both use the prefix 'ADR' -- `urzua new` would mint colliding identities",
+        ),
+        ("@RULED", "  not.a.rule:\n    level: error",
+            "unknown rule 'not.a.rule' under `rules:` -- this build ships: ",
+        ),
+        ("@IDXPATH", "../escape.md",
+            "rule 'index.freshness' option 'indexes' entry '../escape.md' path contains a `..` component; a published path must stay inside the repository",
+        ),
+        ("@SNAP", "\"\"",
+            "rule 'citation.issue-exists' option 'issue_refs' has an empty snapshot path",
+        ),
+        ("@IRFIELD", "Nope",
+            "rule 'citation.issue-exists' option 'issue_refs' 'fields' names 'Nope', which no record type declares",
+        ),
+        ("@RULEE", "  citation.path-exists:\n    level: error",
+            "rule 'citation.path-exists' requires the option 'reference_sections' -- without it the rule reads no section and can never report",
+        ),
+        ("@LATER", "Date",
+            "rule 'date.field-order' option 'date_order' entry '{earlier: Date, later: Date}' orders a field against itself",
+        ),
+        ("@DATEF", "Typo",
+            "rule 'date.field-valid' option 'date_fields' entry 'Typo' names a field that is not declared (required_fields or known_fields) by any record type, so it could never be examined",
+        ),
+        ("@DVFL", "    field_levels: {Deciders: error}",
+            "rule 'date.field-valid' does not take the option 'field_levels'",
+        ),
+        ("@PERA", "      - {type: ghost, days: 5}",
+            "rule 'embodiment.claim-expired' option 'periods' entry 0 (type 'ghost') names a record type that is not declared",
+        ),
+        ("@PERB", "      - {type: adr, days: 0}",
+            "rule 'embodiment.claim-expired' option 'periods' entry 0 (type 'adr') has days 0; a period is 1 day or more",
+        ),
+        ("@ANCHOR", "Nope",
+            "rule 'embodiment.claim-expired' option 'anchor_field' names 'Nope', which entry 0 (type 'adr') does not declare (required_fields or known_fields)",
+        ),
+        ("@PERC", "      - {type: adr, days: 31}",
+            "rule 'embodiment.claim-expired' option 'periods' has two entries for type 'adr' of equal specificity that can match the same record; narrow one with a status or a tier",
+        ),
+        ("@REQPIN", "nope",
+            "rule 'embodiment.claim-expired' option 'require_pin' names the category 'nope', which the embodiment declaration does not use (test, code, spec)",
+        ),
+        ("@BATCH", "0",
+            "rule 'embodiment.claim-expired' option 'max_batch' is 0; a batch is 1 record or more",
+        ),
+        ("@AUDIT", "Nope",
+            "rule 'embodiment.consistency' option 'drift_audit_field' names 'Nope', which is not a declared field (required_fields or known_fields) of any record type",
+        ),
+        ("@PINKIND", "directory",
+            "rule 'embodiment.locator-exists' option 'pinnable' names 'directory', which 'locator_kinds' does not declare; a locator of a kind the rule rejects can never be pinned (declared kinds: file)",
+        ),
+        ("@FQCLOSE", "    closes: closes",
+            "rule 'field.quality' does not take the option 'closes'",
+        ),
+        ("@FQLEVEL", "off",
+            "rule 'field.quality' option 'field_levels' gives 'Deciders' the level 'off'; use 'info', 'warn' or 'error' (a field is switched off by not declaring it)",
+        ),
+        ("@SRCPATH", "../esc",
+            "rule 'diff.source-requires-record' option 'source_paths' entry '../esc' contains a `..` component; a published path must stay inside the repository",
+        ),
+        ("@MARKER", "' bad'",
+            "rule 'boundary.published-path-reference' option 'ignore_marker' must be non-blank text on one line with no surrounding whitespace",
+        ),
+        ("@EXTID", "BAD",
+            "rule 'citation.resolution' option 'external_ids' entry 'BAD' must look like PREFIX-N or PREFIX-LOW..HIGH",
+        ),
+        ("@CLOSES", "\"a b\"",
+            "rule 'claim.status-agreement' option 'closes' must be one frontmatter key: not empty, with no whitespace, ':' or '#'",
+        ),
+        ("@NONREF", "Nope",
+            "rule 'citation.resolution' option 'non_reference_field' names 'Nope', which no record type lists in `known_fields` (or `required_fields`)",
+        ),
+        ("@TESTPATH", "other/t.rs",
+            "rule 'embodiment.back-pointer-resolution' option 'test_paths' entry 'other/t.rs' is not inside any 'back_pointer_paths' entry, so no file under it is scanned and a `Verifies:` comment there would count for nothing",
+        ),
+        ("@PTRFIELD", "Nope",
+            "rule 'pointer.target-status' option 'fields' names 'Nope', which is not a declared pointer_fields or narrative_fields entry of any record type",
+        ),
+    ];
+
+    fn render(active: &[(&str, &str, &str)]) -> String {
+        let mut out = TEMPLATE.to_string();
+        for (slot, default) in SLOTS {
+            let value = active
+                .iter()
+                .find(|(s, _, _)| s == slot)
+                .map_or(*default, |(_, v, _)| *v);
+            out = out.replace(slot, value);
+        }
+        out
+    }
+
+    #[test]
+    fn the_baseline_loads() {
+        if let Err(e) = parse(&render(&[])) {
+            panic!("{e}");
+        }
+    }
+
+    #[test]
+    fn simultaneous_faults_are_reported_in_a_fixed_order() {
+        for (i, (slot, _, expected)) in FAULTS.iter().enumerate() {
+            let message = parse(&render(&FAULTS[i..])).unwrap_err().to_string();
+            // The unknown-rule message lists every rule this build ships.
+            let same = if *slot == "@RULED" {
+                message.starts_with(expected)
+            } else {
+                message == *expected
+            };
+            assert!(same, "step {i} ({slot}): {message}");
+        }
+        parse(&render(&[])).expect("with every fault fixed the config loads");
     }
 }

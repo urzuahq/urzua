@@ -1,9 +1,9 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.118'
+Version: '0.119'
 Date: 2026-08-20
 Status: Shipped
-Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:18818ee3b2262e4f5dd6b5960d7f874a5662afaabf772f15c82441d7cc7c2df0, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:92a2b9ceca89133f30987a013734da66b9332c4e937a87e72e53571596e18093, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:3c8aa671582772499ab7345cdbfb5a4dc2c50462882851fb20f853992acfd57c
+Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:df8b21e9c8a5c8a9f829242ac3e16fa71e39a0afaa89ef19a59763cbb2fcfe84, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:92a2b9ceca89133f30987a013734da66b9332c4e937a87e72e53571596e18093, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:3c8aa671582772499ab7345cdbfb5a4dc2c50462882851fb20f853992acfd57c
 Embodiment: Verified
 Author: beauwilliams
 Subject: '`.urzua/config.yaml` -- the schema for record types, required/known fields, and per-type behavior.'
@@ -2349,4 +2349,5 @@ proves this configuration produces the three findings.
 > | 2026-11-08 | Bumped to `0.116`. The pins this spec's `Realized-by` holds on files changed in this change were re-baselined (the `Re-baselined` row above); no behaviour this spec describes changed. **Why:** a revision-log entry that adds a structural change needs a `Version` bump (`revision-log.version-bump-required`). | **structural** |
 > | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/own_config_integration.rs` 06fa48e432cb -> 92a2b9ceca89. Reason: Read the diff of each pinned file since the old pin and the claim still holds. own_config_integration.rs: own_config_declares_a_level_for_every_shipped_rule now checks the parsed config's rule levels instead of text-matching the file; no other test changed. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
 > | 2026-11-08 | Bumped to `0.117`. Config load refuses a type whose `delivered_tiers` names a tier outside `items.resolving_tiers`, naming both. **Why:** round-4 review of the delivery items. | **substantive** |
-> | 2026-11-08 | Bumped to `0.118`. Documents `statuses.delivery.items.pending`, an optional placeholder vocabulary for Done-means items in the shape of `statuses.pending`. **Why:** `ADR-96` amendment of 2026-11-08 (placeholder items). | **substantive** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 18818ee3b226 -> df8b21e9c8a5. Reason: split parse_with_document_models, validate_relation_pairs, claim_expiry_problems and revision_log_problem in config.rs into named validation helpers (SPEC-22 100-line bound); behaviour unchanged, outputs byte-identical, validation order and messages pinned by the new validation_order_tests **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
+> | 2026-11-08 | Bumped to `0.119`. Documents `statuses.delivery.items.pending`, an optional placeholder vocabulary for Done-means items in the shape of `statuses.pending`. **Why:** `ADR-96` amendment of 2026-11-08 (placeholder items). | **substantive** |

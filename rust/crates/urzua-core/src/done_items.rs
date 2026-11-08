@@ -301,6 +301,118 @@ fn fence_opening(rest_after_indent: &str, indent: usize) -> Option<(char, usize)
     (len >= 3).then_some((marker, len))
 }
 
+/// The state of the line-by-line scan of the declared section.
+struct ItemScan {
+    builders: Vec<Builder>,
+    current: Option<Builder>,
+    item_indent: Option<usize>,
+    fence: Option<(char, usize)>,
+    orphans: Vec<(usize, String)>,
+    issues: Vec<ShapeIssue>,
+}
+
+impl ItemScan {
+    fn new() -> Self {
+        ItemScan {
+            builders: Vec::new(),
+            current: None,
+            item_indent: None,
+            fence: None,
+            orphans: Vec::new(),
+            issues: Vec::new(),
+        }
+    }
+
+    /// Closes the item being read, if any.
+    fn close_current(&mut self) {
+        if let Some(done) = self.current.take() {
+            self.builders.push(done);
+        }
+    }
+
+    fn line(&mut self, number: usize, raw: &str, decl: &ItemsDecl) {
+        let line = raw.trim_end();
+        let (indent, rest) = indent_of(line);
+        if let Some((marker, len)) = self.fence {
+            let run = rest.chars().take_while(|c| *c == marker).count();
+            if indent <= 3 && run >= len && rest[run..].trim().is_empty() {
+                self.fence = None;
+            }
+            return;
+        }
+        if let Some(opened) = fence_opening(rest, indent) {
+            self.fence = Some(opened);
+            return;
+        }
+        if rest.is_empty() {
+            if let Some(b) = self.current.as_mut() {
+                b.lines.push(ItemLine {
+                    number,
+                    kind: LineKind::Blank,
+                    text: String::new(),
+                });
+            }
+            return;
+        }
+        if let Some(text) = after_marker(rest) {
+            self.list_marker(number, indent, text);
+            return;
+        }
+        self.plain_text(number, indent, rest, decl);
+    }
+
+    fn list_marker(&mut self, number: usize, indent: usize, text: &str) {
+        let base = *self.item_indent.get_or_insert(indent);
+        if indent == base {
+            self.close_current();
+            self.current = Some(Builder {
+                first_line: number,
+                lines: vec![ItemLine {
+                    number,
+                    kind: LineKind::First,
+                    text: text.to_string(),
+                }],
+            });
+        } else if indent > base {
+            if let Some(b) = self.current.as_mut() {
+                b.lines.push(ItemLine {
+                    number,
+                    kind: LineKind::Sub,
+                    text: text.to_string(),
+                });
+            }
+        } else {
+            self.close_current();
+            self.issues.push(ShapeIssue {
+                line: number,
+                item: None,
+                message: format!(
+                    "a list marker is indented less than the item indent ({base} spaces), so it is neither an item nor a sub-item"
+                ),
+            });
+        }
+    }
+
+    /// Plain text. Deeper than the item marker it continues the item.
+    fn plain_text(&mut self, number: usize, indent: usize, rest: &str, decl: &ItemsDecl) {
+        match (self.current.as_mut(), self.item_indent) {
+            (Some(b), Some(base)) if indent > base => b.lines.push(ItemLine {
+                number,
+                kind: LineKind::Continuation,
+                text: rest.to_string(),
+            }),
+            _ => {
+                self.close_current();
+                if rest.starts_with(decl.evidence_marker.as_str())
+                    || rest.starts_with(decl.waiver_marker.as_str())
+                {
+                    self.orphans.push((number, rest.to_string()));
+                }
+            }
+        }
+    }
+}
+
 /// Parses the text of the declared section. `first_line` is the 1-based file
 /// line of the first line of `body`. `section_line` is the heading's line.
 pub fn parse_items(
@@ -313,97 +425,14 @@ pub fn parse_items(
         section_line: Some(section_line),
         ..Default::default()
     };
-    let mut builders: Vec<Builder> = Vec::new();
-    let mut current: Option<Builder> = None;
-    let mut item_indent: Option<usize> = None;
-    let mut fence: Option<(char, usize)> = None;
-    let mut orphans: Vec<(usize, String)> = Vec::new();
-
+    let mut scan = ItemScan::new();
     for (i, raw) in body.lines().enumerate() {
-        let number = first_line + i;
-        let line = raw.trim_end();
-        let (indent, rest) = indent_of(line);
-        if let Some((marker, len)) = fence {
-            let run = rest.chars().take_while(|c| *c == marker).count();
-            if indent <= 3 && run >= len && rest[run..].trim().is_empty() {
-                fence = None;
-            }
-            continue;
-        }
-        if let Some(opened) = fence_opening(rest, indent) {
-            fence = Some(opened);
-            continue;
-        }
-        if rest.is_empty() {
-            if let Some(b) = current.as_mut() {
-                b.lines.push(ItemLine {
-                    number,
-                    kind: LineKind::Blank,
-                    text: String::new(),
-                });
-            }
-            continue;
-        }
-        if let Some(text) = after_marker(rest) {
-            let base = *item_indent.get_or_insert(indent);
-            if indent == base {
-                if let Some(done) = current.take() {
-                    builders.push(done);
-                }
-                current = Some(Builder {
-                    first_line: number,
-                    lines: vec![ItemLine {
-                        number,
-                        kind: LineKind::First,
-                        text: text.to_string(),
-                    }],
-                });
-            } else if indent > base {
-                if let Some(b) = current.as_mut() {
-                    b.lines.push(ItemLine {
-                        number,
-                        kind: LineKind::Sub,
-                        text: text.to_string(),
-                    });
-                }
-            } else {
-                if let Some(done) = current.take() {
-                    builders.push(done);
-                }
-                out.issues.push(ShapeIssue {
-                    line: number,
-                    item: None,
-                    message: format!(
-                        "a list marker is indented less than the item indent ({base} spaces), so it is neither an item nor a sub-item"
-                    ),
-                });
-            }
-            continue;
-        }
-        // Plain text. Deeper than the item marker it continues the item.
-        match (current.as_mut(), item_indent) {
-            (Some(b), Some(base)) if indent > base => b.lines.push(ItemLine {
-                number,
-                kind: LineKind::Continuation,
-                text: rest.to_string(),
-            }),
-            _ => {
-                if let Some(done) = current.take() {
-                    builders.push(done);
-                }
-                if rest.starts_with(decl.evidence_marker.as_str())
-                    || rest.starts_with(decl.waiver_marker.as_str())
-                {
-                    orphans.push((number, rest.to_string()));
-                }
-            }
-        }
+        scan.line(first_line + i, raw, decl);
     }
-    if let Some(done) = current.take() {
-        builders.push(done);
-    }
+    scan.close_current();
+    out.issues = scan.issues;
 
-    for (number, text) in orphans {
+    for (number, text) in scan.orphans {
         out.issues.push(ShapeIssue {
             line: number,
             item: None,
@@ -413,14 +442,14 @@ pub fn parse_items(
             ),
         });
     }
-    if builders.is_empty() {
+    if scan.builders.is_empty() {
         out.issues.push(ShapeIssue {
             line: section_line,
             item: None,
             message: "the section holds no list item (prose only); write each criterion as a list item that ends in its evidence".to_string(),
         });
     }
-    for (index, builder) in builders.into_iter().enumerate() {
+    for (index, builder) in scan.builders.into_iter().enumerate() {
         let item = build_item(index + 1, builder, decl, &mut out.issues);
         out.items.push(item);
     }
@@ -441,42 +470,56 @@ fn first_clause(line: &str, decl: &ItemsDecl) -> Option<(usize, bool)> {
     }
 }
 
-fn build_item(n: usize, builder: Builder, decl: &ItemsDecl, issues: &mut Vec<ShapeIssue>) -> Item {
-    let mut issue = |line: usize, message: String| {
-        issues.push(ShapeIssue {
-            line,
-            item: Some(n),
-            message,
-        })
+/// A clause as read: the line it is on and its text.
+type ClauseText = Option<(usize, String)>;
+
+/// The clauses on an item's first line, after the item text.
+struct FirstLine {
+    text: String,
+    evidence: ClauseText,
+    waiver: ClauseText,
+    has_clauses: bool,
+}
+
+fn first_line_clauses(first: &ItemLine, decl: &ItemsDecl) -> FirstLine {
+    let mut out = FirstLine {
+        text: first.text.clone(),
+        evidence: None,
+        waiver: None,
+        has_clauses: false,
     };
-    let first = &builder.lines[0];
-    let mut text = first.text.clone();
-    let mut evidence_text: Option<(usize, String)> = None;
-    let mut waiver_text: Option<(usize, String)> = None;
-    let mut on_first_line = false;
     if let Some((at, is_evidence)) = first_clause(&first.text, decl) {
-        on_first_line = true;
-        text = first.text[..at].to_string();
+        out.has_clauses = true;
+        out.text = first.text[..at].to_string();
         let rest = &first.text[at + decl.clause_separator.len()..];
         if is_evidence {
             let after = &rest[decl.evidence_marker.len()..];
             let wv = format!("{}{}", decl.clause_separator, decl.waiver_marker);
             match after.find(&wv) {
                 Some(w) => {
-                    evidence_text = Some((first.number, after[..w].trim().to_string()));
-                    waiver_text = Some((first.number, after[w + wv.len()..].trim().to_string()));
+                    out.evidence = Some((first.number, after[..w].trim().to_string()));
+                    out.waiver = Some((first.number, after[w + wv.len()..].trim().to_string()));
                 }
-                None => evidence_text = Some((first.number, after.trim().to_string())),
+                None => out.evidence = Some((first.number, after.trim().to_string())),
             }
         } else {
-            waiver_text = Some((
+            out.waiver = Some((
                 first.number,
                 rest[decl.waiver_marker.len()..].trim().to_string(),
             ));
         }
     }
+    out
+}
 
-    // The final one or two lines, each starting at its marker.
+/// Reads the final one or two lines of an item, each starting at its marker,
+/// into `first`'s clauses unless the first line already holds clauses.
+fn final_line_clauses(
+    builder: &Builder,
+    decl: &ItemsDecl,
+    first: &mut FirstLine,
+    issue: &mut impl FnMut(usize, String),
+) {
     let tail: Vec<&ItemLine> = builder
         .lines
         .iter()
@@ -505,26 +548,46 @@ fn build_item(n: usize, builder: Builder, decl: &ItemsDecl, issues: &mut Vec<Sha
             }
         }
     }
-    if on_first_line && (final_ev.is_some() || final_wv.is_some()) {
-        let at = final_ev.or(final_wv).map_or(first.number, |l| l.number);
+    if first.has_clauses && (final_ev.is_some() || final_wv.is_some()) {
+        let at = final_ev
+            .or(final_wv)
+            .map_or(builder.lines[0].number, |l| l.number);
         issue(
             at,
             "clauses are on the item's first line and on final lines at once; put them in one place".to_string(),
         );
     } else {
         if let Some(l) = final_ev {
-            evidence_text = Some((
+            first.evidence = Some((
                 l.number,
                 l.text[decl.evidence_marker.len()..].trim().to_string(),
             ));
         }
         if let Some(l) = final_wv {
-            waiver_text = Some((
+            first.waiver = Some((
                 l.number,
                 l.text[decl.waiver_marker.len()..].trim().to_string(),
             ));
         }
     }
+}
+
+fn build_item(n: usize, builder: Builder, decl: &ItemsDecl, issues: &mut Vec<ShapeIssue>) -> Item {
+    let mut issue = |line: usize, message: String| {
+        issues.push(ShapeIssue {
+            line,
+            item: Some(n),
+            message,
+        })
+    };
+    let mut clauses = first_line_clauses(&builder.lines[0], decl);
+    final_line_clauses(&builder, decl, &mut clauses, &mut issue);
+    let FirstLine {
+        text,
+        evidence: evidence_text,
+        waiver: waiver_text,
+        ..
+    } = clauses;
 
     let placeholder = judge_text(&text, builder.first_line, decl, &mut issue);
     let evidence = evidence_text.map(|(line, clause)| {
@@ -624,12 +687,14 @@ fn is_record_id(text: &str) -> bool {
         && number.chars().all(|c| c.is_ascii_digit())
 }
 
-fn parse_waiver(
+/// Splits a waiver clause `<category> (<cite>, <date>) -- <reason>` into its
+/// category, the text inside the parenthesis if one is written, and the reason.
+fn split_waiver<'c>(
     line: usize,
-    clause: &str,
+    clause: &'c str,
     decl: &ItemsDecl,
     issue: &mut impl FnMut(usize, String),
-) -> Option<Waiver> {
+) -> Option<(&'c str, Option<&'c str>, &'c str)> {
     let Some((head, reason)) = clause.split_once(" -- ") else {
         issue(
             line,
@@ -659,6 +724,100 @@ fn parse_waiver(
         },
         None => (head.trim(), None),
     };
+    Some((category, parenthesis, reason))
+}
+
+/// Reads the cite and date inside a waiver's parenthesis. The flag is false
+/// when either is wrong (reported).
+fn waiver_parenthesis(
+    line: usize,
+    category: &str,
+    declared: &WaiverCategory,
+    inner: &str,
+    issue: &mut impl FnMut(usize, String),
+) -> (Option<String>, Option<String>, bool) {
+    let mut ok = true;
+    let (mut cite, mut date) = (None, None);
+    let (c, d) = match inner.split_once(", ") {
+        Some((c, d)) => (c.trim(), Some(d.trim())),
+        None => (inner.trim(), None),
+    };
+    if is_record_id(c) {
+        cite = Some(c.to_string());
+    } else {
+        issue(
+            line,
+            format!("the waiver's cite '{c}' is not a record id such as MILE-215 (a pull request or issue number goes in the reason)"),
+        );
+        ok = false;
+    }
+    match d {
+        Some(d) if !declared.expires_required() => {
+            issue(
+                line,
+                format!("'{category}' takes no date, but the waiver gives '{d}'"),
+            );
+            ok = false;
+        }
+        Some(d) if crate::waiver::is_calendar_date(d) => date = Some(d.to_string()),
+        Some(d) => {
+            issue(
+                line,
+                format!("the waiver's date '{d}' is not a real YYYY-MM-DD date"),
+            );
+            ok = false;
+        }
+        None => {}
+    }
+    (cite, date, ok)
+}
+
+/// Reports a cite or date the category requires and the waiver lacks; true
+/// when it did.
+fn waiver_requirement_unmet(
+    line: usize,
+    category: &str,
+    declared: &WaiverCategory,
+    has_parenthesis: bool,
+    has_date: bool,
+    issue: &mut impl FnMut(usize, String),
+) -> bool {
+    if !has_parenthesis && declared.cite_required() {
+        issue(
+            line,
+            format!(
+                "'{category}' requires a cite{}: write `{category} (<record id>{}) -- <reason>`",
+                if declared.expires_required() {
+                    " and an expiry date"
+                } else {
+                    ""
+                },
+                if declared.expires_required() {
+                    ", <YYYY-MM-DD>"
+                } else {
+                    ""
+                }
+            ),
+        );
+        true
+    } else if has_parenthesis && declared.expires_required() && !has_date {
+        issue(
+            line,
+            format!("'{category}' requires an expiry date: write `{category} (<record id>, <YYYY-MM-DD>) -- <reason>`"),
+        );
+        true
+    } else {
+        false
+    }
+}
+
+fn parse_waiver(
+    line: usize,
+    clause: &str,
+    decl: &ItemsDecl,
+    issue: &mut impl FnMut(usize, String),
+) -> Option<Waiver> {
+    let (category, parenthesis, reason) = split_waiver(line, clause, decl, issue)?;
     let Some(declared) = decl.category(category) else {
         issue(
             line,
@@ -680,61 +839,20 @@ fn parse_waiver(
     }
     let (mut cite, mut date) = (None, None);
     if let Some(inner) = parenthesis {
-        let (c, d) = match inner.split_once(", ") {
-            Some((c, d)) => (c.trim(), Some(d.trim())),
-            None => (inner.trim(), None),
-        };
-        if is_record_id(c) {
-            cite = Some(c.to_string());
-        } else {
-            issue(
-                line,
-                format!("the waiver's cite '{c}' is not a record id such as MILE-215 (a pull request or issue number goes in the reason)"),
-            );
-            ok = false;
-        }
-        match d {
-            Some(d) if !declared.expires_required() => {
-                issue(
-                    line,
-                    format!("'{category}' takes no date, but the waiver gives '{d}'"),
-                );
-                ok = false;
-            }
-            Some(d) if crate::waiver::is_calendar_date(d) => date = Some(d.to_string()),
-            Some(d) => {
-                issue(
-                    line,
-                    format!("the waiver's date '{d}' is not a real YYYY-MM-DD date"),
-                );
-                ok = false;
-            }
-            None => {}
-        }
+        let (c, d, inner_ok) = waiver_parenthesis(line, category, declared, inner, issue);
+        (cite, date) = (c, d);
+        ok &= inner_ok;
     }
-    if ok && parenthesis.is_none() && declared.cite_required() {
-        issue(
+    if ok
+        && waiver_requirement_unmet(
             line,
-            format!(
-                "'{category}' requires a cite{}: write `{category} (<record id>{}) -- <reason>`",
-                if declared.expires_required() {
-                    " and an expiry date"
-                } else {
-                    ""
-                },
-                if declared.expires_required() {
-                    ", <YYYY-MM-DD>"
-                } else {
-                    ""
-                }
-            ),
-        );
-        ok = false;
-    } else if ok && parenthesis.is_some() && declared.expires_required() && date.is_none() {
-        issue(
-            line,
-            format!("'{category}' requires an expiry date: write `{category} (<record id>, <YYYY-MM-DD>) -- <reason>`"),
-        );
+            category,
+            declared,
+            parenthesis.is_some(),
+            date.is_some(),
+            issue,
+        )
+    {
         ok = false;
     }
     ok.then(|| Waiver {
