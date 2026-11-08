@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5PKKQRJF9WFZJA105B
-Version: '0.17'
+Version: '0.18'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/commands/init.rs@sha256:6c671b5f6ed730ac5389ed12c9bda023c7bd38ee02f74bb087e520e45f0a6aa4, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:5ab61b95fd5864a41566dee0d902fac000dca3552f90316331ecf90617c3f9b0
+Realized-by: code:rust/crates/urzua-cli/src/commands/init.rs@sha256:eab52da490621ee2ece7406e899f25606e12ab2d68700d5d35e671c045709969, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:5ab61b95fd5864a41566dee0d902fac000dca3552f90316331ecf90617c3f9b0
 Author: beauwilliams
 Subject: '`urzua init` -- the adopt-existing-corpus path and `.urzua/` layout.'
 Implements: RFC-1
@@ -202,3 +202,5 @@ adopt should infer rules or only structure, and multi-corpus-per-repo).
 > | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/init.rs` 08dfadd3cae6 -> 5f376bdd1b6d, `rust/crates/urzua-cli/tests/check_integration.rs` f893cb99b833 -> 8538aedb7492. Reason: the tests in check_integration.rs now name real tracked files; the behaviour this record relies on is unchanged; init.rs now words the header-shape notice truthfully (check reports unreadable headers only when required_fields declares them), excludes README.md for a directory holding one, and carries the merged doc-comment edit from main; the behaviour this record relies on is unchanged **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
 > | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/check_integration.rs` 8538aedb7492 -> 5ab61b95fd58. Reason: check_integration.rs: the only change is in pre_commit_hook_stops_a_planted_bad_header_with_the_real_binary, which now symlinks the urzua binary into the fixture instead of copying it (a copy raced a forking test thread and failed with ETXTBSY under load); the test's setup, planted defect and assertions are otherwise unchanged **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
 > | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/init.rs` 5f376bdd1b6d -> 6c671b5f6ed7. Reason: split init::run into propose_record_types and write_config, and render_config_yaml into proposed_types_mapping and proposed_rules_mapping (init.rs); behaviour unchanged, outputs byte-identical **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/init.rs` 6c671b5f6ed7 -> eab52da49062. Reason: Read the diff of each re-pinned file against main. cli/commands/init.rs: Notice literals use Notice::new or gain detail: None; no behaviour change. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
+> | 2026-11-08 | Bumped to `0.18`. The pins this spec's `Realized-by` holds on files this change touched were re-baselined (the `Re-baselined` row above); no behaviour this spec describes changed. | **structural** |
