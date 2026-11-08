@@ -634,3 +634,113 @@ fn a_record_with_no_revision_log_is_refused_and_untouched() {
     assert_eq!(parsed["status"], "partial-failure", "{parsed}");
     assert_eq!(read(&dir, &path(1)), before);
 }
+
+#[test]
+fn a_path_outside_the_repository_or_untracked_does_not_resolve_observed_failing() {
+    let dir = fixture("outside", &config(RULE, ""), 1);
+    std::fs::write(
+        dir.join(path(1)),
+        record(
+            1,
+            "code:src/a.rs, test:src/t.rs, code:/etc/passwd, code:untracked.txt, code:../outside.txt, code:untracked.txt#x",
+            "",
+        ),
+    )
+    .unwrap();
+    commit_all(&dir, 40);
+    std::fs::write(dir.join("untracked.txt"), "x\n").unwrap();
+    let before = read(&dir, &path(1));
+    let parsed = json(&run_urzua(&dir, &["reverify"]));
+    let rec = &parsed["records"][0];
+    for l in ["/etc/passwd", "untracked.txt", "../outside.txt"] {
+        let loc = rec["locators"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|x| x["locator"] == l)
+            .unwrap_or_else(|| panic!("{l}: {rec}"));
+        assert_eq!(loc["resolved"], false, "{l}: {loc}");
+        assert_eq!(loc["check"], "unresolved", "{l}: {loc}");
+    }
+    assert!(!rec["refused"].as_array().unwrap().is_empty(), "{rec}");
+    let parsed = json(&run_urzua(&dir, &apply_args(&path(1), "r")));
+    assert_eq!(parsed["status"], "partial-failure", "{parsed}");
+    assert_eq!(read(&dir, &path(1)), before);
+}
+
+#[test]
+fn an_unspecified_actor_is_refused_where_the_level_is_error_observed_failing() {
+    let strict = "    level: error\n    anchor_field: Last-audited\n    require_pin: [code, test]\n    periods:\n      - {type: milestone, status: [Done], days: 30}\n";
+    let dir = fixture("unspecified-error", &config(strict, ""), 1);
+    let before = read(&dir, &path(1));
+    let parsed = json(&run_urzua(
+        &dir,
+        &[
+            "reverify",
+            "--apply",
+            "--ids",
+            &path(1),
+            "--by",
+            "ana",
+            "--reason",
+            "r",
+        ],
+    ));
+    assert_eq!(parsed["status"], "partial-failure", "{parsed}");
+    assert!(
+        parsed["failed"][0]["error"]
+            .as_str()
+            .unwrap()
+            .contains("human"),
+        "{parsed}"
+    );
+    assert_eq!(read(&dir, &path(1)), before);
+}
+
+#[test]
+fn force_with_ids_renews_only_the_named_record_observed_failing() {
+    let dir = fixture("force-ids", &config(RULE, ""), 2);
+    let before1 = read(&dir, &path(1));
+    let out = run_urzua(
+        &dir,
+        &[
+            "reverify",
+            "--apply",
+            "--force",
+            "--ids",
+            &path(2),
+            "--by",
+            "ana",
+            "--actor",
+            "human",
+            "--reason",
+            "r",
+        ],
+    );
+    let parsed = json(&out);
+    assert_eq!(parsed["status"], "applied", "{parsed}");
+    assert_eq!(parsed["records"].as_array().unwrap().len(), 1, "{parsed}");
+    assert_eq!(parsed["records"][0]["record"], path(2), "{parsed}");
+    assert!(read(&dir, &path(2)).contains(&format!("Last-audited: {}", today())));
+    assert_eq!(read(&dir, &path(1)), before1);
+}
+
+#[test]
+fn detect_reports_a_claim_with_no_revision_log_as_not_renewable_observed_failing() {
+    let dir = fixture("detect-no-log", &config(RULE, ""), 1);
+    std::fs::write(
+        dir.join(path(1)),
+        "---\nStable-Id: 01AAAAAAAAAAAAAAAAAAAAAA01\nStatus: Done\nRealized-by: code:src/a.rs, test:src/t.rs\n---\n# MILE-1: T\n",
+    )
+    .unwrap();
+    commit_all(&dir, 40);
+    let parsed = json(&run_urzua(&dir, &["reverify"]));
+    assert_eq!(parsed["status"], "ok", "nothing renewable: {parsed}");
+    let refused = parsed["records"][0]["refused"].as_array().unwrap();
+    assert!(
+        refused
+            .iter()
+            .any(|r| r.as_str().unwrap().contains("Revision log")),
+        "{parsed}"
+    );
+}
