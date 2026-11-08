@@ -200,7 +200,7 @@ pub fn run(config_path: Option<PathBuf>, args: FixArgs) -> ExitCode {
             (population, repairs, notices)
         },
     );
-    drift_notices.extend(unevidenced);
+    drift_notices.extend(with_excused_notice(unevidenced, &back_pointed));
 
     if !apply {
         let (repairs, unmatched) = narrow_to_ids(
@@ -351,6 +351,32 @@ pub(crate) fn validate_reason(
         ),
         (_, r) => Ok(r.unwrap_or_default().to_string()),
     }
+}
+
+/// The info notice that says how many lines a declared back-pointer
+/// `ignore_marker` kept out of the evidence a command read (`ADR-80`), or none
+/// when no line was excused.
+pub(crate) fn excused_evidence_notice(
+    evidence: &urzua_core::rules::BackPointerEvidence,
+) -> Option<urzua_core::report::Notice> {
+    let n = evidence.excused_lines;
+    (n > 0).then(|| urzua_core::report::Notice {
+        severity: urzua_core::report::NoticeSeverity::Info,
+        subject: urzua_core::rules::RULE_EMBODIMENT_BACK_POINTER_RESOLUTION.to_string(),
+        message: format!(
+            "ignore_marker -- {n} line{} excused from back-pointer evidence; a line carrying the declared marker is not counted as evidence",
+            if n == 1 { "" } else { "s" }
+        ),
+    })
+}
+
+/// `notices` with the excused-evidence notice (`excused_evidence_notice`) added.
+fn with_excused_notice(
+    mut notices: Vec<Notice>,
+    evidence: &urzua_core::rules::BackPointerEvidence,
+) -> Vec<Notice> {
+    notices.extend(excused_evidence_notice(evidence));
+    notices
 }
 
 /// What the back-pointer scan finds in the tree, for the delivery tiers.

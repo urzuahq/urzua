@@ -11,6 +11,13 @@ pub struct PublishedFile {
     pub content: Option<String>,
 }
 
+/// Whether `line` carries the declared ignore marker, which excuses that one
+/// line (`ADR-80`). The one definition the boundary rule and both back-pointer
+/// rules share, so the marker means the same thing to each.
+pub fn line_carries_ignore_marker(line: &str, marker: &str) -> bool {
+    line.contains(marker)
+}
+
 /// Whether `path` sits at or below the declared `published` entry, a path
 /// prefix (never a glob) already normalised by config parse. Compared by
 /// path component, so `pkg` covers `pkg/a.rs` and not `pkg2/a.rs`. The one
@@ -293,7 +300,7 @@ pub fn published_path_reference(
                 }
             }
             match ignore_marker {
-                Some(marker) if line.contains(marker) => {
+                Some(marker) if line_carries_ignore_marker(line, marker) => {
                     if here.is_empty() {
                         findings.push(finding(
                             first,
