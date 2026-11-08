@@ -109,29 +109,72 @@ pub fn type_dir_matches_nothing(
     dir_exists: &dyn Fn(&str) -> bool,
     tracked: &[std::path::PathBuf],
 ) -> (RuleExecution, Vec<Finding>) {
-    const RULE_ID: &str = RULE_TYPE_DIR_MATCHES_NOTHING;
     let mut findings = Vec::new();
 
     let names = config.sorted_type_names();
+    let check = TypeDirCheck {
+        config,
+        config_path,
+        matched,
+        dir_exists,
+        tracked,
+    };
 
     let population = census(PopulationUnit::RecordType, names, |name| {
-        let type_config = &config.record_types[*name];
+        check.exclusions_matching_nothing(name, &mut findings);
+        check.missing_extra_dirs(name, &mut findings);
+        check.missing_dir(name, &mut findings);
+        Outcome::Examined
+    });
+
+    (
+        RuleExecution {
+            rule: RULE_TYPE_DIR_MATCHES_NOTHING.to_string(),
+            population: Some(population),
+            status: RuleStatus::Ran,
+            examined_records: Vec::new(),
+        },
+        findings,
+    )
+}
+
+/// What `type.dir-matches-nothing` is handed by the caller.
+struct TypeDirCheck<'a> {
+    config: &'a Config,
+    config_path: &'a std::path::Path,
+    matched: &'a HashMap<String, usize>,
+    dir_exists: &'a dyn Fn(&str) -> bool,
+    tracked: &'a [std::path::PathBuf],
+}
+
+impl TypeDirCheck<'_> {
+    fn finding(&self, action: ActionSource, message: String) -> Finding {
+        Finding {
+            rule: RULE_TYPE_DIR_MATCHES_NOTHING.to_string(),
+            severity: FindingSeverity::Warning,
+            file: self.config_path.to_path_buf(),
+            line: None,
+            waived: None,
+            declared_severity: None,
+            suggested_action: None,
+            action_source: action,
+            message,
+        }
+    }
+
+    /// An `exclude_files` entry that names no tracked file directly in the dir.
+    fn exclusions_matching_nothing(&self, name: &str, findings: &mut Vec<Finding>) {
+        let type_config = &self.config.record_types[name];
         for entry in &type_config.exclude_files {
-            let present = tracked.iter().any(|p| {
+            let present = self.tracked.iter().any(|p| {
                 type_config.owns_dir(p.parent())
                     && p.file_name().is_some_and(|n| n == entry.as_str())
             });
             if !present {
-                findings.push(Finding {
-                    rule: RULE_ID.to_string(),
-                    severity: FindingSeverity::Warning,
-                    file: config_path.to_path_buf(),
-                    line: None,
-                    waived: None,
-                    declared_severity: None,
-                    suggested_action: None,
-                    action_source: ActionSource::new("exclude-files-matches-nothing").key_path(["record_types", name, "exclude_files"]),
-                    message: format!(
+                findings.push(self.finding(
+                    ActionSource::new("exclude-files-matches-nothing")
+                        .key_path(["record_types", name, "exclude_files"]),
+                    format!(
                         "record type '{name}' declares exclude_files entry '{entry}', but no such file is \
                          directly in {} -- the exclusion does nothing; remove it or correct the name",
                         type_config
@@ -140,71 +183,50 @@ pub fn type_dir_matches_nothing(
                             .collect::<Vec<_>>()
                             .join(" or ")
                     ),
-                });
+                ));
             }
         }
-        // A declared extra directory that is not there is a declaration that
-        // silently does nothing, even when `dir` still holds records
-        // (`MILE-130`).
-        for dir in &type_config.extra_dirs {
-            if !dir_exists(dir) {
-                findings.push(Finding {
-                    rule: RULE_ID.to_string(),
-                    severity: FindingSeverity::Warning,
-                    file: config_path.to_path_buf(),
-                    line: None,
-                    waived: None,
-                    declared_severity: None,
-                    suggested_action: None,
-                    action_source: ActionSource::new("extra-dir-missing").key_path(["record_types", name, "extra_dirs"]),
-                    message: format!(
+    }
+
+    /// A declared extra directory that is not there is a declaration that
+    /// silently does nothing, even when `dir` still holds records
+    /// (`MILE-130`).
+    fn missing_extra_dirs(&self, name: &str, findings: &mut Vec<Finding>) {
+        for dir in &self.config.record_types[name].extra_dirs {
+            if !(self.dir_exists)(dir) {
+                findings.push(self.finding(
+                    ActionSource::new("extra-dir-missing")
+                        .key_path(["record_types", name, "extra_dirs"]),
+                    format!(
                         "record type '{name}' declares extra_dirs entry '{dir}', which does not exist -- \
                          its records are not examined and its ids are not counted in the type's namespace"
                     ),
-                });
+                ));
             }
         }
-        if matched.get(*name).copied().unwrap_or(0) == 0 {
-            let dir = &config.record_types[*name].dir;
-            // A directory that exists and is empty is a type declared and not
-            // yet used, which is a legitimate state -- some types are expected
-            // to hold nothing most of the time. An *absent* directory is the
-            // misdeclaration this rule exists for. Git does not track empty
-            // directories, so declaring a type means committing a placeholder
-            // alongside it.
-            if !dir_exists(dir) {
-                findings.push(Finding {
-                    rule: RULE_ID.to_string(),
-                    severity: FindingSeverity::Warning,
-                    file: config_path.to_path_buf(),
-                    line: None,
-                    waived: None,
-                    declared_severity: None,
-                    suggested_action: None,
-                    action_source: ActionSource::new("dir-missing").key_path([
-                        "record_types",
-                        name,
-                        "dir",
-                    ]),
-                    message: format!(
-                        "record type '{name}' declares dir '{dir}', which does not exist -- \
-                         every rule for this type examines nothing"
-                    ),
-                });
-            }
-        }
-        Outcome::Examined
-    });
+    }
 
-    (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records: Vec::new(),
-        },
-        findings,
-    )
+    fn missing_dir(&self, name: &str, findings: &mut Vec<Finding>) {
+        if self.matched.get(name).copied().unwrap_or(0) != 0 {
+            return;
+        }
+        let dir = &self.config.record_types[name].dir;
+        // A directory that exists and is empty is a type declared and not
+        // yet used, which is a legitimate state -- some types are expected
+        // to hold nothing most of the time. An *absent* directory is the
+        // misdeclaration this rule exists for. Git does not track empty
+        // directories, so declaring a type means committing a placeholder
+        // alongside it.
+        if !(self.dir_exists)(dir) {
+            findings.push(self.finding(
+                ActionSource::new("dir-missing").key_path(["record_types", name, "dir"]),
+                format!(
+                    "record type '{name}' declares dir '{dir}', which does not exist -- \
+                     every rule for this type examines nothing"
+                ),
+            ));
+        }
+    }
 }
 
 /// A config-schema inventory rule: examines `Config::record_types` itself,

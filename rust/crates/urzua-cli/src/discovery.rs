@@ -149,6 +149,24 @@ pub(crate) fn untracked_record_files(
     )
 }
 
+/// The resolved document model a record type declares, or the empty model when
+/// it declares none.
+fn resolved_model(
+    type_name: &str,
+    type_config: &urzua_core::config::RecordTypeConfig,
+) -> Result<urzua_core::document_model::RecordModel, String> {
+    Ok(
+        urzua_core::document_model::declared_model(type_name, type_config)
+            .map_err(|e| e.to_string())?
+            .map(|m| {
+                m.resolve()
+                    .map_err(|e| format!("record type '{type_name}': {e}"))
+            })
+            .transpose()?
+            .unwrap_or_default(),
+    )
+}
+
 pub(crate) fn load_records(
     repo_root: &Path,
     discovered: &[PathBuf],
@@ -166,14 +184,7 @@ pub(crate) fn load_records(
     let type_names = config.sorted_type_names();
     for type_name in type_names {
         let type_config = &config.record_types[type_name];
-        let model = urzua_core::document_model::declared_model(type_name, type_config)
-            .map_err(|e| e.to_string())?
-            .map(|m| {
-                m.resolve()
-                    .map_err(|e| format!("record type '{type_name}': {e}"))
-            })
-            .transpose()?
-            .unwrap_or_default();
+        let model = resolved_model(type_name, type_config)?;
         for rel_path in discovered {
             // This directory, not this subtree (RFC-35). Prefix matching let
             // two types claim one record whenever their dirs nested, which no
@@ -319,14 +330,7 @@ pub(crate) fn parse_prospective_record(
         {
             continue;
         }
-        let model = urzua_core::document_model::declared_model(type_name, type_config)
-            .map_err(|e| e.to_string())?
-            .map(|m| {
-                m.resolve()
-                    .map_err(|e| format!("record type '{type_name}': {e}"))
-            })
-            .transpose()?
-            .unwrap_or_default();
+        let model = resolved_model(type_name, type_config)?;
         let type_prefix = type_config
             .prefix
             .clone()
@@ -468,7 +472,15 @@ pub(crate) fn compute_drifted_records(
     records: &[Record],
     config: &Config,
 ) -> DriftedRecords {
-    compute_drifted_records_at(repo_root, records, config, urzua_io::now_unix(), None)
+    let cache = urzua_io::BlameCache::new(repo_root);
+    compute_drifted_records_at(
+        repo_root,
+        records,
+        config,
+        urzua_io::now_unix(),
+        None,
+        &cache,
+    )
 }
 
 /// Drift for proposed content not yet on disk: `proposed` is blamed in place
@@ -480,12 +492,14 @@ pub(crate) fn compute_drifted_records_for_content(
     config: &Config,
     proposed: &str,
 ) -> DriftedRecords {
+    let cache = urzua_io::BlameCache::new(repo_root);
     compute_drifted_records_at(
         repo_root,
         records,
         config,
         urzua_io::now_unix(),
         Some(proposed),
+        &cache,
     )
 }
 
@@ -616,44 +630,376 @@ pub(crate) fn skipped_untracked_notice(skipped: &[PathBuf]) -> Option<urzua_core
     })
 }
 
-/// `git blame` for many (path, line) pairs at once, on a few threads: blame
-/// is the dominant cost of a drift run and the calls are independent
-/// (`MILE-159`). Results come back in input order.
+/// `git blame` for many (path, line) pairs at once: one blame per distinct
+/// file, on a few threads, then every line is read from the cache (`MILE-159`).
+/// Results come back in input order.
 fn blame_lines_parallel(
-    repo_root: &Path,
+    cache: &urzua_io::BlameCache,
     work: &[(PathBuf, usize)],
     proposed: Option<&str>,
 ) -> Vec<Result<Option<String>, String>> {
-    if work.len() < 4 {
-        return work
-            .iter()
-            .map(|(p, l)| urzua_io::commit_for_line_in(repo_root, p, *l, proposed))
-            .collect();
-    }
-    let threads = std::thread::available_parallelism()
-        .map_or(4, |n| n.get())
-        .clamp(2, 8);
-    let chunk = work.len().div_ceil(threads);
-    std::thread::scope(|scope| {
-        let handles: Vec<_> = work
-            .chunks(chunk)
-            .map(|part| {
-                scope.spawn(move || {
-                    part.iter()
-                        .map(|(p, l)| urzua_io::commit_for_line_in(repo_root, p, *l, proposed))
-                        .collect::<Vec<_>>()
-                })
-            })
-            .collect();
-        handles
-            .into_iter()
-            .flat_map(|h| h.join().unwrap_or_default())
-            .collect()
-    })
+    cache.prefetch(work, proposed);
+    work.iter()
+        .map(|(p, l)| cache.commit_for_line(p, *l, proposed))
+        .collect()
 }
 
 /// The seconds in one day, for the `MILE-129` day-denominated options.
 const DAY_SECS: i64 = 86_400;
+
+/// Records `e` once: a git failure is reported a single time however many
+/// lines met it.
+fn note_problem(problems: &mut Vec<String>, e: String) {
+    if !problems.contains(&e) {
+        problems.push(e);
+    }
+}
+
+/// The claims of `record` whose locators are judged for drift: its evidence
+/// field's value with that field's line, then each valid Done-means item
+/// clause (`ADR-96` section 5). A claim's locators drift against the commit
+/// that last touched the claim's own line.
+fn drift_claims(config: &Config, record: &Record) -> Vec<(usize, String)> {
+    let locator_field = rules::relation_field_name(
+        config,
+        &record.record_type,
+        urzua_core::config::RelationRole::EmbodimentLocator,
+    );
+    let mut claims = Vec::new();
+    if let (Some(value), Some(line)) = (
+        record.header.get(locator_field),
+        record
+            .header
+            .fields
+            .iter()
+            .find(|f| f.key.as_str() == locator_field)
+            .map(|f| f.line),
+    ) {
+        claims.push((line, value.to_string()));
+    }
+    if let Some(items) = &record.items {
+        for clause in items
+            .items
+            .iter()
+            .filter_map(|i| i.evidence.as_ref())
+            .filter(|c| c.valid)
+        {
+            claims.push((clause.line, clause.text.clone()));
+        }
+    }
+    claims
+}
+
+/// What judging one locator decided for its record.
+enum Judged {
+    /// Judge the next locator.
+    Next,
+    /// The record drifted outside the grace window: nothing else is judged.
+    Drifted,
+}
+
+/// The state of one drift computation: what it reads, what it memoizes across
+/// the whole corpus and what it has found.
+struct DriftJudge<'a> {
+    repo_root: &'a Path,
+    config: &'a Config,
+    now_unix: i64,
+    grace_secs: Option<i64>,
+    audit_field: Option<&'a str>,
+    texts: crate::file_texts::FileTexts,
+    locator_opts: rules::LocatorExistsOpts,
+    cache: &'a urzua_io::BlameCache,
+    // A locator cited by several records (a shared implementation module, a
+    // shared test file) would otherwise re-run the same `git log`/`merge-base`
+    // subprocess once per citing record -- both memoized here across the
+    // whole corpus (`BUG-135`).
+    last_commit_for_path: HashMap<PathBuf, Option<String>>,
+    strictly_before: HashMap<(String, String), bool>,
+    drifted: HashSet<PathBuf>,
+    fresh: HashSet<PathBuf>,
+    no_history: HashSet<PathBuf>,
+    problems: Vec<String>,
+}
+
+impl<'a> DriftJudge<'a> {
+    fn new(
+        repo_root: &'a Path,
+        config: &'a Config,
+        now_unix: i64,
+        cache: &'a urzua_io::BlameCache,
+    ) -> Self {
+        let consistency = config.rules.get(rules::RULE_EMBODIMENT_CONSISTENCY);
+        DriftJudge {
+            repo_root,
+            config,
+            now_unix,
+            grace_secs: consistency
+                .and_then(|s| s.drift_grace_days)
+                .map(|d| i64::from(d) * DAY_SECS),
+            audit_field: consistency
+                .and_then(|s| s.drift_audit_field.as_deref())
+                .map(str::trim),
+            texts: crate::file_texts::FileTexts::new(repo_root.to_path_buf(), config),
+            locator_opts: config.rule_opts(rules::RULE_EMBODIMENT_LOCATOR_EXISTS),
+            cache,
+            last_commit_for_path: HashMap::new(),
+            strictly_before: HashMap::new(),
+            drifted: HashSet::new(),
+            fresh: HashSet::new(),
+            no_history: HashSet::new(),
+            problems: Vec::new(),
+        }
+    }
+
+    // Implements: ADR-67 (the grace window)
+    /// Inside the window, so not yet drift. A declared audit date replaces the
+    /// cited file's last change as where the window counts from. An undatable
+    /// commit is never held back: the window only ever suppresses what it can
+    /// prove is fresh.
+    fn held_back(&self, audit_time: Option<i64>, commit: &str) -> bool {
+        let Some(grace) = self.grace_secs else {
+            return false;
+        };
+        match audit_time {
+            Some(t) => self.now_unix - t < grace,
+            None => self
+                .cache
+                .commit_unix_time(commit)
+                .is_some_and(|t| self.now_unix - t < grace),
+        }
+    }
+
+    /// Judges every claim of `record`; `references` holds each claim's blame, in
+    /// order. Every claim's blame is consumed whether or not an earlier claim
+    /// already drifted the record.
+    fn judge_record(
+        &mut self,
+        record: &Record,
+        claims: &[(usize, String)],
+        references: Vec<Option<Result<Option<String>, String>>>,
+    ) {
+        // Implements: ADR-67 (the audit anchor)
+        // A declared, well-formed last-audit date replaces the cited file's
+        // last change as where the window counts from; a malformed one is
+        // reported by the rule and falls back to the file (`MILE-166`).
+        let audit_time = self
+            .audit_field
+            .and_then(|f| record.header.get(f))
+            .and_then(|v| rules::date_unix(v).ok());
+        for ((_, realized_by_value), reference) in claims.iter().zip(references) {
+            let reference_commit = match reference {
+                Some(Ok(Some(c))) => c,
+                Some(Err(e)) => {
+                    note_problem(&mut self.problems, e);
+                    continue;
+                }
+                // No history for the line: nothing to judge, and said so
+                // (`ADR-92` clause 7).
+                Some(Ok(None)) => {
+                    self.no_history.insert(record.path.clone());
+                    continue;
+                }
+                _ => continue,
+            };
+            // An all-zero hash is a line the proposed content changed or added: it
+            // is touched now, so no locator can have moved since (`MILE-159`).
+            if reference_commit.bytes().all(|b| b == b'0') {
+                continue;
+            }
+            for entry in urzua_core::locator::realized_by_locators(realized_by_value) {
+                // A locator that does not parse is `embodiment.locator-exists`' finding.
+                let Ok(parsed) = entry.parsed else { continue };
+                // A commit anchor is reserved for MILE-84 and is reported by
+                // `embodiment.locator-exists` as unsupported; it is not judged
+                // for drift on the file's history either.
+                if matches!(parsed.anchor, Some(urzua_core::locator::Anchor::Commit(_))) {
+                    continue;
+                }
+                if let Judged::Drifted =
+                    self.judge_locator(record, &parsed, &reference_commit, audit_time)
+                {
+                    return;
+                }
+            }
+        }
+    }
+
+    /// The files a directory or glob locator covers (`BUG-176`). A kind the
+    /// config does not declare is not judged this way: `embodiment.locator-exists`
+    /// reports it and drift is read from the path's history as before.
+    fn covered_files(
+        &self,
+        parsed: &urzua_core::locator::Locator,
+    ) -> Option<(LocatorKind, Vec<String>)> {
+        if parsed.scope.is_some() {
+            return None;
+        }
+        self.texts
+            .locator_files(&parsed.path)
+            .ok()
+            .and_then(|m| Some((m.kind?, m.files)))
+            .filter(|(kind, _)| {
+                *kind != LocatorKind::File && self.locator_opts.locator_kinds.contains(kind)
+            })
+    }
+
+    fn judge_locator(
+        &mut self,
+        record: &Record,
+        parsed: &urzua_core::locator::Locator,
+        reference_commit: &str,
+        audit_time: Option<i64>,
+    ) -> Judged {
+        use urzua_core::locator::Anchor;
+        let covered = self.covered_files(parsed);
+        if let Some((kind, files)) = &covered {
+            // Nothing matched, or a pin the config does not allow on this
+            // kind, is `embodiment.locator-exists`' finding.
+            if files.is_empty()
+                || (parsed.anchor.is_some() && !self.locator_opts.pinnable.contains(kind))
+            {
+                return Judged::Next;
+            }
+        }
+        match &parsed.anchor {
+            Some(Anchor::Pin(pinned)) if parsed.scope.is_some() || covered.is_some() => {
+                self.judge_span_pin(record, parsed, pinned, audit_time)
+            }
+            Some(Anchor::Pin(pinned)) => self.judge_file_pin(record, parsed, pinned, audit_time),
+            _ => self.judge_history(
+                record,
+                parsed,
+                covered.as_ref().map(|(_, files)| files.as_slice()),
+                reference_commit,
+                audit_time,
+            ),
+        }
+    }
+
+    /// Records `record` as drifted, or as fresh when only a declared audit date
+    /// inside the window holds a scoped pin back.
+    fn judge_span_pin(
+        &mut self,
+        record: &Record,
+        parsed: &urzua_core::locator::Locator,
+        pinned: &str,
+        audit_time: Option<i64>,
+    ) -> Judged {
+        // Implements: ADR-74 (a scoped pin drifts on its span's hash)
+        // The file's last commit says nothing about the scope, so there
+        // is no file-based grace window: only a declared audit date can
+        // hold a scoped pin back. A directory or glob pin is held back
+        // the same way (`BUG-176`).
+        let urzua_core::fix::PinRead::Current { hash, .. } =
+            crate::pins::read_pin(self.repo_root, self.config, &self.texts, parsed)
+        else {
+            // A scope that does not resolve is reported by the rule and
+            // not also judged for drift.
+            return Judged::Next;
+        };
+        if hash != pinned {
+            let audited_fresh = matches!((audit_time, self.grace_secs), (Some(t), Some(grace)) if self.now_unix - t < grace);
+            if audited_fresh {
+                self.fresh.insert(record.path.clone());
+            } else {
+                self.drifted.insert(record.path.clone());
+                return Judged::Drifted;
+            }
+        }
+        Judged::Next
+    }
+
+    fn judge_file_pin(
+        &mut self,
+        record: &Record,
+        parsed: &urzua_core::locator::Locator,
+        pinned: &str,
+        audit_time: Option<i64>,
+    ) -> Judged {
+        // Implements: ADR-67 (a pin drifts on its content hash)
+        // A pin replaces the git-history heuristic for this locator.
+        let locator_path = PathBuf::from(&parsed.path);
+        let current = urzua_io::sha256_hex_of_file(&self.repo_root.join(&locator_path));
+        let changed = current.is_some_and(|c| c != pinned);
+        let fresh = changed
+            && self
+                .last_commit(&locator_path, None)
+                .is_some_and(|commit| self.held_back(audit_time, &commit));
+        if changed && !fresh {
+            self.drifted.insert(record.path.clone());
+            return Judged::Drifted;
+        }
+        if fresh {
+            self.fresh.insert(record.path.clone());
+        }
+        Judged::Next
+    }
+
+    /// An unpinned locator: drifted when its path (the newest of the covered
+    /// files, for a directory or glob) was committed to after the claim's line.
+    fn judge_history(
+        &mut self,
+        record: &Record,
+        parsed: &urzua_core::locator::Locator,
+        covered: Option<&[String]>,
+        reference_commit: &str,
+        audit_time: Option<i64>,
+    ) -> Judged {
+        let locator_path = PathBuf::from(&parsed.path);
+        let Some(locator_commit) = self.last_commit(&locator_path, covered) else {
+            return Judged::Next;
+        };
+        let key = (reference_commit.to_string(), locator_commit.clone());
+        let drifted_pair = match self.strictly_before.get(&key) {
+            Some(known) => *known,
+            None => {
+                let answer = urzua_io::commit_strictly_before(
+                    self.repo_root,
+                    reference_commit,
+                    &locator_commit,
+                )
+                .unwrap_or_else(|e| {
+                    note_problem(&mut self.problems, e);
+                    false
+                });
+                self.strictly_before.insert(key, answer);
+                answer
+            }
+        };
+        if !drifted_pair {
+            return Judged::Next;
+        }
+        if self.held_back(audit_time, &locator_commit) {
+            self.fresh.insert(record.path.clone());
+            Judged::Next
+        } else {
+            self.drifted.insert(record.path.clone());
+            Judged::Drifted
+        }
+    }
+
+    /// The last commit touching `locator_path` (the newest among `covered`
+    /// when given), asked of git once per path.
+    fn last_commit(&mut self, locator_path: &Path, covered: Option<&[String]>) -> Option<String> {
+        if let Some(known) = self.last_commit_for_path.get(locator_path) {
+            return known.clone();
+        }
+        let commit = match covered {
+            Some(files) => {
+                let files: Vec<PathBuf> = files.iter().map(PathBuf::from).collect();
+                urzua_io::last_commit_for_paths(self.repo_root, &files)
+            }
+            None => urzua_io::last_commit_for_path(self.repo_root, locator_path),
+        }
+        .unwrap_or_else(|e| {
+            note_problem(&mut self.problems, e);
+            None
+        });
+        self.last_commit_for_path
+            .insert(locator_path.to_path_buf(), commit.clone());
+        commit
+    }
+}
 
 /// [`compute_drifted_records`] with the clock supplied. Two opt-in refinements
 /// (`MILE-129`), both off unless declared: a locator carrying a `@sha256:` pin
@@ -666,277 +1012,47 @@ pub(crate) fn compute_drifted_records_at(
     config: &Config,
     now_unix: i64,
     proposed: Option<&str>,
+    cache: &urzua_io::BlameCache,
 ) -> DriftedRecords {
-    let mut drifted = HashSet::new();
-    let mut fresh_records = HashSet::new();
-    let mut no_history = HashSet::new();
-    let mut problems: Vec<String> = Vec::new();
-    let note = |problems: &mut Vec<String>, e: String| {
-        if !problems.contains(&e) {
-            problems.push(e);
-        }
-    };
+    let mut judge = DriftJudge::new(repo_root, config, now_unix, cache);
     let shallow = match urzua_io::is_shallow_repository(repo_root) {
         Ok(b) => b,
         Err(e) => {
-            note(&mut problems, e);
+            note_problem(&mut judge.problems, e);
             false
         }
     };
-    let grace_secs = config
-        .rules
-        .get(rules::RULE_EMBODIMENT_CONSISTENCY)
-        .and_then(|s| s.drift_grace_days)
-        .map(|d| i64::from(d) * DAY_SECS);
-    let audit_field = config
-        .rules
-        .get(rules::RULE_EMBODIMENT_CONSISTENCY)
-        .and_then(|s| s.drift_audit_field.as_deref())
-        .map(str::trim);
-    let mut commit_times: HashMap<String, Option<i64>> = HashMap::new();
-    let texts = crate::file_texts::FileTexts::new(repo_root.to_path_buf(), config);
-    let locator_opts: rules::LocatorExistsOpts =
-        config.rule_opts(rules::RULE_EMBODIMENT_LOCATOR_EXISTS);
-    // Implements: ADR-67 (the grace window)
-    // Inside the window, so not yet drift. An undatable commit is never held
-    // back: the window only ever suppresses what it can prove is fresh.
-    let mut within_grace = |commit: &str| -> bool {
-        let Some(grace) = grace_secs else {
-            return false;
-        };
-        let time = *commit_times
-            .entry(commit.to_string())
-            .or_insert_with(|| urzua_io::commit_unix_time(repo_root, commit));
-        time.is_some_and(|t| now_unix - t < grace)
-    };
-
-    // A locator cited by several records (a shared implementation module, a
-    // shared test file) would otherwise re-run the same `git log`/`merge-base`
-    // subprocess once per citing record -- both memoized here across the
-    // whole corpus (`BUG-135`).
-    let mut last_commit_for_path: HashMap<PathBuf, Option<String>> = HashMap::new();
-    let mut strictly_before: HashMap<(String, String), bool> = HashMap::new();
-
-    // One blame per claim -- a record's evidence field line and each Done-means
-    // item clause (`ADR-96` section 5) -- run up front on a few threads (the
-    // per-record loop below stays sequential and cheap). A claim's locators
-    // drift against the commit that last touched the claim's own line.
-    let claims_of = |record: &Record| -> Vec<(usize, String)> {
-        let locator_field = rules::relation_field_name(
-            config,
-            &record.record_type,
-            urzua_core::config::RelationRole::EmbodimentLocator,
-        );
-        let mut claims = Vec::new();
-        if let (Some(value), Some(line)) = (
-            record.header.get(locator_field),
-            record
-                .header
-                .fields
-                .iter()
-                .find(|f| f.key.as_str() == locator_field)
-                .map(|f| f.line),
-        ) {
-            claims.push((line, value.to_string()));
-        }
-        if let Some(items) = &record.items {
-            for clause in items
-                .items
-                .iter()
-                .filter_map(|i| i.evidence.as_ref())
-                .filter(|c| c.valid)
-            {
-                claims.push((clause.line, clause.text.clone()));
-            }
-        }
-        claims
-    };
+    // One blame per claim, run up front (the per-record loop below stays
+    // sequential and cheap).
     let work: Vec<(PathBuf, usize)> = records
         .iter()
         .flat_map(|r| {
-            claims_of(r)
+            drift_claims(config, r)
                 .into_iter()
                 .map(move |(line, _)| (r.path.clone(), line))
         })
         .collect();
-    let mut blames = blame_lines_parallel(repo_root, &work, proposed).into_iter();
-
+    let mut blames = blame_lines_parallel(cache, &work, proposed).into_iter();
     for record in records {
-        let claims = claims_of(record);
+        let claims = drift_claims(config, record);
         if claims.is_empty() {
             continue;
         }
-        // Implements: ADR-67 (the audit anchor)
-        // A declared, well-formed last-audit date replaces the cited file's
-        // last change as where the window counts from; a malformed one is
-        // reported by the rule and falls back to the file (`MILE-166`).
-        let audit_time = audit_field
-            .and_then(|f| record.header.get(f))
-            .and_then(|v| rules::date_unix(v).ok());
-        let mut held_back = |commit: &str| match (audit_time, grace_secs) {
-            (Some(t), Some(grace)) => now_unix - t < grace,
-            _ => within_grace(commit),
-        };
-        // Every claim's blame is consumed, in order, whether or not an earlier
-        // claim already drifted the record.
         let references: Vec<_> = claims.iter().map(|_| blames.next()).collect();
-        'claims: for ((_, realized_by_value), reference) in claims.iter().zip(references) {
-            let reference_commit = match reference {
-                Some(Ok(Some(c))) => c,
-                Some(Err(e)) => {
-                    note(&mut problems, e);
-                    continue;
-                }
-                // No history for the line: nothing to judge, and said so
-                // (`ADR-92` clause 7).
-                Some(Ok(None)) => {
-                    no_history.insert(record.path.clone());
-                    continue;
-                }
-                _ => continue,
-            };
-            // An all-zero hash is a line the proposed content changed or added: it
-            // is touched now, so no locator can have moved since (`MILE-159`).
-            if reference_commit.bytes().all(|b| b == b'0') {
-                continue;
-            }
-
-            for entry in urzua_core::locator::realized_by_locators(realized_by_value) {
-                // A locator that does not parse is `embodiment.locator-exists`' finding.
-                let Ok(parsed) = entry.parsed else { continue };
-                // A commit anchor is reserved for MILE-84 and is reported by
-                // `embodiment.locator-exists` as unsupported; it is not judged
-                // for drift on the file's history either.
-                if matches!(parsed.anchor, Some(urzua_core::locator::Anchor::Commit(_))) {
-                    continue;
-                }
-                let locator = parsed.path.clone();
-                let locator_path = PathBuf::from(&locator);
-                // BUG-176: a directory or glob locator the config accepts
-                // The files such a locator covers. A kind the config does not
-                // declare is not judged this way: `embodiment.locator-exists`
-                // reports it and drift is read from the path's history as before.
-                let covered: Option<(LocatorKind, Vec<String>)> = if parsed.scope.is_none() {
-                    texts
-                        .locator_files(&parsed.path)
-                        .ok()
-                        .and_then(|m| Some((m.kind?, m.files)))
-                        .filter(|(kind, _)| {
-                            *kind != LocatorKind::File && locator_opts.locator_kinds.contains(kind)
-                        })
-                } else {
-                    None
-                };
-                if let Some((kind, files)) = &covered {
-                    // Nothing matched, or a pin the config does not allow on this
-                    // kind, is `embodiment.locator-exists`' finding.
-                    if files.is_empty()
-                        || (parsed.anchor.is_some() && !locator_opts.pinnable.contains(kind))
-                    {
-                        continue;
-                    }
-                }
-                if let (Some(urzua_core::locator::Anchor::Pin(pinned)), true) =
-                    (&parsed.anchor, parsed.scope.is_some() || covered.is_some())
-                {
-                    // Implements: ADR-74 (a scoped pin drifts on its span's hash)
-                    // The file's last commit says nothing about the scope, so there
-                    // is no file-based grace window: only a declared audit date can
-                    // hold a scoped pin back. A directory or glob pin is held back
-                    // the same way (`BUG-176`).
-                    let urzua_core::fix::PinRead::Current { hash, .. } =
-                        crate::pins::read_pin(repo_root, config, &texts, &parsed)
-                    else {
-                        // A scope that does not resolve is reported by the rule and
-                        // not also judged for drift.
-                        continue;
-                    };
-                    if hash != *pinned {
-                        let audited_fresh = matches!((audit_time, grace_secs), (Some(t), Some(grace)) if now_unix - t < grace);
-                        if audited_fresh {
-                            fresh_records.insert(record.path.clone());
-                        } else {
-                            drifted.insert(record.path.clone());
-                            break 'claims;
-                        }
-                    }
-                    continue;
-                }
-                if let Some(urzua_core::locator::Anchor::Pin(pinned)) = &parsed.anchor {
-                    // Implements: ADR-67 (a pin drifts on its content hash)
-                    // A pin replaces the git-history heuristic for this locator.
-                    let current = urzua_io::sha256_hex_of_file(&repo_root.join(&locator_path));
-                    let changed = current.is_some_and(|c| c != *pinned);
-                    let fresh = changed
-                        && last_commit_for_path
-                            .entry(locator_path.clone())
-                            .or_insert_with(|| {
-                                urzua_io::last_commit_for_path(repo_root, &locator_path)
-                                    .unwrap_or_else(|e| {
-                                        note(&mut problems, e);
-                                        None
-                                    })
-                            })
-                            .as_deref()
-                            .is_some_and(&mut held_back);
-                    if changed && !fresh {
-                        drifted.insert(record.path.clone());
-                        break 'claims;
-                    }
-                    if fresh {
-                        fresh_records.insert(record.path.clone());
-                    }
-                    continue;
-                }
-                let Some(locator_commit) = last_commit_for_path
-                    .entry(locator_path.clone())
-                    .or_insert_with(|| {
-                        let commit = match &covered {
-                            // The newest commit among the matched files.
-                            Some((_, files)) => {
-                                let files: Vec<PathBuf> = files.iter().map(PathBuf::from).collect();
-                                urzua_io::last_commit_for_paths(repo_root, &files)
-                            }
-                            None => urzua_io::last_commit_for_path(repo_root, &locator_path),
-                        };
-                        commit.unwrap_or_else(|e| {
-                            note(&mut problems, e);
-                            None
-                        })
-                    })
-                else {
-                    continue;
-                };
-                let drifted_pair = *strictly_before
-                    .entry((reference_commit.clone(), locator_commit.clone()))
-                    .or_insert_with(|| {
-                        urzua_io::commit_strictly_before(
-                            repo_root,
-                            &reference_commit,
-                            locator_commit,
-                        )
-                        .unwrap_or_else(|e| {
-                            note(&mut problems, e);
-                            false
-                        })
-                    });
-                if drifted_pair {
-                    if held_back(locator_commit) {
-                        fresh_records.insert(record.path.clone());
-                    } else {
-                        drifted.insert(record.path.clone());
-                        break 'claims;
-                    }
-                }
-            }
-        }
+        judge.judge_record(record, &claims, references);
     }
-
     // Confirmed drift outranks fresh drift on the same record.
-    fresh_records.retain(|path| !drifted.contains(path));
+    let DriftJudge {
+        drifted,
+        mut fresh,
+        no_history,
+        problems,
+        ..
+    } = judge;
+    fresh.retain(|path| !drifted.contains(path));
     DriftedRecords {
         drifted,
-        fresh: fresh_records,
+        fresh,
         git_problems: problems,
         shallow,
         no_history,
@@ -947,10 +1063,10 @@ pub(crate) fn compute_drifted_records_at(
 /// (`MILE-129`), for `claim_max_age_days`. Empty unless that option is set,
 /// so a repository that never opted in pays for no extra `git blame`.
 pub(crate) fn compute_claim_ages(
-    repo_root: &Path,
     records: &[Record],
     config: &Config,
     now_unix: i64,
+    cache: &urzua_io::BlameCache,
 ) -> (HashMap<PathBuf, u64>, Vec<String>) {
     let mut ages = HashMap::new();
     let mut problems: Vec<String> = Vec::new();
@@ -962,39 +1078,61 @@ pub(crate) fn compute_claim_ages(
     {
         return (ages, problems);
     }
-    for record in records {
-        let locator_field = rules::relation_field_name(
-            config,
-            &record.record_type,
-            urzua_core::config::RelationRole::EmbodimentLocator,
-        );
-        let Some(field) = record
-            .header
-            .fields
-            .iter()
-            .find(|f| f.key.as_str() == locator_field)
-        else {
-            continue;
-        };
-        let commit = match urzua_io::commit_for_line(repo_root, &record.path, field.line) {
+    let work: Vec<(PathBuf, usize)> = records
+        .iter()
+        .filter_map(|record| {
+            let locator_field = rules::relation_field_name(
+                config,
+                &record.record_type,
+                urzua_core::config::RelationRole::EmbodimentLocator,
+            );
+            let field = record
+                .header
+                .fields
+                .iter()
+                .find(|f| f.key.as_str() == locator_field)?;
+            Some((record.path.clone(), field.line))
+        })
+        .collect();
+    for ((path, _), commit) in work.iter().zip(blame_lines_parallel(cache, &work, None)) {
+        let commit = match commit {
             Ok(Some(c)) => c,
             Ok(None) => continue,
             Err(e) => {
-                if !problems.contains(&e) {
-                    problems.push(e);
-                }
+                note_problem(&mut problems, e);
                 continue;
             }
         };
-        let Some(time) = urzua_io::commit_unix_time(repo_root, &commit) else {
+        let Some(time) = cache.commit_unix_time(&commit) else {
             continue;
         };
         ages.insert(
-            record.path.clone(),
+            path.clone(),
             u64::try_from((now_unix - time) / DAY_SECS).unwrap_or(0),
         );
     }
     (ages, problems)
+}
+
+/// The claim measures and the drift of `records` from one blame per file
+/// (`urzua reverify`).
+pub(crate) fn measure_claims_and_drift(
+    repo_root: &Path,
+    records: &[Record],
+    config: &Config,
+    now_unix: i64,
+) -> (ClaimMeasures, DriftedRecords) {
+    let cache = urzua_io::BlameCache::new(repo_root);
+    let measures = compute_claim_measures(records, config, now_unix, &cache);
+    let drift = compute_drifted_records_at(
+        repo_root,
+        records,
+        config,
+        urzua_io::now_unix(),
+        None,
+        &cache,
+    );
+    (measures, drift)
 }
 
 /// What `embodiment.claim-expired` is handed beyond the records (`ADR-97`):
@@ -1017,10 +1155,10 @@ pub(crate) fn offset_seed(stable_id: &str) -> u64 {
 /// Measures the records `embodiment.claim-expired` judges. A record with a
 /// valid audit date is dated by it and costs no `git blame`, as the rule reads.
 pub(crate) fn compute_claim_measures(
-    repo_root: &Path,
     records: &[Record],
     config: &Config,
     now_unix: i64,
+    cache: &urzua_io::BlameCache,
 ) -> ClaimMeasures {
     let opts: rules::ClaimExpiredOpts = config.rule_opts(rules::RULE_EMBODIMENT_CLAIM_EXPIRED);
     let mut out = ClaimMeasures::default();
@@ -1050,7 +1188,7 @@ pub(crate) fn compute_claim_measures(
             work.push((record.path.clone(), line));
         }
     }
-    let commits = blame_lines_parallel(repo_root, &work, None);
+    let commits = blame_lines_parallel(cache, &work, None);
     for ((path, _), commit) in work.into_iter().zip(commits) {
         match commit {
             // An all-zero hash is a line not committed yet: touched now.
@@ -1058,16 +1196,12 @@ pub(crate) fn compute_claim_measures(
                 out.line_times.insert(path, now_unix);
             }
             Ok(Some(commit)) => {
-                if let Some(time) = urzua_io::commit_unix_time(repo_root, &commit) {
+                if let Some(time) = cache.commit_unix_time(&commit) {
                     out.line_times.insert(path, time);
                 }
             }
             Ok(None) => {}
-            Err(e) => {
-                if !out.problems.contains(&e) {
-                    out.problems.push(e);
-                }
-            }
+            Err(e) => note_problem(&mut out.problems, e),
         }
     }
     out
@@ -1244,6 +1378,96 @@ pub(crate) fn resolve_inside_repo(
     Ok(resolved)
 }
 
+/// The `.md` claim files below `dir`, at any depth, sorted. Nothing is skipped
+/// on error; a link is followed only where it stays inside the repository.
+fn claim_markdown_paths(
+    repo_canonical: &std::path::Path,
+    dir: &std::path::Path,
+) -> Result<Vec<std::path::PathBuf>, String> {
+    // `claim_paths` is a path *prefix*, so the claims may sit any depth
+    // below it: reading one level deep made a nested layout report a clean
+    // run over an empty claim list (BUG-63).
+    //
+    // Nothing here is skipped on error. A claim the rule could not read is
+    // a claim it did not check, and continuing past it reports agreement
+    // over an incomplete corpus -- the failure this whole rule exists to
+    // prevent, arrived at from the inside.
+    let mut paths = Vec::new();
+    // A link may point anywhere inside the repository -- declaring
+    // `claims/x -> shared` is the author saying claims also live there,
+    // the same thing the declared root already does (BUG-85). What it may
+    // not do is point at an *ancestor* of the prefix: that sweeps the whole
+    // tree, so files never declared as claims produced blocking findings
+    // under paths that do not exist (BUG-88).
+    let prefix_canonical = dir.canonicalize().unwrap_or_else(|_| dir.to_path_buf());
+    let mut visited: std::collections::HashSet<std::path::PathBuf> =
+        std::collections::HashSet::new();
+    visited.insert(prefix_canonical.clone());
+    let mut pending = vec![dir.to_path_buf()];
+    while let Some(current) = pending.pop() {
+        let entries = std::fs::read_dir(&current)
+            .map_err(|e| format!("claim_paths: could not read {}: {e}", current.display()))?;
+        for entry in entries {
+            let path = entry
+                .map_err(|e| {
+                    format!(
+                        "claim_paths: could not read an entry of {}: {e}",
+                        current.display()
+                    )
+                })?
+                .path();
+            // `symlink_metadata`: a link is never descended into. A link to
+            // an ancestor gives an unbounded walk that leaves the declared
+            // prefix entirely -- measured at 904 files read, from other
+            // repositories on disk (BUG-69).
+            // A link is never *descended* into -- a link to an ancestor
+            // gives an unbounded walk outside the declared prefix (BUG-69)
+            // -- but a linked file is still read. `symlink_metadata`'s
+            // `is_file()` is false for a link whatever it points at, so
+            // testing it alone dropped a symlinked claim in silence, in a
+            // walk that aborts on every other failure (BUG-75).
+            // `symlink_metadata` first, so a dangling link is a named
+            // error rather than a silent skip.
+            std::fs::symlink_metadata(&path)
+                .map_err(|e| format!("claim_paths: could not stat {}: {e}", path.display()))?;
+            let target = std::fs::metadata(&path)
+                .map_err(|e| format!("claim_paths: could not resolve {}: {e}", path.display()))?;
+            if target.is_dir() {
+                // Followed only where it stays inside the repository, which
+                // is the same test the declared root gets: rejecting every
+                // link made the two paths disagree about one symlink
+                // (BUG-85). `visited` is what actually stops the unbounded
+                // walk a link to an ancestor produces (BUG-69).
+                let resolved = resolve_inside_repo(repo_canonical, &path)?;
+                // `starts_with` is reflexive (`BUG-117`): a link resolving
+                // to exactly the prefix root, not a genuine ancestor,
+                // causes no unbounded walk -- `visited` (seeded with the
+                // prefix root before this loop starts) already dedupes it
+                // silently below.
+                if resolved != prefix_canonical && prefix_canonical.starts_with(&resolved) {
+                    return Err(format!(
+                        "claim_paths: {} resolves to an ancestor of the declared prefix, which would read the whole tree",
+                        path.display()
+                    ));
+                }
+                if visited.insert(resolved) {
+                    pending.push(path);
+                }
+            } else if target.is_file() && path.extension().is_some_and(|e| e == "md") {
+                // A linked file is read, so its *target* must also stay
+                // inside the repository: a symlink named `.md` otherwise
+                // feeds an arbitrary file on the machine to the claim
+                // scanner, and its contents steer the findings.
+                resolve_inside_repo(repo_canonical, &path)?;
+                paths.push(path);
+            }
+        }
+    }
+    // Sorted so a finding's order does not depend on the filesystem.
+    paths.sort();
+    Ok(paths)
+}
+
 /// Reads the files a repository pointed `claim.status-agreement` at. Kept in
 /// the CLI because `urzua-core` is pure (ADR-5) -- the rule is given file
 /// contents, never a path to open.
@@ -1277,88 +1501,7 @@ pub(crate) fn read_claim_files(
                 ))
             }
         }
-        // `claim_paths` is a path *prefix*, so the claims may sit any depth
-        // below it: reading one level deep made a nested layout report a clean
-        // run over an empty claim list (BUG-63).
-        //
-        // Nothing here is skipped on error. A claim the rule could not read is
-        // a claim it did not check, and continuing past it reports agreement
-        // over an incomplete corpus -- the failure this whole rule exists to
-        // prevent, arrived at from the inside.
-        let mut paths = Vec::new();
-        // A link may point anywhere inside the repository -- declaring
-        // `claims/x -> shared` is the author saying claims also live there,
-        // the same thing the declared root already does (BUG-85). What it may
-        // not do is point at an *ancestor* of the prefix: that sweeps the whole
-        // tree, so files never declared as claims produced blocking findings
-        // under paths that do not exist (BUG-88).
-        let prefix_canonical = dir.canonicalize().unwrap_or_else(|_| dir.clone());
-        let mut visited: std::collections::HashSet<std::path::PathBuf> =
-            std::collections::HashSet::new();
-        visited.insert(prefix_canonical.clone());
-        let mut pending = vec![dir.clone()];
-        while let Some(current) = pending.pop() {
-            let entries = std::fs::read_dir(&current)
-                .map_err(|e| format!("claim_paths: could not read {}: {e}", current.display()))?;
-            for entry in entries {
-                let path = entry
-                    .map_err(|e| {
-                        format!(
-                            "claim_paths: could not read an entry of {}: {e}",
-                            current.display()
-                        )
-                    })?
-                    .path();
-                // `symlink_metadata`: a link is never descended into. A link to
-                // an ancestor gives an unbounded walk that leaves the declared
-                // prefix entirely -- measured at 904 files read, from other
-                // repositories on disk (BUG-69).
-                // A link is never *descended* into -- a link to an ancestor
-                // gives an unbounded walk outside the declared prefix (BUG-69)
-                // -- but a linked file is still read. `symlink_metadata`'s
-                // `is_file()` is false for a link whatever it points at, so
-                // testing it alone dropped a symlinked claim in silence, in a
-                // walk that aborts on every other failure (BUG-75).
-                // `symlink_metadata` first, so a dangling link is a named
-                // error rather than a silent skip.
-                std::fs::symlink_metadata(&path)
-                    .map_err(|e| format!("claim_paths: could not stat {}: {e}", path.display()))?;
-                let target = std::fs::metadata(&path).map_err(|e| {
-                    format!("claim_paths: could not resolve {}: {e}", path.display())
-                })?;
-                if target.is_dir() {
-                    // Followed only where it stays inside the repository, which
-                    // is the same test the declared root gets: rejecting every
-                    // link made the two paths disagree about one symlink
-                    // (BUG-85). `visited` is what actually stops the unbounded
-                    // walk a link to an ancestor produces (BUG-69).
-                    let resolved = resolve_inside_repo(&repo_canonical, &path)?;
-                    // `starts_with` is reflexive (`BUG-117`): a link resolving
-                    // to exactly the prefix root, not a genuine ancestor,
-                    // causes no unbounded walk -- `visited` (seeded with the
-                    // prefix root before this loop starts) already dedupes it
-                    // silently below.
-                    if resolved != prefix_canonical && prefix_canonical.starts_with(&resolved) {
-                        return Err(format!(
-                            "claim_paths: {} resolves to an ancestor of the declared prefix, which would read the whole tree",
-                            path.display()
-                        ));
-                    }
-                    if visited.insert(resolved) {
-                        pending.push(path);
-                    }
-                } else if target.is_file() && path.extension().is_some_and(|e| e == "md") {
-                    // A linked file is read, so its *target* must also stay
-                    // inside the repository: a symlink named `.md` otherwise
-                    // feeds an arbitrary file on the machine to the claim
-                    // scanner, and its contents steer the findings.
-                    resolve_inside_repo(&repo_canonical, &path)?;
-                    paths.push(path);
-                }
-            }
-        }
-        // Sorted so a finding's order does not depend on the filesystem.
-        paths.sort();
+        let paths = claim_markdown_paths(&repo_canonical, &dir)?;
         for path in paths {
             let content = urzua_io::read_to_string(&path)
                 .map_err(|e| format!("claim_paths: could not read {}: {e}", path.display()))?;
