@@ -515,7 +515,7 @@ fn embodiment_disagreements(
     } else {
         Default::default()
     };
-    crate::file_texts::with_locator_env(repo_root, config, &discovered.paths, |env| {
+    crate::file_texts::with_locator_env(repo_root, config, &discovered.paths, records, |env| {
         let ctx = rules::DeliveryContext {
             back_pointed,
             env,

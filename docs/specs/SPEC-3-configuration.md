@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.113'
+Version: '0.114'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:18818ee3b2262e4f5dd6b5960d7f874a5662afaabf772f15c82441d7cc7c2df0, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:cba8b084a518db237599229f334d9951441424dbdfd2d0af4dd59652f929fc69, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:3c8aa671582772499ab7345cdbfb5a4dc2c50462882851fb20f853992acfd57c
@@ -2034,6 +2034,13 @@ statuses:
       waiver_marker: "waived:"
       partial_status: "InProgress"     # in values and in not_done
       resolving_tiers: ["Specified", "Implemented", "Verified"]   # default: delivered_tiers
+      kind:                            # optional: a record declares its kind
+        field: "Kind"                  # a field the type declares
+        kinds:
+          - {name: build}              # names nothing: the type's delivered_tiers
+          - name: decision
+            delivered_tiers: ["Specified", "Implemented", "Verified"]   # each also in resolving_tiers
+            cited_records: success     # a cited record counts only at a `success` status of its type
       waiver_categories:
         - {name: not-applicable}
         - {name: superseded-by-decision, cite: required}
@@ -2051,6 +2058,19 @@ declared embodiment tier; a duplicate category or one whose name holds whitespac
 comma; an `expires: required` category without `cite: required` (a deferral needs a target); and
 `items` on a type whose `status.delivery-agreement` is off or not declared in `rules`, because that
 rule's `DoneWithUnresolvedItems` finding is what holds a status to the items.
+
+A record declares its kind (`ADR-96`, amendment of 2026-11-07): `kind.field` names the header field and
+`kind.kinds` is the vocabulary. A kind's `delivered_tiers` replaces the type's for the rule that a record
+needs at least one item resolved at a delivered tier, and for the delivered and partial standings, so a
+`decision` kind that counts `Specified` is done when every item resolves at `Specified` or higher. A kind
+that omits `delivered_tiers`, a record with no `Kind` and a type with no `kind` key all use the type's
+`delivered_tiers`. `cited_records: success` reads the status of a record an item cites: a locator that
+resolves to a record counts only while the record's status is one its own type declares `success`, so a
+Proposed decision or a Draft spec evidences nothing; a locator that is not a record is not judged by status.
+The keys are load-time errors when they would be inert: a `field` that is blank or that the type does not
+declare; no `kinds`, or a name listed twice; a `delivered_tiers` entry that is not a declared embodiment tier,
+that is not in `resolving_tiers` (no item could resolve at it) or that is in `unevidenced_tiers`. A `Kind`
+value outside the vocabulary is reported by `status.done-items-shape` and judged as no kind.
 
 A dependency caps the standing (`ADR-96`, amendment of 2026-11-07): where `items` is declared and
 `roadmap.pairs` names a sequencing pair, a record whose items all resolve but which has an unfinished
@@ -2313,5 +2333,7 @@ proves this configuration produces the three findings.
 > | 2026-11-07 | Bumped to `0.110`. Documents that a dependency caps the standing computed from `statuses.delivery.items` (a record whose items all resolve beside an unfinished dependency computes `partial_status`) and that `sequence.status-agreement` skips such a record with an info notice, so `partial_status` may stay a `progress` status. No new key; no `schema_version` bump. **Why:** the `ADR-96` amendment of 2026-11-07, accepted by the maintainer; a configuration without `items` or a sequencing pair is unchanged. | **substantive** |
 > | 2026-11-07 | Bumped to `0.111`. Documents `extension_prefixes` on `header.field-set-consistency` (`MILE-141`): the per-type extension prefix, its fallback to `allow_extension_prefix` for a type it does not name, and its load errors (empty or whitespace prefix, a collision with a declared field, an undeclared type or one without `known_fields`). **Why:** `MILE-141` Done means item 3, built on the maintainer's decision of 2026-11-07. | **substantive** |
 > | 2026-11-07 | Bumped to `0.112`. `relation_fields.title` names the field `urzua new` fills with the record's title, and `revision_log.version_bump.initial` the version it writes into the `version_bump` field; both are optional and leave the field blank when undeclared. A status listed in `sections.exempt_statuses` that no record of the type holds is reported by `type.dir-matches-nothing`. **Why:** `MILE-74` -- a scaffolded spec failed `check` on a blank `Version` and `Subject` that `new` could have filled; `MILE-7` -- an exemption that sets nothing aside was silent. | **substantive** |
+> | 2026-11-07 | Bumped to `0.113`. Documents `statuses.delivery.items.kind`: a field and a vocabulary of kinds, each with optional `delivered_tiers` and `cited_records: success`, so a `decision` milestone is done when every item resolves at `Specified` or higher and cites only decided records; the load errors; opt-in. **Why:** the `ADR-96` amendment of 2026-11-07, accepted by the maintainer (`MILE-73`). | **substantive** |
+> | 2026-11-07 | Bumped to `0.114`. Documents `embodiment.claim-expired` and `embodiment.claim-renewal-unattested` (`ADR-97`, `MILE-129`): the `periods`, `anchor_field`, `require_pin` and `max_batch` options, the most-specific-entry rule, the computed tier, the `spread_days` first-cycle offset, the load errors, and that declaring `claim_max_age_days` beside the rule is refused. Off until declared. **Why:** `MILE-129`, the build of `ADR-97`. | **substantive** |
 > | 2026-11-07 | Bumped to `0.113`. Documents `embodiment.claim-expired` and `embodiment.claim-renewal-unattested` (`ADR-97`, `MILE-129`): the `periods`, `anchor_field`, `require_pin` and `max_batch` options, the most-specific-entry rule, the computed tier, the `spread_days` first-cycle offset, the load errors, and that declaring `claim_max_age_days` beside the rule is refused. Off until declared. **Why:** `MILE-129`, the build of `ADR-97`. | **substantive** |
 > | 2026-11-08 | Pinned (attested by beauwilliams, identity: gh-verified, actor: agent): 3 locators pinned, 3 file-level, 0 scoped. Evidence: rust/crates/urzua-core/src/config.rs@sha256:18818ee3b226, rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:cba8b084a518, rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:3c8aa6715827 Reason: Pinned the files as they are now after checking each against the record it evidences: config.yaml and the own-config test still declare the adr, rfc, spec and condition types that SPEC-16, SPEC-17, SPEC-18 and SPEC-23 describe, with spec_shipped_integration.rs, rules/roadmap.rs, condition_type_integration.rs and work_types_integration.rs behind them, check.rs, rules.rs, check_integration.rs and fail_on_integration.rs still implement urzua check (SPEC-2), the workflows, the install-knope action and the release and gate test scripts still make up the pipeline SPEC-20 describes, the Makefile and checks.yml still dispatch the repository layout of SPEC-21, the harness modules, the bundled hook script and the harness integration tests still implement the request, verdict and adapter layout of SPEC-24, config.rs and the own-config and field-levels tests still implement SPEC-3, and acceptance.rs and acceptance_property.rs still implement SPEC-4. **Why:** a claim is renewed only over pinned code and test evidence. | **structural** |

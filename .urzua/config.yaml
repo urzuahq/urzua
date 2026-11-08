@@ -304,6 +304,7 @@ record_types:
       - "Blocks"
       - "Last-audited"
       - "Realized-by"
+      - "Kind"
       - "Non-reference-ids"
     statuses:
       values: ["Planned", "InProgress", "Done", "WontDo"]
@@ -346,6 +347,18 @@ record_types:
           waiver_marker: "waived:"
           partial_status: "InProgress"
           resolving_tiers: ["Specified", "Implemented", "Verified"]
+          # A milestone declares its kind (ADR-96, amendment of 2026-11-07). A
+          # `decision` milestone is done when every item cites a decided record
+          # (an Accepted ADR or RFC, an Accepted or Shipped spec) or evidence
+          # above one: a Draft or Proposed record does not count. `build`, and a
+          # milestone that declares no kind, keep `delivered_tiers` above.
+          kind:
+            field: "Kind"
+            kinds:
+              - {name: build}
+              - name: decision
+                delivered_tiers: ["Specified", "Implemented", "Verified"]
+                cited_records: success
           waiver_categories:
             - {name: not-applicable}
             - {name: superseded-by-decision, cite: required}

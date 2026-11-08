@@ -4,7 +4,7 @@ Status: Shipped
 Embodiment: Verified
 Realized-by: code:.github/workflows/ci.yml@sha256:3d22f5501990754b5b20fd4a05ebb02b6ed70013382eb19a4f838ffd49610036, code:.github/workflows/checks.yml@sha256:4afa5fe0db59c78f2954f105354af9f42c4fef044c7a0e960384c59aa880313d, code:.github/workflows/prepare-release.yml@sha256:0e4d28280d1a77819841035b7ed7da5ee570cf96e80875d2f1e8cc83d7596b8d, code:.github/workflows/publish-release.yml@sha256:530bdeeececf77737d4d162e8aba4c8685bcc73834140675ed8565e3a04aef25, code:.github/actions/install-knope/action.yml@sha256:ace7ea7ca992d45b2e53f32dbb852b36faca2b2d828e4e9ae378d3b54a1702ab, test:.github/scripts/knope-pin.test.sh@sha256:2c13f4fc3ca389b738f6f0a913e45696023f38236868bae27d5a9a352ad40a8d, test:.github/scripts/release-guard.test.sh@sha256:5fca6fe029d9bc486b023e4a401d0ae297f0e4e57ed9bb7a4f54fe62f9ceb82f, test:.github/scripts/release-invariants.test.sh@sha256:8fc2b5758338aef9953492f6d1977d9799c662f05589bf1d9064e6e5129b1381, test:.github/scripts/test-no-leak.test.sh@sha256:36c44d3cd4c56c6483e31d10e31ce44b29db039518446a3f305a1f1f4a2bce9d, test:.github/actions/urzua-gate/test.sh@sha256:2d9fb3612a1d978cc8d98b8a1ce0b6611eaf02502d0e31080a4eeef271e70702
 Date: 2026-09-10
-Version: '0.12'
+Version: '0.13'
 Author: beauwilliams
 Subject: 'This repo''s own CI/CD pipeline -- gating, release cutting, and distribution, as one buildable reference.'
 Implements: ADR-13, ADR-45
@@ -31,35 +31,55 @@ touch the filtered paths, deadlocking a merge that requires it. Its concurrency 
 cancels a superseded run, except on a push to `main`, whose run always finishes.
 
 The required check is the aggregate job **`ci`**. It `needs` every other job, runs `if: always()`, and
-fails when any of them failed or was cancelled. It is the only name a ruleset should require; the jobs
+runs `ci-gate.sh`, which fails when any of them failed, was cancelled or was skipped; the one allowed
+skip is `changeset` outside a pull request. It is the only name a ruleset should require; the jobs
 nested inside a called workflow have unstable names (`ADR-95`).
 
 - **`rust`** calls the reusable workflow `checks.yml` (`ADR-47`), with `pull-requests: write` so the gate
   can post its one updating comment. `publish-release.yml` calls the same workflow against the commit it is
-  about to tag, so there is one definition of the gate rather than two that can drift. `checks.yml` runs,
-  in order, with `fetch-depth: 0` (`embodiment.consistency`'s drift check (`ADR-32`) reads git
-  blame/log history on locators, and a shallow checkout makes it silently unable to detect anything, not
-  an error):
-  - `cargo fmt --check`, `cargo clippy -- -D warnings`;
-  - `cargo machete` and `cargo deny check`, pinned prebuilt binaries verified by checksum;
-  - the pinned, checksummed knope install (the `install-knope` action, below), `knope-pin.test.sh` (no
-    workflow carries a knope pin of its own) and `knope-closes-compat.test.sh` (the release tool must
-    tolerate a fragment's `closes` key);
-  - `cargo build --release --locked`;
-  - the planted-violation cases of `release-guard.test.sh` and `release-invariants.test.sh`, then
-    `release-invariants.sh` on the ref being checked;
-  - `make rule-table-check` (the `SPEC-2` rule table is current);
-  - the tests through `.github/scripts/test-no-leak.sh` (a fresh `TMPDIR` that must be empty of `urzua-*`
-    entries afterwards), after the guard's own planted-violation cases;
-  - a fetch of the pull-request head refs into a private namespace, which `identity.open-pr-collision`
-    reads (`ADR-93`; `check` never fetches);
-  - the **urzua gate** action over the binary just built: `urzua check`, and on a pull request
-    `urzua check --base origin/<base>` with the author and approvers as `--actors`, reported as
-    annotations and one updating comment. `base-ref` is the base branch on a pull request and the branch
-    a queued commit will land on in a merge queue (`merge_group`), so the diff rules run for the commit
-    about to merge; it is empty on a push and on a tag, where only the whole-tree check runs. The
-    workflow's `comment` input (default `"true"`) lets a caller keep the gate from commenting;
-  - `urzua harness status` (the installed hooks and commands have not drifted).
+  about to tag, so there is one definition of the gate rather than two that can drift. `checks.yml` runs
+  its work as jobs that run side by side, so the slowest one, not their sum, sets the wall-clock time
+  (`ADR-98`, Proposed). Each checks out with `fetch-depth: 0` (`embodiment.consistency`'s drift check
+  (`ADR-32`) reads git blame/log history on locators, and a shallow checkout makes it silently unable to
+  detect anything, not an error):
+  - **`lint`**: `cargo fmt --check`, `cargo clippy -- -D warnings`; `cargo machete` and `cargo deny check`,
+    pinned prebuilt binaries verified by checksum; the pinned, checksummed knope install (the
+    `install-knope` action, below), `knope-pin.test.sh`, `nextest-pin.test.sh` and
+    `knope-closes-compat.test.sh`; the planted-violation cases of `release-guard.test.sh`,
+    `release-invariants.test.sh` and `ci-gate.test.sh`, then `release-invariants.sh` on the ref being
+    checked;
+  - **`build`**: `cargo build --release --locked`; `make rule-table-check` (the `SPEC-2` rule table is
+    current); a fetch of the pull-request head refs into a private namespace, which
+    `identity.open-pr-collision` reads (`ADR-93`; `check` never fetches); the **urzua gate** action over
+    the binary just built: `urzua check`, and on a pull request `urzua check --base origin/<base>` with the
+    author and approvers as `--actors`, reported as annotations and one updating comment. `base-ref` is the
+    base branch on a pull request and the branch a queued commit will land on in a merge queue
+    (`merge_group`), so the diff rules run for the commit about to merge; it is empty on a push and on a
+    tag, where only the whole-tree check runs. The workflow's `comment` input (default `"true"`) lets a
+    caller keep the gate from commenting; then `urzua harness status` (the installed hooks and commands have
+    not drifted);
+  - **`test`**: the tests, in three shards. The pinned, checksummed cargo-nextest (the `install-nextest`
+    action, the one place its version and sha256 are written) runs `--partition count:i/3` over every test
+    target except `acceptance`, under `test-no-leak.sh` (a fresh `TMPDIR` that must be empty of `urzua-*`
+    entries afterwards, `BUG-193`), after the guard's own planted-violation cases. nextest does not run
+    doctests, so shard 1 also runs `cargo test --doc`. `.github/scripts/ci-tests.sh` is the one definition
+    of these commands, used by the workflow and by `make ci`;
+  - **`acceptance`** and **`acceptance-gate`**: the corpus acceptance runner (`SPEC-4`) is one custom-harness
+    process (`harness = false`), which nextest cannot list or partition. It takes its own shard switch,
+    `URZUA_ACCEPTANCE_SHARD=i/n`: the cases, in discovery order, are dealt round-robin and each shard runs
+    its own, still under the leak guard, with every case's mutation proof and corpus-and-case scratch
+    directory unchanged. Four shards run in parallel. A shard cannot judge the suite-wide coverage gate,
+    so it writes what it proved to a file (`URZUA_ACCEPTANCE_PROVEN_OUT`) and uploads it;
+    `acceptance-gate` downloads every file and runs `URZUA_ACCEPTANCE_MERGE=<dir>`, which judges the
+    gate over the union and fails when a shard's file is missing, repeated, or from a different
+    discovery, or when the shards ran fewer cases than were discovered;
+  - **`result`** (`rust (fmt, clippy, test, build)`): needs every job above, runs `if: always()` and
+    runs `ci-gate.sh`, which fails unless every needed job's result is `success`. A failure, a
+    cancellation, a skip (a shard that never started) and a missing result are all red.
+
+  Caches: one `rust-cache` key per kind of work (`lint`, `release`, `test`), written only by runs on `main`
+  (`save-if`); a pull request restores it and never writes, so a branch cannot evict it. Test builds keep
+  line tables only (`CARGO_PROFILE_DEV_DEBUG=line-tables-only`).
 - **`changeset`** (`changeset required`): requires a `.changeset/*.md` fragment added in the diff, or
   the `no-changeset` label (`ADR-29`) — never a silent skip. Runs on `pull_request` only, and **only asks
   at all when the PR touches a path declared in `.github/release-paths`** (`rust/`, `README.md`,
@@ -84,7 +104,9 @@ nested inside a called workflow have unstable names (`ADR-95`).
 Concurrency is workflow-level, so a new commit cancels the whole superseded run, including on a PR title
 or body edit (`edited`).
 
-**`make ci`** runs the checks of this section that can run on a laptop, including `check --base
+**`make ci`** runs the checks of this section that can run on a laptop (the tests through the same
+`ci-tests.sh`, unsharded; without nextest installed it falls back to plain `cargo test` and says so, and
+with `CI` set it fails instead), including `check --base
 origin/main` (after fetching the pull-request refs) and the knope pin test. It does not run the changeset
 label gate, the pinned-release gate (a download with an attestation check) or the `--actors` file, which
 need the GitHub API; CI runs all three, and the target says so rather than claiming to be everything CI
@@ -254,5 +276,6 @@ replays the original payload.
 > | 2026-11-07 | Bumped to `0.9`. Rewrote the pipeline sections to match the workflows: the gate is `checks.yml`, called by `ci.yml`'s `rust` job and by `publish-release.yml`'s `verify` job (there is no `verify-ci` job; `ADR-47` deleted it); `ci.yml` also has `release-invariants`, `gate-action`, `gate-released` and the aggregate `ci` job, the one required check; the release PR is opened by a GitHub App token, so its `ci` run executes (the claim that it never runs, and that `RFC-30` was the only mitigation, is removed); added the recovery when `verify` fails after the release PR merged. `Realized-by` gains `checks.yml` and `prepare-release.yml`. **Why:** the maintainer decided on 2026-11-05 to protect `main` with `ci` required and open the release PR with an App token (`ADR-95`), and the spec still described a deleted job and a run that never executes, which would mislead anyone debugging a red release PR or setting the ruleset. | **substantive** |
 > | 2026-11-07 | Bumped to `0.10`. Documents the follow-up hardening of the release workflows: the App token is minted from the client id and requests only `contents` and `pull-requests` write, with no write grant on the job's own `GITHUB_TOKEN`; knope is installed through one `install-knope` action that `knope-pin.test.sh` guards, instead of a pin copied into three workflows and checked in one; the gate takes the queued commit's base branch in a merge queue, so the diff rules run there; `checks.yml` takes a `comment` input that `publish-release.yml` sets to `"false"`; `upload` passes `--clobber` so a re-run after a partial upload completes; `make ci` runs `check --base` and the knope pin test and names the three checks it leaves to CI. `Realized-by` gains the action and the pin test. **Why:** an independent review found the App token broader than its job, the knope pin copied into three workflows and checked in one, and a required check that ran no diff rules in a merge queue; `make ci` claimed to be everything CI runs. | **substantive** |
 > | 2026-11-07 | Bumped to `0.11`. The release-App paragraph no longer reads as though the ruleset on `main` is applied: it says the ruleset is required and not yet applied, states its scope (`main` only, 0 approvals, `ci` required, empty bypass list), says `prepare release` is red on every push until the secrets are set, and points to `docs/reference/release-app-setup.md`. **Why:** an independent review of `ADR-95` could not see a ruleset on the repository, and the spec said the merge was gated by it. | **substantive** |
+> | 2026-11-07 | Bumped to `0.12`. The single `rust` job of `checks.yml` is now parallel jobs (`lint`, `build`, three nextest `test` shards, four `acceptance` shards, `acceptance-gate`) joined by `result`; the `ci` aggregate runs `ci-gate.sh` and fails on a skip as well as a failure or cancellation; the nextest and cache pins, the acceptance shard-and-merge protocol and `make ci`'s use of `ci-tests.sh` are documented. **Why:** the single job took 14 to 15 minutes against a 15-minute timeout (`ADR-98`, Proposed). | **substantive** |
 > | 2026-11-08 | Pinned (attested by beauwilliams, identity: gh-verified, actor: agent): 10 locators pinned, 10 file-level, 0 scoped. Evidence: .github/workflows/ci.yml@sha256:3d22f5501990, .github/workflows/checks.yml@sha256:4afa5fe0db59, .github/workflows/prepare-release.yml@sha256:0e4d28280d1a, .github/workflows/publish-release.yml@sha256:530bdeeececf, .github/actions/install-knope/action.yml@sha256:ace7ea7ca992, .github/scripts/knope-pin.test.sh@sha256:2c13f4fc3ca3, .github/scripts/release-guard.test.sh@sha256:5fca6fe029d9, .github/scripts/release-invariants.test.sh@sha256:8fc2b5758338, .github/scripts/test-no-leak.test.sh@sha256:36c44d3cd4c5, .github/actions/urzua-gate/test.sh@sha256:2d9fb3612a1d Reason: Pinned the files as they are now after checking each against the record it evidences: config.yaml and the own-config test still declare the adr, rfc, spec and condition types that SPEC-16, SPEC-17, SPEC-18 and SPEC-23 describe, with spec_shipped_integration.rs, rules/roadmap.rs, condition_type_integration.rs and work_types_integration.rs behind them, check.rs, rules.rs, check_integration.rs and fail_on_integration.rs still implement urzua check (SPEC-2), the workflows, the install-knope action and the release and gate test scripts still make up the pipeline SPEC-20 describes, the Makefile and checks.yml still dispatch the repository layout of SPEC-21, the harness modules, the bundled hook script and the harness integration tests still implement the request, verdict and adapter layout of SPEC-24, config.rs and the own-config and field-levels tests still implement SPEC-3, and acceptance.rs and acceptance_property.rs still implement SPEC-4. **Why:** a claim is renewed only over pinned code and test evidence. | **structural** |
-> | 2026-11-08 | Bumped to `0.12`. The `code:` and `test:` locators of `Realized-by` are now hash-pinned by `urzua reverify --pin-only` (the `Pinned` row above) and, where the record stated `Drift detected`, its `Embodiment` was recomputed (the tool-authored row above); no behaviour this spec describes changes. **Why:** `MILE-129`, `ADR-97` section 10: a claim is renewed only over pinned code and test evidence, so the corpus is pinned once before expiry is enabled. | **structural** |
+> | 2026-11-08 | Bumped to `0.13`. The `code:` and `test:` locators of `Realized-by` are now hash-pinned by `urzua reverify --pin-only` (the `Pinned` row above) and, where the record stated `Drift detected`, its `Embodiment` was recomputed (the tool-authored row above); no behaviour this spec describes changes. **Why:** `MILE-129`, `ADR-97` section 10: a claim is renewed only over pinned code and test evidence, so the corpus is pinned once before expiry is enabled. | **structural** |

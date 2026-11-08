@@ -27,9 +27,15 @@ fn run_inner(config_path: Option<PathBuf>) -> Result<ExitCode, Failure> {
     let mut roadmap = urzua_core::rules::compute_roadmap(&records, &config);
     // A type that declares `delivery.items` reports its item counts (`ADR-96`).
     if records.iter().any(|r| r.items.is_some()) {
-        crate::file_texts::with_locator_env(&repo_root, &config, &discovered.paths, |env| {
-            urzua_core::rules::add_item_counts(&mut roadmap, &records, &config, env);
-        });
+        crate::file_texts::with_locator_env(
+            &repo_root,
+            &config,
+            &discovered.paths,
+            &records,
+            |env| {
+                urzua_core::rules::add_item_counts(&mut roadmap, &records, &config, env);
+            },
+        );
     }
     Ok(emit(&RoadmapReport {
         status: ReportStatus::Ok,
