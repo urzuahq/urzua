@@ -538,6 +538,9 @@ pub struct Rebaseline {
     /// The lines of the Done-means item clauses a stale pin sits on.
     #[serde(skip)]
     pub item_lines: Vec<usize>,
+    /// The type's declared item section name, for messages (`ADR-96`).
+    #[serde(skip)]
+    pub items_section: String,
 }
 
 // Implements: ADR-67 (attributed re-baselining of a pin)
@@ -633,6 +636,7 @@ pub fn detect_rebaselines(
                 .collect();
             found.push(Rebaseline {
                 item_lines,
+                items_section: crate::rules::items_section(config, &record.record_type),
                 record: record.path.clone(),
                 field: locator_field.to_string(),
                 line: record
@@ -723,8 +727,8 @@ pub fn apply_rebaseline(
         }
         if !replaced_anywhere {
             return Err(format!(
-                "the pin on '{}' is no longer on the '{}' line or in a Done means item clause -- the record may have changed since detect ran",
-                pin.locator, rebaseline.field
+                "the pin on '{}' is no longer on the '{}' line or in a {} item clause -- the record may have changed since detect ran",
+                pin.locator, rebaseline.field, rebaseline.items_section
             ));
         }
     }
@@ -865,6 +869,7 @@ mod tests {
         let content = "---\nEmbodiment: Implemented\nRealized-by: 'code:src/a.rs@sha256:aaaaaaaaaaaaaaaaaaaaaaaa'\n---\n# 1\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Initial. | **structural** |\n";
         let rb = Rebaseline {
             item_lines: Vec::new(),
+            items_section: String::new(),
             record: PathBuf::from("docs/adr/ADR-1-a.md"),
             field: "Realized-by".to_string(),
             line: 3,
@@ -904,6 +909,7 @@ mod tests {
         let content = format!("---\nRealized-by: 'lib/a.rs@sha256:{h}, a.rs@sha256:{h}'\n---\n# 1\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Initial. | **structural** |\n");
         let rb = Rebaseline {
             item_lines: Vec::new(),
+            items_section: String::new(),
             record: PathBuf::from("docs/adr/ADR-1-a.md"),
             field: "Realized-by".to_string(),
             line: 2,
@@ -933,6 +939,40 @@ mod tests {
             )),
             "{out}"
         );
+    }
+
+    #[test]
+    fn a_rebaseline_refusal_names_the_declared_item_section() {
+        let h = "aaaaaaaaaaaaaaaaaaaaaaaa";
+        let content = "---\nRealized-by: 'src/b.rs'\n---\n# 1\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Initial. | **structural** |\n";
+        let rb = Rebaseline {
+            item_lines: Vec::new(),
+            items_section: "Done when".to_string(),
+            record: PathBuf::from("docs/adr/ADR-1-a.md"),
+            field: "Realized-by".to_string(),
+            line: 2,
+            pins: vec![PinDrift {
+                locator: "a.rs".to_string(),
+                recorded_hash: h.to_string(),
+                current_hash: "bbbbbbbbbbbbbbbbbbbbbbbb".to_string(),
+                span: None,
+                files: Vec::new(),
+                spelling: "a.rs".to_string(),
+            }],
+        };
+        let who = Attestation::new("ana", IdentitySource::Asserted, ActorKind::Agent);
+        let err = apply_rebaseline(
+            content,
+            &rb,
+            "2026-11-06",
+            &who,
+            "R.",
+            &Default::default(),
+            &Default::default(),
+        )
+        .unwrap_err();
+        assert!(err.contains("in a Done when item clause"), "{err}");
+        assert!(!err.contains("Done means"), "{err}");
     }
 
     fn no_relation_field_overrides() -> Config {

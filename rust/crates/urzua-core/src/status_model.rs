@@ -667,6 +667,18 @@ fn validate_items(
             ));
         }
     }
+    // An item resolves only at a `resolving_tiers` tier, so a delivered tier
+    // outside that list is a tier no item could ever reach.
+    if let Some(t) = delivery
+        .delivered_tiers
+        .iter()
+        .find(|t| !delivery.resolving_tiers().contains(t))
+    {
+        return Err(format!(
+            "type `delivery.delivered_tiers` names '{t}', which is not in `{key}.resolving_tiers` ({}): no item could resolve at it",
+            delivery.resolving_tiers().join(", ")
+        ));
+    }
     if let Some(kind) = &items.kind {
         validate_kind(rt, delivery, kind, embodiment)?;
     }

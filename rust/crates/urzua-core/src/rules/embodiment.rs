@@ -176,12 +176,12 @@ pub fn embodiment_locator_exists(
             // A Done-means item clause (`ADR-96`) is evidence too, held to the
             // same test; a record with item clauses and no `Realized-by` is
             // still examined.
-            let clauses: Vec<&crate::done_items::Clause> = record
+            let clauses: Vec<(&crate::done_items::Clause, bool)> = record
                 .items
                 .iter()
                 .flat_map(|i| i.items.iter())
-                .filter_map(|i| i.evidence.as_ref())
-                .filter(|c| c.valid)
+                .filter_map(|i| i.evidence.as_ref().map(|c| (c, i.waiver.is_some())))
+                .filter(|(c, _)| c.valid)
                 .collect();
             let value = match declared_value(record, field) {
                 Ok(v) => Some(v),
@@ -223,8 +223,13 @@ pub fn embodiment_locator_exists(
             } else {
                 items_section(config, &record.record_type)
             };
-            for clause in clauses {
-                let place = format!("a Done means item (line {})", clause.line);
+            for (clause, waived) in clauses {
+                // A waived item's evidence may not exist yet: the waiver holds
+                // while it does not resolve (`ADR-96`), so it is not a defect.
+                if waived {
+                    continue;
+                }
+                let place = format!("a {section} item (line {})", clause.line);
                 for entry in locator::realized_by_locators(&clause.text) {
                     if let Some((_, message)) = locator_defect(&entry, &place, &env) {
                         findings.push(Finding {

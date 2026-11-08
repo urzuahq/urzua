@@ -61,6 +61,8 @@ pub struct LocatorsReview {
     pub field_line: usize,
     /// The lines of the Done-means item clauses (`ADR-96`).
     pub item_lines: Vec<usize>,
+    /// The type's declared item section name, for messages (`ADR-96`).
+    pub items_section: String,
     pub locators: Vec<LocatorReview>,
 }
 
@@ -82,6 +84,7 @@ pub fn review_locators(
             .iter()
             .find(|f| f.key.as_str() == field)
             .map_or(0, |f| f.line),
+        items_section: crate::rules::items_section(config, &record.record_type),
         item_lines: record
             .items
             .iter()
@@ -436,8 +439,8 @@ pub fn apply_reverify(
         }
         if !placed {
             return Err(format!(
-                "the unpinned locator '{}' is no longer on the '{}' line or in a Done means item clause -- the record may have changed since the review",
-                pin.display, review.field
+                "the unpinned locator '{}' is no longer on the '{}' line or in a {} item clause -- the record may have changed since the review",
+                pin.display, review.field, review.items_section
             ));
         }
     }

@@ -616,7 +616,7 @@ pub fn status_done_items_shape(
 
 /// The Done-means section name of a type that declares `delivery.items`, else
 /// empty.
-pub(super) fn items_section(config: &Config, record_type: &str) -> String {
+pub fn items_section(config: &Config, record_type: &str) -> String {
     config
         .record_types
         .get(record_type)
@@ -685,8 +685,9 @@ pub fn status_waived_item_stale(
                             .section(decl.section.clone())
                             .line(waiver.line),
                         message: format!(
-                            "{} Done means item {} \"{}\" is waived as {}, and {message}",
+                            "{} {} item {} \"{}\" is waived as {}, and {message}",
                             record_label(record),
+                            decl.section,
                             standing.n,
                             standing.text,
                             waiver.category
@@ -755,6 +756,7 @@ pub fn waived_item_notices(records: &[Record], config: &Config) -> Vec<Notice> {
     let declared = statuses_by_type(config);
     let mut notices = Vec::new();
     let mut by_category: std::collections::BTreeMap<String, usize> = Default::default();
+    let mut sections: std::collections::BTreeSet<String> = Default::default();
     for record in records
         .iter()
         .filter(|r| opted_in(&declared, &r.record_type))
@@ -763,11 +765,13 @@ pub fn waived_item_notices(records: &[Record], config: &Config) -> Vec<Notice> {
         for item in &items.items {
             let Some(w) = &item.waiver else { continue };
             *by_category.entry(w.category.clone()).or_default() += 1;
+            sections.insert(items_section(config, &record.record_type));
             notices.push(Notice {
                 severity: NoticeSeverity::Info,
                 subject: record.path.display().to_string(),
                 message: format!(
-                    "Done means item {} \"{}\" is waived: {}{} -- {}",
+                    "{} item {} \"{}\" is waived: {}{} -- {}",
+                    items_section(config, &record.record_type),
                     item.n,
                     item.text,
                     w.category,
@@ -787,7 +791,8 @@ pub fn waived_item_notices(records: &[Record], config: &Config) -> Vec<Notice> {
             severity: NoticeSeverity::Info,
             subject: RULE_STATUS_WAIVED_ITEM_STALE.to_string(),
             message: format!(
-                "{total} waived Done means item(s) by category: {}",
+                "{total} waived {} item(s) by category: {}",
+                sections.iter().cloned().collect::<Vec<_>>().join("/"),
                 by_category
                     .iter()
                     .map(|(c, n)| format!("{c} {n}"))
