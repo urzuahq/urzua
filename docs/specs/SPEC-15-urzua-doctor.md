@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5E1D23JRXBPTP54NSG
-Version: '0.16'
+Version: '0.17'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/commands/doctor.rs@sha256:46c027154ca96662a050ad7f0a54d4ee32dff3900d435fb80ec72471550b24d8, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs@sha256:44fea1626a547a6d9226f09c5e9cd116aad2dfe384a082aaeb8eec2c74f22af5, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:5ab61b95fd5864a41566dee0d902fac000dca3552f90316331ecf90617c3f9b0
+Realized-by: code:rust/crates/urzua-cli/src/commands/doctor.rs@sha256:4d8d0d22c1161a7bb1d535a582effd290bac7fbb233d7589038585cf176eb6d1, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs@sha256:44fea1626a547a6d9226f09c5e9cd116aad2dfe384a082aaeb8eec2c74f22af5, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:5ab61b95fd5864a41566dee0d902fac000dca3552f90316331ecf90617c3f9b0
 Author: beauwilliams
 Subject: '`urzua doctor` -- diagnosing whether checks are actually wired to CI/hooks, not just present.'
 Implements: —
@@ -113,3 +113,4 @@ than compounded:
 > | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/check_integration.rs` f893cb99b833 -> 8538aedb7492. Reason: the tests in check_integration.rs now name real tracked files; the behaviour this record relies on is unchanged **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
 > | 2026-11-08 | Bumped to `0.15`. The `Realized-by` pin on `check_integration.rs` was re-baselined (the `Re-baselined` row above) after its tests were changed to name real tracked files; no behaviour this spec describes changes. | **structural** |
 > | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/check_integration.rs` 8538aedb7492 -> 5ab61b95fd58. Reason: check_integration.rs: the only change is in pre_commit_hook_stops_a_planted_bad_header_with_the_real_binary, which now symlinks the urzua binary into the fixture instead of copying it (a copy raced a forking test thread and failed with ETXTBSY under load); the test's setup, planted defect and assertions are otherwise unchanged **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/doctor.rs` 46c027154ca9 -> 4d8d0d22c116. Reason: split doctor::run into config_shape_checks, workflows_invoke_checker, ci_wired_check and report_from (doctor.rs); behaviour unchanged, outputs byte-identical **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
