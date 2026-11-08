@@ -2,7 +2,7 @@
 Stable-Id: 01M2VGDX8CRYPC8Y8V5Q5J14M4
 Status: Fixed
 Found-in: 'A code review of the unreleased diff since v0.3.0 -- reproduced for both directions, an inverted rule and an inert one'
-Realized-by: test:rust/crates/urzua-core/src/config.rs#a_rule_missing_an_option_it_requires_is_rejected_observed_failing@sha256:5a10aed473670f51fb79c9266a81acefa29b46a1db7d8f00cd5f225899e38b13
+Realized-by: test:rust/crates/urzua-core/src/config.rs#a_rule_missing_an_option_it_requires_is_rejected_observed_failing@sha256:a7b63fc0524791275964b7f8f6cc4176fc9e6b1e48e33e058fd71e9ea44b8c56
 ---
 # 44 — A rule's required options are unvalidated, so an incomplete rule inverts or never fires
 
@@ -48,3 +48,4 @@ Worth building once, with `BUG-40` and `BUG-41`, rather than three times.
 > | 2026-09-19 | `Status: Open` → `Fixed`. **Why:** `parse` now rejects a rule declared without an option it requires, naming the key and what the rule would otherwise do -- *"treats every claim as a violation, including correct ones"* for a missing `closed_statuses`, *"scans nothing and can never report"* for a missing `claim_paths`. `init` skips option-requiring rules rather than proposing a declaration that will not load, which `BUG-40`'s review had also flagged from the other side. | **substantive** |
 > | 2026-09-19 | `off` no longer requires a rule's options. **Why:** review found that `pointer.target-status: off` was rejected for a missing `not_in` -- so the rule could not be turned off without supplying values it would never read, since `gated` skips a declined rule before any option is used. Turning a rule off is the one declaration that needs nothing. | **substantive** |
 > | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs#a_rule_missing_an_option_it_requires_is_rejected_observed_failing` (lines 4253-4308) 5a10aed47367 -> a7b63fc05247. Reason: Read the diff of each pinned span since the old pin and the claim still holds. config.rs#a_rule_missing_an_option_it_requires_is_rejected_observed_failing: the test's base config now declares required_fields Status for adr so the fallback status lists are still needed (BUG-178), and it still asserts a rule missing an option it requires is rejected. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |

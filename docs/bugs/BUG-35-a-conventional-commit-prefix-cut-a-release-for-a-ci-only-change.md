@@ -2,7 +2,7 @@
 Stable-Id: 01M2MQK99NNTQZ6V91PJEWE5GE
 Status: Fixed
 Found-in: 'merging BUG-33''s own fix (#41) -- the merge was meant to exercise the no-release path and instead opened a 0.2.2 release PR'
-Realized-by: code:knope.toml
+Realized-by: code:knope.toml@sha256:08a547f0466a1644c3fdf68782538ef13af3535220f7028d460a1b0b25f08f8e
 ---
 # 35 — A Conventional Commit prefix cut a release for a CI-only change
 
@@ -81,3 +81,4 @@ knope is configured to ignore Conventional Commits entirely, so a commit prefix 
 > |---|---|---|
 > | 2026-09-16 | Filed and fixed in the same change. **Why:** found by merging another fix and watching the result rather than assuming it -- the merge was expected to exercise `BUG-33`'s no-release path and did something else entirely. Worth recording that the trap had existed unsprung since `ADR-29`, and that the first commit to spring it was written by an agent working on the release pipeline. | **substantive** |
 > | 2026-11-05 | `Regression-test` retired (ADR-84); it named no test, so `Realized-by` is unchanged and the original text is kept under Regression test. **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |
+> | 2026-11-08 | Pinned (attested by beauwilliams, identity: gh-verified, actor: agent): 1 locators pinned, 1 file-level, 0 scoped. Evidence: knope.toml@sha256:08a547f0466a Reason: Pinned the files as they are now after checking each against the record it evidences: publish-release.yml still builds and uploads the archives itself (BUG-28), new_record.rs still renders only the configured YAML header and new_integration.rs still holds the test that a blockquote template does not override it (BUG-3), waiver.rs is_active still parses Expires as a date (BUG-31), prepare-release.yml still hands knope's nothing-to-release exit to release-guard.sh instead of failing (BUG-33), ci.yml's changeset job still reads the label live (BUG-34), knope.toml still releases from changesets only (BUG-35), main.rs and check_integration.rs still emit doctor as JSON (BUG-4), release-guard.test.sh still plants an unmatched-package fragment and asserts a nonzero exit (BUG-48), field_state.rs still carries the retired placeholder tokens (BUG-5), and generate-rule-table.py and the Makefile rule-table-check target still compare SPEC-2's rule table with the shipped rule set (BUG-52). BUG-29 and BUG-30 are not in this batch because the filename.title-consistency code they cite moved out of rules.rs. **Why:** a claim is renewed only over pinned code and test evidence. | **structural** |

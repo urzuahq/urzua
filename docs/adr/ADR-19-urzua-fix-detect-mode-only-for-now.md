@@ -1,8 +1,8 @@
 ---
 Stable-Id: 01M6R3NK48R3KZZ3SZE3FYKSXA
 Status: Accepted
-Embodiment: Drift detected
-Realized-by: code:rust/crates/urzua-core/src/fix.rs, test:rust/crates/urzua-core/src/fix.rs
+Embodiment: Verified
+Realized-by: code:rust/crates/urzua-core/src/fix.rs@sha256:c9cd87e7b00e4640147d759dc80ea16b5aa076ac79cfc5890055d0fdde7c1e56, test:rust/crates/urzua-core/src/fix.rs@sha256:c9cd87e7b00e4640147d759dc80ea16b5aa076ac79cfc5890055d0fdde7c1e56
 Date: 2026-09-05
 Accepted-on: 2026-09-05
 Author: beauwilliams
@@ -64,3 +64,5 @@ when they land.
 > | 2026-11-04 | `Embodiment` recomputed by `urzua fix`: `Drift detected`. **Why:** every file named in `Realized-by` has changed since this line was last verified, and this pass did not re-verify it, so the record states the drift instead of a stale `Verified`; the Decision is unchanged. | **substantive** |
 > | 2026-11-04 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-core/src/fix.rs, test:rust/crates/urzua-core/src/fix.rs` -- stated `Verified` disagreed with the computed value. | **structural** |
 > | 2026-11-04 | Backfilled `Accepted-on` from git history, commit a09084af7. | **structural** |
+> | 2026-11-08 | Pinned (attested by beauwilliams, identity: gh-verified, actor: agent): 2 locators pinned, 2 file-level, 0 scoped. Evidence: rust/crates/urzua-core/src/fix.rs@sha256:c9cd87e7b00e, rust/crates/urzua-core/src/fix.rs@sha256:c9cd87e7b00e Reason: Pinned the files as they are now after checking each against the record it evidences: header.rs still parses the declared YAML frontmatter shape (ADR-17), fix.rs still has detect_repairs (ADR-19), urzua-id still builds ULID stable ids (ADR-21), main.rs still prints JSON with no --format flag on check (ADR-23), urzua-io still resolves the attesting identity in the ADR-31 order, scripts/generate-dashboard.py still generates the static dashboard (ADR-37), report.rs still defines Report and Notice and main.rs still emits them (ADR-46), publish-release.yml still verifies the tree it ships through checks.yml (ADR-47), knope.toml still releases from changesets (ADR-48), and ci.yml still gates changesets on .github/release-paths (ADR-49). **Why:** a claim is renewed only over pinned code and test evidence. | **structural** |
+> | 2026-11-08 | Tool-authored (by beauwilliams, identity: gh-verified, actor: agent): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-core/src/fix.rs@sha256:c9cd87e7b00e4640147d759dc80ea16b5aa076ac79cfc5890055d0fdde7c1e56, test:rust/crates/urzua-core/src/fix.rs@sha256:c9cd87e7b00e4640147d759dc80ea16b5aa076ac79cfc5890055d0fdde7c1e56` -- stated `Drift detected` disagreed with the computed value `Verified`. | **structural** |

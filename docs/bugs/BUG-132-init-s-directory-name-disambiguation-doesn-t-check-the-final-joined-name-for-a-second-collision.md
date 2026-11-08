@@ -2,7 +2,7 @@
 Stable-Id: 01M36PD9E50TMPKS818MB7DWRX
 Status: Fixed
 Found-in: "A /code-review v0.3.0...main pass, round 23"
-Realized-by: test:rust/crates/urzua-cli/tests/check_integration.rs#a_post_disambiguation_name_collision_is_refused_not_silently_dropped_observed_failing@sha256:62bd013bb90bc88cf825e0cb08d6b816270ec0219c7567df35d24805bcc9e48b
+Realized-by: test:rust/crates/urzua-cli/tests/check_integration.rs#a_post_disambiguation_name_collision_is_refused_not_silently_dropped_observed_failing@sha256:579c7e4c0643234d795a0b024db742b95d5f9cb6cb5d234a0bd1f2e1ded6929a
 ---
 # 132 — init's directory-name disambiguation doesn't check the final joined name for a second collision
 
@@ -59,3 +59,4 @@ outcome than asking the adopter to reorganize or hand-write the config for this 
 > | 2026-09-23 | Filed. **Why:** found by a full-release code review; verified `render_config_yaml`'s `types.insert` has no uniqueness guard and the existing disambiguation logic only checks base-name collisions, not the disambiguated name it produces. Left `Status: Open` -- the fix needs deciding `detect_record_types`'s error-reporting shape and what `init` does once a genuine collision is found, not just adding an assertion. | **substantive** |
 > | 2026-09-23 | Fixed. The signature concern was overstated: `run()` already has the disambiguated `Vec<ProposedRecordType>` in hand, so the uniqueness check lives there, not in `detect_record_types`. `init` refuses with a named-directories error rather than choosing a further disambiguation strategy. Regression test verified genuinely failing pre-fix (config written with one type silently dropped, exit 0) and passing after. | **substantive** |
 > | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/check_integration.rs#a_post_disambiguation_name_collision_is_refused_not_silently_dropped_observed_failing` (lines 1172-1214) 62bd013bb90b -> 579c7e4c0643. Reason: Read the diff of each pinned span since the old pin and the claim still holds. check_integration.rs#a_post_disambiguation_name_collision_is_refused_not_silently_dropped_observed_failing: the test body only dropped its manual remove_dir_all of the fixture directory (a TempDir guard removes it on drop), every fixture and assertion is unchanged. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |

@@ -2,7 +2,7 @@
 Stable-Id: 01M2MQK9NYKNJV8C0ZVW411T4W
 Status: Accepted
 Embodiment: Implemented
-Realized-by: code:knope.toml
+Realized-by: code:knope.toml@sha256:08a547f0466a1644c3fdf68782538ef13af3535220f7028d460a1b0b25f08f8e
 Date: 2026-09-16
 Accepted-on: 2026-09-16
 Author: beauwilliams
@@ -101,3 +101,4 @@ format changes; `.changeset/*.md` fragments and `CHANGELOG.md` are unaffected.
 > |---|---|---|
 > | 2026-09-16 | Initial decision. **Why:** an undecided default sat beside a decided mechanism and contradicted it, and the first commit to expose that cut an unintended release. Removing the second trigger costs nothing here -- no release has ever been computed from a commit prefix except the mistaken one. | **structural** |
 > | 2026-11-04 | Backfilled `Accepted-on` from git history, commit befa27e42. | **structural** |
+> | 2026-11-08 | Pinned (attested by beauwilliams, identity: gh-verified, actor: agent): 1 locators pinned, 1 file-level, 0 scoped. Evidence: knope.toml@sha256:08a547f0466a Reason: Pinned the files as they are now after checking each against the record it evidences: header.rs still parses the declared YAML frontmatter shape (ADR-17), fix.rs still has detect_repairs (ADR-19), urzua-id still builds ULID stable ids (ADR-21), main.rs still prints JSON with no --format flag on check (ADR-23), urzua-io still resolves the attesting identity in the ADR-31 order, scripts/generate-dashboard.py still generates the static dashboard (ADR-37), report.rs still defines Report and Notice and main.rs still emits them (ADR-46), publish-release.yml still verifies the tree it ships through checks.yml (ADR-47), knope.toml still releases from changesets (ADR-48), and ci.yml still gates changesets on .github/release-paths (ADR-49). **Why:** a claim is renewed only over pinned code and test evidence. | **structural** |

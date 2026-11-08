@@ -2,7 +2,7 @@
 Stable-Id: 01M2VNC7Y6Y36E4FD4Q0RB3T5A
 Status: Fixed
 Found-in: 'Asking why the engine did not catch ADR-4 reserving a `corpora/` directory that does not exist -- the answer generalised, and then found a live instance'
-Realized-by: test:rust/crates/urzua-core/src/rules/embodiment.rs#a_locator_naming_a_missing_path_is_an_error_observed_failing@sha256:34d04b0fdf97db89637ce1ad93f6e3c621e53d8742eea63669c07519e563e162
+Realized-by: test:rust/crates/urzua-core/src/rules/embodiment.rs#a_locator_naming_a_missing_path_is_an_error_observed_failing@sha256:18024b60aa83d03b660698f5c64295c0bd49a7acd762977780f9df6da37c761e
 ---
 # 49 — A `Realized-by` locator can point at a file that does not exist, and nothing checks
 
@@ -68,3 +68,4 @@ Two constraints from things already learned:
 > | 2026-09-19 | `Status: Open` → `Fixed`. **Why:** `embodiment.locator-exists` reports a `Realized-by` locator absent from the working tree, opt-in and levelled like every rule (`ADR-53`), with the CLI supplying existence so `urzua-core` stays pure (`ADR-5`). Declared `error` here and it immediately caught the live instance -- `ADR-42` naming `.urzua/config.toml`, deleted by `ADR-52` two days earlier -- and blocked. That record is corrected. | **substantive** |
 > | 2026-09-19 | Existence is now *tracked and on disk*, not either alone, and the CLI closure has a test. **Why:** review found the tracked-set check silent on a staged deletion -- `git rm` drops a path from `ls-files` but leaves it in `diff --cached`, and discovery unions the two, so the rule missed exactly the case it was written for. Observed failing: the new integration test reports `left: 0, right: 1` against the tracked-only check. The unit test's stub `present` proved nothing about that, which is `BUG-22`'s failure shape -- the pure half tested, the wiring not. | **substantive** |
 > | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/rules/embodiment.rs#a_locator_naming_a_missing_path_is_an_error_observed_failing` (lines 1236-1292) 34d04b0fdf97 -> 18024b60aa83. Reason: Read the diff of each pinned span since the old pin and the claim still holds. embodiment.rs#a_locator_naming_a_missing_path_is_an_error_observed_failing: the calls to the locator checker gained three empty-slice arguments, assertions unchanged. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |

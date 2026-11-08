@@ -2,7 +2,7 @@
 Stable-Id: 01M35T9QHFVNYZEDK6X18YTPWJ
 Status: Fixed
 Found-in: "A /code-review 108 pass, reviewing RFC-42/ADR-61's implementation"
-Realized-by: test:rust/crates/urzua-core/src/fix.rs#a_type_declaring_custom_embodiment_field_names_is_repaired_by_those_names_observed_failing@sha256:5aa5095668deac3c451b69e897bd298ff755f204a272c8f87c9362e257e561c4
+Realized-by: test:rust/crates/urzua-core/src/fix.rs#a_type_declaring_custom_embodiment_field_names_is_repaired_by_those_names_observed_failing@sha256:46f01692c3ffdc5691b8d4f2d250a36ce0cdd3e22088d1c01531df862d76e995
 ---
 # 118 — urzua fix ignores a type's relation_fields override for Embodiment and Realized-by
 
@@ -42,3 +42,4 @@ hardcoded literal.
 > |---|---|---|
 > | 2026-09-23 | Filed and fixed in one pass. **Why:** found by a full-PR code review of `RFC-42`'s implementation; a planted-violation test observed failing against the hardcoded literals before the fix. | **substantive** |
 > | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/fix.rs#a_type_declaring_custom_embodiment_field_names_is_repaired_by_those_names_observed_failing` (lines 1063-1129) 5aa5095668de -> 46f01692c3ff. Reason: Read the diff of each pinned span since the old pin and the claim still holds. fix.rs#a_type_declaring_custom_embodiment_field_names_is_repaired_by_those_names_observed_failing: the fixture literals gained the new default fields (roadmap, attestation, new, discovery, harness, authority, permanent) and the test helper detect replaced the detect_repairs call, assertions unchanged. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |

@@ -5,7 +5,7 @@ Phase: '0'
 Track: header-format
 Implements: ADR-27, BUG-3
 Blocked-on: —
-Realized-by: code:rust/crates/urzua-cli/src/commands/new.rs, code:rust/crates/urzua-core/src/new_record.rs, test:rust/crates/urzua-cli/tests/new_integration.rs#new_emits_yaml_frontmatter_when_configured_even_with_a_blockquote_template_present@sha256:abbf083803b8a4fe62e6e7b933ffdec9e9964180b452f0a00334eaca302cfbd0
+Realized-by: code:rust/crates/urzua-cli/src/commands/new.rs@sha256:5b61c497ff7e8ea4e30f9671a53477e21427637853ef4871324122e767e70b46, code:rust/crates/urzua-core/src/new_record.rs@sha256:21f5012c2b5ff34c2492d7ad9ca7c0a0a35fdc743df9fc76ae124a8210430e67, test:rust/crates/urzua-cli/tests/new_integration.rs#new_emits_yaml_frontmatter_when_configured_even_with_a_blockquote_template_present@sha256:abbf083803b8a4fe62e6e7b933ffdec9e9964180b452f0a00334eaca302cfbd0
 ---
 # 1 — Fix urzua new's template-priority bug
 
@@ -19,9 +19,9 @@ Flipping any type's header_shape to yaml-frontmatter without this fix means urzu
 
 ## Done means
 
-- `urzua new` for a type configured `yaml-frontmatter` emits a YAML-frontmatter record whether or not a blockquote-shaped template file exists. — evidence: code:rust/crates/urzua-cli/src/commands/new.rs, code:rust/crates/urzua-core/src/new_record.rs, test:rust/crates/urzua-cli/tests/new_integration.rs#new_emits_yaml_frontmatter_when_configured_even_with_a_blockquote_template_present@sha256:abbf083803b8a4fe62e6e7b933ffdec9e9964180b452f0a00334eaca302cfbd0
+- `urzua new` for a type configured `yaml-frontmatter` emits a YAML-frontmatter record whether or not a blockquote-shaped template file exists. — evidence: code:rust/crates/urzua-cli/src/commands/new.rs@sha256:5b61c497ff7e8ea4e30f9671a53477e21427637853ef4871324122e767e70b46, code:rust/crates/urzua-core/src/new_record.rs@sha256:21f5012c2b5ff34c2492d7ad9ca7c0a0a35fdc743df9fc76ae124a8210430e67, test:rust/crates/urzua-cli/tests/new_integration.rs#new_emits_yaml_frontmatter_when_configured_even_with_a_blockquote_template_present@sha256:abbf083803b8a4fe62e6e7b933ffdec9e9964180b452f0a00334eaca302cfbd0
 - A test plants a blockquote-shaped template and fails if the output is blockquote (`new_emits_yaml_frontmatter_when_configured_even_with_a_blockquote_template_present`). — evidence: test:rust/crates/urzua-cli/tests/new_integration.rs#new_emits_yaml_frontmatter_when_configured_even_with_a_blockquote_template_present@sha256:abbf083803b8a4fe62e6e7b933ffdec9e9964180b452f0a00334eaca302cfbd0
-- The configured `header_shape` is the only thing that picks the output shape. — evidence: code:rust/crates/urzua-cli/src/commands/new.rs
+- The configured `header_shape` is the only thing that picks the output shape. — evidence: code:rust/crates/urzua-cli/src/commands/new.rs@sha256:5b61c497ff7e8ea4e30f9671a53477e21427637853ef4871324122e767e70b46
 
 > **Revision log**
 >
@@ -31,3 +31,4 @@ Flipping any type's header_shape to yaml-frontmatter without this fix means urzu
 > | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-183`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. The criteria are those the delivered work met, checked against `Realized-by` and the code; `Status` stays Done. | **structural** |
 > | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |
+> | 2026-11-08 | Pinned (attested by beauwilliams, identity: gh-verified, actor: agent): 2 locators pinned, 2 file-level, 0 scoped. Evidence: rust/crates/urzua-cli/src/commands/new.rs@sha256:5b61c497ff7e, rust/crates/urzua-core/src/new_record.rs@sha256:21f5012c2b5f Reason: Pinned the files as they are now after checking each against the record it evidences: claim.rs and claim_field.rs still read a changeset's declared closes field as a claim (BUG-66), release-invariants.test.sh still plants a release-prep version bump and an unmatched level and asserts the guards fail, and checks.yml now runs it on the unattended path (BUG-92, BUG-93, BUG-96), new.rs and new_record.rs still take the configured header shape over a template (MILE-1), filename.rs still compares the filename's type prefix and padded number with the H1 (MILE-10), config.yaml still declares config.scope-matches-nothing and checks.yml runs the gate (MILE-106, MILE-110), and header.rs, narrative.rs, pointer.rs, field.rs, fix.rs, the Makefile and checks.yml still read the declared relation field names with relation_field_literals.rs failing on a restated literal (MILE-107, MILE-109). **Why:** a claim is renewed only over pinned code and test evidence. | **structural** |
