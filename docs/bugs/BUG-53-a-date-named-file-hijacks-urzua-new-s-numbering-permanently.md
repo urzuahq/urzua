@@ -2,7 +2,7 @@
 Stable-Id: 01M2W32794T1K6A3YCY3KE2XXQ
 Status: Fixed
 Found-in: 'A cumulative code review of v0.3.0..release, run before publishing 0.4.0 -- reproduced against the built binary'
-Realized-by: test:rust/crates/urzua-core/src/new_record.rs#a_date_named_file_is_not_a_record_number_observed_failing@sha256:6ca017966198815957858e378903ea615d88292f45839d578747685c59733855
+Realized-by: test:rust/crates/urzua-core/src/new_record.rs#a_date_named_file_is_not_a_record_number_observed_failing@sha256:ff7cab7405b7c38e8e47cacd78e62045a6e3e031d4eb110734f14fe6e6e391d2
 ---
 # 53 — A date-named file hijacks `urzua new`'s numbering permanently
 
@@ -48,3 +48,4 @@ parsing as a record number. Four digits is not arbitrary: it is what `init` requ
 > | 2026-09-19 | Record corrected: the first fix attempt bounded the first segment to four digits, which does not discriminate -- a year is four digits. The shipped fix rejects a date *tail* instead: `NN-NN-` after the first segment. | **substantive** |
 > | 2026-09-19 | `Regression-test` now names the test that exists. **Why:** the field still read *"not yet written"* after the test was written and observed failing, so this record claimed the work was undone while the work was done. One of eight such records, found by the audit that filed `BUG-57`. | **structural** |
 > | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/new_record.rs#a_date_named_file_is_not_a_record_number_observed_failing` (lines 563-601) 6ca017966198 -> ff7cab7405b7. Reason: Read the diff of each pinned span since the old pin and the claim still holds. new_record.rs#a_date_named_file_is_not_a_record_number_observed_failing: the calls to next_display_number now unwrap its Result (it reports an exhausted number instead of overflowing), the expected numbers are unchanged. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |

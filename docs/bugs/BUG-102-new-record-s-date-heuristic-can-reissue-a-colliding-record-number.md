@@ -2,7 +2,7 @@
 Stable-Id: 01M33QPM2CV2ZD54KTF9YXBWXR
 Status: Fixed
 Found-in: "A /code-review v0.3.0...main pass, reviewing everything landed for the 0.4.0 release"
-Realized-by: test:rust/crates/urzua-core/src/new_record.rs#a_date_named_file_is_not_a_record_number_observed_failing@sha256:6ca017966198815957858e378903ea615d88292f45839d578747685c59733855
+Realized-by: test:rust/crates/urzua-core/src/new_record.rs#a_date_named_file_is_not_a_record_number_observed_failing@sha256:ff7cab7405b7c38e8e47cacd78e62045a6e3e031d4eb110734f14fe6e6e391d2
 ---
 # 102 — new record's date heuristic can reissue a colliding record number
 
@@ -50,3 +50,4 @@ which is the entire remaining ambiguity space, not a gap this fix left open by o
 > |---|---|---|
 > | 2026-09-22 | Filed and fixed in one pass. **Why:** found by a full-release code review; a bounds check added to an existing heuristic, verified with a planted-violation test observed failing before the fix. | **substantive** |
 > | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/new_record.rs#a_date_named_file_is_not_a_record_number_observed_failing` (lines 563-601) 6ca017966198 -> ff7cab7405b7. Reason: Read the diff of each pinned span since the old pin and the claim still holds. new_record.rs#a_date_named_file_is_not_a_record_number_observed_failing: the calls to next_display_number now unwrap its Result (it reports an exhausted number instead of overflowing), the expected numbers are unchanged. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |

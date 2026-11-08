@@ -2,7 +2,7 @@
 Status: Accepted
 Stable-Id: 01M1Z6WV7FRDW9DP8D07GBQMFF
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-core/src/rules/pointer.rs@sha256:f3c650ac0f3bbaefddbf0f448d560a8ac98d5ce675a1ba1d4afbad7defe69fa1, test:rust/crates/urzua-core/src/rules/pointer.rs@sha256:f3c650ac0f3bbaefddbf0f448d560a8ac98d5ce675a1ba1d4afbad7defe69fa1
+Realized-by: code:rust/crates/urzua-core/src/rules/pointer.rs@sha256:e4d8db46f2e32fd5b80d2a62fe9938bf7ef057e18de0e92d2f22c66987b057d9, test:rust/crates/urzua-core/src/rules/pointer.rs@sha256:e4d8db46f2e32fd5b80d2a62fe9938bf7ef057e18de0e92d2f22c66987b057d9
 Date: 2026-09-07
 Accepted-on: 2026-09-07
 Author: beauwilliams
@@ -61,3 +61,4 @@ require any other change.
 > | 2026-11-04 | Pinned `rust/crates/urzua-core/src/rules/pointer.rs` by content hash after re-verifying it against the Decision (attested by beauwilliams). **Why:** Re-verified: parent resolves like Implements; the changes to pointer.rs are severity, exclude_files and fixtures only. | **structural** |
 > | 2026-11-05 | Re-baselined (attested by beauwilliams): re-pinned `rust/crates/urzua-core/src/rules/pointer.rs` f25158f2e1d0 -> a66a71521611. Reason: Re-verified: since the pin, pointer.rs changed only by adding suggested_action and action_source to its findings (ADR-73). Parent still resolves exactly as Implements and Derives-from do, which is what this decision is about. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
 > | 2026-11-05 | Re-baselined (attested by beauwilliams): re-pinned `rust/crates/urzua-core/src/rules/pointer.rs` a66a71521611 -> f3c650ac0f3b. Reason: pointer.rs gained one test, a_bare_hyphen_number_token_is_not_a_reference_observed_failing (BUG-72's regression test), in its tests module; no non-test code in the file changed **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/rules/pointer.rs` f3c650ac0f3b -> e4d8db46f2e3. Reason: Read the diff of each pinned span since the old pin and the claim still holds. rules/pointer.rs: only a test was added since the pin (a declared pointer field with a custom name is resolved and checked clean), no rule code changed. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |

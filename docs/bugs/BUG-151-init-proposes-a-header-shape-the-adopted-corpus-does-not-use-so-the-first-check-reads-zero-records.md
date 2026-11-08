@@ -2,7 +2,7 @@
 Stable-Id: 01M6CXZZ2TP2VC2SZ8CJWVTKZM
 Status: Fixed
 Found-in: "The first check of a real adopter corpus (bold-list headers, bare zero-padded numeric filenames) after urzua init"
-Realized-by: test:rust/crates/urzua-cli/tests/check_integration.rs#init_on_a_bold_list_corpus_proposes_yaml_frontmatter_and_names_the_removed_form@sha256:7e086e70e86bbff5664ebced45a82e4ad8ee19c333f74e040c2bb3750200b7e3
+Realized-by: test:rust/crates/urzua-cli/tests/check_integration.rs#init_on_a_bold_list_corpus_proposes_yaml_frontmatter_and_names_the_removed_form@sha256:567c4f98654dd8c6645db9038ff8ed806774cac3112420ef51b8aa7af562b870
 ---
 # 151 — init proposes a header shape the adopted corpus does not use, so the first check reads zero records
 
@@ -60,3 +60,4 @@ something on a fresh adopt is a separate decision.
 > | 2026-11-02 | Filed. **Why:** a first adopter corpus read as zero records under the config `init` wrote. Left `Status: Open`: the fix needs a decision on `ADR-33`'s steer, not only a code change. | **substantive** |
 > | 2026-11-02 | `Status: Fixed`; `Regression-test` now names the real test. **Why:** `init` proposes the header shape each type's records use (maintainer decision, `ADR-33` amended), fixed in the same PR as the decision. | **substantive** |
 > | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/check_integration.rs#init_on_a_bold_list_corpus_proposes_yaml_frontmatter_and_names_the_removed_form` (lines 3193-3230) 7e086e70e86b -> 567c4f98654d. Reason: Read the diff of each pinned span since the old pin and the claim still holds. check_integration.rs#init_on_a_bold_list_corpus_proposes_yaml_frontmatter_and_names_the_removed_form: the test body only dropped its manual remove_dir_all of the fixture directory (a TempDir guard removes it on drop), every fixture and assertion is unchanged. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |

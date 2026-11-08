@@ -2,7 +2,7 @@
 Stable-Id: 01M2YPPRWS5FHNE404A3GN7NCK
 Status: Fixed
 Found-in: "Round 9 of the 0.4.0 review, reproduced against a scratch repository"
-Realized-by: test:rust/crates/urzua-cli/tests/check_integration.rs#audit_is_ok_on_a_clean_corpus_with_no_relationships@sha256:6ea12ee652a6d7c9e02a31b73cfd2b77cd90ebdf094caac1642299693ce6cece
+Realized-by: test:rust/crates/urzua-cli/tests/check_integration.rs#audit_is_ok_on_a_clean_corpus_with_no_relationships@sha256:fa68f05ca625f0a380712a7e8e326ca60e0ab5116946e405e25843c5f15686e1
 ---
 # 84 — audit is unsatisfiable on a clean corpus with no relationships
 
@@ -57,3 +57,4 @@ were not separated.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/check_integration.rs#audit_is_ok_on_a_clean_corpus_with_no_relationships` (lines 2294-2312) 6ea12ee652a6 -> fa68f05ca625. Reason: Read the diff of each pinned span since the old pin and the claim still holds. check_integration.rs#audit_is_ok_on_a_clean_corpus_with_no_relationships: the output assertions now read the JSON field with json_field instead of substring-matching the printed text, with the same expected values. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |

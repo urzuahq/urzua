@@ -2,7 +2,7 @@
 Status: Fixed
 Stable-Id: 01M1Z5YTQ1FVF20SGM9JM6C0FF
 Found-in: writing SPEC-15 (the doctor spec) and finding the actual implementation printed `[OK]`/`[WARN]`/`[ERROR]` text lines, directly contradicting ADR-23's "stdout is always JSON, no format flag" contract every other command follows
-Realized-by: code:rust/crates/urzua-cli/src/main.rs, test:rust/crates/urzua-cli/tests/check_integration.rs, test:rust/crates/urzua-cli/tests/check_integration.rs#doctor_emits_json_not_plain_text_lines@sha256:b8b8680e7dcc4e6a25ae12a4eac08cc570b95f2ef5151e195dd219c09dff076f
+Realized-by: code:rust/crates/urzua-cli/src/main.rs, test:rust/crates/urzua-cli/tests/check_integration.rs, test:rust/crates/urzua-cli/tests/check_integration.rs#doctor_emits_json_not_plain_text_lines@sha256:f1206a0ad9ab58de9de017375f35f62be7cca473c3fca30d6ed17d4e15d9f9bf
 ---
 # 4 — urzua doctor outputs plain text instead of JSON
 
@@ -36,6 +36,7 @@ contract could still pass its own test suite indefinitely.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-07 | Fixed and shipped: `doctor` now emits `DoctorReport` JSON instead of plain-text lines; exit-code semantics unchanged. | **substantive** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/check_integration.rs#doctor_emits_json_not_plain_text_lines` (lines 394-431) b8b8680e7dcc -> f1206a0ad9ab. Reason: Read the diff of each pinned span since the old pin and the claim still holds. check_integration.rs#doctor_emits_json_not_plain_text_lines: the test body only dropped its manual remove_dir_all of the fixture directory (a TempDir guard removes it on drop), every fixture and assertion is unchanged. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
 
 > **Revision log**
 >

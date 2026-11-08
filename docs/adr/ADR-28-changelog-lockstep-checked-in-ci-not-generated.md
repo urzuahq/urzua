@@ -2,7 +2,7 @@
 Stable-Id: 01M6R3NK4GWRMJ1PXFNHSKT27V
 Status: Superseded
 Embodiment: Implemented
-Realized-by: code:.github/workflows/ci.yml@sha256:cc0baa44652ec9a5b60c5785db098463d602e175661412c76c8afce646913eea
+Realized-by: code:.github/workflows/ci.yml@sha256:3d22f5501990754b5b20fd4a05ebb02b6ed70013382eb19a4f838ffd49610036
 Date: 2026-09-06
 Accepted-on: 2026-09-06
 Author: beauwilliams
@@ -69,3 +69,4 @@ field. Fails closed only on the one condition it exists to catch.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | Pinned `.github/workflows/ci.yml` by content hash after re-verifying it against the Decision (attested by beauwilliams). **Why:** Re-verified for a Superseded record: the only change to ci.yml is an unrelated changeset-required fix. | **structural** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.github/workflows/ci.yml` cc0baa44652e -> 3d22f5501990. Reason: Read the diff of each pinned span since the old pin and the claim still holds. .github/workflows/ci.yml: gained the edited and merge_group triggers and a push to main no longer cancels a run in progress, the changelog check the ADR describes is unchanged. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |

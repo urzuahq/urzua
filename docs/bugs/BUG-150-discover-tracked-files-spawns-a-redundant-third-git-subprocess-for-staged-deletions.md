@@ -2,7 +2,7 @@
 Stable-Id: 01M37DNTD6SQV4CB32PKQ6QQXV
 Status: Fixed
 Found-in: "A /code-review v0.3.0...main pass, round 27"
-Realized-by: test:rust/crates/urzua-io/src/lib.rs#a_staged_rename_is_discovered_under_its_new_name_only_observed_failing@sha256:350c50420e9da70705d325853d37af27cf705826010eae8d013c62148c8d19cc
+Realized-by: test:rust/crates/urzua-io/src/lib.rs#a_staged_rename_is_discovered_under_its_new_name_only_observed_failing@sha256:d9a307c8092e5032350946a9b93479f947a35d9a7d69aa7698990138fd7b2e9e
 ---
 # 150 — discover_tracked_files spawns a redundant third git subprocess for staged deletions
 
@@ -41,3 +41,4 @@ behavior: `--diff-filter=D` never matched a rename either, since git classifies 
 > |---|---|---|
 > | 2026-09-24 | Filed and fixed in one pass, found by a full-release code review. **Why:** a redundant subprocess spawn on every invocation, closed by parsing one call's richer output instead of two calls' overlapping ones. The rename/copy two-path-field case was the real risk in this merge and is explicitly handled and tested. | **substantive** |
 > | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-io/src/lib.rs#a_staged_rename_is_discovered_under_its_new_name_only_observed_failing` (lines 1332-1394) 350c50420e9d -> d9a307c8092e. Reason: Read the diff of each pinned span since the old pin and the claim still holds. lib.rs#a_staged_rename_is_discovered_under_its_new_name_only_observed_failing: the test uses a Scratch guard in place of a hand-made temp dir and calls discover_tracked_files(&tmp, None), the function having gained an optional argument, and it still asserts a staged rename is discovered under its new name only. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |

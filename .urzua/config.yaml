@@ -84,6 +84,7 @@ record_types:
     relation_fields: {date: "Date", author: "Author"}
     known_fields:
       - "Embodiment"
+      - "Last-audited"
       - "Realized-by"
       - "Accepted-on"
       - "Derives-from"
@@ -301,6 +302,7 @@ record_types:
       - "Blocked-on"
       - "Depends-on"
       - "Blocks"
+      - "Last-audited"
       - "Realized-by"
       - "Non-reference-ids"
     statuses:
@@ -381,6 +383,7 @@ record_types:
       - "Stable-Id"
     header_shape: "yaml-frontmatter"
     known_fields:
+      - "Last-audited"
       - "Realized-by"
       - "Implements"
       - "Blocked-on"
@@ -710,6 +713,22 @@ rules:
     # States a human sets that no evidence can compute (MILE-148): a record
     # stating one is not reported as drift, and `urzua fix` leaves it alone.
     sticky_states: ["Deprecated", "Inactive"]
+  # A claim expires after a period declared per record type, status and evidence
+  # tier, and only `urzua reverify` renews it (ADR-97, MILE-129). `Last-audited` is
+  # the day a claim was re-verified, written by the command alone; `require_pin`
+  # makes a renewal refuse code or test evidence that is not hash-pinned. The
+  # first expiry of a record with no `Last-audited` is spread by `spread_days`,
+  # an offset from its Stable-Id, so the corpus does not expire on two days.
+  embodiment.claim-expired:
+    level: warn
+    anchor_field: "Last-audited"
+    require_pin: [code, test]
+    max_batch: 10
+    periods:
+      - {type: milestone, status: [Done], days: 45, spread_days: 45}
+      - {type: bug, status: [Fixed], days: 60, spread_days: 60}
+      - {type: spec, status: [Shipped, Accepted], days: 60, spread_days: 60}
+      - {type: adr, status: [Accepted], days: 90, spread_days: 90}
   embodiment.locator-exists: error
   # Advisory (MILE-46, ADR-87): several ADRs citing one rule module is expected now that
   # the rule engine is split into modules (MILE-131), so the nudge is reported and counted

@@ -2,7 +2,7 @@
 Stable-Id: 01M2MF5T28P4GAQRK2VYBDFZRE
 Status: Fixed
 Found-in: 'a review pass over urzua-core while fixing BUG-23 -- `is_active` compares `Expires` lexically without ever checking it is a date'
-Realized-by: code:rust/crates/urzua-core/src/waiver.rs, test:rust/crates/urzua-core/src/waiver.rs#an_unparseable_expiry_does_not_suppress_observed_failing@sha256:7db66c82a4fa4ba246eb09bd567f6cc6a84d9d909f712452a27546b22471ce18
+Realized-by: code:rust/crates/urzua-core/src/waiver.rs, test:rust/crates/urzua-core/src/waiver.rs#an_unparseable_expiry_does_not_suppress_observed_failing@sha256:64c2268b8e2d1137b3906bad078d0f226ae129c04b5a674ac5a74a88bf9c1c2e
 ---
 # 31 — A waiver with an unparseable Expires value never expires
 
@@ -57,3 +57,4 @@ it was malformed either. Surfacing it needs a `waiver.*` rule, which would mean 
 > |---|---|---|
 > | 2026-09-16 | Filed and fixed in the same change, minus the reporting half. **Why:** latent -- there are no waiver records in this corpus, so this has never fired and the original framing of it as urgent was wrong. It is still the only place in the tool where failing open removes findings rather than adding them, which is why it was worth fixing before anyone writes the first waiver. | **substantive** |
 > | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/waiver.rs#an_unparseable_expiry_does_not_suppress_observed_failing` (lines 483-514) 7db66c82a4fa -> 64c2268b8e2d. Reason: Read the diff of each pinned span since the old pin and the claim still holds. waiver.rs#an_unparseable_expiry_does_not_suppress_observed_failing: the test loops over more invalid expiry spellings (2026-99-99, 2026-19-01, 2026-02-30, 2026-13-01 and 2025-02-29 beside the earlier four) and its fixture struct gained unmet_states and permanence fields, and it still asserts every unparseable expiry fails to suppress. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |

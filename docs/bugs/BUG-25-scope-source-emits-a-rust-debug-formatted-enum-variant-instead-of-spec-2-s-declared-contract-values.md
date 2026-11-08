@@ -2,7 +2,7 @@
 Stable-Id: 01M28KB048PY0D3H4T5CGQXRPW
 Status: Fixed
 Found-in: 'reading `check`''s raw JSON while investigating BUG-24 -- `scope.source` came back as the literal string `"GitTracked"`, which is not one of the four values SPEC-2 declares'
-Realized-by: code:rust/crates/urzua-core/src/report.rs, code:rust/crates/urzua-cli/src/discovery.rs, test:rust/crates/urzua-cli/tests/check_integration.rs#scope_source_is_the_declared_contract_value_not_a_debug_rendering@sha256:c1d9b7b7f7353eab3cea98a3d78f616d4e41d7043438a0284dba9f431bf3f99f
+Realized-by: code:rust/crates/urzua-core/src/report.rs, code:rust/crates/urzua-cli/src/discovery.rs, test:rust/crates/urzua-cli/tests/check_integration.rs#scope_source_is_the_declared_contract_value_not_a_debug_rendering@sha256:827fbffaf0cc13af3b1cf73b0d776f179fe58b7dc32fae0eab772d7d8f25000b
 ---
 # 25 — scope.source emits a Rust Debug-formatted enum variant instead of SPEC-2's declared contract values
 
@@ -84,3 +84,4 @@ rather than documenting three modes that do not exist.
 > | 2026-09-16 | Fixed, and two of this record's own claims corrected. **Why:** the value is the first thing an agent branches on, and it matched no declared value on any run since the field existed. Chosen as a deliberately small user-facing change to exercise the changeset and release path end to end after a day of pipeline repairs. | **substantive** |
 > | 2026-09-11 | Initial bug record, `Status: Open`. Not fixed -- the fix touches the published JSON contract (a serde-tagged enum, the missing `base`, the undeclared `record_types`), so it needs a decision and a changeset, not a silent rename. | **structural** |
 > | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/check_integration.rs#scope_source_is_the_declared_contract_value_not_a_debug_rendering` (lines 43-65) c1d9b7b7f735 -> 827fbffaf0cc. Reason: Read the diff of each pinned span since the old pin and the claim still holds. check_integration.rs#scope_source_is_the_declared_contract_value_not_a_debug_rendering: the test body only dropped its manual remove_dir_all of the fixture directory (a TempDir guard removes it on drop), every fixture and assertion is unchanged. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
