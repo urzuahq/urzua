@@ -502,6 +502,7 @@ fn execute(config_path: Option<PathBuf>, args: CheckArgs) -> Result<CheckReport,
         &executions,
         &why_deferred(&scope, base.as_deref()),
     ));
+    notices.extend(excused_line_notices(&executions));
     scope_findings(session, &scope, &mut findings);
     let waivers = load_waivers(session, &mut notices);
     let today = urzua_io::today();
@@ -584,6 +585,26 @@ fn untracked_notices(
         .collect();
     crate::discovery::skipped_untracked_notice(&skipped)
         .into_iter()
+        .collect()
+}
+
+// ADR-80 (amendment 2026-11-08): a declared ignore marker's excused lines are counted, never hidden.
+/// One info notice per rule whose declared `ignore_marker` excused lines this
+/// run, so an adopter reads how much a marker is hiding (`ADR-80`).
+fn excused_line_notices(executions: &[RuleExecution]) -> Vec<Notice> {
+    executions
+        .iter()
+        .filter_map(|e| {
+            let excused = e.population.as_ref()?.excused_lines();
+            (excused > 0).then(|| Notice {
+                severity: NoticeSeverity::Info,
+                subject: e.rule.clone(),
+                message: format!(
+                    "ignore_marker -- {excused} line{} excused from this rule; a line carrying the declared marker is neither reported nor counted as evidence",
+                    if excused == 1 { "" } else { "s" }
+                ),
+            })
+        })
         .collect()
 }
 

@@ -436,8 +436,10 @@ pub struct RuleSetting {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub boundaries: Option<Vec<Boundary>>,
     /// The text that, on a line inside a boundary, excuses that line alone
-    /// (`ADR-80`). Declared, never compiled in. Only meaningful to
-    /// `boundary.published-path-reference`.
+    /// (`ADR-80`). Declared, never compiled in. Meaningful to
+    /// `boundary.published-path-reference` and, for a back-pointer on the line,
+    /// to `embodiment.back-pointer-resolution` and
+    /// `embodiment.back-pointer-decision-accepted` (`ADR-80` amendment).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ignore_marker: Option<String>,
     /// The generated index artifacts `index.freshness` compares against the
@@ -3161,15 +3163,33 @@ pub fn parse_with_document_models(
     // reports, so every reason is a load error.
     for (name, setting) in config.rules.iter_mut() {
         let owner = crate::rules::rule_accepts_option(name, "boundaries");
-        for (option, present) in [
-            ("boundaries", setting.boundaries.is_some()),
-            ("ignore_marker", setting.ignore_marker.is_some()),
+        for (option, present, accepted) in [
+            ("boundaries", setting.boundaries.is_some(), owner),
+            (
+                "ignore_marker",
+                setting.ignore_marker.is_some(),
+                crate::rules::rule_accepts_option(name, "ignore_marker"),
+            ),
         ] {
-            if present && !owner {
+            if present && !accepted {
                 return Err(ConfigError::OptionNotApplicable {
                     rule: name.clone(),
                     option: option.to_string(),
                 });
+            }
+        }
+        // The marker is one declared spelling on every rule that reads it
+        // (`ADR-80`): the boundary rule and both back-pointer rules.
+        if setting.level != RuleLevel::Off {
+            if let Some(marker) = &setting.ignore_marker {
+                if marker.trim().is_empty() || marker.trim() != marker || marker.contains('\n') {
+                    return Err(ConfigError::InvalidBoundary {
+                        rule: name.clone(),
+                        option: "ignore_marker",
+                        reason: "must be non-blank text on one line with no surrounding whitespace"
+                            .to_string(),
+                    });
+                }
             }
         }
         if !owner || setting.level == RuleLevel::Off {
@@ -3189,14 +3209,6 @@ pub fn parse_with_document_models(
             option,
             reason,
         };
-        if let Some(marker) = &setting.ignore_marker {
-            if marker.trim().is_empty() || marker.trim() != marker || marker.contains('\n') {
-                return Err(bad(
-                    "ignore_marker",
-                    "must be non-blank text on one line with no surrounding whitespace".to_string(),
-                ));
-            }
-        }
         for (idx, boundary) in setting.boundaries.iter_mut().flatten().enumerate() {
             let at = format!("entry {idx}");
             if boundary.reason.trim().is_empty() {
@@ -5852,6 +5864,23 @@ record_types:
             parse(cfg).unwrap_err(),
             ConfigError::OptionNotApplicable { .. }
         ));
+    }
+
+    #[test]
+    fn the_back_pointer_rules_accept_a_valid_ignore_marker_and_refuse_a_blank_one() {
+        for rule in [
+            "embodiment.back-pointer-resolution",
+            "embodiment.back-pointer-decision-accepted",
+        ] {
+            let cfg = |marker: &str| {
+                format!(
+                    "schema_version: 2\nrecord_types:\n  adr:\n    dir: docs/adr\nrules:\n  {rule}:\n    level: error\n    back_pointer_paths: [src]\n    ignore_marker: {marker}\n"
+                )
+            };
+            let ok = parse(&cfg("\"urzua:allow\"")).unwrap();
+            assert_eq!(ok.rules[rule].ignore_marker.as_deref(), Some("urzua:allow"));
+            assert!(parse(&cfg("\"  \"")).is_err(), "{rule}");
+        }
     }
 
     fn index_config(indexes: &str) -> String {

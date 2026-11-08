@@ -70,6 +70,88 @@ pub fn scan_marker(
     out
 }
 
+/// What a scan under a declared ignore marker found (`ADR-80` amendment).
+#[derive(Debug, Default)]
+pub struct MarkerScan {
+    /// The back-pointers on lines the marker does not excuse, in line order.
+    pub kept: Vec<BackPointer>,
+    /// The lines that carry a back-pointer and the marker: excused.
+    pub excused: std::collections::BTreeSet<usize>,
+    /// Every line that carries a back-pointer, excused or not.
+    pub seen: std::collections::BTreeSet<usize>,
+}
+
+/// [`scan_marker`], leaving out a back-pointer on a line that carries the
+/// declared `ignore` marker. With no marker declared this is `scan_marker`
+/// unchanged. The marker excuses its own line only.
+pub fn scan_marker_excusing(
+    path: &std::path::Path,
+    content: &str,
+    prefixes: &[String],
+    marker: &str,
+    ignore: Option<&str>,
+) -> MarkerScan {
+    let mut out = MarkerScan::default();
+    let lines: Vec<&str> = content.lines().collect();
+    for pointer in scan_marker(path, content, prefixes, marker) {
+        out.seen.insert(pointer.line);
+        let excused = ignore.is_some_and(|m| {
+            lines
+                .get(pointer.line - 1)
+                .is_some_and(|l| line_carries_ignore_marker(l, m))
+        });
+        if excused {
+            out.excused.insert(pointer.line);
+        } else {
+            out.kept.push(pointer);
+        }
+    }
+    out
+}
+
+/// The 1-indexed lines that carry the ignore marker but no back-pointer of
+/// either kind: a marker that excuses nothing (`ADR-80`).
+fn unused_marker_lines(
+    content: &str,
+    prefixes: &[String],
+    path: &std::path::Path,
+    ignore: &str,
+) -> Vec<usize> {
+    let pointer_lines: std::collections::BTreeSet<usize> = [MARKER_IMPLEMENTS, MARKER_VERIFIES]
+        .iter()
+        .flat_map(|m| scan_marker(path, content, prefixes, m))
+        .map(|p| p.line)
+        .collect();
+    content
+        .lines()
+        .enumerate()
+        .filter(|(i, l)| line_carries_ignore_marker(l, ignore) && !pointer_lines.contains(&(i + 1)))
+        .map(|(i, _)| i + 1)
+        .collect()
+}
+
+fn unused_marker_finding(
+    rule: &str,
+    variant: &'static str,
+    path: &std::path::Path,
+    line: usize,
+    ignore: &str,
+) -> Finding {
+    Finding {
+        rule: rule.to_string(),
+        severity: FindingSeverity::Error,
+        file: path.to_path_buf(),
+        line: Some(line),
+        message: format!(
+            "the ignore marker '{ignore}' suppresses nothing: no back-pointer is on this line; remove the marker"
+        ),
+        waived: None,
+        declared_severity: None,
+        suggested_action: None,
+        action_source: ActionSource::new(variant),
+    }
+}
+
 /// The text after the marker of the first comment on `line` that carries one.
 fn marker_rest<'a>(
     line: &'a str,
@@ -211,6 +293,11 @@ pub fn back_pointer_evidence(
         .into_iter()
         .filter(|b| b.kind == crate::config::BoundaryKind::Published)
         .collect();
+    // A line the declared `ignore_marker` excuses is not evidence either.
+    let ignore = config
+        .enabled_rule_opts::<IgnoreMarkerOpts>(RULE_EMBODIMENT_BACK_POINTER_RESOLUTION)
+        .and_then(|o| o.ignore_marker);
+    let ignore = ignore.as_deref();
     for file in files {
         if !source_paths
             .iter()
@@ -222,13 +309,17 @@ pub fn back_pointer_evidence(
         let Some(content) = &file.content else {
             continue;
         };
-        for pointer in scan_back_pointers(&file.path, content, &prefixes) {
+        let implements =
+            scan_marker_excusing(&file.path, content, &prefixes, MARKER_IMPLEMENTS, ignore);
+        for pointer in implements.kept {
             if let Some(record) = index.get(&crate::values::RecordId::new(&pointer.id)) {
                 evidence.code.insert(record.path.clone());
             }
         }
         if is_test_file(&file.path, test_paths) {
-            for pointer in scan_marker(&file.path, content, &prefixes, MARKER_VERIFIES) {
+            let verifies =
+                scan_marker_excusing(&file.path, content, &prefixes, MARKER_VERIFIES, ignore);
+            for pointer in verifies.kept {
                 if let Some(record) = index.get(&crate::values::RecordId::new(&pointer.id)) {
                     evidence.test.insert(record.path.clone());
                 }
@@ -319,6 +410,9 @@ pub fn embodiment_back_pointer_resolution(
     const RULE_ID: &str = RULE_EMBODIMENT_BACK_POINTER_RESOLUTION;
     let prefixes = declared_prefixes(config);
     let mut findings = Vec::new();
+    let ignore = config.rule_opts::<IgnoreMarkerOpts>(RULE_ID).ignore_marker;
+    let ignore = ignore.as_deref();
+    let mut excused_lines = 0;
 
     let population = census(PopulationUnit::File, files.iter().collect(), |file| {
         if !source_paths
@@ -331,12 +425,31 @@ pub fn embodiment_back_pointer_resolution(
             return Outcome::Unreadable;
         };
         let verifies = if is_test_file(&file.path, test_paths) {
-            scan_marker(&file.path, content, &prefixes, MARKER_VERIFIES)
+            scan_marker_excusing(&file.path, content, &prefixes, MARKER_VERIFIES, ignore)
         } else {
-            Vec::new()
+            MarkerScan::default()
         };
-        let implements = scan_back_pointers(&file.path, content, &prefixes);
-        for pointer in implements.into_iter().chain(verifies) {
+        let implements =
+            scan_marker_excusing(&file.path, content, &prefixes, MARKER_IMPLEMENTS, ignore);
+        let excused: std::collections::BTreeSet<usize> = implements
+            .excused
+            .iter()
+            .chain(&verifies.excused)
+            .copied()
+            .collect();
+        excused_lines += excused.len();
+        if let Some(marker) = ignore {
+            for line in unused_marker_lines(content, &prefixes, &file.path, marker) {
+                findings.push(unused_marker_finding(
+                    RULE_ID,
+                    "back-pointer-marker-unused",
+                    &file.path,
+                    line,
+                    marker,
+                ));
+            }
+        }
+        for pointer in implements.kept.into_iter().chain(verifies.kept) {
             if !index.contains_key(&crate::values::RecordId::new(&pointer.id)) {
                 findings.push(Finding {
                     rule: RULE_ID.to_string(),
@@ -377,7 +490,7 @@ pub fn embodiment_back_pointer_resolution(
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
-            population: Some(population),
+            population: Some(population.with_excused_lines(excused_lines)),
             status: RuleStatus::Ran,
             examined_records: Vec::new(),
         },
@@ -409,6 +522,10 @@ pub fn embodiment_back_pointer_decision_accepted(
     let prefixes = declared_prefixes(config);
     let declared = super::status::statuses_by_type(config);
     let mut findings = Vec::new();
+    let ignore = config.rule_opts::<IgnoreMarkerOpts>(RULE_ID).ignore_marker;
+    let ignore = ignore.as_deref();
+    let mut excused_lines = 0;
+    let mut unused: Vec<Finding> = Vec::new();
     let mut push = |variant: &'static str, pointer: &BackPointer, message: String| {
         findings.push(Finding {
             rule: RULE_ID.to_string(),
@@ -441,7 +558,21 @@ pub fn embodiment_back_pointer_decision_accepted(
         let Some(content) = &file.content else {
             return Outcome::Unreadable;
         };
-        for pointer in scan_back_pointers(&file.path, content, &prefixes) {
+        let scanned =
+            scan_marker_excusing(&file.path, content, &prefixes, MARKER_IMPLEMENTS, ignore);
+        excused_lines += scanned.excused.len();
+        if let Some(marker) = ignore {
+            for line in unused_marker_lines(content, &prefixes, &file.path, marker) {
+                unused.push(unused_marker_finding(
+                    RULE_ID,
+                    "decision-marker-unused",
+                    &file.path,
+                    line,
+                    marker,
+                ));
+            }
+        }
+        for pointer in scanned.kept {
             // A citation of no record is `embodiment.back-pointer-resolution`'s.
             let Some(target) = index.get(&crate::values::RecordId::new(&pointer.id)) else {
                 continue;
@@ -490,6 +621,7 @@ pub fn embodiment_back_pointer_decision_accepted(
         Outcome::Examined
     });
 
+    findings.extend(unused);
     findings.extend(uncovered_source_paths(
         RULE_ID,
         "decision-uncovered-path",
@@ -501,7 +633,7 @@ pub fn embodiment_back_pointer_decision_accepted(
     (
         RuleExecution {
             rule: RULE_ID.to_string(),
-            population: Some(population),
+            population: Some(population.with_excused_lines(excused_lines)),
             status: RuleStatus::Ran,
             examined_records: Vec::new(),
         },
@@ -534,6 +666,29 @@ mod tests {
         .into_iter()
         .map(|b| (b.line, b.id))
         .collect()
+    }
+
+    #[test]
+    fn a_declared_ignore_marker_drops_only_its_own_line() {
+        let text = expand("// @I ADR-1\n// @I ADR-9 skip-me\n// @I ADR-2\n");
+        let path = std::path::Path::new("src/a.rs");
+        let scan =
+            scan_marker_excusing(path, &text, &prefixes(), MARKER_IMPLEMENTS, Some("skip-me"));
+        let kept: Vec<usize> = scan.kept.iter().map(|p| p.line).collect();
+        assert_eq!(kept, vec![1, 3]);
+        assert_eq!(scan.excused.iter().copied().collect::<Vec<_>>(), vec![2]);
+        // No marker declared: identical to the plain scan.
+        let plain = scan_marker_excusing(path, &text, &prefixes(), MARKER_IMPLEMENTS, None);
+        assert_eq!(plain.kept, scan_back_pointers(path, &text, &prefixes()));
+        assert!(plain.excused.is_empty());
+    }
+
+    #[test]
+    fn a_marker_on_a_line_without_a_back_pointer_is_unused() {
+        let text = expand("// @I ADR-1 skip-me\nfn a() {} // skip-me\n");
+        let unused =
+            unused_marker_lines(&text, &prefixes(), std::path::Path::new("a.rs"), "skip-me");
+        assert_eq!(unused, vec![2]);
     }
 
     #[test]
