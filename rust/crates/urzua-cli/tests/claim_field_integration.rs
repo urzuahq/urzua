@@ -6,7 +6,7 @@
 
 mod common;
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
 
 fn git(dir: &Path, args: &[&str]) {
@@ -27,9 +27,8 @@ fn config(claim_options: &str) -> String {
 }
 
 /// A repository with `BUG-1` open and `BUG-2` fixed, and the given fragments.
-fn repo(name: &str, claim_options: &str, fragments: &[(&str, &str)]) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("urzua-claim-field-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+fn repo(name: &str, claim_options: &str, fragments: &[(&str, &str)]) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-claim-field-{name}"));
     std::fs::create_dir_all(dir.join("docs/bugs")).unwrap();
     std::fs::create_dir_all(dir.join(".changeset")).unwrap();
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
@@ -102,7 +101,6 @@ fn a_fragment_listing_a_still_open_record_fails_the_check_observed_failing() {
     assert_eq!(action["kind"], "edit-field", "{report}");
     assert_eq!(action["target"]["file"], "docs/bugs/BUG-1-open.md");
     assert_eq!(action["target"]["field"], "Status");
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -131,7 +129,6 @@ fn closed_records_an_empty_list_and_a_non_fragment_are_clean_and_disclosed_obser
     assert!(notices.contains("README.md"), "{notices}");
     assert!(notices.contains("no frontmatter"), "{notices}");
     assert!(notices.contains("0 closing-verb claim"), "{notices}");
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -147,14 +144,12 @@ fn strict_catches_the_incident_shape_a_fragment_naming_a_record_and_declaring_no
         .unwrap()
         .contains("claim.field-missing"));
     assert_eq!(code, 1);
-    std::fs::remove_dir_all(&dir).ok();
 
     // Not strict: the field is checked when present, and this fragment has none.
     let dir = repo("not-strict", "    closes: closes\n", &[("a.md", bare)]);
     let (code, report) = check(&dir);
     assert!(claim_findings(&report).is_empty(), "{report}");
     assert_eq!(code, 0);
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -185,7 +180,6 @@ fn a_block_list_an_unresolved_id_and_a_non_id_are_findings_observed_failing() {
     assert!(message(".changeset/words.md").contains("claim.field-malformed"));
     assert_eq!(found.len(), 3, "{report}");
     assert_eq!(code, 1);
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 /// Declaring neither option changes nothing: the same fragments, read by the
@@ -212,7 +206,6 @@ fn without_the_options_the_rule_reads_closing_verbs_alone_observed_failing() {
     assert!(report
         .get("notices")
         .is_none_or(|n| !n.to_string().contains("closing-verb")));
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 /// A closing verb in the body still works with the field declared, and the
@@ -233,7 +226,6 @@ fn a_verb_claim_in_the_body_is_still_found_and_counted_observed_failing() {
     assert!(report["notices"]
         .to_string()
         .contains("1 closing-verb claim"));
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -251,7 +243,6 @@ fn strict_without_closes_does_not_load_observed_failing() {
         String::from_utf8_lossy(&out.stderr)
     );
     assert!(text.contains("strict") && text.contains("closes"), "{text}");
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 /// The release tool refuses an unterminated fence and a blank line before the
@@ -274,14 +265,12 @@ fn strict_reports_a_fence_the_release_tool_cannot_read_observed_failing() {
             "{name}: {report}"
         );
         assert_eq!(code, 1, "{name}");
-        std::fs::remove_dir_all(&dir).ok();
 
         // Not strict: read as no frontmatter, out of scope, no finding.
         let dir = repo(name, "    closes: closes\n", &[("a.md", text)]);
         let (code, report) = check(&dir);
         assert!(claim_findings(&report).is_empty(), "{name}: {report}");
         assert_eq!(code, 0, "{name}");
-        std::fs::remove_dir_all(&dir).ok();
     }
 }
 
@@ -316,7 +305,6 @@ fn verb_claims_false_turns_the_prose_reading_off_and_keeps_the_field_observed_fa
     let notices = report["notices"].to_string();
     assert!(notices.contains("closing-verb reading is off"), "{notices}");
     assert!(!notices.contains("0 closing-verb"), "no count: {notices}");
-    std::fs::remove_dir_all(&dir).ok();
 
     let listed = "---\ndefault: patch\ncloses: [BUG-1]\n---\n\nFixes BUG-1.\n";
     let dir = repo("verb-off-listed", VERB_OFF, &[("a.md", listed)]);
@@ -328,7 +316,6 @@ fn verb_claims_false_turns_the_prose_reading_off_and_keeps_the_field_observed_fa
         .unwrap()
         .starts_with("claim.closes-open"));
     assert_eq!(code, 1);
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 /// Absent and `true` read prose exactly as before, byte for byte.
@@ -346,8 +333,6 @@ fn verb_claims_absent_or_true_is_the_reading_as_it_was_observed_failing() {
     assert_eq!(absent.0, 1);
     assert_eq!(claim_findings(&absent.1).len(), 1, "{}", absent.1);
     assert_eq!(absent, on);
-    std::fs::remove_dir_all(&dir_absent).ok();
-    std::fs::remove_dir_all(&dir_on).ok();
 }
 
 #[test]
@@ -360,7 +345,6 @@ fn verb_claims_needs_closes_whether_true_or_false_observed_failing() {
             "{value}: {text}"
         );
         assert!(!text.contains("does not take"), "{text}");
-        std::fs::remove_dir_all(&dir).ok();
     }
 }
 
@@ -379,7 +363,6 @@ fn verb_claims_on_another_rule_is_not_applicable_observed_failing() {
         text.contains("does not take the option 'verb_claims'"),
         "{text}"
     );
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 /// Off without `strict`: a fragment lacking the key then has no claim at all,
@@ -400,11 +383,9 @@ fn verb_claims_false_without_strict_carries_a_notice_observed_failing() {
         notices.contains("without `strict`") && notices.contains("no claim"),
         "{notices}"
     );
-    std::fs::remove_dir_all(&dir).ok();
 
     // With `strict` the gap is a finding, so no such notice.
     let dir = repo("verb-off-strict", VERB_OFF, &[("a.md", bare)]);
     let (_, report) = check(&dir);
     assert!(!report["notices"].to_string().contains("without `strict`"));
-    std::fs::remove_dir_all(&dir).ok();
 }
