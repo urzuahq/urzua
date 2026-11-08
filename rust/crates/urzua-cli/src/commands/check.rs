@@ -536,6 +536,7 @@ fn execute(config_path: Option<PathBuf>, args: CheckArgs) -> Result<CheckReport,
         &scope.in_scope.iter().map(|p| p.as_path()).collect(),
     );
     Ok(CheckReport {
+        as_of: crate::as_of(),
         status,
         files_examined,
         records_read_by_any_rule,
@@ -1501,7 +1502,11 @@ fn run_phase(
 fn probes(repo_root: &Path) -> (impl Fn(&Path) -> bool, impl Fn(&str) -> bool) {
     let (a, b) = (repo_root.to_path_buf(), repo_root.to_path_buf());
     (
-        move |p: &Path| a.join(p).try_exists().unwrap_or(true),
+        // A path that resolves outside the repository is never probed: it
+        // reads as absent, not as "exists but untracked".
+        move |p: &Path| {
+            urzua_io::confine_to_root(&a, p).is_ok() && a.join(p).try_exists().unwrap_or(true)
+        },
         move |d: &str| b.join(d).is_dir(),
     )
 }

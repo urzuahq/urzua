@@ -61,6 +61,8 @@ pub struct LocatorsReview {
     pub field_line: usize,
     /// The lines of the Done-means item clauses (`ADR-96`).
     pub item_lines: Vec<usize>,
+    /// The type's declared item section name, for messages (`ADR-96`).
+    pub items_section: String,
     pub locators: Vec<LocatorReview>,
 }
 
@@ -82,14 +84,8 @@ pub fn review_locators(
             .iter()
             .find(|f| f.key.as_str() == field)
             .map_or(0, |f| f.line),
-        item_lines: record
-            .items
-            .iter()
-            .flat_map(|i| i.items.iter())
-            .filter_map(|i| i.evidence.as_ref())
-            .filter(|c| c.valid)
-            .map(|c| c.line)
-            .collect(),
+        items_section: crate::rules::items_section(config, &record.record_type),
+        item_lines: valid_item_evidence_lines(record),
         locators: Vec::new(),
     };
     let Some(value) = evidence_text(record, field) else {
@@ -282,6 +278,7 @@ pub struct RecordReview {
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct ReverifyReport {
     pub status: crate::report::FixStatus,
+    pub as_of: crate::report::AsOf,
     /// `detect` writes nothing; `apply` wrote the records listed as applied.
     pub mode: &'static str,
     pub pin_only: bool,
@@ -429,9 +426,10 @@ pub fn apply_reverify(
             }
         }
         if !placed {
-            return Err(format!(
-                "the unpinned locator '{}' is no longer on the '{}' line or in a Done means item clause -- the record may have changed since the review",
-                pin.display, review.field
+            return Err(unplaced_pin_message(
+                &pin.display,
+                &review.field,
+                &review.items_section,
             ));
         }
     }
@@ -471,9 +469,36 @@ fn set_anchor(doc: &mut LineDoc, field: &str, today: &str) -> Result<(), String>
     Ok(())
 }
 
+/// The lines of the record's valid Done-means item evidence clauses.
+fn valid_item_evidence_lines(record: &Record) -> Vec<usize> {
+    record
+        .items
+        .iter()
+        .flat_map(|i| i.items.iter())
+        .filter_map(|i| i.evidence.as_ref())
+        .filter(|c| c.valid)
+        .map(|c| c.line)
+        .collect()
+}
+
+/// Why a first pin found no place to go, naming the type's declared item section.
+fn unplaced_pin_message(display: &str, field: &str, section: &str) -> String {
+    format!(
+        "the unpinned locator '{display}' is no longer on the '{field}' line or in a {section} item clause -- the record may have changed since the review"
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_unplaced_pin_message_names_the_declared_section() {
+        let m = unplaced_pin_message("code:src/a.rs", "Realized-by", "Done when");
+        assert!(m.contains("in a Done when item clause"), "{m}");
+        assert!(m.contains("'Realized-by' line"), "{m}");
+        assert!(!m.contains("Done means"), "{m}");
+    }
 
     const H: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 

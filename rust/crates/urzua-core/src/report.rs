@@ -677,9 +677,29 @@ pub struct DiffScope {
     pub whole_corpus_reason: Option<String>,
 }
 
+/// The date every comparison in a run was made against, and where it came
+/// from (`ADR-97`, amendment of 2026-11-08). Present in every report of a
+/// command that compares dates.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct AsOf {
+    /// `YYYY-MM-DD`, UTC.
+    pub date: String,
+    pub source: AsOfSourceKind,
+}
+
+/// `flag` when `--as-of` named the date, `clock` when the machine's UTC date
+/// was read.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum AsOfSourceKind {
+    Flag,
+    Clock,
+}
+
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct CheckReport {
     pub status: ReportStatus,
+    pub as_of: AsOf,
     pub files_examined: usize,
     /// How many records some rule actually reached a verdict about
     /// ([`records_read_by_any_rule`]). `files_examined` says what was read off
@@ -1132,6 +1152,7 @@ impl Report for NewReport {
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct FixReport {
     pub status: FixStatus,
+    pub as_of: AsOf,
     pub population: Population,
     pub repairs: Vec<crate::fix::Repair>,
     /// Stale evidence pins, listed (or, after `--apply`, re-pinned) by
@@ -1471,6 +1492,10 @@ mod tests {
     #[test]
     fn notices_never_move_a_successful_exit_code() {
         let report = CheckReport {
+            as_of: AsOf {
+                date: "2026-11-08".to_string(),
+                source: AsOfSourceKind::Clock,
+            },
             status: ReportStatus::Ok,
             files_examined: 1,
             records_read_by_any_rule: 0,
@@ -1494,6 +1519,10 @@ mod tests {
 
     fn report_with_warning(fail_on: crate::config::FailOn, waived: Option<&str>) -> CheckReport {
         CheckReport {
+            as_of: AsOf {
+                date: "2026-11-08".to_string(),
+                source: AsOfSourceKind::Clock,
+            },
             status: ReportStatus::FindingsPresent,
             files_examined: 1,
             records_read_by_any_rule: 1,

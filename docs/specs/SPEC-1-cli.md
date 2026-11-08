@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5AJB7EBVDWVSMCSYZQ
-Version: '0.33'
+Version: '0.34'
 Date: 2026-07-29
 Status: Shipped
 Embodiment: Verified
@@ -214,6 +214,15 @@ codebase's own code can structure into JSON, including genuine errors (ADR-26's 
   version is outside the window the release reads, `CouldNotRun` adds a `schema_version_error` object
   (`found`, `supported`, `current`, `migration`; `SPEC-3`, `ADR-77`) beside the usual `error` sentence,
   and is omitted otherwise.
+- **The evaluation date is an input (`ADR-97`, second amendment of 2026-11-08).** A global option
+  `--as-of YYYY-MM-DD` fixes the UTC date every date comparison reads: waiver `Expires`, claim age
+  (including ages taken from git history, measured to the end of that day), status expiry and the audit
+  grace. Without it the date is the machine's UTC date, read once per run, and behaviour is unchanged.
+  A report of a command that compares dates (`check`, `audit`, `fix`, `reverify`) carries a top-level
+  `as_of` object, always present: `{"date": "YYYY-MM-DD", "source": "flag" | "clock"}`. A malformed or
+  impossible date is a `CouldNotRun` (exit 2). The option is refused, never ignored, by a command that
+  compares no dates, and by `fix --apply` and `reverify --apply`, whose revision rows and anchors carry
+  the real date; preview with `--as-of` and no `--apply`. The wall clock is read in one place.
 - **`--help`/`--version` are the one stated plain-text exception** — clap's own output, never
   JSON-wrapped, matching `cargo`'s own convention that help/version generation is never gated behind
   a machine-format flag.
@@ -367,3 +376,4 @@ None. Every question this spec carried has been answered or routed:
 > | 2026-11-08 | Bumped to `0.32`. The CLI gains `urzua reverify` (`ADR-97`, `SPEC-8`), the attributed renewal of an expired claim; the pin on the `Command` enum is re-baselined above. No other command changes. **Why:** `MILE-129`, the build of `ADR-97`. | **substantive** |
 > | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/main.rs#Command` (lines 94-338) a6f09ebb5aa7 -> 3476a956db42. Reason: Read the diff of each pinned file since the old pin and the claim still holds. main.rs#Command: only the doc comment on the Init variant changed, so its --help text now says --dry-run prints the config the real run would write instead of calling it byte-identical to the real run; no variant, flag or argument changed. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
 > | 2026-11-08 | Bumped to `0.33`. The pins this spec's `Realized-by` holds on files changed in this change were re-baselined (the `Re-baselined` row above); no behaviour this spec describes changed. **Why:** a revision-log entry that adds a structural change needs a `Version` bump (`revision-log.version-bump-required`). | **structural** |
+> | 2026-11-08 | Bumped to `0.34`. The CLI gains the global `--as-of YYYY-MM-DD` evaluation date and a top-level `as_of` on the reports of `check`, `audit`, `fix` and `reverify`, with its refusals; no pinned symbol of this spec changed. **Why:** maintainer decision of 2026-11-08 (the second `ADR-97` amendment of that date): a verdict must be reproducible and upcoming expiries previewable. | **substantive** |

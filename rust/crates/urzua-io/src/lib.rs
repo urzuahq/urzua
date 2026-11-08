@@ -524,17 +524,88 @@ pub fn read_to_string(path: &Path) -> std::io::Result<String> {
     std::fs::read_to_string(path)
 }
 
-/// Today's date, `YYYY-MM-DD`, in UTC, whatever the machine's time zone. The
-/// one piece of wall-clock I/O waiver expiry needs (ADR-0011) --
-/// `urzua-core`'s expiry comparison itself takes this as a plain string
-/// argument and stays pure. Every date comparison uses UTC: a waiver's
-/// `Expires`, a snapshot's date, and (through `now_unix`) a claim's age, so a
-/// waiver lapses at the same instant for every contributor and in CI.
+/// Where the evaluation date came from (`ADR-97`, amendment of 2026-11-08).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AsOfSource {
+    /// `--as-of` named it.
+    Flag,
+    /// The machine's clock, read once.
+    Clock,
+}
+
+#[derive(Debug, Clone)]
+struct EvaluationClock {
+    date: String,
+    /// The instant claim ages are measured to: the end of `date` (UTC) for a
+    /// flag, so nothing dated on that day is in the future; the real instant
+    /// for the clock.
+    unix: i64,
+    source: AsOfSource,
+}
+
+static CLOCK: std::sync::OnceLock<EvaluationClock> = std::sync::OnceLock::new();
+
+/// The one place the wall clock is read. Every date and age comparison reads
+/// the evaluation clock below; `clock_is_read_in_one_place` (urzua-cli tests)
+/// fails if another call site appears.
+fn system_clock() -> EvaluationClock {
+    let now = chrono::Utc::now();
+    EvaluationClock {
+        date: now.date_naive().format("%Y-%m-%d").to_string(),
+        unix: now.timestamp(),
+        source: AsOfSource::Clock,
+    }
+}
+
+/// Parses a strict `YYYY-MM-DD` calendar date.
+fn parse_as_of(value: &str) -> Result<chrono::NaiveDate, String> {
+    let shaped = value.len() == 10
+        && value.bytes().enumerate().all(|(i, b)| match i {
+            4 | 7 => b == b'-',
+            _ => b.is_ascii_digit(),
+        });
+    if !shaped {
+        return Err(format!(
+            "--as-of '{value}' is not a date: write it as YYYY-MM-DD"
+        ));
+    }
+    chrono::NaiveDate::parse_from_str(value, "%Y-%m-%d")
+        .map_err(|_| format!("--as-of '{value}' is not a calendar date: write it as YYYY-MM-DD"))
+}
+
+/// Fixes the evaluation date for the whole run (`--as-of`). Call once, before
+/// anything reads a date; a second call, or a call after a read, is refused.
+pub fn set_as_of(value: &str) -> Result<(), String> {
+    let date = parse_as_of(value)?;
+    let end_of_day = date
+        .and_hms_opt(23, 59, 59)
+        .map(|t| t.and_utc().timestamp())
+        .ok_or_else(|| format!("--as-of '{value}' is out of range"))?;
+    CLOCK
+        .set(EvaluationClock {
+            date: date.format("%Y-%m-%d").to_string(),
+            unix: end_of_day,
+            source: AsOfSource::Flag,
+        })
+        .map_err(|_| "the evaluation date was already fixed for this run".to_string())
+}
+
+fn clock() -> &'static EvaluationClock {
+    CLOCK.get_or_init(system_clock)
+}
+
+/// The evaluation date, `YYYY-MM-DD`: `--as-of` when given, else today in UTC
+/// whatever the machine's time zone (read once per run). Waiver `Expires`, a
+/// snapshot's date, a claim's anchor and every other date comparison use it,
+/// so a waiver lapses at the same instant for every contributor and in CI.
+/// `urzua-core`'s comparisons take it as a plain string and stay pure.
 pub fn today() -> String {
-    chrono::Utc::now()
-        .date_naive()
-        .format("%Y-%m-%d")
-        .to_string()
+    clock().date.clone()
+}
+
+/// Where [`today`] came from.
+pub fn as_of_source() -> AsOfSource {
+    clock().source
 }
 
 const GH_AUTH_TIMEOUT: Duration = Duration::from_secs(5);
@@ -1147,9 +1218,10 @@ pub fn commit_unix_time(repo_root: &Path, commit: &str) -> Option<i64> {
     String::from_utf8_lossy(&output.stdout).trim().parse().ok()
 }
 
-/// Seconds since the epoch, now (`MILE-129`).
+/// Seconds since the epoch at the evaluation date (`MILE-129`): now, or the
+/// end of the `--as-of` day. Claim ages and audit grace measure to it.
 pub fn now_unix() -> i64 {
-    chrono::Utc::now().timestamp()
+    clock().unix
 }
 
 /// Lowercase hex SHA-256 of the file's bytes (`MILE-129`), or `None` when it
@@ -1243,6 +1315,28 @@ mod tests {
                 String::from_utf8_lossy(&out.stdout),
                 String::from_utf8_lossy(&out.stderr)
             );
+        }
+    }
+
+    #[test]
+    fn as_of_accepts_only_a_strict_calendar_date() {
+        for ok in ["2026-11-08", "2024-02-29", "1999-12-31"] {
+            assert!(parse_as_of(ok).is_ok(), "{ok}");
+        }
+        for bad in [
+            "",
+            "tomorrow",
+            "2026-1-5",
+            "2026-13-01",
+            "2026-02-30",
+            "2025-02-29",
+            "20261108",
+            "2026-11-08T00:00:00Z",
+            " 2026-11-08",
+            "2026/11/08",
+            "+026-11-08",
+        ] {
+            assert!(parse_as_of(bad).is_err(), "{bad:?}");
         }
     }
 

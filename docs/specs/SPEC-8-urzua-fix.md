@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5Q0XVK27P5T8FN72BN
-Version: '0.37'
+Version: '0.38'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/commands/fix.rs@sha256:be8f45475c2b596ebe284ff01875a1694acf6eb1bc1b2cdc41d4d841d9806773, code:rust/crates/urzua-core/src/fix.rs@sha256:9ac6fd0b57a321050d3f27d733e0f410b3496b17dc9651d1fa2933ddb42ad621, test:rust/crates/urzua-cli/tests/fix_paths_integration.rs@sha256:73cb06a1782f02abeaf6c0795632ed1d1939633d72f67033247120656c6927d2, test:rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs@sha256:27c91b75ad614811aa87db203bafedcadf05c64de434957d0859e2af55659bf0, test:rust/crates/urzua-cli/tests/fix_drift_integration.rs@sha256:ff69343ca324400bde79c266372f9a213728d4d4ef8202beca6e12e54aa35352
+Realized-by: code:rust/crates/urzua-cli/src/commands/fix.rs@sha256:751d9bdf6982199d0f6d175573217be840075d809b58378370dba39a3b29fd55, code:rust/crates/urzua-core/src/fix.rs@sha256:db0e96b74575090e7b3ee95ce37f766fea9da6f9a75155e951c11aa0f0bd08e9, test:rust/crates/urzua-cli/tests/fix_paths_integration.rs@sha256:73cb06a1782f02abeaf6c0795632ed1d1939633d72f67033247120656c6927d2, test:rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs@sha256:27c91b75ad614811aa87db203bafedcadf05c64de434957d0859e2af55659bf0, test:rust/crates/urzua-cli/tests/fix_drift_integration.rs@sha256:ff69343ca324400bde79c266372f9a213728d4d4ef8202beca6e12e54aa35352
 Author: beauwilliams
 Subject: '`urzua fix` -- detecting and applying Embodiment corrections computed from evidence.'
 Implements: ADR-15, ADR-18, ADR-19, ADR-20
@@ -393,6 +393,15 @@ declared and is `not-run` otherwise.
 - The exit codes are `fix`'s: 0 for a review or an applied batch, 1 for a refused or failed record,
   2 for `not-run`.
 
+## The evaluation date (`--as-of`)
+
+`fix` and `reverify` reports carry a top-level `as_of` (`{"date", "source"}`, `SPEC-1`). In detect mode the
+global `--as-of YYYY-MM-DD` makes the claim age, the expiry and the audit grace read that date, so `reverify
+--as-of <date>` lists the records whose claim will have expired by then. With `--apply` (including
+`fix --rebaseline --apply`) the option is a usage error (exit 2, nothing written): the revision row and the
+anchor carry the real date, and a different one would falsify the history. A command that never sees a stated
+date refuses the option rather than ignoring it.
+
 ## Purity boundary
 
 `urzua-core::fix::apply_repair` is a pure `&str -> Result<String, String>` transform. The CLI
@@ -465,5 +474,9 @@ asserted by test, not assumed by convention.
 > | 2026-11-08 | Bumped to `0.35`. `urzua reverify` hardening: a locator outside the repository or untracked no longer resolves for a pin; a first pin is no longer spliced into a longer anchored locator (`a.rs#Foo::bar`); any actor but human is refused where the period's level is `error`; `--force --ids` renews the named record; detect lists a record with no usable revision log as refused. Documents the four. **Why:** the round-4 review findings on `reverify` (`ADR-97`); no change to what an accepted run writes. | **substantive** |
 > | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/fix.rs` 23e5e6b703b5 -> 5a67695c913d, `rust/crates/urzua-core/src/fix.rs` c9cd87e7b00e -> 88c815c0639a. Reason: Read the diff of each pinned file: core fix.rs moved apply_rebaseline's evidence-line lookup and revision-row tail into shared helpers (evidence_edit_lines, append_log_rows, revision_log_refusal) that apply_reverify also calls, with the same rows and error text; cli commands/fix.rs gained validate_reason, back_pointer_evidence, into_failures and identity_notices extracted from fix and reverify with the same behaviour; core reverify.rs calls the helpers and its first-pin matcher no longer splices into a longer anchored locator; cli commands/reverify.rs now refuses a record with no usable revision log in detect, refuses any non-human actor at an error-level period, and honours --ids under --force. Each claim these records make about those files still holds. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
 > | 2026-11-08 | Bumped to `0.36`. `urzua reverify` lists, dates and renews a milestone whose evidence is only its Done-means item clauses, pinning the item locators; the refusal for a record with no evidence names both sources. **Why:** `ADR-97` amendment of 2026-11-08. | **substantive** |
-> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/fix.rs` 5a67695c913d -> be8f45475c2b, `rust/crates/urzua-core/src/fix.rs` 88c815c0639a -> 9ac6fd0b57a3. Reason: Read the diff of each re-pinned file against main. cli/src/commands/fix.rs: Notice struct literals gained detail: None; no behaviour change; core/src/fix.rs: Notice struct literals gained detail: None; no behaviour change. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
-> | 2026-11-08 | Bumped to `0.37`. The pins this spec's `Realized-by` holds on files this change touched were re-baselined (the `Re-baselined` row above); no behaviour this spec describes changed. | **structural** |
+> | 2026-11-08 | Bumped to `0.37`. `fix` and `reverify` reports carry `as_of`; the global `--as-of` applies to their detect modes and is refused with `--apply`. **Why:** maintainer decision of 2026-11-08 (the second `ADR-97` amendment of that date). | **substantive** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/fix.rs` 5a67695c913d -> 751d9bdf6982. Reason: Read the diff of each re-pinned file. commands/fix.rs: the FixReport construction gains as_of; no other change. Nothing this record relies on changed. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/fix.rs` 88c815c0639a -> aff4037c8a9a. Reason: Read the diff of each pinned file since the old pin; the claim still holds. fix.rs: the only change is that the re-baseline refusal message names the type's declared item section instead of the literal Done means (a new items_section field carried to it, with a test of the wording); how pins are found and rewritten is unchanged. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
+> | 2026-11-08 | Bumped to `0.38`. The pins this spec's `Realized-by` holds on files changed in this change were re-baselined (the `Re-baselined` row above); no behaviour this spec describes changed. **Why:** a revision-log entry that adds a structural change needs a `Version` bump (`revision-log.version-bump-required`). | **structural** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/fix.rs` aff4037c8a9a -> db0e96b74575. Reason: fix.rs: since the previous pin only the pin-reading loop in detect_rebaselines moved into a helper (note_failed_pin) to stay under the SPEC-22 function bound; behaviour is unchanged, so the claim still holds. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/fix.rs` 88c815c0639a -> db0e96b74575. Reason: fix.rs: this change makes the re-baseline refusal message name the type's declared item section instead of the literal Done means (a new items_section field carried to it, with a test) and moves the failed-pin listing in detect_rebaselines into a helper to stay under the SPEC-22 bound; unrelated to the claim this record evidences, which still holds. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
