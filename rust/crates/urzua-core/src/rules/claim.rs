@@ -1,4 +1,5 @@
 use super::*;
+use crate::status_model::StatusDecl;
 
 /// The references a line actually claims to close: the run immediately
 /// following a closing verb, ending at the first token that is neither a
@@ -46,6 +47,201 @@ fn claimed_closed(line: &str) -> Vec<String> {
     out
 }
 
+/// A claimed record id as written in one file: the file, the line, the id as
+/// written and the id normalised for lookup.
+type ClaimedRef<'a> = (&'a String, usize, String, String);
+
+/// Present tense only: a claim is written in the present, while prose
+/// *about* a past claim is written in the past. A narrowing, not a fix --
+/// a present-tense sentence discussing a claim still matches.
+fn verb_occurrences<'a>(claims: &'a [(String, String)], opts: &ClaimOpts) -> Vec<ClaimedRef<'a>> {
+    let mut occurrences = Vec::new();
+    for (path, content) in claims {
+        for (idx, line) in verb_claim_lines(content, opts) {
+            for reference in claimed_closed(line) {
+                let normalized = crate::values::RecordId::new(&reference).to_string();
+                occurrences.push((path, idx + 1, reference, normalized));
+            }
+        }
+    }
+    occurrences
+}
+
+/// What each file declares in the structured field, when one is declared, and
+/// the files that are not fragments at all. Reports the field's own defects.
+fn listed_claims<'a>(
+    claims: &'a [(String, String)],
+    opts: &ClaimOpts,
+    findings: &mut Vec<Finding>,
+) -> (Vec<ClaimedRef<'a>>, Vec<&'a String>) {
+    let mut listed: Vec<ClaimedRef<'a>> = Vec::new();
+    let mut non_fragments: Vec<&String> = Vec::new();
+    let Some(key) = opts.closes.as_deref() else {
+        return (listed, non_fragments);
+    };
+    for (path, content) in claims {
+        match read_claim_field(content, key) {
+            ClaimField::NoFrontmatter => non_fragments.push(path),
+            // The release tool cannot read it: a malformed claim file under
+            // `strict`, and as before (no frontmatter) otherwise.
+            ClaimField::BrokenFence { line, reason } => {
+                if opts.strict {
+                    findings.push(field_finding(path, line, "claim-field-malformed", reason));
+                } else {
+                    non_fragments.push(path);
+                }
+            }
+            ClaimField::Missing => {
+                if opts.strict {
+                    findings.push(field_finding(
+                        path,
+                        1,
+                        "claim-field-missing",
+                        format!(
+                            "has no `{key}` field; declare the records this change closes as `{key}: [BUG-1, BUG-2]`, or `{key}: []` if it closes none"
+                        ),
+                    ));
+                }
+            }
+            ClaimField::Malformed { line, reason } => {
+                findings.push(field_finding(path, line, "claim-field-malformed", reason))
+            }
+            ClaimField::Declared { line, ids } => {
+                for id in ids {
+                    let normalized = crate::values::RecordId::new(&id).to_string();
+                    listed.push((path, line, id, normalized));
+                }
+            }
+        }
+    }
+    (listed, non_fragments)
+}
+
+/// One candidate per *distinct* claimed reference, deduped the same way the
+/// verdict is: two changesets closing one record are one thing to judge.
+/// Counting occurrences instead made the number exceed the corpus while
+/// saying nothing about records (BUG-90). A listed id is its own candidate,
+/// because it is judged by a different reading than the same id in prose.
+fn claim_candidates<'a>(
+    occurrences: &'a [ClaimedRef<'_>],
+    listed: &[ClaimedRef<'_>],
+    non_fragments: &[&String],
+) -> Vec<Candidate<'a>> {
+    let mut seen: std::collections::HashSet<&str> = std::collections::HashSet::new();
+    let mut seen_listed: std::collections::HashSet<&str> = std::collections::HashSet::new();
+    let mut candidates: Vec<Candidate> = occurrences
+        .iter()
+        .map(|(_, _, _, normalized)| normalized.as_str())
+        .filter(|normalized| seen.insert(normalized))
+        .map(Candidate::Verb)
+        .collect();
+    candidates.extend(
+        listed
+            .iter()
+            .map(|(_, _, _, normalized)| normalized.as_str())
+            .filter(|normalized| seen_listed.insert(normalized))
+            .map(|_| Candidate::Listed),
+    );
+    // A file with no frontmatter is not a fragment, so the field does not
+    // apply to it: eligible, out of scope, and disclosed by `check`.
+    candidates.extend(non_fragments.iter().map(|_| Candidate::NotAFragment));
+    candidates
+}
+
+/// What the claim readings judge a claimed record against.
+struct ClaimJudge<'a> {
+    config: &'a Config,
+    index: &'a RecordIndex<'a>,
+    declared_by_type: HashMap<String, std::collections::BTreeSet<crate::values::FieldName>>,
+    statuses: HashMap<String, StatusDecl>,
+    closed_statuses: &'a [String],
+}
+
+impl ClaimJudge<'_> {
+    /// Findings of the closing-verb reading, per occurrence, not per
+    /// candidate: each place the claim is written is its own thing to correct.
+    fn verb_findings(&self, occurrences: Vec<ClaimedRef<'_>>, findings: &mut Vec<Finding>) {
+        for (path, line, reference, normalized) in occurrences {
+            let Some(target) = self.index.get(normalized.as_str()) else {
+                continue;
+            };
+            // A lookup miss is unjudged, not a status match (BUG-100).
+            let status_field = relation_field_name(
+                self.config,
+                &target.record_type,
+                crate::config::RelationRole::Status,
+            );
+            let Ok(status) =
+                declared_cross_record_value(&self.declared_by_type, target, status_field)
+            else {
+                continue;
+            };
+            if is_finished(
+                &self.statuses,
+                &target.record_type,
+                status,
+                self.closed_statuses,
+            ) {
+                continue;
+            }
+            findings.push(Finding {
+                rule: RULE_CLAIM_STATUS_AGREEMENT.to_string(),
+                severity: FindingSeverity::Error,
+                file: PathBuf::from(path),
+                line: Some(line),
+                waived: None,
+                declared_severity: None,
+                suggested_action: None,
+                action_source: ActionSource::new("claim-status-disagrees"),
+                message: format!(
+                    "claims to close {reference}, but {reference} has {status_field} {status}"
+                ),
+            });
+        }
+    }
+
+    /// Findings of the structured reading over the ids a file lists.
+    fn listed_findings(&self, listed: Vec<ClaimedRef<'_>>, key: &str, findings: &mut Vec<Finding>) {
+        for (path, line, id, normalized) in listed {
+            let Some(target) = self.index.get(normalized.as_str()) else {
+                findings.push(field_finding(
+                    path,
+                    line,
+                    "claim-id-unresolved",
+                    format!("lists {id} in `{key}`, which resolves to no record"),
+                ));
+                continue;
+            };
+            let status_field = relation_field_name(
+                self.config,
+                &target.record_type,
+                crate::config::RelationRole::Status,
+            );
+            // Closed is the type's declared terminals alone: the rule's fallback
+            // list is for the verb reading, and a type that declares none has no
+            // declared close to compare a listed record against.
+            let status = declared_cross_record_value(&self.declared_by_type, target, status_field);
+            if status.is_ok_and(|s| is_finished(&self.statuses, &target.record_type, s, &[])) {
+                continue;
+            }
+            let state = match status {
+                Ok(s) => format!("{status_field} {s}"),
+                Err(_) => format!("no readable {status_field}"),
+            };
+            let mut finding = field_finding(
+                path,
+                line,
+                "claim-closes-open",
+                format!("lists {id} in `{key}` as closed, but {id} has {state}"),
+            );
+            finding.action_source = ActionSource::new("claim-closes-open")
+                .file(target.path.clone())
+                .field(status_field);
+            findings.push(finding);
+        }
+    }
+}
+
 /// A file outside the corpus claiming a record is closed, while the record
 /// itself says otherwise.
 ///
@@ -79,90 +275,16 @@ pub fn claim_status_agreement(
     config: &Config,
     index: &RecordIndex,
 ) -> (RuleExecution, Vec<Finding>) {
-    const RULE_ID: &str = RULE_CLAIM_STATUS_AGREEMENT;
-    let closed_statuses = opts.closed_statuses.as_slice();
     let mut findings = Vec::new();
-    let declared_by_type = declared_fields_by_type(config);
-    let declared_by_type = &declared_by_type;
-    let statuses = statuses_by_type(config);
-
-    // Present tense only: a claim is written in the present, while prose
-    // *about* a past claim is written in the past. A narrowing, not a fix --
-    // a present-tense sentence discussing a claim still matches.
-    let mut occurrences: Vec<(&String, usize, String, String)> = Vec::new();
-    for (path, content) in claims {
-        for (idx, line) in verb_claim_lines(content, opts) {
-            for reference in claimed_closed(line) {
-                let normalized = crate::values::RecordId::new(&reference).to_string();
-                occurrences.push((path, idx + 1, reference, normalized));
-            }
-        }
-    }
-
-    // What each file declares in the structured field, when one is declared.
-    let mut listed: Vec<(&String, usize, String, String)> = Vec::new();
-    let mut non_fragments: Vec<&String> = Vec::new();
-    if let Some(key) = opts.closes.as_deref() {
-        for (path, content) in claims {
-            match read_claim_field(content, key) {
-                ClaimField::NoFrontmatter => non_fragments.push(path),
-                // The release tool cannot read it: a malformed claim file under
-                // `strict`, and as before (no frontmatter) otherwise.
-                ClaimField::BrokenFence { line, reason } => {
-                    if opts.strict {
-                        findings.push(field_finding(path, line, "claim-field-malformed", reason));
-                    } else {
-                        non_fragments.push(path);
-                    }
-                }
-                ClaimField::Missing => {
-                    if opts.strict {
-                        findings.push(field_finding(
-                            path,
-                            1,
-                            "claim-field-missing",
-                            format!(
-                                "has no `{key}` field; declare the records this change closes as `{key}: [BUG-1, BUG-2]`, or `{key}: []` if it closes none"
-                            ),
-                        ));
-                    }
-                }
-                ClaimField::Malformed { line, reason } => {
-                    findings.push(field_finding(path, line, "claim-field-malformed", reason))
-                }
-                ClaimField::Declared { line, ids } => {
-                    for id in ids {
-                        let normalized = crate::values::RecordId::new(&id).to_string();
-                        listed.push((path, line, id, normalized));
-                    }
-                }
-            }
-        }
-    }
-
-    // One candidate per *distinct* claimed reference, deduped the same way the
-    // verdict is: two changesets closing one record are one thing to judge.
-    // Counting occurrences instead made the number exceed the corpus while
-    // saying nothing about records (BUG-90). A listed id is its own candidate,
-    // because it is judged by a different reading than the same id in prose.
-    let mut seen: std::collections::HashSet<&str> = std::collections::HashSet::new();
-    let mut seen_listed: std::collections::HashSet<&str> = std::collections::HashSet::new();
-    let mut candidates: Vec<Candidate> = occurrences
-        .iter()
-        .map(|(_, _, _, normalized)| normalized.as_str())
-        .filter(|normalized| seen.insert(normalized))
-        .map(Candidate::Verb)
-        .collect();
-    candidates.extend(
-        listed
-            .iter()
-            .map(|(_, _, _, normalized)| normalized.as_str())
-            .filter(|normalized| seen_listed.insert(normalized))
-            .map(|_| Candidate::Listed),
-    );
-    // A file with no frontmatter is not a fragment, so the field does not
-    // apply to it: eligible, out of scope, and disclosed by `check`.
-    candidates.extend(non_fragments.iter().map(|_| Candidate::NotAFragment));
+    let judge = ClaimJudge {
+        config,
+        index,
+        declared_by_type: declared_fields_by_type(config),
+        statuses: statuses_by_type(config),
+        closed_statuses: opts.closed_statuses.as_slice(),
+    };
+    let occurrences = verb_occurrences(claims, opts);
+    let (listed, non_fragments) = listed_claims(claims, opts, &mut findings);
 
     // A claimed reference resolving to no record is eligible and unexamined --
     // the claim was made and the engine could not judge it. It was a bare
@@ -170,7 +292,7 @@ pub fn claim_status_agreement(
     // judged (it is a finding), so it counts as examined.
     let population = census(
         PopulationUnit::Claim,
-        candidates,
+        claim_candidates(&occurrences, &listed, &non_fragments),
         |candidate| match candidate {
             Candidate::Verb(normalized) if !index.contains_key(*normalized) => Outcome::Absent,
             Candidate::NotAFragment => Outcome::OutOfScope,
@@ -178,77 +300,12 @@ pub fn claim_status_agreement(
         },
     );
 
-    // Findings are per occurrence, not per candidate: each place the claim is
-    // written is its own thing to correct.
-    for (path, line, reference, normalized) in occurrences {
-        let Some(target) = index.get(normalized.as_str()) else {
-            continue;
-        };
-        // A lookup miss is unjudged, not a status match (BUG-100).
-        let status_field = relation_field_name(
-            config,
-            &target.record_type,
-            crate::config::RelationRole::Status,
-        );
-        let Ok(status) = declared_cross_record_value(declared_by_type, target, status_field) else {
-            continue;
-        };
-        if is_finished(&statuses, &target.record_type, status, closed_statuses) {
-            continue;
-        }
-        findings.push(Finding {
-            rule: RULE_ID.to_string(),
-            severity: FindingSeverity::Error,
-            file: PathBuf::from(path),
-            line: Some(line),
-            waived: None,
-            declared_severity: None,
-            suggested_action: None,
-            action_source: ActionSource::new("claim-status-disagrees"),
-            message: format!(
-                "claims to close {reference}, but {reference} has {status_field} {status}"
-            ),
-        });
-    }
-
-    let key = opts.closes.as_deref().unwrap_or_default();
-    for (path, line, id, normalized) in listed {
-        let Some(target) = index.get(normalized.as_str()) else {
-            findings.push(field_finding(
-                path,
-                line,
-                "claim-id-unresolved",
-                format!("lists {id} in `{key}`, which resolves to no record"),
-            ));
-            continue;
-        };
-        let status_field = relation_field_name(
-            config,
-            &target.record_type,
-            crate::config::RelationRole::Status,
-        );
-        // Closed is the type's declared terminals alone: the rule's fallback
-        // list is for the verb reading, and a type that declares none has no
-        // declared close to compare a listed record against.
-        let status = declared_cross_record_value(declared_by_type, target, status_field);
-        if status.is_ok_and(|s| is_finished(&statuses, &target.record_type, s, &[])) {
-            continue;
-        }
-        let state = match status {
-            Ok(s) => format!("{status_field} {s}"),
-            Err(_) => format!("no readable {status_field}"),
-        };
-        let mut finding = field_finding(
-            path,
-            line,
-            "claim-closes-open",
-            format!("lists {id} in `{key}` as closed, but {id} has {state}"),
-        );
-        finding.action_source = ActionSource::new("claim-closes-open")
-            .file(target.path.clone())
-            .field(status_field);
-        findings.push(finding);
-    }
+    judge.verb_findings(occurrences, &mut findings);
+    judge.listed_findings(
+        listed,
+        opts.closes.as_deref().unwrap_or_default(),
+        &mut findings,
+    );
 
     // The structured findings and the verb ones arrive in file and line order
     // whichever reading found them.
@@ -258,7 +315,7 @@ pub fn claim_status_agreement(
 
     (
         RuleExecution {
-            rule: RULE_ID.to_string(),
+            rule: RULE_CLAIM_STATUS_AGREEMENT.to_string(),
             population: Some(population),
             status: RuleStatus::Ran,
             examined_records: Vec::new(),
