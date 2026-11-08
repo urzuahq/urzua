@@ -252,6 +252,7 @@ pub(crate) fn committed_statuses(
                         "{}: could not read the merge base's copy, so its Status move is not judged: {e}",
                         record.path.display()
                     ),
+                    detail: None,
                 });
                 CommittedStatus::Unreadable
             }

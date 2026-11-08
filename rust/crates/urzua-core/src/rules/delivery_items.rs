@@ -785,6 +785,7 @@ pub fn waived_item_notices(records: &[Record], config: &Config) -> Vec<Notice> {
                     },
                     w.reason
                 ),
+                detail: None,
             });
         }
     }
@@ -802,6 +803,7 @@ pub fn waived_item_notices(records: &[Record], config: &Config) -> Vec<Notice> {
                     .collect::<Vec<_>>()
                     .join(", ")
             ),
+            detail: None,
         });
     }
     notices

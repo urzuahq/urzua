@@ -260,6 +260,7 @@ pub(crate) fn missing_record_notices(missing: &std::collections::HashSet<PathBuf
             paths.len(),
             if more > 0 { format!(" and {more} more") } else { String::new() }
         ),
+        detail: None,
     }]
 }
 
@@ -537,6 +538,7 @@ pub(crate) fn drift_notices(shallow: bool, problems: &[String]) -> Vec<urzua_cor
             severity: NoticeSeverity::Warning,
             subject: NOTICE_DRIFT_GIT.to_string(),
             message: "the repository is a shallow clone, so the git history that embodiment drift reads is truncated: a result of no drift cannot be trusted (fetch full history, e.g. `git fetch --unshallow`)".to_string(),
+            detail: None,
         });
     }
     if !problems.is_empty() {
@@ -560,6 +562,7 @@ pub(crate) fn drift_notices(shallow: bool, problems: &[String]) -> Vec<urzua_cor
                     String::new()
                 }
             ),
+            detail: None,
         });
     }
     out
@@ -595,6 +598,7 @@ pub(crate) fn no_history_notice(
             if n == 1 { "has" } else { "have" },
             if n == 1 { "it" } else { "them" },
         ),
+        detail: None,
     })
 }
 
@@ -627,6 +631,7 @@ pub(crate) fn skipped_untracked_notice(skipped: &[PathBuf]) -> Option<urzua_core
             },
             if n == 1 { "it" } else { "them" },
         ),
+        detail: None,
     })
 }
 
