@@ -15,6 +15,7 @@ use crate::rules::{
     compute_embodiment, evidence_text, find_revision_log_entries, parse_realized_by,
     relation_field_name, DeliveryContext,
 };
+use crate::status_model::StatusDecl;
 
 /// One mechanically-detected disagreement between a record's stated value
 /// and what the tool computes -- the same shape RFC-0008 §3 specifies for
@@ -60,122 +61,25 @@ pub fn detect_repairs(
     fresh_drift: &HashSet<PathBuf>,
     ctx: &DeliveryContext<'_>,
 ) -> (Population, Vec<Repair>) {
-    let back_pointed = ctx.back_pointed;
     let mut repairs = Vec::new();
-    let sticky = crate::rules::sticky_states(config);
-
-    let embodiment_outcome = |record: &Record, repairs: &mut Vec<Repair>| -> Outcome {
-        let state_field =
-            relation_field_name(config, &record.record_type, RelationRole::EmbodimentState);
-        let locator_field =
-            relation_field_name(config, &record.record_type, RelationRole::EmbodimentLocator);
-        let Some(stated) = record.header.get(state_field) else {
-            return Outcome::Absent;
-        };
-        // A sticky state is a human's; there is nothing to recompute (`MILE-148`).
-        if sticky.contains(stated.trim()) {
-            return Outcome::Examined;
-        }
-        let cited_by_code = back_pointed.code.contains(&record.path);
-        let cited_by_test = back_pointed.test.contains(&record.path);
-        // No `Realized-by` is repaired only when a back-pointer cites the
-        // record, as `embodiment.consistency` judges it (`MILE-149`).
-        // The union of `Realized-by` and the Done-means item clauses
-        // (`ADR-96` section 5).
-        let realized_by_text = evidence_text(record, locator_field);
-        let realized_by_value = realized_by_text.as_deref();
-        if realized_by_value.is_none() && !(cited_by_code || cited_by_test) {
-            return Outcome::Absent;
-        }
-
-        // Drift (ADR-32) is computed by the caller from git history and
-        // handed in as plain data, the same shape `embodiment_consistency`
-        // takes, so this function stays pure (MILE-15).
-        let computed = compute_embodiment(
-            &config.embodiment,
-            &realized_by_value.map(parse_realized_by).unwrap_or_default(),
-            drifted.contains(&record.path),
-            cited_by_code,
-            cited_by_test,
-        );
-        let stated = stated.trim();
-        // Fresh drift (`drift_grace_days`) never flips a stated `Drift detected`.
-        let keeps_stated_drift =
-            fresh_drift.contains(&record.path) && config.embodiment.is_drift(stated);
-        if stated != computed && !keeps_stated_drift {
-            repairs.push(Repair {
-                record: record.path.clone(),
-                field: state_field.to_string(),
-                line: record
-                    .header
-                    .fields
-                    .iter()
-                    .find(|f| f.key.as_str() == state_field)
-                    .map_or(0, |f| f.line),
-                current_value: stated.to_string(),
-                computed_value: computed.to_string(),
-                tier: 1,
-                evidence: match realized_by_value {
-                    Some(value) => format!("{locator_field}: {value}"),
-                    None => format!(
-                        "no {locator_field} field; cited by {} back-pointers",
-                        if cited_by_test { "test" } else { "source" }
-                    ),
-                },
-            });
-        }
-        Outcome::Examined
+    let scan = RepairScan {
+        config,
+        sticky: crate::rules::sticky_states(config),
+        drifted,
+        fresh_drift,
+        ctx,
     };
-
     let delivery_types = crate::rules::statuses_by_type(config);
     let population = census(PopulationUnit::Record, records.iter().collect(), |record| {
-        let embodiment = embodiment_outcome(record, &mut repairs);
+        let (embodiment, repair) = scan.embodiment(record);
+        repairs.extend(repair);
         // `Status` against delivery evidence (`MILE-183`): the one case with a
         // single correct value is repaired; the reverse is `unevidenced_successes`.
-        let status = match delivery_types.get(&record.record_type) {
-            Some(decl) if decl.delivery.is_some() => {
-                match crate::rules::judge_delivery(record, config, decl, ctx) {
-                    Ok(judged) => {
-                        // `fix` never downgrades a `success` status
-                        // (`DoneWithUnresolvedItems` is reported, not written),
-                        // and writes `partial_status` only to a record that is
-                        // not derived-blocked (`ADR-96` sections 2 and 7).
-                        let repaired = match judged.disagreement.clone() {
-                            Some(crate::rules::DeliveryDisagreement::DeliveredButNotDone {
-                                set_status,
-                            }) => Some(set_status),
-                            Some(crate::rules::DeliveryDisagreement::PartialButNotStarted {
-                                partial_status,
-                                blocked: false,
-                            }) => Some(partial_status),
-                            _ => None,
-                        };
-                        if let Some(set_status) = repaired {
-                            repairs.push(Repair {
-                                record: record.path.clone(),
-                                field: judged.status_field.clone(),
-                                line: record
-                                    .header
-                                    .fields
-                                    .iter()
-                                    .find(|f| f.key.as_str() == judged.status_field)
-                                    .map_or(0, |f| f.line),
-                                current_value: judged.status.clone(),
-                                computed_value: set_status,
-                                tier: 1,
-                                evidence: format!(
-                                    "{} computes to {}",
-                                    judged.evidence, judged.tier
-                                ),
-                            });
-                        }
-                        Outcome::Examined
-                    }
-                    Err(outcome) => outcome,
-                }
-            }
-            _ => Outcome::Absent,
+        let (status, repair) = match delivery_types.get(&record.record_type) {
+            Some(decl) if decl.delivery.is_some() => scan.status(record, decl),
+            _ => (Outcome::Absent, None),
         };
+        repairs.extend(repair);
         if embodiment == Outcome::Examined || status == Outcome::Examined {
             Outcome::Examined
         } else if embodiment != Outcome::Absent {
@@ -186,6 +90,118 @@ pub fn detect_repairs(
     });
 
     (population, repairs)
+}
+
+/// What `detect_repairs` reads for every record, gathered so each repair kind
+/// is a method rather than a closure over six captures.
+struct RepairScan<'a> {
+    config: &'a Config,
+    sticky: HashSet<&'a str>,
+    drifted: &'a HashSet<PathBuf>,
+    fresh_drift: &'a HashSet<PathBuf>,
+    ctx: &'a DeliveryContext<'a>,
+}
+
+impl RepairScan<'_> {
+    /// The `Embodiment` repair of one record, if it needs one.
+    fn embodiment(&self, record: &Record) -> (Outcome, Option<Repair>) {
+        let config = self.config;
+        let back_pointed = self.ctx.back_pointed;
+        let state_field =
+            relation_field_name(config, &record.record_type, RelationRole::EmbodimentState);
+        let locator_field =
+            relation_field_name(config, &record.record_type, RelationRole::EmbodimentLocator);
+        let Some(stated) = record.header.get(state_field) else {
+            return (Outcome::Absent, None);
+        };
+        // A sticky state is a human's; there is nothing to recompute (`MILE-148`).
+        if self.sticky.contains(stated.trim()) {
+            return (Outcome::Examined, None);
+        }
+        let cited_by_code = back_pointed.code.contains(&record.path);
+        let cited_by_test = back_pointed.test.contains(&record.path);
+        // No `Realized-by` is repaired only when a back-pointer cites the
+        // record, as `embodiment.consistency` judges it (`MILE-149`).
+        // The union of `Realized-by` and the Done-means item clauses
+        // (`ADR-96` section 5).
+        let realized_by_text = evidence_text(record, locator_field);
+        let realized_by_value = realized_by_text.as_deref();
+        if realized_by_value.is_none() && !(cited_by_code || cited_by_test) {
+            return (Outcome::Absent, None);
+        }
+
+        // Drift (ADR-32) is computed by the caller from git history and
+        // handed in as plain data, the same shape `embodiment_consistency`
+        // takes, so this function stays pure (MILE-15).
+        let computed = compute_embodiment(
+            &config.embodiment,
+            &realized_by_value.map(parse_realized_by).unwrap_or_default(),
+            self.drifted.contains(&record.path),
+            cited_by_code,
+            cited_by_test,
+        );
+        let stated = stated.trim();
+        // Fresh drift (`drift_grace_days`) never flips a stated `Drift detected`.
+        let keeps_stated_drift =
+            self.fresh_drift.contains(&record.path) && config.embodiment.is_drift(stated);
+        let repair = (stated != computed && !keeps_stated_drift).then(|| Repair {
+            record: record.path.clone(),
+            field: state_field.to_string(),
+            line: field_line(record, state_field),
+            current_value: stated.to_string(),
+            computed_value: computed.to_string(),
+            tier: 1,
+            evidence: match realized_by_value {
+                Some(value) => format!("{locator_field}: {value}"),
+                None => format!(
+                    "no {locator_field} field; cited by {} back-pointers",
+                    if cited_by_test { "test" } else { "source" }
+                ),
+            },
+        });
+        (Outcome::Examined, repair)
+    }
+
+    /// The `Status` repair of one record whose type declares delivery evidence.
+    fn status(&self, record: &Record, decl: &StatusDecl) -> (Outcome, Option<Repair>) {
+        let judged = match crate::rules::judge_delivery(record, self.config, decl, self.ctx) {
+            Ok(judged) => judged,
+            Err(outcome) => return (outcome, None),
+        };
+        // `fix` never downgrades a `success` status (`DoneWithUnresolvedItems`
+        // is reported, not written), and writes `partial_status` only to a
+        // record that is not derived-blocked (`ADR-96` sections 2 and 7).
+        let repaired = match judged.disagreement.clone() {
+            Some(crate::rules::DeliveryDisagreement::DeliveredButNotDone { set_status }) => {
+                Some(set_status)
+            }
+            Some(crate::rules::DeliveryDisagreement::PartialButNotStarted {
+                partial_status,
+                blocked: false,
+            }) => Some(partial_status),
+            _ => None,
+        };
+        let repair = repaired.map(|set_status| Repair {
+            record: record.path.clone(),
+            field: judged.status_field.clone(),
+            line: field_line(record, &judged.status_field),
+            current_value: judged.status.clone(),
+            computed_value: set_status,
+            tier: 1,
+            evidence: format!("{} computes to {}", judged.evidence, judged.tier),
+        });
+        (Outcome::Examined, repair)
+    }
+}
+
+/// The 1-based line of `field` in `record`'s header; `0` when it has none.
+fn field_line(record: &Record, field: &str) -> usize {
+    record
+        .header
+        .fields
+        .iter()
+        .find(|f| f.key.as_str() == field)
+        .map_or(0, |f| f.line)
 }
 
 /// Records whose success `Status` has no delivery evidence (`MILE-183`). `fix`
@@ -567,73 +583,85 @@ pub fn detect_rebaselines(
         let Some(value) = evidence_text(record, locator_field) else {
             return Outcome::Absent;
         };
-        let mut pins: Vec<PinDrift> = Vec::new();
-        for entry in crate::locator::realized_by_locators(&value) {
-            let Ok(locator) = entry.parsed else { continue };
-            let Some(crate::locator::Anchor::Pin(recorded)) = locator.anchor.clone() else {
-                continue;
-            };
-            match read(&locator) {
-                // A scoped pin on a file that cannot be read cannot be
-                // re-pinned either: list it rather than skip it silently.
-                PinRead::Unreadable if locator.scope.is_some() => {
-                    let reason = format!("file not found or unreadable: {}", locator.path);
-                    note_failed_pin(&mut failed, &record.path, locator.display(), reason);
-                }
-                PinRead::Unreadable => {}
-                PinRead::Failed(reason) => {
-                    note_failed_pin(&mut failed, &record.path, locator.display(), reason);
-                }
-                PinRead::Current { hash, span, files } => {
-                    if hash != recorded
-                        && !pins
-                            .iter()
-                            .any(|p| p.spelling == locator.spelling && p.recorded_hash == recorded)
-                    {
-                        pins.push(PinDrift {
-                            locator: locator.display(),
-                            recorded_hash: recorded,
-                            current_hash: hash,
-                            span,
-                            files,
-                            spelling: locator.spelling.clone(),
-                        });
-                    }
-                }
-            }
-        }
+        let pins = stale_pins(record, &value, read, &mut failed);
         if !pins.is_empty() {
-            let item_lines: Vec<usize> = record
-                .items
-                .iter()
-                .flat_map(|i| i.items.iter())
-                .filter_map(|i| i.evidence.as_ref())
-                .filter(|c| c.valid)
-                .filter(|c| {
-                    pins.iter().any(|p| {
-                        c.text
-                            .contains(&format!("{}@sha256:{}", p.spelling, p.recorded_hash))
-                    })
-                })
-                .map(|c| c.line)
-                .collect();
+            let item_lines = stale_item_lines(record, &pins);
             found.push(Rebaseline {
                 item_lines,
                 items_section: crate::rules::items_section(config, &record.record_type),
                 record: record.path.clone(),
                 field: locator_field.to_string(),
-                line: record
-                    .header
-                    .fields
-                    .iter()
-                    .find(|f| f.key.as_str() == locator_field)
-                    .map_or(0, |f| f.line),
+                line: field_line(record, locator_field),
                 pins,
             });
         }
         Outcome::Examined
     });
     (population, found, failed)
+}
+
+/// The pins of `value`'s locators whose content changed, in order; a pin that
+/// cannot be re-pinned is added to `failed` instead.
+fn stale_pins(
+    record: &Record,
+    value: &str,
+    read: &dyn Fn(&crate::locator::Locator) -> PinRead,
+    failed: &mut Vec<FailedPin>,
+) -> Vec<PinDrift> {
+    let mut pins: Vec<PinDrift> = Vec::new();
+    for entry in crate::locator::realized_by_locators(value) {
+        let Ok(locator) = entry.parsed else { continue };
+        let Some(crate::locator::Anchor::Pin(recorded)) = locator.anchor.clone() else {
+            continue;
+        };
+        let mut fail = |reason: String| {
+            note_failed_pin(failed, &record.path, locator.display(), reason);
+        };
+        match read(&locator) {
+            // A scoped pin on a file that cannot be read cannot be
+            // re-pinned either: list it rather than skip it silently.
+            PinRead::Unreadable if locator.scope.is_some() => {
+                fail(format!("file not found or unreadable: {}", locator.path));
+            }
+            PinRead::Unreadable => {}
+            PinRead::Failed(reason) => fail(reason),
+            PinRead::Current { hash, span, files } => {
+                if hash != recorded
+                    && !pins
+                        .iter()
+                        .any(|p| p.spelling == locator.spelling && p.recorded_hash == recorded)
+                {
+                    pins.push(PinDrift {
+                        locator: locator.display(),
+                        recorded_hash: recorded,
+                        current_hash: hash,
+                        span,
+                        files,
+                        spelling: locator.spelling.clone(),
+                    });
+                }
+            }
+        }
+    }
+    pins
+}
+
+/// The lines of the Done-means item clauses a stale pin sits on.
+fn stale_item_lines(record: &Record, pins: &[PinDrift]) -> Vec<usize> {
+    record
+        .items
+        .iter()
+        .flat_map(|i| i.items.iter())
+        .filter_map(|i| i.evidence.as_ref())
+        .filter(|c| c.valid)
+        .filter(|c| {
+            pins.iter().any(|p| {
+                c.text
+                    .contains(&format!("{}@sha256:{}", p.spelling, p.recorded_hash))
+            })
+        })
+        .map(|c| c.line)
+        .collect()
 }
 
 /// Lists a pin that could not be read once per record and locator.

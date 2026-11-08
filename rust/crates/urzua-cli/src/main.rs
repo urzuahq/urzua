@@ -478,13 +478,8 @@ enum ExportFormat {
     Json,
 }
 
-/// `--help`/`--version` surface as `Err(_)` too (`ErrorKind::DisplayHelp`/
-/// `DisplayVersion`), not a separate success path -- print as clap already
-/// rendered them and exit 0, the one stated plain-text exception (matching
-/// `cargo`'s own convention: help/version are never gated behind a
-/// machine-format flag). Every other parse error goes through the same
-/// `emit()`/`CouldNotRun` path as any other fatal command error.
-fn main() -> ExitCode {
+/// Turns a panic into the JSON `not-run` envelope and exit 2.
+fn install_panic_hook() {
     std::panic::set_hook(Box::new(|info| {
         use std::io::Write;
         let out = serde_json::json!({ "status": "not-run", "panic": info.to_string() });
@@ -497,12 +492,18 @@ fn main() -> ExitCode {
         // unwinding panic out of main is 101 (MILE-176).
         std::process::exit(2);
     }));
+}
 
-    // Debug builds only: lets the acceptance test prove the panic exit code.
-    #[cfg(debug_assertions)]
-    if std::env::var_os("URZUA_TEST_PANIC").is_some() {
-        panic!("URZUA_TEST_PANIC set");
-    }
+/// `--help`/`--version` surface as `Err(_)` too (`ErrorKind::DisplayHelp`/
+/// `DisplayVersion`), not a separate success path -- print as clap already
+/// rendered them and exit 0, the one stated plain-text exception (matching
+/// `cargo`'s own convention: help/version are never gated behind a
+/// machine-format flag). Every other parse error goes through the same
+/// `emit()`/`CouldNotRun` path as any other fatal command error.
+fn main() -> ExitCode {
+    install_panic_hook();
+
+    panic_if_requested();
 
     let cli = match parse_cli() {
         Ok(cli) => cli,
@@ -538,52 +539,11 @@ fn main() -> ExitCode {
             by,
         } => commands::new::run(cli.config, record_type, title, by),
         Command::Audit => commands::audit::run(cli.config),
-        Command::Migrate {
-            target: MigrateTarget::Ids { apply },
-        } => commands::migrate::run_ids(cli.config, apply),
-        Command::Migrate {
-            target: MigrateTarget::Config,
-        } => commands::migrate::run_config(cli.config),
-        Command::Migrate {
-            target:
-                MigrateTarget::Schema {
-                    report: true,
-                    field: Some(field),
-                },
-        } => commands::migrate::run_schema_report(cli.config, field),
-        Command::Migrate {
-            target: MigrateTarget::Schema { .. },
-        } => emit(&CouldNotRun::from(
-            "pass --report --field <Name> (--assist-waivers and --apply are not implemented yet)",
-        )),
-        Command::Export {
-            format: ExportFormat::Json,
-        } => commands::export::run(cli.config),
-        Command::Export {
-            format: ExportFormat::Agdr,
-        } => not_implemented("export"),
+        Command::Migrate { target } => dispatch_migrate(cli.config, target),
+        Command::Export { format } => dispatch_export(cli.config, format),
         Command::Import { .. } => not_implemented("import"),
         Command::Init { dry_run } => commands::init::run(cli.config, dry_run),
-        Command::Harness { target } => match target {
-            HarnessTarget::Install { adapter, dry_run } => {
-                harness::run_install(cli.config, adapter, dry_run)
-            }
-            HarnessTarget::Status => harness::run_status(cli.config),
-            HarnessTarget::Update { force, dry_run } => {
-                harness::run_update(cli.config, force, dry_run)
-            }
-            HarnessTarget::Uninstall { dry_run } => harness::run_uninstall(cli.config, dry_run),
-            HarnessTarget::Adapters => harness::run_adapters(),
-            HarnessTarget::Run {
-                event: HarnessRun::Edit,
-            } => harness::run_edit(cli.config),
-            HarnessTarget::Run {
-                event: HarnessRun::SessionStart,
-            } => harness::run_session_start(cli.config),
-            HarnessTarget::Run {
-                event: HarnessRun::PostCommand,
-            } => harness::run_post_command(cli.config),
-        },
+        Command::Harness { target } => dispatch_harness(cli.config, target),
         Command::Doctor => commands::doctor::run(cli.config),
         Command::Rules => commands::rules::run(),
         Command::Index { apply } => commands::index::run(cli.config, apply),
@@ -636,6 +596,59 @@ fn main() -> ExitCode {
                 reason,
             },
         ),
+    }
+}
+
+/// Debug builds only: lets the acceptance test prove the panic exit code.
+#[cfg(debug_assertions)]
+fn panic_if_requested() {
+    if std::env::var_os("URZUA_TEST_PANIC").is_some() {
+        panic!("URZUA_TEST_PANIC set");
+    }
+}
+
+#[cfg(not(debug_assertions))]
+fn panic_if_requested() {}
+
+fn dispatch_export(config: Option<PathBuf>, format: ExportFormat) -> ExitCode {
+    match format {
+        ExportFormat::Json => commands::export::run(config),
+        ExportFormat::Agdr => not_implemented("export"),
+    }
+}
+
+fn dispatch_migrate(config: Option<PathBuf>, target: MigrateTarget) -> ExitCode {
+    match target {
+        MigrateTarget::Ids { apply } => commands::migrate::run_ids(config, apply),
+        MigrateTarget::Config => commands::migrate::run_config(config),
+        MigrateTarget::Schema {
+            report: true,
+            field: Some(field),
+        } => commands::migrate::run_schema_report(config, field),
+        MigrateTarget::Schema { .. } => emit(&CouldNotRun::from(
+            "pass --report --field <Name> (--assist-waivers and --apply are not implemented yet)",
+        )),
+    }
+}
+
+fn dispatch_harness(config: Option<PathBuf>, target: HarnessTarget) -> ExitCode {
+    match target {
+        HarnessTarget::Install { adapter, dry_run } => {
+            harness::run_install(config, adapter, dry_run)
+        }
+        HarnessTarget::Status => harness::run_status(config),
+        HarnessTarget::Update { force, dry_run } => harness::run_update(config, force, dry_run),
+        HarnessTarget::Uninstall { dry_run } => harness::run_uninstall(config, dry_run),
+        HarnessTarget::Adapters => harness::run_adapters(),
+        HarnessTarget::Run {
+            event: HarnessRun::Edit,
+        } => harness::run_edit(config),
+        HarnessTarget::Run {
+            event: HarnessRun::SessionStart,
+        } => harness::run_session_start(config),
+        HarnessTarget::Run {
+            event: HarnessRun::PostCommand,
+        } => harness::run_post_command(config),
     }
 }
 
