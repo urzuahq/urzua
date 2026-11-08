@@ -16,7 +16,9 @@ const DAY_SECS: i64 = 86_400;
 pub enum ClaimAnchor {
     /// The date in the declared `anchor_field`: the day someone re-verified.
     Audited { field: String, date: String },
-    /// The date of the commit that last touched the `Realized-by` line.
+    /// The date of the commit that last touched the first evidence line: the
+    /// `Realized-by` line, or for a record that has none its first Done-means
+    /// item evidence clause.
     Line { date: String },
 }
 
@@ -174,6 +176,28 @@ pub fn date_from_days(days: i64) -> String {
     format!("{y:04}-{m:02}-{d:02}")
 }
 
+/// The 1-based file line a claim's age is counted from when no audit date
+/// exists (`ADR-97`, amendment of 2026-11-08): the locator field's line when
+/// it holds a value, else the first Done-means item evidence clause, else an
+/// empty field's own line. `None`
+/// when the record has neither source. One function for the rule, the
+/// measurement and `urzua reverify`.
+pub fn evidence_anchor_line(record: &Record, locator_field: &str) -> Option<usize> {
+    let field = record
+        .header
+        .fields
+        .iter()
+        .find(|f| f.key.as_str() == locator_field);
+    if let Some(f) = field.filter(|f| !f.value.trim().is_empty()) {
+        return Some(f.line);
+    }
+    record
+        .items
+        .as_ref()
+        .and_then(|i| i.evidence_lines().into_iter().min())
+        .or_else(|| field.map(|f| f.line))
+}
+
 /// The `periods` entry that judges `record`, or why none does: the record has no
 /// locator field, holds a retained or sticky state, or no entry matches. It
 /// needs no clock and no history, so a claim that cannot be dated is still known
@@ -194,8 +218,10 @@ pub fn covering_entry<'a>(
     if record.header.is_unreadable() {
         return Err(ClaimSkip::Unreadable);
     }
-    if record.header.get(locator_field).is_none() {
-        return Err(ClaimSkip::Unexamined("no locator field"));
+    if evidence_text(record, locator_field).is_none() {
+        return Err(ClaimSkip::Unexamined(
+            "no locator field and no Done-means item evidence clause",
+        ));
     }
     let status = record
         .header
@@ -374,13 +400,15 @@ pub fn embodiment_claim_expired(
     let has_claims = |record_type: &str| {
         listed.iter().any(|r| {
             r.record_type == record_type
-                && r.header
-                    .get(relation_field_name(
+                && evidence_text(
+                    r,
+                    relation_field_name(
                         config,
                         &r.record_type,
                         crate::config::RelationRole::EmbodimentLocator,
-                    ))
-                    .is_some_and(|v| !v.trim().is_empty())
+                    ),
+                )
+                .is_some_and(|v| !v.trim().is_empty())
         })
     };
     let unmatched_entries = opts

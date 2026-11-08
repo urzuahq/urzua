@@ -744,3 +744,83 @@ fn detect_reports_a_claim_with_no_revision_log_as_not_renewable_observed_failing
         "{parsed}"
     );
 }
+
+fn items_config() -> String {
+    let base = config(
+        RULE,
+        "  status.delivery-agreement: warn\n  status.done-items-shape: warn\n",
+    );
+    let marker = "      claim_retained: [Superseded]\n";
+    assert!(base.contains(marker));
+    base.replace(
+        marker,
+        "      claim_retained: [Superseded]\n      delivery:\n        delivered_tiers: [Implemented, Verified]\n        unevidenced_tiers: [\"Not started\"]\n        not_done: [Planned]\n        set_status: Done\n        items:\n          section: \"Done means\"\n          clause_separator: \" — \"\n          evidence_marker: \"evidence:\"\n          waiver_marker: \"waived:\"\n          partial_status: \"Planned\"\n          resolving_tiers: [Specified, Implemented, Verified]\n          waiver_categories:\n            - {name: not-applicable}\n    sections:\n      from: headings\n      required:\n        - {name: Done means}\n",
+    )
+}
+
+fn item_only(items: &str) -> String {
+    format!(
+        "---\nStable-Id: 01AAAAAAAAAAAAAAAAAAAAAA01\nStatus: Done\n---\n# MILE-1: T\n\n## Done means\n\n{items}\n## Revision log\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Initial. | **structural** |\n"
+    )
+}
+
+fn item_fixture(name: &str, items: &str) -> common::TempDir {
+    let dir = fixture(name, &items_config(), 0);
+    std::fs::write(dir.join(path(1)), item_only(items)).unwrap();
+    commit_all(&dir, 40);
+    dir
+}
+
+#[test]
+fn an_item_only_milestone_is_renewed_with_pins_on_its_item_locators_observed_failing() {
+    let dir = item_fixture(
+        "itemapply",
+        "- It is built. — evidence: code:src/a.rs\n- It is tested. — evidence: test:src/t.rs\n",
+    );
+    let p1 = path(1);
+    let out = run_urzua(
+        &dir,
+        &apply_args(
+            &p1,
+            "Read src/a.rs and t.rs against the items; both still meet them.",
+        ),
+    );
+    let parsed = json(&out);
+    assert_eq!(parsed["status"], "applied", "{parsed} {out:?}");
+    let text = read(&dir, &p1);
+    assert!(
+        text.contains(&format!("code:src/a.rs@sha256:{}", sha256(SRC)))
+            && text.contains(&format!("test:src/t.rs@sha256:{}", sha256(TST))),
+        "{text}"
+    );
+    assert!(
+        text.contains(&format!("Last-audited: {}\n", today())),
+        "{text}"
+    );
+    let parsed = json(&run_urzua(&dir, &["check"]));
+    assert!(
+        parsed["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|f| f["rule"] != "embodiment.claim-expired"),
+        "{parsed}"
+    );
+}
+
+#[test]
+fn a_record_with_no_locator_field_and_no_item_evidence_is_refused_with_the_reason() {
+    let dir = item_fixture("noevidence", "- It is built.\n");
+    let before = read(&dir, &path(1));
+    let out = run_urzua(&dir, &apply_args(&path(1), "checked"));
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        text.contains("no locator field and no Done-means item evidence clause"),
+        "{text}"
+    );
+    assert_eq!(read(&dir, &path(1)), before);
+}
