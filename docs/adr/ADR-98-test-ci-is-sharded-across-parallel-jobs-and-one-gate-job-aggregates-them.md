@@ -40,6 +40,9 @@ requires the single check `ci`).
 | D. Build tests once (`nextest archive`), upload, run shards from the archive | No repeated test compilation | Artifact transfer and remap complexity for a build that is short with a warm cache; revisit if the compile dominates |
 | E. `--partition hash:i/n` instead of `count:i/n` | A test stays in its shard when others are added | Uneven shards: the few heavy tests can land together, and they are what sets the time here |
 | F. A matrix of whole `cargo test -p <crate>` jobs | No new tool | Almost all the time is in one crate; it balances nothing |
+| G. Per-job concurrency groups, so a new commit cancels work job by job | A finished job survives a newer push | `ci.yml` already has one workflow-level group that cancels a superseded run whole; per-job groups only help when the gate waits for the newer run, which this design has no need of |
+| H. A label-gated full matrix: the expensive jobs run only when a PR carries a label | Cheap pushes while iterating | The whole pipeline now takes about 4.5 minutes, so there is no expensive tier to gate, and a label is one more way for a required job to skip |
+| I. A workflow that re-runs the checks of every layer of a stacked PR when a layer above goes green | Spares lower layers their own full run | This repository does not stack pull requests; the extra workflow would have nothing to act on |
 
 ## Decision
 
@@ -47,7 +50,7 @@ requires the single check `ci`).
 a timeout the job kept hitting, we decided to split `checks.yml` into parallel jobs (lint, release build and
 records gate, three nextest test shards, four acceptance shards and an acceptance coverage-gate merge),
 shard with `cargo nextest --partition count:i/n`, and join everything in a `result` job and then the
-unchanged `ci` job, both of which fail unless every job they need succeeded (a skip is a failure,
+`ci` job (same name, now a script-checked gate), both of which fail unless every job they need succeeded (a skip is a failure,
 except `changeset` outside a pull request), to achieve a wall-clock set by the slowest job rather than
 the sum, accepting more runner-minutes and a shard protocol for the acceptance runner to maintain.*
 
@@ -86,9 +89,8 @@ The `ci` name, which the ruleset requires, does not change. The only external ef
 - nextest does not run doctests; `ci-tests.sh doctest` does, in the first test shard.
 - A test that depended on running in the same process as another (shared statics) now runs alone;
   none did here (the full suite passed under nextest).
-- Per-job concurrency groups, a label-gated full matrix and a stacked-PR re-run workflow were considered
-  from an existing deployment and not adopted: the fast checks here are cheap enough to run every time,
-  and `ci.yml` has a single workflow-level group that cancels a superseded run without a waiting gate.
+- Options G to I are patterns seen in other CI setups and deliberately not adopted; the table gives the
+  reason for each, and each can be revisited if the pipeline grows an expensive tier or stacked PRs.
 
 ## References
 

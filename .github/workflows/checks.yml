@@ -275,6 +275,8 @@ jobs:
           path: ${{ runner.temp }}/acceptance.proven
           if-no-files-found: error
           retention-days: 1
+          # A re-run of the whole workflow uploads under the same name again.
+          overwrite: true
 
   acceptance-gate:
     name: acceptance coverage gate (all shards)

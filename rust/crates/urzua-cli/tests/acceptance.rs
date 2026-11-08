@@ -908,17 +908,18 @@ fn main() {
     }
 
     let discovered = queue.len();
+    // Judged over the whole suite before it is dealt out, so every shard
+    // reports a collision between cases that landed in different shards.
+    for c in scratch_collisions(&queue) {
+        println!("FAIL  {c}");
+        fail += 1;
+    }
     if let Some(sh) = shard {
         let mut position = 0;
         queue.retain(|_| {
             position += 1;
             sharding::owns(sh, position - 1)
         });
-    }
-
-    for c in scratch_collisions(&queue) {
-        println!("FAIL  {c}");
-        fail += 1;
     }
 
     // Cases are independent (each owns a throwaway repo), so run them on a few
