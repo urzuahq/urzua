@@ -3,7 +3,7 @@ Stable-Id: 01M6CXZVGSSA8BEM1D0QTQKFE5
 Status: Done
 Phase: '0'
 Track: governance-process
-Realized-by: code:rust/crates/urzua-core/src/rules/shared.rs#scoped_census_records@sha256:2775fec529d50ccc0144d09afbad78e450e94b8a2fd8ff65c6a5523965ebc02a, test:rust/crates/urzua-cli/tests/check_integration.rs#every_header_reading_rule_reports_a_header_none_type_as_out_of_scope@sha256:60033116789c2bbb7b0234fea53089908434e52ef8ff2145011e1bdd38ae6863
+Realized-by: code:rust/crates/urzua-core/src/rules/shared.rs#scoped_census_records@sha256:2775fec529d50ccc0144d09afbad78e450e94b8a2fd8ff65c6a5523965ebc02a, test:rust/crates/urzua-cli/tests/check_integration.rs#every_header_reading_rule_reports_a_header_none_type_as_out_of_scope@sha256:88bdb8265ec6c026b3b4e290afa9a6cb22a845bdd320b29fb97600f5e1e6f139
 ---
 # 119 — One shared rule-population builder, so per-rule scope gating cannot be forgotten
 
@@ -34,8 +34,8 @@ states found in three rules was fixed once in the shared mechanism, not three ti
 ## Done means
 
 - Every header-reading rule is gated through one shared builder, `scoped_census_records` in `rules/shared.rs`. — evidence: code:rust/crates/urzua-core/src/rules/shared.rs#scoped_census_records@sha256:2775fec529d50ccc0144d09afbad78e450e94b8a2fd8ff65c6a5523965ebc02a
-- That builder classifies a `header_shape: none` type, an unreadable header and the other out-of-scope cases as `OutOfScope` once. — evidence: code:rust/crates/urzua-core/src/rules/shared.rs#scoped_census_records@sha256:2775fec529d50ccc0144d09afbad78e450e94b8a2fd8ff65c6a5523965ebc02a, test:rust/crates/urzua-cli/tests/check_integration.rs#every_header_reading_rule_reports_a_header_none_type_as_out_of_scope@sha256:60033116789c2bbb7b0234fea53089908434e52ef8ff2145011e1bdd38ae6863
-- A table-driven test iterates every shipped rule over a `header_shape: none` type and fails for a rule that examines it. — evidence: test:rust/crates/urzua-cli/tests/check_integration.rs#every_header_reading_rule_reports_a_header_none_type_as_out_of_scope@sha256:60033116789c2bbb7b0234fea53089908434e52ef8ff2145011e1bdd38ae6863
+- That builder classifies a `header_shape: none` type, an unreadable header and the other out-of-scope cases as `OutOfScope` once. — evidence: code:rust/crates/urzua-core/src/rules/shared.rs#scoped_census_records@sha256:2775fec529d50ccc0144d09afbad78e450e94b8a2fd8ff65c6a5523965ebc02a, test:rust/crates/urzua-cli/tests/check_integration.rs#every_header_reading_rule_reports_a_header_none_type_as_out_of_scope@sha256:88bdb8265ec6c026b3b4e290afa9a6cb22a845bdd320b29fb97600f5e1e6f139
+- A table-driven test iterates every shipped rule over a `header_shape: none` type and fails for a rule that examines it. — evidence: test:rust/crates/urzua-cli/tests/check_integration.rs#every_header_reading_rule_reports_a_header_none_type_as_out_of_scope@sha256:88bdb8265ec6c026b3b4e290afa9a6cb22a845bdd320b29fb97600f5e1e6f139
 
 ## References
 
@@ -51,3 +51,4 @@ states found in three rules was fixed once in the shared mechanism, not three ti
 > | 2026-11-04 | `Realized-by` added and `Status` Planned -> Done. **Why:** the work is merged in #136: every header-reading rule is gated through `scoped_census_records`, and a table-driven test iterates every shipped rule over a `header_shape: none` type. Checked against this record's Done means and the code; the record never carried its own delivery evidence, and `status.delivery-agreement` (`MILE-183`) reads evidence under a not-done `Status` as a disagreement. | **structural** |
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. The criteria are those the delivered work met, checked against `Realized-by` and the code; `Status` stays Done. | **structural** |
 > | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/check_integration.rs#every_header_reading_rule_reports_a_header_none_type_as_out_of_scope` (lines 3342-3455) 60033116789c -> 88bdb8265ec6. Reason: Read the diff of the pinned test: every_header_reading_rule_reports_a_header_none_type_as_out_of_scope gained one config arm giving embodiment.claim-expired the periods and anchor_field it needs to load, and its assertions are unchanged, so the test still requires every non-exempt rule in the table, the two new expiry rules included, to count a header_shape none type as out of scope. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
