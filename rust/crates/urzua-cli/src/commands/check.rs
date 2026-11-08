@@ -646,6 +646,7 @@ fn excused_line_notices(executions: &[RuleExecution]) -> Vec<Notice> {
                     "ignore_marker -- {excused} line{} excused from this rule; a line carrying the declared marker is neither reported nor counted as evidence",
                     if excused == 1 { "" } else { "s" }
                 ),
+                detail: None,
             })
         })
         .collect()

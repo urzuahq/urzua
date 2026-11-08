@@ -367,6 +367,7 @@ pub(crate) fn excused_evidence_notice(
             "ignore_marker -- {n} line{} excused from back-pointer evidence; a line carrying the declared marker is not counted as evidence",
             if n == 1 { "" } else { "s" }
         ),
+        detail: None,
     })
 }
 
