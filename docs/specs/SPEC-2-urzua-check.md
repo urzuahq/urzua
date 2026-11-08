@@ -3,7 +3,7 @@ Stable-Id: 01M6R3NK5GM1RYRRX2XVMZ0ZAK
 Version: '0.132'
 Date: 2026-08-20
 Status: Shipped
-Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs@sha256:dbde595328f24571f544e259150d6f1fad9059f2e9c3e1de45ba2d3f257b3008, code:rust/crates/urzua-core/src/rules.rs@sha256:355dd5bf590d2020ab967cb30501aa6ce610186c6631f22aa828831a6fbac0d4, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:5ab61b95fd5864a41566dee0d902fac000dca3552f90316331ecf90617c3f9b0, test:rust/crates/urzua-cli/tests/fail_on_integration.rs@sha256:4b1707f3b18aed7b018f8b80c55f1e2091ae19148f3de6c95435a8f5fee4cab7
+Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs@sha256:b330a683612fc21b7e452f451fea09512b62640e2aa5745aef2eb0efa6c8ab86, code:rust/crates/urzua-core/src/rules.rs@sha256:355dd5bf590d2020ab967cb30501aa6ce610186c6631f22aa828831a6fbac0d4, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:5ab61b95fd5864a41566dee0d902fac000dca3552f90316331ecf90617c3f9b0, test:rust/crates/urzua-cli/tests/fail_on_integration.rs@sha256:4b1707f3b18aed7b018f8b80c55f1e2091ae19148f3de6c95435a8f5fee4cab7
 Embodiment: Verified
 Author: beauwilliams
 Subject: '`urzua check` -- discovery, rule execution, and the JSON output contract.'
@@ -621,8 +621,9 @@ notice with the subject `permanent-waivers` counting the permanent waivers in ef
 when the option is off, and `discovery.untracked-not-drift-judged` when it is on. A key the `harness`
 configuration carries that the build does not read (an unknown `harness` key, or an unknown key inside a
 known guardrail such as `enabeld`) adds one `warning` notice, whose `subject` is where the key sits
-(`harness` or `harness.guardrails.<name>`) and whose `detail` object holds `key`, `nearest` (the closest key
-the build reads, when one is close) and `valid` (the keys read at that place); a notice with no `detail`
+(`harness` or `harness.guardrails.<name>`) and whose `detail` object holds `key` (a string), `nearest` (a string: the closest key
+the build reads, when one is close, else absent) and `valid` (a list of strings: the keys read at that place),
+for example `{"key": "enabeld", "nearest": "enabled", "valid": ["enabled", "..."]}`; `detail` values are strings or lists of strings; a notice with no `detail`
 omits the field (`ADR-89` amendment of 2026-11-07: reported, not an error). A record with no git
 history (an untracked file, a staged-new one, an unborn `HEAD`) has no date for its `Realized-by` line, so
 `embodiment.consistency` cannot say that a cited file changed since: it does not judge the record for
@@ -1167,4 +1168,5 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/check.rs` c819006495f2 -> 2d7184369392. Reason: Read the diff of each re-pinned file. commands/check.rs: the CheckReport construction gains as_of; no other change. Nothing this record relies on changed. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
 > | 2026-11-08 | Bumped to `0.131`. `embodiment.locator-exists` does not examine an item whose valid, unexpired waiver holds while its evidence does not resolve (an expired waiver no longer excuses it) (`ADR-96`), and never probes a locator that resolves outside the repository; item messages name the type's declared `items.section`. **Why:** round-4 review of the delivery items. | **substantive** |
 > | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/check.rs` 2d7184369392 -> dbde595328f2. Reason: check.rs: this change confines the locator existence probe to the repository root, so a path outside it reads as absent; unrelated to the claim this record evidences, which still holds. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
-> | 2026-11-08 | Bumped to `0.132`. `check` reports an unknown key in the `harness` configuration as a warning notice with a structured `detail` (`key`, `nearest`, `valid`); `notices` gain an optional `detail` object, omitted when empty. **Why:** only `harness install`, `doctor` and the session hook read `harness.problems`, so a misspelled guardrail key such as `enabeld` passed `check` silently. | **substantive** |
+> | 2026-11-08 | Bumped to `0.132`. `check` reports an unknown key in the `harness` configuration as a warning notice with a structured `detail` (`key`, `nearest`, and `valid` as a list); `notices` gain an optional `detail` object of strings and string lists, omitted when empty. **Why:** only `harness install`, `doctor` and the session hook read `harness.problems`, so a misspelled guardrail key such as `enabeld` passed `check` silently. | **substantive** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/check.rs` dbde595328f2 -> b330a683612f. Reason: Read the diff of each re-pinned file against main. check.rs: Notice literals use Notice::new/detail: None and check adds harness_key_notices (one warning notice per unknown harness key, with detail key, nearest and valid as a list); behaviour otherwise unchanged. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |

@@ -71,6 +71,10 @@ fn a_misspelled_key_inside_a_guardrail_is_a_structured_warning_notice_with_the_n
     assert_eq!(n["severity"], "warning");
     assert_eq!(n["detail"]["key"], "enabeld");
     assert_eq!(n["detail"]["nearest"], "enabled");
+    let valid = n["detail"]["valid"]
+        .as_array()
+        .unwrap_or_else(|| panic!("valid is a list: {n}"));
+    assert!(valid.iter().any(|v| v == "enabled"), "{n}");
     // Reported, not an error: the exit code and the findings do not move.
     assert_eq!(code, 0, "{report}");
     assert!(report["findings"].as_array().unwrap().is_empty());

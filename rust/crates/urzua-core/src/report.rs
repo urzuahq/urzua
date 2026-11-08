@@ -771,9 +771,18 @@ pub struct Notice {
     pub message: String,
     /// Structured fields a reader can branch on without parsing `message`
     /// (for example the offending `key` and its `nearest` valid key). Omitted
-    /// from the output when a notice carries none.
+    /// from the output when a notice carries none. Each value is a string or,
+    /// where the field is a set, a list of strings.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub detail: Option<std::collections::BTreeMap<String, String>>,
+    pub detail: Option<std::collections::BTreeMap<String, DetailValue>>,
+}
+
+/// One value in a notice's `detail`: a string, or a list of strings.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(untagged)]
+pub enum DetailValue {
+    Text(String),
+    List(Vec<String>),
 }
 
 impl Notice {

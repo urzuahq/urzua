@@ -164,13 +164,15 @@ whether this position is defensible:
 
 Accepted by the maintainer on 2026-11-08, with this clarification of section 2's test.
 
-Read literally, "does this make a record more verifiable, or does it add a capability around records" would put `urzua roadmap` (`ADR-82`; `MILE-182`, `MILE-187`, `MILE-192`, `MILE-196`) outside the engine, because it does not make any record more verifiable. **`urzua roadmap` is engine scope.** The test is read with this second limb: a command is also in scope when it is a pure function of the records' own declared fields and keeps no state of its own. `roadmap` computes waves, the ready set and the critical path only from the `Depends-on` and `Blocks` fields a record declares and the statuses its type declares, writes nothing, needs no service and calls no model. It is the same kind of derived reading as `Embodiment` and the `blocked` status, which section 2 already counts as engine scope. What stays out is unchanged: a capability that holds its own state about the work (a tracker, a board, an assignment, a schedule), consumes anything but the records, or needs a service to run.
+Read literally, "does this make a record more verifiable, or does it add a capability around records" would put `urzua roadmap` (`ADR-82`; `MILE-182`, `MILE-187`, `MILE-192`, `MILE-196`) outside the engine, because it does not make any record more verifiable. **`urzua roadmap` is engine scope.** It belongs to a named class, not to a general rule: the derived readings of the records that the engine computes itself, from the records and the configuration alone, with no state of its own, no service and no model call. `Embodiment` and the `blocked` status, which `check` computes and section 2 already counts as engine scope, are that class, and `urzua roadmap` is its third member. It orders the work from the sequencing pairs the configuration declares (`Depends-on` and `Blocks` in this repository), groups it by the records' declared `Phase`, restricts it to the types `roadmap.work_types` names when that is declared, and reads the statuses their types declare. It writes nothing.
+
+This amendment does not widen section 3. A generated presentation of the records, such as the dashboard (`ADR-37`), and the org rollup (`MILE-24`) stay ecosystem: they are artifacts built around the engine's output for an audience, not a reading the engine computes inside `check` or `roadmap`, and a function of the records alone is not enough to make one engine scope. What stays out is unchanged: a capability that holds its own state about the work (a tracker, a board, an assignment, a schedule), consumes anything but the records, or needs a service to run.
 
 The one-line description of the engine, used verbatim by `urzua --help` and the first paragraph of `README.md`, is:
 
-> The verifiable specification layer for agent-authored change: it checks the records a change traces back to and orders work from their declared dependencies. It never reads the change.
+> The verifiable specification layer for agent-authored change: it checks the records a change traces back to and orders work from their declared dependencies. It never judges the change.
 
-Changing the help text and the README to that sentence reword the description of existing commands; they add, rename and rescope none, so the non-goal below stands.
+Changing the help text and the README to that sentence reword the description of existing commands; they add, rename and rescope none, so the non-goal above ("Renaming, rescoping, or adding any command") stands.
 
 > **Revision log**
 >

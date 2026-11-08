@@ -18,11 +18,11 @@ use std::process::ExitCode;
 
 use urzua_core::config::{Config, RuleLevel, RuleSetting};
 use urzua_core::refs_snapshot::RefsSnapshot;
-use urzua_core::report::Failure;
 use urzua_core::report::{
     CheckReport, CouldNotRun, DiffScope, Finding, FindingSeverity, Notice, NoticeSeverity,
     RuleExecution, ScopeInfo,
 };
+use urzua_core::report::{DetailValue, Failure};
 use urzua_core::rules;
 
 use crate::discovery::{
@@ -569,11 +569,11 @@ fn harness_key_notices(harness: Option<&urzua_core::harness::HarnessDecl>) -> Ve
                 .map(|n| format!("; did you mean '{n}'?"))
                 .unwrap_or_default();
             let mut detail = std::collections::BTreeMap::new();
-            detail.insert("key".to_string(), u.key.clone());
+            detail.insert("key".to_string(), DetailValue::Text(u.key.clone()));
             if let Some(n) = &u.nearest {
-                detail.insert("nearest".to_string(), n.clone());
+                detail.insert("nearest".to_string(), DetailValue::Text(n.clone()));
             }
-            detail.insert("valid".to_string(), u.valid.join(", "));
+            detail.insert("valid".to_string(), DetailValue::List(u.valid.clone()));
             Notice {
                 severity: NoticeSeverity::Warning,
                 subject: u.subject.clone(),

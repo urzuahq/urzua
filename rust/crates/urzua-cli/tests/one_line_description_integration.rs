@@ -32,6 +32,10 @@ fn help_description() -> String {
 fn help_readme_and_rfc_27_carry_the_same_one_line_description() {
     let description = help_description();
     assert!(description.len() > 40, "{description}");
+    assert!(
+        description.ends_with("It never judges the change."),
+        "RFC-27 says the engine never judges the change: {description}"
+    );
 
     let readme = std::fs::read_to_string(repo_root().join("README.md")).unwrap();
     assert!(
