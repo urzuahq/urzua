@@ -309,6 +309,7 @@ pub fn run(config_path: Option<PathBuf>, args: ReverifyArgs) -> ExitCode {
             FixStatus::Ok
         };
         return emit(&ReverifyReport {
+            as_of: crate::as_of(),
             status,
             mode: "detect",
             pin_only,
@@ -327,7 +328,6 @@ pub fn run(config_path: Option<PathBuf>, args: ReverifyArgs) -> ExitCode {
             reviewed.len()
         )));
     }
-    let today = urzua_io::today();
     let mut written: Vec<RecordReview> = Vec::new();
     for item in reviewed {
         let Reviewed {
@@ -382,7 +382,7 @@ pub fn run(config_path: Option<PathBuf>, args: ReverifyArgs) -> ExitCode {
         match apply_reverify(
             &fresh,
             &plan,
-            &today,
+            &urzua_io::today(),
             &identity.attestation,
             &reason,
             &log_id,
@@ -426,6 +426,7 @@ fn apply_report(
     let mut notices: Vec<Notice> = identity_notices(Some(&identity));
     notices.extend(drift_notices(drift, problems));
     ReverifyReport {
+        as_of: crate::as_of(),
         status,
         mode: "apply",
         pin_only,
