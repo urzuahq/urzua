@@ -1,9 +1,9 @@
 ---
 Stable-Id: 01M6R3NK5GM1RYRRX2XVMZ0ZAK
-Version: '0.131'
+Version: '0.132'
 Date: 2026-08-20
 Status: Shipped
-Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs@sha256:dbde595328f24571f544e259150d6f1fad9059f2e9c3e1de45ba2d3f257b3008, code:rust/crates/urzua-core/src/rules.rs@sha256:355dd5bf590d2020ab967cb30501aa6ce610186c6631f22aa828831a6fbac0d4, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:5ab61b95fd5864a41566dee0d902fac000dca3552f90316331ecf90617c3f9b0, test:rust/crates/urzua-cli/tests/fail_on_integration.rs@sha256:4b1707f3b18aed7b018f8b80c55f1e2091ae19148f3de6c95435a8f5fee4cab7
+Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs@sha256:55045153ea1f1f1ece7eec94526b24e40102c9ef881b473571dd135d2f437ea0, code:rust/crates/urzua-core/src/rules.rs@sha256:355dd5bf590d2020ab967cb30501aa6ce610186c6631f22aa828831a6fbac0d4, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:5ab61b95fd5864a41566dee0d902fac000dca3552f90316331ecf90617c3f9b0, test:rust/crates/urzua-cli/tests/fail_on_integration.rs@sha256:4b1707f3b18aed7b018f8b80c55f1e2091ae19148f3de6c95435a8f5fee4cab7
 Embodiment: Verified
 Author: beauwilliams
 Subject: '`urzua check` -- discovery, rule execution, and the JSON output contract.'
@@ -1162,3 +1162,5 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/check.rs` c819006495f2 -> 2d7184369392. Reason: Read the diff of each re-pinned file. commands/check.rs: the CheckReport construction gains as_of; no other change. Nothing this record relies on changed. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
 > | 2026-11-08 | Bumped to `0.131`. `embodiment.locator-exists` does not examine an item whose valid, unexpired waiver holds while its evidence does not resolve (an expired waiver no longer excuses it) (`ADR-96`), and never probes a locator that resolves outside the repository; item messages name the type's declared `items.section`. **Why:** round-4 review of the delivery items. | **substantive** |
 > | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/check.rs` 2d7184369392 -> dbde595328f2. Reason: check.rs: this change confines the locator existence probe to the repository root, so a path outside it reads as absent; unrelated to the claim this record evidences, which still holds. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/check.rs` dbde595328f2 -> 55045153ea1f. Reason: check.rs creates one BlameCache per run in load_context and passes it to load_drift and load_claim_measures; behaviour unchanged, outputs byte-identical **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
+> | 2026-11-08 | Bumped to `0.132`. No contract changes: `check` blames each record file once per run instead of once per line, and its output is byte-identical; the re-baselined pin above records the code change. **Why:** the revision-log rule requires a version bump for a structural row. | **structural** |
