@@ -531,6 +531,7 @@ fn build_report(
     };
 
     FixReport {
+        as_of: crate::as_of(),
         status,
         population,
         repairs,

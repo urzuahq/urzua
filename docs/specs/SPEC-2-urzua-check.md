@@ -1,9 +1,9 @@
 ---
 Stable-Id: 01M6R3NK5GM1RYRRX2XVMZ0ZAK
-Version: '0.128'
+Version: '0.130'
 Date: 2026-08-20
 Status: Shipped
-Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs@sha256:c819006495f23fd9742941942eea3a7a4894f9eec67d3c3cfbf18561ede31f6b, code:rust/crates/urzua-core/src/rules.rs@sha256:355dd5bf590d2020ab967cb30501aa6ce610186c6631f22aa828831a6fbac0d4, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:8538aedb749292d7641c037df67b6e667d5087b0c8dca95682fef065a8429a00, test:rust/crates/urzua-cli/tests/fail_on_integration.rs@sha256:4b1707f3b18aed7b018f8b80c55f1e2091ae19148f3de6c95435a8f5fee4cab7
+Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs@sha256:2d7184369392b25674b10a05f1a6ce32aa349be99d1eb9b6f178b159ed457466, code:rust/crates/urzua-core/src/rules.rs@sha256:355dd5bf590d2020ab967cb30501aa6ce610186c6631f22aa828831a6fbac0d4, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:5ab61b95fd5864a41566dee0d902fac000dca3552f90316331ecf90617c3f9b0, test:rust/crates/urzua-cli/tests/fail_on_integration.rs@sha256:4b1707f3b18aed7b018f8b80c55f1e2091ae19148f3de6c95435a8f5fee4cab7
 Embodiment: Verified
 Author: beauwilliams
 Subject: '`urzua check` -- discovery, rule execution, and the JSON output contract.'
@@ -502,9 +502,17 @@ Implements RFC-3, as amended by ADR-7 (real field names, not RFC-3's illustrativ
 ADR-26/ADR-46 (stdout is the only stream; there is no stderr rendering at all). Stdout carries nothing
 but the JSON object below, so a consumer never has to find it inside prose.
 
+`as_of` is the date every comparison in the run was made against (`ADR-97`, second amendment of 2026-11-08):
+`{"date": "YYYY-MM-DD", "source": "flag" | "clock"}`, always present, directly after `status`. `--as-of
+YYYY-MM-DD` (global, accepted by `check` and `audit`) makes waiver `Expires`, claim age, status expiry and the
+audit grace read that date instead of the machine's UTC date; a claim age taken from git history is measured to
+the end of that day. A malformed date is a `not-run` report (exit 2). `--as-of` leaves everything else in the
+report unchanged. `claim_max_age_days` and the audit grace measure elapsed seconds, and under `--as-of` those seconds run to 23:59:59 UTC of the stated day, so `--as-of <today>` can read up to one day older than the real clock; day-bucketed claim expiry (`embodiment.claim-expired`) is unchanged.
+
 ```json
 {
   "status": "ok",
+  "as_of": { "date": "2026-11-08", "source": "clock" },
   "files_examined": 51,
   "records_read_by_any_rule": 51,
   "rules_executed": [
@@ -1147,3 +1155,6 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/check_integration.rs` f893cb99b833 -> 8538aedb7492. Reason: the tests in check_integration.rs now name real tracked files; the behaviour this record relies on is unchanged **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
 > | 2026-11-08 | Bumped to `0.127`. The `Realized-by` pin on `check_integration.rs` was re-baselined (the `Re-baselined` row above) after its tests were changed to name real tracked files; no behaviour this spec describes changes. | **structural** |
 > | 2026-11-08 | Bumped to `0.128`. `embodiment.claim-expired` judges a record whose evidence is only its Done-means item evidence clauses, counting its age from the first evidence line. **Why:** `ADR-97` amendment of 2026-11-08 -- such a milestone never expired and `urzua reverify` could not renew it. | **substantive** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/check_integration.rs` 8538aedb7492 -> 5ab61b95fd58. Reason: check_integration.rs: the only change is in pre_commit_hook_stops_a_planted_bad_header_with_the_real_binary, which now symlinks the urzua binary into the fixture instead of copying it (a copy raced a forking test thread and failed with ETXTBSY under load); the test's setup, planted defect and assertions are otherwise unchanged **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
+> | 2026-11-08 | Bumped to `0.130`. The report gains a top-level `as_of` and `check` accepts the global `--as-of`; the pins on this spec's `Realized-by` locators that moved with the change are re-baselined. **Why:** maintainer decision of 2026-11-08 (the second `ADR-97` amendment of that date). | **substantive** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/check.rs` c819006495f2 -> 2d7184369392. Reason: Read the diff of each re-pinned file. commands/check.rs: the CheckReport construction gains as_of; no other change. Nothing this record relies on changed. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |

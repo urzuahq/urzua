@@ -32,7 +32,7 @@ crates/urzua-cli/src/harness/post_command.rs::judge_changes	210
 crates/urzua-cli/src/harness/run.rs::judge_edit_in	101
 crates/urzua-cli/src/harness/run.rs::judge_record	188
 crates/urzua-cli/src/harness/run.rs::session_start	197
-crates/urzua-cli/src/main.rs::main	157
+crates/urzua-cli/src/main.rs::main	154
 crates/urzua-core/src/document_model.rs::RawRequiredSection::resolve	104
 crates/urzua-core/src/done_items.rs::build_item	115
 crates/urzua-core/src/done_items.rs::parse_items	123

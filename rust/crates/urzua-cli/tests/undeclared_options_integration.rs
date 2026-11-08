@@ -230,6 +230,9 @@ const RUNS: &[(&str, &[&str], i32)] = &[
 /// - `scope.include_untracked` and `scope.untracked_included`: added by #386
 ///   (MILE-206, `discovery.include_untracked`), `false` and `0` when undeclared.
 ///
+/// - `as_of`: the report's evaluation date (`--as-of`, ADR-97's amendment of
+///   2026-11-08), always present and the clock's date when no flag is given.
+///
 /// Nothing the `info` option adds (a `severity: "info"` finding, a changed
 /// count or `status`) is touched: the fixture has no info finding, and one
 /// would be a finding block, not a `not-enabled` entry.
@@ -246,6 +249,11 @@ fn normalise(text: &str) -> String {
             && lines[i + 3].trim_start().starts_with('}');
         if is_entry {
             i += 4;
+        } else if line.trim() == "\"as_of\": {" {
+            while !lines[i].trim_start().starts_with('}') {
+                i += 1;
+            }
+            i += 1;
         } else if line.contains("\"include_untracked\":")
             || line.contains("\"untracked_included\":")
         {

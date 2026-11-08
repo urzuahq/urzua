@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5PKKQRJF9WFZJA105B
-Version: '0.15'
+Version: '0.16'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/commands/init.rs@sha256:5f376bdd1b6d088cbb9f78f0a1bc6e7b07f83ddbe72ce950a213db162854d3c7, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:8538aedb749292d7641c037df67b6e667d5087b0c8dca95682fef065a8429a00
+Realized-by: code:rust/crates/urzua-cli/src/commands/init.rs@sha256:5f376bdd1b6d088cbb9f78f0a1bc6e7b07f83ddbe72ce950a213db162854d3c7, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:5ab61b95fd5864a41566dee0d902fac000dca3552f90316331ecf90617c3f9b0
 Author: beauwilliams
 Subject: '`urzua init` -- the adopt-existing-corpus path and `.urzua/` layout.'
 Implements: RFC-1
@@ -200,3 +200,4 @@ adopt should infer rules or only structure, and multi-corpus-per-repo).
 > | 2026-11-08 | Bumped to `0.14`. The pins this spec's `Realized-by` holds on files changed in this change were re-baselined (the `Re-baselined` row above); no behaviour this spec describes changed. **Why:** a revision-log entry that adds a structural change needs a `Version` bump (`revision-log.version-bump-required`). | **structural** |
 > | 2026-11-08 | Bumped to `0.15`. The `header-shape` notice states what `check` does (silent while `required_fields` is empty) and the config that makes it report, instead of promising a report that never came; `init` writes `exclude_files: [README.md]` for a proposed directory that holds a README. The written config for a corpus with no README, and every existing config, are unchanged. **Why:** the round-4 adopter review (S3, N1): the warning was not true, and every adopted corpus drew `filename.identity-pattern` warnings asking to rename its README. | **substantive** |
 > | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/init.rs` 08dfadd3cae6 -> 5f376bdd1b6d, `rust/crates/urzua-cli/tests/check_integration.rs` f893cb99b833 -> 8538aedb7492. Reason: the tests in check_integration.rs now name real tracked files; the behaviour this record relies on is unchanged; init.rs now words the header-shape notice truthfully (check reports unreadable headers only when required_fields declares them), excludes README.md for a directory holding one, and carries the merged doc-comment edit from main; the behaviour this record relies on is unchanged **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/check_integration.rs` 8538aedb7492 -> 5ab61b95fd58. Reason: check_integration.rs: the only change is in pre_commit_hook_stops_a_planted_bad_header_with_the_real_binary, which now symlinks the urzua binary into the fixture instead of copying it (a copy raced a forking test thread and failed with ETXTBSY under load); the test's setup, planted defect and assertions are otherwise unchanged **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
