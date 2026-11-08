@@ -36,7 +36,7 @@ crates/urzua-core/src/config.rs::parse_with_document_models	896
 crates/urzua-core/src/config.rs::revision_log_problem	104
 crates/urzua-core/src/config.rs::validate_relation_pairs	317
 crates/urzua-core/src/document_model.rs::RawRequiredSection::resolve	104
-crates/urzua-core/src/done_items.rs::build_item	115
+crates/urzua-core/src/done_items.rs::build_item	114
 crates/urzua-core/src/done_items.rs::parse_items	123
 crates/urzua-core/src/done_items.rs::parse_waiver	121
 crates/urzua-core/src/fix.rs::detect_repairs	134

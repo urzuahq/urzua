@@ -293,6 +293,11 @@ fn evidence_standing(
     delivery: &DeliveryDecl,
     env: &LocatorEnv<'_>,
 ) -> EvidenceStanding {
+    if item.placeholder {
+        return EvidenceStanding::Fails {
+            cause: "the item is an unfilled placeholder (see status.done-items-shape)".to_string(),
+        };
+    }
     let Some(clause) = &item.evidence else {
         return EvidenceStanding::None;
     };
