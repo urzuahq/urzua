@@ -16,9 +16,9 @@ crates/urzua-cli/src/commands/fix.rs::run	309
 crates/urzua-cli/src/commands/fix.rs::run_rebaseline	123
 crates/urzua-cli/src/commands/index.rs::run	121
 crates/urzua-cli/src/commands/init.rs::render_config_yaml	105
-crates/urzua-cli/src/commands/init.rs::run	162
+crates/urzua-cli/src/commands/init.rs::run	150
 crates/urzua-cli/src/commands/migrate.rs::run_ids_inner	131
-crates/urzua-cli/src/commands/new.rs::run	357
+crates/urzua-cli/src/commands/new.rs::run	347
 crates/urzua-cli/src/commands/reverify.rs::run	361
 crates/urzua-cli/src/diff_scope.rs::examine	124
 crates/urzua-cli/src/discovery.rs::compute_drifted_records_at	282

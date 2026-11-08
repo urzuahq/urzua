@@ -162,7 +162,34 @@ pub struct UnknownKey {
     pub valid: Vec<String>,
 }
 
+/// The keys the `harness` mapping reads.
+const HARNESS_KEYS: &[&str] = &["adapters", "instructions_file", "guardrails"];
+
+impl GuardrailInfo {
+    /// The keys a guardrail's mapping reads.
+    fn keys(&self) -> &'static [&'static str] {
+        if self.takes_on_unjudged {
+            &["enabled", "on_unjudged"]
+        } else {
+            &["enabled"]
+        }
+    }
+}
+
 impl HarnessDecl {
+    /// Records a key the build does not read, as the `problems` message and as a
+    /// structured [`UnknownKey`] with the nearest of the keys read at that place.
+    fn note_unknown_key(&mut self, subject: String, key: &str, valid: &[&str], why: &str) {
+        self.problems
+            .push(format!("{subject} has the key '{key}', {why}"));
+        self.unknown_keys.push(UnknownKey {
+            subject,
+            key: key.to_string(),
+            nearest: nearest_name(key, valid.iter().copied()).map(str::to_string),
+            valid: valid.iter().map(|v| v.to_string()).collect(),
+        });
+    }
+
     /// Whether the guardrail is named and on.
     pub fn enabled(&self, name: &str) -> bool {
         self.guardrails.get(name).is_some_and(|g| g.enabled)
@@ -263,40 +290,23 @@ impl<'de> Deserialize<'de> for HarnessDecl {
                                         }
                                     })
                                 }
-                                other => {
-                                    decl.problems.push(format!(
-                                        "harness.guardrails.{name} has the key '{other}', which it does not take"
-                                    ));
-                                    let valid: Vec<&str> = if info.takes_on_unjudged {
-                                        vec!["enabled", "on_unjudged"]
-                                    } else {
-                                        vec!["enabled"]
-                                    };
-                                    decl.unknown_keys.push(UnknownKey {
-                                        subject: format!("harness.guardrails.{name}"),
-                                        key: other.to_string(),
-                                        nearest: nearest_name(other, valid.iter().copied())
-                                            .map(str::to_string),
-                                        valid: valid.iter().map(|v| v.to_string()).collect(),
-                                    });
-                                }
+                                other => decl.note_unknown_key(
+                                    format!("harness.guardrails.{name}"),
+                                    other,
+                                    info.keys(),
+                                    "which it does not take",
+                                ),
                             }
                         }
                         decl.guardrails.insert(name, guardrail);
                     }
                 }
-                other => {
-                    decl.problems.push(format!(
-                        "harness has the key '{other}', which this build does not know (it reads adapters, instructions_file, guardrails)"
-                    ));
-                    let valid = ["adapters", "instructions_file", "guardrails"];
-                    decl.unknown_keys.push(UnknownKey {
-                        subject: "harness".to_string(),
-                        key: other.to_string(),
-                        nearest: nearest_name(other, valid.iter().copied()).map(str::to_string),
-                        valid: valid.iter().map(|v| v.to_string()).collect(),
-                    });
-                }
+                other => decl.note_unknown_key(
+                    "harness".to_string(),
+                    other,
+                    HARNESS_KEYS,
+                    "which this build does not know (it reads adapters, instructions_file, guardrails)",
+                ),
             }
         }
         Ok(decl)

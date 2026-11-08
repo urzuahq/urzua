@@ -756,6 +756,22 @@ pub struct Notice {
     pub detail: Option<std::collections::BTreeMap<String, String>>,
 }
 
+impl Notice {
+    /// A notice with no structured `detail`.
+    pub fn new(
+        severity: NoticeSeverity,
+        subject: impl Into<String>,
+        message: impl Into<String>,
+    ) -> Notice {
+        Notice {
+            severity,
+            subject: subject.into(),
+            message: message.into(),
+            detail: None,
+        }
+    }
+}
+
 /// Every command's report implements this (ADR-0046): `urzua-cli`'s
 /// `emit()` is the shared print step, and an exit code that `notices()` can
 /// never move.

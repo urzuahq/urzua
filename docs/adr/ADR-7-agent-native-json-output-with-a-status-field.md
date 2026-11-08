@@ -2,7 +2,7 @@
 Stable-Id: 01M6R3NK4S1K3KKMGNV0RC498S
 Status: Superseded
 Embodiment: Deprecated
-Realized-by: code:rust/crates/urzua-core/src/report.rs@sha256:5b713d23f7fa371a7ce84c8baab4b6c4d8859177ea12c9a8f18d245a9b860f8b, spec:docs/specs/SPEC-2-urzua-check.md
+Realized-by: code:rust/crates/urzua-core/src/report.rs@sha256:598b6ab6caffde5605f69c5d7d851a48443529a05cc6c8bcad0291ec069b3710, spec:docs/specs/SPEC-2-urzua-check.md
 Date: 2026-09-04
 Accepted-on: 2026-09-05
 Author: beauwilliams
@@ -68,3 +68,4 @@ Cheap to revise before v0 ships to any external user.
 > | 2026-11-05 | Re-baselined (attested by beauwilliams): re-pinned `rust/crates/urzua-core/src/report.rs` 81ca2e7df37e -> 206e1e3374db. Reason: report.rs gains the FindingSeverity::Info variant (serialized "info"), FindingSeverity::rank and an Implements: ADR-87 comment (ADR-87, MILE-194); the status field and the report shape this decision records are unchanged, so the evidence still holds **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
 > | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/report.rs` 206e1e3374db -> 60b6889bf4eb. Reason: Read the diff of each pinned span since the old pin and the claim still holds. urzua-core/src/report.rs: added FindingSeverity::at_least, the deferred-by-scope population count and the untracked and pull-refs report fields, the JSON envelope (status values and exit codes) is as before. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
 > | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/report.rs` 60b6889bf4eb -> 5b713d23f7fa. Reason: Read the diff of each re-pinned file against main. core/report.rs: Notice gained an optional detail map, omitted from output when absent; no other reporting changed. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/report.rs` 5b713d23f7fa -> 598b6ab6caff. Reason: Read the diff of each re-pinned file against main. core/report.rs: Notice gained an optional detail map (omitted when absent) and a Notice::new constructor for notices with no detail. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |

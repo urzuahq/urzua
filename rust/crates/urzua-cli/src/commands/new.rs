@@ -84,33 +84,22 @@ pub fn run(
                     opts.remote
                 );
                 eprintln!("urzua: {message}");
-                notices.push(Notice {
-                    severity: NoticeSeverity::Warning,
-                    subject: NOTICE_PULL_REFS.to_string(),
+                notices.push(Notice::new(
+                    NoticeSeverity::Warning,
+                    NOTICE_PULL_REFS.to_string(),
                     message,
-                    detail: None,
-                });
+                ));
             }
         }
         pull.refs = new_refs::count_pull_refs(&repo_root);
         match new_refs::acquire_lock(&repo_root, opts.lock_timeout_seconds) {
             LockOutcome::Held(lock) => _lock = Some(lock),
-            LockOutcome::Unavailable(why) => notices.push(Notice {
-                severity: NoticeSeverity::Warning,
-                subject: NOTICE_PULL_REFS.to_string(),
-                message: format!(
+            LockOutcome::Unavailable(why) => notices.push(Notice::new(NoticeSeverity::Warning, NOTICE_PULL_REFS.to_string(), format!(
                     "the numbering lock was not taken ({why}); a concurrent `urzua new` could take the same number"
-                ),
-                detail: None,
-            }),
+                ))),
             LockOutcome::TimedOut(why) => return emit(&CouldNotRun::from(why)),
         }
-        notices.push(Notice {
-            severity: NoticeSeverity::Info,
-            subject: NOTICE_PULL_REFS.to_string(),
-            message: "separate clones are not scanned: a record created and not pushed in another clone of this repository is invisible to numbering, and to the fetch".to_string(),
-            detail: None,
-        });
+        notices.push(Notice::new(NoticeSeverity::Info, NOTICE_PULL_REFS.to_string(), "separate clones are not scanned: a record created and not pushed in another clone of this repository is invisible to numbering, and to the fetch".to_string()));
     }
 
     // One namespace across every directory the type declares (`MILE-130`):
@@ -348,23 +337,19 @@ pub fn run(
         }
     }
 
-    notices.extend(identity.warning.into_iter().map(|message| Notice {
-        severity: NoticeSeverity::Warning,
-        subject: NOTICE_IDENTITY.to_string(),
-        message,
-        detail: None,
+    notices.extend(identity.warning.into_iter().map(|message| {
+        Notice::new(
+            NoticeSeverity::Warning,
+            NOTICE_IDENTITY.to_string(),
+            message,
+        )
     }));
     if !admits_stable_id {
-        notices.push(Notice {
-            severity: NoticeSeverity::Warning,
-            subject: "stable-id".to_string(),
-            message: format!(
+        notices.push(Notice::new(NoticeSeverity::Warning, "stable-id".to_string(), format!(
                 "record type '{record_type}' declares a closed field set (`known_fields`) that does not list \
                  `Stable-Id`, yet every record type gets one (ADR-21); the new record carries it and \
                  `header.field-set-consistency` will report it until `Stable-Id` is added to the type's `known_fields`"
-            ),
-            detail: None,
-        });
+            )));
     }
 
     emit(&NewReport {
@@ -404,15 +389,14 @@ fn assign_display_number(
     let mut claims = match other_ref_claims(repo_root, dirs, &prefixes) {
         Ok(c) => c,
         Err(reason) => {
-            notices.push(Notice {
-                severity: NoticeSeverity::Warning,
-                subject: NOTICE_NUMBERING.to_string(),
-                message: format!(
+            notices.push(Notice::new(
+                NoticeSeverity::Warning,
+                NOTICE_NUMBERING.to_string(),
+                format!(
                     "numbering from the working tree only; could not read other refs ({reason}). \
                      A number claimed on an unmerged branch will not be seen."
                 ),
-                detail: None,
-            });
+            ));
             return urzua_core::new_record::next_display_number_by(filenames, number_of)
                 .map(|number| (number, Vec::new()));
         }
@@ -422,15 +406,10 @@ fn assign_display_number(
             Ok(siblings) => {
                 for path in siblings {
                     if !path.is_dir() {
-                        notices.push(Notice {
-                            severity: NoticeSeverity::Warning,
-                            subject: NOTICE_PULL_REFS.to_string(),
-                            message: format!(
+                        notices.push(Notice::new(NoticeSeverity::Warning, NOTICE_PULL_REFS.to_string(), format!(
                                 "worktree {} is listed by git but its directory is missing; skipped",
                                 path.display()
-                            ),
-                            detail: None,
-                        });
+                            )));
                         continue;
                     }
                     let mut names = Vec::new();
@@ -447,14 +426,9 @@ fn assign_display_number(
                     pull.worktrees_scanned += 1;
                 }
             }
-            Err(why) => notices.push(Notice {
-                severity: NoticeSeverity::Warning,
-                subject: NOTICE_PULL_REFS.to_string(),
-                message: format!(
+            Err(why) => notices.push(Notice::new(NoticeSeverity::Warning, NOTICE_PULL_REFS.to_string(), format!(
                     "could not list the worktrees ({why}); a number drafted and untracked in a sibling worktree will not be seen"
-                ),
-                detail: None,
-            }),
+                ))),
         }
     }
     let got =
