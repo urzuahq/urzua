@@ -16,10 +16,6 @@ crates/urzua-cli/src/commands/fix.rs::run_rebaseline	123
 crates/urzua-cli/src/commands/reverify.rs::run	360
 crates/urzua-cli/src/diff_scope.rs::examine	124
 crates/urzua-cli/src/main.rs::main	154
-crates/urzua-core/src/config.rs::claim_expiry_problems	158
-crates/urzua-core/src/config.rs::parse_with_document_models	884
-crates/urzua-core/src/config.rs::revision_log_problem	104
-crates/urzua-core/src/config.rs::validate_relation_pairs	317
 crates/urzua-core/src/document_model.rs::RawRequiredSection::resolve	104
 crates/urzua-core/src/fix.rs::detect_repairs	134
 crates/urzua-core/src/header.rs::parse_yaml_frontmatter	101

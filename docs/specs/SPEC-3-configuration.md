@@ -1,9 +1,9 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.118'
+Version: '0.119'
 Date: 2026-08-20
 Status: Shipped
-Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:a012efb93ba2dff15c26c4ea65cab014e38b790c96111ff0d606f3b434cf4967, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:92a2b9ceca89133f30987a013734da66b9332c4e937a87e72e53571596e18093, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:3c8aa671582772499ab7345cdbfb5a4dc2c50462882851fb20f853992acfd57c
+Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:20203e6012242d88f80f6c8b86a74b96a02db16c1afb99391b3c8814d9245681, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:92a2b9ceca89133f30987a013734da66b9332c4e937a87e72e53571596e18093, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:3c8aa671582772499ab7345cdbfb5a4dc2c50462882851fb20f853992acfd57c
 Embodiment: Verified
 Author: beauwilliams
 Subject: '`.urzua/config.yaml` -- the schema for record types, required/known fields, and per-type behavior.'
@@ -1937,44 +1937,6 @@ rules:
 `test_paths` belongs to `embodiment.back-pointer-resolution` and to `embodiment.locator-on-back-pointer-path`
 (below); on any other rule it is the usual option-on-a-rule-that-does-not-take-it load error.
 
-#### Excusing one line: `ignore_marker` (`ADR-80`, amended 2026-11-08)
-
-A string literal in a test file can hold a line that reads as a back-pointer
-(`// Implements:` and an id that does not exist, inside a multi-line fixture). `embodiment.back-pointer-resolution`
-and `embodiment.back-pointer-decision-accepted` take the same optional `ignore_marker` as
-`boundary.published-path-reference`, with the same meaning and the same validation:
-
-```yaml
-rules:
-  embodiment.back-pointer-resolution:
-    level: error
-    back_pointer_paths: ["src", "tests"]
-    ignore_marker: "urzua:ignore"   # optional; declared, never compiled in
-```
-
-- **One marker for both rules.** Declare it on either rule or on both. If either enabled rule declares
-  one, that marker applies everywhere back-pointers are read: both rules and the evidence collector
-  (`check`, `urzua fix`, `urzua reverify`). Two different values on the two rules are a load error naming
-  both rules.
-- **The marker excuses the whole line**, every id on it, wherever on the line the marker sits, including
-  inside the citation text (`// Implements: ADR-1 urzua:ignore`). A back-pointer on an excused line is not
-  reported, is not judged for the status of the record it cites, and is not evidence (code or test tier).
-  A real citation on any other line of the same file is unaffected.
-- **Load-time guard.** A marker that is empty, whitespace, padded, multi-line, or equal to or contained in
-  a back-pointer keyword (`Implements:`, `Verifies:`) is refused on these two rules, because it would sit
-  in every citation and excuse them all.
-- **Nothing is hidden.** The rule's population carries `excused_lines`, the number of lines excused
-  (present only when non-zero), and `check` reports one `info` notice per rule that excused any; `urzua fix`
-  and `urzua reverify`, which read the same evidence, report the same count in an `info` notice.
-- **A stale marker is a finding**, reported once per line, by `embodiment.back-pointer-resolution` while it
-  is enabled (else by `embodiment.back-pointer-decision-accepted`): a marker on a line carrying no
-  back-pointer the rule reads (`back-pointer-marker-unused`, `decision-marker-unused`). A marker on a
-  `Verifies:` line in a file outside `test_paths`, where `Verifies:` is not read, excuses nothing and is
-  reported.
-- On any rule other than these two and the boundary rule the option is the usual
-  option-on-a-rule-that-does-not-take-it load error. Undeclared, no line is excused and the output is
-  unchanged.
-
 ### Preferring the lighter mechanism: `embodiment.locator-on-back-pointer-path` (`ADR-78` item 4, `MILE-189`)
 
 An opt-in warning for a `Realized-by` locator on a file the back-pointer scan already reads, where an
@@ -2381,4 +2343,6 @@ proves this configuration produces the three findings.
 > | 2026-11-08 | Bumped to `0.116`. The pins this spec's `Realized-by` holds on files changed in this change were re-baselined (the `Re-baselined` row above); no behaviour this spec describes changed. **Why:** a revision-log entry that adds a structural change needs a `Version` bump (`revision-log.version-bump-required`). | **structural** |
 > | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/own_config_integration.rs` 06fa48e432cb -> 92a2b9ceca89. Reason: Read the diff of each pinned file since the old pin and the claim still holds. own_config_integration.rs: own_config_declares_a_level_for_every_shipped_rule now checks the parsed config's rule levels instead of text-matching the file; no other test changed. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
 > | 2026-11-08 | Bumped to `0.117`. Config load refuses a type whose `delivered_tiers` names a tier outside `items.resolving_tiers`, naming both. **Why:** round-4 review of the delivery items. | **substantive** |
-> | 2026-11-08 | Bumped to `0.118`. Documents `ignore_marker` on `embodiment.back-pointer-resolution` and `embodiment.back-pointer-decision-accepted`: the boundary rule's option reused as one marker for both rules and the evidence collector (differing values are a load error), excusing the whole line (not reported, not judged, not evidence), a load-time guard against a marker inside a back-pointer keyword, disclosure as `excused_lines` and an `info` notice in `check`, `fix` and `reverify`, and an unused marker reported once per line; opt-in. **Why:** `ADR-80` amendment of 2026-11-08, accepted by the maintainer. | **substantive** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 18818ee3b226 -> df8b21e9c8a5. Reason: split parse_with_document_models, validate_relation_pairs, claim_expiry_problems and revision_log_problem in config.rs into named validation helpers (SPEC-22 100-line bound); behaviour unchanged, outputs byte-identical, validation order and messages pinned by the new validation_order_tests **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` df8b21e9c8a5 -> 20203e601224. Reason: Read the diff of each pinned file or range since the old pin against what this record evidences: config.rs gained the validate_ignore_markers helper, called first in validate_boundaries, which accepts ignore_marker on embodiment.back-pointer-resolution and embodiment.back-pointer-decision-accepted, validates the marker (non-blank, one line, no padding) ahead of the boundary-only checks so it covers every rule that takes the option (this replaces the boundary rule's inline check, with the same errors), refuses a marker inside the Implements: or Verifies: keyword on the two back-pointer rules and refuses two different markers on them; no other option, parse or default changed. The claim this record evidences still holds. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
+> | 2026-11-08 | Bumped to `0.119`. Documents `ignore_marker` on `embodiment.back-pointer-resolution` and `embodiment.back-pointer-decision-accepted`: the boundary rule's option reused as one marker for both rules and the evidence collector (differing values are a load error), excusing the whole line (not reported, not judged, not evidence), a load-time guard against a marker inside a back-pointer keyword, disclosure as `excused_lines` and an `info` notice in `check`, `fix` and `reverify`, and an unused marker reported once per line; opt-in. **Why:** `ADR-80` amendment of 2026-11-08, accepted by the maintainer. | **substantive** |
