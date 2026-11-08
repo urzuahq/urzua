@@ -1715,6 +1715,7 @@ end: brace_balanced
             } else {
                 HashSet::new()
             },
+            ..Default::default()
         };
         let (_, findings) = embodiment_consistency(
             &[r],

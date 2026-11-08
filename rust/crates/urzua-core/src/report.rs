@@ -514,6 +514,13 @@ pub struct Population {
     /// (`config.scope-matches-nothing` does not read it).
     #[serde(skip_serializing_if = "is_zero")]
     deferred_by_scope: usize,
+    /// Lines a declared `ignore_marker` excused from a back-pointer rule
+    /// (`ADR-80` amendment): a count of lines inside the examined candidates,
+    /// not a kind of candidate. Serialized only when non-zero, so a
+    /// configuration that declares no marker reports exactly what it did
+    /// before.
+    #[serde(skip_serializing_if = "is_zero")]
+    excused_lines: usize,
 }
 
 fn is_zero(n: &usize) -> bool {
@@ -552,6 +559,17 @@ impl Population {
     /// record is not in the diff's changed set (`ADR-90`).
     pub fn deferred_by_scope(&self) -> usize {
         self.deferred_by_scope
+    }
+
+    /// How many lines a declared `ignore_marker` excused (`ADR-80` amendment).
+    pub fn excused_lines(&self) -> usize {
+        self.excused_lines
+    }
+
+    /// This population with the lines a declared `ignore_marker` excused.
+    pub fn with_excused_lines(mut self, excused_lines: usize) -> Self {
+        self.excused_lines = excused_lines;
+        self
     }
 
     pub fn of(unit: PopulationUnit, eligible: usize, examined: usize) -> Self {
@@ -595,6 +613,7 @@ impl Population {
             out_of_scope,
             unreadable,
             deferred_by_scope,
+            excused_lines: 0,
         }
     }
 }
