@@ -1755,11 +1755,6 @@ fn revision_log_identity_problem(decl: &RevisionLogDecl) -> Option<&'static str>
     }
 }
 
-/// Why a declared `prefix` cannot head a recognized `PREFIX-N-slug.md`
-/// filename, or `None` when it can. Reuses the filename grammar
-/// (`parse_record_filename`): hyphen-separated segments, each non-empty
-/// upper-case/digits and not all digits (an all-digit segment would be read
-/// as the record number).
 /// Why a type's `revision_log` declaration cannot be used, or `None`: the
 /// identity (`MILE-167`), the version bump (`BUG-51`) and the vocabulary,
 /// columns and tool class (`ADR-94`).
@@ -1848,6 +1843,11 @@ fn revision_log_problem(decl: &RevisionLogDecl) -> Option<String> {
     None
 }
 
+/// Why a declared `prefix` cannot head a recognized `PREFIX-N-slug.md`
+/// filename, or `None` when it can. Reuses the filename grammar
+/// (`parse_record_filename`): hyphen-separated segments, each non-empty
+/// upper-case/digits and not all digits (an all-digit segment would be read
+/// as the record number).
 fn prefix_problem(prefix: &str) -> Option<&'static str> {
     if prefix.is_empty() {
         return Some("is empty");
