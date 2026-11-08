@@ -178,10 +178,9 @@ pub fn date_from_days(days: i64) -> String {
 
 /// The 1-based file line a claim's age is counted from when no audit date
 /// exists (`ADR-97`, amendment of 2026-11-08): the locator field's line when
-/// it holds a value, else the first Done-means item evidence clause, else an
-/// empty field's own line. `None`
-/// when the record has neither source. One function for the rule, the
-/// measurement and `urzua reverify`.
+/// it holds a value, else the first valid Done-means item evidence clause,
+/// else an empty field's own line. `None` when the record has neither source.
+/// One function for the rule, the measurement and `urzua reverify`.
 pub fn evidence_anchor_line(record: &Record, locator_field: &str) -> Option<usize> {
     let field = record
         .header
@@ -194,7 +193,7 @@ pub fn evidence_anchor_line(record: &Record, locator_field: &str) -> Option<usiz
     record
         .items
         .as_ref()
-        .and_then(|i| i.evidence_lines().into_iter().min())
+        .and_then(|i| i.valid_evidence_lines().into_iter().min())
         .or_else(|| field.map(|f| f.line))
 }
 
