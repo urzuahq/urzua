@@ -4,11 +4,11 @@
 //! (`urzua-cli`) reads the tree, the clock and git; nothing here does.
 
 use crate::config::{Config, RelationRole};
-use crate::fix::{Attestation, PinRead, PinSpan};
-use crate::line_edit::{table_row_prefix, LineDoc};
+use crate::fix::{append_log_rows, evidence_edit_lines, Attestation, PinRead, PinSpan};
+use crate::line_edit::LineDoc;
 use crate::locator::{self, Anchor, Locator};
 use crate::record::Record;
-use crate::rules::{evidence_text, find_revision_log_entries, relation_field_name};
+use crate::rules::{evidence_text, relation_field_name};
 
 /// What the tool could prove about one locator at review time.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
@@ -212,7 +212,8 @@ fn path_char(c: char) -> bool {
 /// `line` with the unpinned locator `category:spelling` given its pin, or
 /// `None` when it is not on the line. A match starts at a token boundary and
 /// ends where the locator does, so the pin on `a.rs` is not written onto
-/// `lib/a.rs`, `a.rs#Foo` or an already pinned `a.rs@sha256:...`.
+/// `lib/a.rs`, `a.rs#Foo` or an already pinned `a.rs@sha256:...`, and the pin on
+/// `a.rs#Foo` is not written into `a.rs#Foo::bar` or `a.rs#Foo(x)`.
 pub fn pin_unpinned_in_line(
     line: &str,
     category: &str,
@@ -241,7 +242,7 @@ pub fn pin_unpinned_in_line(
         let after_ok = line[at + spelling.len()..]
             .chars()
             .next()
-            .is_none_or(|c| !path_char(c) && c != '#');
+            .is_none_or(|c| !path_char(c) && !matches!(c, '#' | ':' | '('));
         if after_ok {
             out.push_str(&line[rest..at + spelling.len()]);
             out.push_str("@sha256:");
@@ -409,20 +410,13 @@ pub fn apply_reverify(
 ) -> Result<String, String> {
     let mut doc = LineDoc::parse(content);
     let review = plan.review;
-    let mut lines: Vec<usize> = Vec::new();
-    if review.field_line != 0 || review.item_lines.is_empty() {
-        let key = format!("{}:", review.field);
-        let at = doc
-            .find_line(|l| l.trim_start().starts_with(&key))
-            .ok_or_else(|| {
-                format!(
-                    "could not find the '{}' line to edit -- the record may have changed since the review",
-                    review.field
-                )
-            })?;
-        lines.push(at);
-    }
-    lines.extend(&review.item_lines);
+    let lines = evidence_edit_lines(
+        &doc,
+        &review.field,
+        review.field_line,
+        &review.item_lines,
+        "the review",
+    )?;
     for pin in plan.pins {
         let mut placed = false;
         for &at in &lines {
@@ -445,21 +439,6 @@ pub fn apply_reverify(
         set_anchor(&mut doc, renewal.anchor_field, today)?;
     }
 
-    let edited = doc.to_string();
-    let log = find_revision_log_entries(&edited, log_id, shape).ok_or_else(|| {
-        "record has no Revision log section -- refusing to write without one to record the attestation in".to_string()
-    })?;
-    let log = log.map_err(|problem| problem.message)?;
-    let Some(last_entry) = log.entries.last() else {
-        return Err(
-            "record's Revision log section has no existing rows to append after".to_string(),
-        );
-    };
-    let prefix = doc
-        .line(last_entry.line)
-        .and_then(table_row_prefix)
-        .unwrap_or("> ")
-        .to_string();
     let mut rows = Vec::new();
     if !plan.pins.is_empty() {
         rows.push(pinned_row(attestation, plan.pins, reason));
@@ -467,12 +446,7 @@ pub fn apply_reverify(
     if let Some(renewal) = &plan.renewal {
         rows.push(reverified_row(attestation, review, renewal, reason));
     }
-    let mut after = last_entry.line;
-    for narrative in rows {
-        let row = crate::fix::log_row(&prefix, log.layout, shape, today, &narrative)?;
-        doc.insert_after(after, row);
-        after += 1;
-    }
+    append_log_rows(&mut doc, log_id, shape, today, &rows, "write")?;
     Ok(doc.to_string())
 }
 
@@ -526,6 +500,27 @@ mod tests {
             out.contains(&format!("code: src/a.rs#Foo::bar@sha256:{H}, test:t.rs")),
             "{out}"
         );
+    }
+
+    #[test]
+    fn a_first_pin_is_not_spliced_into_a_longer_anchored_locator_observed_failing() {
+        let line = "Realized-by: code:src/a.rs#Foo::bar, code:src/a.rs#Foo";
+        let out = pin_unpinned_in_line(line, "code", "src/a.rs#Foo", H).unwrap();
+        assert_eq!(
+            out,
+            format!("Realized-by: code:src/a.rs#Foo::bar, code:src/a.rs#Foo@sha256:{H}")
+        );
+        // Only the longer one on the line: the shorter spelling is not on it.
+        assert_eq!(
+            pin_unpinned_in_line("code:src/a.rs#Foo::bar", "code", "src/a.rs#Foo", H),
+            None
+        );
+        assert_eq!(
+            pin_unpinned_in_line("code:src/a.rs#Foo(x)", "code", "src/a.rs#Foo", H),
+            None
+        );
+        let out = pin_unpinned_in_line("code:src/a.rs#Foo::bar", "code", "src/a.rs#Foo::bar", H);
+        assert_eq!(out, Some(format!("code:src/a.rs#Foo::bar@sha256:{H}")));
     }
 
     #[test]
