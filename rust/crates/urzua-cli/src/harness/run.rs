@@ -610,28 +610,9 @@ fn judge_edit_in(config: Option<PathBuf>, request: Request) -> Verdict {
     if let Some(why) = &request.adapter_error {
         return adapter_failure(config.as_deref(), &request, why);
     }
-    let cwd_here = std::env::current_dir().unwrap_or_default();
     let ws = match Workspace::open(&[PathBuf::from(".")], config.clone()) {
         Ok(ws) => ws,
-        Err(e) => {
-            // The configuration does not load, so only the raw file can say what
-            // the guardrail was told to do about an edit it cannot judge.
-            let (enabled, on) = raw_policy(config.as_deref(), &cwd_here, "editor-hook");
-            let why = format!("the configuration does not load: {}", e.message);
-            if let Some(verdict) = raw_gate_denial(config.as_deref(), &request, &why) {
-                return verdict;
-            }
-            return if enabled {
-                unjudged(on, actor, request.paths.first().map(String::as_str), &why)
-            } else {
-                unjudged(
-                    OnUnjudged::Allow,
-                    actor,
-                    request.paths.first().map(String::as_str),
-                    &why,
-                )
-            };
-        }
+        Err(e) => return config_unloadable(config.as_deref(), &request, actor, &e.message),
     };
     let Workspace {
         repo_root,
@@ -642,14 +623,8 @@ fn judge_edit_in(config: Option<PathBuf>, request: Request) -> Verdict {
     // editor hook being on: an agent's move to a gated status, or write to a gated
     // path, is refused outright (`ADR-89` section 4).
     if actor == Actor::Agent {
-        if let Some(content) = request.content.as_deref() {
-            // A request that names several paths is malformed (SPEC-24), but a
-            // gated path among them still blocks: every path is judged.
-            for path in &request.paths {
-                if let Some(verdict) = gate_denial(&repo_root, &loaded, path, content, &request) {
-                    return verdict;
-                }
-            }
+        if let Some(denial) = agent_gate_denial(&repo_root, &loaded, &request) {
+            return denial;
         }
     }
     let Some(harness) = loaded.harness.as_ref().filter(|h| h.enabled("editor-hook")) else {
@@ -696,6 +671,44 @@ fn judge_edit_in(config: Option<PathBuf>, request: Request) -> Verdict {
         content,
         &request,
     )
+}
+
+/// The verdict for an edit when the configuration does not load.
+fn config_unloadable(
+    config: Option<&Path>,
+    request: &Request,
+    actor: Actor,
+    message: &str,
+) -> Verdict {
+    let cwd_here = std::env::current_dir().unwrap_or_default();
+    // The configuration does not load, so only the raw file can say what
+    // the guardrail was told to do about an edit it cannot judge.
+    let (enabled, on) = raw_policy(config, &cwd_here, "editor-hook");
+    let why = format!("the configuration does not load: {message}");
+    if let Some(verdict) = raw_gate_denial(config, request, &why) {
+        return verdict;
+    }
+    if enabled {
+        unjudged(on, actor, request.paths.first().map(String::as_str), &why)
+    } else {
+        unjudged(
+            OnUnjudged::Allow,
+            actor,
+            request.paths.first().map(String::as_str),
+            &why,
+        )
+    }
+}
+
+/// An agent's write refused by the acceptance or protected-path gate. A request
+/// that names several paths is malformed (SPEC-24), but a gated path among them
+/// still blocks: every path is judged and any denial wins.
+fn agent_gate_denial(repo_root: &Path, loaded: &Config, request: &Request) -> Option<Verdict> {
+    let content = request.content.as_deref()?;
+    request
+        .paths
+        .iter()
+        .find_map(|path| gate_denial(repo_root, loaded, path, content, request))
 }
 
 struct Judging<'a> {
@@ -778,34 +791,13 @@ fn ran_summary(report: &CheckReport) -> String {
     out
 }
 
+const EDIT_P: &str = "urzua harness (editor-hook)";
+
 fn judge_record(j: &Judging<'_>, content: String, request: &Request) -> Verdict {
-    const P: &str = "urzua harness (editor-hook)";
     let rel = j.rel_text;
-    let report = match judge_proposed(j.config_arg.clone(), j.rel.clone(), content) {
-        Err(e) if e.message.starts_with("no record type governs ") => {
-            return Verdict::new(
-                "not-governed",
-                Some(rel),
-                format!("{rel} is not a governed record; nothing to judge"),
-            )
-        }
-        Err(e) => {
-            return unjudged(
-                j.on,
-                j.actor,
-                Some(rel),
-                &format!("urzua reported not-run: {}", e.message),
-            )
-        }
-        Ok(r) if r.status == ReportStatus::NotRun => {
-            return unjudged(
-                j.on,
-                j.actor,
-                Some(rel),
-                "urzua reported not-run: no enabled rule examined the record",
-            )
-        }
+    let report = match proposed_report(j, content) {
         Ok(r) => r,
+        Err(verdict) => return verdict,
     };
 
     // Missing history costs only the rules that read it (embodiment drift).
@@ -835,29 +827,7 @@ fn judge_record(j: &Judging<'_>, content: String, request: &Request) -> Verdict 
         .copied()
         .filter(|f| f.severity != FindingSeverity::Error)
         .collect();
-
-    // Errors the record on disk already has are not this edit's (`block_on:
-    // introduced`, the default). A baseline run that cannot judge leaves every
-    // error introduced. `block_on: all` blocks any unwaived error and skips it.
-    let block_all = j.config.block_on.as_deref() == Some("all");
-    let (mut introduced, mut existing) = (errors.clone(), Vec::<&Finding>::new());
-    let baseline_report;
-    if !block_all && !errors.is_empty() {
-        if let Ok(on_disk) = std::fs::read_to_string(j.repo_root.join(&j.rel)) {
-            if let Ok(r) = judge_proposed(j.config_arg.clone(), j.rel.clone(), on_disk) {
-                if matches!(r.status, ReportStatus::Ok | ReportStatus::FindingsPresent) {
-                    baseline_report = r;
-                    let keys: HashSet<String> = live(&baseline_report)
-                        .into_iter()
-                        .filter(|f| f.severity == FindingSeverity::Error)
-                        .map(key)
-                        .collect();
-                    (existing, introduced) =
-                        errors.iter().copied().partition(|f| keys.contains(&key(f)));
-                }
-            }
-        }
-    }
+    let (introduced, existing) = split_introduced(j, errors);
 
     let mut note = histnote.clone();
     if !existing.is_empty() {
@@ -875,33 +845,7 @@ fn judge_record(j: &Judging<'_>, content: String, request: &Request) -> Verdict 
 
     if introduced.is_empty() {
         let shown: Vec<&Finding> = existing.iter().chain(&others).copied().collect();
-        let (kind, message) = if shown.is_empty() {
-            if histnote.is_empty() {
-                (
-                    "allow",
-                    format!(
-                        "{P}: urzua judged {rel}; no findings. {}",
-                        ran_summary(&report)
-                    ),
-                )
-            } else {
-                (
-                    "allow-with-warnings",
-                    format!(
-                        "{P}: urzua judged {rel} with what it can see; no findings. {}{histnote}",
-                        ran_summary(&report)
-                    ),
-                )
-            }
-        } else {
-            (
-                "allow-with-warnings",
-                format!(
-                    "{P}: urzua judged {rel}; nothing this edit introduced blocks it. {}{note}",
-                    ran_summary(&report)
-                ),
-            )
-        };
+        let (kind, message) = allow_message(rel, &report, &shown, &histnote, &note);
         let mut v = Verdict::new(kind, Some(rel), message);
         v.findings = to_json(&shown);
         return v;
@@ -912,7 +856,116 @@ fn judge_record(j: &Judging<'_>, content: String, request: &Request) -> Verdict 
     let list = describe(&introduced, false);
     let mut v = Verdict::new("block", Some(rel), String::new());
     v.findings = to_json(&introduced);
+    override_verdict(j, request, v, &introduced, &list, &note)
+}
 
+/// The check report of the proposed content, or the verdict when it cannot
+/// be had.
+fn proposed_report(j: &Judging<'_>, content: String) -> Result<CheckReport, Verdict> {
+    let rel = j.rel_text;
+    match judge_proposed(j.config_arg.clone(), j.rel.clone(), content) {
+        Err(e) if e.message.starts_with("no record type governs ") => Err(Verdict::new(
+            "not-governed",
+            Some(rel),
+            format!("{rel} is not a governed record; nothing to judge"),
+        )),
+        Err(e) => Err(unjudged(
+            j.on,
+            j.actor,
+            Some(rel),
+            &format!("urzua reported not-run: {}", e.message),
+        )),
+        Ok(r) if r.status == ReportStatus::NotRun => Err(unjudged(
+            j.on,
+            j.actor,
+            Some(rel),
+            "urzua reported not-run: no enabled rule examined the record",
+        )),
+        Ok(r) => Ok(r),
+    }
+}
+
+/// Splits the errors into those this edit introduced and those the record on
+/// disk already has.
+///
+/// Errors the record on disk already has are not this edit's (`block_on:
+/// introduced`, the default). A baseline run that cannot judge leaves every
+/// error introduced. `block_on: all` blocks any unwaived error and skips it.
+fn split_introduced<'a>(
+    j: &Judging<'_>,
+    errors: Vec<&'a Finding>,
+) -> (Vec<&'a Finding>, Vec<&'a Finding>) {
+    let block_all = j.config.block_on.as_deref() == Some("all");
+    let (mut introduced, mut existing) = (errors.clone(), Vec::<&Finding>::new());
+    if !block_all && !errors.is_empty() {
+        if let Ok(on_disk) = std::fs::read_to_string(j.repo_root.join(&j.rel)) {
+            if let Ok(baseline) = judge_proposed(j.config_arg.clone(), j.rel.clone(), on_disk) {
+                if matches!(
+                    baseline.status,
+                    ReportStatus::Ok | ReportStatus::FindingsPresent
+                ) {
+                    let keys: HashSet<String> = live(&baseline)
+                        .into_iter()
+                        .filter(|f| f.severity == FindingSeverity::Error)
+                        .map(key)
+                        .collect();
+                    (existing, introduced) =
+                        errors.iter().copied().partition(|f| keys.contains(&key(f)));
+                }
+            }
+        }
+    }
+    (introduced, existing)
+}
+
+/// The verdict kind and message of an edit that introduced no error.
+fn allow_message(
+    rel: &str,
+    report: &CheckReport,
+    shown: &[&Finding],
+    histnote: &str,
+    note: &str,
+) -> (&'static str, String) {
+    if !shown.is_empty() {
+        return (
+            "allow-with-warnings",
+            format!(
+                "{EDIT_P}: urzua judged {rel}; nothing this edit introduced blocks it. {}{note}",
+                ran_summary(report)
+            ),
+        );
+    }
+    if histnote.is_empty() {
+        (
+            "allow",
+            format!(
+                "{EDIT_P}: urzua judged {rel}; no findings. {}",
+                ran_summary(report)
+            ),
+        )
+    } else {
+        (
+            "allow-with-warnings",
+            format!(
+                "{EDIT_P}: urzua judged {rel} with what it can see; no findings. {}{histnote}",
+                ran_summary(report)
+            ),
+        )
+    }
+}
+
+/// The verdict of an edit that introduced errors: blocked, unless a named
+/// override is given (and recorded, when an `override_log` is declared).
+fn override_verdict(
+    j: &Judging<'_>,
+    request: &Request,
+    mut v: Verdict,
+    introduced: &[&Finding],
+    list: &str,
+    note: &str,
+) -> Verdict {
+    const P: &str = EDIT_P;
+    let rel = j.rel_text;
     let env_name = std::env::var("URZUA_HOOK_OVERRIDE")
         .ok()
         .filter(|n| !n.is_empty());
@@ -949,7 +1002,7 @@ fn judge_record(j: &Judging<'_>, content: String, request: &Request) -> Verdict 
                 );
                 return v;
             }
-            if let Err(e) = persist_override(j.repo_root, log, &name, rel, &introduced, &reason) {
+            if let Err(e) = persist_override(j.repo_root, log, &name, rel, introduced, &reason) {
                 v.message = format!(
                     "{P}: blocked. The override could not be recorded in {log} ({e}), and an override that is not recorded is not allowed.\n{list}"
                 );
@@ -1070,6 +1123,185 @@ pub fn run_session_start(config: Option<PathBuf>) -> ExitCode {
     emit(&session_start(config))
 }
 
+/// The settings files read so far, `None` when absent or unreadable.
+type SettingsDocs = std::collections::BTreeMap<String, Option<super::json::J>>;
+
+fn cached_doc<'a>(
+    docs: &'a mut SettingsDocs,
+    root: &Path,
+    file: &str,
+) -> &'a Option<super::json::J> {
+    docs.entry(file.to_string()).or_insert_with(|| {
+        super::load_settings(root, file)
+            .ok()
+            .and_then(|s| s.text.map(|_| s.doc))
+    })
+}
+
+/// The lock, or `None` after saying why there is none.
+fn installed_lock_problems(root: &Path, problems: &mut Vec<Problem>) -> Option<lock::Lock> {
+    let lock = match super::installed_lock(root) {
+        Ok(l) => l,
+        Err(m) => {
+            problems.push(Problem {
+                check: "lock",
+                message: m,
+            });
+            None
+        }
+    };
+    if lock.is_none() {
+        problems.push(Problem {
+            check: "lock",
+            message: format!(
+                "{} is missing: the harness is not installed (run `urzua harness install`)",
+                lock::LOCK_PATH
+            ),
+        });
+    }
+    lock
+}
+
+fn version_problem(lock: &lock::Lock, problems: &mut Vec<Problem>) {
+    let version = super::engine_version();
+    if lock.bundle_version != version {
+        let older = lock.bundle_version.as_str() < version;
+        problems.push(Problem {
+            check: "version",
+            message: if older {
+                format!("the installed bundle ({}) is older than this binary ({version}): run `urzua harness update`", lock.bundle_version)
+            } else {
+                format!("the installed bundle ({}) is newer than this binary ({version}): update urzua", lock.bundle_version)
+            },
+        });
+    }
+}
+
+/// Each locked adapter must be embedded, with its interpreters and
+/// environment present. Returns the directories of the commands it installs.
+fn adapter_problems(lock: &lock::Lock, problems: &mut Vec<Problem>) -> Vec<String> {
+    let mut command_dirs: Vec<String> = Vec::new();
+    for name in &lock.adapters {
+        let Some(adapter) = super::bundle::adapter(name) else {
+            problems.push(Problem {
+                check: "adapter",
+                message: format!(
+                    "the lock names the adapter '{name}', which this binary does not embed"
+                ),
+            });
+            continue;
+        };
+        let manifest = adapter.manifest();
+        if let Some(dir) = &manifest.commands_dir {
+            command_dirs.push(format!("{}/", dir.trim_end_matches('/')));
+        }
+        for interpreter in &manifest.requires.interpreters {
+            if !on_path(interpreter) {
+                problems.push(Problem {
+                    check: "interpreter",
+                    message: format!("'{interpreter}', which the {name} adapter's translator needs, is not on PATH: its hook commands exit 127, which the agent treats as non-blocking and tells you nothing, so edits go unjudged"),
+                });
+            }
+        }
+        for var in &manifest.requires.env {
+            if std::env::var_os(var).is_none_or(|v| v.is_empty()) {
+                problems.push(Problem {
+                    check: "environment",
+                    message: format!("{var} is not set in this session. The {name} adapter's hook commands find the project from it; without it they fall back to the nearest git repository at or above the current directory that holds .urzua/config.yaml and the translator, which is the same project only while the session was started inside it"),
+                });
+            }
+        }
+    }
+    command_dirs
+}
+
+/// The hook entries are wired in the agent's project settings.
+fn hook_entry_problems(
+    root: &Path,
+    lock: &lock::Lock,
+    docs: &mut SettingsDocs,
+    problems: &mut Vec<Problem>,
+) {
+    for e in &lock.entries {
+        let doc = cached_doc(docs, root, &e.file);
+        let found = doc
+            .as_ref()
+            .and_then(|d| settings::find(d, &e.event, &e.matcher, &e.handler));
+        match found {
+            None => problems.push(Problem {
+                check: "hook-entry",
+                message: format!("the hook entry '{}' is not wired in {}: the guardrail does not run (run `urzua harness status`, then `urzua harness install`)", e.key(), e.file),
+            }),
+            Some(hook) if lock::hash(&hook.compact()) != e.hash => problems.push(Problem {
+                check: "hook-entry",
+                message: format!("the hook entry '{}' in {} is not the one the install wrote (its hash differs from {}): it may no longer run the guardrail (run `urzua harness status`, then `urzua harness update --force`)", e.key(), e.file, lock::LOCK_PATH),
+            }),
+            Some(_) => {}
+        }
+    }
+}
+
+/// The files the install owns are the ones it wrote: a translator that was
+/// neutered or deleted passes every other check here and judges nothing.
+fn owned_file_problems(
+    root: &Path,
+    lock: &lock::Lock,
+    command_dirs: &[String],
+    problems: &mut Vec<Problem>,
+) {
+    for (path, locked) in &lock.files {
+        let customisable = command_dirs.iter().any(|d| path.starts_with(d.as_str()));
+        match super::read(root, path) {
+            Ok(None) => problems.push(Problem {
+                check: "file",
+                message: format!("{path} is missing: it is part of the installed harness and the guardrail that uses it cannot run (run `urzua harness status`, then `urzua harness update`)"),
+            }),
+            Ok(Some(text)) if !customisable && lock::hash(&text) != *locked => {
+                problems.push(Problem {
+                    check: "file",
+                    message: format!("{path} is not the file the install wrote (its hash differs from {}): it may judge nothing (run `urzua harness status`, then `urzua harness update --force` to restore it)", lock::LOCK_PATH),
+                })
+            }
+            Err(m) => problems.push(Problem {
+                check: "file",
+                message: format!("{m}, so the installed harness file cannot be checked"),
+            }),
+            Ok(Some(_)) => {}
+        }
+    }
+}
+
+/// A setting that switches every hook off, which no hook entry can show.
+fn kill_switch_problems(
+    root: &Path,
+    lock: &lock::Lock,
+    docs: &mut SettingsDocs,
+    problems: &mut Vec<Problem>,
+) {
+    for name in &lock.adapters {
+        let Some(adapter) = super::bundle::adapter(name) else {
+            continue;
+        };
+        let manifest = adapter.manifest();
+        let Some(doc) = cached_doc(docs, root, &manifest.settings_file).as_ref() else {
+            continue;
+        };
+        for key in &manifest.kill_switches {
+            let on = match doc.get(key) {
+                Some(super::json::J::Bool(b)) => *b,
+                Some(super::json::J::Str(s)) => s.trim().eq_ignore_ascii_case("true"),
+                _ => false,
+            };
+            if on {
+                problems.push(Problem {
+                    check: "kill-switch",
+                    message: format!("{} sets \"{key}\" to true: every hook of the {name} adapter is switched off, so no guardrail runs in this session (remove the setting)", manifest.settings_file),
+                });
+            }
+        }
+    }
+}
+
 fn session_start(config: Option<PathBuf>) -> Verdict {
     const P: &str = "urzua harness (session-start)";
     let ws = match Workspace::open(&[PathBuf::from(".")], config.clone()) {
@@ -1114,150 +1346,15 @@ fn session_start(config: Option<PathBuf>) -> Verdict {
             message: "urzua is not on PATH in this session, so the hook commands cannot find it (a build directory needs URZUA_BIN set)".to_string(),
         });
     }
-    let lock = match super::installed_lock(&ws.repo_root) {
-        Ok(l) => l,
-        Err(m) => {
-            problems.push(Problem {
-                check: "lock",
-                message: m,
-            });
-            None
-        }
-    };
-    let Some(lock) = lock else {
-        problems.push(Problem {
-            check: "lock",
-            message: format!(
-                "{} is missing: the harness is not installed (run `urzua harness install`)",
-                lock::LOCK_PATH
-            ),
-        });
+    let Some(lock) = installed_lock_problems(&ws.repo_root, &mut problems) else {
         return finish(problems, &harness);
     };
-    let version = super::engine_version();
-    if lock.bundle_version != version {
-        let older = lock.bundle_version.as_str() < version;
-        problems.push(Problem {
-            check: "version",
-            message: if older {
-                format!("the installed bundle ({}) is older than this binary ({version}): run `urzua harness update`", lock.bundle_version)
-            } else {
-                format!("the installed bundle ({}) is newer than this binary ({version}): update urzua", lock.bundle_version)
-            },
-        });
-    }
-
-    let mut command_dirs: Vec<String> = Vec::new();
-    for name in &lock.adapters {
-        let Some(adapter) = super::bundle::adapter(name) else {
-            problems.push(Problem {
-                check: "adapter",
-                message: format!(
-                    "the lock names the adapter '{name}', which this binary does not embed"
-                ),
-            });
-            continue;
-        };
-        let manifest = adapter.manifest();
-        if let Some(dir) = &manifest.commands_dir {
-            command_dirs.push(format!("{}/", dir.trim_end_matches('/')));
-        }
-        for interpreter in &manifest.requires.interpreters {
-            if !on_path(interpreter) {
-                problems.push(Problem {
-                    check: "interpreter",
-                    message: format!("'{interpreter}', which the {name} adapter's translator needs, is not on PATH: its hook commands exit 127, which the agent treats as non-blocking and tells you nothing, so edits go unjudged"),
-                });
-            }
-        }
-        for var in &manifest.requires.env {
-            if std::env::var_os(var).is_none_or(|v| v.is_empty()) {
-                problems.push(Problem {
-                    check: "environment",
-                    message: format!("{var} is not set in this session. The {name} adapter's hook commands find the project from it; without it they fall back to the nearest git repository at or above the current directory that holds .urzua/config.yaml and the translator, which is the same project only while the session was started inside it"),
-                });
-            }
-        }
-    }
-
-    // The hook entries are wired in the agent's project settings.
-    let mut docs: std::collections::BTreeMap<String, Option<super::json::J>> = Default::default();
-    for e in &lock.entries {
-        let doc = docs.entry(e.file.clone()).or_insert_with(|| {
-            super::load_settings(&ws.repo_root, &e.file)
-                .ok()
-                .and_then(|s| s.text.map(|_| s.doc))
-        });
-        let found = doc
-            .as_ref()
-            .and_then(|d| settings::find(d, &e.event, &e.matcher, &e.handler));
-        match found {
-            None => problems.push(Problem {
-                check: "hook-entry",
-                message: format!("the hook entry '{}' is not wired in {}: the guardrail does not run (run `urzua harness status`, then `urzua harness install`)", e.key(), e.file),
-            }),
-            Some(hook) if lock::hash(&hook.compact()) != e.hash => problems.push(Problem {
-                check: "hook-entry",
-                message: format!("the hook entry '{}' in {} is not the one the install wrote (its hash differs from {}): it may no longer run the guardrail (run `urzua harness status`, then `urzua harness update --force`)", e.key(), e.file, lock::LOCK_PATH),
-            }),
-            Some(_) => {}
-        }
-    }
-
-    // The files the install owns are the ones it wrote: a translator that was
-    // neutered or deleted passes every other check here and judges nothing.
-    for (path, locked) in &lock.files {
-        let customisable = command_dirs.iter().any(|d| path.starts_with(d.as_str()));
-        match super::read(&ws.repo_root, path) {
-            Ok(None) => problems.push(Problem {
-                check: "file",
-                message: format!("{path} is missing: it is part of the installed harness and the guardrail that uses it cannot run (run `urzua harness status`, then `urzua harness update`)"),
-            }),
-            Ok(Some(text)) if !customisable && lock::hash(&text) != *locked => {
-                problems.push(Problem {
-                    check: "file",
-                    message: format!("{path} is not the file the install wrote (its hash differs from {}): it may judge nothing (run `urzua harness status`, then `urzua harness update --force` to restore it)", lock::LOCK_PATH),
-                })
-            }
-            Err(m) => problems.push(Problem {
-                check: "file",
-                message: format!("{m}, so the installed harness file cannot be checked"),
-            }),
-            Ok(Some(_)) => {}
-        }
-    }
-
-    // A setting that switches every hook off, which no hook entry can show.
-    for name in &lock.adapters {
-        let Some(adapter) = super::bundle::adapter(name) else {
-            continue;
-        };
-        let manifest = adapter.manifest();
-        let Some(doc) = docs
-            .entry(manifest.settings_file.clone())
-            .or_insert_with(|| {
-                super::load_settings(&ws.repo_root, &manifest.settings_file)
-                    .ok()
-                    .and_then(|s| s.text.map(|_| s.doc))
-            })
-            .as_ref()
-        else {
-            continue;
-        };
-        for key in &manifest.kill_switches {
-            let on = match doc.get(key) {
-                Some(super::json::J::Bool(b)) => *b,
-                Some(super::json::J::Str(s)) => s.trim().eq_ignore_ascii_case("true"),
-                _ => false,
-            };
-            if on {
-                problems.push(Problem {
-                    check: "kill-switch",
-                    message: format!("{} sets \"{key}\" to true: every hook of the {name} adapter is switched off, so no guardrail runs in this session (remove the setting)", manifest.settings_file),
-                });
-            }
-        }
-    }
+    version_problem(&lock, &mut problems);
+    let command_dirs = adapter_problems(&lock, &mut problems);
+    let mut docs = SettingsDocs::new();
+    hook_entry_problems(&ws.repo_root, &lock, &mut docs, &mut problems);
+    owned_file_problems(&ws.repo_root, &lock, &command_dirs, &mut problems);
+    kill_switch_problems(&ws.repo_root, &lock, &mut docs, &mut problems);
 
     for message in crate::commands::doctor::git_hook_problems(&ws.repo_root) {
         problems.push(Problem {
