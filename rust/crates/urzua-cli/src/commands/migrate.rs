@@ -4,10 +4,12 @@
 //! newly-required field would break before it's ever added to config, and
 //! rewriting a config from the previous schema version to the current one.
 
-use std::path::PathBuf;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use urzua_core::header::HeaderShape;
+use urzua_core::record::Record;
 use urzua_core::report::{Failure, MigrateSchemaReport, Notice, Report, ReportStatus};
 
 use crate::discovery::{default_config_path, find_repo_root};
@@ -109,90 +111,10 @@ fn run_ids_inner(config_path: Option<PathBuf>, apply: bool) -> Result<ExitCode, 
     // interleave.
     let _lock = urzua_io::FixLock::acquire(&repo_root)?;
     let missing_paths: Vec<PathBuf> = missing.iter().map(|r| r.path.clone()).collect();
-    let mut results = Vec::with_capacity(missing.len());
-    for r in &missing {
-        let Some(region) = r.header.region else {
-            results.push(MigrateIdsResult {
-                record: r.path.clone(),
-                outcome: MigrateIdsOutcome::Skipped,
-                // A header written in a removed form carries its name here.
-                error: Some(
-                    r.header
-                        .parse_error
-                        .clone()
-                        .unwrap_or_else(|| "no header-shaped region found".to_string()),
-                ),
-            });
-            continue;
-        };
-        let Some(content) = full_text.get(&r.path) else {
-            continue;
-        };
-
-        let id = urzua_id::StableId::generate();
-        let header_shape = config
-            .record_types
-            .get(&r.record_type)
-            .map(|cfg| cfg.header_shape)
-            .unwrap_or_default();
-        let new_line = match header_shape {
-            HeaderShape::YamlFrontmatter => format!("Stable-Id: {}", id.as_str()),
-            // `none` parses to `region: None` unconditionally (`ADR-50`), and
-            // the `let Some(region) = ... else { Skipped }` guard above
-            // already returned for exactly that case -- reaching here with
-            // `region: Some(_)` and `header_shape: None` would mean that
-            // invariant broke.
-            HeaderShape::None => {
-                unreachable!("a `none`-shaped record has no region to insert into")
-            }
-        };
-        // region.0 is the 1-indexed first header line (the opening `---`
-        // for yaml-frontmatter); inserting after it places the new field
-        // right below, valid for the one shape with a header. Every other byte of the
-        // file, line endings and trailing newline included, is left as is.
-        let mut doc = urzua_core::line_edit::LineDoc::parse(content);
-        doc.insert_after(region.0, new_line);
-        let new_content = doc.to_string();
-
-        let full_path = repo_root.join(&r.path);
-        // Re-read right before writing (as `fix` does): the id was placed from
-        // the text read at session start, and a record edited since would be
-        // overwritten by it.
-        match urzua_io::read_to_string(&full_path) {
-            Ok(on_disk) if on_disk == *content => {}
-            Ok(_) => {
-                results.push(MigrateIdsResult {
-                    record: r.path.clone(),
-                    outcome: MigrateIdsOutcome::Failed,
-                    error: Some(
-                        "the record changed since it was read; nothing was written -- run `urzua migrate ids --apply` again"
-                            .to_string(),
-                    ),
-                });
-                continue;
-            }
-            Err(e) => {
-                results.push(MigrateIdsResult {
-                    record: r.path.clone(),
-                    outcome: MigrateIdsOutcome::Failed,
-                    error: Some(format!("could not re-read: {e}")),
-                });
-                continue;
-            }
-        }
-        match urzua_io::write_atomic_in(&repo_root, &full_path, &new_content) {
-            Ok(()) => results.push(MigrateIdsResult {
-                record: r.path.clone(),
-                outcome: MigrateIdsOutcome::Applied,
-                error: None,
-            }),
-            Err(e) => results.push(MigrateIdsResult {
-                record: r.path.clone(),
-                outcome: MigrateIdsOutcome::Failed,
-                error: Some(e.to_string()),
-            }),
-        }
-    }
+    let results: Vec<MigrateIdsResult> = missing
+        .iter()
+        .filter_map(|r| backfill_stable_id(r, &config, &full_text, &repo_root))
+        .collect();
 
     let status = if results
         .iter()
@@ -209,6 +131,85 @@ fn run_ids_inner(config_path: Option<PathBuf>, apply: bool) -> Result<ExitCode, 
         results,
         notices: Vec::new(),
     }))
+}
+
+/// Writes a fresh `Stable-Id` into one record lacking it. `None` when the
+/// record's text was not read at session start (nothing to report).
+fn backfill_stable_id(
+    r: &Record,
+    config: &urzua_core::config::Config,
+    full_text: &HashMap<PathBuf, String>,
+    repo_root: &Path,
+) -> Option<MigrateIdsResult> {
+    let Some(region) = r.header.region else {
+        return Some(MigrateIdsResult {
+            record: r.path.clone(),
+            outcome: MigrateIdsOutcome::Skipped,
+            // A header written in a removed form carries its name here.
+            error: Some(
+                r.header
+                    .parse_error
+                    .clone()
+                    .unwrap_or_else(|| "no header-shaped region found".to_string()),
+            ),
+        });
+    };
+    let content = full_text.get(&r.path)?;
+
+    let id = urzua_id::StableId::generate();
+    let header_shape = config
+        .record_types
+        .get(&r.record_type)
+        .map(|cfg| cfg.header_shape)
+        .unwrap_or_default();
+    let new_line = match header_shape {
+        HeaderShape::YamlFrontmatter => format!("Stable-Id: {}", id.as_str()),
+        // `none` parses to `region: None` unconditionally (`ADR-50`), and
+        // the `let Some(region) = ... else { Skipped }` guard above
+        // already returned for exactly that case -- reaching here with
+        // `region: Some(_)` and `header_shape: None` would mean that
+        // invariant broke.
+        HeaderShape::None => {
+            unreachable!("a `none`-shaped record has no region to insert into")
+        }
+    };
+    // region.0 is the 1-indexed first header line (the opening `---`
+    // for yaml-frontmatter); inserting after it places the new field
+    // right below, valid for the one shape with a header. Every other byte of the
+    // file, line endings and trailing newline included, is left as is.
+    let mut doc = urzua_core::line_edit::LineDoc::parse(content);
+    doc.insert_after(region.0, new_line);
+    let new_content = doc.to_string();
+
+    let full_path = repo_root.join(&r.path);
+    let failed = |error: String| {
+        Some(MigrateIdsResult {
+            record: r.path.clone(),
+            outcome: MigrateIdsOutcome::Failed,
+            error: Some(error),
+        })
+    };
+    // Re-read right before writing (as `fix` does): the id was placed from
+    // the text read at session start, and a record edited since would be
+    // overwritten by it.
+    match urzua_io::read_to_string(&full_path) {
+        Ok(on_disk) if on_disk == *content => {}
+        Ok(_) => {
+            return failed(
+                "the record changed since it was read; nothing was written -- run `urzua migrate ids --apply` again"
+                    .to_string(),
+            )
+        }
+        Err(e) => return failed(format!("could not re-read: {e}")),
+    }
+    match urzua_io::write_atomic_in(repo_root, &full_path, &new_content) {
+        Ok(()) => Some(MigrateIdsResult {
+            record: r.path.clone(),
+            outcome: MigrateIdsOutcome::Applied,
+            error: None,
+        }),
+        Err(e) => failed(e.to_string()),
+    }
 }
 
 /// A preview of which existing records would newly fail if `field` were

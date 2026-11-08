@@ -39,125 +39,160 @@ pub fn waiver_matches_nothing(
     defers_to_diff: impl Fn(&str) -> bool,
     today: &str,
 ) -> (RuleExecution, Vec<Finding>) {
-    const RULE_ID: &str = RULE_WAIVER_MATCHES_NOTHING;
     let mut out = Vec::new();
+    let run = WaiverRun {
+        findings,
+        executed,
+        whole_corpus,
+        reached: &reached,
+        defers_to_diff: &defers_to_diff,
+        today,
+    };
 
     let (population, examined_records) = census_records(
         PopulationUnit::Record,
         waivers.iter().collect::<Vec<_>>(),
         |w| PathBuf::from(&w.id),
-        |w| {
-            let path = PathBuf::from(&w.id);
-            // The waiver's own header fields are reserved names (`SPEC-10`).
-            let mut report = |variant: &'static str, field: &str, message: String| {
-                out.push(Finding {
-                    rule: RULE_ID.to_string(),
-                    severity: FindingSeverity::Warning,
-                    file: path.clone(),
-                    line: None,
-                    waived: None,
-                    declared_severity: None,
-                    suggested_action: None,
-                    action_source: ActionSource::new(variant).field(field),
-                    message,
-                });
-                Outcome::Examined
-            };
-            let claimed = format!("rule '{}', scope '{}'", w.rule, w.scope);
-
-            if !w.is_active(today) {
-                if !reached(&path) {
-                    return Outcome::Absent;
-                }
-                let expires = w.expires.as_deref().unwrap_or_default();
-                return report(
-                    "waiver-expired",
-                    "Expires",
-                    format!(
-                    "waiver ({claimed}) is expired: Expires '{expires}' has passed or is not a \
-                     calendar date in YYYY-MM-DD form, so it covers nothing; remove it or set a new date"
-                ),
-                );
-            }
-            if !w.is_effective() {
-                if !reached(&path) {
-                    return Outcome::Absent;
-                }
-                // Implements: ADR-86 (the message names the unmet requirement)
-                // Whichever requirement is unmet is named: a field the type
-                // requires, or what `permanent` asks of a waiver without an
-                // expiry.
-                let mut unmet = Vec::new();
-                for (i, field) in w.unmet.iter().enumerate() {
-                    unmet.push(match w.unmet_states.get(i) {
-                        Some(FieldState::Placeholder) => format!(
-                            "its {field} is a placeholder (unedited template text), not a real value, and its type requires one (`effective_requires`)"
-                        ),
-                        Some(FieldState::Pending) => format!(
-                            "its {field} is a declared pending value, not a real one, and its type requires one (`effective_requires`)"
-                        ),
-                        _ => format!(
-                            "it lacks {field}, which its type requires (`effective_requires`)"
-                        ),
-                    });
-                }
-                let mut field = w.unmet.first().map(String::as_str);
-                if let Permanence::Refused(refusal) = &w.permanence {
-                    unmet.push(refusal.describe(&w.rule));
-                    field = field.or(Some(refusal.field()));
-                }
-                return report(
-                    "waiver-ineffective",
-                    field.unwrap_or("Rule"),
-                    format!(
-                        "waiver ({claimed}) is not in effect: {}; its finding is reported again until the requirement is met",
-                        unmet.join("; ")
-                    ),
-                );
-            }
-            if !ALL_RULES.contains(&w.rule.as_str()) {
-                if !reached(&path) {
-                    return Outcome::Absent;
-                }
-                return report(
-                    "waiver-unknown-rule",
-                    "Rule",
-                    format!(
-                        "waiver ({claimed}) names a rule this build does not have, so it can \
-                     never match a finding"
-                    ),
-                );
-            }
-            let target_ran = executed
-                .iter()
-                .any(|e| e.rule == w.rule && e.status == RuleStatus::Ran);
-            if !whole_corpus || !target_ran || defers_to_diff(&w.rule) {
-                return Outcome::Absent;
-            }
-            if findings.iter().any(|f| w.covers(f)) {
-                return Outcome::Examined;
-            }
-            report(
-                "waiver-matches-no-finding",
-                "Scope",
-                format!(
-                    "waiver ({claimed}) matches no finding: '{}' ran over the whole corpus and \
-                 reported nothing in that scope; remove the waiver",
-                    w.rule
-                ),
-            )
-        },
+        |w| run.judge(w, &mut out),
     );
 
     (
         RuleExecution {
-            rule: RULE_ID.to_string(),
+            rule: RULE_WAIVER_MATCHES_NOTHING.to_string(),
             population: Some(population),
             status: RuleStatus::Ran,
             examined_records,
         },
         out,
     )
+}
+
+/// What `waiver.matches-nothing` could see in this invocation.
+struct WaiverRun<'a> {
+    findings: &'a [Finding],
+    executed: &'a [RuleExecution],
+    whole_corpus: bool,
+    reached: &'a dyn Fn(&std::path::Path) -> bool,
+    defers_to_diff: &'a dyn Fn(&str) -> bool,
+    today: &'a str,
+}
+
+/// One `waiver.matches-nothing` warning on a waiver record. The waiver's own
+/// header fields are reserved names (`SPEC-10`).
+fn waiver_report(
+    path: &std::path::Path,
+    variant: &'static str,
+    field: &str,
+    message: String,
+) -> Finding {
+    Finding {
+        rule: RULE_WAIVER_MATCHES_NOTHING.to_string(),
+        severity: FindingSeverity::Warning,
+        file: path.to_path_buf(),
+        line: None,
+        waived: None,
+        declared_severity: None,
+        suggested_action: None,
+        action_source: ActionSource::new(variant).field(field),
+        message,
+    }
+}
+
+/// Implements: ADR-86 (the message names the unmet requirement)
+/// Whichever requirement is unmet is named: a field the type requires, or what
+/// `permanent` asks of a waiver without an expiry. Returns the unmet clauses
+/// and the field the finding is about.
+fn unmet_requirements(w: &Suppression) -> (Vec<String>, Option<&str>) {
+    let mut unmet = Vec::new();
+    for (i, field) in w.unmet.iter().enumerate() {
+        unmet.push(match w.unmet_states.get(i) {
+            Some(FieldState::Placeholder) => format!(
+                "its {field} is a placeholder (unedited template text), not a real value, and its type requires one (`effective_requires`)"
+            ),
+            Some(FieldState::Pending) => format!(
+                "its {field} is a declared pending value, not a real one, and its type requires one (`effective_requires`)"
+            ),
+            _ => format!("it lacks {field}, which its type requires (`effective_requires`)"),
+        });
+    }
+    let mut field = w.unmet.first().map(String::as_str);
+    if let Permanence::Refused(refusal) = &w.permanence {
+        unmet.push(refusal.describe(&w.rule));
+        field = field.or(Some(refusal.field()));
+    }
+    (unmet, field)
+}
+
+impl WaiverRun<'_> {
+    fn judge(&self, w: &Suppression, out: &mut Vec<Finding>) -> Outcome {
+        let path = PathBuf::from(&w.id);
+        let mut report = |variant: &'static str, field: &str, message: String| {
+            out.push(waiver_report(&path, variant, field, message));
+            Outcome::Examined
+        };
+        let claimed = format!("rule '{}', scope '{}'", w.rule, w.scope);
+
+        if !w.is_active(self.today) {
+            if !(self.reached)(&path) {
+                return Outcome::Absent;
+            }
+            let expires = w.expires.as_deref().unwrap_or_default();
+            return report(
+                "waiver-expired",
+                "Expires",
+                format!(
+                    "waiver ({claimed}) is expired: Expires '{expires}' has passed or is not a \
+                     calendar date in YYYY-MM-DD form, so it covers nothing; remove it or set a new date"
+                ),
+            );
+        }
+        if !w.is_effective() {
+            if !(self.reached)(&path) {
+                return Outcome::Absent;
+            }
+            let (unmet, field) = unmet_requirements(w);
+            return report(
+                "waiver-ineffective",
+                field.unwrap_or("Rule"),
+                format!(
+                    "waiver ({claimed}) is not in effect: {}; its finding is reported again until the requirement is met",
+                    unmet.join("; ")
+                ),
+            );
+        }
+        if !ALL_RULES.contains(&w.rule.as_str()) {
+            if !(self.reached)(&path) {
+                return Outcome::Absent;
+            }
+            return report(
+                "waiver-unknown-rule",
+                "Rule",
+                format!(
+                    "waiver ({claimed}) names a rule this build does not have, so it can \
+                     never match a finding"
+                ),
+            );
+        }
+        let target_ran = self
+            .executed
+            .iter()
+            .any(|e| e.rule == w.rule && e.status == RuleStatus::Ran);
+        if !self.whole_corpus || !target_ran || (self.defers_to_diff)(&w.rule) {
+            return Outcome::Absent;
+        }
+        if self.findings.iter().any(|f| w.covers(f)) {
+            return Outcome::Examined;
+        }
+        report(
+            "waiver-matches-no-finding",
+            "Scope",
+            format!(
+                "waiver ({claimed}) matches no finding: '{}' ran over the whole corpus and \
+                 reported nothing in that scope; remove the waiver",
+                w.rule
+            ),
+        )
+    }
 }
 
 #[cfg(test)]

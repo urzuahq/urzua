@@ -46,7 +46,7 @@ use std::process::{Command, ExitCode};
 
 use serde::{Deserialize, Serialize};
 use urzua_core::config::Config;
-use urzua_core::report::{Finding, FindingSeverity, Notice, Report, ReportStatus};
+use urzua_core::report::{CheckReport, Finding, FindingSeverity, Notice, Report, ReportStatus};
 
 use super::run::{key, live, to_json};
 use crate::commands::check::{check_paths, judge_proposed};
@@ -194,92 +194,23 @@ fn judge_changes(
         return PostVerdict::quiet(format!("{P}: git shows no changed file; nothing to check"));
     }
 
-    let ws = match Workspace::open(&[PathBuf::from(".")], config.clone()) {
-        Ok(ws) => ws,
-        Err(e) => {
-            return PostVerdict::unjudged(&format!(
-                "the configuration does not load: {}",
-                e.message
-            ))
-        }
-    };
     let Workspace {
         repo_root,
         config_path,
         config: loaded,
-    } = ws;
-    if !loaded
-        .harness
-        .as_ref()
-        .is_some_and(|h| h.enabled(GUARDRAIL))
-    {
-        return PostVerdict::quiet(format!(
-            "{P}: the {GUARDRAIL} guardrail is not enabled under harness.guardrails; nothing was checked"
-        ));
-    }
-    if std::env::set_current_dir(&repo_root).is_err() {
-        return PostVerdict::unjudged("the repository root cannot be entered");
-    }
+    } = match open_governed(config) {
+        Ok(ws) => ws,
+        Err(verdict) => return *verdict,
+    };
 
-    // Every path the command may have changed: the working tree's (a deleted
-    // file flagged) and the files committed since the last check.
-    let mut paths: BTreeMap<String, bool> = BTreeMap::new();
-    for (rel, deleted) in tree {
-        paths.insert(rel, deleted);
-    }
-    for rel in committed {
-        let gone = !repo_root.join(&rel).exists();
-        paths.entry(rel).or_insert(gone);
-    }
     // Protected files git does not show (ignored ones), by content hash.
     let scan = scan_protected(&repo_root, &config_path, &loaded, true);
-    for (rel, deleted) in scan.changes {
-        paths.entry(rel).or_insert(deleted);
-    }
-
-    // Governed, still on disk, with the content hash the memory is keyed by;
-    // and protected paths, a deleted one included.
-    let hash_of = |rel: &str| match std::fs::read(repo_root.join(rel)) {
-        Ok(bytes) => urzua_io::sha256_hex_of_str(&String::from_utf8_lossy(&bytes)),
-        // Unreadable: always checked, so `check` says why it cannot judge it.
-        Err(_) => String::new(),
-    };
-    let mut candidates: BTreeMap<String, String> = BTreeMap::new();
-    let mut protected_candidates: BTreeMap<String, (String, bool)> = BTreeMap::new();
-    for (rel, deleted) in &paths {
-        let path = Path::new(rel);
-        if super::gate::protected_change_report(&loaded, path, *deleted).is_some() {
-            let hash = if *deleted {
-                "deleted".to_string()
-            } else {
-                hash_of(rel)
-            };
-            protected_candidates.insert(rel.clone(), (hash, *deleted));
-        }
-        if !*deleted
-            && crate::discovery::is_governed(&loaded, path)
-            && repo_root.join(path).is_file()
-        {
-            candidates.insert(rel.clone(), hash_of(rel));
-        }
-    }
-    let seen = read_memory(&repo_root);
-    let fresh: Vec<String> = candidates
-        .iter()
-        .filter(|(p, h)| h.is_empty() || seen.get(*p) != Some(*h))
-        .map(|(p, _)| p.clone())
-        .collect();
-    let protected: Vec<String> = protected_candidates
-        .iter()
-        .filter(|(p, (h, _))| h.is_empty() || seen.get(*p) != Some(h))
-        .filter_map(|(p, (_, deleted))| {
-            super::gate::protected_change_report(&loaded, Path::new(p), *deleted)
-        })
-        .collect();
-    let mut remembered = candidates.clone();
-    for (p, (h, _)) in &protected_candidates {
-        remembered.insert(p.clone(), h.clone());
-    }
+    let paths = changed_path_map(&repo_root, tree, committed, scan.changes);
+    let Selected {
+        fresh,
+        protected,
+        remembered,
+    } = select_unseen(&repo_root, &loaded, &paths);
     if fresh.is_empty() && protected.is_empty() {
         write_memory(&repo_root, &remembered);
         let mut v = PostVerdict::quiet(format!(
@@ -300,21 +231,9 @@ fn judge_changes(
         .filter_map(|rel| super::gate::gated_move_report(&repo_root, &loaded, Path::new(rel), base))
         .collect();
 
-    let report = if fresh.is_empty() {
-        None
-    } else {
-        match check_paths(config.clone(), fresh.iter().map(PathBuf::from).collect()) {
-            Ok(r) if r.status != ReportStatus::NotRun => Some(r),
-            Ok(_) if gated.is_empty() && protected.is_empty() => {
-                return PostVerdict::unjudged(
-                    "check could not run: no enabled rule examined the records",
-                )
-            }
-            Err(e) if gated.is_empty() && protected.is_empty() => {
-                return PostVerdict::unjudged(&format!("check could not run: {}", e.message))
-            }
-            _ => None,
-        }
+    let report = match run_check(config, &fresh, gated.is_empty() && protected.is_empty()) {
+        Ok(r) => r,
+        Err(verdict) => return *verdict,
     };
     let all = report.as_ref().map(live).unwrap_or_default();
     let (old, new) = partition_by_head(config, &all, base);
@@ -338,6 +257,168 @@ fn judge_changes(
         return v;
     }
     v.verdict = "allow-with-warnings";
+    v.message = findings_message(&FindingsSummary {
+        checked: fresh.len(),
+        new: &new,
+        old: &old,
+        gated: &gated,
+        protected: &protected,
+        note: scan.note.as_deref(),
+    });
+    v
+}
+
+/// Opens the workspace the command ran in. An `Err` is the verdict to
+/// return: the configuration does not load, the guardrail is off, or the
+/// repository root cannot be entered.
+fn open_governed(config: &Option<PathBuf>) -> Result<Workspace, Box<PostVerdict>> {
+    let ws = match Workspace::open(&[PathBuf::from(".")], config.clone()) {
+        Ok(ws) => ws,
+        Err(e) => {
+            return Err(Box::new(PostVerdict::unjudged(&format!(
+                "the configuration does not load: {}",
+                e.message
+            ))))
+        }
+    };
+    if !ws
+        .config
+        .harness
+        .as_ref()
+        .is_some_and(|h| h.enabled(GUARDRAIL))
+    {
+        return Err(Box::new(PostVerdict::quiet(format!(
+            "{P}: the {GUARDRAIL} guardrail is not enabled under harness.guardrails; nothing was checked"
+        ))));
+    }
+    if std::env::set_current_dir(&ws.repo_root).is_err() {
+        return Err(Box::new(PostVerdict::unjudged(
+            "the repository root cannot be entered",
+        )));
+    }
+    Ok(ws)
+}
+
+/// Runs `check` on the records to judge. `Ok(None)` when none are, or when
+/// `check` could not run but a gated move or protected change is still
+/// reported; an `Err` is the verdict to return.
+fn run_check(
+    config: &Option<PathBuf>,
+    fresh: &[String],
+    nothing_else_to_report: bool,
+) -> Result<Option<CheckReport>, Box<PostVerdict>> {
+    if fresh.is_empty() {
+        return Ok(None);
+    }
+    match check_paths(config.clone(), fresh.iter().map(PathBuf::from).collect()) {
+        Ok(r) if r.status != ReportStatus::NotRun => Ok(Some(r)),
+        Ok(_) if nothing_else_to_report => Err(Box::new(PostVerdict::unjudged(
+            "check could not run: no enabled rule examined the records",
+        ))),
+        Err(e) if nothing_else_to_report => Err(Box::new(PostVerdict::unjudged(&format!(
+            "check could not run: {}",
+            e.message
+        )))),
+        _ => Ok(None),
+    }
+}
+
+/// Every path the command may have changed: the working tree's (a deleted
+/// file flagged), the files committed since the last check, and the protected
+/// files git does not show.
+fn changed_path_map(
+    repo_root: &Path,
+    tree: Vec<(String, bool)>,
+    committed: Vec<String>,
+    protected_changes: Vec<(String, bool)>,
+) -> BTreeMap<String, bool> {
+    let mut paths: BTreeMap<String, bool> = BTreeMap::new();
+    for (rel, deleted) in tree {
+        paths.insert(rel, deleted);
+    }
+    for rel in committed {
+        let gone = !repo_root.join(&rel).exists();
+        paths.entry(rel).or_insert(gone);
+    }
+    for (rel, deleted) in protected_changes {
+        paths.entry(rel).or_insert(deleted);
+    }
+    paths
+}
+
+/// The changed paths the memory has not seen at their current content.
+struct Selected {
+    /// Governed records to check.
+    fresh: Vec<String>,
+    /// One report line per protected path changed.
+    protected: Vec<String>,
+    /// The memory to write once judged: every candidate with its hash.
+    remembered: BTreeMap<String, String>,
+}
+
+fn select_unseen(repo_root: &Path, loaded: &Config, paths: &BTreeMap<String, bool>) -> Selected {
+    // Governed, still on disk, with the content hash the memory is keyed by;
+    // and protected paths, a deleted one included.
+    let hash_of = |rel: &str| match std::fs::read(repo_root.join(rel)) {
+        Ok(bytes) => urzua_io::sha256_hex_of_str(&String::from_utf8_lossy(&bytes)),
+        // Unreadable: always checked, so `check` says why it cannot judge it.
+        Err(_) => String::new(),
+    };
+    let mut candidates: BTreeMap<String, String> = BTreeMap::new();
+    let mut protected_candidates: BTreeMap<String, (String, bool)> = BTreeMap::new();
+    for (rel, deleted) in paths {
+        let path = Path::new(rel);
+        if super::gate::protected_change_report(loaded, path, *deleted).is_some() {
+            let hash = if *deleted {
+                "deleted".to_string()
+            } else {
+                hash_of(rel)
+            };
+            protected_candidates.insert(rel.clone(), (hash, *deleted));
+        }
+        if !*deleted
+            && crate::discovery::is_governed(loaded, path)
+            && repo_root.join(path).is_file()
+        {
+            candidates.insert(rel.clone(), hash_of(rel));
+        }
+    }
+    let seen = read_memory(repo_root);
+    let fresh: Vec<String> = candidates
+        .iter()
+        .filter(|(p, h)| h.is_empty() || seen.get(*p) != Some(*h))
+        .map(|(p, _)| p.clone())
+        .collect();
+    let protected: Vec<String> = protected_candidates
+        .iter()
+        .filter(|(p, (h, _))| h.is_empty() || seen.get(*p) != Some(h))
+        .filter_map(|(p, (_, deleted))| {
+            super::gate::protected_change_report(loaded, Path::new(p), *deleted)
+        })
+        .collect();
+    let mut remembered = candidates;
+    for (p, (h, _)) in &protected_candidates {
+        remembered.insert(p.clone(), h.clone());
+    }
+    Selected {
+        fresh,
+        protected,
+        remembered,
+    }
+}
+
+/// What the final message of a run that found something reports.
+struct FindingsSummary<'a> {
+    checked: usize,
+    new: &'a [&'a Finding],
+    old: &'a [&'a Finding],
+    gated: &'a [String],
+    protected: &'a [String],
+    note: Option<&'a str>,
+}
+
+fn findings_message(summary: &FindingsSummary) -> String {
+    let (new, old, gated, protected) = (summary.new, summary.old, summary.gated, summary.protected);
     let errors = new
         .iter()
         .filter(|f| f.severity == FindingSeverity::Error)
@@ -354,8 +435,8 @@ fn judge_changes(
     }
     let mut m = format!(
         "{P}: urzua checked {} record(s) the command changed (git status and any commit it made, untracked included) and found {} finding(s), {errors} of them errors{notes}. The command had already run, so this was not prevented and nothing was blocked; pre-commit and CI remain the hard gate.",
-        fresh.len(),
-        new.len()
+        summary.checked,
+        summary.new.len()
     );
     if !gated.is_empty() {
         m.push_str(&format!(
@@ -369,20 +450,19 @@ fn judge_changes(
             protected.join("\n")
         ));
     }
-    if let Some(note) = &scan.note {
+    if let Some(note) = summary.note {
         m.push_str(&format!("\n{note}"));
     }
     if !new.is_empty() {
-        m.push_str(&format!("\n{}", describe(&new)));
+        m.push_str(&format!("\n{}", describe(new)));
     }
     if !old.is_empty() {
         m.push_str(&format!(
             "\nAlready failing at HEAD before this command (listed, not new):\n{}",
-            describe(&old)
+            describe(old)
         ));
     }
-    v.message = m;
-    v
+    m
 }
 
 /// The repository root and the commit `HEAD` names, in one `git` call. Either
