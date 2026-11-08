@@ -271,7 +271,6 @@ pub fn filename_identity_pattern(
     records: &[Record],
     config: &Config,
 ) -> (RuleExecution, Vec<Finding>) {
-    const RULE_ID: &str = RULE_FILENAME_IDENTITY_PATTERN;
     let mut findings = Vec::new();
 
     let mut off_pattern: HashMap<&str, Vec<&Record>> = HashMap::new();
@@ -297,96 +296,109 @@ pub fn filename_identity_pattern(
     for type_name in type_names {
         let mut off = off_pattern.remove(type_name).unwrap_or_default();
         off.sort_by(|a, b| a.path.cmp(&b.path));
-        let type_config = config.record_types.get(type_name);
-        let identity = type_config
-            .and_then(|t| {
-                crate::document_model::declared_model(type_name, t)
-                    .ok()
-                    .flatten()
-            })
-            .and_then(|m| m.resolve().ok())
-            .and_then(|m| m.identity);
-        let pattern = type_config
-            .and_then(|t| t.identity.as_ref())
-            .and_then(|v| v.get("pattern"))
-            .and_then(|v| v.as_str());
-        let convention = match pattern {
-            Some(p) => format!("the declared identity pattern '{p}'"),
-            None => "the 'TYPE-NNNN-slug.md' convention".to_string(),
-        };
-        let guidance = |record: &Record| -> String {
-            let name = file_name_of(record);
-            let expected = expected_name(&record.type_prefix, &name, identity.as_ref());
-            format!("{name} -> {expected}")
-        };
-
-        if off.len() == totals.get(type_name).copied().unwrap_or(0) {
-            let dir = type_config.map_or_else(
-                || {
-                    off[0]
-                        .path
-                        .parent()
-                        .map(|p| p.to_path_buf())
-                        .unwrap_or_default()
-                },
-                |t| std::path::PathBuf::from(&t.dir),
-            );
-            findings.push(Finding {
-                rule: RULE_ID.to_string(),
-                severity: FindingSeverity::Warning,
-                file: dir,
-                line: None,
-                waived: None,
-                declared_severity: None,
-                suggested_action: None,
-                action_source: ActionSource::new("identity-pattern-none-match"),
-                message: format!(
-                    "none of record type '{type_name}''s {} file(s) matches {convention}, so \
-                     no identity-reading rule can examine any of them; rename each: {}",
-                    off.len(),
-                    {
-                        // A corpus can hold hundreds of such files; naming every
-                        // rename in one string made the finding unreadable.
-                        const SHOWN: usize = 5;
-                        let mut names: Vec<String> =
-                            off.iter().take(SHOWN).map(|r| guidance(r)).collect();
-                        if off.len() > SHOWN {
-                            names.push(format!("and {} more", off.len() - SHOWN));
-                        }
-                        names.join("; ")
-                    }
-                ),
-            });
-        } else {
-            for record in off {
-                findings.push(Finding {
-                    rule: RULE_ID.to_string(),
-                    severity: FindingSeverity::Warning,
-                    file: record.path.clone(),
-                    line: None,
-                    waived: None,
-                    declared_severity: None,
-                    suggested_action: None,
-                    action_source: ActionSource::new("identity-pattern-mismatch"),
-                    message: format!(
-                        "file name does not match {convention} for record type '{type_name}', \
-                         so it has no identity and identity-reading rules skip it; rename: {}",
-                        guidance(record)
-                    ),
-                });
-            }
-        }
+        let total = totals.get(type_name).copied().unwrap_or(0);
+        identity_findings_for_type(type_name, off, total, config, &mut findings);
     }
 
     (
         RuleExecution {
-            rule: RULE_ID.to_string(),
+            rule: RULE_FILENAME_IDENTITY_PATTERN.to_string(),
             population: Some(population),
             status: RuleStatus::Ran,
             examined_records,
         },
         findings,
     )
+}
+
+/// The findings for one type's off-pattern files: one on the directory when
+/// every file of the type is off-pattern (`total`), else one per file.
+fn identity_findings_for_type(
+    type_name: &str,
+    off: Vec<&Record>,
+    total: usize,
+    config: &Config,
+    findings: &mut Vec<Finding>,
+) {
+    let type_config = config.record_types.get(type_name);
+    let identity = type_config
+        .and_then(|t| {
+            crate::document_model::declared_model(type_name, t)
+                .ok()
+                .flatten()
+        })
+        .and_then(|m| m.resolve().ok())
+        .and_then(|m| m.identity);
+    let pattern = type_config
+        .and_then(|t| t.identity.as_ref())
+        .and_then(|v| v.get("pattern"))
+        .and_then(|v| v.as_str());
+    let convention = match pattern {
+        Some(p) => format!("the declared identity pattern '{p}'"),
+        None => "the 'TYPE-NNNN-slug.md' convention".to_string(),
+    };
+    let guidance = |record: &Record| -> String {
+        let name = file_name_of(record);
+        let expected = expected_name(&record.type_prefix, &name, identity.as_ref());
+        format!("{name} -> {expected}")
+    };
+
+    if off.len() == total {
+        let dir = type_config.map_or_else(
+            || {
+                off[0]
+                    .path
+                    .parent()
+                    .map(|p| p.to_path_buf())
+                    .unwrap_or_default()
+            },
+            |t| std::path::PathBuf::from(&t.dir),
+        );
+        findings.push(Finding {
+            rule: RULE_FILENAME_IDENTITY_PATTERN.to_string(),
+            severity: FindingSeverity::Warning,
+            file: dir,
+            line: None,
+            waived: None,
+            declared_severity: None,
+            suggested_action: None,
+            action_source: ActionSource::new("identity-pattern-none-match"),
+            message: format!(
+                "none of record type '{type_name}''s {} file(s) matches {convention}, so \
+                 no identity-reading rule can examine any of them; rename each: {}",
+                off.len(),
+                {
+                    // A corpus can hold hundreds of such files; naming every
+                    // rename in one string made the finding unreadable.
+                    const SHOWN: usize = 5;
+                    let mut names: Vec<String> =
+                        off.iter().take(SHOWN).map(|r| guidance(r)).collect();
+                    if off.len() > SHOWN {
+                        names.push(format!("and {} more", off.len() - SHOWN));
+                    }
+                    names.join("; ")
+                }
+            ),
+        });
+    } else {
+        for record in off {
+            findings.push(Finding {
+                rule: RULE_FILENAME_IDENTITY_PATTERN.to_string(),
+                severity: FindingSeverity::Warning,
+                file: record.path.clone(),
+                line: None,
+                waived: None,
+                declared_severity: None,
+                suggested_action: None,
+                action_source: ActionSource::new("identity-pattern-mismatch"),
+                message: format!(
+                    "file name does not match {convention} for record type '{type_name}', \
+                     so it has no identity and identity-reading rules skip it; rename: {}",
+                    guidance(record)
+                ),
+            });
+        }
+    }
 }
 
 fn file_name_of(record: &Record) -> String {
