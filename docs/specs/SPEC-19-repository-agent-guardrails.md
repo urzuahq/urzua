@@ -2,7 +2,7 @@
 Stable-Id: 01M20SH9CXA18HFPABZJQY795D
 Status: Accepted
 Date: 2026-09-08
-Version: '0.24'
+Version: '0.25'
 Author: beauwilliams
 Subject: 'Repository agent guardrails -- mechanisms that constrain or guide an AI agent working in this repo; today, `AGENTS.md` and the drafting commands in `.claude/commands/`.'
 Implements: MILE-36
@@ -138,9 +138,10 @@ the engine and an adapter per agent that only translates. The contract is `SPEC-
   run is stated as NOT judged. The request, verdict and memory are in `SPEC-24`. This repository enables it in
   `.urzua/config.yaml` and has the bundle installed.
 - **An unset project-directory variable is a stated verdict.** The adapter's command finds the translator
-  from `CLAUDE_PROJECT_DIR`, else from the outermost directory above the current one that holds
-  `.urzua/config.yaml` (never from the nearest git repository: the hook's directory follows a Bash `cd`, and a
-  `git init` below the project would hide the translator), the command checks the translator's sha256, which
+  from `CLAUDE_PROJECT_DIR`, else from the nearest real git working tree at or above the current directory
+  that holds `.urzua/config.yaml` and the translator (stepping outward past a nested repository that holds
+  neither, so a Bash `cd` into a `git init` below the project still finds it; never the outermost
+  configuration, which a file written above the project could supply), the command checks the translator's sha256, which
   `harness install` and `update` write into it, and runs the bytes it checked (a mismatch takes the path of a
   missing translator), and the translator takes the project directory from the request's `cwd` and from where
   it is installed, so the command no longer becomes `python3 -I "/scripts/hooks/..."` and exits 2, which
@@ -290,3 +291,4 @@ and this section claims only what each place does.
 > | 2026-11-07 | Bumped to `0.22`. The third review of the harness (`ADR-89` amendment of 2026-11-07): the settings command finds the project from `CLAUDE_PROJECT_DIR` or the outermost configuration, not the nearest git repository, and refuses an edit under `on_unjudged: deny` when it cannot run the translator; an edit is judged by the outermost governed repository with symlinks followed to the end, a dangling link included; MCP calls are read for every path-like string; the edit tools are refused for `.urzua/cache`, the lock, the override log and the git hooks; session-start compares the installed files, hook entries and `disableAllHooks` with the lock; the post-command check lists a record hidden with `--assume-unchanged`; the accepted-risk statement gains the Bash write to the harness's own files, the unreadable configuration in the shell fallback and the nested repository with its own configuration. **Why:** the third review found the wrapper failing open outside the project root, a dangling link and a nested repository escaping the gates, and several silent routes. | **substantive** |
 > | 2026-11-08 | Bumped to `0.23`. Adds the `/reverify` command and the `reverify` verb of the helper (`ADR-97` section 4, `MILE-129`): it refuses an empty reason, lists the review, passes `--actor agent` and prints the `Pinned:` and `Re-verified:` lines for the pull request body. **Why:** `ADR-97` lists the command beside `/repin`; the engine PR built `urzua reverify` without it. | **substantive** |
 > | 2026-11-08 | Bumped to `0.24`. The fourth review of the harness (`ADR-89` amendment of 2026-11-08): an edit is judged against the session's own repository and every governed repository that holds the file, a deny from any winning, and a `.git` counts only when git accepts it; every hook command embeds the translator's sha256 and does not run a translator that differs; a read-named MCP tool is judged when the call names an output or carries content; MCP paths are trimmed, NUL-cut and normalised before the length test; the accepted-risk statement is made exact (commits on the checked-out branch, MCP shell and patch tools, invalid YAML, the unprotected instructions block, ungated waivers); `AGENTS.md`'s accepted-risk list says the same. **Why:** the fourth review found an outer repository minted by two unjudged writes replacing the session's gates, and the translator being its own reporter. | **substantive** |
+> | 2026-11-08 | Bumped to `0.25`. With `CLAUDE_PROJECT_DIR` unset the settings command resolves the nearest real git working tree holding the configuration and the translator instead of the outermost configuration; `body`, `data`, `payload` and `value` are content keys for MCP calls (`ADR-89` amendment of 2026-11-08, corrected after review). **Why:** the independent review of pull request 438 found a configuration written above the project taking the wrapper. | **substantive** |

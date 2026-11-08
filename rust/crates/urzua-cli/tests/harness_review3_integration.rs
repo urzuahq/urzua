@@ -1048,3 +1048,55 @@ fn an_mcp_path_is_read_after_trimming_and_normalising_whatever_the_wrapping() {
         serde_json::json!({"path": format!(" {ok}\n"), "content": "x\n"})
     ));
 }
+
+#[test]
+fn with_the_project_variable_unset_a_minted_outer_configuration_cannot_take_the_wrapper() {
+    for real_git in [false, true] {
+        let (parent, proj) = nested_project(if real_git {
+            "unset-real"
+        } else {
+            "unset-empty"
+        });
+        install(&proj);
+        if real_git {
+            git(&parent, &["init", "-q"]);
+        } else {
+            std::fs::write(parent.join(".git"), "").unwrap();
+        }
+        std::fs::create_dir_all(parent.join(".urzua")).unwrap();
+        std::fs::write(parent.join(".urzua/config.yaml"), "schema_version: 2\n").unwrap();
+        std::fs::create_dir_all(proj.join("docs/sub")).unwrap();
+        // From the project root and from a subdirectory, variable unset.
+        for cwd in [proj.clone(), proj.join("docs/sub")] {
+            for rel in [".claude/settings.json", PATH_1] {
+                let content = if rel == PATH_1 { ACCEPTED } else { "{}\n" };
+                let payload = write_payload(&cwd, &proj.join(rel), content);
+                let v = run_command(&proj, &cwd, None, None, &payload);
+                assert_eq!(
+                    decision(&v),
+                    Some("deny"),
+                    "real_git={real_git} {cwd:?} {rel}: {v}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn a_read_named_mcp_tool_with_body_data_payload_or_value_is_judged_as_a_write() {
+    let dir = fixture("s2-keys", &config(""));
+    let p = dir
+        .join(".claude/settings.json")
+        .to_string_lossy()
+        .to_string();
+    for key in ["body", "data", "payload", "value"] {
+        assert!(
+            denies(
+                &dir,
+                "mcp__x__get",
+                serde_json::json!({"path": p, key: "{}\n"})
+            ),
+            "{key}"
+        );
+    }
+}

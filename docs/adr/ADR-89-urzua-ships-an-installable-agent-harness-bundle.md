@@ -505,9 +505,12 @@ agent replace the session's gates with two writes outside the repository.
   them. A `.git` counts only when it is a real git working tree (`git rev-parse --show-toplevel` succeeds
   there and names that directory), so an empty file or directory called `.git` makes nothing. Session-start
   and the post-command check enter the session's own repository the same way, not the outermost one. The
-  settings command is unchanged: it still finds the translator from `CLAUDE_PROJECT_DIR`, else from the
-  outermost configuration above the current directory, and the translator's hash (below) is what makes a
-  translator found in a minted directory useless.
+  settings command follows the same rule: it finds the translator from `CLAUDE_PROJECT_DIR` and, when that
+  is unset, from the nearest real git working tree at or above the current directory that holds both
+  `.urzua/config.yaml` and the translator (found with `git rev-parse --show-toplevel`, stepping outward past
+  a nested repository that holds neither), never from the outermost configuration. This replaces the
+  fallback of the amendment of 2026-11-07; a configuration written above the project, with or without a
+  `.git`, is never chosen over the project, and when the engine judges it can only add denies.
 - **The translator is verified before it runs.** Every hook command of the Claude Code adapter embeds the
   sha256 of `.claude/hooks/urzua-claude-code.py`, written by `harness install` and `harness update` from the
   bundle, and reads the file once, compares its hash and runs those bytes (nothing can swap the file between
@@ -519,7 +522,7 @@ agent replace the session's gates with two writes outside the repository.
   said it was reported; it was not). `harness status` and the session-start check keep comparing the file
   and the hook entry with the lock; `update` rewrites both, and `uninstall` removes them.
 - **MCP tools.** A tool named for reading is still judged when the call carries a key naming an output
-  (`output`, `out`, `dest`, `target`, `save` and the like) or a content key. A path string is trimmed,
+  (`output`, `out`, `dest`, `target`, `save` and the like) or a content key (`content`, `text`, `body`, `data`, `payload`, `value` and the like). A path string is trimmed,
   cut at a NUL and normalised lexically (`.` and `..`) before its length is tested; a string that is too
   long as written is a path only if it collapses to a shorter one, and is otherwise a candidate looked at
   only for a refusal. An MCP tool that runs a shell command or applies a patch stays an unparsed route
@@ -562,3 +565,4 @@ The Status of this ADR stays Accepted.
 > | 2026-11-07 | Added a proposed `## Amendment (2026-11-07)`, pending maintainer acceptance, after the third review of the harness: the settings command resolves the project root from `CLAUDE_PROJECT_DIR` or the outermost configuration above the current directory and refuses an edit under `on_unjudged: deny` when it cannot run the translator; an edit is judged by the outermost governed repository with symlinks followed, a dangling link included; the harness protects its own cache, lock, override log and git hooks from the edit tools; session-start compares the installed files, hook entries and `disableAllHooks` with the lock; MCP calls are read for every path-like string. The Accepted-risk list gains items 6 to 8 (a Bash write to the harness's own files, an unreadable configuration in the shell fallback, a nested repository with its own configuration), and items 1 and 5 are widened (`--assume-unchanged` is now reported; local settings and a swap between check and write are named). `Status` stays Accepted. **Why:** the third review found the wrapper failing open outside the project root, a dangling link and a nested repository escaping the gates, and several silent routes. | **substantive** |
 > | 2026-11-07 | Amendment (settings command, judged repository, harness-owned paths, override-log approval by PR review) accepted. **Why:** Maintainer decision, 2026-11-07. | **substantive** |
 > | 2026-11-08 | Added an `## Amendment (2026-11-08)`, accepted by the maintainer on 2026-11-08, after the fourth review of the harness: an edit is judged against the session's own repository and every governed repository that holds the file, and a deny from any wins (the "outermost" rule of the 2026-11-07 amendment is withdrawn, because two unjudged writes above the project minted a governing repository with no gates); a `.git` counts only when git accepts it; every hook command embeds the translator's sha256 and refuses to run a translator that differs; a read-named MCP tool is judged when the call names an output or carries content; MCP path strings are trimmed, NUL-cut and normalised before the length test. The Accepted-risk list is made exact (items 1, 5, 7 and 8 revised, items 9 and 10 added). `Status` stays Accepted. **Why:** Maintainer decisions, 2026-11-08, on the fourth review of the harness. | **substantive** |
+> | 2026-11-08 | Corrected the `## Amendment (2026-11-08)` after review of pull request 438: with `CLAUDE_PROJECT_DIR` unset, the settings command resolves the nearest real git working tree that holds the configuration and the translator, not the outermost configuration (which let a configuration written above the project take the wrapper); `body`, `data`, `payload` and `value` join the content keys. `Status` stays Accepted. **Why:** the independent review found the wrapper still taking an outer configuration. | **substantive** |

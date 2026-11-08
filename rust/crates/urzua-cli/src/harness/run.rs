@@ -1152,7 +1152,7 @@ fn session_start(config: Option<PathBuf>) -> Verdict {
             if std::env::var_os(var).is_none_or(|v| v.is_empty()) {
                 problems.push(Problem {
                     check: "environment",
-                    message: format!("{var} is not set in this session. The {name} adapter's hook commands find the project from it; without it they fall back to the outermost directory above the current one that holds .urzua/config.yaml, which is the same project only while the session was started inside it"),
+                    message: format!("{var} is not set in this session. The {name} adapter's hook commands find the project from it; without it they fall back to the nearest git repository at or above the current directory that holds .urzua/config.yaml and the translator, which is the same project only while the session was started inside it"),
                 });
             }
         }

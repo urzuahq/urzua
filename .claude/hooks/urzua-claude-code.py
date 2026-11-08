@@ -55,7 +55,7 @@ EDIT_TOOLS = ("Write", "Edit", "MultiEdit", "NotebookEdit")
 
 # How an MCP tool names the file it writes and the text it writes. None of this
 # is rule knowledge: it only finds the paths and the content in a payload.
-MCP_CONTENT_KEYS = ("content", "contents", "file_text", "fileText", "text", "new_source")
+MCP_CONTENT_KEYS = ("content", "contents", "file_text", "fileText", "text", "new_source", "body", "data", "payload", "value")
 MCP_EDIT_KEYS = ("edits", "old_string", "new_string", "old_str", "new_str", "old_text", "new_text", "oldText", "newText", "patch", "diff", "changes", "operations", "insert_text", "replacement", "append")
 # A key names a path when one of its words is one of these (`filePath`, `from`,
 # `source_path`, `destination`, `uri`).
