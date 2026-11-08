@@ -12,14 +12,11 @@
 # Print the current offenders in this format with:
 #   cargo test -p urzua-cli --test fn_length_ratchet -- --ignored --nocapture
 crates/urzua-cli/src/commands/doctor.rs::run	256
-crates/urzua-cli/src/commands/fix.rs::run	309
-crates/urzua-cli/src/commands/fix.rs::run_rebaseline	123
 crates/urzua-cli/src/commands/index.rs::run	121
 crates/urzua-cli/src/commands/init.rs::render_config_yaml	105
 crates/urzua-cli/src/commands/init.rs::run	162
 crates/urzua-cli/src/commands/migrate.rs::run_ids_inner	131
 crates/urzua-cli/src/commands/new.rs::run	357
-crates/urzua-cli/src/commands/reverify.rs::run	361
 crates/urzua-cli/src/diff_scope.rs::examine	124
 crates/urzua-cli/src/discovery.rs::compute_drifted_records_at	282
 crates/urzua-cli/src/discovery.rs::read_claim_files	125
@@ -32,7 +29,6 @@ crates/urzua-cli/src/harness/post_command.rs::judge_changes	210
 crates/urzua-cli/src/harness/run.rs::judge_edit_in	101
 crates/urzua-cli/src/harness/run.rs::judge_record	188
 crates/urzua-cli/src/harness/run.rs::session_start	197
-crates/urzua-cli/src/main.rs::main	154
 crates/urzua-core/src/config.rs::claim_expiry_problems	158
 crates/urzua-core/src/config.rs::parse_with_document_models	896
 crates/urzua-core/src/config.rs::revision_log_problem	104
@@ -41,10 +37,7 @@ crates/urzua-core/src/document_model.rs::RawRequiredSection::resolve	104
 crates/urzua-core/src/done_items.rs::build_item	115
 crates/urzua-core/src/done_items.rs::parse_items	123
 crates/urzua-core/src/done_items.rs::parse_waiver	121
-crates/urzua-core/src/fix.rs::detect_rebaselines	101
-crates/urzua-core/src/fix.rs::detect_repairs	134
 crates/urzua-core/src/header.rs::parse_yaml_frontmatter	101
-crates/urzua-core/src/reverify.rs::review_locators	108
 crates/urzua-core/src/rules/back_pointer.rs::embodiment_back_pointer_decision_accepted	112
 crates/urzua-core/src/rules/boundary.rs::published_path_reference	205
 crates/urzua-core/src/rules/citation.rs::citation_issue_exists	191
