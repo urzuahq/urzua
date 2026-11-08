@@ -4303,7 +4303,9 @@ fn pre_commit_hook_stops_a_planted_bad_header_with_the_real_binary() {
     .unwrap();
     commit_all(&dir);
     std::fs::create_dir_all(dir.join("rust/target/release")).unwrap();
-    std::fs::copy(
+    // A link, not a copy: a copy leaves a write descriptor that a concurrently forking test thread
+    // inherits, and executing the file while one is open fails with ETXTBSY under load.
+    std::os::unix::fs::symlink(
         env!("CARGO_BIN_EXE_urzua"),
         dir.join("rust/target/release/urzua"),
     )

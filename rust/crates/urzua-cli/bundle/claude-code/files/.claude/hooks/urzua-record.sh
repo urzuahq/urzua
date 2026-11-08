@@ -95,9 +95,9 @@ amend-finish)
     echo "urzua-record: refusing; an amendment only adds lines, and $removed existing line(s) of $path were changed or removed" >&2
     exit 1
   fi
-  printf '%s\n' "$diff" | grep -q '^+## Amendment (' || {
+  grep -q '^+## Amendment (' <<<"$diff" || {
     echo "urzua-record: refusing; no added '## Amendment (YYYY-MM-DD): ...' section in $path" >&2; exit 1; }
-  printf '%s\n' "$diff" | grep -q '^+> |' || {
+  grep -q '^+> |' <<<"$diff" || {
     echo "urzua-record: refusing; no added revision-log row in $path" >&2; exit 1; }
   git add -- "$path"
   report="$("$bin" check "$path")" && rc=0 || rc=$?
@@ -124,7 +124,7 @@ repin)
   "$bin" fix --rebaseline --ids "$path" >&2 || true
   out="$("$bin" fix --rebaseline --apply --ids "$path" --by "$by" --actor agent --reason "$reason")" && rc=0 || rc=$?
   printf '%s\n' "$out"
-  printf '%s\n' "$out" | grep -q '"status": "applied"' || {
+  grep -q '"status": "applied"' <<<"$out" || {
     echo "urzua-record: nothing was re-pinned for $path" >&2; exit 1; }
   [ "$rc" -eq 0 ] || exit "$rc"
   git add -- "$path"
@@ -146,11 +146,11 @@ reverify)
   printf '%s\n' "$review" >&2
   out="$("$bin" reverify --apply --ids "$path" --by "$by" --actor agent --reason "$reason")" && rc=0 || rc=$?
   printf '%s\n' "$out"
-  printf '%s\n' "$out" | grep -q '"status": "applied"' || {
+  grep -q '"status": "applied"' <<<"$out" || {
     echo "urzua-record: nothing was renewed for $path" >&2; exit 1; }
   [ "$rc" -eq 0 ] || exit "$rc"
   git add -- "$path"
-  if printf '%s\n' "$review" | grep -q '"check": "will-pin"'; then
+  if grep -q '"check": "will-pin"' <<<"$review"; then
     echo "Pinned: $path -- $reason" >&2
   fi
   echo "Re-verified: $path -- $reason" >&2
@@ -163,7 +163,7 @@ done)
   [ -n "$by" ] || { echo "urzua-record: no identity; set URZUA_BY to the person who authorised this" >&2; exit 2; }
   out="$("$bin" fix --apply --ids "$path" --by "$by" --actor agent)" && rc=0 || rc=$?
   printf '%s\n' "$out"
-  if ! printf '%s\n' "$out" | grep -q '"computed_value"'; then
+  if ! grep -q '"computed_value"' <<<"$out"; then
     echo "urzua-record: the engine computed no value for $path from its evidence, so nothing was set (add the evidence first, on each item of the record's completion criteria that the change delivered; the notices above name any item still unresolved; this command never writes a value itself)" >&2
     exit 1
   fi
