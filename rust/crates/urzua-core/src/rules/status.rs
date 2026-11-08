@@ -185,6 +185,7 @@ pub fn judge_delivery(
     if delivery.items.is_some() {
         let empty = crate::done_items::DoneItems::default();
         let mut judged = judge_items(
+            record,
             record.items.as_ref().unwrap_or(&empty),
             config,
             delivery,

@@ -3,6 +3,7 @@ Status: Done
 Stable-Id: 01M1YX4KG8PJNP7J1NRGCYPA2E
 Phase: '1'
 Track: governance-process
+Kind: decision
 Implements: ADR-41
 Blocked-on: —
 Realized-by: spec:docs/adr/ADR-41-specs-are-organized-by-feature-area-decided-editorially.md, spec:docs/specs/SPEC-8-urzua-fix.md, spec:docs/specs/SPEC-9-the-bug-record-type.md, spec:docs/specs/SPEC-10-the-waiver-record-type.md, spec:docs/specs/SPEC-11-urzua-audit.md, spec:docs/specs/SPEC-12-urzua-new.md, spec:docs/specs/SPEC-13-urzua-explain-and-urzua-graph.md, spec:docs/specs/SPEC-14-urzua-migrate.md, spec:docs/specs/SPEC-15-urzua-doctor.md
@@ -40,3 +41,4 @@ rule would just add more inconsistent precedent on top of the inconsistent prece
 > | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-183`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. The criteria are those the delivered work met, checked against `Realized-by` and the code; `Status` stays Done. | **structural** |
 > | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |
+> | 2026-11-07 | `Kind: decision` added. **Why:** maintainer decision of 2026-11-07 (`ADR-96` amendment, milestone kinds): this milestone records a decision, so it is judged against a decided record (an Accepted decision or a Shipped spec) rather than a built tier. Its `Status` is computed from its Done means items by `urzua fix`, not set by hand. | **structural** |

@@ -4,6 +4,7 @@ Realized-by: spec:docs/adr/ADR-69-a-record-edit-is-judged-by-urzua-before-it-is-
 Stable-Id: 01M1Y5JJECJSQBGTZSAH8WHYRP
 Phase: '0'
 Track: governance-process
+Kind: decision
 Implements: RFC-7
 Blocked-on: —
 ---
@@ -35,3 +36,4 @@ Still Draft; genuinely undecided.
 > | 2026-11-05 | Two of the three `ADR-78` milestones are built: `MILE-191` (#308) and `MILE-188` (#309). `MILE-189`, the `Realized-by` mechanism nudge, is built as a rule but not yet enabled in this repository, because enabled it reports 308 warnings and this repository fails on any warning; see its revision log. This milestone stays open until that is decided and `MILE-189` is `Done`. `Status` stays `Planned`. **Why:** Done means asks for `ADR-78`'s parts to be built, and one is not delivered. | **substantive** |
 > | 2026-11-05 | Closed: `Status: Done`, with `Realized-by` citing `ADR-69`, `ADR-70`, `ADR-71` and `ADR-78`, all Accepted. Each part of `RFC-7` is an Accepted ADR or built by name: the hook, drafting commands and layered gate (`ADR-69` to `ADR-71`), and the override log, hook scope, section 4, the section 5 nudge, the stage-skip waiver and no revision record for a blocked edit (`ADR-78`). `MILE-191`, `MILE-188` and `MILE-189` build the parts that need code and are tracked on their own. **Why:** this milestone decides `RFC-7`, and `ADR-78` says it closes when accepted; tying it to the build of `MILE-191`, `MILE-188` and `MILE-189` would contradict both that sentence and this record's Done means. | **substantive** |
 > | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |
+> | 2026-11-07 | `Kind: decision` added. **Why:** maintainer decision of 2026-11-07 (`ADR-96` amendment, milestone kinds): this milestone records a decision, so it is judged against a decided record (an Accepted decision or a Shipped spec) rather than a built tier. Its `Status` is computed from its Done means items by `urzua fix`, not set by hand. | **structural** |
