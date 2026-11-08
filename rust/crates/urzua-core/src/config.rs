@@ -6320,3 +6320,315 @@ mod option_table_tests {
         assert_eq!(option_field("fields", &empty), Some(Vec::new()));
     }
 }
+
+/// Characterisation of load-time validation order: a config carrying one
+/// fault per validation pass reports them one at a time, in a fixed order
+/// and with fixed messages. Fixing the reported fault reveals the next.
+#[cfg(test)]
+mod validation_order_tests {
+    use super::*;
+
+    /// A valid config. Every `@NAME` is a slot: `SLOTS` holds its valid
+    /// default and `FAULTS` the faulty value that replaces it.
+    const TEMPLATE: &str = "schema_version: 2
+@TOPA
+@TOPB
+@TOPC
+@TOPD
+record_types:
+  adr:
+    dir: @ADRDIR
+    required_fields: [Status]
+    known_fields: [Date, Accepted-on, Deciders, Reviewers, Blocks, Blocked-by, Realized-by]
+    pointer_fields: [Reviewers]
+@ADREXCL
+@ADRLOG
+@ADRPFX
+  bug:
+    dir: @BUGDIR
+@BUGPFX
+relation_pairs:
+  - {name: ok, forward: Blocks, inverse: Blocked-by, reciprocity: required@ACYC}
+@PAIRA
+@PAIRB
+@PAIRC
+rules:
+  index.freshness:
+    level: error
+    indexes: [{path: @IDXPATH, type: adr, format: '- {id}'}]
+  citation.issue-exists:
+    level: error
+    reference_sections: [References]
+    issue_refs: {snapshot: @SNAP, repository: o/r, forms: [number], fields: [@IRFIELD]}
+  date.field-valid:
+    level: error
+    date_fields: [@DATEF]
+@DVFL
+  date.field-order:
+    level: error
+    date_order: [{earlier: Date, later: @LATER}]
+  field.quality:
+    level: error
+    field_levels: {Deciders: @FQLEVEL}
+@FQCLOSE
+  embodiment.locator-exists:
+    level: error
+    locator_kinds: [file]
+    pinnable: [@PINKIND]
+  embodiment.claim-expired:
+    level: error
+    anchor_field: @ANCHOR
+    periods:
+@PERA
+@PERB
+      - {type: adr, days: 30}
+@PERC
+    require_pin: [@REQPIN]
+    max_batch: @BATCH
+  embodiment.consistency:
+    level: error
+    drift_grace_days: 3
+    drift_audit_field: @AUDIT
+  diff.source-requires-record:
+    level: error
+    source_paths: [@SRCPATH]
+    exclude_paths: [docs]
+  boundary.published-path-reference:
+    level: error
+    published_paths: [docs]
+    ignore_marker: @MARKER
+  citation.resolution:
+    level: error
+    external_ids: [@EXTID]
+    non_reference_field: @NONREF
+  claim.status-agreement:
+    level: error
+    claim_paths: [docs]
+    closed_statuses: [Done]
+    closes: @CLOSES
+  embodiment.back-pointer-resolution:
+    level: error
+    back_pointer_paths: [src]
+    test_paths: [@TESTPATH]
+  pointer.target-status:
+    level: error
+    not_in: [Done]
+    fields: [@PTRFIELD]
+  sequence.cycle:
+    level: error
+@RULEA
+@RULEB
+@RULEC
+@RULED
+@RULEE
+";
+
+    const SLOTS: &[(&str, &str)] = &[
+        ("@TOPA", ""),
+        ("@TOPB", ""),
+        ("@TOPC", ""),
+        ("@TOPD", ""),
+        ("@ADRDIR", "docs/adr"),
+        ("@ADREXCL", ""),
+        ("@ADRLOG", ""),
+        ("@ADRPFX", ""),
+        ("@BUGDIR", "docs/bug"),
+        ("@BUGPFX", ""),
+        ("@ACYC", ", acyclic: true"),
+        ("@PAIRA", ""),
+        ("@PAIRB", ""),
+        ("@PAIRC", ""),
+        ("@IDXPATH", "docs/index.md"),
+        ("@SNAP", "snap.json"),
+        ("@DATEF", "Date"),
+        ("@DVFL", ""),
+        ("@LATER", "Accepted-on"),
+        ("@FQLEVEL", "error"),
+        ("@FQCLOSE", ""),
+        ("@IRFIELD", "Date"),
+        ("@RULEE", ""),
+        ("@PINKIND", "file"),
+        ("@ANCHOR", "Date"),
+        ("@PERA", ""),
+        ("@PERB", ""),
+        ("@PERC", ""),
+        ("@REQPIN", "code"),
+        ("@BATCH", "5"),
+        ("@AUDIT", "Date"),
+        ("@SRCPATH", "src"),
+        ("@MARKER", "ok"),
+        ("@EXTID", "ADR-1"),
+        ("@NONREF", "Deciders"),
+        ("@CLOSES", "closes"),
+        ("@TESTPATH", "src/t.rs"),
+        ("@PTRFIELD", "Reviewers"),
+        ("@RULEA", ""),
+        ("@RULEB", ""),
+        ("@RULEC", ""),
+        ("@RULED", ""),
+    ];
+
+    /// `(slot, faulty value, message)` in the order the loader reports them.
+    const FAULTS: &[(&str, &str, &str)] = &[
+        ("@PAIRA", "  - {name: bad, forward: Nope, inverse: Nope2, reciprocity: required}",
+            "relation_pairs: pair 'bad' forward field 'Nope' is not in the required_fields or known_fields of any record type, so the pair could never examine a record",
+        ),
+        ("@PAIRB", "  - {name: typed, forward: Date, inverse: Accepted-on, reciprocity: required, types: [ghost]}",
+            "relation_pairs: pair 'typed' types names 'ghost', which is not a configured record type",
+        ),
+        ("@PAIRC", "  - {name: prov, forward: Reviewers, inverse: Deciders, reciprocity: required, provisional: {statuses: []}}",
+            "relation_pairs: pair 'prov' provisional.statuses must list at least one status",
+        ),
+        ("@ACYC", "",
+            "relation_pairs: rule 'sequence.cycle' is enabled but no relation_pairs entry declares `acyclic: true`, so it would examine nothing",
+        ),
+        ("@TOPA", "override_log: /abs/log.md",
+            "relation_pairs: override_log '/abs/log.md' is not a repository-relative file path",
+        ),
+        ("@TOPB", "block_on: nope",
+            "relation_pairs: block_on 'nope' is not one of introduced, all",
+        ),
+        ("@TOPC", "new:\n  fetch_timeout_seconds: 0",
+            "relation_pairs: new.fetch_timeout_seconds must be at least 1",
+        ),
+        ("@TOPD", "attestation:\n  identity: asserted\n  require_verified: true",
+            "relation_pairs: attestation.require_verified: true cannot be combined with identity: asserted, which takes --by as given and verifies nothing",
+        ),
+        ("@RULEA", "  diff.decider-required:\n    level: error",
+            "relation_pairs: rule 'diff.decider-required' is enabled but no top-level `authority` is declared, so it would judge no gate",
+        ),
+        ("@RULEB", "  override.unreviewed:\n    level: error",
+            "relation_pairs: rule 'override.unreviewed' is enabled but no `override_log` is declared, so it would read no log",
+        ),
+        ("@RULEC", "  revision-log.version-bump-required:\n    level: error",
+            "relation_pairs: rule 'revision-log.version-bump-required' is enabled but no record type declares revision_log.version_bump, so it would examine nothing",
+        ),
+        ("@ADRDIR", "docs/./adr",
+            "record type 'adr' declares dir 'docs/./adr', which is not in canonical form -- write 'docs/adr'",
+        ),
+        ("@ADREXCL", "    exclude_files: [\"a/b\"]",
+            "record type 'adr' declares exclude_files entry 'a/b', which is not a bare file name -- it would exclude nothing",
+        ),
+        ("@ADRLOG", "    revision_log: {}",
+            "record type 'adr' declares revision_log neither `marker` nor `heading` -- name one",
+        ),
+        ("@ADRPFX", "    prefix: \"bad-\"",
+            "record type 'adr' declares prefix 'bad-', which must be upper-case ASCII letters and digits in hyphen-separated segments",
+        ),
+        ("@BUGDIR", "docs/adr",
+            "record types 'adr' and 'bug' both own directory 'docs/adr' -- a directory holds one type's records",
+        ),
+        ("@BUGPFX", "    prefix: ADR",
+            "record types 'adr' and 'bug' both use the prefix 'ADR' -- `urzua new` would mint colliding identities",
+        ),
+        ("@RULED", "  not.a.rule:\n    level: error",
+            "unknown rule 'not.a.rule' under `rules:` -- this build ships: ",
+        ),
+        ("@IDXPATH", "../escape.md",
+            "rule 'index.freshness' option 'indexes' entry '../escape.md' path contains a `..` component; a published path must stay inside the repository",
+        ),
+        ("@SNAP", "\"\"",
+            "rule 'citation.issue-exists' option 'issue_refs' has an empty snapshot path",
+        ),
+        ("@IRFIELD", "Nope",
+            "rule 'citation.issue-exists' option 'issue_refs' 'fields' names 'Nope', which no record type declares",
+        ),
+        ("@RULEE", "  citation.path-exists:\n    level: error",
+            "rule 'citation.path-exists' requires the option 'reference_sections' -- without it the rule reads no section and can never report",
+        ),
+        ("@LATER", "Date",
+            "rule 'date.field-order' option 'date_order' entry '{earlier: Date, later: Date}' orders a field against itself",
+        ),
+        ("@DATEF", "Typo",
+            "rule 'date.field-valid' option 'date_fields' entry 'Typo' names a field that is not declared (required_fields or known_fields) by any record type, so it could never be examined",
+        ),
+        ("@DVFL", "    field_levels: {Deciders: error}",
+            "rule 'date.field-valid' does not take the option 'field_levels'",
+        ),
+        ("@PERA", "      - {type: ghost, days: 5}",
+            "rule 'embodiment.claim-expired' option 'periods' entry 0 (type 'ghost') names a record type that is not declared",
+        ),
+        ("@PERB", "      - {type: adr, days: 0}",
+            "rule 'embodiment.claim-expired' option 'periods' entry 0 (type 'adr') has days 0; a period is 1 day or more",
+        ),
+        ("@ANCHOR", "Nope",
+            "rule 'embodiment.claim-expired' option 'anchor_field' names 'Nope', which entry 0 (type 'adr') does not declare (required_fields or known_fields)",
+        ),
+        ("@PERC", "      - {type: adr, days: 31}",
+            "rule 'embodiment.claim-expired' option 'periods' has two entries for type 'adr' of equal specificity that can match the same record; narrow one with a status or a tier",
+        ),
+        ("@REQPIN", "nope",
+            "rule 'embodiment.claim-expired' option 'require_pin' names the category 'nope', which the embodiment declaration does not use (test, code, spec)",
+        ),
+        ("@BATCH", "0",
+            "rule 'embodiment.claim-expired' option 'max_batch' is 0; a batch is 1 record or more",
+        ),
+        ("@AUDIT", "Nope",
+            "rule 'embodiment.consistency' option 'drift_audit_field' names 'Nope', which is not a declared field (required_fields or known_fields) of any record type",
+        ),
+        ("@PINKIND", "directory",
+            "rule 'embodiment.locator-exists' option 'pinnable' names 'directory', which 'locator_kinds' does not declare; a locator of a kind the rule rejects can never be pinned (declared kinds: file)",
+        ),
+        ("@FQCLOSE", "    closes: closes",
+            "rule 'field.quality' does not take the option 'closes'",
+        ),
+        ("@FQLEVEL", "off",
+            "rule 'field.quality' option 'field_levels' gives 'Deciders' the level 'off'; use 'info', 'warn' or 'error' (a field is switched off by not declaring it)",
+        ),
+        ("@SRCPATH", "../esc",
+            "rule 'diff.source-requires-record' option 'source_paths' entry '../esc' contains a `..` component; a published path must stay inside the repository",
+        ),
+        ("@MARKER", "' bad'",
+            "rule 'boundary.published-path-reference' option 'ignore_marker' must be non-blank text on one line with no surrounding whitespace",
+        ),
+        ("@EXTID", "BAD",
+            "rule 'citation.resolution' option 'external_ids' entry 'BAD' must look like PREFIX-N or PREFIX-LOW..HIGH",
+        ),
+        ("@CLOSES", "\"a b\"",
+            "rule 'claim.status-agreement' option 'closes' must be one frontmatter key: not empty, with no whitespace, ':' or '#'",
+        ),
+        ("@NONREF", "Nope",
+            "rule 'citation.resolution' option 'non_reference_field' names 'Nope', which no record type lists in `known_fields` (or `required_fields`)",
+        ),
+        ("@TESTPATH", "other/t.rs",
+            "rule 'embodiment.back-pointer-resolution' option 'test_paths' entry 'other/t.rs' is not inside any 'back_pointer_paths' entry, so no file under it is scanned and a `Verifies:` comment there would count for nothing",
+        ),
+        ("@PTRFIELD", "Nope",
+            "rule 'pointer.target-status' option 'fields' names 'Nope', which is not a declared pointer_fields or narrative_fields entry of any record type",
+        ),
+    ];
+
+    fn render(active: &[(&str, &str, &str)]) -> String {
+        let mut out = TEMPLATE.to_string();
+        for (slot, default) in SLOTS {
+            let value = active
+                .iter()
+                .find(|(s, _, _)| s == slot)
+                .map_or(*default, |(_, v, _)| *v);
+            out = out.replace(slot, value);
+        }
+        out
+    }
+
+    #[test]
+    fn the_baseline_loads() {
+        if let Err(e) = parse(&render(&[])) {
+            panic!("{e}");
+        }
+    }
+
+    #[test]
+    fn simultaneous_faults_are_reported_in_a_fixed_order() {
+        for (i, (slot, _, expected)) in FAULTS.iter().enumerate() {
+            let message = parse(&render(&FAULTS[i..])).unwrap_err().to_string();
+            // The unknown-rule message lists every rule this build ships.
+            let same = if *slot == "@RULED" {
+                message.starts_with(expected)
+            } else {
+                message == *expected
+            };
+            assert!(same, "step {i} ({slot}): {message}");
+        }
+        parse(&render(&[])).expect("with every fault fixed the config loads");
+    }
+}
