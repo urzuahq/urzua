@@ -3,6 +3,7 @@ Status: InProgress
 Stable-Id: 01M1YSGQ9F9WXDWB2VJEQ657K4
 Phase: '1'
 Track: governance-process
+Kind: decision
 Implements: RFC-6, ADR-14
 Blocked-on: —
 Realized-by: spec:docs/adr/ADR-14-an-append-only-revision-log-not-edit-in-place.md, spec:docs/specs/SPEC-1-cli.md
@@ -45,3 +46,4 @@ inconsistent precedent one spec at a time.
 > | 2026-11-07 | `Status` `Done` -> `InProgress`. Status set from its Done-means items (ADR-96, MILE-215): unresolved item 2. **Why:** the item has no evidence clause, and `DoneWithUnresolvedItems` forbids `Done` while an item is unresolved; `fix` never downgrades, so the status is set by hand to the computed value. | **structural** |
 > | 2026-11-07 | Left open: the item `RFC-6`'s open question points at the amended `ADR-14` rule is not made true. **Why:** `RFC-6`'s open questions ask when a spec has drifted enough to need a new ADR, and `ADR-14`'s amendment of 2026-09-07 says in terms that this is the question it leaves deferred; the amendment answers a different one (a new spec number or an in-place revision), which `RFC-6` never lists as open. Pointing the open question at the amendment would say it is resolved when it is not, so no pointer was added. Whether the item should name the question `RFC-6` actually asks, or be dropped as resting on a misreading, is the maintainer's call. | **substantive** |
 > | 2026-11-07 | The item "`RFC-6`'s open question points at the amended `ADR-14` rule" is amended to what is true. Maintainer decision of 2026-11-07. **Why:** the original claim was wrong. `RFC-6` asks when a spec has drifted enough to need a new ADR, and `ADR-14`'s amendment answers a different question (a new spec number or an in-place revision) and says it leaves that one deferred, so `RFC-6`'s question was never resolved by it and cannot point at it. The question stays open and `MILE-50`, which implements `RFC-6`, tracks it; the item now states that and cites `ADR-14` and `MILE-50`. | **substantive** |
+> | 2026-11-07 | `Kind: decision` added. **Why:** maintainer decision of 2026-11-07 (`ADR-96` amendment, milestone kinds): this milestone records a decision, so it is judged against a decided record (an Accepted decision or a Shipped spec) rather than a built tier. Its `Status` is computed from its Done means items by `urzua fix`, not set by hand. | **structural** |

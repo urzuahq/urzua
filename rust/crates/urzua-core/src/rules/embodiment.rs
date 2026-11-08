@@ -151,6 +151,7 @@ pub fn embodiment_locator_exists(
         present,
         read,
         untracked_on_disk,
+        records,
     };
 
     // One candidate per declared slot, not per locator: the population is the
@@ -267,6 +268,10 @@ pub struct LocatorEnv<'a> {
     pub present: &'a dyn Fn(&str) -> bool,
     pub read: &'a dyn Fn(&str) -> crate::locator::SharedText,
     pub untracked_on_disk: &'a dyn Fn(&str) -> bool,
+    /// The records, for a Done-means item whose kind asks that the records it
+    /// cites have reached a `success` status (`ADR-96`, amendment of
+    /// 2026-11-07). Empty where nothing is judged against a cited record.
+    pub records: &'a [Record],
 }
 
 impl<'a> LocatorEnv<'a> {
@@ -281,6 +286,7 @@ impl<'a> LocatorEnv<'a> {
             present: &present,
             read: &crate::locator::no_file_text,
             untracked_on_disk: &present,
+            records: &[],
         };
         f(&env)
     }
@@ -306,6 +312,7 @@ pub(crate) fn locator_defect(
         present,
         read,
         untracked_on_disk,
+        records: _,
     } = env;
     macro_rules! defect {
         ($variant:expr, $message:expr $(,)?) => {

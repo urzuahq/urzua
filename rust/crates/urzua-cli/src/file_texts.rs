@@ -88,6 +88,7 @@ pub(crate) fn with_locator_env<R>(
     root: &std::path::Path,
     config: &urzua_core::config::Config,
     tracked: &[PathBuf],
+    records: &[urzua_core::record::Record],
     f: impl FnOnce(&urzua_core::rules::LocatorEnv<'_>) -> R,
 ) -> R {
     let texts = FileTexts::new(root.to_path_buf(), config);
@@ -109,6 +110,7 @@ pub(crate) fn with_locator_env<R>(
         present: &present,
         read: &read,
         untracked_on_disk: &untracked,
+        records,
     };
     f(&env)
 }

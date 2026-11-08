@@ -667,6 +667,9 @@ fn validate_items(
             ));
         }
     }
+    if let Some(kind) = &items.kind {
+        validate_kind(rt, delivery, kind, embodiment)?;
+    }
     let mut seen = std::collections::BTreeSet::new();
     for c in &items.waiver_categories {
         if c.name.trim().is_empty() {
@@ -691,6 +694,73 @@ fn validate_items(
                 "`{key}.waiver_categories` '{}' requires an expiry but no cite: a deferral needs a target (`cite: required`)",
                 c.name
             ));
+        }
+    }
+    Ok(())
+}
+
+/// `statuses.delivery.items.kind` is refused at load when it would be inert or
+/// contradictory (`ADR-96`, amendment of 2026-11-07, `BUG-44`): a field the type
+/// does not carry, a kind no record can be told from another, and a delivered
+/// tier no item can reach each read as a kind that silently never applies.
+fn validate_kind(
+    rt: &RecordTypeConfig,
+    delivery: &DeliveryDecl,
+    kind: &crate::done_items::KindDecl,
+    embodiment: &EmbodimentDecl,
+) -> Result<(), String> {
+    let key = "delivery.items.kind";
+    if kind.field.trim().is_empty() {
+        return Err(format!("`{key}.field` is blank"));
+    }
+    if let Some(known) = rt.known_fields.as_ref().map(|_| rt.declared_fields()) {
+        if !known.contains(&crate::values::FieldName::new(&kind.field)) {
+            return Err(format!(
+                "`{key}.field` names '{}', which the type does not declare: add it to `required_fields` or `known_fields`",
+                kind.field
+            ));
+        }
+    }
+    if kind.kinds.is_empty() {
+        return Err(format!("`{key}.kinds` is empty; name at least one kind"));
+    }
+    let known: Vec<&str> = embodiment.tiers.iter().map(|t| t.state.as_str()).collect();
+    let mut seen = std::collections::BTreeSet::new();
+    for entry in &kind.kinds {
+        if entry.name.trim().is_empty() {
+            return Err(format!("`{key}.kinds` has a blank name"));
+        }
+        if !seen.insert(entry.name.as_str()) {
+            return Err(format!("`{key}.kinds` lists '{}' twice", entry.name));
+        }
+        let Some(tiers) = &entry.delivered_tiers else {
+            continue;
+        };
+        check_list(
+            &format!("{key}.kinds.{}.delivered_tiers", entry.name),
+            tiers,
+            false,
+        )?;
+        for t in tiers {
+            if !known.contains(&t.as_str()) {
+                return Err(format!(
+                    "`{key}.kinds.{}.delivered_tiers` names '{t}', which is not a declared embodiment tier (one of: {})",
+                    entry.name,
+                    known.join(", ")
+                ));
+            }
+            if !delivery.resolving_tiers().contains(t) {
+                return Err(format!(
+                    "`{key}.kinds.{}.delivered_tiers` names '{t}', which is not in `resolving_tiers`: no item could resolve at it",
+                    entry.name
+                ));
+            }
+            if delivery.unevidenced_tiers.contains(t) {
+                return Err(format!(
+                    "`{key}.kinds.{}.delivered_tiers` names '{t}', which is in `delivery.unevidenced_tiers`",
+                    entry.name
+                ));
+            }
         }
     }
     Ok(())
