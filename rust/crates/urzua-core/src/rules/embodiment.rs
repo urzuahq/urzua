@@ -141,7 +141,28 @@ pub fn embodiment_locator_exists(
     read: &dyn Fn(&str) -> crate::locator::SharedText,
     untracked_on_disk: &dyn Fn(&str) -> bool,
 ) -> (RuleExecution, Vec<Finding>) {
-    use crate::locator;
+    embodiment_locator_exists_on(
+        records,
+        config,
+        tracked,
+        present,
+        read,
+        untracked_on_disk,
+        "",
+    )
+}
+
+/// `embodiment.locator-exists` as of `today` (empty when the caller has none):
+/// a waived item is excused only while its waiver has not expired.
+pub fn embodiment_locator_exists_on(
+    records: &[Record],
+    config: &Config,
+    tracked: &[PathBuf],
+    present: &dyn Fn(&str) -> bool,
+    read: &dyn Fn(&str) -> crate::locator::SharedText,
+    untracked_on_disk: &dyn Fn(&str) -> bool,
+    today: &str,
+) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_EMBODIMENT_LOCATOR_EXISTS;
     let mut findings = Vec::new();
     let env = LocatorEnv {
@@ -167,84 +188,7 @@ pub fn embodiment_locator_exists(
         PopulationUnit::Field,
         slots,
         |record| *record,
-        |record| {
-            let field = relation_field_name(
-                config,
-                &record.record_type,
-                crate::config::RelationRole::EmbodimentLocator,
-            );
-            // A Done-means item clause (`ADR-96`) is evidence too, held to the
-            // same test; a record with item clauses and no `Realized-by` is
-            // still examined.
-            let clauses: Vec<&crate::done_items::Clause> = record
-                .items
-                .iter()
-                .flat_map(|i| i.items.iter())
-                .filter_map(|i| i.evidence.as_ref())
-                .filter(|c| c.valid)
-                .collect();
-            let value = match declared_value(record, field) {
-                Ok(v) => Some(v),
-                Err(Outcome::Absent) if !clauses.is_empty() => None,
-                Err(outcome) => return outcome,
-            };
-            if let Some(value) = value {
-                let mut report = |variant: &'static str, message: String| {
-                    findings.push(Finding {
-                        rule: RULE_ID.to_string(),
-                        severity: FindingSeverity::Error,
-                        file: record.path.clone(),
-                        line: None,
-                        waived: None,
-                        declared_severity: None,
-                        suggested_action: None,
-                        action_source: ActionSource::new(variant).field(field),
-                        message,
-                    });
-                };
-                // Text the splitter drops is evidence that does not exist; say so.
-                if let Some(lead) = locator::realized_by_unrecognised(value) {
-                    report(
-                        "locator-malformed",
-                        format!(
-                            "{field} holds '{lead}', which is not a recognised entry and counts as no evidence (grammar: {})",
-                            locator::GRAMMAR
-                        ),
-                    );
-                }
-                for entry in locator::realized_by_locators(value) {
-                    if let Some((variant, message)) = locator_defect(&entry, field, &env) {
-                        report(variant, message);
-                    }
-                }
-            }
-            let section = if clauses.is_empty() {
-                String::new()
-            } else {
-                items_section(config, &record.record_type)
-            };
-            for clause in clauses {
-                let place = format!("a Done means item (line {})", clause.line);
-                for entry in locator::realized_by_locators(&clause.text) {
-                    if let Some((_, message)) = locator_defect(&entry, &place, &env) {
-                        findings.push(Finding {
-                            rule: RULE_ID.to_string(),
-                            severity: FindingSeverity::Error,
-                            file: record.path.clone(),
-                            line: Some(clause.line),
-                            waived: None,
-                            declared_severity: None,
-                            suggested_action: None,
-                            action_source: ActionSource::new("item-locator-defect")
-                                .section(section.clone())
-                                .line(clause.line),
-                            message,
-                        });
-                    }
-                }
-            }
-            Outcome::Examined
-        },
+        |record| locator_exists_for_record(record, config, &env, today, &mut findings),
     );
 
     (
@@ -256,6 +200,133 @@ pub fn embodiment_locator_exists(
         },
         findings,
     )
+}
+
+/// The valid Done-means item evidence clauses of `record` (`ADR-96`), each with
+/// whether its item is excused: it carries a waiver that has not expired.
+fn item_evidence_clauses<'r>(
+    record: &'r Record,
+    today: &str,
+) -> Vec<(&'r crate::done_items::Clause, bool)> {
+    record
+        .items
+        .iter()
+        .flat_map(|i| i.items.iter())
+        .filter_map(|i| {
+            i.evidence
+                .as_ref()
+                .map(|c| (c, i.waiver.as_ref().is_some_and(|w| !w.is_expired(today))))
+        })
+        .filter(|(c, _)| c.valid)
+        .collect()
+}
+
+/// One record's `embodiment.locator-exists` findings, pushed onto `findings`.
+fn locator_exists_for_record(
+    record: &Record,
+    config: &Config,
+    env: &LocatorEnv<'_>,
+    today: &str,
+    findings: &mut Vec<Finding>,
+) -> Outcome {
+    let field = relation_field_name(
+        config,
+        &record.record_type,
+        crate::config::RelationRole::EmbodimentLocator,
+    );
+    // A Done-means item clause (`ADR-96`) is evidence too, held to the same
+    // test; a record with item clauses and no `Realized-by` is still examined.
+    let clauses = item_evidence_clauses(record, today);
+    let value = match declared_value(record, field) {
+        Ok(v) => Some(v),
+        Err(Outcome::Absent) if !clauses.is_empty() => None,
+        Err(outcome) => return outcome,
+    };
+    if let Some(value) = value {
+        header_locator_findings(record, field, value, env, findings);
+    }
+    item_locator_findings(record, config, &clauses, env, findings);
+    Outcome::Examined
+}
+
+/// The findings on the `Realized-by`-style header field.
+fn header_locator_findings(
+    record: &Record,
+    field: &str,
+    value: &str,
+    env: &LocatorEnv<'_>,
+    findings: &mut Vec<Finding>,
+) {
+    use crate::locator;
+    let mut report = |variant: &'static str, message: String| {
+        findings.push(Finding {
+            rule: RULE_EMBODIMENT_LOCATOR_EXISTS.to_string(),
+            severity: FindingSeverity::Error,
+            file: record.path.clone(),
+            line: None,
+            waived: None,
+            declared_severity: None,
+            suggested_action: None,
+            action_source: ActionSource::new(variant).field(field),
+            message,
+        });
+    };
+    // Text the splitter drops is evidence that does not exist; say so.
+    if let Some(lead) = locator::realized_by_unrecognised(value) {
+        report(
+            "locator-malformed",
+            format!(
+                "{field} holds '{lead}', which is not a recognised entry and counts as no evidence (grammar: {})",
+                locator::GRAMMAR
+            ),
+        );
+    }
+    for entry in locator::realized_by_locators(value) {
+        if let Some((variant, message)) = locator_defect(&entry, field, env) {
+            report(variant, message);
+        }
+    }
+}
+
+/// The findings on the record's Done-means item clauses; an excused (waived,
+/// unexpired) item is not examined.
+fn item_locator_findings(
+    record: &Record,
+    config: &Config,
+    clauses: &[(&crate::done_items::Clause, bool)],
+    env: &LocatorEnv<'_>,
+    findings: &mut Vec<Finding>,
+) {
+    let section = if clauses.is_empty() {
+        String::new()
+    } else {
+        items_section(config, &record.record_type)
+    };
+    for (clause, waived) in clauses {
+        // A waived item's evidence may not exist yet: the waiver holds while it
+        // does not resolve (`ADR-96`), so it is not a defect.
+        if *waived {
+            continue;
+        }
+        let place = format!("a {section} item (line {})", clause.line);
+        for entry in crate::locator::realized_by_locators(&clause.text) {
+            if let Some((_, message)) = locator_defect(&entry, &place, env) {
+                findings.push(Finding {
+                    rule: RULE_EMBODIMENT_LOCATOR_EXISTS.to_string(),
+                    severity: FindingSeverity::Error,
+                    file: record.path.clone(),
+                    line: Some(clause.line),
+                    waived: None,
+                    declared_severity: None,
+                    suggested_action: None,
+                    action_source: ActionSource::new("item-locator-defect")
+                        .section(section.clone())
+                        .line(clause.line),
+                    message,
+                });
+            }
+        }
+    }
 }
 
 /// What a locator is checked against: the tracked files, the working tree and
