@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK46ZQ08SSX6286KEZWZ
-Status: Accepted
+Status: Retired
 Embodiment: Drift detected
 Realized-by: code:rust/crates/urzua-core/src/header.rs, test:rust/crates/urzua-core/src/header.rs
 Date: 2026-09-05
@@ -69,8 +69,8 @@ existing caller needs to change.
 *Status of this amendment: accepted 2026-11-08 by the maintainer. The Decision text above is unchanged; see the revision log.*
 
 The Decision above adds `HeaderShape::BoldList` as a declared per-profile shape, and the Consequences
-keep its parsing support ("Parsing support stays"). That is no longer true. The 0.4.0 breaking change
-removed the `bold-list` shape, together with the `blockquote` shape, so the engine has no reader for
+keep its parsing support ("Parsing support stays"). That is no longer true. A breaking change on `main`, released in the
+next minor version (0.4.0, not yet tagged on 2026-11-08), removed the `bold-list` shape, together with the `blockquote` shape, so the engine has no reader for
 `- **Key:** Value` headers: `header_shape` accepts `yaml-frontmatter` (the default when omitted) or
 `none`, a config declaring `header_shape: bold-list` fails to load with an error naming the removed
 shape, and a record still written in that form is reported by `header.required-fields` as unreadable
@@ -98,4 +98,5 @@ was done for `ADR-38`.
 > | 2026-11-04 | `Embodiment` recomputed by `urzua fix`: `Drift detected`. **Why:** every file named in `Realized-by` has changed since this line was last verified, and this pass did not re-verify it, so the record states the drift instead of a stale `Verified`; the Decision is unchanged. | **substantive** |
 > | 2026-11-04 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-core/src/header.rs, test:rust/crates/urzua-core/src/header.rs` -- stated `Verified` disagreed with the computed value. | **structural** |
 > | 2026-11-04 | Backfilled `Accepted-on` from git history, commit 895cf4ca3. | **structural** |
-> | 2026-11-08 | Amendment added saying the `bold-list` header shape was removed from the engine by the 0.4.0 breaking change (`MILE-85`, `#205`; changeset `remove-blockquote-and-bold-list-headers`), and accepted by the maintainer on 2026-11-08. **Why:** maintainer decision, 2026-11-08: the Decision's mechanism and its `Parsing support stays` consequence no longer hold, and the record should say so before it is retired as `ADR-38` was; the Decision is unchanged and `Status` is not changed by this row. | **substantive** |
+> | 2026-11-08 | Amendment added saying the `bold-list` header shape was removed from the engine by a breaking change on `main`, to ship in 0.4.0 (`MILE-85`, `#205`; changeset `remove-blockquote-and-bold-list-headers`), and accepted by the maintainer on 2026-11-08. **Why:** maintainer decision, 2026-11-08: the Decision's mechanism and its `Parsing support stays` consequence no longer hold, and the record should say so before it is retired as `ADR-38` was; the Decision is unchanged and `Status` is not changed by this row. | **substantive** |
+> | 2026-11-08 | `Status` changed from Accepted to Retired. **Why:** maintainer decision, 2026-11-08: the mechanism this decision governs was removed with no successor record, as with `ADR-38`. | **substantive** |
