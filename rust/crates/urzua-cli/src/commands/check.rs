@@ -508,15 +508,10 @@ fn execute(config_path: Option<PathBuf>, args: CheckArgs) -> Result<CheckReport,
         &context.back_pointed,
     ));
     notices.extend(harness_key_notices(session.config.harness.as_ref()));
-    notices.extend(actors_notices(
-        context.gate_config.as_ref().unwrap_or(&session.config),
-        actors.is_some(),
-        base.is_some(),
-        selection.as_deref(),
-    ));
-    notices.extend(decider_table_notices(
+    notices.extend(decider_gate_notices(
         &session.config,
-        base.is_some(),
+        &context,
+        (base.is_some(), actors.is_some()),
         selection.as_deref(),
     ));
     context.actors = actors;
@@ -528,7 +523,7 @@ fn execute(config_path: Option<PathBuf>, args: CheckArgs) -> Result<CheckReport,
     ));
     notices.extend(excused_line_notices(&executions));
     scope_findings(session, &scope, &mut findings);
-    let waivers = load_waivers(session, &mut notices);
+    let waivers = effective_waivers(session, &context, &mut notices);
     let today = urzua_io::today();
     run_after_scoping(
         &context,
@@ -1243,6 +1238,60 @@ fn read_diff_inputs(
     })
 }
 
+/// Applies `authority.waivable` (`ADR-89` amendment of 2026-11-09, gate
+/// waivers) to the waivers of `diff.decider-required`: under `never` none
+/// counts, under `base` only one the diff leaves untouched (so the base revision
+/// holds it as it is) counts, and a run with no diff cannot tell, so none does.
+/// A waiver of any other rule is untouched. Each ignored waiver is named in an
+/// info notice, so it is never silently dropped.
+fn restrict_decider_waivers(
+    waivers: Vec<urzua_core::waiver::Suppression>,
+    waivable: urzua_core::authority::Waivable,
+    changed: Option<&[PathBuf]>,
+    notices: &mut Vec<Notice>,
+) -> Vec<urzua_core::waiver::Suppression> {
+    use urzua_core::authority::Waivable;
+    let rule = rules::RULE_DIFF_DECIDER_REQUIRED;
+    if waivable == Waivable::Any {
+        return waivers;
+    }
+    let mut ignored: Vec<String> = Vec::new();
+    let kept = waivers
+        .into_iter()
+        .filter(|w| {
+            if w.rule != rule {
+                return true;
+            }
+            let held_by_base = waivable == Waivable::Base
+                && changed.is_some_and(|c| !c.iter().any(|p| p == std::path::Path::new(&w.id)));
+            if !held_by_base {
+                ignored.push(w.id.clone());
+            }
+            held_by_base
+        })
+        .collect();
+    if !ignored.is_empty() {
+        ignored.sort();
+        notices.push(Notice {
+            severity: NoticeSeverity::Info,
+            subject: rule.to_string(),
+            message: format!(
+                "authority.waivable is '{}': {} ignored for {rule}, so a gated change is cleared by a decider, not a record ({}): {}",
+                waivable.as_str(),
+                if ignored.len() == 1 { "a waiver is" } else { "waivers are" },
+                if waivable == Waivable::Never {
+                    "no waiver of this rule counts"
+                } else {
+                    "only a waiver the base revision holds unchanged counts"
+                },
+                ignored.join(", ")
+            ),
+            detail: None,
+        });
+    }
+    kept
+}
+
 /// What the base revision's config says about the decider gate
 /// (`authority.decider_table`, `ADR-89` amendment of 2026-11-09): its
 /// `authority` table, its `diff.decider-required` setting and its `fail_on`,
@@ -1303,6 +1352,66 @@ fn load_base_gate(
         .unwrap_or_else(|why| unreadable(why, notices))
 }
 
+/// The notices the decider gate owes a run: the missing-actors one and the
+/// "no --base" decider-table one.
+fn decider_gate_notices(
+    config: &Config,
+    context: &Context<'_>,
+    (has_base, has_actors): (bool, bool),
+    selection: Option<&[String]>,
+) -> Vec<Notice> {
+    let mut out = actors_notices(
+        context.gate_config.as_ref().unwrap_or(config),
+        has_actors,
+        has_base,
+        selection,
+    );
+    out.extend(decider_table_notices(
+        config, has_base, has_actors, selection,
+    ));
+    out
+}
+
+/// Whether a `diff.decider-required` setting asks for evidence.
+fn wants_evidence(setting: &urzua_core::config::RuleSetting) -> bool {
+    use urzua_core::config::RuleOpts;
+    urzua_core::rules::DeciderRequiredOpts::from_setting(setting).require_evidence
+}
+
+/// The stricter of the head's and the base's `diff.decider-required` setting,
+/// level and option by option: the higher level (with the setting that holds it),
+/// and `require_evidence` when either side sets it, the rule's only option.
+fn stricter_decider_setting(
+    head: Option<&urzua_core::config::RuleSetting>,
+    base: &urzua_core::config::RuleSetting,
+) -> urzua_core::config::RuleSetting {
+    let head_level = head.map_or(RuleLevel::Off, |s| s.level);
+    let mut merged = if base.level > head_level {
+        base.clone()
+    } else {
+        head.cloned().unwrap_or_default()
+    };
+    if wants_evidence(base) || head.is_some_and(wants_evidence) {
+        merged.require_evidence = Some(true);
+    }
+    merged
+}
+
+/// The waivers in force: the records' waivers, less those `authority.waivable`
+/// ignores for `diff.decider-required`.
+fn effective_waivers(
+    session: &Session,
+    context: &Context<'_>,
+    notices: &mut Vec<Notice>,
+) -> Vec<urzua_core::waiver::Suppression> {
+    let loaded = load_waivers(session, notices);
+    let waivable = urzua_core::authority::effective_waivable(
+        session.config.authority.as_ref(),
+        &context.base_authority,
+    );
+    restrict_decider_waivers(loaded, waivable, context.changed_paths.as_deref(), notices)
+}
+
 /// Applies the base revision's decider-gate settings under
 /// `authority.decider_table: base` or `both` (the mode in force is the
 /// stricter of the head's and the base's): the rule's level and options and
@@ -1345,15 +1454,26 @@ fn apply_base_gate(
                 .to_string(),
         ));
     }
-    let head_level = config.rules.get(&rule).map_or(RuleLevel::Off, |s| s.level);
-    if let Some(base_rule) = base.rule.as_ref().filter(|b| b.level > head_level) {
-        adjusted.rules.insert(rule.clone(), base_rule.clone());
-        changed = true;
-        notices.push(note(format!(
-            "{rule} is '{}' at the base revision and '{}' here: the base's stricter setting applies",
-            base_rule.level.as_str(),
-            head_level.as_str()
-        )));
+    let head_setting = config.rules.get(&rule);
+    let head_level = head_setting.map_or(RuleLevel::Off, |s| s.level);
+    if let Some(base_rule) = base.rule.as_ref() {
+        let merged = stricter_decider_setting(head_setting, base_rule);
+        if head_setting != Some(&merged) {
+            adjusted.rules.insert(rule.clone(), merged);
+            changed = true;
+            if base_rule.level > head_level {
+                notices.push(note(format!(
+                    "{rule} is '{}' at the base revision and '{}' here: the base's stricter setting applies",
+                    base_rule.level.as_str(),
+                    head_level.as_str()
+                )));
+            }
+            if wants_evidence(base_rule) && !head_setting.is_some_and(wants_evidence) {
+                notices.push(note(format!(
+                    "{rule} sets require_evidence at the base revision and not here: the base's stricter option applies"
+                )));
+            }
+        }
     }
     let fail_on = config.fail_on.max(base.fail_on.unwrap_or_default());
     if fail_on != config.fail_on {
@@ -1370,12 +1490,16 @@ fn apply_base_gate(
 fn decider_table_notices(
     config: &Config,
     has_base: bool,
+    has_actors: bool,
     selection: Option<&[String]>,
 ) -> Vec<Notice> {
     use urzua_core::authority::DeciderTable;
     let rule = rules::RULE_DIFF_DECIDER_REQUIRED;
     let mode = config.authority.as_ref().and_then(|a| a.decider_table);
+    // Said only when `--actors` names who made a change there is no base to
+    // judge: a plain local check has nothing for the rule to judge.
     if has_base
+        || !has_actors
         || !matches!(mode, Some(DeciderTable::Base | DeciderTable::Both))
         || enabled_setting(config, rule).is_none()
         || selection.is_some_and(|s| !s.iter().any(|r| r == rule))

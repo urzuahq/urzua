@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5E1D23JRXBPTP54NSG
-Version: '0.22'
+Version: '0.23'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -65,6 +65,8 @@ empty, same as every other command's report.
 | `record-type-required-fields` | One check per declared type with an empty `required_fields`. `warn`, not `error` — a type with no required fields is unusual, not necessarily wrong. |
 | `ci-wired` | Some workflow under `.github/workflows/` runs `urzua check` (a call in a command position: a `#` comment and an `echo`/`printf` line are not a call) or uses urzua's reusable `actions/urzua-gate` action (`MILE-180`); a repository's own wrapper script or make target is not recognised, which runs the checker for the caller. `warn` if not — a check that exists but is never run reports nothing to anyone. |
 | `authority-decider-table` | When `authority` declares gates: `ok` naming the value of `decider_table`, or `warn` when it is undeclared, since the table is then read from the pull request's own head and a pull request can add its author to a decider group in the change it asks to have approved; the message recommends `base` (`SPEC-3`, `ADR-89` amendment of 2026-11-09). |
+| `authority-waivable` | When `authority` declares gates: `ok` naming the value of `waivable`, or `warn` when it is undeclared, since a waiver record in the same pull request can then silence `diff.decider-required` (`SPEC-3`, `ADR-89` amendment of 2026-11-09, gate waivers). |
+| `authority-config-gated` | When `authority` declares gates and no path gate lists `.urzua/config.yaml`: `warn`, since a pull request can then edit the configuration (`exclude_files`, `dir`, status field names) and accept a record without a decider. Absent when a gate lists it. |
 
 | `hook-wired` | One check per local hook layer (`pre-commit`, `pre-push`), carrying `layer` and a machine-readable `state` (`MILE-179`, `ADR-71`). The hooks directory is `core.hooksPath` (relative to the working tree root) when set, else the repository's own `hooks`. `state` is `not-installed`, `installed-running-urzua` (the file runs `urzua <subcommand>`, by a path ending in `urzua` or by a variable assigned one; a mention in a comment or an `echo` does not count), `installed-not-running-urzua`, or `installed-not-executable` (git ignores a hook without the execute bit; not checked on non-Unix hosts). `ok` only for `installed-running-urzua`; the other states are `warn`, since a local layer is a convenience and only CI is the guarantee. `error` when the hooks directory or hook file cannot be read: not knowing is not the same as absent. Hook-manager configuration (lefthook, pre-commit framework) is not read; a manager that installs real hook files, or sets `core.hooksPath`, is seen. |
 
@@ -123,3 +125,4 @@ than compounded:
 > | 2026-11-09 | Bumped to `0.20`. `harness-installed` is not reported for a `harness` block that declares no adapter, guardrail or instructions file. **Why:** `urzua init` now writes `harness: {outside_writes: shared}` into every fresh configuration, and it was followed by a warning that a harness it never asked for was not installed. | **substantive** |
 > | 2026-11-09 | Bumped to `0.21`. Adds the check `authority-decider-table`, which warns when `authority` declares gates and `decider_table` is undeclared. **Why:** `ADR-89` amendment of 2026-11-09 (decider table), accepted by the maintainer. | **substantive** |
 > | 2026-11-09 | Bumped to `0.22`. Re-pin rows in this revision log were reworded to name who re-verified, matching the tool's wording since 2026-11-09; hashes, reasons and dates are unchanged. **Why:** Maintainer decision, 2026-11-09. | **structural** |
+> | 2026-11-09 | Bumped to `0.23`. Adds the checks `authority-waivable` and `authority-config-gated`. **Why:** `ADR-89` amendment of 2026-11-09 (gate waivers). | **substantive** |
