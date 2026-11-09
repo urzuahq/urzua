@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5Q0XVK27P5T8FN72BN
-Version: '0.45'
+Version: '0.47'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -374,7 +374,14 @@ declared and is `not-run` otherwise.
   line moves), and the clause records `<category>:<path>@sha256:<old 12 hex> -> <new 12 hex>`
   (a cited record: `<category>:<id> (latest revision <date>; pin <old> -> <new>)`), attested by the
   same `--by`, `--actor` and `--reason`; so the renewal leaves no stale pin for
-  `embodiment.consistency` to report. An unpinned locator is only recorded. Under `block` a moved pin
+  `embodiment.consistency` to report. An unpinned locator is only recorded, and the renewal's
+  row names it (`category:locator`, a cited record `category:ID`) and dates the acknowledgement:
+  `embodiment.consistency` judges that locator's drift from that day on, so a change of the cited file on or
+  before it (day granularity: later the same day too) no longer reports once `drift_grace_days` has passed, and
+  a later change does; a locator the row does not name keeps drifting. Only a row in the exact shape below
+  acknowledges anything. A record whose drift all lies in `acknowledge` categories is not refused because
+  `embodiment.consistency` reports it (the renewal clears it); a disagreement that remains without that
+  drift still refuses. Under `block` a moved pin
   is refused as above, and `--pin-only` never moves a pin. Under `ignore` the drift is neither refused nor listed; a stated `Embodiment` that `embodiment.consistency` would report;
   a record the expiry rule does not judge (neither a `Realized-by` value nor a Done-means item evidence clause) or cannot date (no valid anchor date and no commit for its first evidence line: the `Realized-by` line, or the first item evidence clause); a rule with no `anchor_field`; a record with
   no usable revision log; and any actor but `--actor human` (`agent`, or none given) where the matching
@@ -511,3 +518,5 @@ asserted by test, not assumed by convention.
 > | 2026-11-09 | Bumped to `0.44`. Documents the per-category drift policy of `reverify` (`block`, `acknowledge`, `ignore`): the corrected refusal for a drifted locator outside `require_pin`, `drift_acknowledged` in the detect report and the `; Drift acknowledged` clause of the `Re-verified` row (a non-record file named with the commit that last changed it; a drifted pinned locator of an `acknowledge` category re-pinned by the same renewal, old -> new hash recorded). **Why:** `ADR-97` amendment of 2026-11-09 (drift policy); the refusal told the reader to run `--pin-only`, which cannot pin a `spec:` locator, and a renewal under `acknowledge` left the pin of a moved code or test locator stale. | **substantive** |
 > | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/fix.rs` 0b23d692333e -> b5bfb2aa1386. Reason: Read the diff of each pinned file or span since the old pin against what this record evidences. rust/crates/urzua-core/src/fix.rs: replace_exact_pin becomes pub(crate) so reverify can reuse it; its body and every caller are unchanged. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-09 | Bumped to `0.45`. Re-pin rows in this revision log were reworded to name who re-verified, matching the tool's wording since 2026-11-09; hashes, reasons and dates are unchanged. **Why:** Maintainer decision, 2026-11-09. | **structural** |
+> | 2026-11-09 | Bumped to `0.46`. `reverify` under `drift: acknowledge` does not refuse a record whose only drift is in acknowledging categories because `embodiment.consistency` reports it past `drift_grace_days`, and the acknowledging `Re-verified` row dates the acknowledgement for unpinned locators. **Why:** `ADR-97` drift-policy amendment, consistency fix: `acknowledge` worked only inside the grace window. | **substantive** |
+> | 2026-11-09 | Bumped to `0.47`. The acknowledging `Re-verified` row names each acknowledged locator and clears only those, the date has day granularity, and only a row in the tool's exact shape acknowledges anything. **Why:** `ADR-97` item 6: a row cleared every unpinned locator of its category, and any text containing the words cleared them. | **substantive** |

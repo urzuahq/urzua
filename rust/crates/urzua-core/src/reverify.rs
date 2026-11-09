@@ -412,6 +412,169 @@ pub fn latest_revision_date(
     log.entries.iter().map(|e| e.date.clone()).max()
 }
 
+/// The clause a `Re-verified` row carries when the renewal acknowledged drift
+/// (`drift: acknowledge`); it ends the `Evidence` list.
+pub const DRIFT_ACKNOWLEDGED_CLAUSE: &str = "; Drift acknowledged:";
+
+/// What the tool wrote in a `Re-verified` row, read back: the locators its
+/// `Evidence:` list names (pins removed) and, when the renewal acknowledged
+/// drift, the locators the `Drift acknowledged:` clause names, each as
+/// `category:locator` or `category:ID` (hash, commit and revision text
+/// removed). The one parser that `acknowledgements` and
+/// `embodiment.claim-renewal-unattested` share.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReverifiedRow {
+    pub evidence: Vec<String>,
+    /// The pin hash text (as written, the tool's 12-character prefix) the
+    /// `Evidence:` list gave each pinned locator, by locator.
+    pub pins: Vec<(String, String)>,
+    pub acknowledged: Vec<String>,
+}
+
+/// Reads `row` as the shape [`reverified_row`] writes: `Re-verified (attested
+/// by <id>, identity: <source>, actor: <kind>[, verified login: <login>]): ...
+/// Evidence: <list>[; Drift acknowledged: <list>.] Reason: <reason> ...`.
+/// `None` for text that merely mentions a re-verification: a hand-typed row
+/// is not the tool's row and renews and acknowledges nothing.
+pub fn parse_reverified_row(row: &str) -> Option<ReverifiedRow> {
+    // `row` is the log row's cells (`<date> | <change> | <class>`): the change
+    // cell starts with the text.
+    const START: &str = "Re-verified (attested by ";
+    let at = row.find(START)?;
+    let before = row[..at].trim();
+    if !before.is_empty() && !before.ends_with('|') {
+        return None;
+    }
+    let rest = &row[at + START.len()..];
+    let (label, rest) = rest.split_once("): ")?;
+    let (who, source_actor) = label.split_once(", identity: ")?;
+    let (source, actor) = source_actor.split_once(", actor: ")?;
+    if [who, source, actor].iter().any(|p| p.trim().is_empty()) {
+        return None;
+    }
+    let (_, rest) = rest.split_once(" Evidence: ")?;
+    let (listed, reason) = rest.split_once(" Reason: ")?;
+    if reason.trim().is_empty() {
+        return None;
+    }
+    let (evidence, acknowledged) = match listed.split_once(DRIFT_ACKNOWLEDGED_CLAUSE) {
+        Some((evidence, acknowledged)) => (evidence, Some(acknowledged)),
+        None => (listed, None),
+    };
+    let entries = split_list(evidence);
+    let evidence: Vec<String> = entries.iter().map(|e| strip_pin(e).to_string()).collect();
+    let pins: Vec<(String, String)> = entries
+        .iter()
+        .filter_map(|e| {
+            let (locator, hash) = e.split_once("@sha256:")?;
+            Some((locator.trim().to_string(), hash.trim().to_string()))
+        })
+        .collect();
+    if evidence.is_empty() {
+        return None;
+    }
+    let acknowledged = match acknowledged {
+        Some(text) => {
+            let names: Vec<String> = split_list(text.trim().trim_end_matches('.'))
+                .iter()
+                .map(|e| acknowledged_name(e))
+                .collect();
+            if names.is_empty() {
+                return None;
+            }
+            names
+        }
+        None => Vec::new(),
+    };
+    Some(ReverifiedRow {
+        evidence,
+        pins,
+        acknowledged,
+    })
+}
+
+/// Splits a `, `-separated list, leaving a comma inside parentheses alone.
+fn split_list(text: &str) -> Vec<String> {
+    let (mut parts, mut depth, mut start) = (Vec::new(), 0usize, 0usize);
+    let bytes = text.as_bytes();
+    for (i, b) in bytes.iter().enumerate() {
+        match b {
+            b'(' => depth += 1,
+            b')' => depth = depth.saturating_sub(1),
+            b',' if depth == 0 && bytes.get(i + 1) == Some(&b' ') => {
+                parts.push(text[start..i].trim().to_string());
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    parts.push(text[start..].trim().to_string());
+    parts.retain(|p| !p.is_empty());
+    parts
+}
+
+/// `locator@sha256:...` as `locator`.
+fn strip_pin(entry: &str) -> &str {
+    entry.split("@sha256:").next().unwrap_or(entry).trim()
+}
+
+/// An acknowledged entry as the locator it names: `category:locator` or
+/// `category:ID`, without the hash, the commit or the revision text after it.
+fn acknowledged_name(entry: &str) -> String {
+    // Cut at the tool's own suffix forms only, so a path that holds ` (` stays whole.
+    const SUFFIXES: [&str; 4] = [
+        " (latest revision ",
+        " (last changed in ",
+        " (pin ",
+        " (no dated revision row)",
+    ];
+    let cut = SUFFIXES.iter().filter_map(|s| entry.rfind(s)).max();
+    let head = cut.map_or(entry, |at| &entry[..at]);
+    strip_pin(head).to_string()
+}
+
+/// A `Re-verified` row that acknowledged drift: the day it is dated, the
+/// locators it names and the row itself (to tell a row the branch added).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Acknowledgement {
+    pub date: String,
+    pub names: Vec<String>,
+    pub evidence: Vec<String>,
+    pub pins: Vec<(String, String)>,
+    pub row: String,
+}
+
+/// Every `Re-verified` row of a record in the tool's shape that acknowledged
+/// drift and carries a valid date. Drift of a locator a row names is judged
+/// from that row's date on (`ADR-97`, amendment of 2026-11-09, consistency):
+/// what changed on or before it was read and attested, exactly as a re-pin
+/// moves a pinned locator's reference point. Empty when the log cannot be read.
+pub fn acknowledgements(
+    content: &str,
+    log_id: &crate::config::RevisionLogId,
+    shape: &crate::config::RevisionLogShape,
+) -> Vec<Acknowledgement> {
+    let Some(Ok(log)) = crate::rules::find_revision_log_entries(content, log_id, shape) else {
+        return Vec::new();
+    };
+    log.entries
+        .iter()
+        .filter_map(|e| {
+            let parsed = parse_reverified_row(&e.row)?;
+            let date = e.date.trim().to_string();
+            (!parsed.acknowledged.is_empty() && crate::rules::date_unix(&date).is_ok()).then(|| {
+                Acknowledgement {
+                    date,
+                    names: parsed.acknowledged,
+                    evidence: parsed.evidence,
+                    pins: parsed.pins,
+                    row: e.row.clone(),
+                }
+            })
+        })
+        .collect()
+}
+
 /// One record in a review: its standing, its locators and what refuses it.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct RecordReview {
@@ -557,7 +720,10 @@ pub fn reverified_row(
     let acknowledged = if renewal.acknowledged.is_empty() {
         String::new()
     } else {
-        format!("; Drift acknowledged: {}.", renewal.acknowledged.join(", "))
+        format!(
+            "{DRIFT_ACKNOWLEDGED_CLAUSE} {}.",
+            renewal.acknowledged.join(", ")
+        )
     };
     format!(
         "Re-verified (attested by {}): {total} locators re-resolved, {hashed} hash-checked, {history_text}. Evidence: {evidence}{acknowledged} Reason: {reason} **Why:** the claim was {} days old against a {}-day period.",
@@ -798,6 +964,35 @@ mod tests {
             row.contains("Evidence: docs/s.md; Drift acknowledged: spec:ADR-1 (latest revision 2026-11-09). Reason: why **Why:**"),
             "{row}"
         );
+    }
+
+    #[test]
+    fn a_row_is_read_back_only_in_the_shape_the_tool_writes() {
+        let tool = " 2026-11-09 | Re-verified (attested by ana, identity: asserted, actor: human): 2 locators re-resolved, 1 hash-checked, 1 spec locators checked by git history only. Evidence: src/a.rs@sha256:0123456789ab, docs/adr/ADR-1-c.md; Drift acknowledged: spec:ADR-1 (latest revision 2026-11-01; pin a, b), code:src/b.rs@sha256:aaaaaaaaaaaa (last changed in 1234abc). Reason: r **Why:** w. | **structural** ";
+        let parsed = parse_reverified_row(tool).expect("the tool's row parses");
+        assert_eq!(parsed.evidence, ["src/a.rs", "docs/adr/ADR-1-c.md"]);
+        assert_eq!(parsed.acknowledged, ["spec:ADR-1", "code:src/b.rs"]);
+        for typed in [
+            "Re-verified (attested by ana (human)): looked. Evidence: x; Drift acknowledged: spec:ADR-1. Reason: r",
+            "Re-verified (attested by ana, identity: asserted): Evidence: x Reason: r",
+            "Re-verified (attested by ana, identity: asserted, actor: human): no list. Reason: r",
+            "Re-verified (attested by ana, identity: asserted, actor: human): Evidence: x",
+            "see Re-verified (attested by ana, identity: asserted, actor: human): Evidence: x Reason: r",
+        ] {
+            assert_eq!(parse_reverified_row(typed), None, "{typed}");
+        }
+    }
+
+    #[test]
+    fn a_locator_path_holding_a_space_and_parenthesis_is_named_whole() {
+        let row = " 2026-11-09 | Re-verified (attested by ana, identity: asserted, actor: human): 1 locators re-resolved, 1 hash-checked, 0 spec locators checked by git history only. Evidence: docs/a (copy).md@sha256:0123456789ab; Drift acknowledged: code:docs/a (copy).md@sha256:0123456789ab -> 0123456789cd (last changed in 1234abc), spec:ADR-1 (latest revision 2026-11-01; pin a -> b). Reason: r **Why:** w. | **structural** ";
+        let parsed = parse_reverified_row(row).expect("the tool's row parses");
+        assert_eq!(parsed.evidence, ["docs/a (copy).md"]);
+        assert_eq!(
+            parsed.pins,
+            [("docs/a (copy).md".to_string(), "0123456789ab".to_string())]
+        );
+        assert_eq!(parsed.acknowledged, ["code:docs/a (copy).md", "spec:ADR-1"]);
     }
 
     #[test]

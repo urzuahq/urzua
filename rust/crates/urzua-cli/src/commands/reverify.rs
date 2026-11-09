@@ -186,15 +186,31 @@ fn gather_evidence(
     let back_pointed =
         back_pointer_evidence(repo_root, discovered, config, records).map_err(refuse)?;
     let disagreeing = if rule_enabled(config, rules::RULE_EMBODIMENT_CONSISTENCY) {
-        embodiment_disagreements(
-            repo_root,
-            config,
-            records,
-            subset,
-            discovered,
-            &drift,
-            &back_pointed,
-        )
+        let judge = |drifted: &HashSet<PathBuf>, fresh: &HashSet<PathBuf>| {
+            embodiment_disagreements(
+                repo_root,
+                config,
+                records,
+                subset,
+                discovered,
+                (drifted, fresh),
+                &back_pointed,
+            )
+        };
+        let mut disagreeing = judge(&drift.drifted, &drift.fresh);
+        // Implements: ADR-97 (drift-policy amendment, consistency): a record
+        // whose only drift is in categories that acknowledge it is renewable
+        // although `embodiment.consistency` reports it now, because the
+        // renewal clears that drift. It is refused only for a disagreement
+        // that would remain without the acknowledged drift.
+        let acknowledged = acknowledged_only(&drift, config);
+        if !disagreeing.is_empty() && !acknowledged.is_empty() {
+            let drifted = drift.drifted.difference(&acknowledged).cloned().collect();
+            let fresh = drift.fresh.difference(&acknowledged).cloned().collect();
+            let remaining = judge(&drifted, &fresh);
+            disagreeing.retain(|path| !acknowledged.contains(path) || remaining.contains(path));
+        }
+        disagreeing
     } else {
         HashSet::new()
     };
@@ -784,6 +800,27 @@ fn commits_since_line(
     out
 }
 
+/// The records whose every drifted locator is in a category whose drift
+/// policy is `acknowledge`: the renewal reads and attests all of it.
+fn acknowledged_only(
+    drift: &crate::discovery::DriftedRecords,
+    config: &Config,
+) -> HashSet<PathBuf> {
+    let opts: rules::ClaimExpiredOpts = config.rule_opts(rules::RULE_EMBODIMENT_CLAIM_EXPIRED);
+    drift
+        .locators
+        .iter()
+        .filter(|(path, found)| {
+            (drift.drifted.contains(*path) || drift.fresh.contains(*path))
+                && !found.is_empty()
+                && found.iter().all(|l| {
+                    opts.drift_policy(&l.category) == urzua_core::config::DriftPolicy::Acknowledge
+                })
+        })
+        .map(|(path, _)| path.clone())
+        .collect()
+}
+
 /// The records whose stated `Embodiment` `embodiment.consistency` would
 /// report: the same computation `urzua fix` repairs from.
 fn embodiment_disagreements(
@@ -792,7 +829,7 @@ fn embodiment_disagreements(
     records: &[Record],
     subset: &[Record],
     discovered: &urzua_io::DiscoveredFiles,
-    drift: &crate::discovery::DriftedRecords,
+    (drifted, fresh): (&HashSet<PathBuf>, &HashSet<PathBuf>),
     back_pointed: &rules::BackPointerEvidence,
 ) -> HashSet<PathBuf> {
     let blocked = if subset.iter().any(|r| r.items.is_some()) {
@@ -806,8 +843,7 @@ fn embodiment_disagreements(
             env,
             blocked: &blocked,
         };
-        let (_, repairs) =
-            urzua_core::fix::detect_repairs(subset, config, &drift.drifted, &drift.fresh, &ctx);
+        let (_, repairs) = urzua_core::fix::detect_repairs(subset, config, drifted, fresh, &ctx);
         repairs
             .into_iter()
             .filter(|r| {

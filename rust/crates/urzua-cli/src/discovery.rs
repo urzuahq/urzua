@@ -791,6 +791,19 @@ struct DriftJudge<'a> {
     // whole corpus (`BUG-135`).
     last_commit_for_path: HashMap<PathBuf, Option<String>>,
     strictly_before: HashMap<(String, String), bool>,
+    claim_opts: rules::ClaimExpiredOpts,
+    /// The end of the newest day on which a `Re-verified` row of the record
+    /// being judged acknowledged the drift of each locator it names, by name
+    /// (`category:locator` or `category:ID`); set per record.
+    acknowledged_until: HashMap<String, i64>,
+    /// Judge without reading any acknowledgement: what drifted, whether or not
+    /// a renewal acknowledged it (the drift a row is checked against).
+    ignore_acknowledgements: bool,
+    /// The name of each drifted or held-back locator, by record.
+    names: HashMap<PathBuf, HashSet<String>>,
+    /// The id a cited file has as a record, by path; `None` for a file that is
+    /// no record.
+    cited_ids: HashMap<String, Option<String>>,
     drifted: HashSet<PathBuf>,
     fresh: HashSet<PathBuf>,
     fresh_until: HashMap<PathBuf, i64>,
@@ -822,6 +835,11 @@ impl<'a> DriftJudge<'a> {
             cache,
             last_commit_for_path: HashMap::new(),
             strictly_before: HashMap::new(),
+            claim_opts: config.rule_opts(rules::RULE_EMBODIMENT_CLAIM_EXPIRED),
+            acknowledged_until: HashMap::new(),
+            ignore_acknowledgements: false,
+            names: HashMap::new(),
+            cited_ids: HashMap::new(),
             drifted: HashSet::new(),
             fresh: HashSet::new(),
             fresh_until: HashMap::new(),
@@ -855,6 +873,88 @@ impl<'a> DriftJudge<'a> {
             .or_insert(leaves);
     }
 
+    // Implements: ADR-97 (the drift-policy amendment: an acknowledged renewal
+    // resets the reference point of the acknowledged locators)
+    /// For each locator a `Re-verified` row of `record` in the tool's shape
+    /// acknowledged, the end of the newest day of such a row that names it.
+    /// A repository that declares no acknowledging category reads no file.
+    fn acknowledged_through(&self, record: &Record) -> HashMap<String, i64> {
+        use urzua_core::config::DriftPolicy;
+        let mut through = HashMap::new();
+        if self.ignore_acknowledgements
+            || !self
+                .claim_opts
+                .drift
+                .values()
+                .any(|p| *p == DriftPolicy::Acknowledge)
+        {
+            return through;
+        }
+        let Ok(content) = urzua_io::read_to_string(&self.repo_root.join(&record.path)) else {
+            return through;
+        };
+        for ack in urzua_core::reverify::acknowledgements(
+            &content,
+            &self.config.revision_log_id(&record.record_type),
+            &self.config.revision_log_shape(&record.record_type),
+        ) {
+            let Ok(day) = rules::date_unix(&ack.date) else {
+                continue;
+            };
+            // A row dated after the evaluation date attests nothing yet.
+            if day > self.now_unix {
+                continue;
+            }
+            for name in ack.names {
+                let end = through.entry(name).or_insert(i64::MIN);
+                *end = (*end).max(day + DAY_SECS);
+            }
+        }
+        through
+    }
+
+    /// How a row names `parsed` under `category`: a cited record by its id, any
+    /// other file by its locator (without a pin), as `urzua reverify` writes it.
+    fn locator_name(&mut self, category: &str, parsed: &urzua_core::locator::Locator) -> String {
+        let id = self
+            .cited_ids
+            .entry(parsed.path.clone())
+            .or_insert_with(|| {
+                parse_prospective_record(self.config, Path::new(&parsed.path), "")
+                    .ok()
+                    .and_then(|r| rules::record_id(&r))
+            })
+            .clone();
+        match id {
+            Some(id) => format!("{category}:{id}"),
+            None => format!("{category}:{}", parsed.display()),
+        }
+    }
+
+    /// Whether the drift of an unpinned `parsed` locator of `category` last
+    /// changed in `locator_commit` was acknowledged by a renewal: the category
+    /// acknowledges drift and a row names this very locator for a day on or
+    /// after the change. A pinned locator needs no such reading: the renewal
+    /// moved its pin.
+    fn acknowledged(
+        &mut self,
+        category: &str,
+        parsed: &urzua_core::locator::Locator,
+        locator_commit: &str,
+    ) -> bool {
+        use urzua_core::config::DriftPolicy;
+        if self.claim_opts.drift_policy(category) != DriftPolicy::Acknowledge
+            || self.acknowledged_until.is_empty()
+        {
+            return false;
+        }
+        let name = self.locator_name(category, parsed);
+        self.acknowledged_until
+            .get(&name)
+            .zip(self.cache.commit_unix_time(locator_commit))
+            .is_some_and(|(until, changed)| changed < *until)
+    }
+
     /// Judges every claim of `record`; `references` holds each claim's blame, in
     /// order. Every claim's blame is consumed whether or not an earlier claim
     /// already drifted the record.
@@ -872,6 +972,7 @@ impl<'a> DriftJudge<'a> {
             .audit_field
             .and_then(|f| record.header.get(f))
             .and_then(|v| rules::date_unix(v).ok());
+        self.acknowledged_until = self.acknowledged_through(record);
         for ((_, realized_by_value), reference) in claims.iter().zip(references) {
             let reference_commit = match reference {
                 Some(Ok(Some(c))) => c,
@@ -903,7 +1004,8 @@ impl<'a> DriftJudge<'a> {
                 }
                 // Every locator is judged, not only up to the first drift: the
                 // renewal's drift policy is per category (`ADR-97` amendment).
-                let verdict = self.judge_locator(&parsed, &reference_commit, audit_time);
+                let verdict =
+                    self.judge_locator(&parsed, &entry.category, &reference_commit, audit_time);
                 self.note(record, &entry.category, &parsed, verdict);
             }
         }
@@ -944,6 +1046,11 @@ impl<'a> DriftJudge<'a> {
                 self.drifted.insert(record.path.clone());
             }
         }
+        let name = self.locator_name(category, parsed);
+        self.names
+            .entry(record.path.clone())
+            .or_default()
+            .insert(name);
         let drift = urzua_core::reverify::LocatorDrift {
             category: category.to_string(),
             locator: parsed.display(),
@@ -957,6 +1064,7 @@ impl<'a> DriftJudge<'a> {
     fn judge_locator(
         &mut self,
         parsed: &urzua_core::locator::Locator,
+        category: &str,
         reference_commit: &str,
         audit_time: Option<i64>,
     ) -> Judged {
@@ -978,6 +1086,7 @@ impl<'a> DriftJudge<'a> {
             Some(Anchor::Pin(pinned)) => self.judge_file_pin(parsed, pinned, audit_time),
             _ => self.judge_history(
                 parsed,
+                category,
                 covered.as_ref().map(|(_, files)| files.as_slice()),
                 reference_commit,
                 audit_time,
@@ -1050,6 +1159,7 @@ impl<'a> DriftJudge<'a> {
     fn judge_history(
         &mut self,
         parsed: &urzua_core::locator::Locator,
+        category: &str,
         covered: Option<&[String]>,
         reference_commit: &str,
         audit_time: Option<i64>,
@@ -1075,7 +1185,7 @@ impl<'a> DriftJudge<'a> {
                 answer
             }
         };
-        if !drifted_pair {
+        if !drifted_pair || self.acknowledged(category, parsed, &locator_commit) {
             return Judged::Next;
         }
         if let Some(leaves) = self.held_back(audit_time, &locator_commit) {
@@ -1173,6 +1283,40 @@ pub(crate) fn compute_drifted_records_at(
         shallow,
         no_history,
     }
+}
+
+/// The locators of the merge base's copy of a record (`base_text`) that had
+/// drifted, by name, whether or not a renewal acknowledged them: the claim's
+/// lines are dated as of `base_commit`, the cited files' history is read as it
+/// stands. What `embodiment.claim-renewal-unattested` checks a drift
+/// acknowledgement a branch added against. `None` when the copy does not
+/// parse as a record.
+pub(crate) fn compute_base_drift(
+    repo_root: &Path,
+    config: &Config,
+    base_commit: &str,
+    path: &Path,
+    base_text: &str,
+    now_unix: i64,
+    cache: &urzua_io::BlameCache,
+) -> Option<HashSet<String>> {
+    let record = parse_prospective_record(config, path, base_text).ok()?;
+    let claims = drift_claims(config, &record);
+    let references = claims
+        .iter()
+        .map(|(line, _)| {
+            Some(urzua_io::commit_for_line_at_rev(
+                repo_root,
+                base_commit,
+                path,
+                *line,
+            ))
+        })
+        .collect();
+    let mut judge = DriftJudge::new(repo_root, config, now_unix, cache);
+    judge.ignore_acknowledgements = true;
+    judge.judge_record(&record, &claims, references);
+    Some(judge.names.remove(&record.path).unwrap_or_default())
 }
 
 /// Whole days since each record's `Realized-by` line was last touched

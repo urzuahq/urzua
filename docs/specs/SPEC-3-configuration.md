@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.134'
+Version: '0.135'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:d62499673ea966031198e95a718a5a3a325b321fcc72842ad6a71b2a304bdb0a, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:92a2b9ceca89133f30987a013734da66b9332c4e937a87e72e53571596e18093, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:3c8aa671582772499ab7345cdbfb5a4dc2c50462882851fb20f853992acfd57c
@@ -1750,8 +1750,11 @@ rules:
 - **`embodiment.claim-renewal-unattested`** is a second opt-in rule, declared beside it and needing
   its `anchor_field`. On `check --base` it reports a changed record whose anchor date is newer than
   its merge-base copy's and which gained no `Re-verified` revision row dated that day, or whose
-  anchor the merge-base copy carried and the branch removed. It is not-applicable without `--base`,
-  and cannot see a record that never carried the field or one new in the diff.
+  anchor the merge-base copy carried and the branch removed. A `Re-verified` row counts only in the
+  exact shape `reverify` writes. It also reports a drift-acknowledging row the branch added that
+  names a locator which had not drifted at the merge base, or whose `Evidence:` list is not the
+  record's current locators. It is not-applicable without `--base`, and cannot see a record that
+  never carried the field or one new in the diff.
 
 ### Scoped evidence pins and locator resolvers (`ADR-74`, `MILE-185`)
 
@@ -2432,3 +2435,4 @@ proves this configuration produces the three findings.
 > | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` c1fbbe868c77 -> d62499673ea9. Reason: config.rs: ignore_marker now refuses record-id markers (ADR-1) and keyword-fragment markers (ements: ADR-); drift keys differing only by whitespace are refused; nocite-style specific markers still load (test added); **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-09 | Bumped to `0.133`. The record file extension `.md` is matched in any case (`X.MD` is a record), so a case-insensitive filesystem cannot hide a record from discovery or the acceptance gate. **Why:** the sixth review of the harness. | **substantive** |
 > | 2026-11-09 | Bumped to `0.134`. Documents `authority.waivable` (`never`, `base`, `any`; undeclared is `any`): whether a waiver may silence `diff.decider-required`, the stricter of the base's and the head's applying; `init` proposes `never`; states that the configuration is protected only when a gate lists it. **Why:** `ADR-89` amendment of 2026-11-09 (gate waivers). | **substantive** |
+> | 2026-11-09 | Bumped to `0.135`. `embodiment.claim-renewal-unattested` is described with the row-shape and drift-acknowledgement checks. **Why:** `ADR-97` item 6: a hand-typed row must not clear drift nobody read. | **substantive** |

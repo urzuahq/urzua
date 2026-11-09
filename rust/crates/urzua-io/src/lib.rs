@@ -1001,6 +1001,39 @@ pub fn commit_for_line_in(
         .map(|s| s.to_string()))
 }
 
+/// As [`commit_for_line`], on the file as `rev` held it: the commit that last
+/// touched `line` of `path` at that revision. For the merge base's copy of a
+/// record, whose claim a branch may have edited since.
+pub fn commit_for_line_at_rev(
+    repo_root: &Path,
+    rev: &str,
+    path: &Path,
+    line: usize,
+) -> Result<Option<String>, String> {
+    let run = GitRun::new()
+        .args(["blame", "-L", &format!("{line},{line}"), "--porcelain"])
+        .arg(rev);
+    let output = run_blame(run, path, repo_root, None)
+        .map_err(|e| format!("could not run git blame on {}: {e}", path.display()))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if is_no_history_stderr(&stderr) {
+            return Ok(None);
+        }
+        return Err(format!(
+            "git blame on {} at {rev} failed: {}",
+            path.display(),
+            stderr.trim()
+        ));
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    Ok(stdout
+        .lines()
+        .next()
+        .and_then(|l| l.split_whitespace().next())
+        .map(|s| s.to_string()))
+}
+
 /// One line's blame: its commit, none, or why git could not say.
 type LineBlame = Result<Option<String>, String>;
 
