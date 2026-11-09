@@ -609,6 +609,56 @@ pub fn embodiment_consistency(
     )
 }
 
+/// Which of the records `drift_grace_days` holds back would become a finding
+/// the day the window ends. Each is judged by the rule's own [`ConsistencyJudge`]
+/// as if its drift were already reported (in `drifted`, none held back), so the
+/// answer is the rule's own: a record whose type declares no `Embodiment`, one
+/// stating no `Embodiment`, a sticky state, or a stated drift state that already
+/// agrees yields no finding and is left out. The age and audit-date options are
+/// off here: only a disagreement counts.
+pub fn held_back_drift_that_would_report(
+    records: &[Record],
+    config: &Config,
+    held_back: &HashSet<PathBuf>,
+    back_pointed: &BackPointerEvidence,
+) -> HashSet<PathBuf> {
+    let none_held = HashSet::new();
+    let no_ages = HashMap::new();
+    let judge = ConsistencyJudge {
+        config,
+        drifted: held_back,
+        fresh_drift: &none_held,
+        back_pointed,
+        claim_age_days: &no_ages,
+        max_age: None,
+        sticky: sticky_states(config),
+        audit_field: None,
+    };
+    declared_slots_for_roles(
+        records,
+        config,
+        &[
+            crate::config::RelationRole::EmbodimentState,
+            crate::config::RelationRole::EmbodimentLocator,
+        ],
+    )
+    .into_iter()
+    .filter(|record| held_back.contains(&record.path))
+    .filter(|record| {
+        !config
+            .record_types
+            .get(&record.record_type)
+            .is_some_and(|t| t.has_no_header())
+    })
+    .filter(|record| {
+        let mut findings = Vec::new();
+        judge.judge(record, &mut findings);
+        !findings.is_empty()
+    })
+    .map(|record| record.path.clone())
+    .collect()
+}
+
 /// What `embodiment.consistency` judges every record against: the caller's
 /// precomputed history and evidence, and the rule's own options.
 struct ConsistencyJudge<'a> {
