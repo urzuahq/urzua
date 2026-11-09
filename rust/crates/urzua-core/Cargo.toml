@@ -10,6 +10,7 @@ publish.workspace = true
 [dependencies]
 regex = { workspace = true }
 serde = { workspace = true }
+sha2 = "0.10"
 thiserror = { workspace = true }
 yaml_serde = { workspace = true }
 
