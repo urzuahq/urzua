@@ -231,28 +231,7 @@ pub fn upgrade(mut doc: Value) -> Result<(Value, Vec<Change>), String> {
                 .to_string(),
         );
     }
-    // A version-1 build read an omitted `header_shape` as `blockquote`; the
-    // default is `yaml-frontmatter` now and `blockquote` is no longer read
-    // (`MILE-85`, `ADR-54`: a break is a break). Upgrading such a type would
-    // change what it means without saying so, so the upgrade refuses.
-    if let Some(types) = root
-        .get(Value::String("record_types".into()))
-        .and_then(Value::as_mapping)
-    {
-        let shape = Value::String("header_shape".into());
-        let omitted: Vec<String> = types
-            .iter()
-            .filter(|(_, ty)| ty.as_mapping().is_some_and(|m| !m.contains_key(&shape)))
-            .map(|(name, _)| format!("record_types.{}", name.as_str().unwrap_or("?")))
-            .collect();
-        if !omitted.is_empty() {
-            return Err(format!(
-                "{} omit{} `header_shape`, which a version-1 build read as `blockquote`; that shape was removed in MILE-85 and the default is now `yaml-frontmatter`, so the upgrade would change what the config means. Rewrite the type's records as YAML frontmatter and declare `header_shape: yaml-frontmatter` (or `none` for a type with no header), then run again",
-                omitted.join(", "),
-                if omitted.len() == 1 { "s" } else { "" },
-            ));
-        }
-    }
+    refuse_omitted_header_shape(root)?;
     let mut changes = Vec::new();
 
     root.insert(
@@ -267,51 +246,99 @@ pub fn upgrade(mut doc: Value) -> Result<(Value, Vec<Change>), String> {
         reason: "the config is now written in the current schema".to_string(),
     });
 
-    if let Some(types) = root
+    drop_header_layouts(root, &mut changes);
+    root.insert(rules_key, Value::Mapping(version_2_rules(&mut changes)));
+    Ok((doc, changes))
+}
+
+/// A version-1 build read an omitted `header_shape` as `blockquote`; the
+/// default is `yaml-frontmatter` now and `blockquote` is no longer read
+/// (`MILE-85`, `ADR-54`: a break is a break). Upgrading such a type would
+/// change what it means without saying so, so the upgrade refuses.
+fn refuse_omitted_header_shape(root: &Mapping) -> Result<(), String> {
+    let Some(types) = root
+        .get(Value::String("record_types".into()))
+        .and_then(Value::as_mapping)
+    else {
+        return Ok(());
+    };
+    let shape = Value::String("header_shape".into());
+    let omitted: Vec<String> = types
+        .iter()
+        .filter(|(_, ty)| ty.as_mapping().is_some_and(|m| !m.contains_key(&shape)))
+        .map(|(name, _)| format!("record_types.{}", name.as_str().unwrap_or("?")))
+        .collect();
+    if omitted.is_empty() {
+        return Ok(());
+    }
+    Err(format!(
+        "{} omit{} `header_shape`, which a version-1 build read as `blockquote`; that shape was removed in MILE-85 and the default is now `yaml-frontmatter`, so the upgrade would change what the config means. Rewrite the type's records as YAML frontmatter and declare `header_shape: yaml-frontmatter` (or `none` for a type with no header), then run again",
+        omitted.join(", "),
+        if omitted.len() == 1 { "s" } else { "" },
+    ))
+}
+
+/// Removes every record type's `header_layout`, which no rule reads.
+fn drop_header_layouts(root: &mut Mapping, changes: &mut Vec<Change>) {
+    let Some(types) = root
         .get_mut(Value::String("record_types".into()))
         .and_then(Value::as_mapping_mut)
-    {
-        let layout = Value::String("header_layout".into());
-        for (name, ty) in types.iter_mut() {
-            let Some(ty) = ty.as_mapping_mut() else {
-                continue;
-            };
-            if ty.remove(&layout).is_some() {
-                let name = name.as_str().unwrap_or("?");
-                changes.push(Change {
-                    action: ChangeAction::Dropped,
-                    key: format!("record_types.{name}.header_layout"),
-                    to: None,
-                    value: None,
-                    reason: "no rule reads it any more; `header.layout-consistency` was removed"
-                        .to_string(),
-                });
-            }
+    else {
+        return;
+    };
+    let layout = Value::String("header_layout".into());
+    for (name, ty) in types.iter_mut() {
+        let Some(ty) = ty.as_mapping_mut() else {
+            continue;
+        };
+        if ty.remove(&layout).is_some() {
+            let name = name.as_str().unwrap_or("?");
+            changes.push(Change {
+                action: ChangeAction::Dropped,
+                key: format!("record_types.{name}.header_layout"),
+                to: None,
+                value: None,
+                reason: "no rule reads it any more; `header.layout-consistency` was removed"
+                    .to_string(),
+            });
         }
     }
+}
 
+/// Names a rule in the version-2 `rules` table, and says so.
+fn enable_rule(
+    rules: &mut Mapping,
+    id: &str,
+    level: &str,
+    reason: &str,
+    changes: &mut Vec<Change>,
+) {
+    rules.insert(Value::String(id.into()), Value::String(level.into()));
+    changes.push(Change {
+        action: ChangeAction::Added,
+        key: format!("rules.{id}"),
+        to: None,
+        value: Some(level.to_string()),
+        reason: reason.to_string(),
+    });
+}
+
+/// The `rules` table carrying every rule a version-1 build ran, at the
+/// severity it ran it.
+fn version_2_rules(changes: &mut Vec<Change>) -> Mapping {
     let mut rules = Mapping::new();
-    let mut enable = |id: &str, level: &str, reason: &str, changes: &mut Vec<Change>| {
-        rules.insert(Value::String(id.into()), Value::String(level.into()));
-        changes.push(Change {
-            action: ChangeAction::Added,
-            key: format!("rules.{id}"),
-            to: None,
-            value: Some(level.to_string()),
-            reason: reason.to_string(),
-        });
-    };
     let ran = "a version-1 build ran this rule at this severity; a version-2 config runs only the rules it names";
     for (id, carry) in V1_RULES {
         match carry {
-            Carry::Level(level) => enable(id, level, ran, &mut changes),
+            Carry::Level(level) => enable_rule(&mut rules, id, level, ran, changes),
             Carry::Split(level, other, other_level) => {
-                enable(id, level, ran, &mut changes);
-                enable(
+                enable_rule(&mut rules, id, level, ran, changes);
+                enable_rule(
+                    &mut rules,
                     other,
                     other_level,
                     "the rule was split out of the one above; a version-1 build reported this half at this severity",
-                    &mut changes,
+                    changes,
                 );
             }
             Carry::Gone(reason) => changes.push(Change {
@@ -331,14 +358,14 @@ pub fn upgrade(mut doc: Value) -> Result<(Value, Vec<Change>), String> {
         reason: "version 1 announced the status of every reference that resolved, which version 2 no longer does; the rule now needs the `not_in` statuses a repository declares"
             .to_string(),
     });
-    enable(
+    enable_rule(
+        &mut rules,
         OUTDATED_RULE,
         "warn",
         "reports a config read through an upgrade; enabled so the next release reports this one",
-        &mut changes,
+        changes,
     );
-    root.insert(rules_key, Value::Mapping(rules));
-    Ok((doc, changes))
+    rules
 }
 
 /// The result of rewriting a version-1 config text.

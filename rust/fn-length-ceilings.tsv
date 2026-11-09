@@ -11,16 +11,5 @@
 #     the entry, or lower it to the new length).
 # Print the current offenders in this format with:
 #   cargo test -p urzua-cli --test fn_length_ratchet -- --ignored --nocapture
-crates/urzua-cli/src/diff_scope.rs::examine	124
-crates/urzua-core/src/document_model.rs::RawRequiredSection::resolve	104
-crates/urzua-core/src/header.rs::parse_yaml_frontmatter	101
-crates/urzua-core/src/rules/boundary.rs::published_path_reference	205
-crates/urzua-core/src/rules/claim_expiry.rs::embodiment_claim_expired	143
-crates/urzua-core/src/rules/claim_expiry.rs::embodiment_claim_renewal_unattested	108
 crates/urzua-core/src/rules/delivery_items.rs::status_waived_item_stale	104
-crates/urzua-core/src/rules/embodiment.rs::embodiment_consistency	158
-crates/urzua-core/src/rules/embodiment.rs::embodiment_locator_promotion_candidate	119
-crates/urzua-core/src/rules/embodiment.rs::locator_defect	154
-crates/urzua-core/src/rules/locator_mechanism.rs::embodiment_locator_on_back_pointer_path	119
-crates/urzua-core/src/schema_version.rs::upgrade	120
 crates/urzua-core/src/status_model.rs::validate_items	112
