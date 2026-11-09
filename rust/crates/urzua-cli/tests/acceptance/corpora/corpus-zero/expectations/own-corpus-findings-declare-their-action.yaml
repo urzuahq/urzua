@@ -1,6 +1,6 @@
 id: own-corpus-findings-declare-their-action
 corpus: "@repo"
-invocation: [check]
+invocation: [--as-of, "2026-11-09", check]
 # This repository's own corpus over its own configuration (`ADR-73`, `MILE-44`).
 # The `embodiment.locator-on-back-pointer-path` nudges used to be listed here, to
 # prove that their exempt variant carries no `suggested_action`. The rule now
