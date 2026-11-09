@@ -654,8 +654,18 @@ fn gate_denial(
 }
 
 /// Judges the edit in the repository the process is in.
-fn judge_edit_in(config: Option<PathBuf>, request: Request) -> Verdict {
+fn judge_edit_in(config: Option<PathBuf>, mut request: Request) -> Verdict {
     let actor = request.actor();
+    if request.adapter_error.is_none()
+        && !request.contents.is_empty()
+        && request.contents.len() != request.paths.len()
+    {
+        request.adapter_error = Some(format!(
+            "the request names {} path(s) but {} proposed content(s)",
+            request.paths.len(),
+            request.contents.len()
+        ));
+    }
     if let Some(why) = &request.adapter_error {
         return adapter_failure(config.as_deref(), &request, why);
     }
@@ -763,7 +773,9 @@ fn config_unloadable(
 /// still blocks: every path is judged and any denial wins.
 fn agent_gate_denial(repo_root: &Path, loaded: &Config, request: &Request) -> Option<Verdict> {
     request.paths.iter().enumerate().find_map(|(i, path)| {
-        let content = request.content_at(i)?;
+        // A path without content is still judged by its path (a protected
+        // path blocks); the acceptance gate, which reads content, finds no status.
+        let content = request.content_at(i).unwrap_or("");
         gate_denial(repo_root, loaded, path, content, request)
     })
 }

@@ -615,7 +615,7 @@ worktree of the repository, at a commit that holds no gates, an unjudged place t
 
 ## Amendment (2026-11-09, fifth review): the status gates and the MCP call bound
 
-Status of this amendment: pending maintainer review. It fixes behaviour against what this ADR promises and
+Status of this amendment: accepted by the maintainer on 2026-11-09. It fixes behaviour against what this ADR promises and
 changes no decision.
 
 - **Route 1, a weakening of a status gate is reported like a path gate.** The post-command baseline also holds
@@ -690,3 +690,4 @@ The Decision is unchanged. The Status of this ADR stays Accepted.
 > | 2026-11-09 | Amendment of 2026-11-09 (the accepted-risk list made exact: routes 1, 6 and 11) accepted. **Why:** Maintainer decision, 2026-11-09. | **substantive** |
 > | 2026-11-09 | Added an `## Amendment (2026-11-09, outside writes)`, accepted by the maintainer on 2026-11-09: `harness.outside_writes` (`allow`, `shared` or `deny`) (with `allow_paths` for `deny`) decides how an edit-tool write outside the session's repository is judged; under `shared` a file of a linked worktree of the same repository is also judged against the session's acceptance and protected-path gates, under `deny` any such write is refused except under `allow_paths`, undeclared acts as `allow`; `init` proposes `shared`, `doctor` warns when it is undeclared with a guardrail enabled; a separate clone joins the accepted-risk list as route 12 and routes 1 and 8 name the worktree commit and the side-branch push. `Status` stays Accepted. **Why:** Maintainer decision, 2026-11-09, on the review that found a linked worktree at a commit without gates an unjudged place to write. | **substantive** |
 > | 2026-11-09 | Added an `## Amendment (2026-11-09, fifth review)`, pending maintainer review: a removed or narrowed status gate, or `acceptance` switched off, is judged against the baseline in the post-command check (route 1); a change of a gate's `by` is not shrinkage (the move and the configuration are reported); the `edit` hook sets a 120 second `timeout` and the translator bounds an MCP call (all gates in one engine process for at most 512 files, then at most 8 record files). `Status` stays Accepted. **Why:** the fifth review of the harness found these behaving otherwise than the ADR promises. | **substantive** |
+> | 2026-11-09 | Amendment of 2026-11-09 (fifth review: the status gates and the MCP call bound) accepted. **Why:** Maintainer decision, 2026-11-09. | **substantive** |
