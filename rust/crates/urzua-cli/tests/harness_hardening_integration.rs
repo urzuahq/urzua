@@ -1044,25 +1044,39 @@ fn the_engine_says_for_a_gates_only_request_whether_a_record_would_be_checked() 
 }
 
 #[test]
-fn a_request_whose_contents_do_not_match_its_paths_is_refused_and_a_null_content_is_judged_by_path() {
+fn a_request_whose_contents_do_not_match_its_paths_is_refused_and_a_null_content_is_judged_by_path()
+{
     let dir = fixture("contents-mismatch", &config(""));
-    let ask = |paths: serde_json::Value, contents: serde_json::Value, content: serde_json::Value| {
-        let request = serde_json::json!({
-            "event": "edit", "tool": "mcp__x__w", "paths": paths, "contents": contents,
-            "content": content, "actor": "agent", "cwd": dir.to_string_lossy(),
-            "gates_only": true,
-        });
-        let mut c = urzua();
-        c.args(["harness", "run", "edit"]).current_dir(&dir);
-        json(&run_with_stdin(&mut c, &request.to_string()))
-    };
+    let ask =
+        |paths: serde_json::Value, contents: serde_json::Value, content: serde_json::Value| {
+            let request = serde_json::json!({
+                "event": "edit", "tool": "mcp__x__w", "paths": paths, "contents": contents,
+                "content": content, "actor": "agent", "cwd": dir.to_string_lossy(),
+                "gates_only": true,
+            });
+            let mut c = urzua();
+            c.args(["harness", "run", "edit"]).current_dir(&dir);
+            json(&run_with_stdin(&mut c, &request.to_string()))
+        };
     let benign = dir.join("notes.txt").to_string_lossy().to_string();
     let protected = dir.join(PROTECTED).to_string_lossy().to_string();
-    let v = ask(serde_json::json!([benign, protected]), serde_json::json!(["x"]), serde_json::Value::Null);
+    let v = ask(
+        serde_json::json!([benign, protected]),
+        serde_json::json!(["x"]),
+        serde_json::Value::Null,
+    );
     assert_eq!(v["verdict"], "block", "{v}");
-    let v = ask(serde_json::json!([benign, protected]), serde_json::json!([null, null]), serde_json::Value::Null);
+    let v = ask(
+        serde_json::json!([benign, protected]),
+        serde_json::json!([null, null]),
+        serde_json::Value::Null,
+    );
     assert_eq!(v["verdict"], "block", "{v}");
-    let v = ask(serde_json::json!([benign, benign]), serde_json::json!(["a", "b"]), serde_json::Value::Null);
+    let v = ask(
+        serde_json::json!([benign, benign]),
+        serde_json::json!(["a", "b"]),
+        serde_json::Value::Null,
+    );
     assert_eq!(v["verdict"], "allow", "{v}");
 }
 
