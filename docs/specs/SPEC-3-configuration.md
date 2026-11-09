@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.120'
+Version: '0.121'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:20203e6012242d88f80f6c8b86a74b96a02db16c1afb99391b3c8814d9245681, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:92a2b9ceca89133f30987a013734da66b9332c4e937a87e72e53571596e18093, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:3c8aa671582772499ab7345cdbfb5a4dc2c50462882851fb20f853992acfd57c
@@ -2074,6 +2074,14 @@ declare; no `kinds`, or a name listed twice; a `delivered_tiers` entry that is n
 that is not in `resolving_tiers` (no item could resolve at it) or that is in `unevidenced_tiers`. A `Kind`
 value outside the vocabulary is reported by `status.done-items-shape` and judged as no kind.
 
+`items.pending` (optional) lists the texts that mean an item is not yet written, in the shape and with the
+matching of `statuses.pending`: a whole value (trimmed, case-insensitive) or `{pattern: "..."}`. An item whose
+text matches is an unfilled placeholder: it never resolves, its evidence and waiver clauses are ignored, and
+`status.done-items-shape` reports it on its line (`ADR-96`, amendment of 2026-11-08). Omitted keeps today's
+behaviour. An empty list, a blank or duplicate entry and an invalid pattern are load errors.
+Whole-value entries match case-insensitively, but `{pattern: ...}` entries are case-sensitive regexes, and a real
+item that begins with a declared pattern is flagged too, so a pattern should be specific to the template's wording.
+
 A dependency caps the standing (`ADR-96`, amendment of 2026-11-07): where `items` is declared and
 `roadmap.pairs` names a sequencing pair, a record whose items all resolve but which has an unfinished
 dependency computes `partial_status`, not `set_status`. Nothing is added to the configuration for this; a
@@ -2348,3 +2356,4 @@ proves this configuration produces the three findings.
 > | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` df8b21e9c8a5 -> 20203e601224. Reason: Read the diff of each pinned file or range since the old pin against what this record evidences: config.rs gained the validate_ignore_markers helper, called first in validate_boundaries, which accepts ignore_marker on embodiment.back-pointer-resolution and embodiment.back-pointer-decision-accepted, validates the marker (non-blank, one line, no padding) ahead of the boundary-only checks so it covers every rule that takes the option (this replaces the boundary rule's inline check, with the same errors), refuses a marker inside the Implements: or Verifies: keyword on the two back-pointer rules and refuses two different markers on them; no other option, parse or default changed. The claim this record evidences still holds. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
 > | 2026-11-08 | Bumped to `0.119`. Documents `ignore_marker` on `embodiment.back-pointer-resolution` and `embodiment.back-pointer-decision-accepted`: the boundary rule's option reused as one marker for both rules and the evidence collector (differing values are a load error), excusing the whole line (not reported, not judged, not evidence), a load-time guard against a marker inside a back-pointer keyword, disclosure as `excused_lines` and an `info` notice in `check`, `fix` and `reverify`, and an unused marker reported once per line; opt-in. **Why:** `ADR-80` amendment of 2026-11-08, accepted by the maintainer. | **substantive** |
 > | 2026-11-08 | Bumped to `0.120`. States that `urzua check` reports an unknown `harness` key, or an unknown key inside a guardrail, as a warning notice. **Why:** the `ADR-89` amendment of 2026-11-07 keeps these "reported, not an error", but only `harness install`, `doctor` and the session hook read them; a typo such as `enabeld` left the guardrail off while `check` was silent. | **substantive** |
+> | 2026-11-08 | Bumped to `0.121`. Documents `statuses.delivery.items.pending`, an optional placeholder vocabulary for Done-means items in the shape of `statuses.pending`. **Why:** `ADR-96` amendment of 2026-11-08 (placeholder items). | **substantive** |
