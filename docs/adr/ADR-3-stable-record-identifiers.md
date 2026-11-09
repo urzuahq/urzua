@@ -65,7 +65,8 @@ Specifics:
    assigning a display number can never break a link.
 4. **Filenames** carry the display number for browsability
    (`0042-some-decision.md`), with the stable ID in the record's frontmatter as the authority. A
-   filename/ID mismatch is a lint error — a check `filename.title-consistency` already makes for the number.
+   mismatch between the filename's number and the number in the H1 title is a lint error:
+   `filename.title-consistency` already makes that check, which covers the display-number half only.
 5. **Back-pointers in code** (`Implements: ...`) accept either form. Display numbers are what humans
    type; the resolver maps them to stable IDs, and the linter flags any display number that has
    drifted from the record it names.

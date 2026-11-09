@@ -16,7 +16,7 @@ Derives-from: RFC-1, RFC-4
 This project has accumulated a real backlog — decided-but-unbuilt work (RFC-17's section-parser,
 ADR-33's header-shape conversion), explicitly deferred work (RFC-5's full claim graph, `fix`
 Tier 2/3, AgDR export), undecided Draft RFCs, and ~30 candidate features and findings
-with no routing to any public record at all — with no durable, checkable place to track any of it.
+with no routing to any public record at all. There was no durable, checkable place to track any of it.
 It exists only in conversation history and an unstructured roadmap document.
 
 The obvious question this project already answered once, for `waiver` (ADR-11): does tracking
