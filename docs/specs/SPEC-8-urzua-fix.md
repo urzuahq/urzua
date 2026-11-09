@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5Q0XVK27P5T8FN72BN
-Version: '0.43'
+Version: '0.44'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/commands/fix.rs@sha256:9e52be4749a2a8d1e9895e8e762a7ea7ab282410652c04a718fd848fb32b38a6, code:rust/crates/urzua-core/src/fix.rs@sha256:0b23d692333e06f8911b58f55de937fc8bc711c5f1cb7fc561e6db5691f0db4d, test:rust/crates/urzua-cli/tests/fix_paths_integration.rs@sha256:73cb06a1782f02abeaf6c0795632ed1d1939633d72f67033247120656c6927d2, test:rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs@sha256:27c91b75ad614811aa87db203bafedcadf05c64de434957d0859e2af55659bf0, test:rust/crates/urzua-cli/tests/fix_drift_integration.rs@sha256:ff69343ca324400bde79c266372f9a213728d4d4ef8202beca6e12e54aa35352
+Realized-by: code:rust/crates/urzua-cli/src/commands/fix.rs@sha256:9e52be4749a2a8d1e9895e8e762a7ea7ab282410652c04a718fd848fb32b38a6, code:rust/crates/urzua-core/src/fix.rs@sha256:b5bfb2aa1386ccffba13be9f41ccdeffd829b864f682467c858ccde77d37c95c, test:rust/crates/urzua-cli/tests/fix_paths_integration.rs@sha256:73cb06a1782f02abeaf6c0795632ed1d1939633d72f67033247120656c6927d2, test:rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs@sha256:27c91b75ad614811aa87db203bafedcadf05c64de434957d0859e2af55659bf0, test:rust/crates/urzua-cli/tests/fix_drift_integration.rs@sha256:ff69343ca324400bde79c266372f9a213728d4d4ef8202beca6e12e54aa35352
 Author: beauwilliams
 Subject: '`urzua fix` -- detecting and applying Embodiment corrections computed from evidence.'
 Implements: ADR-15, ADR-18, ADR-19, ADR-20
@@ -341,7 +341,9 @@ declared and is `not-run` otherwise.
   `pinned`, `recorded_hash`, `current_hash`, `check` and, for a scoped one, `span` with its text, so
   the reviewer reads the content they attest. `check` is `hash-checked`, `will-pin`, `history-only`
   (a locator outside `require_pin`, such as `spec:`, re-resolved and judged by git history only),
-  `changed` or `unresolved`. `refused` lists why a record cannot be written; with `--pin-only`,
+  `changed` or `unresolved`. `drift_acknowledged` (absent when empty) lists the drifted locators of a
+  category declared `drift: acknowledge` that a renewal would write into its row, as the row names them,
+  so a record the policy lets through is listed as renewable with its drift shown. `refused` lists why a record cannot be written; with `--pin-only`,
   `commits_since` lists the commits that touched an unpinned locator since the `Realized-by` line
   was last touched. A record whose revision log a row cannot be appended to (no log section, an unreadable
   one, or one with no rows) is listed in `refused` with that reason, because both modes append an attested
@@ -357,7 +359,23 @@ declared and is `not-run` otherwise.
 - **Refused, writing nothing for that record:** a locator that does not resolve; a pinned locator
   whose hash differs (run `fix --rebaseline`); drift by the git-history rule, inside
   `drift_grace_days` too (attesting over a file that changed and was not re-read is the rubber stamp
-  this command exists to prevent); a stated `Embodiment` that `embodiment.consistency` would report;
+  this command exists to prevent), where the drift policy of the locator's category is `block`, the
+  default (`SPEC-3`, `drift`). A refusal for drift in a category with a pin to move names the re-pin
+  remedy; one for a category outside `require_pin` (a `spec:` locator, which `--pin-only` cannot pin)
+  names the category, that its policy is `block` (declared, or by default), and the `drift` setting
+  that lets a reviewer acknowledge it. Under `acknowledge` the renewal is written and the `Re-verified`
+  row gains a clause `; Drift acknowledged: <locator>, ...` between its `Evidence` list and the
+  `Reason` (the `;` ends the evidence list, so the row parses unambiguously): a cited record as
+  `<category>:<id> (latest revision <date>)`, any other file as
+  `<category>:<path>@sha256:<12 hex> (last changed in <short sha>)`, the commit being the newest one
+  that touched the file after the `Realized-by` line was last touched (omitted when git cannot say).
+  A drifted pinned locator of an `acknowledge` category is re-pinned by the same renewal: the new
+  hash is written over the stale one on the `Realized-by` line or item clause (nothing else on the
+  line moves), and the clause records `<category>:<path>@sha256:<old 12 hex> -> <new 12 hex>`
+  (a cited record: `<category>:<id> (latest revision <date>; pin <old> -> <new>)`), attested by the
+  same `--by`, `--actor` and `--reason`; so the renewal leaves no stale pin for
+  `embodiment.consistency` to report. An unpinned locator is only recorded. Under `block` a moved pin
+  is refused as above, and `--pin-only` never moves a pin. Under `ignore` the drift is neither refused nor listed; a stated `Embodiment` that `embodiment.consistency` would report;
   a record the expiry rule does not judge (neither a `Realized-by` value nor a Done-means item evidence clause) or cannot date (no valid anchor date and no commit for its first evidence line: the `Realized-by` line, or the first item evidence clause); a rule with no `anchor_field`; a record with
   no usable revision log; and any actor but `--actor human` (`agent`, or none given) where the matching
   entry's level is `error`.
@@ -379,7 +397,7 @@ declared and is `not-run` otherwise.
   of the type's `tool_class`:
   `Pinned (attested by NAME, identity: SOURCE, actor: ACTOR): N locators pinned, F file-level, Q scoped. Evidence: <locator>@sha256:<12 hex>, ... Reason: <reason> **Why:** a claim is renewed only over pinned code and test evidence.`
   and
-  `Re-verified (attested by NAME, identity: SOURCE, actor: ACTOR): N locators re-resolved, P hash-checked, S spec locators checked by git history only. Evidence: ... Reason: <reason> **Why:** the claim was <age> days old against a <days>-day period.`
+  `Re-verified (attested by NAME, identity: SOURCE, actor: ACTOR): N locators re-resolved, P hash-checked, S spec locators checked by git history only. Evidence: ...[; Drift acknowledged: ...] Reason: <reason> **Why:** the claim was <age> days old against a <days>-day period.`
   A record pinned and renewed in one run gets both rows, in that order, with the one reason. A
   repository with no `require_pin` gets `H unpinned locators checked by git history only` for `S spec
   locators ...`.
@@ -490,3 +508,5 @@ asserted by test, not assumed by convention.
 > | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/fix.rs` bfd53b872aaa -> 98b3bebce0fd. Reason: fix.rs: read the diff since the previous pin; it adds Attestation::rebaseline_why and uses it for the Why text of the re-baseline revision row (worded by actor kind) plus its test; nothing this record's claim covers changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/fix.rs` 98b3bebce0fd -> 0b23d692333e. Reason: Read the diff of fix.rs since the old pin against what this record evidences: the only change is log_row, which now writes a pipe in a revision-row narrative as an escaped pipe so the row keeps its columns (plus its unit test); the behaviour this record evidences is unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-09 | Bumped to `0.43`. The pinned `fix.rs` evidence moved when `log_row` began escaping a pipe in a revision-row narrative; no spec text changed. **Why:** the repository checker asks a dated structural revision row, such as the re-pin above, to carry a version bump. | **structural** |
+> | 2026-11-09 | Bumped to `0.44`. Documents the per-category drift policy of `reverify` (`block`, `acknowledge`, `ignore`): the corrected refusal for a drifted locator outside `require_pin`, `drift_acknowledged` in the detect report and the `; Drift acknowledged` clause of the `Re-verified` row (a non-record file named with the commit that last changed it; a drifted pinned locator of an `acknowledge` category re-pinned by the same renewal, old -> new hash recorded). **Why:** `ADR-97` amendment of 2026-11-09 (drift policy); the refusal told the reader to run `--pin-only`, which cannot pin a `spec:` locator, and a renewal under `acknowledge` left the pin of a moved code or test locator stale. | **substantive** |
+> | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/fix.rs` 0b23d692333e -> b5bfb2aa1386. Reason: Read the diff of each pinned file or span since the old pin against what this record evidences. rust/crates/urzua-core/src/fix.rs: replace_exact_pin becomes pub(crate) so reverify can reuse it; its body and every caller are unchanged. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |

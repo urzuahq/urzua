@@ -693,7 +693,7 @@ fn note_failed_pin(failed: &mut Vec<FailedPin>, record: &Path, locator: String, 
 /// replaced by `new`, or `None` when there is none. A match must start at a
 /// token boundary, so the pin on `a.rs` does not rewrite the pin on `lib/a.rs`
 /// that carries the same hash, and must not run into a longer hash.
-fn replace_exact_pin(line: &str, old: &str, new: &str) -> Option<String> {
+pub(crate) fn replace_exact_pin(line: &str, old: &str, new: &str) -> Option<String> {
     let path_char = |c: char| c.is_alphanumeric() || "_./-~@+%".contains(c);
     let mut out = String::with_capacity(line.len());
     let mut rest = 0;

@@ -3,12 +3,14 @@
 //! two attributed revision rows (`Pinned` and `Re-verified`). The command
 //! (`urzua-cli`) reads the tree, the clock and git; nothing here does.
 
-use crate::config::{Config, RelationRole};
-use crate::fix::{append_log_rows, evidence_edit_lines, Attestation, PinRead, PinSpan};
+use crate::config::{Config, DriftPolicy, RelationRole};
+use crate::fix::{
+    append_log_rows, evidence_edit_lines, replace_exact_pin, Attestation, PinRead, PinSpan,
+};
 use crate::line_edit::LineDoc;
 use crate::locator::{self, Anchor, Locator};
 use crate::record::Record;
-use crate::rules::{evidence_text, relation_field_name};
+use crate::rules::{evidence_text, relation_field_name, ClaimExpiredOpts};
 
 /// What the tool could prove about one locator at review time.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
@@ -51,6 +53,14 @@ pub struct LocatorReview {
     pub spelling: String,
     #[serde(skip)]
     pub scoped: bool,
+    /// The locator's path, without scope or pin.
+    #[serde(skip)]
+    pub path: String,
+    /// What the locator hashes to now, whether or not the review shows it
+    /// (a history-only locator's hash is not in the report), so a drift
+    /// acknowledgement can name the content the reviewer saw.
+    #[serde(skip)]
+    pub read_hash: Option<String>,
 }
 
 /// The locators of one record and where they sit.
@@ -132,6 +142,8 @@ fn unparsed_review(raw: String, category: String, error: &dyn std::fmt::Display)
         reason: Some(format!("does not parse: {error}")),
         spelling: raw,
         scoped: false,
+        path: String::new(),
+        read_hash: None,
     }
 }
 
@@ -159,6 +171,8 @@ fn review_locator(
         reason: None,
         spelling: locator.spelling.clone(),
         scoped: locator.scope.is_some(),
+        path: locator.path.clone(),
+        read_hash: None,
     };
     if matches!(locator.anchor, Some(Anchor::Commit(_))) {
         review.reason = Some("a commit anchor is not supported".to_string());
@@ -169,6 +183,7 @@ fn review_locator(
             review.resolved = true;
             review.span = span;
             review.files = files;
+            review.read_hash = Some(hash.clone());
             review.check = match &recorded {
                 Some(r) if *r == hash => LocatorCheck::HashChecked,
                 Some(_) => LocatorCheck::Changed,
@@ -211,6 +226,39 @@ impl FirstPin {
                     display: l.locator.clone(),
                     hash: l.current_hash.clone()?,
                     scoped: l.scoped,
+                })
+            })
+            .collect()
+    }
+}
+
+/// A pinned locator that moved, in a category whose drift policy is
+/// `acknowledge`: the renewal moves its pin to the hash read now, and the
+/// row names old -> new (`ADR-97`, amendment of 2026-11-09).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Repin {
+    pub display: String,
+    pub spelling: String,
+    pub old_hash: String,
+    pub new_hash: String,
+}
+
+impl Repin {
+    /// The pins a renewal moves: every `changed` locator of a category that
+    /// acknowledges its drift.
+    pub fn from_review(locators: &[LocatorReview], opts: &ClaimExpiredOpts) -> Vec<Repin> {
+        locators
+            .iter()
+            .filter(|l| {
+                l.check == LocatorCheck::Changed
+                    && opts.drift_policy(&l.category) == DriftPolicy::Acknowledge
+            })
+            .filter_map(|l| {
+                Some(Repin {
+                    display: l.locator.clone(),
+                    spelling: l.spelling.clone(),
+                    old_hash: l.recorded_hash.clone()?,
+                    new_hash: l.current_hash.clone()?,
                 })
             })
             .collect()
@@ -267,6 +315,105 @@ pub fn pin_unpinned_in_line(
     found.then_some(out)
 }
 
+/// A locator that drifted since the claim's line was last touched (`ADR-67`),
+/// found by the drift computation and handed to the renewal's drift policy.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LocatorDrift {
+    pub category: String,
+    /// The locator as `LocatorReview::locator` shows it.
+    pub locator: String,
+    /// Only a grace window held it back from being reported as drift.
+    pub inside_grace: bool,
+}
+
+/// What the drift policy makes of a record's drifted locators.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct DriftVerdict {
+    /// Why the renewal is refused; empty when no blocked category drifted.
+    pub refusals: Vec<String>,
+    /// The drift a renewal would acknowledge, as the row names it.
+    pub acknowledged: Vec<String>,
+}
+
+/// The refusal for drift in a category whose locators `--pin-only` can pin or
+/// `fix --rebaseline` can move: the remedy has not changed (`ADR-97` section 4).
+pub const REPIN_DRIFT_REFUSAL: &str = "a locator has drifted since the Realized-by line was last touched, even if inside drift_grace_days: re-pin an unpinned one with `urzua reverify --pin-only` (or a pinned one with `urzua fix --rebaseline`), then renew";
+
+/// The refusal for drift in a category with no pin to move: its policy is
+/// `block`, declared or by default, and it names how to change it.
+fn blocked_policy_refusal(category: &str, declared: bool, cited: &[&str]) -> String {
+    let policy = if declared {
+        "is block"
+    } else {
+        "is not declared, so it is block"
+    };
+    format!(
+        "{} of category '{category}' drifted since the Realized-by line was last touched, even if inside drift_grace_days ({}): the drift policy for '{category}' {policy}, and `urzua reverify --pin-only` cannot pin a category outside require_pin. To let a reviewer renew over it, set `drift: {{{category}: acknowledge}}` under embodiment.claim-expired (the revision row then names the drift and the --reason; `ignore` leaves the category out of renewal)",
+        if cited.len() == 1 { "a locator" } else { "locators" },
+        cited.join(", "),
+    )
+}
+
+/// Applies the per-category drift policy of `opts` (`ADR-97`, amendment of
+/// 2026-11-09) to the drifted locators of one record. `describe` names an
+/// acknowledged locator for the row. A category not declared is `block`; a
+/// blocked locator of a category with a pin to move keeps the re-pin remedy.
+pub fn judge_drift(
+    drifts: &[LocatorDrift],
+    review: &LocatorsReview,
+    opts: &ClaimExpiredOpts,
+    describe: &dyn Fn(&LocatorReview) -> String,
+) -> DriftVerdict {
+    let mut verdict = DriftVerdict::default();
+    let mut repin = false;
+    let mut by_policy: Vec<(&str, Vec<&str>)> = Vec::new();
+    for drift in drifts {
+        let found = review
+            .locators
+            .iter()
+            .find(|l| l.category == drift.category && l.locator == drift.locator);
+        match opts.drift_policy(&drift.category) {
+            DriftPolicy::Ignore => {}
+            DriftPolicy::Acknowledge => {
+                let text =
+                    found.map_or_else(|| format!("{}:{}", drift.category, drift.locator), describe);
+                if !verdict.acknowledged.contains(&text) {
+                    verdict.acknowledged.push(text);
+                }
+            }
+            DriftPolicy::Block if found.is_none_or(|l| l.check != LocatorCheck::HistoryOnly) => {
+                repin = true;
+            }
+            DriftPolicy::Block => match by_policy.iter_mut().find(|(c, _)| *c == drift.category) {
+                Some((_, cited)) => cited.push(&drift.locator),
+                None => by_policy.push((&drift.category, vec![&drift.locator])),
+            },
+        }
+    }
+    if repin {
+        verdict.refusals.push(REPIN_DRIFT_REFUSAL.to_string());
+    }
+    for (category, cited) in by_policy {
+        let declared = opts.drift_declared(category);
+        verdict
+            .refusals
+            .push(blocked_policy_refusal(category, declared, &cited));
+    }
+    verdict
+}
+
+/// The newest dated row of a record's revision log, for naming a cited
+/// record in a drift acknowledgement; `None` when the log cannot be read or
+/// has no rows.
+pub fn latest_revision_date(
+    content: &str,
+    log_id: &crate::config::RevisionLogId,
+    shape: &crate::config::RevisionLogShape,
+) -> Option<String> {
+    let log = crate::rules::find_revision_log_entries(content, log_id, shape)?.ok()?;
+    log.entries.iter().map(|e| e.date.clone()).max()
+}
+
 /// One record in a review: its standing, its locators and what refuses it.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct RecordReview {
@@ -288,6 +435,11 @@ pub struct RecordReview {
     /// Why the record cannot be written; empty when it can.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub refused: Vec<String>,
+    /// The drifted locators whose category declares `drift: acknowledge`
+    /// (`ADR-97`, amendment of 2026-11-09): what a renewal would write into
+    /// the revision row. Empty, and absent from the report, otherwise.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub drift_acknowledged: Vec<String>,
 }
 
 /// `urzua reverify`'s report (`ADR-97` section 4).
@@ -335,6 +487,9 @@ pub struct Renewal<'a> {
     /// The repository declares no `require_pin`: unpinned locators are `H`,
     /// not `S spec locators`, in the row.
     pub require_pin_empty: bool,
+    /// The drifted locators the reviewer acknowledges (`drift: acknowledge`),
+    /// each as `judge_drift` described it; written into the row.
+    pub acknowledged: &'a [String],
 }
 
 /// Everything one record's write needs.
@@ -342,6 +497,8 @@ pub struct Renewal<'a> {
 pub struct ReverifyPlan<'a> {
     pub review: &'a LocatorsReview,
     pub pins: &'a [FirstPin],
+    /// Pins a renewal moves because their category acknowledges drift.
+    pub repins: &'a [Repin],
     pub renewal: Option<Renewal<'a>>,
 }
 
@@ -399,8 +556,13 @@ pub fn reverified_row(
     } else {
         format!("{history} spec locators checked by git history only")
     };
+    let acknowledged = if renewal.acknowledged.is_empty() {
+        String::new()
+    } else {
+        format!("; Drift acknowledged: {}.", renewal.acknowledged.join(", "))
+    };
     format!(
-        "Re-verified (attested by {}): {total} locators re-resolved, {hashed} hash-checked, {history_text}. Evidence: {evidence} Reason: {reason} **Why:** the claim was {} days old against a {}-day period.",
+        "Re-verified (attested by {}): {total} locators re-resolved, {hashed} hash-checked, {history_text}. Evidence: {evidence}{acknowledged} Reason: {reason} **Why:** the claim was {} days old against a {}-day period.",
         attestation.label(),
         renewal.age_days,
         renewal.days,
@@ -446,6 +608,24 @@ pub fn apply_reverify(
                 &pin.display,
                 &review.field,
                 &review.items_section,
+            ));
+        }
+    }
+    for repin in plan.repins {
+        let old = format!("{}@sha256:{}", repin.spelling, repin.old_hash);
+        let new = format!("{}@sha256:{}", repin.spelling, repin.new_hash);
+        let mut placed = false;
+        for &at in &lines {
+            let line = doc.line(at).unwrap_or_default().to_string();
+            if let Some(edited) = replace_exact_pin(&line, &old, &new) {
+                doc.replace_line(at, edited);
+                placed = true;
+            }
+        }
+        if !placed {
+            return Err(format!(
+                "the pin on '{}' is no longer on the '{}' line or in a {} item clause -- the record may have changed since the review",
+                repin.display, review.field, review.items_section
             ));
         }
     }
@@ -507,6 +687,121 @@ fn unplaced_pin_message(display: &str, field: &str, section: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn locator(category: &str, path: &str, check: LocatorCheck) -> LocatorReview {
+        LocatorReview {
+            locator: path.to_string(),
+            category: category.to_string(),
+            resolved: true,
+            pinned: false,
+            recorded_hash: None,
+            current_hash: None,
+            span: None,
+            files: Vec::new(),
+            check,
+            reason: None,
+            spelling: path.to_string(),
+            scoped: false,
+            path: path.to_string(),
+            read_hash: None,
+        }
+    }
+
+    fn drift(category: &str, path: &str) -> LocatorDrift {
+        LocatorDrift {
+            category: category.to_string(),
+            locator: path.to_string(),
+            inside_grace: false,
+        }
+    }
+
+    fn judged(policies: &[(&str, DriftPolicy)], drifts: &[LocatorDrift]) -> DriftVerdict {
+        let review = LocatorsReview {
+            field: "Realized-by".to_string(),
+            field_line: 1,
+            item_lines: Vec::new(),
+            items_section: "Done when".to_string(),
+            locators: vec![
+                locator("code", "src/a.rs", LocatorCheck::WillPin),
+                locator("spec", "docs/s.md", LocatorCheck::HistoryOnly),
+            ],
+        };
+        let opts = ClaimExpiredOpts {
+            drift: policies.iter().map(|(c, p)| (c.to_string(), *p)).collect(),
+            ..ClaimExpiredOpts::default()
+        };
+        judge_drift(drifts, &review, &opts, &|l| {
+            format!("{}:{}", l.category, l.path)
+        })
+    }
+
+    #[test]
+    fn an_undeclared_category_blocks_and_a_spec_only_drift_never_suggests_pin_only() {
+        let v = judged(&[], &[drift("spec", "docs/s.md")]);
+        assert_eq!(v.refusals.len(), 1, "{v:?}");
+        assert!(
+            v.refusals[0].contains("is not declared, so it is block"),
+            "{v:?}"
+        );
+        assert!(!v.refusals[0].contains(REPIN_DRIFT_REFUSAL), "{v:?}");
+        let v = judged(
+            &[("code", DriftPolicy::Block)],
+            &[drift("code", "src/a.rs")],
+        );
+        assert_eq!(v.refusals, [REPIN_DRIFT_REFUSAL], "{v:?}");
+    }
+
+    #[test]
+    fn acknowledge_lists_the_drift_ignore_hides_it_and_a_blocked_category_still_refuses() {
+        let both = [drift("code", "src/a.rs"), drift("spec", "docs/s.md")];
+        let v = judged(
+            &[
+                ("code", DriftPolicy::Block),
+                ("spec", DriftPolicy::Acknowledge),
+            ],
+            &both,
+        );
+        assert_eq!(v.refusals, [REPIN_DRIFT_REFUSAL], "{v:?}");
+        assert_eq!(v.acknowledged, ["spec:docs/s.md"], "{v:?}");
+        let v = judged(
+            &[("code", DriftPolicy::Ignore), ("spec", DriftPolicy::Ignore)],
+            &both,
+        );
+        assert_eq!(v, DriftVerdict::default());
+    }
+
+    #[test]
+    fn the_row_names_acknowledged_drift_before_the_reason_and_not_otherwise() {
+        let a = Attestation::new(
+            "ana",
+            crate::fix::IdentitySource::Asserted,
+            crate::fix::ActorKind::Human,
+        );
+        let review = LocatorsReview {
+            field: "Realized-by".to_string(),
+            field_line: 1,
+            item_lines: Vec::new(),
+            items_section: "Done when".to_string(),
+            locators: vec![locator("spec", "docs/s.md", LocatorCheck::HistoryOnly)],
+        };
+        let none: [String; 0] = [];
+        let mut renewal = Renewal {
+            anchor_field: "Last-audited",
+            age_days: 40,
+            days: 30,
+            require_pin_empty: false,
+            acknowledged: &none,
+        };
+        let plain = reverified_row(&a, &review, &renewal, "why");
+        assert!(!plain.contains("Drift acknowledged"), "{plain}");
+        let said = ["spec:ADR-1 (latest revision 2026-11-09)".to_string()];
+        renewal.acknowledged = &said;
+        let row = reverified_row(&a, &review, &renewal, "why");
+        assert!(
+            row.contains("Evidence: docs/s.md; Drift acknowledged: spec:ADR-1 (latest revision 2026-11-09). Reason: why **Why:**"),
+            "{row}"
+        );
+    }
 
     #[test]
     fn the_unplaced_pin_message_names_the_declared_section() {
