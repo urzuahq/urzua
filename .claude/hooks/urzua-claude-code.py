@@ -24,7 +24,8 @@ An adapter failure never blocks when the configuration allows.
 The editor hook covers Write, Edit, MultiEdit and NotebookEdit, and any MCP tool
 (`mcp__*`). For an MCP call it reads every path-like field, at any depth and in
 any list (`path`, `file`, `from`, `source`, `destination`, `uri` and the like, a
-`file://` URI included), and judges each one. An object with one path field and
+`file:` URI included, whatever the case of its scheme and with one slash or
+three), and a key that is itself a path (`{"files": {"<path>": "<text>"}}`), and judges each one. An object with one path field and
 a content field is judged as a write of that content to that path. A path that
 belongs to a call that looks like an edit, a move or a delete (an `edits` list,
 `old_string`, a tool name such as `edit_file`, `move_file` or `delete_file`) or
@@ -38,6 +39,13 @@ the call carries a key that names an output (`output_path`, `save_to`, `outfile`
 normalised lexically before its length is tested; a string too long as written is
 a path only if it collapses to a shorter one. A tool that applies a patch or runs a
 shell command is not read.
+
+A call is judged cheapest first, and the first block ends it: every file against the
+acceptance and protected-path gates (milliseconds), then the strings the translator could
+not place, then the files whose judgement checks a record (seconds each). A call with more
+than 512 distinct short strings, or more than 8 files that are checked as records, is
+not judged in full: it is an edit that was not judged, refused where the configuration
+says deny, never silently cut short.
 
 It names the project to the engine: the directory it is installed in
 (`<dir>/.claude/hooks/`), as `project_dir`, when `<dir>` holds `.urzua/config.yaml`.
@@ -67,7 +75,13 @@ MCP_READ_WORDS = {"read", "get", "list", "search", "find", "stat", "view", "show
 MCP_DEST_WORDS = {"output", "out", "outfile", "outpath", "dest", "destination", "target", "save", "saveas", "into", "sink"}
 MCP_MAX_DEPTH = 24
 MCP_MAX_PATH = 4096
-MCP_MAX_LOOSE = 64
+# The most distinct short strings of one call that are looked at as possible paths;
+# a call with more is not scanned in full, so it is an edit that was not judged
+# (refused where a gate denies), never one whose later strings are silently skipped.
+MCP_MAX_LOOSE = 512
+# The most record-checking writes of one call that are judged: each costs a full
+# record check in the engine, so a call with more is an edit that was not judged.
+MCP_MAX_RECORDS = 8
 
 
 def _project_dir():
@@ -237,7 +251,10 @@ def as_paths(value):
     value = value.strip()
     if not value or "\n" in value:
         return None, []
-    if value.startswith("file://"):
+    if re.match(r"(?i)file:", value):
+        # The scheme is case-insensitive and `file:/x` and `file:x` are URLs
+        # (WHATWG): the path is what the URL carries.
+        extras.append(posixpath.normpath(value))
         value = unquote(urlparse(value).path)
         if not value:
             return None, []
@@ -264,10 +281,16 @@ def mcp_scan(inp):
     def add(target, value):
         p, extras = as_paths(value)
         if p is not None and p not in target:
-            target.append(p)
+            if target is loose and len(loose) >= MCP_MAX_LOOSE:
+                state["deep"] = True
+            else:
+                target.append(p)
         for e in extras:
             if e not in loose and e not in target and len(e) <= 65536:
-                loose.append(e)
+                if len(loose) >= MCP_MAX_LOOSE:
+                    state["deep"] = True
+                else:
+                    loose.append(e)
 
     def walk(node, depth, keyed):
         if depth > MCP_MAX_DEPTH:
@@ -278,6 +301,16 @@ def mcp_scan(inp):
             for k, v in node.items():
                 if not isinstance(k, str):
                     continue
+                if "/" in k or "." in k or "\\" in k:
+                    # A key that is a path (`{"files": {"<path>": "<text>"}}`).
+                    keyed_paths = []
+                    add(keyed_paths, k)
+                    if keyed_paths and isinstance(v, str):
+                        records.append((keyed_paths[:1], v, False, []))
+                        continue
+                    for p in keyed_paths:
+                        if p not in paths:
+                            paths.append(p)
                 if k in MCP_CONTENT_KEYS:
                     if isinstance(v, str) and content is None:
                         content = v
@@ -315,7 +348,7 @@ def mcp_scan(inp):
                     walk(item, depth + 1, False)
 
     walk(inp, 0, False)
-    return records, loose[:MCP_MAX_LOOSE], state["deep"]
+    return records, loose, state["deep"]
 
 
 def mcp_write(tool, inp):
@@ -390,28 +423,58 @@ def engine(argv, request, cwd):
     return verdict
 
 
+def engine_unrunnable(argv, cwd, path):
+    message = "urzua harness: urzua did NOT judge this call (the engine command `%s` could not be run or answered with something that is not a verdict). It is allowed unless the configuration refuses an edit that was not judged; run `urzua harness status`." % " ".join(argv)
+    return unjudged_result(message, argv, cwd, path, True)
+
+
 def judge_mcp(tool, target, argv, cwd):
-    results = []
+    """Judges an MCP call's writes cheapest first and stops at the first block:
+    every file against the acceptance and protected-path gates (milliseconds),
+    then what the translator could not place, then the files whose judgement
+    checks a record (a full record check each, so no more than MCP_MAX_RECORDS)."""
+    results, records = [], []
     for path, content in target["items"]:
-        request = {"event": "edit", "tool": tool, "paths": [path], "content": content, "actor": "agent", "cwd": cwd, "project_dir": PROJECT_DIR}
+        request = {"event": "edit", "tool": tool, "paths": [path], "content": content, "actor": "agent", "cwd": cwd, "project_dir": PROJECT_DIR, "gates_only": True}
         try:
             verdict = engine(argv, request, cwd)
         except (OSError, ValueError, AttributeError):
-            message = "urzua harness: urzua did NOT judge this call (the engine command `%s` could not be run or answered with something that is not a verdict). It is allowed unless the configuration refuses an edit that was not judged; run `urzua harness status`." % " ".join(argv)
-            results.append(unjudged_result(message, argv, cwd, path, True))
+            results.append(engine_unrunnable(argv, cwd, path))
             continue
         kind, message = verdict.get("verdict"), verdict.get("message", "")
         if kind == "block":
-            results.append(("block", message))
-        elif kind in ("allow-unjudged", "allow-override", "allow-with-warnings"):
-            results.append(("note", message))
+            return decide([("block", message)])
+        if "record" not in verdict:
+            # An engine that does not know gates_only judged the file in full.
+            if kind in ("allow-unjudged", "allow-override", "allow-with-warnings"):
+                results.append(("note", message))
+        elif verdict["record"]:
+            records.append((path, content))
     if target["deep"]:
-        results.append(unjudged_result("urzua harness: urzua did NOT judge this edit (%s: its input nests deeper than the translator reads). It is allowed unless the configuration refuses an edit that was not judged; run 'urzua check' before committing." % tool, argv, cwd, [], False))
+        results.append(unjudged_result("urzua harness: urzua did NOT judge this edit (%s: its input has more strings or nests deeper than the translator reads). It is allowed unless the configuration refuses an edit that was not judged; run 'urzua check' before committing." % tool, argv, cwd, [], False))
     candidates = target["rest"] + target["loose"]
     if candidates:
         shown = ", ".join(target["rest"]) or "an unparsed path"
         message = "urzua harness: urzua did NOT judge this edit (%s on %s: the call is not a whole-file write urzua can read). It is allowed unless the configuration refuses an edit that was not judged; run 'urzua check' before committing." % (tool, shown)
         results.append(unjudged_result(message, argv, cwd, candidates, False, loud=target["loud"] and bool(target["rest"])))
+    if any(k == "block" for k, _ in results):
+        return decide(results)
+    if len(records) > MCP_MAX_RECORDS:
+        message = "urzua harness: urzua did NOT judge this edit (%s writes %d files that are checked as records, more than the %d it judges in one call: %s). Write them in separate calls. It is allowed unless the configuration refuses an edit that was not judged; run 'urzua check' before committing." % (tool, len(records), MCP_MAX_RECORDS, ", ".join(p for p, _ in records[:MCP_MAX_RECORDS]) + ", ...")
+        results.append(unjudged_result(message, argv, cwd, [p for p, _ in records], False))
+        return decide(results)
+    for path, content in records:
+        request = {"event": "edit", "tool": tool, "paths": [path], "content": content, "actor": "agent", "cwd": cwd, "project_dir": PROJECT_DIR}
+        try:
+            verdict = engine(argv, request, cwd)
+        except (OSError, ValueError, AttributeError):
+            results.append(engine_unrunnable(argv, cwd, path))
+            continue
+        kind, message = verdict.get("verdict"), verdict.get("message", "")
+        if kind == "block":
+            return decide([("block", message)])
+        if kind in ("allow-unjudged", "allow-override", "allow-with-warnings"):
+            results.append(("note", message))
     return decide(results)
 
 

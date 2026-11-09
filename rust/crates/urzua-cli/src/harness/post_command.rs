@@ -212,9 +212,7 @@ fn judge_changes(
         mut protected,
         remembered,
     } = select_unseen(&repo_root, &loaded, &paths, &scan.baseline_entries);
-    if !scan.shrunk.is_empty() {
-        protected.push(shrink_line(&repo_root, &config_path, &scan.shrunk));
-    }
+    protected.extend(shrink_lines(&repo_root, &config_path, &scan));
     if fresh.is_empty() && protected.is_empty() {
         write_memory(&repo_root, &remembered);
         let mut v = PostVerdict::quiet(format!(
@@ -230,10 +228,7 @@ fn judge_changes(
     // A gated move is judged on the same records, against the commit the
     // command started from: the command has already run, so this reports and
     // never blocks. It does not depend on `check` being able to run.
-    let gated: Vec<String> = fresh
-        .iter()
-        .filter_map(|rel| super::gate::gated_move_report(&repo_root, &loaded, Path::new(rel), base))
-        .collect();
+    let gated = gated_moves(&repo_root, &loaded, &fresh, base, &scan);
 
     let report = match run_check(config, &fresh, gated.is_empty() && protected.is_empty()) {
         Ok(r) => r,
@@ -270,6 +265,46 @@ fn judge_changes(
         note: scan.note.as_deref(),
     });
     v
+}
+
+/// The report lines for what the command took out of the baseline's gates: a
+/// path gate, and a status gate or the `acceptance` guardrail.
+fn shrink_lines(repo_root: &Path, config_path: &Path, scan: &ProtectedScan) -> Vec<String> {
+    let mut lines = Vec::new();
+    if !scan.shrunk.is_empty() {
+        lines.push(shrink_line(repo_root, config_path, &scan.shrunk));
+    }
+    if !scan.status_shrunk.is_empty() {
+        lines.push(status_shrink_line(
+            repo_root,
+            config_path,
+            &scan.status_shrunk,
+        ));
+    }
+    lines
+}
+
+/// One report line per record the command moved to a gated status, judged
+/// against the commit it started from and the baseline's status gates too.
+fn gated_moves(
+    repo_root: &Path,
+    loaded: &Config,
+    fresh: &[String],
+    base: &str,
+    scan: &ProtectedScan,
+) -> Vec<String> {
+    fresh
+        .iter()
+        .filter_map(|rel| {
+            super::gate::gated_move_report(
+                repo_root,
+                loaded,
+                Path::new(rel),
+                base,
+                &scan.baseline_status_gates,
+            )
+        })
+        .collect()
 }
 
 /// Opens the workspace the command ran in. An `Err` is the verdict to
@@ -558,6 +593,9 @@ struct ProtectedState {
     /// The walk hit its file cap, so some protected files are not hashed.
     #[serde(default)]
     truncated: bool,
+    /// The status gates in force (empty with the `acceptance` guardrail off).
+    #[serde(default)]
+    status_gates: Vec<super::gate::StatusGateEntry>,
 }
 
 fn read_protected(top: &Path) -> Option<ProtectedState> {
@@ -630,6 +668,12 @@ struct ProtectedScan {
     baseline_entries: Vec<String>,
     /// Baseline entries the configuration no longer gates.
     shrunk: Vec<String>,
+    /// The status gates the previous baseline held, judged beside the edited
+    /// configuration's so a gate the command removed still reports its move.
+    baseline_status_gates: Vec<super::gate::StatusGateEntry>,
+    /// The `(type, status)` pairs the baseline gated and the configuration no
+    /// longer does (a gate removed or narrowed, or `acceptance` switched off).
+    status_shrunk: Vec<String>,
 }
 
 /// The entries the previous baseline protected that `entries` no longer does.
@@ -654,6 +698,15 @@ fn shrink_line(root: &Path, config_path: &Path, shrunk: &[String]) -> String {
     )
 }
 
+fn status_shrink_line(root: &Path, config_path: &Path, lost: &[String]) -> String {
+    let rel = config_path.strip_prefix(root).unwrap_or(config_path);
+    format!(
+        "  {} [acceptance] error: the status gates shrank: the configuration no longer gates {} (a gate removed or narrowed, or the acceptance guardrail switched off). Those moves are not gated from now on. It was not prevented; CI's diff.decider-required checks who made it.",
+        rel.display(),
+        lost.join("; ")
+    )
+}
+
 /// At session start, before the baseline is taken from the configuration as it
 /// is now: the entries the previous baseline protected that it no longer gates.
 pub(super) fn protected_set_shrank(root: &Path, config: &Config) -> Option<String> {
@@ -666,11 +719,33 @@ pub(super) fn protected_set_shrank(root: &Path, config: &Config) -> Option<Strin
     } else {
         Vec::new()
     };
-    let shrunk = shrunk_entries(read_protected(root).as_ref(), &entries);
-    (!shrunk.is_empty()).then(|| {
-        format!(
-            "the protected set shrank since the last session: the configuration no longer gates {}, so those paths are not protected (review the change to the configuration)",
+    let state = read_protected(root);
+    let shrunk = shrunk_entries(state.as_ref(), &entries);
+    let lost = state
+        .map(|o| {
+            super::gate::lost_status_gates(
+                &o.status_gates,
+                &super::gate::status_gate_entries(config),
+            )
+        })
+        .unwrap_or_default();
+    let mut parts = Vec::new();
+    if !shrunk.is_empty() {
+        parts.push(format!(
+            "the protected set shrank since the last session: the configuration no longer gates {}, so those paths are not protected",
             shrunk.join(", ")
+        ));
+    }
+    if !lost.is_empty() {
+        parts.push(format!(
+            "the status gates shrank since the last session: the configuration no longer gates {}, so those moves are not gated",
+            lost.join("; ")
+        ));
+    }
+    (!parts.is_empty()).then(|| {
+        format!(
+            "{} (review the change to the configuration)",
+            parts.join("; ")
         )
     })
 }
@@ -687,6 +762,8 @@ fn scan_protected(root: &Path, config_path: &Path, config: &Config, report: bool
         note: None,
         baseline_entries: Vec::new(),
         shrunk: Vec::new(),
+        baseline_status_gates: Vec::new(),
+        status_shrunk: Vec::new(),
     };
     let Some(sig) = urzua_io::sha256_hex_of_file(config_path) else {
         return scan;
@@ -702,8 +779,13 @@ fn scan_protected(root: &Path, config_path: &Path, config: &Config, report: bool
     };
     let (found, truncated) = super::gate::walk_entries(root, &entries);
     let files = hash_files(root, &found);
+    let status_gates = super::gate::status_gate_entries(config);
     let old = read_protected(root);
     if report {
+        if let Some(old) = &old {
+            scan.status_shrunk = super::gate::lost_status_gates(&old.status_gates, &status_gates);
+            scan.baseline_status_gates = old.status_gates.clone();
+        }
         if let Some(old) = old.filter(|o| o.enabled) {
             compare_baseline(root, config_path, &old, &entries, (&files, &sig), &mut scan);
         }
@@ -721,6 +803,7 @@ fn scan_protected(root: &Path, config_path: &Path, config: &Config, report: bool
             entries,
             files,
             truncated,
+            status_gates,
         },
     );
     scan
@@ -777,6 +860,9 @@ fn compare_baseline(
 /// check compares with. The session-start check calls it.
 pub(super) fn seed_protected(root: &Path, config_path: &Path, config: &Config) {
     scan_protected(root, config_path, config, false);
+    // A new session starts from what is on disk: what an earlier session was
+    // told is not remembered, so the same change made again is reported again.
+    forget_all(Some(root));
 }
 
 /// Remembers `HEAD` as the commit the next post-command check starts from. The

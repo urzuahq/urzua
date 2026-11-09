@@ -69,6 +69,13 @@ struct Request {
     /// the guardrails do about a call nobody judged.
     #[serde(default)]
     adapter_error: Option<String>,
+    /// Judge only the acceptance and protected-path gates, which answer in
+    /// milliseconds, and say whether the full editor-hook judgement of this
+    /// path would run a check (`record` in the verdict). An adapter that has
+    /// several files to judge asks this of each first, so a denial returns
+    /// before any record is checked.
+    #[serde(default)]
+    gates_only: bool,
 }
 
 impl Request {
@@ -89,6 +96,10 @@ struct Verdict {
     findings: Vec<serde_json::Value>,
     #[serde(rename = "override", skip_serializing_if = "Option::is_none")]
     override_name: Option<String>,
+    /// Only for a `gates_only` request that no gate denied: whether the full
+    /// judgement of the path checks a record (the costly part).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    record: Option<bool>,
 }
 
 impl Verdict {
@@ -99,6 +110,7 @@ impl Verdict {
             message,
             findings: Vec::new(),
             override_name: None,
+            record: None,
         }
     }
 }
@@ -634,6 +646,9 @@ fn judge_edit_in(config: Option<PathBuf>, request: Request) -> Verdict {
         if let Some(denial) = agent_gate_denial(&repo_root, &loaded, &request) {
             return denial;
         }
+        if request.gates_only {
+            return gates_only_verdict(&repo_root, &loaded, &request);
+        }
     }
     let Some(harness) = loaded.harness.as_ref().filter(|h| h.enabled("editor-hook")) else {
         return unjudged(
@@ -723,6 +738,34 @@ fn agent_gate_denial(repo_root: &Path, loaded: &Config, request: &Request) -> Op
         .paths
         .iter()
         .find_map(|path| gate_denial(repo_root, loaded, path, content, request))
+}
+
+/// The answer to a `gates_only` request no gate denied: allowed so far, with
+/// whether the editor hook would go on to check a record at that path. Anything
+/// it cannot place, or an editor hook that is off (whose notice the full
+/// judgement carries), counts as a record so the full judgement runs.
+fn gates_only_verdict(repo_root: &Path, loaded: &Config, request: &Request) -> Verdict {
+    let editor_on = loaded
+        .harness
+        .as_ref()
+        .is_some_and(|h| h.enabled("editor-hook"));
+    let governed = |path: &String| {
+        let Ok(lexical) = crate::discovery::relative_to_root(repo_root, Path::new(path)) else {
+            return true;
+        };
+        let resolved = resolved_rel(repo_root, Path::new(path)).unwrap_or_else(|| lexical.clone());
+        [lexical, resolved].iter().any(|rel| {
+            crate::discovery::is_governed(loaded, rel)
+                || crate::discovery::is_governed(loaded, &gate::fold_to_declared_dir(loaded, rel))
+        })
+    };
+    let mut verdict = Verdict::new(
+        "allow",
+        request.paths.first().map(String::as_str),
+        String::new(),
+    );
+    verdict.record = Some(!editor_on || request.paths.iter().any(governed));
+    verdict
 }
 
 struct Judging<'a> {

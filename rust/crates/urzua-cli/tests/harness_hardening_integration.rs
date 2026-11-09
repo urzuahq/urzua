@@ -778,6 +778,265 @@ fn an_mcp_write_it_cannot_judge_applies_on_unjudged_only_to_a_gated_or_protected
     assert!(v["systemMessage"].as_str().unwrap().contains("NOT judge"));
 }
 
+const PROTECTED: &str = ".claude/settings.json";
+
+fn denied_mcp(dir: &Path, tool: &str, input: serde_json::Value) -> serde_json::Value {
+    let v = translate(dir, &mcp(dir, tool, input), &ENGINE);
+    assert_eq!(decision(&v), Some("deny"), "{tool}: {v}");
+    v
+}
+
+#[test]
+fn a_path_under_a_non_path_key_is_read_however_many_other_strings_the_call_carries() {
+    let dir = fixture("mcp-many-strings", &config(""));
+    let abs = dir.join(PROTECTED).to_string_lossy().to_string();
+    for junk in [0usize, 70, 300] {
+        let mut input = serde_json::Map::new();
+        for i in 0..junk {
+            input.insert(format!("junk{i}"), format!("value {i}").into());
+        }
+        input.insert("location".into(), abs.clone().into());
+        input.insert("content".into(), "x".into());
+        denied_mcp(&dir, "mcp__x__save_note", input.into());
+    }
+    // A long list of tags before it is not a way past the scan either.
+    let tags: Vec<String> = (0..200).map(|i| format!("tag {i}")).collect();
+    denied_mcp(
+        &dir,
+        "mcp__x__save_note",
+        serde_json::json!({"tags": tags, "location": abs, "content": "x"}),
+    );
+}
+
+#[test]
+fn a_call_with_more_strings_than_the_translator_reads_is_unjudged_and_refused_under_deny() {
+    let dir = fixture("mcp-too-many-strings", &config(""));
+    let mut input = serde_json::Map::new();
+    for i in 0..700 {
+        input.insert(format!("junk{i}"), format!("value {i}").into());
+    }
+    input.insert("content".into(), "x".into());
+    denied_mcp(&dir, "mcp__x__save_note", input.clone().into());
+    // Where the configuration allows an unjudged edit, it is allowed, loudly.
+    let open = fixture("mcp-too-many-strings-open", &config(", on_unjudged: allow"));
+    let v = translate(
+        &open,
+        &mcp(&open, "mcp__x__save_note", input.into()),
+        &ENGINE,
+    );
+    assert_eq!(decision(&v), None, "{v}");
+    assert!(
+        v["systemMessage"].as_str().unwrap().contains("NOT judge"),
+        "{v}"
+    );
+}
+
+#[test]
+fn a_path_used_as_a_dictionary_key_is_read_as_a_path() {
+    let dir = fixture("mcp-dict-keys", &config(""));
+    let abs = |f: &str| dir.join(f).to_string_lossy().to_string();
+    denied_mcp(
+        &dir,
+        "mcp__x__write_files",
+        serde_json::json!({"files": {abs(PROTECTED): "x"}}),
+    );
+    denied_mcp(
+        &dir,
+        "mcp__x__write_files",
+        serde_json::json!({abs(PROTECTED): "x"}),
+    );
+    // A gated record's move to an accepting status, written as a map entry.
+    denied_mcp(
+        &dir,
+        "mcp__x__write_files",
+        serde_json::json!({"files": {abs(PATH_1): ACCEPTED}}),
+    );
+    denied_mcp(
+        &dir,
+        "mcp__x__write_files",
+        serde_json::json!({"files": {abs(PROTECTED): {"mode": "0644"}}}),
+    );
+    // An ordinary file in a map is allowed.
+    let v = translate(
+        &dir,
+        &mcp(
+            &dir,
+            "mcp__x__write_files",
+            serde_json::json!({"files": {abs("notes.txt"): "hi"}}),
+        ),
+        &ENGINE,
+    );
+    assert_eq!(decision(&v), None, "{v}");
+}
+
+#[test]
+fn a_file_uri_is_a_path_whatever_its_case_and_however_many_slashes() {
+    let dir = fixture("mcp-file-uri", &config(""));
+    let abs = dir.join(PROTECTED).to_string_lossy().to_string();
+    for uri in [
+        format!("file:{abs}"),
+        format!("FILE://{abs}"),
+        format!("File:///{}", abs.trim_start_matches('/')),
+        format!("file://localhost{abs}"),
+        format!("file://{abs}"),
+    ] {
+        denied_mcp(
+            &dir,
+            "mcp__x__write_note",
+            serde_json::json!({"uri": uri, "content": "x"}),
+        );
+    }
+    // Another scheme is not a path.
+    let v = translate(
+        &dir,
+        &mcp(
+            &dir,
+            "mcp__x__write_note",
+            serde_json::json!({"uri": format!("https://example.com{abs}"), "content": "x"}),
+        ),
+        &ENGINE,
+    );
+    assert_eq!(decision(&v), None, "{v}");
+}
+
+/// An engine that logs every request and blocks any naming `.claude`; a
+/// `gates_only` request is answered as a record.
+fn logging_engine(log: &Path) -> Vec<String> {
+    vec![
+        "sh".into(),
+        "-c".into(),
+        "in=$(cat); printf '%s\\n' \"$in\" >> \"$0\"; case \"$in\" in *.claude*) echo '{\"verdict\":\"block\",\"message\":\"protected\"}';; *gates_only*) echo '{\"verdict\":\"allow\",\"message\":\"\",\"record\":true}';; *) echo '{\"verdict\":\"allow\",\"message\":\"\"}';; esac".into(),
+        log.to_string_lossy().to_string(),
+    ]
+}
+
+fn logged(log: &Path) -> Vec<String> {
+    std::fs::read_to_string(log)
+        .unwrap_or_default()
+        .lines()
+        .map(str::to_string)
+        .collect()
+}
+
+#[test]
+fn a_multi_file_call_is_blocked_by_its_protected_file_before_any_record_is_checked() {
+    let dir = fixture("mcp-early-exit", &config(""));
+    let log = dir.join("requests.log");
+    let abs = |f: &str| dir.join(f).to_string_lossy().to_string();
+    let items: Vec<serde_json::Value> = [
+        "docs/adr/ADR-2.md",
+        "docs/adr/ADR-3.md",
+        PROTECTED,
+        "docs/adr/ADR-4.md",
+    ]
+    .iter()
+    .map(|f| serde_json::json!({"path": abs(f), "content": PROPOSED}))
+    .collect();
+    let v = translate_with(
+        &dir,
+        &mcp(
+            &dir,
+            "mcp__x__write_files",
+            serde_json::json!({"files": items}),
+        ),
+        &logging_engine(&log),
+    );
+    assert_eq!(decision(&v), Some("deny"), "{v}");
+    let requests = logged(&log);
+    assert!(!requests.is_empty());
+    assert!(
+        requests.iter().all(|r| r.contains("gates_only")),
+        "no full record judgement before the denial: {requests:?}"
+    );
+    assert!(
+        requests.len() <= 3,
+        "stops at the first block: {requests:?}"
+    );
+}
+
+#[test]
+fn record_items_are_judged_in_full_only_after_every_gate_has_passed_and_stop_at_a_block() {
+    let dir = fixture("mcp-record-order", &config(""));
+    let log = dir.join("requests.log");
+    let abs = |f: &str| dir.join(f).to_string_lossy().to_string();
+    let items: Vec<serde_json::Value> = ["docs/adr/ADR-2.md", "docs/adr/ADR-3.md"]
+        .iter()
+        .map(|f| serde_json::json!({"path": abs(f), "content": PROPOSED}))
+        .collect();
+    translate_with(
+        &dir,
+        &mcp(
+            &dir,
+            "mcp__x__write_files",
+            serde_json::json!({"files": items}),
+        ),
+        &logging_engine(&log),
+    );
+    let requests = logged(&log);
+    let (gates, full): (Vec<_>, Vec<_>) = requests.iter().partition(|r| r.contains("gates_only"));
+    assert_eq!((gates.len(), full.len()), (2, 2), "{requests:?}");
+}
+
+#[test]
+fn a_call_with_more_record_writes_than_the_limit_is_unjudged_and_refused_under_deny() {
+    let dir = fixture("mcp-record-cap", &config(""));
+    let abs = |f: &str| dir.join(f).to_string_lossy().to_string();
+    let items: Vec<serde_json::Value> = (2..12)
+        .map(|n| serde_json::json!({"path": abs(&format!("docs/adr/ADR-{n}.md")), "content": PROPOSED}))
+        .collect();
+    let input = serde_json::json!({"files": items});
+    let v = denied_mcp(&dir, "mcp__x__write_files", input.clone());
+    let reason = v["hookSpecificOutput"]["permissionDecisionReason"]
+        .as_str()
+        .unwrap();
+    assert!(reason.contains("more than the 8"), "{reason}");
+    // Eight are judged.
+    let eight = serde_json::json!({"files": &items[..8]});
+    let v = translate(&dir, &mcp(&dir, "mcp__x__write_files", eight), &ENGINE);
+    assert_eq!(decision(&v), None, "{v}");
+    // With on_unjudged: allow the large call is allowed, loudly.
+    let open = fixture("mcp-record-cap-open", &config(", on_unjudged: allow"));
+    let abs = |f: &str| open.join(f).to_string_lossy().to_string();
+    let items: Vec<serde_json::Value> = (2..12)
+        .map(|n| serde_json::json!({"path": abs(&format!("docs/adr/ADR-{n}.md")), "content": PROPOSED}))
+        .collect();
+    let v = translate(
+        &open,
+        &mcp(
+            &open,
+            "mcp__x__write_files",
+            serde_json::json!({"files": items}),
+        ),
+        &ENGINE,
+    );
+    assert_eq!(decision(&v), None, "{v}");
+    assert!(
+        v["systemMessage"].as_str().unwrap().contains("NOT judge"),
+        "{v}"
+    );
+}
+
+#[test]
+fn the_engine_says_for_a_gates_only_request_whether_a_record_would_be_checked() {
+    let dir = fixture("gates-only", &config(""));
+    let ask = |file: &str, content: &str| {
+        let request = serde_json::json!({
+            "event": "edit", "tool": "mcp__x__w", "paths": [dir.join(file).to_string_lossy()],
+            "content": content, "actor": "agent", "cwd": dir.to_string_lossy(),
+            "gates_only": true,
+        });
+        let mut c = urzua();
+        c.args(["harness", "run", "edit"]).current_dir(&dir);
+        json(&run_with_stdin(&mut c, &request.to_string()))
+    };
+    assert_eq!(ask("docs/adr/ADR-9.md", PROPOSED)["record"], true);
+    assert_eq!(ask("notes.txt", "hi")["record"], false);
+    let v = ask(PROTECTED, "x");
+    assert_eq!(v["verdict"], "block", "{v}");
+    let v = ask(PATH_1, ACCEPTED);
+    assert_eq!(v["verdict"], "block", "{v}");
+}
+
 #[test]
 fn the_installed_hook_entry_matches_notebook_edit_and_mcp_tools() {
     let fragment = std::fs::read_to_string(
@@ -787,6 +1046,10 @@ fn the_installed_hook_entry_matches_notebook_edit_and_mcp_tools() {
     let v: serde_json::Value = serde_json::from_str(&fragment).unwrap();
     let matcher = v["hooks"]["PreToolUse"][0]["matcher"].as_str().unwrap();
     assert_eq!(matcher, "Write|Edit|MultiEdit|NotebookEdit|mcp__.*");
+    // An explicit timeout, longer than the host's 60 second default: a call may
+    // carry up to eight record writes at several seconds each.
+    let timeout = v["hooks"]["PreToolUse"][0]["hooks"][0]["timeout"].as_u64();
+    assert_eq!(timeout, Some(120), "{v}");
 }
 
 // ------------------------- a gitignored protected file written by shell
@@ -999,6 +1262,124 @@ fn session_start_reports_a_protected_set_that_shrank_before_it_reseeds() {
             .contains("protected set shrank"),
         "{v}"
     );
+}
+
+// ------------------------- a command that removes a status gate or the acceptance guardrail
+
+/// Two status gates, so removing one leaves a configuration that still loads.
+fn two_gate_config() -> String {
+    config("").replace(
+        "    - {type: adr, to: [Accepted, Rejected], by: maintainers}\n",
+        "    - {type: adr, to: [Accepted], by: maintainers}\n    - {type: adr, to: [Rejected], by: maintainers}\n",
+    )
+}
+
+const SED_REMOVE_STATUS_GATE: &str = "sed -i '/type: adr, to: \\[Accepted\\]/d' .urzua/config.yaml";
+const SED_NARROW_STATUS_GATE: &str =
+    "sed -i 's/to: \\[Accepted, Rejected\\]/to: [Rejected]/' .urzua/config.yaml";
+const SED_DISABLE_ACCEPTANCE: &str =
+    "sed -i 's/acceptance: {enabled: true}/acceptance: {enabled: false}/' .urzua/config.yaml";
+const SED_ACCEPT: &str = "sed -i 's/Status: Proposed/Status: Accepted/' docs/adr/ADR-1-a.md";
+
+fn gated_moves(v: &serde_json::Value) -> Vec<String> {
+    v["gated_moves"]
+        .as_array()
+        .unwrap_or_else(|| panic!("no gated_moves: {v}"))
+        .iter()
+        .map(|l| l.as_str().unwrap().to_string())
+        .collect()
+}
+
+#[test]
+fn removing_a_status_gate_and_moving_a_record_in_one_command_reports_the_move() {
+    let dir = fixture("status-gate-removal", &two_gate_config());
+    run_event(&dir, "session-start");
+    bash(&dir, &format!("{SED_REMOVE_STATUS_GATE} && {SED_ACCEPT}"));
+    let v = post(&dir);
+    let moves = gated_moves(&v);
+    assert!(
+        moves
+            .iter()
+            .any(|l| l.contains("ADR-1-a.md") && l.contains("[acceptance]")),
+        "{v}"
+    );
+    assert!(
+        lines_of(&v)
+            .iter()
+            .any(|l| l.contains("status gate") && l.contains("type adr")),
+        "{v}"
+    );
+}
+
+#[test]
+fn narrowing_a_status_gate_and_moving_a_record_to_the_dropped_status_reports_the_move() {
+    let dir = fixture("status-gate-narrow", &config(""));
+    run_event(&dir, "session-start");
+    bash(&dir, &format!("{SED_NARROW_STATUS_GATE} && {SED_ACCEPT}"));
+    let v = post(&dir);
+    assert_eq!(gated_moves(&v).len(), 1, "{v}");
+    assert!(
+        lines_of(&v).iter().any(|l| l.contains("status gate")),
+        "{v}"
+    );
+}
+
+#[test]
+fn disabling_acceptance_and_moving_a_record_in_one_command_reports_the_move() {
+    let dir = fixture("acceptance-off", &config(""));
+    run_event(&dir, "session-start");
+    bash(&dir, &format!("{SED_DISABLE_ACCEPTANCE} && {SED_ACCEPT}"));
+    let v = post(&dir);
+    assert_eq!(gated_moves(&v).len(), 1, "{v}");
+    assert!(lines_of(&v).iter().any(|l| l.contains("acceptance")), "{v}");
+}
+
+#[test]
+fn a_status_gate_removed_in_an_earlier_command_is_reported_as_shrunk_once() {
+    let dir = fixture("status-gate-earlier", &two_gate_config());
+    run_event(&dir, "session-start");
+    bash(&dir, SED_REMOVE_STATUS_GATE);
+    let v = post(&dir);
+    assert!(
+        lines_of(&v).iter().any(|l| l.contains("status gate")),
+        "{v}"
+    );
+    assert_eq!(post(&dir)["verdict"], "allow");
+}
+
+#[test]
+fn session_start_reports_a_status_gate_that_shrank_before_it_reseeds() {
+    let dir = fixture("status-session-shrink", &two_gate_config());
+    run_event(&dir, "session-start");
+    bash(&dir, SED_REMOVE_STATUS_GATE);
+    let v = run_event(&dir, "session-start");
+    assert!(
+        v["message"].as_str().unwrap().contains("status gate"),
+        "{v}"
+    );
+}
+
+#[test]
+fn an_unchanged_status_gate_reports_no_shrink() {
+    let dir = fixture("status-gate-kept", &config(""));
+    run_event(&dir, "session-start");
+    bash(&dir, "echo '# note' >> .urzua/config.yaml");
+    let v = post(&dir);
+    assert!(!lines_of(&v).iter().any(|l| l.contains("shrank")), "{v}");
+}
+
+#[test]
+fn a_change_reported_in_an_earlier_session_and_redone_in_the_next_is_reported_again() {
+    let dir = fixture("session-forgets", &config(""));
+    run_event(&dir, "session-start");
+    bash(&dir, SED_ACCEPT);
+    assert_eq!(gated_moves(&post(&dir)).len(), 1);
+    // A person reverts it outside the agent; no post-command check sees that.
+    git(&dir, &["checkout", "--", PATH_1]);
+    run_event(&dir, "session-start");
+    bash(&dir, SED_ACCEPT);
+    let v = post(&dir);
+    assert_eq!(gated_moves(&v).len(), 1, "{v}");
 }
 
 // ----------------------------------------------- Unicode case folding

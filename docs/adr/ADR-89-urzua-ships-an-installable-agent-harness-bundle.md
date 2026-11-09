@@ -566,6 +566,24 @@ the post-command baseline found it.
 
 The Decision is unchanged. The Status of this ADR stays Accepted.
 
+## Amendment (2026-11-09, fifth review): the status gates and the MCP call bound
+
+Status of this amendment: pending maintainer review. It fixes behaviour against what this ADR promises and
+changes no decision.
+
+- **Route 1, a weakening of a status gate is reported like a path gate.** The post-command baseline also holds
+  the status gates and the `acceptance` flag. A gate removed or narrowed, or `acceptance` switched off, in the
+  same command as a move to the gated status still reports the move, and the loss is reported once ("the status
+  gates shrank"), at `session-start` as well. A later move is not reported, as for a path gate. A new session
+  clears the post-command memory, so a change reported in an earlier session and made again is reported again.
+- **The Timeout bullet above is replaced:** the `edit` hook entry sets `timeout` to 120 seconds. The Claude Code
+  translator judges an MCP call's files against the gates first, stops at the first block, and judges at most 8
+  files that are checked as records (8.8 to 12.0 seconds each in the release build on a loaded 4-CPU machine, the
+  measurement is in `SPEC-24`); a call with more is an edit that was not judged. A call with more than 512
+  distinct short strings is likewise not judged in full, rather than silently cut short.
+
+The Decision is unchanged. The Status of this ADR stays Accepted.
+
 ## References
 
 - `ADR-69`, `ADR-70`, `ADR-71`: the hook, drafting commands and layered gate this extends; `ADR-70` gains an
@@ -597,3 +615,4 @@ The Decision is unchanged. The Status of this ADR stays Accepted.
 > | 2026-11-08 | Corrected the `## Amendment (2026-11-08)` after review of pull request 438: with `CLAUDE_PROJECT_DIR` unset, the settings command resolves the nearest real git working tree that holds the configuration and the translator, not the outermost configuration (which let a configuration written above the project take the wrapper); `body`, `data`, `payload` and `value` join the content keys. `Status` stays Accepted. **Why:** the independent review found the wrapper still taking an outer configuration. | **substantive** |
 > | 2026-11-09 | Added an `## Amendment (2026-11-09)`, documentation of existing behaviour decided by the orchestrator under the maintainer's 2026-11-07 decision that the accepted-risk list be exact, pending maintainer review: a weakening is reported once and a later edit to a formerly protected path is not (route 1); deleting or forging the harness baseline in the same command as a gate removal hides the removal (route 6); deleting the whole `harness:` section turns the guardrails off, visible to the CI diff gate (new route 11). `Status` stays Accepted. **Why:** the review of pull request 459 found these three routes behaving as described and the list naming none of them. | **substantive** |
 > | 2026-11-09 | Amendment of 2026-11-09 (the accepted-risk list made exact: routes 1, 6 and 11) accepted. **Why:** Maintainer decision, 2026-11-09. | **substantive** |
+> | 2026-11-09 | Added an `## Amendment (2026-11-09, fifth review)`, pending maintainer review: a removed or narrowed status gate, or `acceptance` switched off, is judged against the baseline in the post-command check (route 1); the `edit` hook sets a 120 second `timeout` and the translator bounds an MCP call (gates first, at most 8 record files). `Status` stays Accepted. **Why:** the fifth review of the harness found these behaving otherwise than the ADR promises. | **substantive** |
