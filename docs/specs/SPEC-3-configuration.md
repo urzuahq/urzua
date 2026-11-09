@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.128'
+Version: '0.129'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:dfce2332b3cea9e25b55c616e920641f72f1de0caba3286f0669141e698754ab, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:92a2b9ceca89133f30987a013734da66b9332c4e937a87e72e53571596e18093, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:3c8aa671582772499ab7345cdbfb5a4dc2c50462882851fb20f853992acfd57c
@@ -978,6 +978,7 @@ authority:
   used and, under `base` or `both`, an `info` notice says so. `urzua init` proposes `base`, and `urzua
   doctor` warns (`authority-decider-table`) when gates are declared and the key is not. Any other value is a
   load error.
+  Stale base: when the base revision has no `authority` (for example a branch made before the gates were introduced), the head table is judged; a pull request whose head `authority` names its own author as a decider then passes, because that is indistinguishable from the first introduction of `authority`. Branch protection that requires an up-to-date branch, or a merge queue, removes this route by making the base current. (documented by the orchestrator, pending maintainer review)
 - **`gates`** is a list. `{type, to, by}` gates a move of a record of that type to one of those statuses;
   `{paths, by}` gates a change under those paths (a prefix or a glob, as in `diff.source-requires-record`).
   `by` names a declared group. A gate that names a type no record type declares, a status that type does not
@@ -2413,3 +2414,4 @@ proves this configuration produces the three findings.
 > | 2026-11-09 | Bumped to `0.127`. Documents `authority.decider_table` (`base`, `head`, `both`; undeclared is `head`): which revision's table `diff.decider-required` reads, the stricter of the head's and the base's declaration, a base with no config or no `authority` holding no deciders and no gates, an unreadable base falling back to the head table with a warning, an `info` notice with no `--base`; `urzua init` proposes `base` and `urzua doctor` warns when gates are declared without it. **Why:** `ADR-89` amendment of 2026-11-09 (decider table), accepted by the maintainer. | **substantive** |
 > | 2026-11-09 | Bumped to `0.128`. `authority.decider_table`: a base with no config or no `authority` is not read as no gates (the head table is judged, with an `info` notice), and the base's `diff.decider-required` setting and `fail_on` apply when stricter. **Why:** `ADR-89` amendment of 2026-11-09 (decider table), after review found two ways to pass unjudged. | **substantive** |
 > | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` a9ed37935648 -> dfce2332b3ce. Reason: Read the diff of each pinned file since the old pin and the claim still holds. config.rs: read the diff since the old pin; the only change is two derive lists (RuleLevel and FailOn gain PartialOrd and Ord, so the decider gate can take the stricter of two settings). No parsing, validation or field this record relies on changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-09 | Bumped to `0.129`. `authority.decider_table`: notes that on a stale base with no `authority` the head table is judged and a pull request naming its own author passes; an up-to-date branch requirement or merge queue removes the route. **Why:** `ADR-89` accepted risk 13, documented by the orchestrator, pending maintainer review. | **structural** |
