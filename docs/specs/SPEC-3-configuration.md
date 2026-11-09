@@ -1,9 +1,9 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.129'
+Version: '0.130'
 Date: 2026-08-20
 Status: Shipped
-Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:dfce2332b3cea9e25b55c616e920641f72f1de0caba3286f0669141e698754ab, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:92a2b9ceca89133f30987a013734da66b9332c4e937a87e72e53571596e18093, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:3c8aa671582772499ab7345cdbfb5a4dc2c50462882851fb20f853992acfd57c
+Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:c1fbbe868c771bfabb448be195956f6be45465a4c627533419d7a9002d41955c, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:92a2b9ceca89133f30987a013734da66b9332c4e937a87e72e53571596e18093, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:3c8aa671582772499ab7345cdbfb5a4dc2c50462882851fb20f853992acfd57c
 Embodiment: Verified
 Author: beauwilliams
 Subject: '`.urzua/config.yaml` -- the schema for record types, required/known fields, and per-type behavior.'
@@ -903,9 +903,9 @@ harness:
   is not the session's own and shares the session's `git rev-parse --git-common-dir`; a worktree nested
   inside the session's directory is one, a plain subdirectory is not) by its path relative to that toplevel against the
   session's acceptance and protected-path gates (a request with no content is still judged by its
-  path), and a deny wins; a separate clone shares no common
-  directory and stays unjudged, an accepted risk. `deny` refuses an agent's write outside the session's
-  repository while any guardrail is enabled, except under **`allow_paths`**, a list of absolute or
+  path), and a deny wins; a separate clone, a plain git repository nested inside the session's
+  directory and a submodule share no common directory and stay unjudged, an accepted risk. `deny` refuses an agent's write outside the session's
+  repository (a nested plain repository or submodule is outside) while any guardrail is enabled, except under **`allow_paths`**, a list of absolute or
   `~`-relative directories that `doctor` reports as read by nothing under any other value. A value other
   than the three, or a relative `allow_paths` entry, is a load error. `urzua init` proposes `shared`;
   `urzua doctor` warns when a guardrail is enabled and the key is undeclared; `shared` is recommended.
@@ -978,7 +978,7 @@ authority:
   used and, under `base` or `both`, an `info` notice says so. `urzua init` proposes `base`, and `urzua
   doctor` warns (`authority-decider-table`) when gates are declared and the key is not. Any other value is a
   load error.
-  Stale base: when the base revision has no `authority` (for example a branch made before the gates were introduced), the head table is judged; a pull request whose head `authority` names its own author as a decider then passes, because that is indistinguishable from the first introduction of `authority`. Branch protection that requires an up-to-date branch, or a merge queue, removes this route by making the base current. (documented by the orchestrator, pending maintainer review)
+  Stale base: when the base revision has no `authority` (for example a branch made before the gates were introduced), the head table is judged; a pull request whose head `authority` names its own author as a decider then passes, because that is indistinguishable from the first introduction of `authority`. Branch protection that requires an up-to-date branch, or a merge queue, removes this route by making the base current. (accepted by the maintainer on 2026-11-09)
 - **`gates`** is a list. `{type, to, by}` gates a move of a record of that type to one of those statuses;
   `{paths, by}` gates a change under those paths (a prefix or a glob, as in `diff.source-requires-record`).
   `by` names a declared group. A gate that names a type no record type declares, a status that type does not
@@ -1203,7 +1203,7 @@ rules:
   (prefixes or globs) remove paths from that boundary's violation check only; the excluded files
   stay in the population as eligible and unexamined, not out of scope, so
   `config.scope-matches-nothing` does not read a deliberate exclusion as an unreachable boundary. The declared `ignore_marker` text excuses the single line it appears
-  on and no other. The engine compiles in no marker. A back-pointer rule's marker (`embodiment.back-pointer-resolution`, `embodiment.back-pointer-decision-accepted`) is refused at load when it would sit on every back-pointer line: fewer than 3 non-whitespace characters, no letter or digit (`//`, `#`), part of a back-pointer keyword (`Implements:`, `Verifies:`), or part of a declared record id head (`ADR-` for a type with prefix `ADR`), or padding around those: a marker that leaves fewer than 3 letters or digits after the back-pointer keywords (`Implements:`, `Verifies:`), the declared id heads (`ADR-`, or the bare prefix, when they do not start a record id such as `ADR-1`), comment leaders and punctuation are removed (`// Implements:`, `# Verifies:`, `-- Implements: ADR`, `// ADR-`). `ADR-1`, `example-only` or `urzua:allow` load.
+  on and no other. The engine compiles in no marker. A back-pointer rule's marker (`embodiment.back-pointer-resolution`, `embodiment.back-pointer-decision-accepted`) is refused at load when it would sit on every back-pointer line: fewer than 3 non-whitespace characters, no letter or digit (`//`, `#`), part of a back-pointer keyword (`Implements:`, `Verifies:`), or part of a declared record id head (`ADR-` for a type with prefix `ADR`), or padding around those: a marker that leaves fewer than 3 letters or digits after the back-pointer keywords (`Implements:`, `Verifies:`), the declared id heads (`ADR-`, or the bare prefix, when they do not start a record id such as `ADR-1`), comment leaders and punctuation are removed (`// Implements:`, `# Verifies:`, `-- Implements: ADR`, `// ADR-`). The keywords and id heads are removed whatever their case, so `implements:`, `IMPLEMENTS: ADR` and `adr` alone are refused as `Implements:`, `Implements: ADR` and `ADR` are. `ADR-1`, `example-only` or `urzua:allow` load.
 - **Nothing declared may match nothing silently.** Each of these is a finding at the boundary's
   severity: a `paths` entry covering no tracked file that is not excluded, an `exclude` entry
   matching no tracked file inside its own boundary, and an `ignore_marker` use on a line where
@@ -2415,3 +2415,5 @@ proves this configuration produces the three findings.
 > | 2026-11-09 | Bumped to `0.128`. `authority.decider_table`: a base with no config or no `authority` is not read as no gates (the head table is judged, with an `info` notice), and the base's `diff.decider-required` setting and `fail_on` apply when stricter. **Why:** `ADR-89` amendment of 2026-11-09 (decider table), after review found two ways to pass unjudged. | **substantive** |
 > | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` a9ed37935648 -> dfce2332b3ce. Reason: Read the diff of each pinned file since the old pin and the claim still holds. config.rs: read the diff since the old pin; the only change is two derive lists (RuleLevel and FailOn gain PartialOrd and Ord, so the decider gate can take the stricter of two settings). No parsing, validation or field this record relies on changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-09 | Bumped to `0.129`. `authority.decider_table`: notes that on a stale base with no `authority` the head table is judged and a pull request naming its own author passes; an up-to-date branch requirement or merge queue removes the route. **Why:** `ADR-89` accepted risk 13, documented by the orchestrator, pending maintainer review. | **structural** |
+> | 2026-11-09 | Bumped to `0.130`. Marks the stale-base sentence of `authority.decider_table` as accepted by the maintainer on 2026-11-09; states that under `outside_writes: deny` a nested plain repository or submodule is outside the session repository and under `shared` stays unjudged like a separate clone; a back-pointer rule's `ignore_marker` has its keywords and id heads removed whatever their case before the specificity check. **Why:** maintainer decision of 2026-11-09 on `ADR-89` accepted risk 13; the review of the outside-writes amendment; `implements:` and `adr` were accepted as specific markers though they sit on every back-pointer line. | **substantive** |
+> | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` dfce2332b3ce -> c1fbbe868c77. Reason: Read the diff of config.rs since the old pin and the claim still holds. The only change is in generic_marker_problem and validate_ignore_markers: a back-pointer ignore_marker has the back-pointer keywords and record id heads removed, and the keyword and id head containment checks made, case-insensitively, so implements:, IMPLEMENTS: ADR and adr alone are refused at load; plus new unit-test cases for those markers and for ADR-1 style markers that still load. Nothing this record evidences changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |

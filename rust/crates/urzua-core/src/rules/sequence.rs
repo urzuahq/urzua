@@ -604,7 +604,13 @@ impl StatusAgreement<'_> {
             Ok(_) => return Outcome::Absent,
             Err(outcome) => return outcome,
         };
-        let open = self.open_dependencies(&id);
+        let open = super::delivery_items::open_dependencies(
+            &id,
+            &self.graphs.graphs,
+            self.index,
+            self.declared,
+            self.config,
+        );
         if !open.is_empty() {
             if decl.is_progress_status(status) {
                 return self.judge_blocked(record, &id, status, &open, findings);
@@ -634,42 +640,6 @@ impl StatusAgreement<'_> {
             ));
         }
         Outcome::Examined
-    }
-
-    /// Every dependency over every declared pair that is not finished, as
-    /// `ID (status)`.
-    fn open_dependencies(&self, id: &crate::values::RecordId) -> Vec<String> {
-        let mut open: Vec<String> = Vec::new();
-        for graph in self.graphs.graphs.values() {
-            for dependency in graph.get(id).into_iter().flatten() {
-                let Some(target) = self.index.get(dependency) else {
-                    continue;
-                };
-                let target_field = relation_field_name(
-                    self.config,
-                    &target.record_type,
-                    crate::config::RelationRole::Status,
-                );
-                let target_status = target.header.get(target_field).map(str::trim);
-                let finished = target_status.is_some_and(|s| {
-                    self.declared
-                        .get(&target.record_type)
-                        .is_some_and(|d| d.is_success(s))
-                });
-                if !finished {
-                    let shown = format!(
-                        "{dependency} ({})",
-                        target_status
-                            .filter(|s| !s.is_empty())
-                            .unwrap_or("no status")
-                    );
-                    if !open.contains(&shown) {
-                        open.push(shown);
-                    }
-                }
-            }
-        }
-        open
     }
 
     /// A blocked record in a status that claims progress: an info finding when

@@ -2588,21 +2588,23 @@ fn generic_marker_problem(config: &Config, marker: &str) -> Option<String> {
     if let Some(head) = prefixes
         .iter()
         .map(|prefix| format!("{prefix}-"))
-        .find(|head| head.contains(marker))
+        .find(|head| head.to_lowercase().contains(&marker.to_lowercase()))
     {
         return Some(format!(
             "'{marker}' is part of the record id head '{head}' and would match every citation of that type; declare text that appears in no id"
         ));
     }
-    let mut rest = marker.to_string();
+    // The keywords and id heads are stripped whatever their case: `implements:`
+    // and `adr` sit on back-pointer lines as much as `Implements:` and `ADR`.
+    let mut rest = marker.to_lowercase();
     for keyword in [
         crate::rules::MARKER_IMPLEMENTS,
         crate::rules::MARKER_VERIFIES,
     ] {
-        rest = rest.replace(keyword, " ");
+        rest = rest.replace(&keyword.to_lowercase(), " ");
     }
     for prefix in &prefixes {
-        rest = strip_generic_head(&rest, prefix);
+        rest = strip_generic_head(&rest, &prefix.to_lowercase());
     }
     if rest.chars().filter(|c| c.is_alphanumeric()).count() < 3 {
         return Some(format!(
@@ -2675,7 +2677,10 @@ fn validate_ignore_markers(config: &Config) -> Result<(), ConfigError> {
             if let Some(reason) = generic_marker_problem(config, marker) {
                 return Err(bad(name, reason));
             }
-            if let Some(k) = keywords.iter().find(|k| k.contains(marker)) {
+            if let Some(k) = keywords
+                .iter()
+                .find(|k| k.to_lowercase().contains(&marker.to_lowercase()))
+            {
                 return Err(bad(
                     name,
                     format!("'{marker}' is part of the back-pointer keyword '{k}' and would excuse every back-pointer; declare text that appears in no keyword"),
@@ -6314,6 +6319,13 @@ record_types:
             "-- Implements: ADR",
             "// ADR-",
             "Implements: ADR",
+            "implements:",
+            "IMPLEMENTS: ADR",
+            "implements: adr",
+            "verifies: Adr-",
+            "adr",
+            "Adr-",
+            "// mile",
         ] {
             let err = parse(&cfg(marker)).unwrap_err().to_string();
             assert!(err.contains("ignore_marker"), "{marker}: {err}");
@@ -6324,7 +6336,9 @@ record_types:
             "example-only",
             "record-id-ok",
             "ADR-1",
+            "adr-1",
             "ok!x",
+            "Implements: ADR-1",
         ] {
             assert!(parse(&cfg(marker)).is_ok(), "{marker}");
         }

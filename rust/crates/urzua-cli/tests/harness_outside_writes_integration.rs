@@ -315,6 +315,74 @@ fn shared_judges_the_path_of_a_request_that_carries_no_content() {
     assert_eq!(verdict(&v), "block", "{v}");
 }
 
+fn run_no_content(proj: &Path, path: &Path) -> serde_json::Value {
+    let request = serde_json::json!({
+        "event": "edit", "tool": "Write", "paths": [path.to_string_lossy()],
+        "actor": "agent", "cwd": proj.to_string_lossy(), "project_dir": proj.to_string_lossy(),
+    });
+    let mut c = common::urzua();
+    c.args(["harness", "run", "edit"])
+        .current_dir(proj)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    let mut child = c.spawn().unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(request.to_string().as_bytes())
+        .unwrap();
+    let out = child.wait_with_output().unwrap();
+    serde_json::from_slice(&out.stdout).unwrap()
+}
+
+#[test]
+fn the_session_repository_judges_the_path_of_a_request_that_carries_no_content() {
+    for extra in ["", "  outside_writes: shared\n", "  outside_writes: deny\n"] {
+        let (_parent, proj, _old) = project("session-nocontent", extra);
+        let v = run_no_content(&proj, &proj.join(".claude/settings.json"));
+        assert_eq!(verdict(&v), "block", "{extra}: {v}");
+    }
+}
+
+#[test]
+fn a_nested_plain_repository_is_outside_under_deny_and_unjudged_under_shared() {
+    let (_parent, proj, _old) = project("nested-plain", "  outside_writes: deny\n");
+    let nested = proj.join("vendor/inner");
+    std::fs::create_dir_all(&nested).unwrap();
+    git(&nested, &["init", "-q"]);
+    let target = nested.join("notes.txt");
+    let (code, v, _) = run_edit(&proj, &target, "x\n");
+    assert_eq!((code, verdict(&v)), (1, "block"), "{v}");
+    assert!(
+        v["message"]
+            .as_str()
+            .unwrap()
+            .contains("outside the session repository"),
+        "{v}"
+    );
+    // Listed in allow_paths it is let through.
+    std::fs::write(
+        proj.join(".urzua/config.yaml"),
+        session_config(&format!(
+            "  outside_writes: deny\n  allow_paths: [\"{}\"]\n",
+            nested.display()
+        )),
+    )
+    .unwrap();
+    let (_, v, _) = run_edit(&proj, &target, "x\n");
+    assert_ne!(verdict(&v), "block", "{v}");
+    // Under shared a separate repository is not the session's: unjudged.
+    std::fs::write(
+        proj.join(".urzua/config.yaml"),
+        session_config("  outside_writes: shared\n"),
+    )
+    .unwrap();
+    let (code, v, _) = run_edit(&proj, &target, "x\n");
+    assert_eq!((code, verdict(&v)), (0, "not-governed"), "{v}");
+}
+
 /// The installed translator, run as the agent's hook for a Claude Code tool call.
 fn translate(proj: &Path, payload: serde_json::Value) -> serde_json::Value {
     let dest = proj.join(".claude/hooks");

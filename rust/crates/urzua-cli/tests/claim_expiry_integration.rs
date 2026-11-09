@@ -918,6 +918,43 @@ fn a_hand_typed_audit_date_is_reported_by_the_companion_rule_observed_failing() 
 }
 
 #[test]
+fn a_malformed_anchor_is_reported_as_malformed_not_removed() {
+    let extra = "  embodiment.claim-renewal-unattested: warn\n";
+    let dir = fixture("unattested-malformed", &config(RULE, extra));
+    let old = day_days_ago(20);
+    std::fs::write(
+        dir.join(M1),
+        record(
+            "MILE-1",
+            "Done",
+            "01AAAAAAAAAAAAAAAAAAAAAAAA",
+            &format!("Last-audited: {old}\n"),
+            "code:src/a.rs",
+        ),
+    )
+    .unwrap();
+    commit_all(&dir, 20);
+    git(&dir, &["branch", "-M", "main"]);
+    git(&dir, &["checkout", "-q", "-b", "topic"]);
+    let text = std::fs::read_to_string(dir.join(M1)).unwrap();
+    std::fs::write(
+        dir.join(M1),
+        text.replace(
+            &format!("Last-audited: {old}\n"),
+            "Last-audited: not-a-date\n",
+        ),
+    )
+    .unwrap();
+    commit_all(&dir, 0);
+    let parsed = json(&run_urzua(&dir, &["check", "--base", "main"]));
+    let found = findings(&parsed, "embodiment.claim-renewal-unattested");
+    assert_eq!(found.len(), 1, "{parsed}");
+    let message = found[0]["message"].as_str().unwrap();
+    assert!(message.contains("is malformed"), "{message}");
+    assert!(!message.contains("was removed"), "{message}");
+}
+
+#[test]
 fn the_companion_rule_needs_the_expiry_rule() {
     let cfg = "schema_version: 2\nrules:\n  embodiment.claim-renewal-unattested: warn\nrecord_types:\n  milestone:\n    dir: docs/milestones\n    prefix: MILE\n    header_shape: yaml-frontmatter\n    required_fields: [Status]\n";
     let out = load_error("companion-alone", cfg);
