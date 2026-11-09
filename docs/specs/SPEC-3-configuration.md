@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.123'
+Version: '0.125'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:3cfc01bcd73ed965227a1819c9e967d368c95a53746a03f1797b83b9be458f3b, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:92a2b9ceca89133f30987a013734da66b9332c4e937a87e72e53571596e18093, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:3c8aa671582772499ab7345cdbfb5a4dc2c50462882851fb20f853992acfd57c
@@ -881,6 +881,7 @@ and enables nothing: `urzua harness install` with no `--adapter` writes nothing 
 harness:
   adapters: [claude-code]            # installed when --adapter is not given
   instructions_file: AGENTS.md       # carries the marked block; the engine assumes no file name
+  outside_writes: shared             # allow | shared | deny; undeclared acts as allow
   guardrails:
     editor-hook:    {enabled: true, on_unjudged: allow}   # allow | deny
     session-start:  {enabled: true}
@@ -895,6 +896,19 @@ harness:
   `<!-- urzua-harness:begin -->` and `<!-- urzua-harness:end -->`, adds the markers once at the end of the
   file when absent, never touches the text outside them and, run twice, yields identical bytes. Without
   the key no block is written and the install says so.
+- **`outside_writes`** decides how an edit-tool write outside the session's repository is judged
+  (`ADR-89` amendment of 2026-11-09, outside writes). `allow`, and the key undeclared, leave it to the
+  repository that holds the file, so a linked worktree at a commit with no gates is an unjudged place to
+  write. `shared` also judges the file of a linked worktree of the session's repository (its git toplevel
+  is not the session's own and shares the session's `git rev-parse --git-common-dir`; a worktree nested
+  inside the session's directory is one, a plain subdirectory is not) by its path relative to that toplevel against the
+  session's acceptance and protected-path gates (a request with no content is still judged by its
+  path), and a deny wins; a separate clone shares no common
+  directory and stays unjudged, an accepted risk. `deny` refuses an agent's write outside the session's
+  repository while any guardrail is enabled, except under **`allow_paths`**, a list of absolute or
+  `~`-relative directories that `doctor` reports as read by nothing under any other value. A value other
+  than the three, or a relative `allow_paths` entry, is a load error. `urzua init` proposes `shared`;
+  `urzua doctor` warns when a guardrail is enabled and the key is undeclared; `shared` is recommended.
 - **`guardrails`** names which guardrails are on: a guardrail is on only when named with `enabled: true`.
   The names are `editor-hook`, `post-command`, `session-start`, `acceptance` and `protected-paths`. Only
   `editor-hook`, `acceptance` and `protected-paths` take `on_unjudged`: `allow` (the default for
@@ -2361,3 +2375,5 @@ proves this configuration produces the three findings.
 > | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 20203e601224 -> 921027c81b7e. Reason: config.rs: read the diff since the previous pin; it adds generic_marker_problem and its call in validate_ignore_markers (a back-pointer ignore_marker shorter than 3 characters, with no letter or digit, or inside a record id head is refused at load) plus its test; this adds the guard this record now documents (0.122 row above), and no other claim changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-09 | Bumped to `0.123`. A back-pointer rule's `ignore_marker` is also refused at load when, after removing the back-pointer keywords, the declared record id heads that start no record id, comment leaders and punctuation, it leaves fewer than 3 letters or digits (`// Implements:`, `# Verifies:`, `-- Implements: ADR`). **Why:** round-5 review: the guard refused only text inside a keyword or id head, so a padded marker such as `// Implements:` loaded and excused every back-pointer line. | **substantive** |
 > | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 921027c81b7e -> 3cfc01bcd73e. Reason: Read the diff of config.rs since the old pin against what this record evidences: the only change is generic_marker_problem and its new helper strip_generic_head (a back-pointer ignore_marker that is only keywords, id heads, comment leaders and punctuation around fewer than 3 letters or digits is refused at load) plus its test cases; the behaviour this record evidences is unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-09 | Bumped to `0.124`. Note on the log: The version numbers of earlier `Bumped to` rows are not strictly increasing, and history is not rewritten: the order of the rows is the order the changes landed, and the current `Version` header is authoritative. Rows affected: `0.6` after `0.7`; `0.10` after `0.11`; `0.8`, `0.21` and `0.84` each twice; `0.113` twice, the second after `0.114` (the claim-expiry documentation row). **Why:** a review found the out-of-order and repeated numbers and a reader could be misled about which row introduced which version. | **structural** |
+> | 2026-11-09 | Bumped to `0.125`. Documents `harness.outside_writes` (`allow`, `shared`, `deny`) and `harness.allow_paths`: an unknown value or a relative path is a load error, `allow_paths` beside a mode other than `deny` is reported by `doctor`. **Why:** `ADR-89` amendment of 2026-11-09 (outside writes), accepted by the maintainer: a linked worktree at a commit without gates was an unjudged place to write. | **substantive** |

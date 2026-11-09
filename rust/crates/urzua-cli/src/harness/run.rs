@@ -33,6 +33,8 @@ use crate::commands::check::judge_proposed;
 use crate::emit;
 use crate::session::Workspace;
 
+mod outside;
+
 /// Who is acting. An absent actor is treated as an agent: the safer reading.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Actor {
@@ -577,6 +579,11 @@ fn judge_edit(config: Option<PathBuf>, mut request: Request) -> Verdict {
     if roots.is_empty() {
         let _ = std::env::set_current_dir(first_root);
         return judge_edit_in(config, request);
+    }
+    // The session's repository, when the policy says so, also judges a write
+    // that lands outside it (`harness.outside_writes`).
+    if let Some(verdict) = outside::denial(&roots[0], &cwd, &request) {
+        return verdict;
     }
     // Every repository judges; a deny from any wins. Otherwise the verdict is
     // the first repository's that holds the file (the session's own first).
