@@ -754,3 +754,69 @@ fn a_gate_path_that_can_match_nothing_is_a_load_error() {
         must_not_load("unmatchable", &cfg, &[needle, "authority.gates[1]"]);
     }
 }
+
+// ------------------------------- Stable-Id pairing cannot pick the base copy
+
+const SID: &str = "01M6R3NK40JBCPESD89J6FN865";
+
+fn with_sid(status: &str) -> String {
+    format!("---\nStable-Id: {SID}\nStatus: {status}\n---\n# ADR-1: T\n\nprose\n")
+}
+
+/// A fixture whose base holds `docs/adr/ADR-1-a.md` carrying `SID` with `status`.
+fn sid_fixture(name: &str, status: &str) -> common::TempDir {
+    let dir = fixture(name, &config());
+    std::fs::write(dir.join(PATH_1), with_sid(status)).unwrap();
+    git(&dir, &["add", "-A"]);
+    git(&dir, &["commit", "-q", "-m", "stable id"]);
+    dir
+}
+
+fn mallory(dir: &Path) -> String {
+    write_actors(
+        dir,
+        serde_json::json!({"schema": 1, "pr_author": "mallory", "approvers": []}),
+    )
+}
+
+#[test]
+fn a_new_accepted_record_copying_a_deleted_records_stable_id_is_a_gated_move() {
+    let dir = sid_fixture("sid-copy", "Accepted");
+    git(&dir, &["rm", "-q", PATH_1]);
+    std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
+    std::fs::write(dir.join("docs/adr/ADR-9999-evil.md"), with_sid("Accepted")).unwrap();
+    git(&dir, &["add", "-A"]);
+    let actors = mallory(&dir);
+    let (code, v) = check_base(&dir, &["--actors", &actors]);
+    assert_eq!(code, 1, "{v}");
+    let found = decider_findings(&v);
+    assert_eq!(found.len(), 1, "{v}");
+    assert_eq!(found[0]["file"], "docs/adr/ADR-9999-evil.md");
+    assert_eq!(found[0]["severity"], "error");
+}
+
+#[test]
+fn a_slug_rename_keeps_its_base_status_and_is_not_a_gated_move() {
+    let dir = sid_fixture("sid-slug", "Accepted");
+    git(&dir, &["mv", PATH_1, "docs/adr/ADR-1-renamed.md"]);
+    let actors = mallory(&dir);
+    let (code, v) = check_base(&dir, &["--actors", &actors]);
+    assert_eq!(code, 0, "{v}");
+    assert!(decider_findings(&v).is_empty(), "{v}");
+
+    // A rename that also moves the status is still a move, judged against the base's.
+    std::fs::write(dir.join("docs/adr/ADR-1-renamed.md"), with_sid("Rejected")).unwrap();
+    let (code, v) = check_base(&dir, &["--actors", &actors]);
+    assert_eq!(code, 1, "{v}");
+    assert_eq!(decider_findings(&v).len(), 1, "{v}");
+}
+
+#[test]
+fn a_renumber_with_the_same_stable_id_is_judged_as_a_new_record() {
+    let dir = sid_fixture("sid-renumber", "Accepted");
+    git(&dir, &["mv", PATH_1, "docs/adr/ADR-2-renumbered.md"]);
+    let actors = mallory(&dir);
+    let (code, v) = check_base(&dir, &["--actors", &actors]);
+    assert_eq!(code, 1, "{v}");
+    assert_eq!(decider_findings(&v).len(), 1, "{v}");
+}

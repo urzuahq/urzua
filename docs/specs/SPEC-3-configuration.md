@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.135'
+Version: '0.136'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:d62499673ea966031198e95a718a5a3a325b321fcc72842ad6a71b2a304bdb0a, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:92a2b9ceca89133f30987a013734da66b9332c4e937a87e72e53571596e18093, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:3c8aa671582772499ab7345cdbfb5a4dc2c50462882851fb20f853992acfd57c
@@ -432,7 +432,7 @@ Two details carry weight:
   and reports an edge the graph does not list, or a new record outside `initial`; it needs `--base`
   and reports not-applicable without it. `status.unreachable-state` reports a declared status that no
   path from `initial` reaches; it judges the declaration and needs no `--base`. A record whose
-  committed status is no longer declared is counted unreadable by the first rule, not judged. A record the change renamed is matched to its merge-base copy by `Stable-Id` (`BUG-191`), so it is judged against the status it had before the rename; with no `Stable-Id` or no match it is new, and with several matches it is counted unreadable. This repository's policy is that an ADR or RFC enters at `Proposed` or `Draft` and is accepted in a later change, so its `initial` is that one status; a bug or milestone may be filed already finished, because the PR that fixes or delivers it files it. The
+  committed status is no longer declared is counted unreadable by the first rule, not judged. A record the change renamed is matched to its merge-base copy by `Stable-Id` and the same record id (`BUG-191`), so a slug rename is judged against the status it had before; a renumber, no `Stable-Id` or no match is new, and with several matches it is counted unreadable. This repository's policy is that an ADR or RFC enters at `Proposed` or `Draft` and is accepted in a later change, so its `initial` is that one status; a bug or milestone may be filed already finished, because the PR that fixes or delivers it files it. The
   The derived `blocked` value is the next declaration.
 
   `progress` (optional, `MILE-144`, `RFC-48`, `ADR-83`) names the statuses that claim the work has
@@ -2436,3 +2436,4 @@ proves this configuration produces the three findings.
 > | 2026-11-09 | Bumped to `0.133`. The record file extension `.md` is matched in any case (`X.MD` is a record), so a case-insensitive filesystem cannot hide a record from discovery or the acceptance gate. **Why:** the sixth review of the harness. | **substantive** |
 > | 2026-11-09 | Bumped to `0.134`. Documents `authority.waivable` (`never`, `base`, `any`; undeclared is `any`): whether a waiver may silence `diff.decider-required`, the stricter of the base's and the head's applying; `init` proposes `never`; states that the configuration is protected only when a gate lists it. **Why:** `ADR-89` amendment of 2026-11-09 (gate waivers). | **substantive** |
 > | 2026-11-09 | Bumped to `0.135`. `embodiment.claim-renewal-unattested` is described with the row-shape and drift-acknowledgement checks. **Why:** `ADR-97` item 6: a hand-typed row must not clear drift nobody read. | **substantive** |
+> | 2026-11-09 | Bumped to `0.136`. The merge-base copy of a renamed record is matched by `Stable-Id` and the same record id, so a renumber reads as new. **Why:** `ADR-89` amendment (rename pairing). | **substantive** |

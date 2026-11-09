@@ -12,6 +12,7 @@ use urzua_core::config::{Config, RelationRole};
 use urzua_core::record::Record;
 use urzua_core::report::{DiffScope, Notice, NoticeSeverity};
 use urzua_core::rules::{self, CommittedStatus};
+use urzua_core::values::RecordId;
 
 /// The examined set and the account of how it was reached.
 pub(crate) struct DiffExamination {
@@ -145,21 +146,28 @@ fn stable_id(record: &Record) -> Option<&str> {
         .filter(|v| !v.is_empty())
 }
 
+/// A deleted record's base copy: its record id (`ADR-5`, as the engine derives
+/// it from the file name or the declared identity) and its `Status`.
+type DeletedCopy = (Option<String>, Option<String>);
+
 /// The base copies of the records the diff deleted, by `Stable-Id`, for one
 /// record type (`BUG-191`). The diff reports a rename as a deletion plus an
 /// addition, and the `Stable-Id` is the identity that survives it: a record
-/// added at a new path whose `Stable-Id` a deleted record carried is that
-/// record renamed. The `Status` is `None` where the base copy has no readable
-/// one. A deleted path the base cannot be read at is skipped, as the record it
-/// names is then just new.
+/// added at a new path whose `Stable-Id` a deleted record carried, and whose
+/// record id (type and number) is the same, is that record renamed. The
+/// record id is kept so the caller can refuse a pairing across ids: a new
+/// record that merely copies a deleted one's `Stable-Id` is not a rename. The
+/// `Status` is `None` where the base copy has no readable one. A deleted path
+/// the base cannot be read at is skipped, as the record it names is then just
+/// new.
 fn deleted_by_stable_id(
     repo_root: &Path,
     config: &Config,
     type_name: &str,
     status_field: &str,
     changes: &urzua_io::GitChanges,
-) -> HashMap<String, Vec<Option<String>>> {
-    let mut out: HashMap<String, Vec<Option<String>>> = HashMap::new();
+) -> HashMap<String, Vec<DeletedCopy>> {
+    let mut out: HashMap<String, Vec<DeletedCopy>> = HashMap::new();
     let Some(type_config) = config.record_types.get(type_name) else {
         return out;
     };
@@ -178,16 +186,27 @@ fn deleted_by_stable_id(
         let Ok(content) = urzua_io::read_at_commit(repo_root, &changes.merge_base, path) else {
             continue;
         };
-        let old = Record::parse_with_shape_and_prefix(
-            path.clone(),
-            type_name.to_string(),
-            &content,
-            type_config.header_shape,
-            type_config
-                .prefix
-                .clone()
-                .unwrap_or_else(|| type_name.to_ascii_uppercase()),
-        );
+        let prefix = type_config
+            .prefix
+            .clone()
+            .unwrap_or_else(|| type_name.to_ascii_uppercase());
+        let old = match crate::discovery::resolved_model(type_name, type_config) {
+            Ok(model) => Record::parse_with_model(
+                path.clone(),
+                type_name.to_string(),
+                &content,
+                type_config.header_shape,
+                prefix,
+                &model,
+            ),
+            Err(_) => Record::parse_with_shape_and_prefix(
+                path.clone(),
+                type_name.to_string(),
+                &content,
+                type_config.header_shape,
+                prefix,
+            ),
+        };
         let Some(id) = stable_id(&old).map(str::to_string) else {
             continue;
         };
@@ -197,7 +216,9 @@ fn deleted_by_stable_id(
             .map(str::trim)
             .filter(|v| !v.is_empty())
             .map(str::to_string);
-        out.entry(id).or_default().push(status);
+        out.entry(id)
+            .or_default()
+            .push((rules::record_id(&old), status));
     }
     out
 }
@@ -207,7 +228,10 @@ fn deleted_by_stable_id(
 /// status gate names, `MILE-200`, which `diff.decider-required` reads). A path the base does not have is looked up by
 /// `Stable-Id` among the records the diff deleted, because the diff reports a
 /// rename as a deletion plus an addition (`BUG-191`): a renamed record is
-/// judged against the status it had before. One with no match, or no
+/// judged against the status it had before. The pairing needs the same record
+/// id too (a slug rename keeps its number): a record that copies a deleted
+/// one's `Stable-Id` under another id, or has no id, is new, so a head cannot
+/// pick which base record it is judged against. One with no match, or no
 /// `Stable-Id`, reads as new; one matching several deleted records is
 /// unreadable, since which of them it was cannot be told. A base copy that
 /// exists but cannot be read (not UTF-8, a missing object) is unreadable too,
@@ -224,7 +248,7 @@ pub(crate) fn committed_statuses(
     let mut out = HashMap::new();
     // The deleted records' Stable-Ids, read once per type and only when a
     // changed record has no copy at its own path.
-    let mut renamed_from: HashMap<String, HashMap<String, Vec<Option<String>>>> = HashMap::new();
+    let mut renamed_from: HashMap<String, HashMap<String, Vec<DeletedCopy>>> = HashMap::new();
     for record in records {
         if !changes.changed.contains(&record.path) {
             continue;
@@ -264,12 +288,23 @@ pub(crate) fn committed_statuses(
                     .or_insert_with(|| {
                         deleted_by_stable_id(repo_root, config, &record.record_type, field, changes)
                     });
-                match stable_id(record).and_then(|id| deleted.get(id)) {
-                    None => CommittedStatus::New,
-                    Some(matches) => match matches.as_slice() {
-                        [Some(status)] => CommittedStatus::Status(status.clone()),
-                        _ => CommittedStatus::Unreadable,
-                    },
+                let added_id = rules::record_id(record).map(|id| RecordId::new(&id));
+                let matches: Vec<&Option<String>> = match (stable_id(record), &added_id) {
+                    (Some(sid), Some(added_id)) => deleted
+                        .get(sid)
+                        .into_iter()
+                        .flatten()
+                        .filter(|(id, _)| {
+                            id.as_deref().map(RecordId::new).as_ref() == Some(added_id)
+                        })
+                        .map(|(_, status)| status)
+                        .collect(),
+                    _ => Vec::new(),
+                };
+                match matches.as_slice() {
+                    [] => CommittedStatus::New,
+                    [Some(status)] => CommittedStatus::Status(status.clone()),
+                    _ => CommittedStatus::Unreadable,
                 }
             }
             Ok(Some(content)) => {

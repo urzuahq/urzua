@@ -757,6 +757,40 @@ option no longer turns a missing actors file into an `info`.
 
 Risk 10 is reworded above. The Decision is otherwise unchanged. The Status of this ADR stays Accepted.
 
+## Amendment (2026-11-09, rename pairing)
+
+Status of this amendment: (2026-11-09, rename pairing) decided by the orchestrator as a fix to the gate's
+guarantee; pending maintainer review. It narrows how `diff.decider-required` and `status.transition-allowed`
+find a changed record's committed status; the rest of section 4 is unchanged.
+
+**The problem.** A record the base lacks at its path was paired with any record the diff deleted that carried
+the same `Stable-Id` (`BUG-191`, meant for renames) and judged against the deleted record's status. The head
+chooses its own `Stable-Id`, so a non-decider could delete an Accepted ADR and add a new `Status: Accepted`
+record copying that `Stable-Id`: the gate saw no move and passed, with no Bash write, token or waiver.
+
+**The decision.** The pairing needs the same record id too (type and number, as the engine derives it from
+the file name or the type's declared identity) as well as the `Stable-Id`.
+
+- A slug rename (same number, new slug, same `Stable-Id`) still pairs: it is judged against the status it had,
+  so an unchanged status is not a move.
+- A renumber or a retype that keeps the `Stable-Id` no longer pairs: the added record is new and is judged from
+  no prior status, so an Accepted one is a gated move that needs a decider, like any new record.
+- A record with no readable record id never pairs. Several deleted records with the same id and `Stable-Id`
+  still count the record unreadable.
+- `status.transition-allowed` uses the same pairing, so a renumbered record is judged as new there too.
+
+**Merge queue (nit).** On `merge_group` runs `checks.yml` passes no pull request number, so the gate action
+writes no actors file and a gated change in the queue run is reported `info` (or an error under
+`require_evidence`). The pull request run judged the same change with the author's identity; the queue run
+adds no check of this rule. This is stated here, not changed: it is not a bypass, and it is a limit of what the
+queue run can know. A repository that wants the queue run to fail closed sets `require_evidence: true`.
+
+**Actors outage (nit).** With `actors: "true"` on the gate action and `require_evidence` off, a GitHub API
+failure while writing the actors file passes the gate with a warning (amendment of 2026-11-06). The gate action
+documents this on its `actors` input; set `require_evidence: true` to fail closed.
+
+The Decision is otherwise unchanged. The Status of this ADR stays Accepted.
+
 ## References
 
 - `ADR-69`, `ADR-70`, `ADR-71`: the hook, drafting commands and layered gate this extends; `ADR-70` gains an
@@ -798,3 +832,4 @@ Risk 10 is reworded above. The Decision is otherwise unchanged. The Status of th
 > | 2026-11-09 | Stated in the outside-writes amendment that under `deny` a plain git repository or a submodule nested inside the session repository counts as outside (refused unless under `allow_paths`), and that under `shared` it stays unjudged like a separate clone (route 12). Documents existing behaviour; no decision changes. **Why:** the review of the outside-writes amendment found the nested case unstated. | **substantive** |
 > | 2026-11-09 | Added an `## Amendment (2026-11-09, gate waivers)`, accepted by the maintainer on 2026-11-09: `authority.waivable` (`never`, `base`, `any`; undeclared is `any`) decides whether a waiver can silence `diff.decider-required`; under `base` only a waiver the base revision holds unchanged counts, under `never` none does, and the stricter of the base's and the head's applies; `init` proposes `never`, `doctor` warns when gates are declared and the key is not, and this repository declares `never`. Also under `base` and `both` the rule's `require_evidence` option is the stricter of the two. Risk 10 is reworded. `Status` stays Accepted. **Why:** Maintainer decision, 2026-11-09, on the review that found a non-decider accepting a record by adding a waiver record in the same pull request. | **substantive** |
 > | 2026-11-09 | Corrected the decider-table amendment: the configuration is a protected path only when a gate lists `.urzua/config.yaml`, not because the base declares `authority`; `doctor` warns (`authority-config-gated`) when no gate lists it. Risk 3 now names a self-hosted gate whose binary is built from the pull request. `Status` stays Accepted. **Why:** the sixth review found the amendment claiming a protection the engine does not give, and risk 3 not naming the PR-built binary. | **substantive** |
+> | 2026-11-09 | Added an `## Amendment (2026-11-09, rename pairing)`, (2026-11-09, rename pairing) decided by the orchestrator as a fix to the gate's guarantee; pending maintainer review: a record the base lacks is paired with a deleted record of the same `Stable-Id` only when the record id (type and number) is also the same, so a new Accepted record copying a deleted record's `Stable-Id` is a gated move; a slug rename still pairs, a renumber is new; `status.transition-allowed` uses the same pairing. States that the merge-queue run passes no pull request number (the pull request run judged the change) and that an actors API outage passes the gate unless `require_evidence` is on. `Status` stays Accepted. **Why:** the seventh review reproduced a non-decider accepting a brand-new ADR with no finding. | **substantive** |
