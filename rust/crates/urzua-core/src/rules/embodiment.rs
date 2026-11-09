@@ -192,12 +192,7 @@ pub fn embodiment_locator_exists_on(
     );
 
     (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records,
-        },
+        RuleExecution::ran(RULE_ID, population, examined_records),
         findings,
     )
 }
@@ -259,17 +254,13 @@ fn header_locator_findings(
 ) {
     use crate::locator;
     let mut report = |variant: &'static str, message: String| {
-        findings.push(Finding {
-            rule: RULE_EMBODIMENT_LOCATOR_EXISTS.to_string(),
-            severity: FindingSeverity::Error,
-            file: record.path.clone(),
-            line: None,
-            waived: None,
-            declared_severity: None,
-            suggested_action: None,
-            action_source: ActionSource::new(variant).field(field),
+        findings.push(Finding::new(
+            RULE_EMBODIMENT_LOCATOR_EXISTS,
+            FindingSeverity::Error,
+            record.path.clone(),
+            ActionSource::new(variant).field(field),
             message,
-        });
+        ));
     };
     // Text the splitter drops is evidence that does not exist; say so.
     if let Some(lead) = locator::realized_by_unrecognised(value) {
@@ -311,19 +302,18 @@ fn item_locator_findings(
         let place = format!("a {section} item (line {})", clause.line);
         for entry in crate::locator::realized_by_locators(&clause.text) {
             if let Some((_, message)) = locator_defect(&entry, &place, env) {
-                findings.push(Finding {
-                    rule: RULE_EMBODIMENT_LOCATOR_EXISTS.to_string(),
-                    severity: FindingSeverity::Error,
-                    file: record.path.clone(),
-                    line: Some(clause.line),
-                    waived: None,
-                    declared_severity: None,
-                    suggested_action: None,
-                    action_source: ActionSource::new("item-locator-defect")
-                        .section(section.clone())
-                        .line(clause.line),
-                    message,
-                });
+                findings.push(
+                    Finding::new(
+                        RULE_EMBODIMENT_LOCATOR_EXISTS,
+                        FindingSeverity::Error,
+                        record.path.clone(),
+                        ActionSource::new("item-locator-defect")
+                            .section(section.clone())
+                            .line(clause.line),
+                        message,
+                    )
+                    .at(clause.line),
+                );
             }
         }
     }
@@ -612,12 +602,7 @@ pub fn embodiment_consistency(
     );
 
     (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records,
-        },
+        RuleExecution::ran(RULE_ID, population, examined_records),
         findings,
     )
 }
@@ -713,20 +698,16 @@ impl ConsistencyJudge<'_> {
         let field = self.audit_field?;
         let value = declared_value(record, field).ok()?;
         let problem = date_unix(value).err()?;
-        Some(Finding {
-            rule: RULE_EMBODIMENT_CONSISTENCY.to_string(),
-            severity: FindingSeverity::Warning,
-            file: record.path.clone(),
-            line: None,
-            waived: None,
-            declared_severity: None,
-            suggested_action: None,
-            action_source: ActionSource::new("last-audit-date-invalid").field(field),
-            message: format!(
+        Some(Finding::new(
+            RULE_EMBODIMENT_CONSISTENCY,
+            FindingSeverity::Warning,
+            record.path.clone(),
+            ActionSource::new("last-audit-date-invalid").field(field),
+            format!(
                 "last-audit field {field} value '{}' {problem}, so drift_grace_days counts from the cited file's last change for this record",
                 value.trim()
             ),
-        })
+        ))
     }
 
     /// A claim older than `claim_max_age_days` draws a warning in addition to
@@ -736,19 +717,15 @@ impl ConsistencyJudge<'_> {
         if *age <= u64::from(max) {
             return None;
         }
-        Some(Finding {
-            rule: RULE_EMBODIMENT_CONSISTENCY.to_string(),
-            severity: FindingSeverity::Warning,
-            file: record.path.clone(),
-            line: None,
-            waived: None,
-            declared_severity: None,
-            suggested_action: None,
-            action_source: ActionSource::new("claim-too-old"),
-            message: format!(
+        Some(Finding::new(
+            RULE_EMBODIMENT_CONSISTENCY,
+            FindingSeverity::Warning,
+            record.path.clone(),
+            ActionSource::new("claim-too-old"),
+            format!(
                 "stated {state_field} was last verified {age} days ago, longer than the configured claim_max_age_days of {max}"
             ),
-        })
+        ))
     }
 }
 
@@ -761,15 +738,11 @@ fn disagreement_finding(
     evidence: &str,
     has_evidence: bool,
 ) -> Finding {
-    Finding {
-        rule: RULE_EMBODIMENT_CONSISTENCY.to_string(),
-        severity: FindingSeverity::Warning,
-        file: record.path.clone(),
-        line: None,
-        waived: None,
-        declared_severity: None,
-        suggested_action: None,
-        action_source: if has_evidence {
+    Finding::new(
+        RULE_EMBODIMENT_CONSISTENCY,
+        FindingSeverity::Warning,
+        record.path.clone(),
+        if has_evidence {
             ActionSource::new("embodiment-drift").argv([
                 "urzua",
                 "fix",
@@ -780,10 +753,10 @@ fn disagreement_finding(
         } else {
             ActionSource::new("embodiment-unevidenced").field(state_field)
         },
-        message: format!(
+        format!(
             "stated {state_field} '{stated}' disagrees with '{computed}', computed from {evidence}"
         ),
-    }
+    )
 }
 
 /// The `Embodiment` values the repository declares as set by a human and not
@@ -893,12 +866,11 @@ pub fn embodiment_locator_promotion_candidate(
     );
 
     (
-        RuleExecution {
-            rule: RULE_EMBODIMENT_LOCATOR_PROMOTION_CANDIDATE.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
+        RuleExecution::ran(
+            RULE_EMBODIMENT_LOCATOR_PROMOTION_CANDIDATE,
+            population,
             examined_records,
-        },
+        ),
         citers.promotion_findings(scope.is_some()),
     )
 }
@@ -949,21 +921,17 @@ impl LocatorCiters {
                 vec![paths.iter().next().expect("checked len >= 2 above").clone()]
             };
             for anchor in anchors {
-                findings.push(Finding {
-                    rule: RULE_EMBODIMENT_LOCATOR_PROMOTION_CANDIDATE.to_string(),
-                    severity: FindingSeverity::Warning,
-                    file: anchor,
-                    line: None,
-                    waived: None,
-                    declared_severity: None,
-                    suggested_action: None,
-                    action_source: ActionSource::new("locator-promotion-candidate"),
-                    message: format!(
+                findings.push(Finding::new(
+                    RULE_EMBODIMENT_LOCATOR_PROMOTION_CANDIDATE,
+                    FindingSeverity::Warning,
+                    anchor,
+                    ActionSource::new("locator-promotion-candidate"),
+                    format!(
                         "locator '{locator}' is cited by {} records ({}) -- consider promoting to a shared claim record",
                         paths.len(),
                         names.join(", ")
                     ),
-                });
+                ));
             }
         }
         findings
@@ -1028,32 +996,23 @@ pub fn embodiment_requires_accepted_status(
             if config.embodiment.claims_built(stated)
                 && !accepted.iter().any(|a| a.trim() == status)
             {
-                findings.push(Finding {
-                    rule: RULE_ID.to_string(),
-                    severity: FindingSeverity::Error,
-                    file: record.path.clone(),
-                    line: None,
-                    waived: None,
-                    declared_severity: None,
-                    suggested_action: None,
-                    action_source: ActionSource::new("embodiment-state-not-accepted").field(state_field),
-                    message: format!(
+                findings.push(Finding::new(
+                    RULE_ID,
+                    FindingSeverity::Error,
+                    record.path.clone(),
+                    ActionSource::new("embodiment-state-not-accepted").field(state_field),
+                    format!(
                         "{state_field} '{stated}' cannot be stated while {status_field} is '{status}' (accepted: {})",
                         accepted.join(", ")
                     ),
-                });
+                ));
             }
             Outcome::Examined
         },
     );
 
     (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records,
-        },
+        RuleExecution::ran(RULE_ID, population, examined_records),
         findings,
     )
 }

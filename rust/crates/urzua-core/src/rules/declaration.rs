@@ -17,19 +17,15 @@ pub fn config_pointer_declaration_missing(
             if declares_either
                 && (type_config.pointer_fields.is_none() || type_config.narrative_fields.is_none())
             {
-                findings.push(Finding {
-                    rule: RULE_CONFIG_POINTER_DECLARATION_MISSING.to_string(),
-                    severity: FindingSeverity::Error,
-                    file: config_path.to_path_buf(),
-                    line: None,
-                    waived: None,
-                    declared_severity: None,
-                    suggested_action: None,
-                    action_source: ActionSource::new("pointer-declaration-missing").key_path(["record_types", type_name, if type_config.pointer_fields.is_none() { "pointer_fields" } else { "narrative_fields" }]).list(Vec::<String>::new()),
-                    message: format!(
+                findings.push(Finding::new(
+                    RULE_CONFIG_POINTER_DECLARATION_MISSING,
+                    FindingSeverity::Error,
+                    config_path.to_path_buf(),
+                    ActionSource::new("pointer-declaration-missing").key_path(["record_types", type_name, if type_config.pointer_fields.is_none() { "pointer_fields" } else { "narrative_fields" }]).list(Vec::<String>::new()),
+                    format!(
                         "record type '{type_name}' declares only one of pointer_fields/narrative_fields -- declare both explicitly, even as `[]`, since omitting one is not the same as declaring zero fields of that kind"
                     ),
-                });
+                ));
             }
         },
     )
@@ -56,19 +52,15 @@ pub fn config_known_fields_declaration_missing(
             // `config.header-none-has-no-required-fields` already applies to
             // `required_fields` itself.
             if !type_config.has_no_header() && type_config.known_fields.is_none() {
-                findings.push(Finding {
-                    rule: RULE_CONFIG_KNOWN_FIELDS_DECLARATION_MISSING.to_string(),
-                    severity: FindingSeverity::Error,
-                    file: config_path.to_path_buf(),
-                    line: None,
-                    waived: None,
-                    declared_severity: None,
-                    suggested_action: None,
-                    action_source: ActionSource::new("known-fields-declaration-missing").key_path(["record_types", type_name, "known_fields"]),
-                    message: format!(
+                findings.push(Finding::new(
+                    RULE_CONFIG_KNOWN_FIELDS_DECLARATION_MISSING,
+                    FindingSeverity::Error,
+                    config_path.to_path_buf(),
+                    ActionSource::new("known-fields-declaration-missing").key_path(["record_types", type_name, "known_fields"]),
+                    format!(
                         "record type '{type_name}' does not declare known_fields -- declare it explicitly, even as `[]`, to make this type's field-set governance a conscious choice rather than an unchecked default"
                     ),
-                });
+                ));
             }
         },
     )
@@ -115,17 +107,13 @@ fn undeclared_alias_finding(
     config_path: &std::path::Path,
     message: String,
 ) -> Finding {
-    Finding {
-        rule: rule_id.to_string(),
-        severity: FindingSeverity::Error,
-        file: config_path.to_path_buf(),
-        line: None,
-        waived: None,
-        declared_severity: None,
-        suggested_action: None,
-        action_source: source,
+    Finding::new(
+        rule_id.to_string(),
+        FindingSeverity::Error,
+        config_path.to_path_buf(),
+        source,
         message,
-    }
+    )
 }
 
 /// Rule (MILE-0090/ADR-0044): every field named in a type's `pointer_fields`
@@ -236,19 +224,15 @@ pub fn config_pointer_narrative_overlap(
             let declared_pointers: HashSet<&String> = pointer_fields.iter().collect();
             for field in narrative_fields {
                 if declared_pointers.contains(field) {
-                    findings.push(Finding {
-                        rule: RULE_CONFIG_POINTER_NARRATIVE_OVERLAP.to_string(),
-                        severity: FindingSeverity::Error,
-                        file: config_path.to_path_buf(),
-                        line: None,
-                        waived: None,
-                        declared_severity: None,
-                        suggested_action: None,
-                        action_source: ActionSource::new("pointer-narrative-overlap").key_path(["record_types", type_name, "narrative_fields"]).text(field.as_str()),
-                        message: format!(
+                    findings.push(Finding::new(
+                        RULE_CONFIG_POINTER_NARRATIVE_OVERLAP,
+                        FindingSeverity::Error,
+                        config_path.to_path_buf(),
+                        ActionSource::new("pointer-narrative-overlap").key_path(["record_types", type_name, "narrative_fields"]).text(field.as_str()),
+                        format!(
                             "record type '{type_name}' declares '{field}' in both pointer_fields and narrative_fields -- a field must be exactly one kind"
                         ),
-                    });
+                    ));
                 }
             }
         },
@@ -285,19 +269,15 @@ pub fn config_header_none_has_no_required_fields(
                                  field: &str,
                                  detail: String| {
                 if declared {
-                    findings.push(Finding {
-                            rule: RULE_CONFIG_HEADER_NONE_HAS_NO_REQUIRED_FIELDS.to_string(),
-                            severity: FindingSeverity::Error,
-                            file: config_path.to_path_buf(),
-                            line: None,
-                            waived: None,
-                            declared_severity: None,
-                            suggested_action: None,
-                            action_source: ActionSource::new("header-none-field").key_path(["record_types", type_name, field]),
-                            message: format!(
+                    findings.push(Finding::new(
+                        RULE_CONFIG_HEADER_NONE_HAS_NO_REQUIRED_FIELDS,
+                        FindingSeverity::Error,
+                        config_path.to_path_buf(),
+                        ActionSource::new("header-none-field").key_path(["record_types", type_name, field]),
+                        format!(
                                 "record type '{type_name}' declares header_shape: none but {field} {detail} -- a type with no header has nowhere for a field to be"
                             ),
-                        });
+                    ));
                 }
             };
 

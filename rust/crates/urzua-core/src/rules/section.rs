@@ -33,17 +33,12 @@ pub fn section_required(
             if find_section(sections, slot.required).is_none()
                 && !preamble_carries_marker(slot.required, &slot.preamble(sections))
             {
-                findings.push(Finding {
-                    rule: RULE_SECTION_REQUIRED.to_string(),
-                    severity: FindingSeverity::Error,
-                    file: slot.record.path.clone(),
-                    line: None,
-                    waived: None,
-                    declared_severity: None,
-                    suggested_action: None,
-                    action_source: ActionSource::new("section-missing")
-                        .section(slot.required.name.as_str()),
-                    message: if slot.required.aliases.is_empty() {
+                findings.push(Finding::new(
+                    RULE_SECTION_REQUIRED,
+                    FindingSeverity::Error,
+                    slot.record.path.clone(),
+                    ActionSource::new("section-missing").section(slot.required.name.as_str()),
+                    if slot.required.aliases.is_empty() {
                         format!(
                             "required section {} is missing",
                             label(slot.required, &slot.required.name)
@@ -61,18 +56,13 @@ pub fn section_required(
                             aliases.join(", ")
                         )
                     },
-                });
+                ));
             }
             Outcome::Examined
         },
     );
     (
-        RuleExecution {
-            rule: RULE_SECTION_REQUIRED.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records,
-        },
+        RuleExecution::ran(RULE_SECTION_REQUIRED, population, examined_records),
         findings,
     )
 }
@@ -118,22 +108,18 @@ pub fn section_exemptions_matching_nothing(
             continue;
         }
         for status in decl.exempt_statuses.iter().filter(|s| !held.contains(*s)) {
-            findings.push(Finding {
-                rule: RULE_TYPE_DIR_MATCHES_NOTHING.to_string(),
-                severity: FindingSeverity::Warning,
-                file: config_path.to_path_buf(),
-                line: None,
-                waived: None,
-                declared_severity: None,
-                suggested_action: None,
-                action_source: ActionSource::new("exempt-status-matches-nothing")
+            findings.push(Finding::new(
+                RULE_TYPE_DIR_MATCHES_NOTHING,
+                FindingSeverity::Warning,
+                config_path.to_path_buf(),
+                ActionSource::new("exempt-status-matches-nothing")
                     .key_path(["record_types", name.as_str(), "sections", "exempt_statuses"]),
-                message: format!(
+                format!(
                     "record type '{name}' declares `sections.exempt_statuses` entry '{status}', but \
                      no '{name}' record has that status -- the exemption sets nothing aside; \
                      remove it or correct the status"
                 ),
-            });
+            ));
         }
     }
     findings
@@ -167,16 +153,12 @@ pub fn section_shape(
             };
             let shape = slot.required.shape.as_ref().expect("filtered on shape");
             if let Err((line, message)) = check_shape(section, shape) {
-                findings.push(Finding {
-                    rule: RULE_SECTION_SHAPE.to_string(),
-                    severity: FindingSeverity::Error,
-                    file: slot.record.path.clone(),
-                    line: Some(line),
-                    waived: None,
-                    declared_severity: None,
-                    suggested_action: None,
-                    action_source: ActionSource::new("section-shape").section(slot.required.name.as_str()),
-                    message: if outside {
+                findings.push(Finding::new(
+                    RULE_SECTION_SHAPE,
+                    FindingSeverity::Error,
+                    slot.record.path.clone(),
+                    ActionSource::new("section-shape").section(slot.required.name.as_str()),
+                    if outside {
                         format!(
                             "the preamble (before the first `##` section, where {} is absent): {message}",
                             label(slot.required, &slot.required.name)
@@ -187,18 +169,14 @@ pub fn section_shape(
                             label(slot.required, &slot.required.name)
                         )
                     },
-                });
+                )
+                .at(line));
             }
             Outcome::Examined
         },
     );
     (
-        RuleExecution {
-            rule: RULE_SECTION_SHAPE.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records,
-        },
+        RuleExecution::ran(RULE_SECTION_SHAPE, population, examined_records),
         findings,
     )
 }

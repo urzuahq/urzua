@@ -156,19 +156,16 @@ fn unused_marker_finding(
     line: usize,
     ignore: &str,
 ) -> Finding {
-    Finding {
-        rule: rule.to_string(),
-        severity: FindingSeverity::Error,
-        file: path.to_path_buf(),
-        line: Some(line),
-        message: format!(
+    Finding::new(
+        rule.to_string(),
+        FindingSeverity::Error,
+        path.to_path_buf(),
+        ActionSource::new(variant),
+        format!(
             "the ignore marker '{ignore}' suppresses nothing: no back-pointer is on this line; remove the marker"
         ),
-        waived: None,
-        declared_severity: None,
-        suggested_action: None,
-        action_source: ActionSource::new(variant),
-    }
+    )
+    .at(line)
 }
 
 /// The unused-marker findings of one file: every line carrying `ignore` and none
@@ -187,20 +184,17 @@ fn unused_marker_findings(
 
 /// The finding for a back-pointer citing a record that does not exist.
 fn unresolved_finding(pointer: BackPointer) -> Finding {
-    Finding {
-        rule: RULE_EMBODIMENT_BACK_POINTER_RESOLUTION.to_string(),
-        severity: FindingSeverity::Error,
-        file: pointer.file,
-        line: Some(pointer.line),
-        message: format!(
+    Finding::new(
+        RULE_EMBODIMENT_BACK_POINTER_RESOLUTION,
+        FindingSeverity::Error,
+        pointer.file,
+        ActionSource::new("back-pointer-unresolved"),
+        format!(
             "back-pointer cites {}, which resolves to no record",
             pointer.id
         ),
-        waived: None,
-        declared_severity: None,
-        suggested_action: None,
-        action_source: ActionSource::new("back-pointer-unresolved"),
-    }
+    )
+    .at(pointer.line)
 }
 
 /// Whether the cited record's status permits implementation, as a finding
@@ -478,23 +472,20 @@ fn uncovered_paths(
                     && scanned.is_none_or(|s| s.iter().any(|b| path_is_published(&f.path, b)))
             })
         })
-        .map(|entry| Finding {
-            rule: rule.to_string(),
-            severity: FindingSeverity::Error,
-            file: PathBuf::from(entry),
-            line: None,
-            message: format!(
-                "{label} '{entry}' covers no tracked file, so nothing under it was \
+        .map(|entry| {
+            Finding::new(
+                rule.to_string(),
+                FindingSeverity::Error,
+                PathBuf::from(entry), // The edit lands in the configuration, not in the finding's own
+                // file (the declared source path).
+                ActionSource::new(variant)
+                    .file(config_path)
+                    .key_path(["rules", rule, option]),
+                format!(
+                    "{label} '{entry}' covers no tracked file, so nothing under it was \
                  checked; remove the entry or correct the path"
-            ),
-            waived: None,
-            declared_severity: None,
-            suggested_action: None,
-            // The edit lands in the configuration, not in the finding's own
-            // file (the declared source path).
-            action_source: ActionSource::new(variant)
-                .file(config_path)
-                .key_path(["rules", rule, option]),
+                ),
+            )
         })
         .collect()
 }
@@ -581,12 +572,11 @@ pub fn embodiment_back_pointer_resolution(
     ));
 
     (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population.with_excused_lines(excused_lines)),
-            status: RuleStatus::Ran,
-            examined_records: Vec::new(),
-        },
+        RuleExecution::ran(
+            RULE_ID,
+            population.with_excused_lines(excused_lines),
+            Vec::new(),
+        ),
         findings,
     )
 }
@@ -625,17 +615,16 @@ pub fn embodiment_back_pointer_decision_accepted(
     let mut excused_lines = 0;
     let mut unused: Vec<Finding> = Vec::new();
     let mut push = |variant: &'static str, pointer: &BackPointer, message: String| {
-        findings.push(Finding {
-            rule: RULE_ID.to_string(),
-            severity: FindingSeverity::Error,
-            file: pointer.file.clone(),
-            line: Some(pointer.line),
-            message,
-            waived: None,
-            declared_severity: None,
-            suggested_action: None,
-            action_source: ActionSource::new(variant),
-        });
+        findings.push(
+            Finding::new(
+                RULE_ID,
+                FindingSeverity::Error,
+                pointer.file.clone(),
+                ActionSource::new(variant),
+                message,
+            )
+            .at(pointer.line),
+        );
     };
 
     // The diff narrows what is handed to the rule; it is not the configuration
@@ -691,12 +680,11 @@ pub fn embodiment_back_pointer_decision_accepted(
     ));
 
     (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population.with_excused_lines(excused_lines)),
-            status: RuleStatus::Ran,
-            examined_records: Vec::new(),
-        },
+        RuleExecution::ran(
+            RULE_ID,
+            population.with_excused_lines(excused_lines),
+            Vec::new(),
+        ),
         findings,
     )
 }

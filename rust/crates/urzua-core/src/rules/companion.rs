@@ -88,23 +88,13 @@ pub fn config_companion_declaration_missing(
                         names[0], names[1]
                     ),
                 };
-                findings.push(Finding {
-                    rule: RULE_CONFIG_COMPANION_DECLARATION_MISSING.to_string(),
-                    severity: FindingSeverity::Error,
-                    file: config_path.to_path_buf(),
-                    line: None,
-                    waived: None,
-                    declared_severity: None,
-                    suggested_action: None,
-                    action_source: companion_source(
-                        type_name,
-                        type_config,
-                        records,
-                        missing,
-                        &names,
-                    ),
+                findings.push(Finding::new(
+                    RULE_CONFIG_COMPANION_DECLARATION_MISSING,
+                    FindingSeverity::Error,
+                    config_path.to_path_buf(),
+                    companion_source(type_name, type_config, records, missing, &names),
                     message,
-                });
+                ));
             }
         },
     )

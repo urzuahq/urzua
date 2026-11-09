@@ -6,7 +6,7 @@ Track: corpus-corrections
 Implements: RFC-1, RFC-5, RFC-8, RFC-11
 Blocked-on: —
 ---
-# 33 — Fold research corrections into existing RFCs
+# 33 — Fold corrections into existing RFCs
 
 ## What
 
@@ -14,7 +14,7 @@ Several specific, evidenced corrections not yet routed: RFC-8's repair-vs-lowere
 
 ## Why
 
-Each is a real, evidenced finding from research with no home in the public corpus yet -- routing them is cheaper now than after more schema work builds on the unpatched versions.
+Each is a specific correction to an existing RFC that no public record carries yet -- routing them is cheaper now than after more schema work builds on the unpatched versions.
 
 ## Done means
 
@@ -33,3 +33,5 @@ Each is a real, evidenced finding from research with no home in the public corpu
 
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |
 > | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |
+> | 2026-11-09 | Removed an appeal to research a reader cannot open; the argument now rests on the corrections themselves, each named in What. `Status` unchanged. | **structural** |
+> | 2026-11-09 | Retitled "Fold corrections into existing RFCs" (filename slug and H1) so the title no longer points at a source a reader cannot open. `Stable-Id` is unchanged, so every reference resolves; no other record cited the old filename. `Status` unchanged. | **structural** |

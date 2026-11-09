@@ -36,34 +36,26 @@ fn record_scoped_header_findings(
                 Some(e) => format!(" -- {e}"),
                 None => String::new(),
             };
-            findings.push(Finding {
-                rule: RULE_ID.to_string(),
-                severity: FindingSeverity::Error,
-                file: record.path.clone(),
-                line: None,
-                waived: None,
-                declared_severity: None,
-                suggested_action: None,
-                action_source: ActionSource::new("header-region-missing"),
-                message: format!(
+            findings.push(Finding::new(
+                RULE_ID,
+                FindingSeverity::Error,
+                record.path.clone(),
+                ActionSource::new("header-region-missing"),
+                format!(
                     "no header-shaped region found -- required fields {required:?} cannot be checked{detail}"
                 ),
-            });
+            ));
             continue;
         }
 
         for dup in record.header.duplicate_keys() {
-            findings.push(Finding {
-                rule: RULE_ID.to_string(),
-                severity: FindingSeverity::Error,
-                file: record.path.clone(),
-                line: None,
-                waived: None,
-                declared_severity: None,
-                suggested_action: None,
-                action_source: ActionSource::new("duplicate-key").field(dup.as_str()),
-                message: format!("header key '{dup}' appears more than once -- ambiguous which value is operative"),
-            });
+            findings.push(Finding::new(
+                RULE_ID,
+                FindingSeverity::Error,
+                record.path.clone(),
+                ActionSource::new("duplicate-key").field(dup.as_str()),
+                format!("header key '{dup}' appears more than once -- ambiguous which value is operative"),
+            ));
         }
     }
 }
@@ -95,32 +87,23 @@ pub fn header_required_fields(
                 return Outcome::Unreadable;
             }
             if record.header.get(field.as_str()).is_none() {
-                findings.push(Finding {
-                    rule: RULE_ID.to_string(),
-                    severity: FindingSeverity::Error,
-                    file: record.path.clone(),
-                    line: None,
-                    waived: None,
-                    declared_severity: None,
-                    suggested_action: None,
-                    action_source: ActionSource::new("field-missing").field(field.as_str()),
-                    message: format!(
+                findings.push(Finding::new(
+                    RULE_ID,
+                    FindingSeverity::Error,
+                    record.path.clone(),
+                    ActionSource::new("field-missing").field(field.as_str()),
+                    format!(
                         "missing required header field '{field}' for record type '{}'",
                         record.record_type
                     ),
-                });
+                ));
             }
             Outcome::Examined
         },
     );
 
     (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records,
-        },
+        RuleExecution::ran(RULE_ID, population, examined_records),
         findings,
     )
 }
@@ -228,16 +211,12 @@ pub fn header_field_set_consistency(
                             .text(declared.as_str()),
                         None => ActionSource::new("undeclared-field").field(field.key.as_str()),
                     };
-                    findings.push(Finding {
-                        rule: RULE_ID.to_string(),
-                        severity: FindingSeverity::Warning,
-                        file: record.path.clone(),
-                        line: Some(field.line),
-                        waived: None,
-                        declared_severity: None,
-                        suggested_action: None,
-                        action_source: source,
-                        message: match near {
+                    findings.push(Finding::new(
+                        RULE_ID,
+                        FindingSeverity::Warning,
+                        record.path.clone(),
+                        source,
+                        match near {
                             Some(declared) => format!(
                                 "field '{}' is not declared for record type '{}' -- the type declares '{declared}', which differs only in case; rename it",
                                 field.key, record.record_type
@@ -247,7 +226,8 @@ pub fn header_field_set_consistency(
                                 field.key, record.record_type
                             ),
                         },
-                    });
+                    )
+                    .at(field.line));
                 }
             }
             Outcome::Examined
@@ -255,12 +235,7 @@ pub fn header_field_set_consistency(
     );
 
     (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records,
-        },
+        RuleExecution::ran(RULE_ID, population, examined_records),
         findings,
     )
 }
@@ -307,31 +282,23 @@ pub fn header_field_case_mismatch(
             else {
                 return Outcome::Absent;
             };
-            findings.push(Finding {
-                rule: RULE_ID.to_string(),
-                severity: FindingSeverity::Error,
-                file: record.path.clone(),
-                line: Some(found.line),
-                waived: None,
-                declared_severity: None,
-                suggested_action: None,
-                action_source: ActionSource::new("field-case-mismatch").field(found.key.as_str()).text(field.as_str()),
-                message: format!(
+            findings.push(Finding::new(
+                RULE_ID,
+                FindingSeverity::Error,
+                record.path.clone(),
+                ActionSource::new("field-case-mismatch").field(found.key.as_str()).text(field.as_str()),
+                format!(
                     "declared field '{field}' found as '{}' -- field names compare exactly (ADR-57); rename it",
                     found.key
                 ),
-            });
+            )
+            .at(found.line));
             Outcome::Examined
         },
     );
 
     (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records,
-        },
+        RuleExecution::ran(RULE_ID, population, examined_records),
         findings,
     )
 }
@@ -391,31 +358,23 @@ pub fn header_case_variant_key(
                     .map(|(key, line)| format!("'{key}' (line {line})"))
                     .collect::<Vec<_>>()
                     .join(", ");
-                findings.push(Finding {
-                    rule: RULE_ID.to_string(),
-                    severity: FindingSeverity::Error,
-                    file: record.path.clone(),
-                    line: Some(spellings[0].1),
-                    waived: None,
-                    declared_severity: None,
-                    suggested_action: None,
-                    action_source: ActionSource::new("case-variant-key").field(spellings[0].0),
-                    message: format!(
+                findings.push(Finding::new(
+                    RULE_ID,
+                    FindingSeverity::Error,
+                    record.path.clone(),
+                    ActionSource::new("case-variant-key").field(spellings[0].0),
+                    format!(
                         "header writes keys differing only by case: {named} -- field names compare exactly (ADR-57), so these are different fields; this reports the difference, not which spelling is right"
                     ),
-                });
+                )
+                .at(spellings[0].1));
             }
             Outcome::Examined
         },
     );
 
     (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records,
-        },
+        RuleExecution::ran(RULE_ID, population, examined_records),
         findings,
     )
 }
