@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5E1D23JRXBPTP54NSG
-Version: '0.19'
+Version: '0.20'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -58,6 +58,7 @@ empty, same as every other command's report.
 | `config-exists` | `.urzua/config.yaml` is present. `error` if missing (short-circuits, exit 2). |
 | `config-parses` | The config parses with no unrecognized keys (`deny_unknown_fields` — a typo'd key is a hard parse error, not a silently-ignored one, and so is a `harness.guardrails` name the build does not ship). `error` if not (short-circuits, exit 1). Unrecognized entries inside the `harness` table still load; the message then counts them and `harness-config` names them. |
 | `harness-outside-writes` | `warn` when `harness` enables a guardrail and `outside_writes` is undeclared: a write into a linked worktree of the repository at a commit with no gates is then not judged by this repository's gates; recommends `shared` (`ADR-89` amendment of 2026-11-09, `SPEC-3`). |
+| `harness-installed` | `warn` when `harness` declares an adapter, a guardrail or an instructions file and `.urzua/harness.lock` is missing or the installed bundle has drifted from it. A `harness` block that declares none of the three (only `outside_writes` and `allow_paths`, as `urzua init` writes it) installs nothing, so a missing lock is not reported. |
 | `record-types-declared` | At least one `[record_types.*]` entry exists. `error` if the map is empty — `check` would never examine anything. |
 | `rules-enabled` | At least one rule is enabled (level other than `off`). `error` if none is: every rule is opt-in (`ADR-53`), so `check` would report not-run and examine nothing (`BUG-174`). |
 | `record-type-dir` | One check per declared type: does `dir` actually exist on disk. `error` if not — this fires today for `waiver` in this very repo, correctly, since no waiver record has been created yet (MILE-59) and its directory was deliberately never pre-created. |
@@ -118,3 +119,4 @@ than compounded:
 > | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/doctor.rs` 4d8d0d22c116 -> 64faee47e0b1. Reason: Read the diff of each pinned file since the old pin and the claim still holds. doctor.rs: hooks_dir's git closure uses urzua_io::git::GitRun with the same arguments, working directory and 'could not run git' wording; nothing else changed; behaviour unchanged, outputs byte-identical. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
 > | 2026-11-09 | Bumped to `0.18`. The pins this spec's `Realized-by` holds on files this change touched were re-baselined (the `Re-baselined` row above); no behaviour this spec describes changed. | **structural** |
 > | 2026-11-09 | Bumped to `0.19`. Adds the `harness-outside-writes` check. **Why:** `ADR-89` amendment of 2026-11-09 (outside writes), accepted by the maintainer: a linked worktree at a commit without gates was an unjudged place to write. | **substantive** |
+> | 2026-11-09 | Bumped to `0.20`. `harness-installed` is not reported for a `harness` block that declares no adapter, guardrail or instructions file. **Why:** `urzua init` now writes `harness: {outside_writes: shared}` into every fresh configuration, and it was followed by a warning that a harness it never asked for was not installed. | **substantive** |

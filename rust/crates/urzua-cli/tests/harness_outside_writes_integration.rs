@@ -247,3 +247,176 @@ fn init_proposes_outside_writes_shared() {
     let text = String::from_utf8_lossy(&out.stdout).to_string();
     assert!(text.contains("outside_writes: shared"), "{text}");
 }
+
+fn nested_worktree(proj: &Path, old: &str) -> PathBuf {
+    let wt = proj.join("nested");
+    git(
+        proj,
+        &[
+            "worktree",
+            "add",
+            "-q",
+            "--detach",
+            wt.to_str().unwrap(),
+            old,
+        ],
+    );
+    wt
+}
+
+#[test]
+fn shared_judges_a_linked_worktree_nested_inside_the_session_repository() {
+    let (_parent, proj, old) = project("nested", "  outside_writes: shared\n");
+    let wt = nested_worktree(&proj, &old);
+    for (rel, content) in [
+        (".github/workflows/x.yml", "name: x\n"),
+        (".claude/settings.json", "{}\n"),
+        (ADR, ACCEPTED),
+    ] {
+        let (code, v, _) = run_edit(&proj, &wt.join(rel), content);
+        assert_eq!((code, verdict(&v)), (1, "block"), "{rel}: {v}");
+    }
+    // A plain subdirectory of the session repository is the session's own file:
+    // judged by it as before, with no linked-worktree wording.
+    std::fs::create_dir_all(proj.join("sub")).unwrap();
+    let (code, v, _) = run_edit(&proj, &proj.join("sub/notes.txt"), "x\n");
+    assert_eq!((code, verdict(&v)), (0, "not-governed"), "{v}");
+    let (code, v, _) = run_edit(&proj, &proj.join(".github/workflows/x.yml"), "name: x\n");
+    assert_eq!((code, verdict(&v)), (1, "block"), "{v}");
+    assert!(
+        !v["message"].as_str().unwrap().contains("linked worktree"),
+        "{v}"
+    );
+}
+
+#[test]
+fn shared_judges_the_path_of_a_request_that_carries_no_content() {
+    let (parent, proj, old) = project("nocontent", "  outside_writes: shared\n");
+    let wt = worktree(&parent, &proj, &old);
+    let request = serde_json::json!({
+        "event": "edit", "tool": "Write", "paths": [wt.join(".claude/settings.json").to_string_lossy()],
+        "actor": "agent", "cwd": proj.to_string_lossy(), "project_dir": proj.to_string_lossy(),
+    });
+    let mut c = common::urzua();
+    c.args(["harness", "run", "edit"])
+        .current_dir(&proj)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    let mut child = c.spawn().unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(request.to_string().as_bytes())
+        .unwrap();
+    let out = child.wait_with_output().unwrap();
+    let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(verdict(&v), "block", "{v}");
+}
+
+/// The installed translator, run as the agent's hook for a Claude Code tool call.
+fn translate(proj: &Path, payload: serde_json::Value) -> serde_json::Value {
+    let dest = proj.join(".claude/hooks");
+    std::fs::create_dir_all(&dest).unwrap();
+    let script = dest.join("urzua-claude-code.py");
+    std::fs::copy(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("bundle/claude-code/files/.claude/hooks/urzua-claude-code.py"),
+        &script,
+    )
+    .unwrap();
+    let mut c = Command::new("python3");
+    c.arg("-I")
+        .arg(&script)
+        .args(["edit", "--", "urzua", "harness", "run", "edit"])
+        .current_dir(proj)
+        .env("URZUA_BIN", env!("CARGO_BIN_EXE_urzua"))
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    let mut child = c.spawn().unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(payload.to_string().as_bytes())
+        .unwrap();
+    let out = child.wait_with_output().unwrap();
+    assert_eq!(out.status.code(), Some(0), "{out:?}");
+    serde_json::from_slice(&out.stdout).unwrap_or(serde_json::Value::Null)
+}
+
+#[test]
+fn multiedit_and_notebookedit_into_a_linked_worktree_are_judged_under_shared() {
+    let (parent, proj, old) = project("translator", "  outside_writes: shared\n");
+    let wt = worktree(&parent, &proj, &old);
+    std::fs::create_dir_all(wt.join(".github/workflows")).unwrap();
+    std::fs::write(wt.join(".github/workflows/x.yml"), "name: x\n").unwrap();
+    std::fs::create_dir_all(wt.join(".claude")).unwrap();
+    std::fs::write(
+        wt.join(".claude/nb.ipynb"),
+        r#"{"cells":[{"cell_type":"code","id":"a","metadata":{},"source":"1","outputs":[],"execution_count":null}],"metadata":{},"nbformat":4,"nbformat_minor":5}"#,
+    )
+    .unwrap();
+    let multi = translate(
+        &proj,
+        serde_json::json!({
+            "tool_name": "MultiEdit", "cwd": proj.to_string_lossy(),
+            "tool_input": {
+                "file_path": wt.join(".github/workflows/x.yml").to_string_lossy(),
+                "edits": [{"old_string": "name: x", "new_string": "name: y"}],
+            },
+        }),
+    );
+    assert_eq!(
+        multi["hookSpecificOutput"]["permissionDecision"], "deny",
+        "{multi}"
+    );
+    let note = translate(
+        &proj,
+        serde_json::json!({
+            "tool_name": "NotebookEdit", "cwd": proj.to_string_lossy(),
+            "tool_input": {
+                "notebook_path": wt.join(".claude/nb.ipynb").to_string_lossy(),
+                "cell_id": "a", "new_source": "2",
+            },
+        }),
+    );
+    assert_eq!(
+        note["hookSpecificOutput"]["permissionDecision"], "deny",
+        "{note}"
+    );
+}
+
+#[test]
+fn a_fresh_config_with_only_outside_writes_does_not_warn_that_the_harness_is_not_installed() {
+    let dir = common::TempDir::new("urzua-outside-doctor-bare");
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        format!("{TYPES}harness:\n  outside_writes: shared\n"),
+    )
+    .unwrap();
+    git(&dir, &["init", "-q"]);
+    let out = common::urzua()
+        .arg("doctor")
+        .current_dir(&dir)
+        .output()
+        .unwrap();
+    let text = String::from_utf8_lossy(&out.stdout).to_string();
+    assert!(!text.contains("harness-installed"), "{text}");
+    // Declaring a guardrail makes the missing lock a problem again.
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        format!("{TYPES}harness:\n  outside_writes: shared\n  guardrails:\n    editor-hook: {{enabled: true}}\n"),
+    )
+    .unwrap();
+    let out = common::urzua()
+        .arg("doctor")
+        .current_dir(&dir)
+        .output()
+        .unwrap();
+    let text = String::from_utf8_lossy(&out.stdout).to_string();
+    assert!(text.contains("harness-installed"), "{text}");
+}

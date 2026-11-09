@@ -36,7 +36,7 @@ pub(super) fn denial(session_root: &Path, cwd: &Path, request: &Request) -> Opti
     for path in &request.paths {
         let abs = absolute(cwd, path);
         let target = resolve_links(&abs).unwrap_or_else(|| abs.clone());
-        if target.starts_with(&session) {
+        if within_session(&session, &target) {
             continue;
         }
         let verdict = match mode {
@@ -48,6 +48,23 @@ pub(super) fn denial(session_root: &Path, cwd: &Path, request: &Request) -> Opti
         }
     }
     None
+}
+
+/// Whether the file belongs to the session's own repository: it is under the
+/// session root and its git toplevel is the session's. A linked worktree nested
+/// inside the session root (`git worktree add proj/nested`) is under the root
+/// but is a different working tree, possibly at an older commit, so it is not.
+fn within_session(session: &Path, target: &Path) -> bool {
+    if !target.starts_with(session) {
+        return false;
+    }
+    match (
+        toplevel_and_common_dir(target),
+        toplevel_and_common_dir(session),
+    ) {
+        (Some((top, _)), Some((session_top, _))) => top == session_top,
+        _ => true,
+    }
 }
 
 /// `outside_writes: deny`: refused unless the file is under an `allow_paths`
@@ -103,7 +120,9 @@ fn shared_denial(
     }
     let rel = target.strip_prefix(&toplevel).ok()?;
     let mapped = session.join(rel).to_string_lossy().to_string();
-    let content = request.content.as_deref()?;
+    // A request without content is still judged by its path (a protected path);
+    // the acceptance gate, which reads the content, then finds no status.
+    let content = request.content.as_deref().unwrap_or("");
     let mut verdict = gate_denial(session, config, &mapped, content, request)?;
     verdict.message = format!(
         "{} (the file is {} in a linked worktree of this repository at {}, judged by this repository's configuration)",

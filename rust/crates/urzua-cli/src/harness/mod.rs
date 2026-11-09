@@ -1478,7 +1478,15 @@ pub(crate) fn doctor_checks(
             out.push((Level::Warn, "harness-config", unknown_adapter(name)));
         }
     }
-    out.extend(installed_checks(&env));
+    // A harness block that declares no adapter, guardrail or instructions file
+    // (only `outside_writes`, as `urzua init` writes) installs nothing, so a
+    // missing lock is not a problem.
+    if !(harness.adapters.is_empty()
+        && harness.guardrails.is_empty()
+        && harness.instructions_file.is_none())
+    {
+        out.extend(installed_checks(&env));
+    }
     out.extend(legacy_hook_checks(&env, &adapters));
     if harness.any_enabled() && harness.outside_writes.is_none() {
         out.push((

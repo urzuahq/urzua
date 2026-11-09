@@ -589,9 +589,12 @@ worktree of the repository, at a commit that holds no gates, an unjudged place t
   optional list `harness.allow_paths` of absolute or `~`-relative directories read only with `deny`:
   - `allow`: an edit is judged as before (the repository that holds the file judges it, and a place with no
     gates judges nothing). This is also the meaning of an undeclared key: no behaviour change.
-  - `shared`: when the governed root that holds the written file shares the session repository's
-    `git rev-parse --git-common-dir` (a linked worktree of the same repository), the file's path relative to
-    that root is also judged against the session's configuration: its acceptance gates and its protected paths.
+  - `shared`: when the git toplevel of the file's working tree is not the session repository's own and shares
+    the session repository's `git rev-parse --git-common-dir` (a linked worktree of the same repository,
+    including one nested inside the session repository's directory), the file's path relative to that
+    toplevel is also judged against the session's configuration: its acceptance gates and its protected paths.
+    A file whose toplevel is the session repository's own is the session's and is judged as before. A request
+    that carries no content is still judged by its path (the protected paths).
     A deny wins, as in the amendment of 2026-11-08. The record rules of the editor hook are not re-run on the
     session's copy of the file; only the gates are.
   - `deny`: an agent's edit-tool write to a file outside the session's repository (links resolved) is refused

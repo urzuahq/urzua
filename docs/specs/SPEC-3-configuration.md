@@ -900,8 +900,10 @@ harness:
   (`ADR-89` amendment of 2026-11-09, outside writes). `allow`, and the key undeclared, leave it to the
   repository that holds the file, so a linked worktree at a commit with no gates is an unjudged place to
   write. `shared` also judges the file of a linked worktree of the session's repository (its git toplevel
-  shares the session's `git rev-parse --git-common-dir`) by its path relative to that toplevel against the
-  session's acceptance and protected-path gates, and a deny wins; a separate clone shares no common
+  is not the session's own and shares the session's `git rev-parse --git-common-dir`; a worktree nested
+  inside the session's directory is one, a plain subdirectory is not) by its path relative to that toplevel against the
+  session's acceptance and protected-path gates (a request with no content is still judged by its
+  path), and a deny wins; a separate clone shares no common
   directory and stays unjudged, an accepted risk. `deny` refuses an agent's write outside the session's
   repository while any guardrail is enabled, except under **`allow_paths`**, a list of absolute or
   `~`-relative directories that `doctor` reports as read by nothing under any other value. A value other
