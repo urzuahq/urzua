@@ -687,24 +687,6 @@ fn skipped_reasons(skipped: &[(u32, Vec<String>)]) -> Vec<SkippedReason> {
     out
 }
 
-fn git_output(repo_root: &std::path::Path, args: &[&str]) -> Result<Vec<u8>, String> {
-    let out = std::process::Command::new("git")
-        .arg("-C")
-        .arg(repo_root)
-        .args(args)
-        .output()
-        .map_err(|e| format!("could not run git: {e}"))?;
-    if out.status.success() {
-        Ok(out.stdout)
-    } else {
-        Err(format!(
-            "git {} failed: {}",
-            args[0],
-            String::from_utf8_lossy(&out.stderr).trim()
-        ))
-    }
-}
-
 /// `(ref name, filenames in `dir`)` for every local branch and remote-tracking
 /// ref. One `for-each-ref`, then one `ls-tree` per *distinct commit* (many
 /// refs share a tip), which reads only the one directory's tree object --
@@ -717,7 +699,7 @@ fn other_ref_claims(
 ) -> Result<Vec<(String, Vec<String>)>, String> {
     let mut args = vec!["for-each-ref", "--format=%(objectname) %(refname)"];
     args.extend_from_slice(prefixes);
-    let refs = git_output(repo_root, &args)?;
+    let refs = urzua_io::git::stdout_in(repo_root, &args)?;
     let mut by_commit: std::collections::BTreeMap<String, Vec<String>> = Default::default();
     for line in String::from_utf8_lossy(&refs).lines() {
         let Some((sha, full)) = line.split_once(' ') else {

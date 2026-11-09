@@ -42,11 +42,12 @@
 use std::collections::{BTreeMap, HashSet};
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::process::{Command, ExitCode};
+use std::process::ExitCode;
 
 use serde::{Deserialize, Serialize};
 use urzua_core::config::Config;
 use urzua_core::report::{CheckReport, Finding, FindingSeverity, Notice, Report, ReportStatus};
+use urzua_io::git::GitRun;
 
 use super::run::{key, live, to_json};
 use crate::commands::check::{check_paths, judge_proposed};
@@ -469,7 +470,7 @@ fn findings_message(summary: &FindingsSummary) -> String {
 /// is `None` when git cannot say (no repository, no commit yet); the working
 /// tree is still examined then.
 fn top_and_head() -> (Option<PathBuf>, Option<String>) {
-    let Ok(out) = Command::new("git")
+    let Ok(out) = GitRun::new()
         .args([
             "--no-optional-locks",
             "rev-parse",
@@ -494,7 +495,7 @@ fn top_and_head() -> (Option<PathBuf>, Option<String>) {
 /// or `None` when git cannot compare them (a commit that is gone after a
 /// rewrite): the working tree is judged against `HEAD` then.
 fn committed_since(last: &str, head: &str) -> Option<Vec<String>> {
-    let out = Command::new("git")
+    let out = GitRun::new()
         .args([
             "--no-optional-locks",
             "diff",
@@ -704,7 +705,7 @@ pub(super) fn seed_head(repo_root: &Path) {
 /// deleted, staged or not. An error is a stated reason the changed set could
 /// not be read.
 fn changed_paths() -> Result<Vec<(String, bool)>, String> {
-    let out = Command::new("git")
+    let out = GitRun::new()
         .args([
             "--no-optional-locks",
             "status",
@@ -714,7 +715,7 @@ fn changed_paths() -> Result<Vec<(String, bool)>, String> {
             "--untracked-files=all",
         ])
         .output()
-        .map_err(|e| format!("git could not be run: {e}"))?;
+        .map_err(|e| format!("git could not be run: {}", e.into_io()))?;
     if !out.status.success() {
         return Err(format!(
             "git status failed, so this is not a working tree git knows: {}",
@@ -730,11 +731,9 @@ fn changed_paths() -> Result<Vec<(String, bool)>, String> {
 /// each is gone. A file that is not on disk and is only skip-worktree is not a
 /// change (a sparse checkout leaves such files out). Empty when git cannot say.
 fn hidden_changes(top: &Path) -> Vec<(String, bool)> {
-    use std::io::Write;
-    use std::process::Stdio;
     let git = |args: &[&str]| {
-        Command::new("git")
-            .current_dir(top)
+        GitRun::new()
+            .cwd(top)
             .arg("--no-optional-locks")
             .args(args)
             .output()
@@ -787,29 +786,21 @@ fn hidden_changes(top: &Path) -> Vec<(String, bool)> {
     if present.is_empty() {
         return changes;
     }
-    let spawned = Command::new("git")
-        .current_dir(top)
+    let paths = present
+        .iter()
+        .map(|p| p.as_str())
+        .collect::<Vec<_>>()
+        .join("\n");
+    // If git cannot be run, or fails, no hash is known and each file counts as
+    // changed, the safe direction.
+    let hashed = GitRun::new()
+        .cwd(top)
         .args(["--no-optional-locks", "hash-object", "--stdin-paths"])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .spawn();
-    let Ok(mut child) = spawned else {
-        // It cannot be compared: treat each as changed, the safe direction.
-        changes.extend(present.into_iter().map(|p| (p.clone(), false)));
-        return changes;
-    };
-    if let Some(mut stdin) = child.stdin.take() {
-        let _ = stdin.write_all(
-            present
-                .iter()
-                .map(|p| p.as_str())
-                .collect::<Vec<_>>()
-                .join("\n")
-                .as_bytes(),
-        );
-    }
-    let hashed = child.wait_with_output().ok().filter(|o| o.status.success());
+        .stdin(paths.as_bytes())
+        .discard_stderr()
+        .output()
+        .ok()
+        .filter(|o| o.status.success());
     let oids: Vec<String> = hashed
         .map(|o| {
             String::from_utf8_lossy(&o.stdout)
@@ -879,7 +870,7 @@ fn partition_by_head<'a>(
 }
 
 fn head_text(rel: &Path, base: &str) -> Option<String> {
-    let out = Command::new("git")
+    let out = GitRun::new()
         .args(["--no-optional-locks", "show"])
         .arg(format!("{base}:{}", rel.to_string_lossy()))
         .output()

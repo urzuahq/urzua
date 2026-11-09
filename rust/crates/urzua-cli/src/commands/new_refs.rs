@@ -8,6 +8,7 @@ use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 use urzua_core::config::NewDecl;
+use urzua_io::git::GitRun;
 
 /// The namespace the fetched refs live under; no default refspec, `git branch`
 /// or `git log` shows it.
@@ -50,17 +51,13 @@ pub(crate) fn fetch_pull_refs(repo_root: &Path, opts: &NewDecl) -> Result<(), Fe
             index.to_string()
         };
         let refspec = format!("+{pattern}:{PR_NAMESPACE}/{segment}/*");
-        let mut child = Command::new("git")
-            .arg("-C")
-            .arg(repo_root)
+        let mut child = GitRun::new()
+            .dash_c(repo_root)
             .args(["fetch", "--no-tags", "--quiet"])
             .arg(&opts.remote)
             .arg(&refspec)
             .env("GIT_TERMINAL_PROMPT", "0")
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::piped())
-            .spawn()
+            .spawn(Stdio::null(), Stdio::piped())
             .map_err(|e| FetchFailure::Offline(format!("could not run git: {e}")))?;
         let stderr = child.stderr.take();
         let (tx, rx) = std::sync::mpsc::channel::<String>();
@@ -103,9 +100,8 @@ pub(crate) fn fetch_pull_refs(repo_root: &Path, opts: &NewDecl) -> Result<(), Fe
 
 /// How many refs sit under `refs/urzua/pr`, fetched now or by an earlier run.
 pub(crate) fn count_pull_refs(repo_root: &Path) -> usize {
-    Command::new("git")
-        .arg("-C")
-        .arg(repo_root)
+    GitRun::new()
+        .dash_c(repo_root)
         .args(["for-each-ref", "--format=%(refname)", PR_NAMESPACE])
         .output()
         .ok()
@@ -142,12 +138,11 @@ pub(crate) enum LockOutcome {
 }
 
 fn git_common_dir(repo_root: &Path) -> Result<PathBuf, String> {
-    let out = Command::new("git")
-        .arg("-C")
-        .arg(repo_root)
+    let out = GitRun::new()
+        .dash_c(repo_root)
         .args(["rev-parse", "--git-common-dir"])
         .output()
-        .map_err(|e| format!("could not run git: {e}"))?;
+        .map_err(|e| format!("could not run git: {}", e.into_io()))?;
     if !out.status.success() {
         return Err(String::from_utf8_lossy(&out.stderr).trim().to_string());
     }
@@ -279,12 +274,11 @@ pub(crate) fn acquire_lock(repo_root: &Path, timeout_seconds: u32) -> LockOutcom
 /// each path, in listing order. The worktree at `repo_root` and a bare entry are
 /// left out.
 pub(crate) fn sibling_worktrees(repo_root: &Path) -> Result<Vec<PathBuf>, String> {
-    let out = Command::new("git")
-        .arg("-C")
-        .arg(repo_root)
+    let out = GitRun::new()
+        .dash_c(repo_root)
         .args(["worktree", "list", "--porcelain"])
         .output()
-        .map_err(|e| format!("could not run git: {e}"))?;
+        .map_err(|e| format!("could not run git: {}", e.into_io()))?;
     if !out.status.success() {
         return Err(String::from_utf8_lossy(&out.stderr).trim().to_string());
     }
