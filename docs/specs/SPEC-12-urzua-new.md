@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5C0WX34AQKF79DQDS5
-Version: '0.22'
+Version: '0.23'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -209,3 +209,4 @@ take content and parameters, returning a string.
 > | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/new.rs` 491185f4e11d -> 98d7b5cb1f70. Reason: Read the diff of each re-pinned file against main. cli/commands/new.rs: Notice literals use Notice::new or gain detail: None; no behaviour change. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
 > | 2026-11-08 | Bumped to `0.22`. The pins this spec's `Realized-by` holds on files this change touched were re-baselined (the `Re-baselined` row above); no behaviour this spec describes changed. | **structural** |
 > | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/new.rs` 98d7b5cb1f70 -> 7abffc2519d4. Reason: Read the diff of each pinned file since the old pin and the claim still holds. new.rs: the local git_output helper is gone and the for-each-ref read calls urzua_io::git::stdout_in, which words a failure the same way ('could not run git: ..', 'git <cmd> failed: ..'); nothing else changed; behaviour unchanged, outputs byte-identical. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
+> | 2026-11-09 | Bumped to `0.23`. The pins this spec's `Realized-by` holds on files this change touched were re-baselined (the `Re-baselined` row above); no behaviour this spec describes changed. | **structural** |
