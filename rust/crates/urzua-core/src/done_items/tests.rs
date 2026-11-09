@@ -192,6 +192,18 @@ fn a_final_waiver_before_the_evidence_is_a_shape_issue() {
 }
 
 #[test]
+fn a_first_line_waiver_before_the_evidence_is_a_shape_issue_and_the_evidence_is_kept() {
+    let d = parse(
+        "- X works. — waived: deferred-to (MILE-1, 2099-01-01) -- later — evidence: code:a.rs\n",
+    );
+    assert_eq!(d.issues.len(), 1, "{:?}", issues(&d));
+    assert!(d.issues[0].message.contains("evidence clause comes first"));
+    let item = &d.items[0];
+    assert_eq!(item.evidence.as_ref().unwrap().text, "code:a.rs");
+    assert_eq!(item.waiver.as_ref().unwrap().reason, "later");
+}
+
+#[test]
 fn a_clause_line_that_belongs_to_no_item_is_a_shape_issue() {
     let d = parse("- item\nevidence: code:a.rs\n");
     assert!(
