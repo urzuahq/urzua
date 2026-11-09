@@ -27,10 +27,13 @@ fn commit_all(dir: &Path, date: Option<&str>) {
 
 /// Every run is evaluated as of the date the fixture was built on, passed explicitly, so the
 /// fixture's `Audited` date and the process's evaluation date cannot straddle midnight UTC.
+/// A test that passes its own `--as-of` (the grace-window tests) keeps it.
 fn run_urzua(dir: &Path, args: &[&str]) -> std::process::Output {
-    common::urzua()
-        .args(["--as-of", &today()])
-        .args(args)
+    let mut cmd = common::urzua();
+    if !args.contains(&"--as-of") {
+        cmd.args(["--as-of", &today()]);
+    }
+    cmd.args(args)
         .current_dir(dir)
         .output()
         .expect("urzua binary should run")
