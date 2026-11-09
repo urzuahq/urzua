@@ -296,18 +296,16 @@ pub(crate) fn committed_statuses(
     out
 }
 
-pub(crate) fn examine(
+/// The config file's path as the diff names it, when the diff changed it.
+///
+/// Both spellings are tried: a config that is a tracked symlink changes at the
+/// link's own path when retargeted, while its canonical path is the unchanged
+/// target; editing the target changes the canonical path instead.
+fn changed_config_path(
     repo_root: &Path,
-    config: &Config,
     config_path: &Path,
-    records: &[Record],
     changes: &urzua_io::GitChanges,
-) -> Result<DiffExamination, String> {
-    let changed_paths = display(&changes.changed);
-
-    // Both spellings: a config that is a tracked symlink changes at the link's
-    // own path when retargeted, while its canonical path is the unchanged
-    // target; editing the target changes the canonical path instead.
+) -> Option<PathBuf> {
     let mut config_rels: Vec<PathBuf> = Vec::new();
     if let Ok(rel) = config_path.strip_prefix(repo_root) {
         config_rels.push(rel.to_path_buf());
@@ -317,10 +315,45 @@ pub(crate) fn examine(
             config_rels.push(rel.to_path_buf());
         }
     }
-    if let Some(rel) = config_rels
+    config_rels
         .into_iter()
         .find(|rel| changes.changed.contains(rel))
-    {
+}
+
+/// Whether any cited locator covers a changed path.
+fn cites_changed_path(locators: &[String], changes: &urzua_io::GitChanges) -> bool {
+    locators.iter().any(|locator| {
+        // An empty locator is a path prefix of everything.
+        if locator.is_empty() {
+            return false;
+        }
+        if rules::is_path_glob(locator) {
+            // A glob locator covers files, not a path prefix: match it
+            // with the matcher locator resolution uses. A glob that does
+            // not compile cannot be matched, and locator resolution
+            // reports it on the record.
+            return rules::path_glob_regex(locator).is_ok_and(|re| {
+                changes
+                    .changed
+                    .iter()
+                    .any(|c| re.is_match(&c.to_string_lossy()))
+            });
+        }
+        let path = Path::new(locator);
+        changes.changed.iter().any(|c| c.starts_with(path))
+    })
+}
+
+pub(crate) fn examine(
+    repo_root: &Path,
+    config: &Config,
+    config_path: &Path,
+    records: &[Record],
+    changes: &urzua_io::GitChanges,
+) -> Result<DiffExamination, String> {
+    let changed_paths = display(&changes.changed);
+
+    if let Some(rel) = changed_config_path(repo_root, config_path, changes) {
         return Ok(DiffExamination {
             examined: records.iter().map(|r| r.path.clone()).collect(),
             scope: DiffScope {
@@ -377,26 +410,7 @@ pub(crate) fn examine(
         let shares_an_id = rules::record_id(record)
             .is_some_and(|id| ids.contains(urzua_core::values::RecordId::new(&id).as_str()));
         let locators = cited_locators(config, record);
-        let evidence_changed = locators.iter().any(|locator| {
-            // An empty locator is a path prefix of everything.
-            if locator.is_empty() {
-                return false;
-            }
-            if rules::is_path_glob(locator) {
-                // A glob locator covers files, not a path prefix: match it
-                // with the matcher locator resolution uses. A glob that does
-                // not compile cannot be matched, and locator resolution
-                // reports it on the record.
-                return rules::path_glob_regex(locator).is_ok_and(|re| {
-                    changes
-                        .changed
-                        .iter()
-                        .any(|c| re.is_match(&c.to_string_lossy()))
-                });
-            }
-            let path = Path::new(locator);
-            changes.changed.iter().any(|c| c.starts_with(path))
-        });
+        let evidence_changed = cites_changed_path(&locators, changes);
         let shares_a_locator = locators
             .iter()
             .any(|l| !l.is_empty() && changed_locators.contains(l));

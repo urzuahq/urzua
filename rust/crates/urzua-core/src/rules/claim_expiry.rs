@@ -360,13 +360,6 @@ pub fn embodiment_claim_expired(
     const RULE_ID: &str = RULE_EMBODIMENT_CLAIM_EXPIRED;
     let opts: ClaimExpiredOpts = config.rule_opts(RULE_ID);
     let mut findings = Vec::new();
-    // One candidate per listed record, then one per `periods` entry: an entry
-    // that no record matched is a declaration that reaches nothing, which
-    // `config.scope-matches-nothing` reads as an out-of-scope candidate.
-    enum Candidate<'a> {
-        Record(&'a Record),
-        Entry,
-    }
     let listed: Vec<&Record> = records
         .iter()
         .filter(|r| opts.periods.iter().any(|p| p.record_type == r.record_type))
@@ -383,52 +376,21 @@ pub fn embodiment_claim_expired(
             inputs.seeds.get(&record.path).copied(),
         )
     };
-    let matched: HashSet<usize> = listed
-        .iter()
-        .filter_map(|r| {
-            let tier = computed_tier(r, config, back_pointed);
-            covering_entry(r, config, &opts, &tier)
-                .ok()
-                .map(|(n, ..)| n)
-        })
-        .collect();
-    // An entry is a declaration that reaches nothing only when its type holds
-    // claims (a record with a locator) and none is one the entry covers; a type
-    // with no claim yet has nothing for the entry to match, as an empty corpus
-    // has nothing for any rule.
-    let has_claims = |record_type: &str| {
-        listed.iter().any(|r| {
-            r.record_type == record_type
-                && evidence_text(
-                    r,
-                    relation_field_name(
-                        config,
-                        &r.record_type,
-                        crate::config::RelationRole::EmbodimentLocator,
-                    ),
-                )
-                .is_some_and(|v| !v.trim().is_empty())
-        })
-    };
-    let unmatched_entries = opts
-        .periods
-        .iter()
-        .enumerate()
-        .filter(|(n, p)| !matched.contains(n) && has_claims(&p.record_type))
-        .count();
-    let mut candidates: Vec<Candidate<'_>> = listed.into_iter().map(Candidate::Record).collect();
-    candidates.extend((0..unmatched_entries).map(|_| Candidate::Entry));
+    let unmatched_entries = unmatched_period_entries(&listed, config, &opts, back_pointed);
+    let mut candidates: Vec<ExpiryCandidate<'_>> =
+        listed.into_iter().map(ExpiryCandidate::Record).collect();
+    candidates.extend((0..unmatched_entries).map(|_| ExpiryCandidate::Entry));
     let (population, examined_records) = census_records(
         PopulationUnit::Record,
         candidates,
         |candidate| match candidate {
-            Candidate::Record(record) => record.path.clone(),
-            Candidate::Entry => PathBuf::new(),
+            ExpiryCandidate::Record(record) => record.path.clone(),
+            ExpiryCandidate::Entry => PathBuf::new(),
         },
         |candidate| {
             let record = match candidate {
-                Candidate::Entry => return Outcome::OutOfScope,
-                Candidate::Record(record) => *record,
+                ExpiryCandidate::Entry => return Outcome::OutOfScope,
+                ExpiryCandidate::Record(record) => *record,
             };
             if config
                 .record_types
@@ -445,41 +407,7 @@ pub fn embodiment_claim_expired(
             if scope.is_some_and(|s| s.defers(record)) {
                 return Outcome::DeferredByScope;
             }
-            if let Some(problem) = &standing.anchor_problem {
-                let field = opts.anchor_field.as_deref().unwrap_or_default();
-                findings.push(Finding {
-                    rule: RULE_ID.to_string(),
-                    severity: FindingSeverity::Warning,
-                    file: record.path.clone(),
-                    line: None,
-                    waived: None,
-                    declared_severity: None,
-                    suggested_action: None,
-                    action_source: ActionSource::new("claim-anchor-invalid").field(field),
-                    message: problem.clone(),
-                });
-            }
-            if standing.expired() {
-                findings.push(Finding {
-                    rule: RULE_ID.to_string(),
-                    severity: FindingSeverity::Warning,
-                    file: record.path.clone(),
-                    line: None,
-                    waived: None,
-                    declared_severity: standing
-                        .level_below_rule
-                        .then(|| standing.level.severity())
-                        .flatten(),
-                    suggested_action: None,
-                    action_source: ActionSource::new("claim-expired").argv([
-                        "urzua",
-                        "reverify",
-                        "--ids",
-                        &record.path.display().to_string(),
-                    ]),
-                    message: standing.message(&record.record_type),
-                });
-            }
+            findings.extend(claim_standing_findings(record, &opts, &standing));
             Outcome::Examined
         },
     );
@@ -492,6 +420,98 @@ pub fn embodiment_claim_expired(
         },
         findings,
     )
+}
+
+/// One candidate per listed record, then one per `periods` entry: an entry
+/// that no record matched is a declaration that reaches nothing, which
+/// `config.scope-matches-nothing` reads as an out-of-scope candidate.
+enum ExpiryCandidate<'a> {
+    Record(&'a Record),
+    Entry,
+}
+
+/// How many `periods` entries reach nothing. An entry is a declaration that
+/// reaches nothing only when its type holds claims (a record with a locator)
+/// and none is one the entry covers; a type with no claim yet has nothing for
+/// the entry to match, as an empty corpus has nothing for any rule.
+fn unmatched_period_entries(
+    listed: &[&Record],
+    config: &Config,
+    opts: &ClaimExpiredOpts,
+    back_pointed: &BackPointerEvidence,
+) -> usize {
+    let matched: HashSet<usize> = listed
+        .iter()
+        .filter_map(|r| {
+            let tier = computed_tier(r, config, back_pointed);
+            covering_entry(r, config, opts, &tier).ok().map(|(n, ..)| n)
+        })
+        .collect();
+    let has_claims = |record_type: &str| {
+        listed.iter().any(|r| {
+            r.record_type == record_type
+                && evidence_text(
+                    r,
+                    relation_field_name(
+                        config,
+                        &r.record_type,
+                        crate::config::RelationRole::EmbodimentLocator,
+                    ),
+                )
+                .is_some_and(|v| !v.trim().is_empty())
+        })
+    };
+    opts.periods
+        .iter()
+        .enumerate()
+        .filter(|(n, p)| !matched.contains(n) && has_claims(&p.record_type))
+        .count()
+}
+
+/// The findings of one measured claim: a problem with its anchor field, then
+/// its expiry.
+fn claim_standing_findings(
+    record: &Record,
+    opts: &ClaimExpiredOpts,
+    standing: &ClaimStanding,
+) -> Vec<Finding> {
+    let mut findings = Vec::new();
+    if let Some(problem) = &standing.anchor_problem {
+        let field = opts.anchor_field.as_deref().unwrap_or_default();
+        findings.push(Finding {
+            rule: RULE_EMBODIMENT_CLAIM_EXPIRED.to_string(),
+            severity: FindingSeverity::Warning,
+            file: record.path.clone(),
+            line: None,
+            waived: None,
+            declared_severity: None,
+            suggested_action: None,
+            action_source: ActionSource::new("claim-anchor-invalid").field(field),
+            message: problem.clone(),
+        });
+    }
+    if standing.expired() {
+        findings.push(Finding {
+            rule: RULE_EMBODIMENT_CLAIM_EXPIRED.to_string(),
+            severity: FindingSeverity::Warning,
+            file: record.path.clone(),
+            line: None,
+            waived: None,
+            declared_severity: standing
+                .level_below_rule
+                .then(|| standing.level.severity())
+                .flatten(),
+            suggested_action: None,
+            action_source: ActionSource::new("claim-expired").argv([
+                "urzua",
+                "reverify",
+                "--ids",
+                &record.path.display().to_string(),
+            ]),
+            message: standing.message(&record.record_type),
+        });
+    }
+    findings
 }
 
 /// The anchor date of a record's text, `None` when the field is absent or not a date.
@@ -515,8 +535,8 @@ pub fn embodiment_claim_renewal_unattested(
     scope: Option<&ChangedOnly>,
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_EMBODIMENT_CLAIM_RENEWAL_UNATTESTED;
-    let Some(changed) = changed else {
-        return (
+    let not_applicable = || {
+        (
             RuleExecution {
                 rule: RULE_ID.to_string(),
                 population: None,
@@ -524,19 +544,14 @@ pub fn embodiment_claim_renewal_unattested(
                 examined_records: Vec::new(),
             },
             Vec::new(),
-        );
+        )
+    };
+    let Some(changed) = changed else {
+        return not_applicable();
     };
     let opts: ClaimExpiredOpts = config.rule_opts(RULE_EMBODIMENT_CLAIM_EXPIRED);
     let Some(field) = opts.anchor_field.as_deref() else {
-        return (
-            RuleExecution {
-                rule: RULE_ID.to_string(),
-                population: None,
-                status: RuleStatus::NotApplicable,
-                examined_records: Vec::new(),
-            },
-            Vec::new(),
-        );
+        return not_applicable();
     };
     let changed: HashSet<&PathBuf> = changed.iter().collect();
     let candidates: Vec<&Record> = records
@@ -563,32 +578,7 @@ pub fn embodiment_claim_renewal_unattested(
             else {
                 return Outcome::Absent;
             };
-            let now = anchor_in_text(now_text, field);
-            let then = anchor_in_text(then_text, field);
-            let message = match (&now, &then) {
-                (None, Some((date, _))) => Some(format!(
-                    "the anchor field {field} ({date} at the merge base) was removed: deleting it is not a way back to an earlier first-cycle offset"
-                )),
-                (Some((date, new)), then) if then.as_ref().is_none_or(|(_, old)| new > old) => {
-                    let id = config.revision_log_id(&record.record_type);
-                    let shape = config.revision_log_shape(&record.record_type);
-                    let attested = find_revision_log_entries(now_text, &id, &shape)
-                        .and_then(Result::ok)
-                        .is_some_and(|log| {
-                            log.entries.iter().any(|e| {
-                                e.date.trim() == date
-                                    && e.row.contains("Re-verified (attested by")
-                            })
-                        });
-                    (!attested).then(|| {
-                        format!(
-                            "the anchor field {field} moved to {date} with no Re-verified revision row dated {date}: only `urzua reverify` renews a claim"
-                        )
-                    })
-                }
-                _ => None,
-            };
-            if let Some(message) = message {
+            if let Some(message) = renewal_problem(config, record, field, now_text, then_text) {
                 findings.push(Finding {
                     rule: RULE_ID.to_string(),
                     severity: FindingSeverity::Warning,
@@ -613,6 +603,41 @@ pub fn embodiment_claim_renewal_unattested(
         },
         findings,
     )
+}
+
+/// What is wrong with a changed record's anchor date against its merge-base
+/// copy: removed, or moved forward with no `Re-verified` row dated that day.
+fn renewal_problem(
+    config: &Config,
+    record: &Record,
+    field: &str,
+    now_text: &str,
+    then_text: &str,
+) -> Option<String> {
+    let now = anchor_in_text(now_text, field);
+    let then = anchor_in_text(then_text, field);
+    match (&now, &then) {
+        (None, Some((date, _))) => Some(format!(
+            "the anchor field {field} ({date} at the merge base) was removed: deleting it is not a way back to an earlier first-cycle offset"
+        )),
+        (Some((date, new)), then) if then.as_ref().is_none_or(|(_, old)| new > old) => {
+            let id = config.revision_log_id(&record.record_type);
+            let shape = config.revision_log_shape(&record.record_type);
+            let attested = find_revision_log_entries(now_text, &id, &shape)
+                .and_then(Result::ok)
+                .is_some_and(|log| {
+                    log.entries.iter().any(|e| {
+                        e.date.trim() == date && e.row.contains("Re-verified (attested by")
+                    })
+                });
+            (!attested).then(|| {
+                format!(
+                    "the anchor field {field} moved to {date} with no Re-verified revision row dated {date}: only `urzua reverify` renews a claim"
+                )
+            })
+        }
+        _ => None,
+    }
 }
 
 #[cfg(test)]
