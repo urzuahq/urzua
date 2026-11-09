@@ -612,20 +612,35 @@ pub(crate) fn no_history_notice(
 pub(crate) const NOTICE_DRIFT_IN_GRACE: &str = "embodiment-drift-in-grace";
 
 /// The info notice for drift the grace window is holding back: how many
-/// records, the date the earliest leaves the window (the first day it is
+/// records `embodiment.consistency` would report once the window ends (a record
+/// it would not judge, or whose stated state would still agree, is not counted:
+/// see [`urzua_core::rules::held_back_drift_that_would_report`]), the date the earliest leaves the window (the first day it is
 /// reported) and at most [`SKIPPED_SHOWN`] record ids, so the first error is
 /// never the first sign. `None` with no grace window or nothing held back.
 /// The date is in UTC and follows `--as-of` through the drift computation.
-pub(crate) fn grace_notice(drift: &DriftedRecords) -> Option<urzua_core::report::Notice> {
+pub(crate) fn grace_notice(
+    drift: &DriftedRecords,
+    records: &[Record],
+    config: &Config,
+    back_pointed: &urzua_core::rules::BackPointerEvidence,
+) -> Option<urzua_core::report::Notice> {
     use urzua_core::report::DetailValue;
     let days = drift.grace_days?;
-    let earliest = drift.fresh_until.values().min().copied()?;
-    let date = urzua_io::date_of_unix(earliest)?;
-    let mut ids: Vec<String> = drift
+    let reported = urzua_core::rules::held_back_drift_that_would_report(
+        records,
+        config,
+        &drift.fresh,
+        back_pointed,
+    );
+    let counted: HashMap<&PathBuf, i64> = drift
         .fresh_until
-        .keys()
-        .map(|p| p.display().to_string())
+        .iter()
+        .filter(|(p, _)| reported.contains(*p))
+        .map(|(p, t)| (p, *t))
         .collect();
+    let earliest = counted.values().min().copied()?;
+    let date = urzua_io::date_of_unix(earliest)?;
+    let mut ids: Vec<String> = counted.keys().map(|p| p.display().to_string()).collect();
     ids.sort();
     let n = ids.len();
     ids.truncate(SKIPPED_SHOWN);

@@ -550,3 +550,98 @@ fn the_grace_notice_caps_the_record_list_and_keeps_the_total() {
     assert_eq!(notice["detail"]["count"], "25", "{notice}");
     assert_eq!(notice["detail"]["records"].as_array().unwrap().len(), 20);
 }
+
+/// A repository with a second record type that declares no `Embodiment`
+/// field, like a milestone: its records cite a file too, but the rule never
+/// judges them.
+fn grace_repo_with_two_types(name: &str, consistency: &str) -> common::TempDir {
+    let dir = repo(name, consistency);
+    let mut cfg = config(consistency);
+    cfg.push_str(
+        "  mile:\n    dir: \"docs/mile\"\n    required_fields: []\n    known_fields: [\"Realized-by\"]\n",
+    );
+    std::fs::write(dir.join(".urzua/config.yaml"), cfg).unwrap();
+    std::fs::create_dir_all(dir.join("docs/mile")).unwrap();
+    std::fs::write(dir.join("src/a.rs"), V1).unwrap();
+    dir
+}
+
+fn mile_record() -> String {
+    "---\nRealized-by: 'code:src/a.rs'\n---\n# MILE-1: Held\n".to_string()
+}
+
+fn drift_in_window(dir: &Path) -> serde_json::Value {
+    commit_all(dir, Some(OLD));
+    std::fs::write(dir.join("src/a.rs"), V2).unwrap();
+    commit_all(dir, Some("2026-03-10T12:00:00"));
+    json(&run_urzua(
+        dir,
+        &["--as-of", "2026-03-12", "check", "docs/"],
+    ))
+}
+
+#[test]
+fn a_held_back_record_of_a_type_without_embodiment_is_not_counted_observed_failing() {
+    let dir = grace_repo_with_two_types("grace-notype", "{level: error, drift_grace_days: 28}");
+    std::fs::write(dir.join("docs/mile/MILE-1-held.md"), mile_record()).unwrap();
+    std::fs::write(dir.join(RECORD_PATH), record("code:src/a.rs")).unwrap();
+    let parsed = drift_in_window(&dir);
+    let notice = grace_notice(&parsed).unwrap_or_else(|| panic!("{parsed}"));
+    assert_eq!(notice["detail"]["count"], "1", "{notice}");
+    assert_eq!(
+        notice["detail"]["records"],
+        serde_json::json!([RECORD_PATH]),
+        "{notice}"
+    );
+}
+
+#[test]
+fn with_only_records_the_rule_never_judges_there_is_no_notice() {
+    let dir = grace_repo_with_two_types("grace-onlymile", "{level: error, drift_grace_days: 28}");
+    std::fs::write(dir.join("docs/mile/MILE-1-held.md"), mile_record()).unwrap();
+    let parsed = drift_in_window(&dir);
+    assert!(grace_notice(&parsed).is_none(), "{parsed}");
+}
+
+#[test]
+fn a_sticky_or_already_drifted_record_is_not_counted_observed_failing() {
+    let dir = grace_repo_with_two_types(
+        "grace-sticky",
+        "{level: error, drift_grace_days: 28, sticky_states: [Deprecated]}",
+    );
+    std::fs::write(
+        dir.join(RECORD_PATH),
+        record_stating("Deprecated", "code:src/a.rs"),
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("docs/adr/ADR-2-stated.md"),
+        record_stating("Drift detected", "code:src/a.rs"),
+    )
+    .unwrap();
+    let parsed = drift_in_window(&dir);
+    assert!(grace_notice(&parsed).is_none(), "{parsed}");
+}
+
+#[test]
+fn an_eligible_disagreeing_record_is_counted_beside_ones_that_are_not() {
+    let dir = grace_repo_with_two_types(
+        "grace-mixed",
+        "{level: error, drift_grace_days: 28, sticky_states: [Deprecated]}",
+    );
+    std::fs::write(dir.join("docs/mile/MILE-1-held.md"), mile_record()).unwrap();
+    std::fs::write(
+        dir.join(RECORD_PATH),
+        record_stating("Deprecated", "code:src/a.rs"),
+    )
+    .unwrap();
+    std::fs::write(dir.join("docs/adr/ADR-2-live.md"), record("code:src/a.rs")).unwrap();
+    let parsed = drift_in_window(&dir);
+    let notice = grace_notice(&parsed).unwrap_or_else(|| panic!("{parsed}"));
+    assert_eq!(notice["detail"]["count"], "1", "{notice}");
+    assert_eq!(
+        notice["detail"]["records"],
+        serde_json::json!(["docs/adr/ADR-2-live.md"]),
+        "{notice}"
+    );
+}
