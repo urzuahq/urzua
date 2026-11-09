@@ -581,6 +581,11 @@ pub fn today() -> String {
     clock().date.clone()
 }
 
+/// The UTC `YYYY-MM-DD` date of a Unix time, or `None` when out of range.
+pub fn date_of_unix(unix: i64) -> Option<String> {
+    chrono::DateTime::from_timestamp(unix, 0).map(|t| t.format("%Y-%m-%d").to_string())
+}
+
 /// Where [`today`] came from.
 pub fn as_of_source() -> AsOfSource {
     clock().source

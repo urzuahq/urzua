@@ -427,3 +427,126 @@ fn a_malformed_last_audit_is_reported_and_falls_back_to_the_files_last_change() 
     // The fresh locator change is still held back by the file's date.
     assert!(!drift_reported(&parsed), "{parsed}");
 }
+
+// ---- Drift inside drift_grace_days is disclosed, never a finding ----
+
+fn grace_notice(parsed: &serde_json::Value) -> Option<&serde_json::Value> {
+    parsed["notices"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .find(|n| n["subject"] == "embodiment-drift-in-grace")
+}
+
+#[test]
+fn drift_held_back_by_the_grace_window_is_disclosed_with_count_and_earliest_date_observed_failing()
+{
+    // The locator changed on 2026-03-10 and the window is 28 days: it leaves
+    // the window on 2026-04-07.
+    let dir = drifted_repo(
+        "grace-notice",
+        "{level: error, drift_grace_days: 28}",
+        Some("2026-03-10T12:00:00"),
+    );
+    let out = run_urzua(&dir, &["--as-of", "2026-03-12", "check", "docs/"]);
+    let parsed = json(&out);
+    assert_eq!(out.status.code(), Some(0), "{parsed}");
+    assert_eq!(
+        consistency_messages(&parsed),
+        Vec::<String>::new(),
+        "{parsed}"
+    );
+    let notice = grace_notice(&parsed).unwrap_or_else(|| panic!("no notice: {parsed}"));
+    assert_eq!(notice["severity"], "info", "{notice}");
+    assert_eq!(notice["detail"]["count"], "1", "{notice}");
+    assert_eq!(notice["detail"]["earliest"], "2026-04-07", "{notice}");
+    assert_eq!(notice["detail"]["drift_grace_days"], "28", "{notice}");
+    assert_eq!(
+        notice["detail"]["records"],
+        serde_json::json!([RECORD_PATH]),
+        "{notice}"
+    );
+}
+
+#[test]
+fn the_grace_notice_date_is_where_the_window_ends_and_follows_as_of() {
+    let dir = drifted_repo(
+        "grace-asof",
+        "{level: error, drift_grace_days: 28}",
+        Some("2026-03-10T12:00:00"),
+    );
+    for as_of in ["2026-03-10", "2026-04-06"] {
+        let parsed = json(&run_urzua(&dir, &["--as-of", as_of, "check", "docs/"]));
+        let notice = grace_notice(&parsed).unwrap_or_else(|| panic!("{as_of}: {parsed}"));
+        assert_eq!(notice["detail"]["earliest"], "2026-04-07", "{notice}");
+    }
+    // Past the window the drift is a finding, and the notice is gone.
+    let parsed = json(&run_urzua(
+        &dir,
+        &["--as-of", "2026-04-08", "check", "docs/"],
+    ));
+    assert!(grace_notice(&parsed).is_none(), "{parsed}");
+    assert!(!consistency_messages(&parsed).is_empty(), "{parsed}");
+}
+
+#[test]
+fn a_later_audit_date_moves_the_grace_notice_date() {
+    // The file changed long ago; the audit on 2026-03-20 holds it for 7 days.
+    let dir = audit_repo(
+        "grace-audit",
+        Some("2021-01-01T00:00:00"),
+        Some("2026-03-20"),
+    );
+    let parsed = json(&run_urzua(
+        &dir,
+        &["--as-of", "2026-03-21", "check", "docs/"],
+    ));
+    let notice = grace_notice(&parsed).unwrap_or_else(|| panic!("{parsed}"));
+    assert_eq!(notice["detail"]["earliest"], "2026-03-27", "{notice}");
+}
+
+#[test]
+fn with_no_grace_window_there_is_no_grace_notice() {
+    let dir = drifted_repo("grace-none", "error", Some("2026-03-10T12:00:00"));
+    let parsed = json(&run_urzua(
+        &dir,
+        &["--as-of", "2026-03-12", "check", "docs/"],
+    ));
+    assert!(grace_notice(&parsed).is_none(), "{parsed}");
+}
+
+#[test]
+fn a_grace_window_with_no_held_back_drift_has_no_notice() {
+    let dir = repo("grace-clean", "{level: error, drift_grace_days: 28}");
+    std::fs::write(dir.join("src/a.rs"), V1).unwrap();
+    std::fs::write(dir.join(RECORD_PATH), record("code:src/a.rs")).unwrap();
+    commit_all(&dir, Some(OLD));
+    let parsed = json(&run_urzua(
+        &dir,
+        &["--as-of", "2026-03-12", "check", "docs/"],
+    ));
+    assert!(grace_notice(&parsed).is_none(), "{parsed}");
+}
+
+#[test]
+fn the_grace_notice_caps_the_record_list_and_keeps_the_total() {
+    let dir = repo("grace-cap", "{level: error, drift_grace_days: 28}");
+    std::fs::write(dir.join("src/a.rs"), V1).unwrap();
+    for i in 0..25 {
+        std::fs::write(
+            dir.join(format!("docs/adr/ADR-{}-n.md", i + 1)),
+            record("code:src/a.rs"),
+        )
+        .unwrap();
+    }
+    commit_all(&dir, Some(OLD));
+    std::fs::write(dir.join("src/a.rs"), V2).unwrap();
+    commit_all(&dir, Some("2026-03-10T12:00:00"));
+    let parsed = json(&run_urzua(
+        &dir,
+        &["--as-of", "2026-03-12", "check", "docs/"],
+    ));
+    let notice = grace_notice(&parsed).unwrap_or_else(|| panic!("{parsed}"));
+    assert_eq!(notice["detail"]["count"], "25", "{notice}");
+    assert_eq!(notice["detail"]["records"].as_array().unwrap().len(), 20);
+}

@@ -512,6 +512,12 @@ pub(crate) fn compute_drifted_records_for_content(
 pub(crate) struct DriftedRecords {
     pub(crate) drifted: HashSet<PathBuf>,
     pub(crate) fresh: HashSet<PathBuf>,
+    /// For each `fresh` record, the Unix time its earliest held-back drift
+    /// leaves the grace window: from then on the drift is reported. Read by
+    /// [`grace_notice`].
+    pub(crate) fresh_until: HashMap<PathBuf, i64>,
+    /// `drift_grace_days` as declared, when it is.
+    pub(crate) grace_days: Option<u32>,
     /// Git failures met while computing drift, deduplicated. A failure is a
     /// record git could not judge, never "no drift" (`MILE-159`).
     pub(crate) git_problems: Vec<String>,
@@ -599,6 +605,48 @@ pub(crate) fn no_history_notice(
             if n == 1 { "it" } else { "them" },
         ),
         detail: None,
+    })
+}
+
+/// Notice subject for drift held back by `drift_grace_days`.
+pub(crate) const NOTICE_DRIFT_IN_GRACE: &str = "embodiment-drift-in-grace";
+
+/// The info notice for drift the grace window is holding back: how many
+/// records, the date the earliest leaves the window (the first day it is
+/// reported) and at most [`SKIPPED_SHOWN`] record ids, so the first error is
+/// never the first sign. `None` with no grace window or nothing held back.
+/// The date is in UTC and follows `--as-of` through the drift computation.
+pub(crate) fn grace_notice(drift: &DriftedRecords) -> Option<urzua_core::report::Notice> {
+    use urzua_core::report::DetailValue;
+    let days = drift.grace_days?;
+    let earliest = drift.fresh_until.values().min().copied()?;
+    let date = urzua_io::date_of_unix(earliest)?;
+    let mut ids: Vec<String> = drift
+        .fresh_until
+        .keys()
+        .map(|p| p.display().to_string())
+        .collect();
+    ids.sort();
+    let n = ids.len();
+    ids.truncate(SKIPPED_SHOWN);
+    let mut detail = std::collections::BTreeMap::new();
+    detail.insert("count".to_string(), DetailValue::Text(n.to_string()));
+    detail.insert("earliest".to_string(), DetailValue::Text(date.clone()));
+    detail.insert(
+        "drift_grace_days".to_string(),
+        DetailValue::Text(days.to_string()),
+    );
+    detail.insert("records".to_string(), DetailValue::List(ids));
+    Some(urzua_core::report::Notice {
+        severity: urzua_core::report::NoticeSeverity::Info,
+        subject: NOTICE_DRIFT_IN_GRACE.to_string(),
+        message: format!(
+            "{n} record{} cite{} a file that changed after the pin and {} held back by drift_grace_days ({days}); the first is reported from {date}",
+            if n == 1 { "" } else { "s" },
+            if n == 1 { "s" } else { "" },
+            if n == 1 { "is" } else { "are" },
+        ),
+        detail: Some(detail),
     })
 }
 
@@ -722,6 +770,7 @@ struct DriftJudge<'a> {
     strictly_before: HashMap<(String, String), bool>,
     drifted: HashSet<PathBuf>,
     fresh: HashSet<PathBuf>,
+    fresh_until: HashMap<PathBuf, i64>,
     no_history: HashSet<PathBuf>,
     problems: Vec<String>,
 }
@@ -751,6 +800,7 @@ impl<'a> DriftJudge<'a> {
             strictly_before: HashMap::new(),
             drifted: HashSet::new(),
             fresh: HashSet::new(),
+            fresh_until: HashMap::new(),
             no_history: HashSet::new(),
             problems: Vec::new(),
         }
@@ -761,17 +811,23 @@ impl<'a> DriftJudge<'a> {
     /// cited file's last change as where the window counts from. An undatable
     /// commit is never held back: the window only ever suppresses what it can
     /// prove is fresh.
-    fn held_back(&self, audit_time: Option<i64>, commit: &str) -> bool {
-        let Some(grace) = self.grace_secs else {
-            return false;
+    fn held_back(&self, audit_time: Option<i64>, commit: &str) -> Option<i64> {
+        let grace = self.grace_secs?;
+        let from = match audit_time {
+            Some(t) => t,
+            None => self.cache.commit_unix_time(commit)?,
         };
-        match audit_time {
-            Some(t) => self.now_unix - t < grace,
-            None => self
-                .cache
-                .commit_unix_time(commit)
-                .is_some_and(|t| self.now_unix - t < grace),
-        }
+        (self.now_unix - from < grace).then_some(from + grace)
+    }
+
+    /// Records `record` as holding fresh drift that leaves the window at
+    /// `leaves`; the earliest of a record's held-back drifts stands.
+    fn hold_back(&mut self, record: &Record, leaves: i64) {
+        self.fresh.insert(record.path.clone());
+        self.fresh_until
+            .entry(record.path.clone())
+            .and_modify(|t| *t = (*t).min(leaves))
+            .or_insert(leaves);
     }
 
     /// Judges every claim of `record`; `references` holds each claim's blame, in
@@ -903,9 +959,12 @@ impl<'a> DriftJudge<'a> {
             return Judged::Next;
         };
         if hash != pinned {
-            let audited_fresh = matches!((audit_time, self.grace_secs), (Some(t), Some(grace)) if self.now_unix - t < grace);
-            if audited_fresh {
-                self.fresh.insert(record.path.clone());
+            let audited_until = match (audit_time, self.grace_secs) {
+                (Some(t), Some(grace)) if self.now_unix - t < grace => Some(t + grace),
+                _ => None,
+            };
+            if let Some(leaves) = audited_until {
+                self.hold_back(record, leaves);
             } else {
                 self.drifted.insert(record.path.clone());
                 return Judged::Drifted;
@@ -926,16 +985,18 @@ impl<'a> DriftJudge<'a> {
         let locator_path = PathBuf::from(&parsed.path);
         let current = urzua_io::sha256_hex_of_file(&self.repo_root.join(&locator_path));
         let changed = current.is_some_and(|c| c != pinned);
-        let fresh = changed
-            && self
-                .last_commit(&locator_path, None)
-                .is_some_and(|commit| self.held_back(audit_time, &commit));
-        if changed && !fresh {
+        let held_until = if changed {
+            self.last_commit(&locator_path, None)
+                .and_then(|commit| self.held_back(audit_time, &commit))
+        } else {
+            None
+        };
+        if changed && held_until.is_none() {
             self.drifted.insert(record.path.clone());
             return Judged::Drifted;
         }
-        if fresh {
-            self.fresh.insert(record.path.clone());
+        if let Some(leaves) = held_until {
+            self.hold_back(record, leaves);
         }
         Judged::Next
     }
@@ -974,8 +1035,8 @@ impl<'a> DriftJudge<'a> {
         if !drifted_pair {
             return Judged::Next;
         }
-        if self.held_back(audit_time, &locator_commit) {
-            self.fresh.insert(record.path.clone());
+        if let Some(leaves) = self.held_back(audit_time, &locator_commit) {
+            self.hold_back(record, leaves);
             Judged::Next
         } else {
             self.drifted.insert(record.path.clone());
@@ -1050,14 +1111,21 @@ pub(crate) fn compute_drifted_records_at(
     let DriftJudge {
         drifted,
         mut fresh,
+        mut fresh_until,
         no_history,
         problems,
         ..
     } = judge;
     fresh.retain(|path| !drifted.contains(path));
+    fresh_until.retain(|path, _| fresh.contains(path));
     DriftedRecords {
         drifted,
         fresh,
+        fresh_until,
+        grace_days: config
+            .rules
+            .get(rules::RULE_EMBODIMENT_CONSISTENCY)
+            .and_then(|s| s.drift_grace_days),
         git_problems: problems,
         shallow,
         no_history,
