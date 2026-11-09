@@ -595,7 +595,7 @@ drift on a renewal is a repository's declaration, per locator category:
    `drift_acknowledged`, and a claim it blocks as refused with the reason.
 5. Only `reverify` reads the policy. `embodiment.consistency` reports the same drift, and `embodiment.claim-expired`
    expires the same claims, whatever is declared; a hand edit of the `Realized-by` line is still no renewal.
-6. *(Consistency fix; pending maintainer review.)* An acknowledged renewal clears the drift it acknowledged, and
+6. *(Consistency fix; accepted by the maintainer on 2026-11-09.)* An acknowledged renewal clears the drift it acknowledged, and
    only that. A `Re-verified` row in the exact shape `reverify` writes (`attested by <id>, identity: ..., actor:
    ...`, an `Evidence:` list, the `; Drift acknowledged:` clause, a `Reason:`) names each locator it acknowledged as
    `category:locator` (a cited record: `category:ID`). A category that acknowledges drift is judged for an unpinned
@@ -650,3 +650,4 @@ row) carry the contract.
 > | 2026-11-09 | Corrected the figure in the drift amendment's Context to 68 of the 355 claims, the count on that day; the revision row above still carries the earlier 66, which counted only the claims expiring by 2027-02-07. The Decision text and `Status` are unchanged. **Why:** the figure must match the day it describes. | **structural** |
 > | 2026-11-09 | Consistency fix within the drift-policy amendment (the amendment stays maintainer-accepted; only its new item 6 is pending maintainer review): under `acknowledge`, a renewal clears the drift it acknowledged for `embodiment.consistency` (an unpinned locator is judged from the date of the acknowledging `Re-verified` row, a pinned one by its re-pin), and `reverify` no longer refuses a record whose only drift is in acknowledging categories because consistency reports it. The Decision text and `Status` are unchanged. **Why:** past `drift_grace_days` the drift made every such record refuse with "run `urzua fix` first", and a renewal after `fix` left a new consistency error, so `acknowledge` worked only inside the grace window. | **substantive** |
 > | 2026-11-09 | Item 6 (still pending maintainer review) tightened after review: a row clears only the locators it names, a row counts only in the exact shape `reverify` writes, the same-day granularity is stated, and `embodiment.claim-renewal-unattested` checks an added acknowledging row against the merge base's drift and the record's current locators. **Why:** a hand-typed or over-broad row cleared drift of locators nobody read. | **substantive** |
+> | 2026-11-09 | Item 6 of the drift-policy amendment accepted. **Why:** Maintainer decision, 2026-11-09. | **substantive** |
