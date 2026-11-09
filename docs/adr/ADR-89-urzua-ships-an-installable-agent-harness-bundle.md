@@ -324,6 +324,7 @@ revision log):
     `harness.outside_writes: shared` does not judge a write there, and a commit made in it, or a push of a
     side branch from a linked worktree, is not seen by the post-command check (amendment of 2026-11-09,
     outside writes). `outside_writes: deny` refuses the write; CI sees the pull request.
+13. **A stale base.** when the base revision has no `authority` (for example a branch made before the gates were introduced), the head table is judged; a pull request whose head `authority` names its own author as a decider then passes, because that is indistinguishable from the first introduction of `authority`. Branch protection that requires an up-to-date branch, or a merge queue, removes this route by making the base current. (amendment of 2026-11-09, decider table; documented by the orchestrator, pending maintainer review).
 
 What is claimed is therefore only this: through the edit tools (Write, Edit, MultiEdit, NotebookEdit and any MCP tool
 that carries a file path and content) an agent cannot move a gated record or write a
@@ -657,6 +658,65 @@ The maintainer is asked to accept exactly these:
 
 The Decision is unchanged. The Status of this ADR stays Accepted.
 
+## Amendment (2026-11-09, decider table)
+
+Status of this amendment: accepted by the maintainer on 2026-11-09. It changes what `diff.decider-required`
+reads; the rest of section 4 is unchanged.
+
+**The problem.** The rule read `authority` from the pull request's own checkout. A pull request that adds its
+author to a decider group, deletes a gate, and moves a record to a gated status in the
+same change was judged against the table it had just written, and reported nothing. The sentence above that the
+rule is "a check that means something" with a second human held only for a pull request that did not edit the
+table.
+
+**The decision.** `authority` takes a key `decider_table`: `base`, `head` or `both`.
+
+- `head` reads the table (groups, logins, gates, evidence) from the checkout, as before. Undeclared reads as
+  `head`, so the rule is opt-in and no existing configuration changes behaviour.
+- `base` reads who may decide from the base revision of the `--base` diff: its groups, its logins, its gates and
+  its `evidence`. The head's table is not consulted for the verdict.
+- `both` judges every gated change under both tables, so a gated change needs a decider under each, and a gate
+  that is in either table applies (a gate only the head declares is judged by the head's groups, a gate only the
+  base declares by the base's).
+- The mode in force is the stricter of what the head and the base revision declare (`head` < `base` < `both`),
+  so a pull request cannot loosen the mode by editing the key; a loosening takes effect once it is merged.
+- The base table is read from the configuration file as it was at the merge base, by the same mechanism that
+  reads a record's committed copy (`git show` through `urzua_io`). Only the `authority` section is read, so a
+  base config written by an older build need not load whole. A base with no config file, or with no `authority`
+  section (a branch cut before the table existed), has no table to judge against, and reading it as "no deciders
+  and no gates" would let a pull request that declares its own table pass unjudged. Under `base` and `both` such a
+  base is therefore not trusted: the head table is judged instead (a gate the head declares applies, and a decider
+  must be in the head's group), the finding names "the head's table", and an `info` notice says the base had no
+  authority. A base whose config cannot be read, or whose `authority` section does not load, is said in a warning
+  notice and the head table is used for that run.
+- The base's rule setting is read from the same configuration text. When the mode in force is `base` or `both`,
+  the level and options of `diff.decider-required` and `fail_on` are the stricter of the base's and the head's
+  (`off` < `info` < `warn` < `error`; `error` < `warning`), and an `authority` section the head dropped is
+  replaced by an empty one so the base table is still judged. Deleting the rule's entry, setting it to `off`, or
+  lowering it to `warn` with `fail_on: error`, in a pull request, is therefore judged under the base's stricter
+  setting; an `info` notice names each setting taken from the base. The stricter `fail_on` applies to the whole
+  run, and an explicit `--fail-on` still wins.
+- With no `--base` there is no base revision. The rule reports `not-applicable` as before, the editor and
+  post-command guardrails keep reading the checkout's table, and when `decider_table` is `base` or `both` the
+  report carries an `info` notice saying the head table is used.
+- Findings read as before under `head`. Under `base` and `both` the gate in the message names the table it
+  comes from.
+- `urzua init` writes `decider_table: base` in the configuration it proposes. `urzua doctor` warns, as a
+  structured check named `authority-decider-table`, when gates are declared and `decider_table` is not, and
+  recommends `base`. The gate action's documentation recommends `base`. This repository declares `base`.
+
+**What it does not change.** The accepted-risk list stands. A pull request that drops `--actors` from the
+workflow command, or edits the workflow that runs the gate, still removes the check without touching the
+configuration: that is the remaining known limit and is accepted risk 3. Turning the rule off or downgrading it
+in the configuration is no longer part of that limit under `base` and `both`: it is judged under the base's
+stricter setting, and the configuration is a protected path when the base declares `authority`, so changing it needs a decider of the base table. On a stale base that has no `authority` the configuration is not a protected path, and the route in item 13 applies.
+
+Stale base: when the base revision has no `authority` (for example a branch made before the gates were introduced), the head table is judged; a pull request whose head `authority` names its own author as a decider then passes, because that is indistinguishable from the first introduction of `authority`. Branch protection that requires an up-to-date branch, or a merge queue, removes this route by making the base current. This sentence and accepted risk 13 are documented by the orchestrator, pending maintainer review; the rest of this amendment stays as accepted.
+With a single maintainer the evidence is still authorship, and the rule still cannot tell an agent acting under
+the maintainer's token from the maintainer (item 4).
+
+The Decision is otherwise unchanged. The Status of this ADR stays Accepted.
+
 ## References
 
 - `ADR-69`, `ADR-70`, `ADR-71`: the hook, drafting commands and layered gate this extends; `ADR-70` gains an
@@ -691,3 +751,6 @@ The Decision is unchanged. The Status of this ADR stays Accepted.
 > | 2026-11-09 | Added an `## Amendment (2026-11-09, outside writes)`, accepted by the maintainer on 2026-11-09: `harness.outside_writes` (`allow`, `shared` or `deny`) (with `allow_paths` for `deny`) decides how an edit-tool write outside the session's repository is judged; under `shared` a file of a linked worktree of the same repository is also judged against the session's acceptance and protected-path gates, under `deny` any such write is refused except under `allow_paths`, undeclared acts as `allow`; `init` proposes `shared`, `doctor` warns when it is undeclared with a guardrail enabled; a separate clone joins the accepted-risk list as route 12 and routes 1 and 8 name the worktree commit and the side-branch push. `Status` stays Accepted. **Why:** Maintainer decision, 2026-11-09, on the review that found a linked worktree at a commit without gates an unjudged place to write. | **substantive** |
 > | 2026-11-09 | Added an `## Amendment (2026-11-09, fifth review)`, pending maintainer review: a removed or narrowed status gate, or `acceptance` switched off, is judged against the baseline in the post-command check (route 1); a change of a gate's `by` is not shrinkage (the move and the configuration are reported); the `edit` hook sets a 120 second `timeout` and the translator bounds an MCP call (all gates in one engine process for at most 512 files, then at most 8 record files). `Status` stays Accepted. **Why:** the fifth review of the harness found these behaving otherwise than the ADR promises. | **substantive** |
 > | 2026-11-09 | Amendment of 2026-11-09 (fifth review: the status gates and the MCP call bound) accepted. **Why:** Maintainer decision, 2026-11-09. | **substantive** |
+> | 2026-11-09 | Added an `## Amendment (2026-11-09, decider table)`, accepted by the maintainer on 2026-11-09: `authority.decider_table` (`base`, `head`, `both`; undeclared is `head`) says which revision's table `diff.decider-required` reads, closing the route where a pull request adds its author to a decider group, or deletes a gate, in the change it asks to have approved; `urzua init` writes `base`, `urzua doctor` warns when gates are declared and the key is not, and this repository declares `base`. `Status` stays Accepted. **Why:** Maintainer decision, 2026-11-09, on the review that found the rule judging a pull request against its own table. | **substantive** |
+> | 2026-11-09 | Corrected the decider-table amendment after review: a base with no config or no `authority` is judged against the head table with an `info` notice (not read as no gates), and under `base` and `both` the rule's level and `fail_on` are the stricter of the base's and the head's; the problem statement no longer names an `enabled` key, and the remaining known limit is dropping `--actors` or editing the workflow (accepted risk 3). **Why:** review found a stale merge base and a rule switched off in the pull request each gave no finding. | **substantive** |
+> | 2026-11-09 | Added accepted risk 13 and a sentence to the decider-table amendment, documented by the orchestrator, pending maintainer review: with a stale base that has no `authority`, the head table is judged and a pull request naming its own author as a decider passes, indistinguishable from the first introduction of `authority`; an up-to-date branch requirement or a merge queue removes the route. The amendment no longer calls the configuration a protected path in that case. `Status` stays Accepted. **Why:** the review of pull request 469 found the route undocumented. | **substantive** |

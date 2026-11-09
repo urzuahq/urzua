@@ -237,7 +237,7 @@ impl RoadmapDecl {
 
 /// The exit-code threshold (`SPEC-3`, `fail_on`). Only the exit code reads
 /// it: the report's `blocking` and `status` keep meaning "an error".
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum FailOn {
     #[default]
@@ -779,7 +779,7 @@ pub struct Boundary {
 }
 
 // Implements: ADR-87 (the `info` rule level)
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub enum RuleLevel {
     #[default]
     Off,

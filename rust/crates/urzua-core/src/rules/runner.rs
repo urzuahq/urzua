@@ -95,6 +95,9 @@ pub struct RuleCtx<'a> {
     /// The identities the host supplied (`urzua check --actors`); `None` when
     /// no file was given (`MILE-200`).
     pub actors: Option<&'a crate::authority::Actors>,
+    /// The base revision's `authority` table (`authority.decider_table`);
+    /// `Absent` on a run with no `--base`.
+    pub base_authority: &'a crate::authority::BaseAuthority,
     pub refs_snapshot: &'a Result<crate::refs_snapshot::RefsSnapshot, String>,
     /// Every discovered path, staged deletions included.
     pub tracked_paths: &'a [PathBuf],

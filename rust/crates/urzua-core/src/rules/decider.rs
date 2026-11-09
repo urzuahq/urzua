@@ -11,7 +11,7 @@
 //! means something.
 
 use super::*;
-use crate::authority::{Actors, AuthorityDecl, EvidenceKind, Gate};
+use crate::authority::{Actors, AuthorityDecl, BaseAuthority, DeciderTable, EvidenceKind, Gate};
 use crate::config::RelationRole;
 use crate::report::{census, Outcome};
 
@@ -122,65 +122,121 @@ fn gated_changes<'a>(
     out
 }
 
+/// One table a run judges against, and what to call it in a message: `None`
+/// under `head` alone, so that mode's findings read as they always have.
+struct Judged<'a> {
+    table: &'a AuthorityDecl,
+    label: Option<&'static str>,
+}
+
+/// The tables `mode` judges against. A base with no config or no `authority`
+/// names no decider and no gate, so a branch cut before the table existed could
+/// declare its own and have it waved through: that base is no table to judge
+/// against, and the head table is judged instead (the caller says so in a
+/// notice). An unreadable base falls back to the head table the same way.
+fn judged_tables<'a>(
+    mode: DeciderTable,
+    head: &'a AuthorityDecl,
+    base: &'a BaseAuthority,
+) -> Vec<Judged<'a>> {
+    let head_j = |label| Judged { table: head, label };
+    match (mode, base) {
+        (DeciderTable::Head, _) => vec![head_j(None)],
+        (_, BaseAuthority::Absent) => vec![head_j(Some("the head's table"))],
+        (_, BaseAuthority::Unreadable) => vec![head_j(None)],
+        (DeciderTable::Base, BaseAuthority::Declared(table)) => vec![Judged {
+            table,
+            label: Some("the base revision's table"),
+        }],
+        (DeciderTable::Both, BaseAuthority::Declared(table)) => vec![
+            head_j(Some("the head's table")),
+            Judged {
+                table,
+                label: Some("the base revision's table"),
+            },
+        ],
+    }
+}
+
+fn finding_for(
+    g: &Gated<'_>,
+    judged: &Judged<'_>,
+    actors: Option<&Actors>,
+    opts: &DeciderRequiredOpts,
+) -> Option<Finding> {
+    let group = &g.gate.by;
+    let gate_text = match judged.label {
+        Some(label) => format!("{}, in {label}", g.gate.describe()),
+        None => g.gate.describe(),
+    };
+    let (message, declared_severity) = match actors {
+        Some(actors) if judged.table.satisfied(g.gate, actors) => return None,
+        Some(actors) => (
+            format!(
+                "{}: {} (gate: {gate_text}), and {} -- none is in the decider group '{group}' (evidence accepted: {})",
+                g.path.display(),
+                g.what,
+                evidence_text(judged.table, actors),
+                kinds_text(judged.table)
+            ),
+            None,
+        ),
+        None => (
+            format!(
+                "{}: {} (gate: {gate_text}), but no --actors file was given, so who made it is not known and the decider group '{group}' cannot be checked; run `urzua check --base REF --actors FILE` (the gate action writes FILE)",
+                g.path.display(),
+                g.what,
+            ),
+            (!opts.require_evidence).then_some(FindingSeverity::Info),
+        ),
+    };
+    Some(
+        Finding::new(
+            RULE_DIFF_DECIDER_REQUIRED,
+            FindingSeverity::Error,
+            g.path.to_path_buf(),
+            ActionSource::new(g.variant),
+            message,
+        )
+        .declared_opt(declared_severity),
+    )
+}
+
 /// A gated move or protected-path change whose author or current approvers are
 /// not in the gate's group (`ADR-89` section 4). `changed` is `None` on a run
 /// with no `--base`: the rule then reports not-applicable, never clean. With no
 /// `actors` file a gated change is reported as `info`, or as an error under
 /// `require_evidence`, so an absent input is never a silent pass.
+///
+/// Which table is the gate's is `authority.decider_table` (`ADR-89` amendment
+/// of 2026-11-09): `head` (undeclared) reads the checkout's, `base` reads the
+/// base revision's, `both` judges each gated change under both.
 pub fn decider_required(
     changed: Option<&[PathBuf]>,
     records: &[Record],
     config: &Config,
     committed: Option<&HashMap<PathBuf, CommittedStatus>>,
     actors: Option<&Actors>,
+    base: &BaseAuthority,
     opts: &DeciderRequiredOpts,
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_DIFF_DECIDER_REQUIRED;
-    let (Some(changed), Some(authority)) = (changed, config.authority.as_ref()) else {
+    let (Some(changed), Some(head)) = (changed, config.authority.as_ref()) else {
         return not_applicable(RULE_ID);
     };
     let mut paths: Vec<&PathBuf> = changed.iter().collect();
     paths.sort();
     paths.dedup();
-    let gated = gated_changes(&paths, records, config, authority, committed);
+    let mode = head.effective_table(base);
     let mut findings = Vec::new();
-    for g in &gated {
-        let group = &g.gate.by;
-        let (message, declared_severity) = match actors {
-            Some(actors) if authority.satisfied(g.gate, actors) => continue,
-            Some(actors) => (
-                format!(
-                    "{}: {} (gate: {}), and {} -- none is in the decider group '{group}' (evidence accepted: {})",
-                    g.path.display(),
-                    g.what,
-                    g.gate.describe(),
-                    evidence_text(authority, actors),
-                    kinds_text(authority)
-                ),
-                None,
-            ),
-            None => (
-                format!(
-                    "{}: {} (gate: {}), but no --actors file was given, so who made it is not known and the decider group '{group}' cannot be checked; run `urzua check --base REF --actors FILE` (the gate action writes FILE)",
-                    g.path.display(),
-                    g.what,
-                    g.gate.describe(),
-                ),
-                (!opts.require_evidence).then_some(FindingSeverity::Info),
-            ),
-        };
-        findings.push(
-            Finding::new(
-                RULE_ID,
-                FindingSeverity::Error,
-                g.path.to_path_buf(),
-                ActionSource::new(g.variant),
-                message,
-            )
-            .declared_opt(declared_severity),
-        );
+    let mut gated_paths: HashSet<&Path> = HashSet::new();
+    for judged in judged_tables(mode, head, base) {
+        let gated = gated_changes(&paths, records, config, judged.table, committed);
+        for g in &gated {
+            gated_paths.insert(g.path);
+            findings.extend(finding_for(g, &judged, actors, opts));
+        }
     }
-    let gated_paths: HashSet<&Path> = gated.iter().map(|g| g.path).collect();
     let population = census(PopulationUnit::ChangedPath, paths, |path| {
         if gated_paths.contains(path.as_path()) {
             Outcome::Examined
@@ -238,6 +294,7 @@ mod tests {
             &config(),
             Some(&committed(base)),
             who,
+            &BaseAuthority::Absent,
             &DeciderRequiredOpts {
                 require_evidence: require,
             },
@@ -254,6 +311,7 @@ mod tests {
             &config(),
             None,
             None,
+            &BaseAuthority::Absent,
             &DeciderRequiredOpts::default(),
         );
         assert_eq!(exec.status, RuleStatus::NotApplicable);
