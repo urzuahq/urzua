@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5N2PD9ZYBJPZHN05W7
-Version: '0.18'
+Version: '0.19'
 Date: 2026-08-20
 Status: Shipped
 Embodiment: Verified
@@ -391,6 +391,18 @@ sets and `.github/workflows/ci.yml` runs as the `acceptance` shards and the `acc
 
 The protocol lives in `rust/crates/urzua-cli/tests/acceptance/sharding.rs`.
 
+## Cases over this repository's own corpus pin the evaluation date
+
+A case with `corpus: "@repo"` runs `check` over this repository's live records. Claim expiry (`ADR-97`)
+is judged against the real clock by the records gate (`make records`, the CI build job) and by nothing
+else, so the first claim to expire would turn every one of these cases red with no code change, which
+is a flaky test by this repository's own definition. Each such case therefore starts its invocation
+with the global `--as-of 2026-11-09`, a date inside the validity window of every claim and one past which no
+record is dated that `check` would read as an error. The same date is `OWN_CORPUS_AS_OF` in
+`tests/common/mod.rs` for the integration tests that judge the repository root, and
+`every_own_corpus_acceptance_case_pins_the_evaluation_date` in `audit_fold_integration.rs` fails when an
+own-corpus case lacks the flag. A case over a fixture corpus needs none.
+
 ## Success criteria
 
 1. Every case in the suite is executable and named in `expectations/`. A catalog entry marked "Not built" is
@@ -442,3 +454,4 @@ The protocol lives in `rust/crates/urzua-cli/tests/acceptance/sharding.rs`.
 > | 2026-11-08 | Bumped to `0.17`. The `code:` and `test:` locators of `Realized-by` are now hash-pinned by `urzua reverify --pin-only` (the `Pinned` row above) and, where the record stated `Drift detected`, its `Embodiment` was recomputed (the tool-authored row above); no behaviour this spec describes changes. **Why:** `MILE-129`, `ADR-97` section 10: a claim is renewed only over pinned code and test evidence, so the corpus is pinned once before expiry is enabled. | **structural** |
 > | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/acceptance.rs` 5268644d3380 -> ae174f312e28. Reason: Read the diff of each pinned file since the pin taken earlier in this branch (the changes main landed in ADR-98's sharded CI and the milestone Kind amendment) and the claim still holds. acceptance.rs: acceptance.rs gained sharding (URZUA_ACCEPTANCE_SHARD, URZUA_ACCEPTANCE_PROVEN_OUT and a merge run under URZUA_ACCEPTANCE_MERGE) so each shard proves its cases and the coverage gate is judged over their union, and the cases, the mutation proof and the gate are unchanged. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
 > | 2026-11-08 | Bumped to `0.18`. Added the "CI shard protocol" section: `URZUA_ACCEPTANCE_SHARD`, `URZUA_ACCEPTANCE_PROVEN_OUT` and `URZUA_ACCEPTANCE_MERGE`, how the cases are dealt, what a shard file holds, and what makes the merge refuse a set. **Why:** the protocol was built by `ADR-98` and described only in `SPEC-20` and an ADR, while this spec, which owns the runner and its coverage gate, did not say that the gate is now judged over merged shard files. No behaviour of the runner changed. | **substantive** |
+> | 2026-11-09 | Bumped to `0.19`. Added "Cases over this repository's own corpus pin the evaluation date": every `corpus: "@repo"` case passes `--as-of 2026-11-09`, and a test enforces it. **Why:** a review found those cases, and the integration tests over the repository root, would fail on 2026-12-23, when the first claim expires, with no code change; claim expiry is the records gate's job under the real clock. | **substantive** |

@@ -1,6 +1,6 @@
 id: own-config-claim-rules-run
 corpus: "@repo"
-invocation: [check]
+invocation: [--as-of, "2026-11-09", check]
 # This repository's own .urzua/config.yaml over its own records: every rule of
 # the claim family that the config enables runs over a non-empty population, and
 # the whole check is clean (fail_on: warning). A refactor of the rule wiring

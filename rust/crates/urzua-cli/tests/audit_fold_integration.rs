@@ -284,7 +284,7 @@ fn this_repositorys_own_corpus_is_audited_and_checked_with_rules() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
 
     // `audit` owns no rule set: it runs every rule this repository declares.
-    let (audit_code, audit) = urzua(&root, &["audit"]);
+    let (audit_code, audit) = urzua(&root, &["--as-of", common::OWN_CORPUS_AS_OF, "audit"]);
     assert_eq!(audit_code, 0, "this repository audits clean: {audit}");
     assert!(audit["rules_selected"].is_null(), "{audit}");
     let notices = audit["notices"].as_array().expect("notices");
@@ -300,7 +300,16 @@ fn this_repositorys_own_corpus_is_audited_and_checked_with_rules() {
     for rule in &selected {
         assert!(all.iter().any(|r| r == rule), "{rule} is declared here");
     }
-    let (code, v) = urzua(&root, &["check", "--rules", &selected.join(",")]);
+    let (code, v) = urzua(
+        &root,
+        &[
+            "--as-of",
+            common::OWN_CORPUS_AS_OF,
+            "check",
+            "--rules",
+            &selected.join(","),
+        ],
+    );
     assert_eq!(code, 0, "{v}");
     assert_eq!(v["rules_selected"], serde_json::json!(selected), "{v}");
     assert_eq!(v["status"], "ok", "{v}");
@@ -314,4 +323,29 @@ fn this_repositorys_own_corpus_is_audited_and_checked_with_rules() {
     let (bad, report) = urzua(&root, &["check", "--rules", "no.such-rule"]);
     assert_eq!(bad, 2, "{report}");
     assert_eq!(report["status"], "not-run", "{report}");
+}
+
+/// Every acceptance case that runs `check` over this repository's own corpus pins the
+/// evaluation date, so none of them goes red when a claim expires (ADR-97 leaves expiry to
+/// the records gate, on the real clock).
+#[test]
+fn every_own_corpus_acceptance_case_pins_the_evaluation_date() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/acceptance/corpora/corpus-zero/expectations");
+    let mut own = 0;
+    for entry in std::fs::read_dir(&dir).unwrap() {
+        let path = entry.unwrap().path();
+        let text = std::fs::read_to_string(&path).unwrap();
+        if !text.contains("corpus: \"@repo\"") {
+            continue;
+        }
+        own += 1;
+        let line = text.lines().find(|l| l.starts_with("invocation:")).unwrap();
+        assert!(
+            line.contains(&format!("--as-of, \"{}\"", common::OWN_CORPUS_AS_OF)),
+            "{} does not pin --as-of: {line}",
+            path.display()
+        );
+    }
+    assert!(own >= 20, "only {own} own-corpus cases found");
 }
