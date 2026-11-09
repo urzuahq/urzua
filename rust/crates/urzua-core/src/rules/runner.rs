@@ -85,6 +85,9 @@ pub struct RuleCtx<'a> {
     /// that had drifted at the merge base, read by the caller for the records
     /// that gained a drift-acknowledging `Re-verified` row. Empty without `--base`.
     pub base_drift: &'a HashMap<PathBuf, HashSet<String>>,
+    /// The merge base commit's time (`--base`); `None` without one or when git
+    /// cannot date it.
+    pub merge_base_unix: Option<i64>,
     /// `None` on a run with no `--base`.
     pub changed_paths: Option<&'a [PathBuf]>,
     /// The subset of `changed_paths` that did not exist at the merge base; `None`

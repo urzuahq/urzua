@@ -260,7 +260,7 @@ fn an_undeclared_policy_ignores_an_acknowledging_row_on_the_record() {
 }
 
 #[test]
-fn a_hand_typed_row_without_the_tools_shape_clears_nothing_observed_failing() {
+fn a_hand_typed_row_without_the_tools_shape_clears_nothing() {
     let dir = drifted("typed", "    drift: {spec: acknowledge}\n", false, "spec");
     let day = date_days_ago(15)[..10].to_string();
     let text = std::fs::read_to_string(dir.join(RECORD)).unwrap();
@@ -410,4 +410,81 @@ fn a_genuine_tool_row_passes_and_a_row_naming_the_wrong_locator_is_reported_obse
     let found = renewal_findings(&dir);
     assert_eq!(found.len(), 1, "{found:?}");
     assert!(found[0].contains("evidence"), "{found:?}");
+}
+
+/// The tool's own renewal over the drifted spec, committed, with the rule on
+/// and a `base` tag before it; returns the record's text.
+fn genuine_renewal(name: &str) -> (common::TempDir, String) {
+    let dir = drifted(name, "    drift: {spec: acknowledge}\n", false, "spec");
+    with_renewal_rule(&dir);
+    git(&dir, &["tag", "base"]);
+    let parsed = renew(&dir);
+    assert_eq!(parsed["status"], "applied", "{parsed}");
+    commit_all(&dir, 0);
+    assert_eq!(renewal_findings(&dir), Vec::<String>::new());
+    let text = std::fs::read_to_string(dir.join(RECORD)).unwrap();
+    (dir, text)
+}
+
+fn redate(text: &str, to: &str) -> String {
+    let today = date_days_ago(0)[..10].to_string();
+    let row = format!("> | {today} | Re-verified");
+    assert!(text.contains(&row), "{text}");
+    text.replace(&row, &format!("> | {to} | Re-verified"))
+}
+
+#[test]
+fn a_row_dated_in_the_future_clears_nothing() {
+    let dir = drifted("future", "    drift: {spec: acknowledge}\n", false, "spec");
+    let text = std::fs::read_to_string(dir.join(RECORD)).unwrap();
+    std::fs::write(
+        dir.join(RECORD),
+        format!(
+            "{text}{}",
+            tool_row(
+                "2099-01-01",
+                EVIDENCE,
+                "spec:ADR-1 (latest revision 2026-11-01)"
+            )
+        ),
+    )
+    .unwrap();
+    commit_all(&dir, 15);
+    assert!(consistency_errors(&dir).contains("Drift detected"));
+}
+
+#[test]
+fn a_row_not_dated_the_day_it_was_added_is_reported_on_a_base_run() {
+    let (dir, text) = genuine_renewal("misdated");
+    let misdated = |found: &[String]| {
+        found
+            .iter()
+            .filter(|m| m.contains("not dated the day it was added"))
+            .count()
+    };
+    // Later than the evaluation date.
+    std::fs::write(dir.join(RECORD), redate(&text, "2099-01-01")).unwrap();
+    commit_all(&dir, 0);
+    let found = renewal_findings(&dir);
+    assert_eq!(misdated(&found), 1, "{found:?}");
+    // Earlier than the merge base's commit date.
+    std::fs::write(dir.join(RECORD), redate(&text, "2026-01-02")).unwrap();
+    commit_all(&dir, 0);
+    let found = renewal_findings(&dir);
+    assert_eq!(misdated(&found), 1, "{found:?}");
+}
+
+#[test]
+fn a_row_listing_a_pin_the_record_does_not_hold_is_reported_on_a_base_run() {
+    let (dir, text) = genuine_renewal("wrongpin");
+    assert!(text.contains("@sha256:"), "{text}");
+    let at = text.rfind("Evidence: ").unwrap() + "Evidence: ".len();
+    let pinned = text[at..].find("@sha256:").unwrap() + at + "@sha256:".len();
+    let mut forged = text.clone();
+    forged.replace_range(pinned..pinned + 12, "000000000000");
+    std::fs::write(dir.join(RECORD), forged).unwrap();
+    commit_all(&dir, 0);
+    let found = renewal_findings(&dir);
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert!(found[0].contains("000000000000"), "{found:?}");
 }

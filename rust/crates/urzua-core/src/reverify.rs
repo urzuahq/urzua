@@ -425,6 +425,9 @@ pub const DRIFT_ACKNOWLEDGED_CLAUSE: &str = "; Drift acknowledged:";
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReverifiedRow {
     pub evidence: Vec<String>,
+    /// The pin hash text (as written, the tool's 12-character prefix) the
+    /// `Evidence:` list gave each pinned locator, by locator.
+    pub pins: Vec<(String, String)>,
     pub acknowledged: Vec<String>,
 }
 
@@ -458,9 +461,14 @@ pub fn parse_reverified_row(row: &str) -> Option<ReverifiedRow> {
         Some((evidence, acknowledged)) => (evidence, Some(acknowledged)),
         None => (listed, None),
     };
-    let evidence: Vec<String> = split_list(evidence)
-        .into_iter()
-        .map(|e| strip_pin(&e).to_string())
+    let entries = split_list(evidence);
+    let evidence: Vec<String> = entries.iter().map(|e| strip_pin(e).to_string()).collect();
+    let pins: Vec<(String, String)> = entries
+        .iter()
+        .filter_map(|e| {
+            let (locator, hash) = e.split_once("@sha256:")?;
+            Some((locator.trim().to_string(), hash.trim().to_string()))
+        })
         .collect();
     if evidence.is_empty() {
         return None;
@@ -480,6 +488,7 @@ pub fn parse_reverified_row(row: &str) -> Option<ReverifiedRow> {
     };
     Some(ReverifiedRow {
         evidence,
+        pins,
         acknowledged,
     })
 }
@@ -512,7 +521,15 @@ fn strip_pin(entry: &str) -> &str {
 /// An acknowledged entry as the locator it names: `category:locator` or
 /// `category:ID`, without the hash, the commit or the revision text after it.
 fn acknowledged_name(entry: &str) -> String {
-    let head = entry.split(" (").next().unwrap_or(entry);
+    // Cut at the tool's own suffix forms only, so a path that holds ` (` stays whole.
+    const SUFFIXES: [&str; 4] = [
+        " (latest revision ",
+        " (last changed in ",
+        " (pin ",
+        " (no dated revision row)",
+    ];
+    let cut = SUFFIXES.iter().filter_map(|s| entry.rfind(s)).max();
+    let head = cut.map_or(entry, |at| &entry[..at]);
     strip_pin(head).to_string()
 }
 
@@ -523,6 +540,7 @@ pub struct Acknowledgement {
     pub date: String,
     pub names: Vec<String>,
     pub evidence: Vec<String>,
+    pub pins: Vec<(String, String)>,
     pub row: String,
 }
 
@@ -549,6 +567,7 @@ pub fn acknowledgements(
                     date,
                     names: parsed.acknowledged,
                     evidence: parsed.evidence,
+                    pins: parsed.pins,
                     row: e.row.clone(),
                 }
             })
@@ -962,6 +981,18 @@ mod tests {
         ] {
             assert_eq!(parse_reverified_row(typed), None, "{typed}");
         }
+    }
+
+    #[test]
+    fn a_locator_path_holding_a_space_and_parenthesis_is_named_whole() {
+        let row = " 2026-11-09 | Re-verified (attested by ana, identity: asserted, actor: human): 1 locators re-resolved, 1 hash-checked, 0 spec locators checked by git history only. Evidence: docs/a (copy).md@sha256:0123456789ab; Drift acknowledged: code:docs/a (copy).md@sha256:0123456789ab -> 0123456789cd (last changed in 1234abc), spec:ADR-1 (latest revision 2026-11-01; pin a -> b). Reason: r **Why:** w. | **structural** ";
+        let parsed = parse_reverified_row(row).expect("the tool's row parses");
+        assert_eq!(parsed.evidence, ["docs/a (copy).md"]);
+        assert_eq!(
+            parsed.pins,
+            [("docs/a (copy).md".to_string(), "0123456789ab".to_string())]
+        );
+        assert_eq!(parsed.acknowledged, ["code:docs/a (copy).md", "spec:ADR-1"]);
     }
 
     #[test]

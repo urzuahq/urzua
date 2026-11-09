@@ -111,6 +111,7 @@ struct Context<'a> {
     repo_root: PathBuf,
     base_text: HashMap<PathBuf, String>,
     base_drift: HashMap<PathBuf, HashSet<String>>,
+    merge_base_unix: Option<i64>,
     templates: urzua_core::new_record::TemplateValues,
     /// A proposed record is being judged (`--stdin-path`).
     record_only: bool,
@@ -285,6 +286,7 @@ impl<'a> Context<'a> {
             now_unix: self.now_unix,
             base_text: &self.base_text,
             base_drift: &self.base_drift,
+            merge_base_unix: self.merge_base_unix,
             changed_paths: self.changed_paths.as_deref(),
             added_paths: self.added_paths.as_deref(),
             pull_ref_claims: &self.pull_ref_claims,
@@ -1161,6 +1163,7 @@ fn index_with_disclosures<'a>(
 struct DiffInputs {
     base_text: HashMap<PathBuf, String>,
     base_drift: HashMap<PathBuf, HashSet<String>>,
+    merge_base_unix: Option<i64>,
     added_paths: Option<Vec<PathBuf>>,
     pull_ref_claims: rules::PullRefClaims,
     templates: urzua_core::new_record::TemplateValues,
@@ -1241,6 +1244,8 @@ fn read_diff_inputs(
     let changes = scope.changed.as_ref().or(head_changes.as_ref());
     let base_text = load_base_text(session, changes, notices)?;
     let base_drift = load_base_drift(session, changes, &base_text);
+    let merge_base_unix =
+        changes.and_then(|c| urzua_io::commit_unix_time(repo_root, &c.merge_base));
     let added_paths: Option<Vec<PathBuf>> = changes.map(|c| {
         let mut added: Vec<PathBuf> = c.added.iter().cloned().collect();
         added.sort();
@@ -1284,6 +1289,7 @@ fn read_diff_inputs(
     Ok(DiffInputs {
         base_text,
         base_drift,
+        merge_base_unix,
         added_paths,
         pull_ref_claims,
         templates,
@@ -1664,6 +1670,7 @@ fn load_context<'a>(
             repo_root: repo_root.clone(),
             base_text: diff.base_text,
             base_drift: diff.base_drift,
+            merge_base_unix: diff.merge_base_unix,
             templates: diff.templates,
             record_only: scope.prospective.is_some(),
             selected: selection.map(|s| s.iter().cloned().collect()),

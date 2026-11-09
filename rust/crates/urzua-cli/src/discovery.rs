@@ -901,6 +901,10 @@ impl<'a> DriftJudge<'a> {
             let Ok(day) = rules::date_unix(&ack.date) else {
                 continue;
             };
+            // A row dated after the evaluation date attests nothing yet.
+            if day > self.now_unix {
+                continue;
+            }
             for name in ack.names {
                 let end = through.entry(name).or_insert(i64::MIN);
                 *end = (*end).max(day + DAY_SECS);
