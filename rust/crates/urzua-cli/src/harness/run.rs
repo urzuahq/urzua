@@ -420,9 +420,9 @@ fn is_git_root(dir: &Path) -> bool {
     if !dir.join(".git").exists() {
         return false;
     }
-    let Ok(out) = std::process::Command::new("git")
+    let Ok(out) = urzua_io::git::GitRun::new()
         .args(["-c", "safe.directory=*", "rev-parse", "--show-toplevel"])
-        .current_dir(dir)
+        .cwd(dir)
         .env_remove("GIT_DIR")
         .env_remove("GIT_WORK_TREE")
         .output()

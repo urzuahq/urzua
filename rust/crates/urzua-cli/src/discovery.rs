@@ -1629,23 +1629,7 @@ pub(crate) fn read_pull_ref_claims(
     config: &Config,
     added_ids: &HashSet<urzua_core::values::RecordId>,
 ) -> Result<rules::PullRefClaims, String> {
-    let git = |args: &[&str]| -> Result<Vec<u8>, String> {
-        let out = std::process::Command::new("git")
-            .arg("-C")
-            .arg(repo_root)
-            .args(args)
-            .output()
-            .map_err(|e| format!("could not run git: {e}"))?;
-        if out.status.success() {
-            Ok(out.stdout)
-        } else {
-            Err(format!(
-                "git {} failed: {}",
-                args[0],
-                String::from_utf8_lossy(&out.stderr).trim()
-            ))
-        }
-    };
+    let git = |args: &[&str]| urzua_io::git::stdout_in(repo_root, args);
     let listed = git(&[
         "for-each-ref",
         "--format=%(objectname) %(refname)",
