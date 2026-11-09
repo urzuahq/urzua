@@ -11,7 +11,7 @@ Realized-by: code:rust/crates/urzua-cli/src/commands/init.rs@sha256:eab52da49062
 
 ## What
 
-`urzua init` adopt mode: proposes `.urzua/config.toml` from an existing corpus's real directories and header conventions, never moving or rewriting a single record. `--dry-run` byte-identical to the real run.
+`urzua init` adopt mode: proposes `.urzua/config.toml` from an existing corpus's real directories and header conventions, never moving or rewriting a single record. `--dry-run` proposes the identical config the real run writes, and reports it instead of writing it.
 
 ## Why
 
@@ -40,3 +40,4 @@ The tool has to be adoptable without a rewrite for "one engine instead of a fork
 > | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/init.rs` 08dfadd3cae6 -> 5f376bdd1b6d. Reason: init.rs now words the header-shape notice truthfully (check reports unreadable headers only when required_fields declares them), excludes README.md for a directory holding one, and carries the merged doc-comment edit from main; the behaviour this record relies on is unchanged **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
 > | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/init.rs` 5f376bdd1b6d -> 6c671b5f6ed7. Reason: split init::run into propose_record_types and write_config, and render_config_yaml into proposed_types_mapping and proposed_rules_mapping (init.rs); behaviour unchanged, outputs byte-identical **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
 > | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/init.rs` 6c671b5f6ed7 -> eab52da49062. Reason: Read the diff of each re-pinned file against main. cli/commands/init.rs: Notice literals use Notice::new or gain detail: None; no behaviour change. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
+> | 2026-11-09 | What reworded: it said `--dry-run` is byte-identical to the real run, which is false (the reports differ in `dry_run`, `written` and `config_yaml`); the proposed config is identical, the report is not. The Done item was corrected on 2026-11-08; this sentence was missed. **Why:** a review found the What still stating the claim the Done item had already corrected. | **structural** |

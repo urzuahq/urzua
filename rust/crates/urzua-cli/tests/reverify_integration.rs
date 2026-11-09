@@ -19,14 +19,47 @@ fn git(dir: &Path, args: &[&str]) {
 
 fn date_days_ago(n: u32) -> String {
     let out = Command::new("date")
-        .args(["-u", "-d", &format!("{n} days ago"), "+%Y-%m-%dT12:00:00Z"])
+        .args([
+            "-u",
+            "-d",
+            &format!("{} 12:00:00 UTC - {n} days", today()),
+            "+%Y-%m-%dT12:00:00Z",
+        ])
         .output()
         .unwrap();
     String::from_utf8(out.stdout).unwrap().trim().to_string()
 }
 
+/// The date this test process's fixtures are built on: read once, so the fixture dates, the
+/// `--as-of` passed to read-only runs and every assertion agree. `reverify --apply` refuses
+/// `--as-of` and stamps the real date, so an assertion on what it wrote accepts either side
+/// of a midnight UTC that fell inside the run (see `stamped_today`).
 fn today() -> String {
-    date_days_ago(0)[..10].to_string()
+    static TODAY: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    TODAY
+        .get_or_init(|| {
+            let out = Command::new("date").args(["-u", "+%F"]).output().unwrap();
+            String::from_utf8(out.stdout).unwrap().trim().to_string()
+        })
+        .clone()
+}
+
+/// Whether `text` carries the `Last-audited` stamp an apply run wrote: the fixture's date, or
+/// the real date now when midnight UTC passed between the two.
+fn stamped_today(text: &str) -> bool {
+    let now = String::from_utf8(
+        Command::new("date")
+            .args(["-u", "+%F"])
+            .output()
+            .unwrap()
+            .stdout,
+    )
+    .unwrap()
+    .trim()
+    .to_string();
+    [today(), now]
+        .iter()
+        .any(|d| text.contains(&format!("Last-audited: {d}")))
 }
 
 fn commit_all(dir: &Path, days_ago: u32) {
@@ -43,7 +76,14 @@ fn commit_all(dir: &Path, days_ago: u32) {
 }
 
 fn run_urzua(dir: &Path, args: &[&str]) -> std::process::Output {
+    // A read-only run is evaluated as of the fixture's date; `--apply` refuses `--as-of`.
+    let as_of: &[&str] = if args.contains(&"--apply") {
+        &[]
+    } else {
+        &["--as-of", &today()]
+    };
     common::urzua()
+        .args(as_of)
         .args(args)
         .current_dir(dir)
         .output()
@@ -208,10 +248,7 @@ fn apply_pins_code_and_test_then_renews_with_two_rows_and_the_anchor_observed_fa
         "{text}"
     );
     // The anchor is set, and Status and Embodiment are not touched.
-    assert!(
-        text.contains(&format!("Last-audited: {}\n", today())),
-        "{text}"
-    );
+    assert!(stamped_today(&text), "{text}");
     assert!(
         text.contains("Status: Done\n") && !text.contains("Embodiment"),
         "{text}"
@@ -721,7 +758,7 @@ fn force_with_ids_renews_only_the_named_record_observed_failing() {
     assert_eq!(parsed["status"], "applied", "{parsed}");
     assert_eq!(parsed["records"].as_array().unwrap().len(), 1, "{parsed}");
     assert_eq!(parsed["records"][0]["record"], path(2), "{parsed}");
-    assert!(read(&dir, &path(2)).contains(&format!("Last-audited: {}", today())));
+    assert!(stamped_today(&read(&dir, &path(2))));
     assert_eq!(read(&dir, &path(1)), before1);
 }
 
@@ -793,10 +830,7 @@ fn an_item_only_milestone_is_renewed_with_pins_on_its_item_locators_observed_fai
             && text.contains(&format!("test:src/t.rs@sha256:{}", sha256(TST))),
         "{text}"
     );
-    assert!(
-        text.contains(&format!("Last-audited: {}\n", today())),
-        "{text}"
-    );
+    assert!(stamped_today(&text), "{text}");
     let parsed = json(&run_urzua(&dir, &["check"]));
     assert!(
         parsed["findings"]

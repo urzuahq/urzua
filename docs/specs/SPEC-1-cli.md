@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5AJB7EBVDWVSMCSYZQ
-Version: '0.34'
+Version: '0.35'
 Date: 2026-07-29
 Status: Shipped
 Embodiment: Verified
@@ -377,3 +377,4 @@ None. Every question this spec carried has been answered or routed:
 > | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/main.rs#Command` (lines 94-338) a6f09ebb5aa7 -> 3476a956db42. Reason: Read the diff of each pinned file since the old pin and the claim still holds. main.rs#Command: only the doc comment on the Init variant changed, so its --help text now says --dry-run prints the config the real run would write instead of calling it byte-identical to the real run; no variant, flag or argument changed. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
 > | 2026-11-08 | Bumped to `0.33`. The pins this spec's `Realized-by` holds on files changed in this change were re-baselined (the `Re-baselined` row above); no behaviour this spec describes changed. **Why:** a revision-log entry that adds a structural change needs a `Version` bump (`revision-log.version-bump-required`). | **structural** |
 > | 2026-11-08 | Bumped to `0.34`. The CLI gains the global `--as-of YYYY-MM-DD` evaluation date and a top-level `as_of` on the reports of `check`, `audit`, `fix` and `reverify`, with its refusals; no pinned symbol of this spec changed. **Why:** maintainer decision of 2026-11-08 (the second `ADR-97` amendment of that date): a verdict must be reproducible and upcoming expiries previewable. | **substantive** |
+> | 2026-11-09 | Bumped to `0.35`. Note on the log: The version numbers of earlier `Bumped to` rows are not strictly increasing, and history is not rewritten: the order of the rows is the order the changes landed, and the current `Version` header is authoritative. Rows affected: `0.15` appears twice (the `Accepted` to `Shipped` row and the later `urzua audit` row), and the `0.15` `audit` row comes after `0.17`. **Why:** a review found the out-of-order and repeated numbers and a reader could be misled about which row introduced which version. | **structural** |
