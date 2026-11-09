@@ -406,6 +406,17 @@ impl Attestation {
         }
         label
     }
+
+    /// The one-line rationale a re-baseline row ends with, worded by who
+    /// attested: an agent's re-pin says a reviewer confirms it in the PR, a
+    /// person's says the person re-verified it. No `|`, so it stays in its cell.
+    pub fn rebaseline_why(&self) -> &'static str {
+        match self.actor {
+            ActorKind::Agent => "the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR.",
+            ActorKind::Human => "the pinned evidence changed and a person re-verified that the claim still holds.",
+            ActorKind::Unspecified => "the pinned evidence changed and the attesting actor re-verified that the claim still holds.",
+        }
+    }
 }
 
 /// Computes the new file content for applying one Tier-1 repair. Pure --
@@ -768,8 +779,9 @@ pub fn apply_rebaseline(
         .collect::<Vec<_>>()
         .join(", ");
     let narrative = format!(
-        "Re-baselined (attested by {}): re-pinned {moved}. Reason: {reason} **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds.",
-        attestation.label()
+        "Re-baselined (attested by {}): re-pinned {moved}. Reason: {reason} **Why:** {}",
+        attestation.label(),
+        attestation.rebaseline_why()
     );
     append_log_rows(&mut doc, log_id, shape, today, &[narrative], "re-baseline")?;
     Ok(doc.to_string())
@@ -950,6 +962,38 @@ mod tests {
             asserted.label(),
             "ana, identity: asserted, actor: unspecified, verified login: octo"
         );
+    }
+
+    #[test]
+    fn a_rebaseline_row_says_who_re_verified_by_actor_kind() {
+        let content = "---\nEmbodiment: Implemented\nRealized-by: 'code:src/a.rs@sha256:aaaaaaaaaaaaaaaaaaaaaaaa'\n---\n# 1\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Initial. | **structural** |\n";
+        let rb = || Rebaseline {
+            item_lines: Vec::new(),
+            items_section: String::new(),
+            record: PathBuf::from("docs/adr/ADR-1-a.md"),
+            field: "Realized-by".to_string(),
+            line: 3,
+            pins: vec![PinDrift {
+                locator: "code:src/a.rs".to_string(),
+                recorded_hash: "aaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
+                current_hash: "bbbbbbbbbbbbbbbbbbbbbbbb".to_string(),
+                span: None,
+                files: Vec::new(),
+                spelling: "code:src/a.rs".to_string(),
+            }],
+        };
+        for (actor, wording) in [
+            (ActorKind::Agent, "an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR."),
+            (ActorKind::Human, "a person re-verified that the claim still holds."),
+            (ActorKind::Unspecified, "the attesting actor re-verified that the claim still holds."),
+        ] {
+            let who = Attestation::new("ana", IdentitySource::Asserted, actor);
+            let out = apply_rebaseline(content, &rb(), "2026-11-06", &who, "Reason.", &Default::default(), &Default::default()).unwrap();
+            let row = out.lines().find(|l| l.contains("Re-baselined")).unwrap();
+            assert!(row.contains(&format!("**Why:** the pinned evidence changed and {wording} |")), "{row}");
+            assert!(!row.contains("a reviewer re-verified"), "{row}");
+            assert_eq!(row.matches('|').count(), 4, "{row}");
+        }
     }
 
     #[test]

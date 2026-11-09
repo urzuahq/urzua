@@ -78,8 +78,9 @@ fn blank_literals(src: &str) -> Vec<u8> {
             }
             blank(&mut out, i, j);
             i = j;
-        } else if c == b'r' && (i == 0 || !(b[i - 1].is_ascii_alphanumeric() || b[i - 1] == b'_')) {
-            // A raw string `r"..."` / `r#"..."#`; otherwise an ordinary identifier.
+        } else if c == b'r' && starts_raw_string_prefix(b, i) {
+            // A raw string `r"..."` / `r#"..."#` or a byte raw string `br"..."` / `br#"..."#`;
+            // otherwise an ordinary identifier.
             let mut h = i + 1;
             while h < n && b[h] == b'#' {
                 h += 1;
@@ -125,6 +126,18 @@ fn blank_literals(src: &str) -> Vec<u8> {
         }
     }
     out
+}
+
+/// Whether the `r` at `i` begins a raw string prefix: not part of a longer identifier,
+/// except for the `b` of a byte raw string (`br"..."`).
+fn starts_raw_string_prefix(b: &[u8], i: usize) -> bool {
+    let ident = |x: u8| x.is_ascii_alphanumeric() || x == b'_';
+    match i.checked_sub(1).map(|p| b[p]) {
+        None => true,
+        Some(prev) if !ident(prev) => true,
+        Some(b'b') => i == 1 || !ident(b[i - 2]),
+        Some(_) => false,
+    }
 }
 
 fn find(hay: &[u8], needle: &[u8]) -> Option<usize> {
@@ -390,19 +403,32 @@ fn rust_files(dir: &Path, out: &mut Vec<PathBuf>) {
     }
 }
 
-/// Every non-test function in `crates/*/src`, keyed by its path from the workspace root.
+/// The Rust files `SPEC-22` bounds in one crate: its `src`, `benches` and `examples`
+/// directories and its `build.rs`, where present.
+fn crate_rust_files(krate: &Path, out: &mut Vec<PathBuf>) {
+    for dir in ["src", "benches", "examples"] {
+        rust_files(&krate.join(dir), out);
+    }
+    let build = krate.join("build.rs");
+    if build.is_file() {
+        out.push(build);
+    }
+}
+
+/// Every non-test function in each crate's `src`, `benches`, `examples` and `build.rs`,
+/// keyed by its path from the workspace root.
 fn measure_workspace(root: &Path) -> Vec<Measured> {
     let mut files = Vec::new();
     let crates = root.join("crates");
     let mut dirs: Vec<PathBuf> = std::fs::read_dir(&crates)
         .expect("the crates directory")
         .flatten()
-        .map(|e| e.path().join("src"))
-        .filter(|p| p.is_dir())
+        .map(|e| e.path())
+        .filter(|p| p.join("src").is_dir())
         .collect();
     dirs.sort();
     for d in &dirs {
-        rust_files(d, &mut files);
+        crate_rust_files(d, &mut files);
     }
     files.sort();
     let mut excluded: Vec<PathBuf> = Vec::new();
@@ -675,6 +701,42 @@ mod tests {
         let src = "fn f() {\n    let a = \"}\";\n    // }\n    let b = '}';\n    let c = r#\"}\"#;\n    let d: &'static str = \"{\";\n}\nfn g() {}\n";
         let (fns, _) = measure_source("a.rs", src);
         assert_eq!(fns, vec![m("a.rs::f", 7), m("a.rs::g", 1)]);
+    }
+
+    #[test]
+    fn byte_raw_strings_are_blanked_like_raw_strings() {
+        let src = "fn f() {\n    let a = br#\"}\"#;\n    let b = br\"{\";\n    let r = 1;\n    let br = 2;\n}\nfn g() {}\n";
+        let (fns, _) = measure_source("a.rs", src);
+        assert_eq!(fns, vec![m("a.rs::f", 6), m("a.rs::g", 1)]);
+    }
+
+    #[test]
+    fn an_identifier_ending_in_br_is_not_a_raw_string() {
+        let src = "fn f() {\n    let abr = 1;\n    let x = abr;\n}\nfn g() {}\n";
+        let (fns, _) = measure_source("a.rs", src);
+        assert_eq!(fns, vec![m("a.rs::f", 4), m("a.rs::g", 1)]);
+    }
+
+    #[test]
+    fn the_workspace_scan_includes_build_scripts() {
+        let measured = measure_workspace(&workspace_root());
+        assert!(
+            measured
+                .iter()
+                .any(|f| f.key.starts_with("crates/urzua-cli/build.rs::")),
+            "build.rs functions are not measured"
+        );
+        let dir = std::env::temp_dir().join(format!("urzua-ratchet-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("benches")).unwrap();
+        std::fs::create_dir_all(dir.join("examples")).unwrap();
+        std::fs::create_dir_all(dir.join("src")).unwrap();
+        for f in ["build.rs", "benches/b.rs", "examples/e.rs", "src/lib.rs"] {
+            std::fs::write(dir.join(f), "fn f() {}\n").unwrap();
+        }
+        let mut files = Vec::new();
+        crate_rust_files(&dir, &mut files);
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(files.len(), 4, "{files:?}");
     }
 
     #[test]
