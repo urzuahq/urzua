@@ -512,6 +512,10 @@ pub(crate) fn compute_drifted_records_for_content(
 pub(crate) struct DriftedRecords {
     pub(crate) drifted: HashSet<PathBuf>,
     pub(crate) fresh: HashSet<PathBuf>,
+    /// Every locator that drifted (or, inside the window, would have), per
+    /// record, in the order the record cites them: what a renewal's per-category
+    /// drift policy judges (`ADR-97`, amendment of 2026-11-09).
+    pub(crate) locators: HashMap<PathBuf, Vec<urzua_core::reverify::LocatorDrift>>,
     /// Git failures met while computing drift, deduplicated. A failure is a
     /// record git could not judge, never "no drift" (`MILE-159`).
     pub(crate) git_problems: Vec<String>,
@@ -695,11 +699,14 @@ fn drift_claims(config: &Config, record: &Record) -> Vec<(usize, String)> {
     claims
 }
 
-/// What judging one locator decided for its record.
+/// What judging one locator decided.
+#[derive(Clone, Copy, PartialEq, Eq)]
 enum Judged {
-    /// Judge the next locator.
+    /// The locator did not drift.
     Next,
-    /// The record drifted outside the grace window: nothing else is judged.
+    /// Only a grace window or a declared audit date holds its drift back.
+    Fresh,
+    /// The locator drifted outside the grace window.
     Drifted,
 }
 
@@ -722,6 +729,7 @@ struct DriftJudge<'a> {
     strictly_before: HashMap<(String, String), bool>,
     drifted: HashSet<PathBuf>,
     fresh: HashSet<PathBuf>,
+    locators: HashMap<PathBuf, Vec<urzua_core::reverify::LocatorDrift>>,
     no_history: HashSet<PathBuf>,
     problems: Vec<String>,
 }
@@ -751,6 +759,7 @@ impl<'a> DriftJudge<'a> {
             strictly_before: HashMap::new(),
             drifted: HashSet::new(),
             fresh: HashSet::new(),
+            locators: HashMap::new(),
             no_history: HashSet::new(),
             problems: Vec::new(),
         }
@@ -820,11 +829,10 @@ impl<'a> DriftJudge<'a> {
                 if matches!(parsed.anchor, Some(urzua_core::locator::Anchor::Commit(_))) {
                     continue;
                 }
-                if let Judged::Drifted =
-                    self.judge_locator(record, &parsed, &reference_commit, audit_time)
-                {
-                    return;
-                }
+                // Every locator is judged, not only up to the first drift: the
+                // renewal's drift policy is per category (`ADR-97` amendment).
+                let verdict = self.judge_locator(&parsed, &reference_commit, audit_time);
+                self.note(record, &entry.category, &parsed, verdict);
             }
         }
     }
@@ -848,9 +856,39 @@ impl<'a> DriftJudge<'a> {
             })
     }
 
-    fn judge_locator(
+    /// Records the verdict on `parsed` for `record`: the record is drifted or
+    /// fresh, and the locator is kept with its category.
+    fn note(
         &mut self,
         record: &Record,
+        category: &str,
+        parsed: &urzua_core::locator::Locator,
+        verdict: Judged,
+    ) {
+        let inside_grace = match verdict {
+            Judged::Next => return,
+            Judged::Fresh => {
+                self.fresh.insert(record.path.clone());
+                true
+            }
+            Judged::Drifted => {
+                self.drifted.insert(record.path.clone());
+                false
+            }
+        };
+        let drift = urzua_core::reverify::LocatorDrift {
+            category: category.to_string(),
+            locator: parsed.display(),
+            inside_grace,
+        };
+        let known = self.locators.entry(record.path.clone()).or_default();
+        if !known.contains(&drift) {
+            known.push(drift);
+        }
+    }
+
+    fn judge_locator(
+        &mut self,
         parsed: &urzua_core::locator::Locator,
         reference_commit: &str,
         audit_time: Option<i64>,
@@ -868,11 +906,10 @@ impl<'a> DriftJudge<'a> {
         }
         match &parsed.anchor {
             Some(Anchor::Pin(pinned)) if parsed.scope.is_some() || covered.is_some() => {
-                self.judge_span_pin(record, parsed, pinned, audit_time)
+                self.judge_span_pin(parsed, pinned, audit_time)
             }
-            Some(Anchor::Pin(pinned)) => self.judge_file_pin(record, parsed, pinned, audit_time),
+            Some(Anchor::Pin(pinned)) => self.judge_file_pin(parsed, pinned, audit_time),
             _ => self.judge_history(
-                record,
                 parsed,
                 covered.as_ref().map(|(_, files)| files.as_slice()),
                 reference_commit,
@@ -881,11 +918,10 @@ impl<'a> DriftJudge<'a> {
         }
     }
 
-    /// Records `record` as drifted, or as fresh when only a declared audit date
-    /// inside the window holds a scoped pin back.
+    /// Drifted, or fresh when only a declared audit date inside the window
+    /// holds a scoped pin back.
     fn judge_span_pin(
         &mut self,
-        record: &Record,
         parsed: &urzua_core::locator::Locator,
         pinned: &str,
         audit_time: Option<i64>,
@@ -904,19 +940,17 @@ impl<'a> DriftJudge<'a> {
         };
         if hash != pinned {
             let audited_fresh = matches!((audit_time, self.grace_secs), (Some(t), Some(grace)) if self.now_unix - t < grace);
-            if audited_fresh {
-                self.fresh.insert(record.path.clone());
+            return if audited_fresh {
+                Judged::Fresh
             } else {
-                self.drifted.insert(record.path.clone());
-                return Judged::Drifted;
-            }
+                Judged::Drifted
+            };
         }
         Judged::Next
     }
 
     fn judge_file_pin(
         &mut self,
-        record: &Record,
         parsed: &urzua_core::locator::Locator,
         pinned: &str,
         audit_time: Option<i64>,
@@ -931,11 +965,10 @@ impl<'a> DriftJudge<'a> {
                 .last_commit(&locator_path, None)
                 .is_some_and(|commit| self.held_back(audit_time, &commit));
         if changed && !fresh {
-            self.drifted.insert(record.path.clone());
             return Judged::Drifted;
         }
         if fresh {
-            self.fresh.insert(record.path.clone());
+            return Judged::Fresh;
         }
         Judged::Next
     }
@@ -944,7 +977,6 @@ impl<'a> DriftJudge<'a> {
     /// files, for a directory or glob) was committed to after the claim's line.
     fn judge_history(
         &mut self,
-        record: &Record,
         parsed: &urzua_core::locator::Locator,
         covered: Option<&[String]>,
         reference_commit: &str,
@@ -975,10 +1007,8 @@ impl<'a> DriftJudge<'a> {
             return Judged::Next;
         }
         if self.held_back(audit_time, &locator_commit) {
-            self.fresh.insert(record.path.clone());
-            Judged::Next
+            Judged::Fresh
         } else {
-            self.drifted.insert(record.path.clone());
             Judged::Drifted
         }
     }
@@ -1050,6 +1080,7 @@ pub(crate) fn compute_drifted_records_at(
     let DriftJudge {
         drifted,
         mut fresh,
+        locators,
         no_history,
         problems,
         ..
@@ -1058,6 +1089,7 @@ pub(crate) fn compute_drifted_records_at(
     DriftedRecords {
         drifted,
         fresh,
+        locators,
         git_problems: problems,
         shallow,
         no_history,

@@ -1,9 +1,9 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.126'
+Version: '0.127'
 Date: 2026-08-20
 Status: Shipped
-Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:3cfc01bcd73ed965227a1819c9e967d368c95a53746a03f1797b83b9be458f3b, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:92a2b9ceca89133f30987a013734da66b9332c4e937a87e72e53571596e18093, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:3c8aa671582772499ab7345cdbfb5a4dc2c50462882851fb20f853992acfd57c
+Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:a9ed379356481d887473b4623f74559b8ca8b83fd5184c518c677535a78646ff, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:92a2b9ceca89133f30987a013734da66b9332c4e937a87e72e53571596e18093, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:3c8aa671582772499ab7345cdbfb5a4dc2c50462882851fb20f853992acfd57c
 Embodiment: Verified
 Author: beauwilliams
 Subject: '`.urzua/config.yaml` -- the schema for record types, required/known fields, and per-type behavior.'
@@ -1663,6 +1663,7 @@ rules:
     level: warn               # info | warn | error; the ceiling for every entry below
     anchor_field: Last-audited
     require_pin: [code, test] # evidence categories whose locators must be pinned to be renewed
+    drift: {code: block, test: block, spec: acknowledge} # what drift does to a renewal, per category
     max_batch: 10             # most records one `reverify --apply` may name
     periods:
       - {type: milestone, status: [Done],              days: 45, spread_days: 45}
@@ -1690,6 +1691,21 @@ rules:
 - **`require_pin`** lists evidence categories as the `embodiment` declaration names them (`code`,
   `test`, `spec` by default); an unknown one is a load error. It defaults to empty. `max_batch` is a
   whole number, 1 or more, defaulting to 1. Both are read by `urzua reverify` (`SPEC-8`).
+- **`drift`** (`ADR-97`, amendment of 2026-11-09) is a map from an evidence category, as the
+  `embodiment` declaration names it (`code`, `test`, `spec` by default), to what drift of a locator of
+  that category since the claim's `Realized-by` line was last touched does to a renewal by `urzua
+  reverify`: `block` refuses the renewal until the locator is re-pinned (a pinned locator by `fix
+  --rebaseline`, an unpinned one in a `require_pin` category by `reverify --pin-only`); `acknowledge`
+  lets `reverify --apply` renew, and the `Re-verified` row names each drifted locator of the category
+  (a cited record by its id and its newest revision-log date, any other file by its path, the
+  prefix of the hash read and the commit that last changed it) together with the reviewer's
+  `--reason`, and re-pins a drifted pinned locator of the category in the same act, recording old ->
+  new hash; `ignore` leaves the category's
+  drift out of renewal, unlisted. A category not named is `block`, so a configuration without `drift`
+  behaves as before. An unknown category (the load error lists the declared ones), an unknown policy
+  (it lists `block`, `acknowledge`, `ignore`) and the option on any other rule are load errors. It
+  changes only what `reverify` refuses and writes: `embodiment.consistency` reports the same drift
+  either way.
 - **Nothing is dropped silently.** An unknown type, status or tier, `days` of 0, an unknown key, an
   `anchor_field` a listed type does not declare, a type with no locator field, an empty `periods`
   and every option on any other rule are load errors. A `periods` entry whose type holds claims
@@ -2389,4 +2405,5 @@ proves this configuration produces the three findings.
 > | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 921027c81b7e -> 3cfc01bcd73e. Reason: Read the diff of config.rs since the old pin against what this record evidences: the only change is generic_marker_problem and its new helper strip_generic_head (a back-pointer ignore_marker that is only keywords, id heads, comment leaders and punctuation around fewer than 3 letters or digits is refused at load) plus its test cases; the behaviour this record evidences is unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-09 | Bumped to `0.124`. Note on the log: The version numbers of earlier `Bumped to` rows are not strictly increasing, and history is not rewritten: the order of the rows is the order the changes landed, and the current `Version` header is authoritative. Rows affected: `0.6` after `0.7`; `0.10` after `0.11`; `0.8`, `0.21` and `0.84` each twice; `0.113` twice, the second after `0.114` (the claim-expiry documentation row). **Why:** a review found the out-of-order and repeated numbers and a reader could be misled about which row introduced which version. | **structural** |
 > | 2026-11-09 | Bumped to `0.125`. Documents `harness.outside_writes` (`allow`, `shared`, `deny`) and `harness.allow_paths`: an unknown value or a relative path is a load error, `allow_paths` beside a mode other than `deny` is reported by `doctor`. **Why:** `ADR-89` amendment of 2026-11-09 (outside writes), accepted by the maintainer: a linked worktree at a commit without gates was an unjudged place to write. | **substantive** |
-> | 2026-11-09 | Bumped to `0.126`. Documents `authority.decider_table` (`base`, `head`, `both`; undeclared is `head`): which revision's table `diff.decider-required` reads, the stricter of the head's and the base's declaration, a base with no config or no `authority` holding no deciders and no gates, an unreadable base falling back to the head table with a warning, an `info` notice with no `--base`; `urzua init` proposes `base` and `urzua doctor` warns when gates are declared without it. **Why:** `ADR-89` amendment of 2026-11-09 (decider table), accepted by the maintainer. | **substantive** |
+> | 2026-11-09 | Bumped to `0.126`. Documents `drift` on `embodiment.claim-expired`: a per-evidence-category policy (`block`, `acknowledge`, `ignore`; undeclared is `block`) for what drift of a locator does to a renewal by `urzua reverify`, with its load errors. **Why:** `ADR-97` amendment of 2026-11-09 (drift policy); a drifted `spec:` locator is unpinned by design, so `reverify --pin-only` could not clear it and 66 of 355 claims could not be renewed. | **substantive** |
+> | 2026-11-09 | Bumped to `0.127`. Documents `authority.decider_table` (`base`, `head`, `both`; undeclared is `head`): which revision's table `diff.decider-required` reads, the stricter of the head's and the base's declaration, a base with no config or no `authority` holding no deciders and no gates, an unreadable base falling back to the head table with a warning, an `info` notice with no `--base`; `urzua init` proposes `base` and `urzua doctor` warns when gates are declared without it. **Why:** `ADR-89` amendment of 2026-11-09 (decider table), accepted by the maintainer. | **substantive** |
