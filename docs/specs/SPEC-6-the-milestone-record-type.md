@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5QF32RM76Y50THPQEG
-Version: '0.24'
+Version: '0.25'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -15,7 +15,7 @@ Parent: —
 ## Purpose
 
 Tracks this project's own backlog — decided-but-unbuilt work, explicitly deferred work, undecided
-RFCs, and unrouted research findings — as a real, checkable corpus instead of conversation history
+RFCs, and unrouted candidate features and findings — as a real, checkable corpus instead of conversation history
 and an unstructured document. `milestone` is the first record type this project has added
 beyond ADR/RFC/Spec, and exercises RFC-4's generic layering claim directly: if the mechanism
 built for three types doesn't hold for a fourth, that's real evidence, not a hypothetical.
@@ -334,3 +334,4 @@ to another record — nothing to check for resolution, no cycle risk, no new rul
 > | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/status_model.rs` 2d90f7140553 -> 01c98f5a04ab. Reason: Read the diff of each pinned file since the old pin and the claim still holds. status_model.rs: DeliveryPending::matches is now pub(crate) and the delivery.items load validation also runs check_pending on the new optional pending list; no other behaviour changed. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
 > | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: unspecified): re-pinned `rust/crates/urzua-core/src/status_model.rs` 01c98f5a04ab -> 35b191cc38f8. Reason: Re-pinned after checking the delta in each pinned file against what this record evidences: status_model.rs: split validate_items into validate_item_markers and validate_waiver_categories; the blank-section, required-section, marker, partial-status, resolving-tier and kind checks keep their order with the same error text. Behaviour unchanged, outputs byte-identical (check, check --base, audit, fix --rebaseline and reverify JSON compared before and after, with and without --as-of). **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
 > | 2026-11-09 | Bumped to `0.24`. The pinned `status_model.rs` evidence moved when `validate_items` was split into helpers to meet the SPEC-22 function bound; no spec text changed. **Why:** the repository checker asks a dated structural revision row to carry a version bump, and the re-pin above is such a row. | **structural** |
+> | 2026-11-09 | Bumped to `0.25`. Removed an appeal to research a reader cannot open; the argument now rests on the backlog this type tracks. **Why:** a revision-log entry that adds a structural change needs a `Version` bump (`revision-log.version-bump-required`). | **structural** |
