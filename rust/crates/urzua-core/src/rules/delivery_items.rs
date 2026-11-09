@@ -464,6 +464,47 @@ pub fn first_non_progress_status(decl: &StatusDecl) -> Option<&str> {
         .map(String::as_str)
 }
 
+/// The dependencies of `id` over every declared pair that are not finished, as
+/// `ID (status)`: the one scan `derived_blocked_records` (the dependency cap) and
+/// `sequence.status-agreement` both read (`ADR-96`, dependencies amendment).
+pub(super) fn open_dependencies(
+    id: &crate::values::RecordId,
+    graphs: &std::collections::BTreeMap<&str, SequenceGraph>,
+    index: &RecordIndex,
+    declared: &HashMap<String, StatusDecl>,
+    config: &Config,
+) -> Vec<String> {
+    let mut open: Vec<String> = Vec::new();
+    for graph in graphs.values() {
+        for dependency in graph.get(id).into_iter().flatten() {
+            let Some(target) = index.get(dependency) else {
+                continue;
+            };
+            let field = relation_field_name(
+                config,
+                &target.record_type,
+                crate::config::RelationRole::Status,
+            );
+            let status = target.header.get(field).map(str::trim);
+            let finished = status.is_some_and(|s| {
+                declared
+                    .get(&target.record_type)
+                    .is_some_and(|d| d.is_success(s))
+            });
+            if !finished {
+                let shown = format!(
+                    "{dependency} ({})",
+                    status.filter(|s| !s.is_empty()).unwrap_or("no status")
+                );
+                if !open.contains(&shown) {
+                    open.push(shown);
+                }
+            }
+        }
+    }
+    open
+}
+
 /// The records whose dependencies are not all finished (`ADR-83`): derived, the
 /// way `sequence.status-agreement` derives it, each with the dependencies that
 /// are still open, shown as `MILE-171 (InProgress)`. A dependency is unfinished
@@ -487,34 +528,7 @@ pub fn derived_blocked_records(
             continue;
         };
         let id = crate::values::RecordId::new(&id);
-        let mut open: Vec<String> = Vec::new();
-        for graph in graphs.values() {
-            for dependency in graph.get(&id).into_iter().flatten() {
-                let Some(target) = index.get(dependency) else {
-                    continue;
-                };
-                let field = relation_field_name(
-                    config,
-                    &target.record_type,
-                    crate::config::RelationRole::Status,
-                );
-                let status = target.header.get(field).map(str::trim);
-                let finished = status.is_some_and(|s| {
-                    declared
-                        .get(&target.record_type)
-                        .is_some_and(|d| d.is_success(s))
-                });
-                if !finished {
-                    let shown = format!(
-                        "{dependency} ({})",
-                        status.filter(|s| !s.is_empty()).unwrap_or("no status")
-                    );
-                    if !open.contains(&shown) {
-                        open.push(shown);
-                    }
-                }
-            }
-        }
+        let open = open_dependencies(&id, &graphs, &index, &declared, config);
         if !open.is_empty() {
             blocked.insert(record.path.clone(), open);
         }

@@ -514,10 +514,18 @@ fn anchor_in_text(text: &str, field: &str) -> Option<(String, i64)> {
     Some((value, unix))
 }
 
+/// The trimmed, non-empty value the text writes for `field`, `None` when the
+/// field is absent or blank.
+fn header_value(text: &str, field: &str) -> Option<String> {
+    let header = crate::header::parse(text);
+    let value = header.get(field)?.trim();
+    (!value.is_empty()).then(|| value.to_string())
+}
+
 /// `embodiment.claim-renewal-unattested` (`ADR-97` section 6): on a `--base`
 /// run, a changed record whose anchor date is newer than its merge-base copy's
 /// and which gained no `Re-verified` row dated that day, or whose anchor the
-/// merge-base copy carried and the branch removed.
+/// merge-base copy carried and the branch removed or left malformed.
 pub fn embodiment_claim_renewal_unattested(
     records: &[Record],
     config: &Config,
@@ -589,9 +597,17 @@ fn renewal_problem(
     let now = anchor_in_text(now_text, field);
     let then = anchor_in_text(then_text, field);
     match (&now, &then) {
-        (None, Some((date, _))) => Some(format!(
-            "the anchor field {field} ({date} at the merge base) was removed: deleting it is not a way back to an earlier first-cycle offset"
-        )),
+        (None, Some((date, _))) => {
+            let written = header_value(now_text, field);
+            Some(match written {
+                Some(value) => format!(
+                    "the anchor field {field} ('{value}') is malformed, not a date: it carried {date} at the merge base, and an unreadable date is not a way back to an earlier first-cycle offset"
+                ),
+                None => format!(
+                    "the anchor field {field} ({date} at the merge base) was removed: deleting it is not a way back to an earlier first-cycle offset"
+                ),
+            })
+        }
         (Some((date, new)), then) if then.as_ref().is_none_or(|(_, old)| new > old) => {
             let id = config.revision_log_id(&record.record_type);
             let shape = config.revision_log_shape(&record.record_type);
