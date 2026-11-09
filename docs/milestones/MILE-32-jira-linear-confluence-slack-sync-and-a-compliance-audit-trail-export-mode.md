@@ -14,7 +14,7 @@ Two-way sync so a decision can originate from or update an external ticket, and 
 
 ## Why
 
-Named in roadmap research; neither has any RFC coverage today.
+Neither has any RFC coverage today.
 
 ## Done means
 
@@ -30,3 +30,4 @@ Named in roadmap research; neither has any RFC coverage today.
 
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |
 > | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |
+> | 2026-11-09 | Removed an appeal to research a reader cannot open; the argument now rests on the absence of any RFC coverage. `Status` unchanged. | **structural** |

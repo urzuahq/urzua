@@ -15,7 +15,7 @@ Reconstruct decision history from commits/PRs with confidence scoring and a draf
 
 ## Why
 
-Named in research as the single biggest adoption unlock, and explicitly out of scope for RFC-1 as written.
+A project adopting urzua starts with no decision history in its corpus, and backfilling it is explicitly out of scope for RFC-1 as written.
 
 ## Done means
 
@@ -33,3 +33,4 @@ Named in research as the single biggest adoption unlock, and explicitly out of s
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |
 > | 2026-11-05 | `Depends-on: MILE-52` added. **Why:** `MILE-52` states the concurrency design for the backfill engine is settled before the engine's execution model is built. Proposed for maintainer review; `Status` unchanged. | **structural** |
 > | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |
+> | 2026-11-09 | Removed an appeal to research a reader cannot open; the argument now rests on RFC-1's stated scope. `Status` unchanged. | **structural** |
