@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5PKKQRJF9WFZJA105B
-Version: '0.19'
+Version: '0.20'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/commands/init.rs@sha256:1520764ba016c196ecc6eebdd78013c616b6d68870c5d798c05a7caeb9119d09, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:5ab61b95fd5864a41566dee0d902fac000dca3552f90316331ecf90617c3f9b0
+Realized-by: code:rust/crates/urzua-cli/src/commands/init.rs@sha256:ee569c2dd2fff94a516fab4d09e931209aedfa6d0d4e570de132e42d2bda6ec0, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:5ab61b95fd5864a41566dee0d902fac000dca3552f90316331ecf90617c3f9b0
 Author: beauwilliams
 Subject: '`urzua init` -- the adopt-existing-corpus path and `.urzua/` layout.'
 Implements: RFC-1
@@ -106,6 +106,10 @@ declaration `init` does not write. `init` writes `required_fields: []` and infer
 `header.pointer-field-clean` are not proposed. A `rule-applicability` notice (severity `info`) lists them
 with the declaration each reads, so the adopter knows what to declare on a record type before enabling
 the rule. Each rule's declaration is the `reads_declaration` of its entry in the rule table.
+
+`init` also writes `authority: {decider_table: base}`: no deciders and no gates, which no corpus can supply,
+only the choice that who may decide is read from a pull request's base revision (`SPEC-3`, `ADR-89`
+amendment of 2026-11-09), so the table the adopter writes next is not one a pull request can edit for itself.
 
 ## Safety
 
@@ -212,3 +216,5 @@ adopt should infer rules or only structure, and multi-corpus-per-repo).
 > | 2026-11-08 | Bumped to `0.18`. The pins this spec's `Realized-by` holds on files this change touched were re-baselined (the `Re-baselined` row above); no behaviour this spec describes changed. | **structural** |
 > | 2026-11-09 | Bumped to `0.19`. Adds `## Proposed harness key`: the proposed config declares `harness.outside_writes: shared`. **Why:** `ADR-89` amendment of 2026-11-09 (outside writes), accepted by the maintainer: a linked worktree at a commit without gates was an unjudged place to write. | **substantive** |
 > | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/init.rs` eab52da49062 -> 1520764ba016. Reason: init.rs: read the diff since the previous pin; render_config_yaml adds a top-level harness mapping {outside_writes: shared} to the proposed config (6 added lines, no other change to the file). This record's claim about init is unaffected; SPEC-5 0.19 documents the new key. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-09 | Bumped to `0.20`. The proposed configuration carries `authority: {decider_table: base}`, with no deciders or gates. **Why:** `ADR-89` amendment of 2026-11-09 (decider table), accepted by the maintainer. | **substantive** |
+> | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/init.rs` 1520764ba016 -> ee569c2dd2ff. Reason: Read the diff of each pinned file since the old pin and the claim still holds. init.rs: render_config_yaml adds an authority mapping holding only decider_table: base to the proposed configuration; nothing else in the pinned file changed. Behaviour unchanged for a repository that does not declare decider_table. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |

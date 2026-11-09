@@ -5,7 +5,7 @@ Phase: '0'
 Track: roadmap-tracking
 Implements: ADR-34
 Blocked-on: —
-Realized-by: code:.urzua/config.yaml@sha256:594d115541e37b3e3c0e602a4ef18d82eaf99100174a048133003a2bd80ee78b, spec:docs/specs/SPEC-6-the-milestone-record-type.md, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs#a_milestone_must_state_its_done_means_unless_it_is_wontdo@sha256:25ce42b874d80cc7d3a2ab911a79c88c7494b512d80f465ad0b3f621af7e9a16
+Realized-by: code:.urzua/config.yaml@sha256:12cea423f024b2e599a13f31277f93fddd668f6dd05a1fee5e8405403a4a72eb, spec:docs/specs/SPEC-6-the-milestone-record-type.md, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs#a_milestone_must_state_its_done_means_unless_it_is_wontdo@sha256:25ce42b874d80cc7d3a2ab911a79c88c7494b512d80f465ad0b3f621af7e9a16
 ---
 # 8 — Add the milestone record type
 
@@ -19,9 +19,9 @@ The backlog was accumulating in conversation history and an unstructured documen
 
 ## Done means
 
-- A `milestone` record type is configured in `.urzua/config.yaml` with `Status`, `Phase` and `Track` required and `Implements` a pointer field. — evidence: code:.urzua/config.yaml@sha256:594d115541e37b3e3c0e602a4ef18d82eaf99100174a048133003a2bd80ee78b
+- A `milestone` record type is configured in `.urzua/config.yaml` with `Status`, `Phase` and `Track` required and `Implements` a pointer field. — evidence: code:.urzua/config.yaml@sha256:12cea423f024b2e599a13f31277f93fddd668f6dd05a1fee5e8405403a4a72eb
 - `SPEC-6` documents it. — evidence: spec:docs/specs/SPEC-6-the-milestone-record-type.md
-- `urzua check` examines every `docs/milestones/` record under it. — evidence: code:.urzua/config.yaml@sha256:594d115541e37b3e3c0e602a4ef18d82eaf99100174a048133003a2bd80ee78b, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs#a_milestone_must_state_its_done_means_unless_it_is_wontdo@sha256:25ce42b874d80cc7d3a2ab911a79c88c7494b512d80f465ad0b3f621af7e9a16
+- `urzua check` examines every `docs/milestones/` record under it. — evidence: code:.urzua/config.yaml@sha256:12cea423f024b2e599a13f31277f93fddd668f6dd05a1fee5e8405403a4a72eb, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs#a_milestone_must_state_its_done_means_unless_it_is_wontdo@sha256:25ce42b874d80cc7d3a2ab911a79c88c7494b512d80f465ad0b3f621af7e9a16
 - Adding it needed no change to urzua-core. — waived: process-outcome -- a property of the change that added the type (commit 784fa758: a config declaration, a template and a spec, with two unrelated core defects fixed beside it), which no file can evidence now
 
 > **Revision log**
@@ -38,3 +38,4 @@ The backlog was accumulating in conversation history and an unstructured documen
 | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` 0a00038a6388 -> 3d51c2fac8b7. Reason: Read the diff of each pinned file since the old pin and the claim still holds. config.yaml: only the comment above the three rules declared off changed, to say they report `not-enabled` exactly as an undeclared rule does; no declaration changed. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
 | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` 3d51c2fac8b7 -> 653bb0f54ca6. Reason: Read the diff of each pinned file since the old pin and the claim still holds. config.yaml: the only change is a new optional pending list (two placeholder patterns) under record_types::milestone statuses.delivery.items; nothing else in the file changed. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
 | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` 653bb0f54ca6 -> 594d115541e3. Reason: config.yaml: read the diff since the previous pin; the only change is one added line, outside_writes: shared, under the harness key (this repository declares the new harness.outside_writes option, ADR-89 amendment of 2026-11-09). No record type, rule, status, relation or other declaration this record relies on changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+| 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` 594d115541e3 -> 12cea423f024. Reason: Read the diff of each pinned file since the old pin and the claim still holds. config.yaml: this repository's authority table declares decider_table: base, with a two-line comment above it; no other key or line changed. Behaviour unchanged for a repository that does not declare decider_table. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |

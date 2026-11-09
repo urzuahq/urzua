@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5E1D23JRXBPTP54NSG
-Version: '0.20'
+Version: '0.21'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -64,6 +64,7 @@ empty, same as every other command's report.
 | `record-type-dir` | One check per declared type: does `dir` actually exist on disk. `error` if not — this fires today for `waiver` in this very repo, correctly, since no waiver record has been created yet (MILE-59) and its directory was deliberately never pre-created. |
 | `record-type-required-fields` | One check per declared type with an empty `required_fields`. `warn`, not `error` — a type with no required fields is unusual, not necessarily wrong. |
 | `ci-wired` | Some workflow under `.github/workflows/` runs `urzua check` (a call in a command position: a `#` comment and an `echo`/`printf` line are not a call) or uses urzua's reusable `actions/urzua-gate` action (`MILE-180`); a repository's own wrapper script or make target is not recognised, which runs the checker for the caller. `warn` if not — a check that exists but is never run reports nothing to anyone. |
+| `authority-decider-table` | When `authority` declares gates: `ok` naming the value of `decider_table`, or `warn` when it is undeclared, since the table is then read from the pull request's own head and a pull request can add its author to a decider group in the change it asks to have approved; the message recommends `base` (`SPEC-3`, `ADR-89` amendment of 2026-11-09). |
 
 | `hook-wired` | One check per local hook layer (`pre-commit`, `pre-push`), carrying `layer` and a machine-readable `state` (`MILE-179`, `ADR-71`). The hooks directory is `core.hooksPath` (relative to the working tree root) when set, else the repository's own `hooks`. `state` is `not-installed`, `installed-running-urzua` (the file runs `urzua <subcommand>`, by a path ending in `urzua` or by a variable assigned one; a mention in a comment or an `echo` does not count), `installed-not-running-urzua`, or `installed-not-executable` (git ignores a hook without the execute bit; not checked on non-Unix hosts). `ok` only for `installed-running-urzua`; the other states are `warn`, since a local layer is a convenience and only CI is the guarantee. `error` when the hooks directory or hook file cannot be read: not knowing is not the same as absent. Hook-manager configuration (lefthook, pre-commit framework) is not read; a manager that installs real hook files, or sets `core.hooksPath`, is seen. |
 
@@ -120,3 +121,4 @@ than compounded:
 > | 2026-11-09 | Bumped to `0.18`. The pins this spec's `Realized-by` holds on files this change touched were re-baselined (the `Re-baselined` row above); no behaviour this spec describes changed. | **structural** |
 > | 2026-11-09 | Bumped to `0.19`. Adds the `harness-outside-writes` check. **Why:** `ADR-89` amendment of 2026-11-09 (outside writes), accepted by the maintainer: a linked worktree at a commit without gates was an unjudged place to write. | **substantive** |
 > | 2026-11-09 | Bumped to `0.20`. `harness-installed` is not reported for a `harness` block that declares no adapter, guardrail or instructions file. **Why:** `urzua init` now writes `harness: {outside_writes: shared}` into every fresh configuration, and it was followed by a warning that a harness it never asked for was not installed. | **substantive** |
+> | 2026-11-09 | Bumped to `0.21`. Adds the check `authority-decider-table`, which warns when `authority` declares gates and `decider_table` is undeclared. **Why:** `ADR-89` amendment of 2026-11-09 (decider table), accepted by the maintainer. | **substantive** |

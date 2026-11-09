@@ -615,6 +615,53 @@ worktree of the repository, at a commit that holds no gates, an unjudged place t
 
 The Decision is unchanged. The Status of this ADR stays Accepted.
 
+## Amendment (2026-11-09, decider table)
+
+Status of this amendment: accepted by the maintainer on 2026-11-09. It changes what `diff.decider-required`
+reads; the rest of section 4 is unchanged.
+
+**The problem.** The rule read `authority` from the pull request's own checkout. A pull request that adds its
+author to a decider group, deletes a gate or sets `enabled: false`, and moves a record to a gated status in the
+same change was judged against the table it had just written, and reported nothing. The sentence above that the
+rule is "a check that means something" with a second human held only for a pull request that did not edit the
+table.
+
+**The decision.** `authority` takes a key `decider_table`: `base`, `head` or `both`.
+
+- `head` reads the table (groups, logins, gates, evidence) from the checkout, as before. Undeclared reads as
+  `head`, so the rule is opt-in and no existing configuration changes behaviour.
+- `base` reads who may decide from the base revision of the `--base` diff: its groups, its logins, its gates and
+  its `evidence`. The head's table is not consulted for the verdict.
+- `both` judges every gated change under both tables, so a gated change needs a decider under each, and a gate
+  that is in either table applies (a gate only the head declares is judged by the head's groups, a gate only the
+  base declares by the base's).
+- The mode in force is the stricter of what the head and the base revision declare (`head` < `base` < `both`),
+  so a pull request cannot loosen the mode by editing the key; a loosening takes effect once it is merged.
+- The base table is read from the configuration file as it was at the merge base, by the same mechanism that
+  reads a record's committed copy (`git show` through `urzua_io`). Only the `authority` section is read, so a
+  base config written by an older build need not load whole. A base with no config file, or with no `authority`
+  section, holds no deciders and no gates: under `base` nothing is gated by the base, so a pull request that
+  introduces the first `authority` table is not judged by it (it is judged by the table once it is the base of
+  the next change). A base whose config cannot be read, or whose `authority` section does not load, is said in a
+  warning notice and the head table is used for that run.
+- With no `--base` there is no base revision. The rule reports `not-applicable` as before, the editor and
+  post-command guardrails keep reading the checkout's table, and when `decider_table` is `base` or `both` the
+  report carries an `info` notice saying the head table is used.
+- Findings read as before under `head`. Under `base` and `both` the gate in the message names the table it
+  comes from.
+- `urzua init` writes `decider_table: base` in the configuration it proposes. `urzua doctor` warns, as a
+  structured check named `authority-decider-table`, when gates are declared and `decider_table` is not, and
+  recommends `base`. The gate action's documentation recommends `base`. This repository declares `base`.
+
+**What it does not change.** The accepted-risk list stands. Item 3 now has a sibling that is the same kind: a
+pull request can set the rule itself to `off` in its own configuration, or change the workflow that runs the gate,
+and the head's rule level is read from the head. `decider_table: base` closes the edit of the table; it does not
+close the edit of the gate. The configuration is a protected path, so under `base` that edit needs a decider of
+the base table. With a single maintainer the evidence is still authorship, and the rule still cannot tell an agent
+acting under the maintainer's token from the maintainer (item 4).
+
+The Decision is otherwise unchanged. The Status of this ADR stays Accepted.
+
 ## References
 
 - `ADR-69`, `ADR-70`, `ADR-71`: the hook, drafting commands and layered gate this extends; `ADR-70` gains an
@@ -647,3 +694,4 @@ The Decision is unchanged. The Status of this ADR stays Accepted.
 > | 2026-11-09 | Added an `## Amendment (2026-11-09)`, documentation of existing behaviour decided by the orchestrator under the maintainer's 2026-11-07 decision that the accepted-risk list be exact, pending maintainer review: a weakening is reported once and a later edit to a formerly protected path is not (route 1); deleting or forging the harness baseline in the same command as a gate removal hides the removal (route 6); deleting the whole `harness:` section turns the guardrails off, visible to the CI diff gate (new route 11). `Status` stays Accepted. **Why:** the review of pull request 459 found these three routes behaving as described and the list naming none of them. | **substantive** |
 > | 2026-11-09 | Amendment of 2026-11-09 (the accepted-risk list made exact: routes 1, 6 and 11) accepted. **Why:** Maintainer decision, 2026-11-09. | **substantive** |
 > | 2026-11-09 | Added an `## Amendment (2026-11-09, outside writes)`, accepted by the maintainer on 2026-11-09: `harness.outside_writes` (`allow`, `shared` or `deny`) (with `allow_paths` for `deny`) decides how an edit-tool write outside the session's repository is judged; under `shared` a file of a linked worktree of the same repository is also judged against the session's acceptance and protected-path gates, under `deny` any such write is refused except under `allow_paths`, undeclared acts as `allow`; `init` proposes `shared`, `doctor` warns when it is undeclared with a guardrail enabled; a separate clone joins the accepted-risk list as route 12 and routes 1 and 8 name the worktree commit and the side-branch push. `Status` stays Accepted. **Why:** Maintainer decision, 2026-11-09, on the review that found a linked worktree at a commit without gates an unjudged place to write. | **substantive** |
+> | 2026-11-09 | Added an `## Amendment (2026-11-09, decider table)`, accepted by the maintainer on 2026-11-09: `authority.decider_table` (`base`, `head`, `both`; undeclared is `head`) says which revision's table `diff.decider-required` reads, closing the route where a pull request adds its author to a decider group, or deletes a gate, in the change it asks to have approved; `urzua init` writes `base`, `urzua doctor` warns when gates are declared and the key is not, and this repository declares `base`. `Status` stays Accepted. **Why:** Maintainer decision, 2026-11-09, on the review that found the rule judging a pull request against its own table. | **substantive** |

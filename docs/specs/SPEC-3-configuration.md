@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.125'
+Version: '0.126'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:3cfc01bcd73ed965227a1819c9e967d368c95a53746a03f1797b83b9be458f3b, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:92a2b9ceca89133f30987a013734da66b9332c4e937a87e72e53571596e18093, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:3c8aa671582772499ab7345cdbfb5a4dc2c50462882851fb20f853992acfd57c
@@ -948,6 +948,7 @@ authority:
   deciders:
     maintainers: {logins: [beauwilliams]}   # the host's logins; compared without case
   evidence: [pr-author]                     # pr-author | pr-approver, any of; pr-author when omitted
+  decider_table: base                       # base | head | both; head when omitted
   gates:
     - {type: adr, to: [Accepted, Rejected], by: maintainers}
     - {type: rfc, to: [Accepted, Rejected], by: maintainers}
@@ -962,6 +963,17 @@ authority:
   commit). The default is `pr-author`, never `pr-approver`: a host bars an author from approving their own
   pull request, so on a single-maintainer repository `pr-approver` could never be satisfied and no
   acceptance could merge. An empty list and an unknown kind are load errors.
+- **`decider_table`** says which revision's table `diff.decider-required` reads (`ADR-89`, amendment of
+  2026-11-09): `head` the checkout's, as before; `base` the configuration file at the `--base` merge base, so a
+  pull request cannot add its author to a group, or remove a gate, in the change it asks to have approved;
+  `both` judges each gated change under both tables, a gate in either applying. Undeclared is `head` (the
+  rule is opt-in, no behaviour changes). The mode in force is the stricter of the head's and the base's
+  declaration (`head` < `base` < `both`), so editing the key in a pull request does not loosen it. Under
+  `base`, a base with no config file or no `authority` section holds no deciders and no gates; one whose
+  config cannot be read is a warning notice and the head table is used. With no `--base` the head table is
+  used and, under `base` or `both`, an `info` notice says so. `urzua init` proposes `base`, and `urzua
+  doctor` warns (`authority-decider-table`) when gates are declared and the key is not. Any other value is a
+  load error.
 - **`gates`** is a list. `{type, to, by}` gates a move of a record of that type to one of those statuses;
   `{paths, by}` gates a change under those paths (a prefix or a glob, as in `diff.source-requires-record`).
   `by` names a declared group. A gate that names a type no record type declares, a status that type does not
@@ -2377,3 +2389,4 @@ proves this configuration produces the three findings.
 > | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 921027c81b7e -> 3cfc01bcd73e. Reason: Read the diff of config.rs since the old pin against what this record evidences: the only change is generic_marker_problem and its new helper strip_generic_head (a back-pointer ignore_marker that is only keywords, id heads, comment leaders and punctuation around fewer than 3 letters or digits is refused at load) plus its test cases; the behaviour this record evidences is unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-09 | Bumped to `0.124`. Note on the log: The version numbers of earlier `Bumped to` rows are not strictly increasing, and history is not rewritten: the order of the rows is the order the changes landed, and the current `Version` header is authoritative. Rows affected: `0.6` after `0.7`; `0.10` after `0.11`; `0.8`, `0.21` and `0.84` each twice; `0.113` twice, the second after `0.114` (the claim-expiry documentation row). **Why:** a review found the out-of-order and repeated numbers and a reader could be misled about which row introduced which version. | **structural** |
 > | 2026-11-09 | Bumped to `0.125`. Documents `harness.outside_writes` (`allow`, `shared`, `deny`) and `harness.allow_paths`: an unknown value or a relative path is a load error, `allow_paths` beside a mode other than `deny` is reported by `doctor`. **Why:** `ADR-89` amendment of 2026-11-09 (outside writes), accepted by the maintainer: a linked worktree at a commit without gates was an unjudged place to write. | **substantive** |
+> | 2026-11-09 | Bumped to `0.126`. Documents `authority.decider_table` (`base`, `head`, `both`; undeclared is `head`): which revision's table `diff.decider-required` reads, the stricter of the head's and the base's declaration, a base with no config or no `authority` holding no deciders and no gates, an unreadable base falling back to the head table with a warning, an `info` notice with no `--base`; `urzua init` proposes `base` and `urzua doctor` warns when gates are declared without it. **Why:** `ADR-89` amendment of 2026-11-09 (decider table), accepted by the maintainer. | **substantive** |

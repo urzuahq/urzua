@@ -1,0 +1,11 @@
+---
+default: minor
+closes: []
+---
+
+Add `authority.decider_table` (`base`, `head` or `both`), which says whose table `diff.decider-required`
+reads. With `base`, who may decide (the groups, their logins and the gates) comes from the configuration at
+the pull request's base revision, so a pull request can no longer add its author to a decider group, or
+delete a gate, in the same change that moves a record to a gated status. `head`, which an undeclared key
+means, keeps reading the checkout's table. `urzua init` now proposes `decider_table: base`, and `urzua
+doctor` warns when gates are declared without the key.

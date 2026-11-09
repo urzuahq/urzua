@@ -618,6 +618,9 @@ harness:
 # The bypasses (a Bash write, a shell edit of the guardrails, a pull request that changes its own
 # workflow, an agent acting as the maintainer) are the accepted risk of ADR-89 section 4.
 authority:
+  # Who may decide is read from the base revision of the pull request, so a pull request cannot add
+  # its author to a group in the change it asks to have approved (ADR-89, amendment of 2026-11-09).
+  decider_table: base
   deciders:
     maintainers: {logins: [beauwilliams]}
   gates:

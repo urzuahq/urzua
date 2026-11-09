@@ -493,6 +493,12 @@ pub fn render_config_yaml(proposed: &[ProposedRecordType]) -> String {
     );
     root.insert(Value::from("record_types"), Value::Mapping(types));
     root.insert(Value::from("rules"), Value::Mapping(rules));
+    // Who may decide is read from the base revision, so a pull request cannot
+    // widen its own approvers (`ADR-89` amendment of 2026-11-09). The deciders
+    // and gates are the adopter's to write: no corpus supplies them.
+    let mut authority = Mapping::new();
+    authority.insert(Value::from("decider_table"), Value::from("base"));
+    root.insert(Value::from("authority"), Value::Mapping(authority));
     // Proposed so a guardrail an adopter enables later also judges the files of
     // a linked worktree of this repository (ADR-89 amendment of 2026-11-09);
     // alone it enables nothing.

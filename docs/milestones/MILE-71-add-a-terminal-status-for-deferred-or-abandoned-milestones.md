@@ -5,7 +5,7 @@ Phase: '0'
 Track: schema-governance
 Implements: ADR-34, SPEC-6
 Blocked-on: —
-Realized-by: code:.urzua/config.yaml@sha256:594d115541e37b3e3c0e602a4ef18d82eaf99100174a048133003a2bd80ee78b, spec:docs/specs/SPEC-6-the-milestone-record-type.md, code:.urzua/templates/milestone.md@sha256:878708705fa067c5365be3434ce2ab904f0b29b72615df3595c8856e01b3597e
+Realized-by: code:.urzua/config.yaml@sha256:12cea423f024b2e599a13f31277f93fddd668f6dd05a1fee5e8405403a4a72eb, spec:docs/specs/SPEC-6-the-milestone-record-type.md, code:.urzua/templates/milestone.md@sha256:878708705fa067c5365be3434ce2ab904f0b29b72615df3595c8856e01b3597e
 ---
 # 71 — Add a terminal status for deferred or abandoned milestones
 
@@ -27,10 +27,10 @@ crashes or emits wrong output today, the enum is just incomplete for a real case
 
 ## Done means
 
-- `WontDo` is a value of the milestone `Status` enum, declared as a failure status in urzua's own `.urzua/config.yaml`. — evidence: code:.urzua/config.yaml@sha256:594d115541e37b3e3c0e602a4ef18d82eaf99100174a048133003a2bd80ee78b
+- `WontDo` is a value of the milestone `Status` enum, declared as a failure status in urzua's own `.urzua/config.yaml`. — evidence: code:.urzua/config.yaml@sha256:12cea423f024b2e599a13f31277f93fddd668f6dd05a1fee5e8405403a4a72eb
 - `WontDo` is documented in `SPEC-6`. — evidence: spec:docs/specs/SPEC-6-the-milestone-record-type.md
 - `WontDo` is listed in the milestone template. — evidence: code:.urzua/templates/milestone.md@sha256:878708705fa067c5365be3434ce2ab904f0b29b72615df3595c8856e01b3597e
-- A deliberately abandoned milestone has an honest terminal state distinct from `Blocked`, which is derived and never a `Status` value. — evidence: code:.urzua/config.yaml@sha256:594d115541e37b3e3c0e602a4ef18d82eaf99100174a048133003a2bd80ee78b, spec:docs/specs/SPEC-6-the-milestone-record-type.md
+- A deliberately abandoned milestone has an honest terminal state distinct from `Blocked`, which is derived and never a `Status` value. — evidence: code:.urzua/config.yaml@sha256:12cea423f024b2e599a13f31277f93fddd668f6dd05a1fee5e8405403a4a72eb, spec:docs/specs/SPEC-6-the-milestone-record-type.md
 
 > **Revision log**
 >
@@ -47,3 +47,4 @@ crashes or emits wrong output today, the enum is just incomplete for a real case
 > | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/templates/milestone.md` bebac786c6a9 -> 878708705fa0. Reason: Read the diff of each re-pinned file against main. templates/milestone.md: Done means is scaffolded as placeholder list items instead of prose guidance; header and other sections unchanged. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
 > | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` 3d51c2fac8b7 -> 653bb0f54ca6. Reason: Read the diff of each pinned file since the old pin and the claim still holds. config.yaml: the only change is a new optional pending list (two placeholder patterns) under record_types::milestone statuses.delivery.items; nothing else in the file changed. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
 > | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` 653bb0f54ca6 -> 594d115541e3. Reason: config.yaml: read the diff since the previous pin; the only change is one added line, outside_writes: shared, under the harness key (this repository declares the new harness.outside_writes option, ADR-89 amendment of 2026-11-09). No record type, rule, status, relation or other declaration this record relies on changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` 594d115541e3 -> 12cea423f024. Reason: Read the diff of each pinned file since the old pin and the claim still holds. config.yaml: this repository's authority table declares decider_table: base, with a two-line comment above it; no other key or line changed. Behaviour unchanged for a repository that does not declare decider_table. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |

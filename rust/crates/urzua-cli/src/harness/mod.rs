@@ -1351,7 +1351,22 @@ fn authority_checks(config: &urzua_core::config::Config) -> Vec<(Level, &'static
         .rules
         .get(urzua_core::rules::RULE_DIFF_DECIDER_REQUIRED)
         .is_some_and(|s| s.level != urzua_core::config::RuleLevel::Off);
-    if !rule_on {
+    let authority = config.authority.as_ref();
+    let has_gates = authority.is_some_and(|a| !a.gates.is_empty());
+    if let Some(table) = authority.and_then(|a| a.decider_table) {
+        out.push((
+            Level::Ok,
+            "authority-decider-table",
+            format!("authority.decider_table is '{}'", table.as_str()),
+        ));
+    } else if has_gates {
+        out.push((
+            Level::Warn,
+            "authority-decider-table",
+            "authority gates are declared but authority.decider_table is not, so the table is read from the pull request's own head and a pull request can add its author to a decider group in the same change; declare `decider_table: base` so who may decide is read from the base revision".to_string(),
+        ));
+    }
+    if !rule_on && has_gates {
         out.push((
             Level::Warn,
             "authority-host",
