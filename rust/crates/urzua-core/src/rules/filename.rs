@@ -401,7 +401,7 @@ fn expected_name(
     file_name: &str,
     identity: Option<&crate::document_model::CompiledIdentity>,
 ) -> String {
-    let stem = file_name.strip_suffix(".md").unwrap_or(file_name);
+    let stem = crate::record::strip_md_extension(file_name).unwrap_or(file_name);
     let digits = stem.chars().take_while(char::is_ascii_digit).count();
     let (number, rest) = stem.split_at(digits);
     let rest = rest.trim_start_matches(['-', '_', ' ']);

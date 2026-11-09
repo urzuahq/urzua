@@ -50,10 +50,8 @@ struct OverrideRequest {
 
 #[derive(Deserialize, Default, Clone)]
 struct Request {
-    #[allow(dead_code)]
-    event: Option<String>,
-    #[allow(dead_code)]
-    tool: Option<String>,
+    // The adapter also sends `event` and `tool`; the engine takes the event
+    // from its command line, so serde ignores them (SPEC-24).
     #[serde(default)]
     paths: Vec<String>,
     content: Option<String>,

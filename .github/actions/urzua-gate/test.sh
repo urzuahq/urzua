@@ -93,6 +93,15 @@ rc=$?
 { [ "$rc" -eq 0 ] && grep -q '::warning' "$tmp/out.txt"; }
 expect "comment: a failed post warns and exits 0 (never changes the verdict)" $?
 
+: >"$FAKE_GH_LOG"; FAKE_COMMENT_ID=4242 "$here/post-comment.sh" "$tmp/findings.md" >/dev/null
+grep -q 'select(.user.type == "Bot" and' "$FAKE_GH_LOG"
+expect "comment: only a comment authored by a bot account is taken for the gate's own" $?
+
+# The filter itself, on a comment list with a marker planted by a person.
+printf '%s' '[{"id":1,"user":{"type":"User"},"body":"x <!-- urzua-gate --> y"},{"id":2,"user":{"type":"Bot"},"body":"<!-- urzua-gate -->"}]' >"$tmp/comments.json"
+[ "$(jq -r ".[] | select(.user.type == \"Bot\" and (.body | contains(\"<!-- urzua-gate -->\"))) | .id" "$tmp/comments.json")" = "2" ]
+expect "comment: the filter skips a person's comment that carries the marker" $?
+
 # ---- actors ----
 actors() { # pull fixture, reviews fixture -> the file's JSON on stdout
   FAKE_PULL="$here/fixtures/$1" FAKE_REVIEWS="$here/fixtures/$2" \

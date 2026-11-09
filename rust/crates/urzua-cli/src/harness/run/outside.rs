@@ -55,7 +55,14 @@ pub(super) fn denial(session_root: &Path, cwd: &Path, request: &Request) -> Opti
         }
         let verdict = match mode {
             OutsideWrites::Deny => deny_outside(&session, &target, &harness.allow_paths, path),
-            _ => shared_denial(&session, &ws.config, &target, index, request),
+            _ => shared_denial(
+                &ws.config,
+                &target,
+                found.as_ref(),
+                session_top.as_ref(),
+                index,
+                request,
+            ),
         };
         if verdict.is_some() {
             return verdict;
@@ -122,25 +129,29 @@ fn expand(entry: &str) -> Option<PathBuf> {
 }
 
 /// `outside_writes: shared`: a file of a linked worktree of the session's
-/// repository is judged by its path in that worktree against the session's gates.
+/// repository is judged by its path in that worktree against the session's
+/// gates, and a record's status before the edit is the worktree's own copy, not
+/// the session's. `target_top` and `session_top` are the cached
+/// `(toplevel, common dir)` pairs, so git is not asked again.
 fn shared_denial(
-    session: &Path,
     config: &urzua_core::config::Config,
     target: &Path,
+    target_top: Option<&(PathBuf, PathBuf)>,
+    session_top: Option<&(PathBuf, PathBuf)>,
     index: usize,
     request: &Request,
 ) -> Option<Verdict> {
-    let (toplevel, common) = toplevel_and_common_dir(target)?;
-    let (_, session_common) = toplevel_and_common_dir(session)?;
+    let (toplevel, common) = target_top?;
+    let (_, session_common) = session_top?;
     if common != session_common {
         return None;
     }
-    let rel = target.strip_prefix(&toplevel).ok()?;
-    let mapped = session.join(rel).to_string_lossy().to_string();
+    let rel = target.strip_prefix(toplevel).ok()?;
+    let in_worktree = target.to_string_lossy().to_string();
     // A request without content is still judged by its path (a protected path);
     // the acceptance gate, which reads the content, then finds no status.
     let content = request.content_at(index).unwrap_or("");
-    let mut verdict = gate_denial(session, config, &mapped, content, request)?;
+    let mut verdict = gate_denial(toplevel, config, &in_worktree, content, request)?;
     verdict.message = format!(
         "{} (the file is {} in a linked worktree of this repository at {}, judged by this repository's configuration)",
         verdict.message,

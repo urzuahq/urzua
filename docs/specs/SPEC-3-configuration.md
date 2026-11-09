@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.132'
+Version: '0.133'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:d62499673ea966031198e95a718a5a3a325b321fcc72842ad6a71b2a304bdb0a, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:92a2b9ceca89133f30987a013734da66b9332c4e937a87e72e53571596e18093, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:3c8aa671582772499ab7345cdbfb5a4dc2c50462882851fb20f853992acfd57c
@@ -2420,3 +2420,4 @@ proves this configuration produces the three findings.
 > | 2026-11-09 | Bumped to `0.131`. Re-pin rows in this revision log were reworded to name who re-verified, matching the tool's wording since 2026-11-09; hashes, reasons and dates are unchanged. **Why:** Maintainer decision, 2026-11-09. | **structural** |
 > | 2026-11-09 | Bumped to `0.132`. A back-pointer rule's `ignore_marker` is also refused when it is a fragment of a keyword run into an id head (`ements: ADR-`) or is itself a record id (`ADR-1`); `drift` keys that differ only by whitespace are refused at load. **Why:** both markers loaded and excused every back-pointer line of a type or every citation of an id and the ids it begins, and two keys collapsed silently into one policy. | **substantive** |
 > | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` c1fbbe868c77 -> d62499673ea9. Reason: config.rs: ignore_marker now refuses record-id markers (ADR-1) and keyword-fragment markers (ements: ADR-); drift keys differing only by whitespace are refused; nocite-style specific markers still load (test added); **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-09 | Bumped to `0.133`. The record file extension `.md` is matched in any case (`X.MD` is a record), so a case-insensitive filesystem cannot hide a record from discovery or the acceptance gate. **Why:** the sixth review of the harness. | **substantive** |
