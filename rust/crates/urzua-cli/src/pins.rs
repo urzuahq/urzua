@@ -36,17 +36,18 @@ pub(crate) fn read_pin(
     if !is_tracked_file(texts, &locator.path) {
         return PinRead::Unreadable;
     }
-    let text = match &*texts.get(&locator.path) {
+    let file = texts.get(&locator.path);
+    let text = match &*file {
         FileText::Missing => return PinRead::Unreadable,
         FileText::NotUtf8 => return PinRead::Failed(ScopeError::NotUtf8.to_string()),
-        FileText::Text(text) => text.clone(),
+        FileText::Text(text) => text,
     };
     let resolved = locator::select_resolver(&config.locator_resolvers, &locator.path)
-        .and_then(|resolver| locator::resolve_scope(&text, resolver, scope));
+        .and_then(|resolver| locator::resolve_scope(text, resolver, scope));
     match resolved {
         Err(e) => PinRead::Failed(e.to_string()),
         Ok(span) => {
-            let pinned = locator::span_text(&text, span);
+            let pinned = locator::span_text(text, span);
             PinRead::Current {
                 hash: urzua_io::sha256_hex_of_str(&pinned),
                 span: Some(PinSpan {

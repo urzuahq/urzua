@@ -10,7 +10,10 @@
 // dependency reaches this crate's build.
 // regex (MILE-98): a pure finite-automata engine over in-memory text, needed to
 // compile the declared `identity.pattern`; it opens no file and no socket.
-const ALLOWED_DEPENDENCIES: &[&str] = &["regex", "serde", "thiserror", "yaml_serde"];
+// sha2: a pure digest over in-memory bytes, used to key the symbol-resolution
+// memo on the file text's SHA-256 so the memo keeps no copy of the text; it
+// opens no file and no socket (urzua-io already depends on it for pins).
+const ALLOWED_DEPENDENCIES: &[&str] = &["regex", "serde", "sha2", "thiserror", "yaml_serde"];
 
 /// The actual assertion, extracted as a pure function over a dependency list
 /// so it can be exercised both against real `cargo metadata` output and
