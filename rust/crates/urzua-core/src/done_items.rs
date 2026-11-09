@@ -226,7 +226,8 @@ impl DoneItems {
     }
 
     /// The file lines that carry an evidence clause.
-    pub fn evidence_lines(&self) -> Vec<usize> {
+    #[cfg(test)]
+    pub(crate) fn evidence_lines(&self) -> Vec<usize> {
         self.items
             .iter()
             .filter_map(|i| i.evidence.as_ref())
