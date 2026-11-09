@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5PKKQRJF9WFZJA105B
-Version: '0.18'
+Version: '0.19'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Verified
@@ -89,6 +89,12 @@ each one. A type whose records are all frontmatter gets no notice. A type with n
 Each `proposed` entry reports the chosen `header_shape`. When a proposed directory holds a `README.md`
 directly, which is never a record, the type is written with `exclude_files: [README.md]` and its `proposed`
 entry lists `exclude_files`; a directory with no README writes no `exclude_files`.
+
+## Proposed harness key
+
+`init` also proposes `harness: {outside_writes: shared}`. It enables no guardrail; it makes a guardrail the
+adopter turns on later also judge the files of a linked worktree of the repository (`ADR-89` amendment of
+2026-11-09, outside writes; `SPEC-3`).
 
 ## Proposed rules
 
@@ -204,3 +210,4 @@ adopt should infer rules or only structure, and multi-corpus-per-repo).
 > | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/init.rs` 5f376bdd1b6d -> 6c671b5f6ed7. Reason: split init::run into propose_record_types and write_config, and render_config_yaml into proposed_types_mapping and proposed_rules_mapping (init.rs); behaviour unchanged, outputs byte-identical **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
 > | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/init.rs` 6c671b5f6ed7 -> eab52da49062. Reason: Read the diff of each re-pinned file against main. cli/commands/init.rs: Notice literals use Notice::new or gain detail: None; no behaviour change. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
 > | 2026-11-08 | Bumped to `0.18`. The pins this spec's `Realized-by` holds on files this change touched were re-baselined (the `Re-baselined` row above); no behaviour this spec describes changed. | **structural** |
+> | 2026-11-09 | Bumped to `0.19`. Adds `## Proposed harness key`: the proposed config declares `harness.outside_writes: shared`. **Why:** `ADR-89` amendment of 2026-11-09 (outside writes), accepted by the maintainer: a linked worktree at a commit without gates was an unjudged place to write. | **substantive** |

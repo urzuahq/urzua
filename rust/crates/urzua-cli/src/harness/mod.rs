@@ -1480,6 +1480,13 @@ pub(crate) fn doctor_checks(
     }
     out.extend(installed_checks(&env));
     out.extend(legacy_hook_checks(&env, &adapters));
+    if harness.any_enabled() && harness.outside_writes.is_none() {
+        out.push((
+            Level::Warn,
+            "harness-outside-writes",
+            "harness.outside_writes is not declared while guardrails are enabled, so an edit-tool write into a linked worktree of this repository (for example one at an older commit that holds no gates) is not judged by this repository's gates; set `outside_writes: shared` under harness (allow keeps today's behaviour, deny refuses any write outside the repository except under allow_paths)".to_string(),
+        ));
+    }
     for g in GUARDRAILS {
         if harness.enabled(g.name)
             && harness.on_unjudged(g.name) == urzua_core::harness::OnUnjudged::Deny
