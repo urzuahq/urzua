@@ -491,6 +491,12 @@ fn execute(config_path: Option<PathBuf>, args: CheckArgs) -> Result<CheckReport,
     )?;
     let (mut context, mut notices) = load_context(session, &scope, selection.as_deref())?;
     notices.extend(untracked_notices(session, &scope, &context.drift));
+    notices.extend(crate::discovery::grace_notice(
+        &context.drift,
+        &session.records,
+        &session.config,
+        &context.back_pointed,
+    ));
     notices.extend(harness_key_notices(session.config.harness.as_ref()));
     notices.extend(actors_notices(
         &session.config,
