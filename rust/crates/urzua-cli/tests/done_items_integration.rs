@@ -1412,3 +1412,105 @@ fn an_expired_waiver_does_not_excuse_missing_evidence() {
     assert_eq!(count("waiver-live", live), 0);
     assert_eq!(count("waiver-expired", expired), 1);
 }
+
+// ------------------------------------------------- placeholder items (pending)
+
+const PENDING_ITEMS: &str = "          waiver_categories:
+            - {name: not-applicable}
+          pending:
+            - \"TODO\"
+            - {pattern: \"^Replace this item\"}
+";
+
+fn pending_items() -> String {
+    ITEMS.replace(
+        "          waiver_categories:\n            - {name: not-applicable}\n            - {name: superseded-by-decision, cite: required}\n            - {name: deferred-to, cite: required, expires: required}\n            - {name: process-outcome}\n",
+        PENDING_ITEMS,
+    )
+}
+
+const PLACEHOLDER_ITEMS: &str = "- Replace this item with one criterion a reviewer can verify.\n- It is built. — evidence: code:src/a.rs\n";
+
+#[test]
+fn a_placeholder_item_is_flagged_with_its_line_and_a_filled_item_is_not() {
+    let dir = repo(
+        "placeholder-flagged",
+        &config(&pending_items(), "error"),
+        &[(1, milestone("Planned", "", PLACEHOLDER_ITEMS))],
+    );
+    let out = run(&dir, &["check"]);
+    let report = parsed(&out);
+    assert_eq!(out.status.code(), Some(1), "{report}");
+    let found = findings(&report, "status.done-items-shape");
+    assert_eq!(found.len(), 1, "{report}");
+    let message = found[0]["message"].as_str().unwrap();
+    assert!(message.contains("item 1"), "{message}");
+    assert!(message.contains("unfilled placeholder"), "{message}");
+    assert_eq!(found[0]["severity"], "error");
+    assert!(found[0]["line"].as_u64().is_some(), "{report}");
+    assert!(found[0]["suggested_action"].is_object(), "{report}");
+    let filled = repo(
+        "placeholder-filled",
+        &config(&pending_items(), "error"),
+        &[(1, milestone("Planned", "", BOTH_EVIDENCED))],
+    );
+    let report = parsed(&run(&filled, &["check"]));
+    assert!(
+        findings(&report, "status.done-items-shape").is_empty(),
+        "{report}"
+    );
+}
+
+#[test]
+fn an_undeclared_pending_leaves_a_placeholder_item_unflagged() {
+    let dir = repo(
+        "placeholder-undeclared",
+        &config(ITEMS, "error"),
+        &[(1, milestone("Planned", "", PLACEHOLDER_ITEMS))],
+    );
+    let report = parsed(&run(&dir, &["check"]));
+    assert!(
+        findings(&report, "status.done-items-shape").is_empty(),
+        "{report}"
+    );
+}
+
+#[test]
+fn a_placeholder_item_cannot_satisfy_done_even_with_a_clause() {
+    let items = "- TODO — evidence: code:src/a.rs\n- It is tested. — evidence: test:tests/a.rs\n";
+    let dir = repo(
+        "placeholder-done",
+        &config(&pending_items(), "error"),
+        &[(1, milestone("Done", "", items))],
+    );
+    let report = parsed(&run(&dir, &["check"]));
+    let found = findings(&report, "status.delivery-agreement");
+    assert_eq!(found.len(), 1, "{report}");
+    let message = found[0]["message"].as_str().unwrap();
+    assert!(
+        message.contains("item 1") && message.contains("unfilled placeholder"),
+        "{message}"
+    );
+    assert_eq!(
+        findings(&report, "status.done-items-shape").len(),
+        1,
+        "{report}"
+    );
+}
+
+#[test]
+fn a_placeholder_item_cannot_be_waived() {
+    let items =
+        "- TODO — waived: not-applicable -- nothing\n- It is tested. — evidence: test:tests/a.rs\n";
+    let dir = repo(
+        "placeholder-waived",
+        &config(&pending_items(), "error"),
+        &[(1, milestone("Done", "", items))],
+    );
+    let report = parsed(&run(&dir, &["check"]));
+    assert_eq!(
+        findings(&report, "status.delivery-agreement").len(),
+        1,
+        "{report}"
+    );
+}

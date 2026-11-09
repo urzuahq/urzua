@@ -488,12 +488,13 @@ fn an_agent_edit_to_the_files_that_enforce_the_gate_is_denied_in_this_repository
     }
 }
 
-/// A freshly scaffolded milestone reports no `status.done-items-shape` finding: the
-/// template scaffolds the list-item shape this repository's `statuses.delivery.items`
-/// accepts, so the only findings left are the placeholders still to be filled in
-/// (`Phase`, `Track`), not a shape error on the section the template itself wrote.
+/// A freshly scaffolded milestone reports no shape error on the section the template
+/// wrote: the template scaffolds the list-item shape this repository's
+/// `statuses.delivery.items` accepts. The two placeholder items are still unfilled, and
+/// the type's declared `delivery.items.pending` vocabulary reports exactly those two
+/// (and nothing else) until a real criterion replaces them.
 #[test]
-fn a_fresh_milestone_scaffold_passes_the_done_items_shape_rule() {
+fn a_fresh_milestone_scaffold_reports_only_its_two_placeholder_items() {
     let (dir, record, _) = scaffold("milestone.md", "Throwaway shape probe record");
     let out = common::urzua()
         .args(["check", "--rules", "status.done-items-shape"])
@@ -503,9 +504,13 @@ fn a_fresh_milestone_scaffold_passes_the_done_items_shape_rule() {
         .unwrap();
     let report: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
     assert_eq!(report["files_examined"], 1, "{report}");
-    assert!(
-        report["findings"].as_array().unwrap().is_empty(),
-        "a scaffolded milestone must not trip the shape rule: {report}"
-    );
-    assert!(out.status.success(), "{report}");
+    let findings = report["findings"].as_array().unwrap();
+    assert_eq!(findings.len(), 2, "{report}");
+    for finding in findings {
+        let message = finding["message"].as_str().unwrap();
+        assert!(
+            message.contains("is an unfilled placeholder"),
+            "only placeholder findings are expected on a scaffold: {report}"
+        );
+    }
 }

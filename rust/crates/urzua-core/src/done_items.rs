@@ -40,6 +40,14 @@ pub struct ItemsDecl {
     /// delivered. Omitted keeps one rule for every record.
     #[serde(default)]
     pub kind: Option<KindDecl>,
+    /// Opt-in placeholder vocabulary (`ADR-96`, amendment of 2026-11-08): item
+    /// texts that mean "not yet written", in the shape and with the matching of
+    /// `statuses.pending` (a whole value, trimmed and case-insensitive, or a
+    /// `{pattern: ...}`). An item whose text matches is an unfilled placeholder:
+    /// it never resolves, carries no evidence and no waiver, and
+    /// `status.done-items-shape` reports it. Omitted keeps today's behaviour.
+    #[serde(default)]
+    pub pending: Option<Vec<crate::status_model::PendingEntry>>,
 }
 
 /// `statuses.delivery.items.kind`: the field that holds a record's kind and the
@@ -115,6 +123,15 @@ impl ItemsDecl {
             .find(|k| k.name == value.trim())
     }
 
+    /// Whether an item's text is a declared placeholder. `false` when the type
+    /// declares no `pending`.
+    pub fn is_placeholder(&self, text: &str) -> bool {
+        let text = text.trim();
+        self.pending
+            .as_ref()
+            .is_some_and(|p| p.iter().any(|e| e.matches(text)))
+    }
+
     pub fn category(&self, name: &str) -> Option<&WaiverCategory> {
         self.waiver_categories.iter().find(|c| c.name == name)
     }
@@ -160,6 +177,10 @@ pub struct Item {
     pub text: String,
     pub evidence: Option<Clause>,
     pub waiver: Option<Waiver>,
+    /// The item text matches the declared `pending` vocabulary: an unfilled
+    /// placeholder. Its clauses are dropped, so it is neither evidence nor
+    /// waived.
+    pub placeholder: bool,
 }
 
 /// One deviation from the grammar, reported by `status.done-items-shape`.
@@ -568,15 +589,7 @@ fn build_item(n: usize, builder: Builder, decl: &ItemsDecl, issues: &mut Vec<Sha
         ..
     } = clauses;
 
-    let lead = text.trim_start();
-    if lead.starts_with("[x]") || lead.starts_with("[X]") || lead.starts_with("[ ]") {
-        issue(
-            builder.first_line,
-            "the item starts with a checkbox; state is computed from the evidence, not ticked"
-                .to_string(),
-        );
-    }
-
+    let placeholder = judge_text(&text, builder.first_line, decl, &mut issue);
     let evidence = evidence_text.map(|(line, clause)| {
         let problems = locator_problems(&clause);
         for p in &problems {
@@ -590,13 +603,50 @@ fn build_item(n: usize, builder: Builder, decl: &ItemsDecl, issues: &mut Vec<Sha
     });
     let waiver =
         waiver_text.and_then(|(line, clause)| parse_waiver(line, &clause, decl, &mut issue));
+    // A placeholder is not evidence and cannot be waived.
+    let (evidence, waiver) = if placeholder {
+        (None, None)
+    } else {
+        (evidence, waiver)
+    };
     Item {
         n,
         line: builder.first_line,
         text: text.trim().to_string(),
         evidence,
         waiver,
+        placeholder,
     }
+}
+
+/// The shape issues of an item's own text: a leading checkbox, and a text that
+/// matches the declared `pending` vocabulary. Returns whether it is a placeholder.
+fn judge_text(
+    text: &str,
+    line: usize,
+    decl: &ItemsDecl,
+    issue: &mut impl FnMut(usize, String),
+) -> bool {
+    let lead = text.trim_start();
+    if lead.starts_with("[x]") || lead.starts_with("[X]") || lead.starts_with("[ ]") {
+        issue(
+            line,
+            "the item starts with a checkbox; state is computed from the evidence, not ticked"
+                .to_string(),
+        );
+    }
+    let placeholder = decl.is_placeholder(text);
+    if placeholder {
+        issue(line, placeholder_message(text));
+    }
+    placeholder
+}
+
+fn placeholder_message(text: &str) -> String {
+    format!(
+        "the item '{}' is an unfilled placeholder (it matches the declared `pending` vocabulary); replace it with a real criterion that names its evidence, or delete the item",
+        text.trim()
+    )
 }
 
 /// What is wrong with an evidence clause as a list of locators, empty when it

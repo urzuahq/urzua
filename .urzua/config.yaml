@@ -364,6 +364,12 @@ record_types:
             - {name: superseded-by-decision, cite: required}
             - {name: deferred-to, cite: required, expires: required}
             - {name: process-outcome}
+          # An item still holding the milestone template's placeholder text is
+          # unfilled: it never resolves and `status.done-items-shape` reports it
+          # (ADR-96, amendment of 2026-11-08).
+          pending:
+            - {pattern: "^Replace this item"}
+            - {pattern: "^Add one item per criterion"}
     # Every milestone, open or closed, states its Done means (maintainer
     # decision of 2026-11-04): a Done milestone is judged against it and not
     # against its What. A WontDo milestone is set aside on purpose, as a
