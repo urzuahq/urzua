@@ -130,27 +130,25 @@ struct Judged<'a> {
 }
 
 /// The tables `mode` judges against. A base with no config or no `authority`
-/// holds no deciders and no gates (`none`); an unreadable one falls back to
-/// the head table (the caller said so in a notice).
+/// names no decider and no gate, so a branch cut before the table existed could
+/// declare its own and have it waved through: that base is no table to judge
+/// against, and the head table is judged instead (the caller says so in a
+/// notice). An unreadable base falls back to the head table the same way.
 fn judged_tables<'a>(
     mode: DeciderTable,
     head: &'a AuthorityDecl,
     base: &'a BaseAuthority,
-    none: &'a AuthorityDecl,
 ) -> Vec<Judged<'a>> {
-    let base_table = match base {
-        BaseAuthority::Declared(a) => Some(a),
-        BaseAuthority::Absent => Some(none),
-        BaseAuthority::Unreadable => None,
-    };
     let head_j = |label| Judged { table: head, label };
-    match (mode, base_table) {
-        (DeciderTable::Head, _) | (_, None) => vec![head_j(None)],
-        (DeciderTable::Base, Some(table)) => vec![Judged {
+    match (mode, base) {
+        (DeciderTable::Head, _) => vec![head_j(None)],
+        (_, BaseAuthority::Absent) => vec![head_j(Some("the head's table"))],
+        (_, BaseAuthority::Unreadable) => vec![head_j(None)],
+        (DeciderTable::Base, BaseAuthority::Declared(table)) => vec![Judged {
             table,
             label: Some("the base revision's table"),
         }],
-        (DeciderTable::Both, Some(table)) => vec![
+        (DeciderTable::Both, BaseAuthority::Declared(table)) => vec![
             head_j(Some("the head's table")),
             Judged {
                 table,
@@ -229,11 +227,10 @@ pub fn decider_required(
     let mut paths: Vec<&PathBuf> = changed.iter().collect();
     paths.sort();
     paths.dedup();
-    let none = AuthorityDecl::none();
     let mode = head.effective_table(base);
     let mut findings = Vec::new();
     let mut gated_paths: HashSet<&Path> = HashSet::new();
-    for judged in judged_tables(mode, head, base, &none) {
+    for judged in judged_tables(mode, head, base) {
         let gated = gated_changes(&paths, records, config, judged.table, committed);
         for g in &gated {
             gated_paths.insert(g.path);

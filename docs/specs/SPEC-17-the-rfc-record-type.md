@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5FRHCY6MQ6VB26JKFC
-Version: '0.17'
+Version: '0.18'
 Date: 2026-09-08
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:.urzua/config.yaml@sha256:2f0e023ed5a5a35a4cdaf1fb653e11bb410bbca7bd30d3254c00e4e8f575d415, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs@sha256:44fea1626a547a6d9226f09c5e9cd116aad2dfe384a082aaeb8eec2c74f22af5
+Realized-by: code:.urzua/config.yaml@sha256:cbb1c67c40a04562b517932dd635c9f9083378df4d05deeb58771286cc1487bb, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs@sha256:44fea1626a547a6d9226f09c5e9cd116aad2dfe384a082aaeb8eec2c74f22af5
 Author: beauwilliams
 Subject: 'The `rfc` record type -- schema, required fields, and lifecycle for proposals.'
 Parent: —
@@ -124,3 +124,5 @@ ADR's own `Deciders` field records.
 > | 2026-11-09 | Bumped to `0.16`. The pin this spec's `Realized-by` holds on `.urzua/config.yaml` was re-baselined (the `Re-baselined` row above); no behaviour this spec describes changed. | **structural** |
 > | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` 594d115541e3 -> 2f0e023ed5a5. Reason: Read the diff of each pinned file or span since the old pin against what this record evidences. .urzua/config.yaml: embodiment.claim-expired gains `drift: {code: block, test: block, spec: acknowledge}` and its explanatory comment; nothing else in the file changed. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-09 | Bumped to `0.17`. The pin this spec's `Realized-by` holds on `.urzua/config.yaml` was re-baselined (the `Re-baselined` row above) after the config gained the `drift` declaration under `embodiment.claim-expired`; no behaviour this spec describes changed. | **structural** |
+> | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` 2f0e023ed5a5 -> cbb1c67c40a0. Reason: Read the diff of each pinned file since the old pin and the claim still holds. config.yaml: read the diff since the old pin; the only change is the added key authority.decider_table: base with its two-line comment (this repository declares the new decider_table option, ADR-89 amendment of 2026-11-09). No record type, rule, status, relation or other declaration this record relies on changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-09 | Bumped to `0.18`. The pins this spec's `Realized-by` holds on `.urzua/config.yaml` were re-baselined (the `Re-baselined` row above) after the config gained `authority.decider_table: base`; no behaviour this spec describes changed. **Why:** the version-bump rule requires a bump beside a structural revision row. | **structural** |

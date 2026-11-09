@@ -5,7 +5,7 @@ Phase: '0'
 Track: header-format
 Implements: ADR-33
 Blocked-on: —
-Realized-by: code:.urzua/config.yaml@sha256:2f0e023ed5a5a35a4cdaf1fb653e11bb410bbca7bd30d3254c00e4e8f575d415, code:.github/workflows/checks.yml@sha256:a201f4e57f5f91a353ee0a7449831c0d03263200ac8e83a8f2a7a5b54fbe95a9
+Realized-by: code:.urzua/config.yaml@sha256:cbb1c67c40a04562b517932dd635c9f9083378df4d05deeb58771286cc1487bb, code:.github/workflows/checks.yml@sha256:a201f4e57f5f91a353ee0a7449831c0d03263200ac8e83a8f2a7a5b54fbe95a9
 ---
 # 3 — Convert this repo's own docs to yaml-frontmatter
 
@@ -21,7 +21,7 @@ The actual dogfooding step ADR-33 named as the real forcing function for this wo
 
 ## Done means
 
-- Every record type configured in this repository's `.urzua/config.yaml` declares `header_shape: yaml-frontmatter`. — evidence: code:.urzua/config.yaml@sha256:2f0e023ed5a5a35a4cdaf1fb653e11bb410bbca7bd30d3254c00e4e8f575d415
+- Every record type configured in this repository's `.urzua/config.yaml` declares `header_shape: yaml-frontmatter`. — evidence: code:.urzua/config.yaml@sha256:cbb1c67c40a04562b517932dd635c9f9083378df4d05deeb58771286cc1487bb
 - Every ADR, RFC, spec, milestone and bug record parses under it, and `urzua check` over this repository reports no unreadable header. — evidence: code:.github/workflows/checks.yml@sha256:a201f4e57f5f91a353ee0a7449831c0d03263200ac8e83a8f2a7a5b54fbe95a9
 - The conversion was a one-time pass that shipped no tool, and nothing below the header changed. — waived: process-outcome -- a property of the one-time conversion of 2026-09-08, verified at the time by a before/after field-set comparison against every file (see the revision log); the scratch tool was never committed, so no file can evidence it now
 
@@ -42,3 +42,4 @@ The actual dogfooding step ADR-33 named as the real forcing function for this wo
 > | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` 3d51c2fac8b7 -> 653bb0f54ca6. Reason: Read the diff of each pinned file since the old pin and the claim still holds. config.yaml: the only change is a new optional pending list (two placeholder patterns) under record_types::milestone statuses.delivery.items; nothing else in the file changed. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
 > | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` 653bb0f54ca6 -> 594d115541e3. Reason: config.yaml: read the diff since the previous pin; the only change is one added line, outside_writes: shared, under the harness key (this repository declares the new harness.outside_writes option, ADR-89 amendment of 2026-11-09). No record type, rule, status, relation or other declaration this record relies on changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` 594d115541e3 -> 2f0e023ed5a5. Reason: Read the diff of each pinned file or span since the old pin against what this record evidences. .urzua/config.yaml: embodiment.claim-expired gains `drift: {code: block, test: block, spec: acknowledge}` and its explanatory comment; nothing else in the file changed. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` 2f0e023ed5a5 -> cbb1c67c40a0. Reason: Read the diff of each pinned file since the old pin and the claim still holds. config.yaml: read the diff since the old pin; the only change is the added key authority.decider_table: base with its two-line comment (this repository declares the new decider_table option, ADR-89 amendment of 2026-11-09). No record type, rule, status, relation or other declaration this record relies on changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |

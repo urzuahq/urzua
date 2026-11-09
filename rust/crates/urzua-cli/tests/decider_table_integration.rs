@@ -237,28 +237,52 @@ fn both_needs_a_decider_under_each_table() {
     );
 }
 
-#[test]
-fn a_base_with_no_config_holds_no_deciders_and_no_gates() {
-    let head = config(BASE, "Alice", GATES);
-    let dir = fixture("no-base-config", None);
-    let v = check_pr(&dir, &head, "mallory", &[]);
-    assert!(findings(&v).is_empty(), "{v}");
-    let status = v["rules_executed"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|r| r["rule"] == "diff.decider-required")
-        .unwrap()["status"]
-        .clone();
-    assert_eq!(status, "ran", "{v}");
+/// A pull request cut before the base had an `authority` section declares one
+/// whose group does not hold its author: the base names no decider and no
+/// gate, so judging against it would let anything through (the bypass). The
+/// head table is judged instead, and an info notice says why.
+fn assert_stale_base_is_judged_against_the_head(name: &str, base: Option<&str>, want: &[&str]) {
+    for mode in ["base", "both"] {
+        let head = config(&format!("  decider_table: {mode}\n"), "Alice", GATES);
+        let dir = fixture(&format!("{name}-{mode}"), base);
+        let v = check_pr(&dir, &head, "mallory", &[]);
+        assert_eq!(files(&v), want, "{mode}: {v}");
+        let message = findings(&v)[0]["message"].as_str().unwrap();
+        assert!(message.contains("the head's table"), "{message}");
+        assert!(
+            v["notices"].as_array().unwrap().iter().any(|n| {
+                n["subject"] == "diff.decider-required"
+                    && n["severity"] == "info"
+                    && n["message"]
+                        .as_str()
+                        .unwrap()
+                        .contains("the base revision has no config file or no authority section")
+                    && n["message"]
+                        .as_str()
+                        .unwrap()
+                        .contains("head table is judged")
+            }),
+            "{mode}: {v}"
+        );
+        // A decider of the head's group still passes.
+        let v = check_pr(&dir, &head, "alice", &[]);
+        assert!(findings(&v).is_empty(), "{mode}: {v}");
+    }
 }
 
 #[test]
-fn a_base_with_a_config_but_no_authority_holds_no_deciders_and_no_gates() {
-    let head = config(BASE, "Alice", GATES);
-    let dir = fixture("no-base-authority", Some(TYPES));
-    let v = check_pr(&dir, &head, "mallory", &[]);
-    assert!(findings(&v).is_empty(), "{v}");
+fn a_base_with_no_config_is_judged_against_the_head_table_and_says_so() {
+    // The config file is new, not committed, so it is not in the diff.
+    assert_stale_base_is_judged_against_the_head("no-base-config", None, &[PATH_1]);
+}
+
+#[test]
+fn a_stale_base_with_a_config_but_no_authority_is_judged_against_the_head_table() {
+    assert_stale_base_is_judged_against_the_head(
+        "no-base-authority",
+        Some(TYPES),
+        &[CONFIG, PATH_1],
+    );
 }
 
 #[test]
@@ -367,4 +391,123 @@ fn init_proposes_decider_table_base_and_the_config_loads() {
     );
     let doctor = json(&run(&dir, &["doctor"]));
     assert_eq!(doctor["checks"][1]["status"], "ok", "{doctor}");
+}
+
+/// The pull request's config is `head_config`, the base's is `base_config`;
+/// returns the report and the exit code.
+fn check_pr_exit(dir: &Path, head_config: &str, who: &str) -> (serde_json::Value, Option<i32>) {
+    std::fs::write(dir.join(CONFIG), head_config).unwrap();
+    std::fs::write(dir.join(PATH_1), ACCEPTED).unwrap();
+    let file = actors(dir, who, &[]);
+    let out = run(dir, &["check", "--base", "HEAD", "--actors", &file]);
+    (json(&out), out.status.code())
+}
+
+fn severities(v: &serde_json::Value) -> Vec<String> {
+    findings(v)
+        .iter()
+        .map(|f| f["severity"].as_str().unwrap().to_string())
+        .collect()
+}
+
+#[test]
+fn turning_the_rule_off_in_the_pull_request_is_judged_under_the_base_setting() {
+    for mode in ["base", "both"] {
+        let extra = format!("  decider_table: {mode}\n");
+        let base = config(&extra, "Alice", GATES);
+        let off = config(&extra, "Alice", GATES)
+            .replace("diff.decider-required: error", "diff.decider-required: off");
+        let dir = fixture(&format!("rule-off-{mode}"), Some(&base));
+        let (v, code) = check_pr_exit(&dir, &off, "mallory");
+        let mut want = vec![CONFIG, PATH_1];
+        if mode == "both" {
+            want = vec![CONFIG, CONFIG, PATH_1, PATH_1];
+        }
+        assert_eq!(files(&v), want, "{mode}: {v}");
+        assert!(severities(&v).iter().all(|s| s == "error"), "{mode}: {v}");
+        assert_eq!(code, Some(1), "{mode}: {v}");
+    }
+}
+
+#[test]
+fn deleting_the_rule_entry_in_the_pull_request_is_judged_under_the_base_setting() {
+    let extra = BASE;
+    let base = config(extra, "Alice", GATES);
+    let gone = base.replace(
+        "  diff.decider-required: error\n",
+        "  field.quality: error\n",
+    );
+    assert_ne!(gone, base);
+    let dir = fixture("rule-deleted", Some(&base));
+    let (v, code) = check_pr_exit(&dir, &gone, "mallory");
+    assert_eq!(files(&v), [CONFIG, PATH_1], "{v}");
+    assert_eq!(code, Some(1), "{v}");
+}
+
+#[test]
+fn dropping_the_authority_section_and_the_rule_together_is_still_judged_under_the_base() {
+    let base = config(BASE, "Alice", GATES);
+    let dir = fixture("authority-dropped", Some(&base));
+    let head = TYPES.replace("diff.decider-required: error", "diff.decider-required: off");
+    let (v, code) = check_pr_exit(&dir, &head, "mallory");
+    assert_eq!(files(&v), [CONFIG, PATH_1], "{v}");
+    assert_eq!(code, Some(1), "{v}");
+}
+
+#[test]
+fn lowering_the_rule_to_warn_and_fail_on_to_error_still_blocks() {
+    // The base gates at warn under fail_on: warning; the pull request keeps the
+    // rule at warn and drops fail_on, which would exit 0.
+    let strict = "fail_on: warning\n";
+    let base_cfg = config(BASE, "Alice", GATES).replace(
+        "diff.decider-required: error",
+        "diff.decider-required: warn",
+    );
+    let base = format!("{strict}{base_cfg}");
+    let dir = fixture("fail-on-lowered", Some(&base));
+    let (v, code) = check_pr_exit(&dir, &base_cfg, "mallory");
+    assert_eq!(files(&v), [CONFIG, PATH_1], "{v}");
+    assert_eq!(severities(&v), ["warning", "warning"], "{v}");
+    assert_eq!(code, Some(1), "{v}");
+    // Control: the same head with no base gate at all exits 0.
+    let loose_base = base_cfg.replace("decider_table: base", "decider_table: head");
+    let dir = fixture("fail-on-lowered-head", Some(&loose_base));
+    let (v, code) = check_pr_exit(&dir, &base_cfg, "mallory");
+    assert_eq!(code, Some(0), "{v}");
+}
+
+#[test]
+fn a_base_gate_that_is_looser_than_the_head_does_not_loosen_the_head() {
+    let base = config(BASE, "Alice", GATES).replace(
+        "diff.decider-required: error",
+        "diff.decider-required: warn",
+    );
+    let head = config(BASE, "Alice", GATES);
+    let dir = fixture("base-looser", Some(&base));
+    let (v, code) = check_pr_exit(&dir, &head, "mallory");
+    assert_eq!(severities(&v), ["error", "error"], "{v}");
+    assert_eq!(code, Some(1), "{v}");
+}
+
+#[test]
+fn doctor_says_an_authority_with_no_gates_is_declared_but_gates_nothing() {
+    let doctor = |cfg: &str, name: &str| {
+        let dir = fixture(name, Some(cfg));
+        let v = json(&run(&dir, &["doctor"]));
+        v["checks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["check"] == "authority-host")
+            .cloned()
+            .expect("an authority-host check")
+    };
+    let empty = doctor(&config(BASE, "Alice", ""), "doctor-no-gates");
+    assert_eq!(empty["status"], "warn", "{empty}");
+    assert!(empty["message"]
+        .as_str()
+        .unwrap()
+        .contains("declared, no gates"));
+    let gated = doctor(&config(BASE, "Alice", GATES), "doctor-gates");
+    assert_eq!(gated["status"], "ok", "{gated}");
 }

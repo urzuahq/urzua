@@ -621,7 +621,7 @@ Status of this amendment: accepted by the maintainer on 2026-11-09. It changes w
 reads; the rest of section 4 is unchanged.
 
 **The problem.** The rule read `authority` from the pull request's own checkout. A pull request that adds its
-author to a decider group, deletes a gate or sets `enabled: false`, and moves a record to a gated status in the
+author to a decider group, deletes a gate, and moves a record to a gated status in the
 same change was judged against the table it had just written, and reported nothing. The sentence above that the
 rule is "a check that means something" with a second human held only for a pull request that did not edit the
 table.
@@ -640,10 +640,19 @@ table.
 - The base table is read from the configuration file as it was at the merge base, by the same mechanism that
   reads a record's committed copy (`git show` through `urzua_io`). Only the `authority` section is read, so a
   base config written by an older build need not load whole. A base with no config file, or with no `authority`
-  section, holds no deciders and no gates: under `base` nothing is gated by the base, so a pull request that
-  introduces the first `authority` table is not judged by it (it is judged by the table once it is the base of
-  the next change). A base whose config cannot be read, or whose `authority` section does not load, is said in a
-  warning notice and the head table is used for that run.
+  section (a branch cut before the table existed), has no table to judge against, and reading it as "no deciders
+  and no gates" would let a pull request that declares its own table pass unjudged. Under `base` and `both` such a
+  base is therefore not trusted: the head table is judged instead (a gate the head declares applies, and a decider
+  must be in the head's group), the finding names "the head's table", and an `info` notice says the base had no
+  authority. A base whose config cannot be read, or whose `authority` section does not load, is said in a warning
+  notice and the head table is used for that run.
+- The base's rule setting is read from the same configuration text. When the mode in force is `base` or `both`,
+  the level and options of `diff.decider-required` and `fail_on` are the stricter of the base's and the head's
+  (`off` < `info` < `warn` < `error`; `error` < `warning`), and an `authority` section the head dropped is
+  replaced by an empty one so the base table is still judged. Deleting the rule's entry, setting it to `off`, or
+  lowering it to `warn` with `fail_on: error`, in a pull request, is therefore judged under the base's stricter
+  setting; an `info` notice names each setting taken from the base. The stricter `fail_on` applies to the whole
+  run, and an explicit `--fail-on` still wins.
 - With no `--base` there is no base revision. The rule reports `not-applicable` as before, the editor and
   post-command guardrails keep reading the checkout's table, and when `decider_table` is `base` or `both` the
   report carries an `info` notice saying the head table is used.
@@ -653,12 +662,13 @@ table.
   structured check named `authority-decider-table`, when gates are declared and `decider_table` is not, and
   recommends `base`. The gate action's documentation recommends `base`. This repository declares `base`.
 
-**What it does not change.** The accepted-risk list stands. Item 3 now has a sibling that is the same kind: a
-pull request can set the rule itself to `off` in its own configuration, or change the workflow that runs the gate,
-and the head's rule level is read from the head. `decider_table: base` closes the edit of the table; it does not
-close the edit of the gate. The configuration is a protected path, so under `base` that edit needs a decider of
-the base table. With a single maintainer the evidence is still authorship, and the rule still cannot tell an agent
-acting under the maintainer's token from the maintainer (item 4).
+**What it does not change.** The accepted-risk list stands. A pull request that drops `--actors` from the
+workflow command, or edits the workflow that runs the gate, still removes the check without touching the
+configuration: that is the remaining known limit and is accepted risk 3. Turning the rule off or downgrading it
+in the configuration is no longer part of that limit under `base` and `both`: it is judged under the base's
+stricter setting, and the configuration is a protected path, so changing it needs a decider of the base table.
+With a single maintainer the evidence is still authorship, and the rule still cannot tell an agent acting under
+the maintainer's token from the maintainer (item 4).
 
 The Decision is otherwise unchanged. The Status of this ADR stays Accepted.
 
@@ -695,3 +705,4 @@ The Decision is otherwise unchanged. The Status of this ADR stays Accepted.
 > | 2026-11-09 | Amendment of 2026-11-09 (the accepted-risk list made exact: routes 1, 6 and 11) accepted. **Why:** Maintainer decision, 2026-11-09. | **substantive** |
 > | 2026-11-09 | Added an `## Amendment (2026-11-09, outside writes)`, accepted by the maintainer on 2026-11-09: `harness.outside_writes` (`allow`, `shared` or `deny`) (with `allow_paths` for `deny`) decides how an edit-tool write outside the session's repository is judged; under `shared` a file of a linked worktree of the same repository is also judged against the session's acceptance and protected-path gates, under `deny` any such write is refused except under `allow_paths`, undeclared acts as `allow`; `init` proposes `shared`, `doctor` warns when it is undeclared with a guardrail enabled; a separate clone joins the accepted-risk list as route 12 and routes 1 and 8 name the worktree commit and the side-branch push. `Status` stays Accepted. **Why:** Maintainer decision, 2026-11-09, on the review that found a linked worktree at a commit without gates an unjudged place to write. | **substantive** |
 > | 2026-11-09 | Added an `## Amendment (2026-11-09, decider table)`, accepted by the maintainer on 2026-11-09: `authority.decider_table` (`base`, `head`, `both`; undeclared is `head`) says which revision's table `diff.decider-required` reads, closing the route where a pull request adds its author to a decider group, or deletes a gate, in the change it asks to have approved; `urzua init` writes `base`, `urzua doctor` warns when gates are declared and the key is not, and this repository declares `base`. `Status` stays Accepted. **Why:** Maintainer decision, 2026-11-09, on the review that found the rule judging a pull request against its own table. | **substantive** |
+> | 2026-11-09 | Corrected the decider-table amendment after review: a base with no config or no `authority` is judged against the head table with an `info` notice (not read as no gates), and under `base` and `both` the rule's level and `fail_on` are the stricter of the base's and the head's; the problem statement no longer names an `enabled` key, and the remaining known limit is dropping `--actors` or editing the workflow (accepted risk 3). **Why:** review found a stale merge base and a rule switched off in the pull request each gave no finding. | **substantive** |

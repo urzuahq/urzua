@@ -101,6 +101,13 @@ struct Context<'a> {
     actors: Option<urzua_core::authority::Actors>,
     /// The base revision's `authority` table (`authority.decider_table`).
     base_authority: urzua_core::authority::BaseAuthority,
+    /// The checkout's config with the base revision's stricter decider-gate
+    /// settings applied (the rule's level and options, an `authority` the head
+    /// dropped); `None` when the head's own config is what runs.
+    gate_config: Option<Config>,
+    /// The exit threshold in force: the stricter of the head's `fail_on` and,
+    /// under `authority.decider_table: base`/`both`, the base's.
+    fail_on: urzua_core::config::FailOn,
     repo_root: PathBuf,
     base_text: HashMap<PathBuf, String>,
     templates: urzua_core::new_record::TemplateValues,
@@ -252,7 +259,7 @@ impl<'a> Context<'a> {
     ) -> rules::RuleCtx<'a> {
         let s = self.session;
         rules::RuleCtx {
-            config: &s.config,
+            config: self.gate_config.as_ref().unwrap_or(&s.config),
             config_path: &s.config_path,
             records: &s.records,
             full_text: &s.full_text,
@@ -496,7 +503,7 @@ fn execute(config_path: Option<PathBuf>, args: CheckArgs) -> Result<CheckReport,
     notices.extend(untracked_notices(session, &scope, &context.drift));
     notices.extend(harness_key_notices(session.config.harness.as_ref()));
     notices.extend(actors_notices(
-        &session.config,
+        context.gate_config.as_ref().unwrap_or(&session.config),
         actors.is_some(),
         base.is_some(),
         selection.as_deref(),
@@ -555,7 +562,7 @@ fn execute(config_path: Option<PathBuf>, args: CheckArgs) -> Result<CheckReport,
         findings,
         notices,
         // The flag wins over the configuration; either only moves the exit code.
-        fail_on: fail_on.unwrap_or(session.config.fail_on),
+        fail_on: fail_on.unwrap_or(context.fail_on),
     })
 }
 
@@ -1156,6 +1163,8 @@ struct DiffInputs {
     changed_paths: Option<Vec<PathBuf>>,
     committed_statuses: Option<HashMap<PathBuf, rules::CommittedStatus>>,
     base_authority: urzua_core::authority::BaseAuthority,
+    gate_config: Option<Config>,
+    fail_on: urzua_core::config::FailOn,
 }
 
 /// Stage 2c: read what the diff rules judge a change against.
@@ -1184,13 +1193,17 @@ fn read_diff_inputs(
     let templates = load_templates(repo_root, config, notices)?;
     // The diff rules judge the changed set itself; `None` without `--base`.
     let changed_paths = changes.map(|c| c.changed.iter().cloned().collect());
-    let base_authority = load_base_authority(session, changes, notices);
+    let base_gate = load_base_gate(session, changes, notices);
+    let base_authority = base_gate.authority.clone();
+    let (gate_config, fail_on) =
+        apply_base_gate(&session.config, &base_gate, changes.is_some(), notices);
+    let rule_config = gate_config.as_ref().unwrap_or(&session.config);
     let committed_statuses = changes.map(|c| {
         // The types an authority status gate names (the head's and the base
         // revision's) are read too, but only when `diff.decider-required`
         // will use them.
-        let gated = if enabled_setting(config, rules::RULE_DIFF_DECIDER_REQUIRED).is_some() {
-            let mut types = config
+        let gated = if enabled_setting(rule_config, rules::RULE_DIFF_DECIDER_REQUIRED).is_some() {
+            let mut types = rule_config
                 .authority
                 .as_ref()
                 .map(|a| a.gated_types())
@@ -1219,35 +1232,44 @@ fn read_diff_inputs(
         changed_paths,
         committed_statuses,
         base_authority,
+        gate_config,
+        fail_on,
     })
 }
 
-/// The base revision's `authority` table, for `authority.decider_table`
-/// (`ADR-89` amendment of 2026-11-09). Read only when `diff.decider-required`
-/// is enabled, an `authority` is declared and the run has a diff. A config the
-/// base does not have is `Absent`; one that cannot be read or loaded is said in
-/// a warning notice and the head table is used.
-fn load_base_authority(
+/// What the base revision's config says about the decider gate
+/// (`authority.decider_table`, `ADR-89` amendment of 2026-11-09): its
+/// `authority` table, its `diff.decider-required` setting and its `fail_on`,
+/// all from the same config text. Read on every run with a diff, whatever the
+/// head declares, because a pull request can drop the head's `authority`, turn
+/// the rule off or lower `fail_on`. A config the base does not have is
+/// `Absent`; one that cannot be read or loaded is said in a warning notice
+/// (only when the head declares the gate) and the head table is used.
+fn load_base_gate(
     session: &Session,
     changes: Option<&urzua_io::GitChanges>,
     notices: &mut Vec<Notice>,
-) -> urzua_core::authority::BaseAuthority {
-    use urzua_core::authority::BaseAuthority;
+) -> urzua_core::authority::BaseGate {
+    use urzua_core::authority::{BaseAuthority, BaseGate};
     let rule = rules::RULE_DIFF_DECIDER_REQUIRED;
     let Some(changes) = changes else {
-        return BaseAuthority::Absent;
+        return BaseGate::absent();
     };
-    if session.config.authority.is_none() || enabled_setting(&session.config, rule).is_none() {
-        return BaseAuthority::Absent;
-    }
+    let head_declares =
+        session.config.authority.is_some() || enabled_setting(&session.config, rule).is_some();
     let unreadable = |why: String, notices: &mut Vec<Notice>| {
-        notices.push(Notice {
-            severity: NoticeSeverity::Warning,
-            subject: rule.to_string(),
-            message: format!("{why}, so authority.decider_table cannot read the base table and the head table is used"),
-            detail: None,
-        });
-        BaseAuthority::Unreadable
+        if head_declares {
+            notices.push(Notice {
+                severity: NoticeSeverity::Warning,
+                subject: rule.to_string(),
+                message: format!("{why}, so authority.decider_table cannot read the base table and the head table is used"),
+                detail: None,
+            });
+        }
+        BaseGate {
+            authority: BaseAuthority::Unreadable,
+            ..BaseGate::absent()
+        }
     };
     let rel = match crate::discovery::relative_to_root(&session.repo_root, &session.config_path) {
         Ok(rel) => rel,
@@ -1271,7 +1293,69 @@ fn load_base_authority(
                 )
             }
         };
-    BaseAuthority::from_config_text(text.as_deref()).unwrap_or_else(|why| unreadable(why, notices))
+    urzua_core::authority::BaseGate::from_config_text(text.as_deref(), rule)
+        .unwrap_or_else(|why| unreadable(why, notices))
+}
+
+/// Applies the base revision's decider-gate settings under
+/// `authority.decider_table: base` or `both` (the mode in force is the
+/// stricter of the head's and the base's): the rule's level and options and
+/// `fail_on` are the stricter of the base's and the head's, and an `authority`
+/// the head dropped is replaced by an empty one so the base table is still
+/// judged. Returns the config to run with (`None`: the head's own) and the
+/// exit threshold. A base with no `authority` cannot be judged against, so the
+/// head table is, and a notice says so.
+fn apply_base_gate(
+    config: &Config,
+    base: &urzua_core::authority::BaseGate,
+    has_base: bool,
+    notices: &mut Vec<Notice>,
+) -> (Option<Config>, urzua_core::config::FailOn) {
+    use urzua_core::authority::{effective_mode, AuthorityDecl, DeciderTable};
+    let rule = rules::RULE_DIFF_DECIDER_REQUIRED.to_string();
+    let mode = effective_mode(config.authority.as_ref(), &base.authority);
+    if !has_base || mode == DeciderTable::Head {
+        return (None, config.fail_on);
+    }
+    let note = |message: String| Notice {
+        severity: NoticeSeverity::Info,
+        subject: rule.clone(),
+        message,
+        detail: None,
+    };
+    if base.authority.is_absent() {
+        notices.push(note(format!(
+            "authority.decider_table is '{}' but the base revision has no config file or no authority section, so it names no decider and no gate: the head table is judged instead",
+            mode.as_str()
+        )));
+    }
+    let mut adjusted = config.clone();
+    let mut changed = false;
+    if adjusted.authority.is_none() {
+        adjusted.authority = Some(AuthorityDecl::none());
+        changed = true;
+        notices.push(note(
+            "the head dropped the authority section; the base revision's is still judged"
+                .to_string(),
+        ));
+    }
+    let head_level = config.rules.get(&rule).map_or(RuleLevel::Off, |s| s.level);
+    if let Some(base_rule) = base.rule.as_ref().filter(|b| b.level > head_level) {
+        adjusted.rules.insert(rule.clone(), base_rule.clone());
+        changed = true;
+        notices.push(note(format!(
+            "{rule} is '{}' at the base revision and '{}' here: the base's stricter setting applies",
+            base_rule.level.as_str(),
+            head_level.as_str()
+        )));
+    }
+    let fail_on = config.fail_on.max(base.fail_on.unwrap_or_default());
+    if fail_on != config.fail_on {
+        notices.push(note(
+            "fail_on is 'warning' at the base revision and 'error' here: the base's stricter threshold applies".to_string(),
+        ));
+    }
+    (changed.then_some(adjusted), fail_on)
 }
 
 /// `authority.decider_table: base` or `both` names a base revision, and a run
@@ -1384,6 +1468,8 @@ fn load_context<'a>(
             committed_statuses: diff.committed_statuses,
             actors: None,
             base_authority: diff.base_authority,
+            gate_config: diff.gate_config,
+            fail_on: diff.fail_on,
             repo_root: repo_root.clone(),
             base_text: diff.base_text,
             templates: diff.templates,

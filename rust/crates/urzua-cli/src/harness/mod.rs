@@ -1342,10 +1342,22 @@ pub(crate) enum Level {
 /// Said whenever the table is declared, so it never reads as more protection than
 /// it is.
 fn authority_checks(config: &urzua_core::config::Config) -> Vec<(Level, &'static str, String)> {
+    let declared_empty = config
+        .authority
+        .as_ref()
+        .is_some_and(|a| a.gates.is_empty());
     let mut out = vec![(
-        Level::Ok,
+        if declared_empty {
+            Level::Warn
+        } else {
+            Level::Ok
+        },
         "authority-host",
-        "authority is declared. The required status check, branch protection and any CODEOWNERS file are the host's settings, which urzua can neither read nor verify, so it does not claim them. Locally it refuses an agent's edit tools (a Bash command is reported, not stopped); in CI diff.decider-required proves authorship only, so with a single maintainer it cannot tell an agent acting under the maintainer's token from the maintainer (the accepted risk of ADR-89). A distinct agent identity, with CODEOWNERS on the protected paths and branch protection requiring the code owner, is a future option and is not configured here.".to_string(),
+        if declared_empty {
+            "authority is declared, no gates: no status move and no path is gated, so diff.decider-required has nothing to judge; add a gate or remove the section".to_string()
+        } else {
+            "authority is declared. The required status check, branch protection and any CODEOWNERS file are the host's settings, which urzua can neither read nor verify, so it does not claim them. Locally it refuses an agent's edit tools (a Bash command is reported, not stopped); in CI diff.decider-required proves authorship only, so with a single maintainer it cannot tell an agent acting under the maintainer's token from the maintainer (the accepted risk of ADR-89). A distinct agent identity, with CODEOWNERS on the protected paths and branch protection requiring the code owner, is a future option and is not configured here.".to_string()
+        },
     )];
     let rule_on = config
         .rules

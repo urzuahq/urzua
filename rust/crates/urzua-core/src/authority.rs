@@ -136,6 +136,12 @@ impl BaseAuthority {
         }
     }
 
+    /// Whether the base revision declares no `authority` (no config file, or no
+    /// such section): it names no decider and no gate.
+    pub fn is_absent(&self) -> bool {
+        matches!(self, BaseAuthority::Absent)
+    }
+
     /// The base table, when one is declared.
     pub fn declared(&self) -> Option<&AuthorityDecl> {
         match self {
@@ -143,6 +149,80 @@ impl BaseAuthority {
             _ => None,
         }
     }
+}
+
+/// What the base revision's config says about the decider gate: its
+/// `authority` table and how its rule is set (`ADR-89` amendment of
+/// 2026-11-09). All three are read from the same config text, so a pull request
+/// that edits the head's rule setting or `fail_on` cannot loosen the gate.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BaseGate {
+    pub authority: BaseAuthority,
+    /// The base's `diff.decider-required` entry, when it has one.
+    pub rule: Option<crate::config::RuleSetting>,
+    /// The base's `fail_on`, when it declares one.
+    pub fail_on: Option<crate::config::FailOn>,
+}
+
+impl BaseGate {
+    /// A base revision with nothing to say (a run with no `--base`).
+    pub fn absent() -> BaseGate {
+        BaseGate {
+            authority: BaseAuthority::Absent,
+            rule: None,
+            fail_on: None,
+        }
+    }
+
+    /// Reads the base config text (`None`: the file is not there). Only the
+    /// `authority`, `fail_on` and `rules.<rule>` keys are read.
+    pub fn from_config_text(text: Option<&str>, rule: &str) -> Result<BaseGate, String> {
+        let authority = BaseAuthority::from_config_text(text)?;
+        let Some(text) = text else {
+            return Ok(BaseGate {
+                authority,
+                ..BaseGate::absent()
+            });
+        };
+        let value: yaml_serde::Value = yaml_serde::from_str(text)
+            .map_err(|e| format!("the base revision's config does not parse as YAML: {e}"))?;
+        let map = value.as_mapping();
+        let rule_setting = map
+            .and_then(|m| m.get("rules"))
+            .and_then(|r| r.as_mapping())
+            .and_then(|r| r.get(rule))
+            .map(|v| {
+                yaml_serde::from_value::<crate::config::RuleSetting>(v.clone()).map_err(|e| {
+                    format!("the base revision's setting for {rule} does not load: {e}")
+                })
+            })
+            .transpose()?;
+        let fail_on = map
+            .and_then(|m| m.get("fail_on"))
+            .map(|v| {
+                yaml_serde::from_value::<crate::config::FailOn>(v.clone())
+                    .map_err(|e| format!("the base revision's fail_on does not load: {e}"))
+            })
+            .transpose()?;
+        Ok(BaseGate {
+            authority,
+            rule: rule_setting,
+            fail_on,
+        })
+    }
+}
+
+/// The mode in force for a run: the stricter of the head's declaration (if the
+/// head has an `authority`) and the base revision's. Undeclared reads as `head`.
+pub fn effective_mode(head: Option<&AuthorityDecl>, base: &BaseAuthority) -> DeciderTable {
+    let head = head
+        .and_then(|a| a.decider_table)
+        .unwrap_or(DeciderTable::Head);
+    let base = base
+        .declared()
+        .and_then(|a| a.decider_table)
+        .unwrap_or(DeciderTable::Head);
+    head.max(base)
 }
 
 /// The `authority` key.
@@ -334,12 +414,7 @@ impl AuthorityDecl {
     /// the base revision's table declare, so a pull request cannot loosen it
     /// by editing the key. Undeclared reads as `head`.
     pub fn effective_table(&self, base: &BaseAuthority) -> DeciderTable {
-        let head = self.decider_table.unwrap_or(DeciderTable::Head);
-        let base = base
-            .declared()
-            .and_then(|a| a.decider_table)
-            .unwrap_or(DeciderTable::Head);
-        head.max(base)
+        effective_mode(Some(self), base)
     }
 
     /// Reads the key as written. Shape errors name the entry.
@@ -654,6 +729,31 @@ mod tests {
         );
         assert!(BaseAuthority::from_config_text(Some("authority: {colour: blue}\n")).is_err());
         assert!(BaseAuthority::from_config_text(Some("a: [\n")).is_err());
+    }
+
+    #[test]
+    fn the_base_gate_reads_the_rule_setting_and_fail_on_from_the_same_text() {
+        use crate::config::{FailOn, RuleLevel};
+        let rule = "diff.decider-required";
+        let g = BaseGate::from_config_text(
+            Some("fail_on: warning\nrules:\n  diff.decider-required: warn\n"),
+            rule,
+        )
+        .unwrap();
+        assert_eq!(g.rule.unwrap().level, RuleLevel::Warn);
+        assert_eq!(g.fail_on, Some(FailOn::Warning));
+        assert!(g.authority.is_absent());
+        let table = BaseGate::from_config_text(
+            Some("rules:\n  diff.decider-required: {level: error, require_evidence: true}\n"),
+            rule,
+        )
+        .unwrap();
+        assert_eq!(table.rule.unwrap().level, RuleLevel::Error);
+        assert_eq!(
+            BaseGate::from_config_text(None, rule).unwrap(),
+            BaseGate::absent()
+        );
+        assert!(BaseGate::from_config_text(Some("fail_on: loud\n"), rule).is_err());
     }
 
     #[test]
