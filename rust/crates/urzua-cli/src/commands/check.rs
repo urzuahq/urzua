@@ -1244,6 +1244,10 @@ fn read_diff_inputs(
 /// holds it as it is) counts, and a run with no diff cannot tell, so none does.
 /// A waiver of any other rule is untouched. Each ignored waiver is named in an
 /// info notice, so it is never silently dropped.
+///
+/// This relies on `Suppression.id` being the waiver's repo-relative path: the
+/// diff's changed-path set is matched against it to tell a touched waiver from
+/// an untouched one.
 fn restrict_decider_waivers(
     waivers: Vec<urzua_core::waiver::Suppression>,
     waivable: urzua_core::authority::Waivable,
