@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5PKKQRJF9WFZJA105B
-Version: '0.21'
+Version: '0.22'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Verified
@@ -220,3 +220,4 @@ adopt should infer rules or only structure, and multi-corpus-per-repo).
 > | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/init.rs` 1520764ba016 -> ee569c2dd2ff. Reason: Read the diff of each pinned file since the old pin and the claim still holds. init.rs: render_config_yaml adds an authority mapping holding only decider_table: base to the proposed configuration; nothing else in the pinned file changed. Behaviour unchanged for a repository that does not declare decider_table. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-09 | Bumped to `0.21`. Re-pin rows in this revision log were reworded to name who re-verified, matching the tool's wording since 2026-11-09; hashes, reasons and dates are unchanged. **Why:** Maintainer decision, 2026-11-09. | **structural** |
 > | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/init.rs` ee569c2dd2ff -> 1cb2edb3e555. Reason: Read the diff of init.rs: the authority block `urzua init` writes gains `waivable: never`; nothing else changed. The pinned evidence still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-09 | Bumped to `0.22`. Evidence pins on `.urzua/config.yaml` were re-pinned (row above) after the config's authority section gained `waivable: never`; the specification's content is unchanged. **Why:** `ADR-89` amendment of 2026-11-09 (gate waivers). | **substantive** |
