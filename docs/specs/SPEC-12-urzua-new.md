@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5C0WX34AQKF79DQDS5
-Version: '0.22'
+Version: '0.23'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/commands/new.rs@sha256:98d7b5cb1f70bc845be2803e84bf57827f6f10e30acb9ab412858a3090b9e76e, code:rust/crates/urzua-core/src/new_record.rs@sha256:21f5012c2b5ff34c2492d7ad9ca7c0a0a35fdc743df9fc76ae124a8210430e67, test:rust/crates/urzua-cli/tests/new_integration.rs@sha256:c319a5750aa11e1bd2b6be9fc6a2d707f34150c514d49c35290ad353f0ef61f7
+Realized-by: code:rust/crates/urzua-cli/src/commands/new.rs@sha256:7abffc2519d4afca971621f8f4ed85ee88231a2faeab539683bd98f5b6191ec1, code:rust/crates/urzua-core/src/new_record.rs@sha256:21f5012c2b5ff34c2492d7ad9ca7c0a0a35fdc743df9fc76ae124a8210430e67, test:rust/crates/urzua-cli/tests/new_integration.rs@sha256:c319a5750aa11e1bd2b6be9fc6a2d707f34150c514d49c35290ad353f0ef61f7
 Author: beauwilliams
 Subject: '`urzua new` -- generating a record''s initial content with a real stable ID assigned.'
 Implements: ADR-27
@@ -208,3 +208,5 @@ take content and parameters, returning a string.
 > | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/new.rs` 5b61c497ff7e -> 491185f4e11d. Reason: split new::run into lookup_record_type, scan_pull_requests, number_record, build_filename, render_record and write_new_file (new.rs); behaviour unchanged, outputs byte-identical **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
 > | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/new.rs` 491185f4e11d -> 98d7b5cb1f70. Reason: Read the diff of each re-pinned file against main. cli/commands/new.rs: Notice literals use Notice::new or gain detail: None; no behaviour change. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
 > | 2026-11-08 | Bumped to `0.22`. The pins this spec's `Realized-by` holds on files this change touched were re-baselined (the `Re-baselined` row above); no behaviour this spec describes changed. | **structural** |
+> | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/new.rs` 98d7b5cb1f70 -> 7abffc2519d4. Reason: Read the diff of each pinned file since the old pin and the claim still holds. new.rs: the local git_output helper is gone and the for-each-ref read calls urzua_io::git::stdout_in, which words a failure the same way ('could not run git: ..', 'git <cmd> failed: ..'); nothing else changed; behaviour unchanged, outputs byte-identical. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
+> | 2026-11-09 | Bumped to `0.23`. The pins this spec's `Realized-by` holds on files this change touched were re-baselined (the `Re-baselined` row above); no behaviour this spec describes changed. | **structural** |

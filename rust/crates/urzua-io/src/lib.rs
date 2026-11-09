@@ -7,6 +7,9 @@
 
 #![forbid(unsafe_code)]
 
+pub mod git;
+
+use git::GitRun;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -379,29 +382,17 @@ fn cat_file_batch(
     mode: &str,
     input: String,
 ) -> Result<std::process::Output, String> {
-    use std::io::Write;
-    let mut child = Command::new("git")
-        .arg("-C")
-        .arg(repo_root)
+    let out = GitRun::new()
+        .dash_c(repo_root)
         .args(["cat-file", mode])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|e| format!("could not run git: {e}"))?;
-    let mut stdin = child.stdin.take().expect("piped stdin");
-    let writer = std::thread::spawn(move || {
-        let _ = stdin.write_all(input.as_bytes());
-    });
-    let out = child
-        .wait_with_output()
-        .map_err(|e| format!("could not read git: {e}"))?;
-    let _ = writer.join();
+        .stdin(input.as_bytes())
+        .output()
+        .map_err(|e| match e {
+            git::RunError::Spawn(e) => format!("could not run git: {e}"),
+            git::RunError::Wait(e) => format!("could not read git: {e}"),
+        })?;
     if !out.status.success() {
-        return Err(format!(
-            "git cat-file failed: {}",
-            String::from_utf8_lossy(&out.stderr).trim()
-        ));
+        return Err(format!("git cat-file failed: {}", git::stderr_text(&out)));
     }
     Ok(out)
 }
@@ -748,9 +739,9 @@ fn resolve_identity_unchecked(
 }
 
 fn git_config_name(repo_root: &Path) -> Result<String, String> {
-    if let Ok(output) = Command::new("git")
+    if let Ok(output) = GitRun::new()
         .args(["config", "user.name"])
-        .current_dir(repo_root)
+        .cwd(repo_root)
         .output()
     {
         if output.status.success() {
@@ -976,12 +967,11 @@ pub fn commit_for_line_in(
     line: usize,
     contents: Option<&str>,
 ) -> Result<Option<String>, String> {
-    let mut cmd = Command::new("git");
-    cmd.args(["blame", "-L", &format!("{line},{line}"), "--porcelain"]);
+    let mut run = GitRun::new().args(["blame", "-L", &format!("{line},{line}"), "--porcelain"]);
     if contents.is_some() {
-        cmd.args(["--contents", "-"]);
+        run = run.args(["--contents", "-"]);
     }
-    let output = run_blame(cmd, path, repo_root, contents)
+    let output = run_blame(run, path, repo_root, contents)
         .map_err(|e| format!("could not run git blame on {}: {e}", path.display()))?;
 
     if !output.status.success() {
@@ -1168,15 +1158,14 @@ fn blame_lines(
     if lines.contains(&0) {
         return each();
     }
-    let mut cmd = Command::new("git");
-    cmd.args(["blame", "--porcelain"]);
+    let mut run = GitRun::new().args(["blame", "--porcelain"]);
     for line in lines {
-        cmd.args(["-L", &format!("{line},{line}")]);
+        run = run.args(["-L", &format!("{line},{line}")]);
     }
     if contents.is_some() {
-        cmd.args(["--contents", "-"]);
+        run = run.args(["--contents", "-"]);
     }
-    let Ok(output) = run_blame(cmd, path, repo_root, contents) else {
+    let Ok(output) = run_blame(run, path, repo_root, contents) else {
         return each();
     };
     if !output.status.success() {
@@ -1197,28 +1186,17 @@ fn blame_lines(
 
 /// Runs a prepared `git blame` for `path`, feeding `contents` on stdin if given.
 fn run_blame(
-    mut cmd: Command,
+    run: GitRun,
     path: &Path,
     repo_root: &Path,
     contents: Option<&str>,
 ) -> std::io::Result<std::process::Output> {
-    use std::io::Write;
-    cmd.arg("--")
-        .arg(path)
-        .current_dir(repo_root)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .stdin(if contents.is_some() {
-            Stdio::piped()
-        } else {
-            Stdio::null()
-        });
-    let mut child = cmd.spawn()?;
-    if let (Some(text), Some(mut stdin)) = (contents, child.stdin.take()) {
+    let mut run = run.arg("--").arg(path).cwd(repo_root);
+    if let Some(text) = contents {
         // A broken pipe means git exited early (no history); its status says why.
-        let _ = stdin.write_all(text.as_bytes());
+        run = run.stdin(text.as_bytes());
     }
-    child.wait_with_output()
+    run.output().map_err(git::RunError::into_io)
 }
 
 /// The commit of each blamed line of `git blame --porcelain` output, by line.
@@ -1254,7 +1232,7 @@ pub fn commits_touching_since(
     since: &str,
     path: &str,
 ) -> Result<Vec<String>, String> {
-    let output = Command::new("git")
+    let output = GitRun::new()
         .args([
             "--literal-pathspecs",
             "log",
@@ -1264,9 +1242,9 @@ pub fn commits_touching_since(
             "--",
             path,
         ])
-        .current_dir(repo_root)
+        .cwd(repo_root)
         .output()
-        .map_err(|e| format!("could not run git log on {path}: {e}"))?;
+        .map_err(|e| format!("could not run git log on {path}: {}", e.into_io()))?;
     if !output.status.success() {
         return Err(format!(
             "git log on {path} failed: {}",
@@ -1282,12 +1260,18 @@ pub fn commits_touching_since(
 /// The commit that last touched a whole file -- used for locator paths,
 /// which (unlike a header field) aren't a single line (ADR-0032).
 pub fn last_commit_for_path(repo_root: &Path, path: &Path) -> Result<Option<String>, String> {
-    let output = Command::new("git")
+    let output = GitRun::new()
         .args(["--literal-pathspecs", "log", "-1", "--format=%H", "--"])
         .arg(path)
-        .current_dir(repo_root)
+        .cwd(repo_root)
         .output()
-        .map_err(|e| format!("could not run git log on {}: {e}", path.display()))?;
+        .map_err(|e| {
+            format!(
+                "could not run git log on {}: {}",
+                path.display(),
+                e.into_io()
+            )
+        })?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -1315,12 +1299,12 @@ pub fn last_commit_for_paths(
 ) -> Result<Option<String>, String> {
     let mut shas: Vec<String> = Vec::new();
     for batch in paths.chunks(400) {
-        let output = Command::new("git")
+        let output = GitRun::new()
             .args(["--literal-pathspecs", "log", "-1", "--format=%H", "--"])
             .args(batch)
-            .current_dir(repo_root)
+            .cwd(repo_root)
             .output()
-            .map_err(|e| format!("could not run git log: {e}"))?;
+            .map_err(|e| format!("could not run git log: {}", e.into_io()))?;
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             if is_no_history_stderr(&stderr) {
@@ -1336,12 +1320,12 @@ pub fn last_commit_for_paths(
     if shas.len() <= 1 {
         return Ok(shas.pop());
     }
-    let output = Command::new("git")
+    let output = GitRun::new()
         .args(["log", "--no-walk=sorted", "-n", "1", "--format=%H"])
         .args(&shas)
-        .current_dir(repo_root)
+        .cwd(repo_root)
         .output()
-        .map_err(|e| format!("could not run git log: {e}"))?;
+        .map_err(|e| format!("could not run git log: {}", e.into_io()))?;
     if !output.status.success() {
         return Err(format!(
             "git log failed: {}",
@@ -1365,11 +1349,11 @@ pub fn commit_strictly_before(
     if ancestor == descendant {
         return Ok(false);
     }
-    let output = Command::new("git")
+    let output = GitRun::new()
         .args(["merge-base", "--is-ancestor", ancestor, descendant])
-        .current_dir(repo_root)
+        .cwd(repo_root)
         .output()
-        .map_err(|e| format!("could not run git merge-base: {e}"))?;
+        .map_err(|e| format!("could not run git merge-base: {}", e.into_io()))?;
     match output.status.code() {
         Some(0) => Ok(true),
         Some(1) => Ok(false),
@@ -1385,11 +1369,11 @@ pub fn commit_strictly_before(
 /// Whether the repository is a shallow clone, which hides the history the
 /// drift computation reads (`MILE-159`). `Err` when git cannot say.
 pub fn is_shallow_repository(repo_root: &Path) -> Result<bool, String> {
-    let output = Command::new("git")
+    let output = GitRun::new()
         .args(["rev-parse", "--is-shallow-repository"])
-        .current_dir(repo_root)
+        .cwd(repo_root)
         .output()
-        .map_err(|e| format!("could not run git rev-parse: {e}"))?;
+        .map_err(|e| format!("could not run git rev-parse: {}", e.into_io()))?;
     if !output.status.success() {
         return Err(format!(
             "git rev-parse --is-shallow-repository failed: {}",
@@ -1414,9 +1398,9 @@ fn is_no_history_stderr(stderr: &str) -> bool {
 /// `None` when git cannot say, so a grace window or claim age never fires on
 /// a commit it could not date.
 pub fn commit_unix_time(repo_root: &Path, commit: &str) -> Option<i64> {
-    let output = Command::new("git")
+    let output = GitRun::new()
         .args(["show", "-s", "--format=%ct", commit])
-        .current_dir(repo_root)
+        .cwd(repo_root)
         .output()
         .ok()?;
     if !output.status.success() {
@@ -1453,14 +1437,14 @@ pub fn sha256_hex_of_str(text: &str) -> String {
 
 fn run_git(dir: &Path, args: &[&str]) -> Result<String, DiscoveryError> {
     let args_str = args.join(" ");
-    let output = Command::new("git")
+    let output = GitRun::new()
         .args(args)
-        .current_dir(dir)
+        .cwd(dir)
         .output()
-        .map_err(|source| DiscoveryError::Spawn {
+        .map_err(|e| DiscoveryError::Spawn {
             args: args_str.clone(),
             dir: dir.to_path_buf(),
-            source,
+            source: e.into_io(),
         })?;
 
     if !output.status.success() {
