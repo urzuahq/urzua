@@ -322,8 +322,6 @@ pub struct LocatorDrift {
     pub category: String,
     /// The locator as `LocatorReview::locator` shows it.
     pub locator: String,
-    /// Only a grace window held it back from being reported as drift.
-    pub inside_grace: bool,
 }
 
 /// What the drift policy makes of a record's drifted locators.
@@ -711,7 +709,6 @@ mod tests {
         LocatorDrift {
             category: category.to_string(),
             locator: path.to_string(),
-            inside_grace: false,
         }
     }
 

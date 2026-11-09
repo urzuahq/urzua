@@ -2099,7 +2099,18 @@ fn claim_expiry_problems(
             ));
         }
     }
+    let mut seen_drift: Vec<&str> = Vec::new();
     for category in setting.drift.iter().flat_map(|d| d.keys()) {
+        if seen_drift.contains(&category.trim()) {
+            return Err(bad(
+                "drift",
+                format!(
+                    "names the category '{}' more than once (keys that differ only by whitespace are the same category)",
+                    category.trim()
+                ),
+            ));
+        }
+        seen_drift.push(category.trim());
         if !categories.contains(&category.trim()) {
             return Err(bad(
                 "drift",
@@ -2585,6 +2596,35 @@ fn generic_marker_problem(config: &Config, marker: &str) -> Option<String> {
         ));
     }
     let prefixes = crate::rules::declared_prefixes(config);
+    // A marker that is itself a record id (`ADR-1`) excuses every citation of that id
+    // and of the ids it begins (`ADR-10` to `ADR-19`, ...).
+    let lowered = marker.to_lowercase();
+    if let Some(prefix) = prefixes.iter().find(|prefix| {
+        lowered
+            .strip_prefix(&format!("{}-", prefix.to_lowercase()))
+            .is_some_and(|n| !n.is_empty() && n.chars().all(|c| c.is_ascii_digit()))
+    }) {
+        return Some(format!(
+            "'{marker}' is a record id ({prefix}-N) and would excuse every citation of it and of every id it begins; declare text that appears in no id"
+        ));
+    }
+    // A fragment of a keyword run into an id head (`ements: ADR-`) sits on every
+    // back-pointer line of that type.
+    for keyword in [
+        crate::rules::MARKER_IMPLEMENTS,
+        crate::rules::MARKER_VERIFIES,
+    ] {
+        for prefix in &prefixes {
+            for joiner in ["", " "] {
+                let combined = format!("{keyword}{joiner}{prefix}-").to_lowercase();
+                if combined.contains(&lowered) {
+                    return Some(format!(
+                        "'{marker}' is part of '{keyword} {prefix}-', the start of every back-pointer line, and would excuse them all; declare text that names something specific"
+                    ));
+                }
+            }
+        }
+    }
     if let Some(head) = prefixes
         .iter()
         .map(|prefix| format!("{prefix}-"))
@@ -6326,17 +6366,23 @@ record_types:
             "adr",
             "Adr-",
             "// mile",
+            "ements: ADR-",
+            "ements: ADR",
+            "s: MILE-",
+            "ADR-1",
+            "adr-1",
+            "ADR-26",
+            "MILE-3",
         ] {
             let err = parse(&cfg(marker)).unwrap_err().to_string();
             assert!(err.contains("ignore_marker"), "{marker}: {err}");
         }
-        // Specific text still loads, including one that names a single record.
+        // Specific text still loads, including a keyword followed by one record.
         for marker in [
             "urzua:allow",
             "example-only",
             "record-id-ok",
-            "ADR-1",
-            "adr-1",
+            "nocite",
             "ok!x",
             "Implements: ADR-1",
         ] {
@@ -7115,6 +7161,22 @@ rules:
             out = out.replace(slot, value);
         }
         out
+    }
+
+    #[test]
+    fn drift_keys_that_differ_only_by_whitespace_are_refused() {
+        let base = render(&[]);
+        let with = |drift: &str| {
+            base.replace(
+                "    require_pin: [code]",
+                &format!("    require_pin: [code]\n    drift: {drift}"),
+            )
+        };
+        parse(&with("{code: block}")).expect("one key loads");
+        let err = parse(&with("{code: block, ' code': acknowledge}"))
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("more than once"), "{err}");
     }
 
     #[test]
