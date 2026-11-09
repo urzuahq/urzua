@@ -493,6 +493,12 @@ pub fn render_config_yaml(proposed: &[ProposedRecordType]) -> String {
     );
     root.insert(Value::from("record_types"), Value::Mapping(types));
     root.insert(Value::from("rules"), Value::Mapping(rules));
+    // Proposed so a guardrail an adopter enables later also judges the files of
+    // a linked worktree of this repository (ADR-89 amendment of 2026-11-09);
+    // alone it enables nothing.
+    let mut harness = Mapping::new();
+    harness.insert(Value::from("outside_writes"), Value::from("shared"));
+    root.insert(Value::from("harness"), Value::Mapping(harness));
 
     // `.unwrap()`, not a swallowed default: `root` is built entirely from
     // plain strings/sequences/mappings, so serialization failing here would
