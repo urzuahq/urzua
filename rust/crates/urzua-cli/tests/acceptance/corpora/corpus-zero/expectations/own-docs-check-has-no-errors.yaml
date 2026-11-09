@@ -1,6 +1,6 @@
 id: own-docs-check-has-no-errors
 corpus: "@repo"
-invocation: [check, docs/]
+invocation: [--as-of, "2026-11-09", check, docs/]
 expect_exit: 0
 expect_json:
   - {at: /blocking, equals: false}
