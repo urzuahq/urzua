@@ -13,6 +13,13 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::OnceLock;
 
+/// The evaluation date every test that judges this repository's own live corpus passes as
+/// `--as-of`. Claim expiry (ADR-97) is the records gate's job under the real clock; a test
+/// that asserted a clean run under the real clock would go red on the first expiry with no
+/// code change. A date in the past is safe: nothing reads a record dated after it as an
+/// error. Acceptance cases with `corpus: "@repo"` carry the same literal in their YAML.
+pub const OWN_CORPUS_AS_OF: &str = "2026-11-09";
+
 /// The directory holding a `gh` that always fails, as a `gh` that is not logged
 /// in does. `urzua fix --apply` and `urzua new` ask `gh api user` who is
 /// attesting, and a logged-in `gh` on the machine running the tests would make a

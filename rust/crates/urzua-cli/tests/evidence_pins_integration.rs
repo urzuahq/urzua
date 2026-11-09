@@ -25,8 +25,11 @@ fn commit_all(dir: &Path, date: Option<&str>) {
     git(dir, &["commit", "-q", "-m", "fixture"], date);
 }
 
+/// Every run is evaluated as of the date the fixture was built on, passed explicitly, so the
+/// fixture's `Audited` date and the process's evaluation date cannot straddle midnight UTC.
 fn run_urzua(dir: &Path, args: &[&str]) -> std::process::Output {
     common::urzua()
+        .args(["--as-of", &today()])
         .args(args)
         .current_dir(dir)
         .output()
@@ -374,9 +377,15 @@ fn audit_repo(name: &str, locator_date: Option<&str>, audited: Option<&str>) -> 
     dir
 }
 
+/// The date this test process's fixtures are built on: read once, so every use agrees.
 fn today() -> String {
-    let out = Command::new("date").args(["-u", "+%F"]).output().unwrap();
-    String::from_utf8(out.stdout).unwrap().trim().to_string()
+    static TODAY: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    TODAY
+        .get_or_init(|| {
+            let out = Command::new("date").args(["-u", "+%F"]).output().unwrap();
+            String::from_utf8(out.stdout).unwrap().trim().to_string()
+        })
+        .clone()
 }
 
 fn drift_reported(parsed: &serde_json::Value) -> bool {

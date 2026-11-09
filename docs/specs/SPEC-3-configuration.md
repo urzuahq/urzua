@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.122'
+Version: '0.123'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:921027c81b7ecf7d56c357dd548fa28c47c785c7cd322c261c14e0b46626b296, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:92a2b9ceca89133f30987a013734da66b9332c4e937a87e72e53571596e18093, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:3c8aa671582772499ab7345cdbfb5a4dc2c50462882851fb20f853992acfd57c
@@ -2359,3 +2359,4 @@ proves this configuration produces the three findings.
 > | 2026-11-08 | Bumped to `0.121`. Documents `statuses.delivery.items.pending`, an optional placeholder vocabulary for Done-means items in the shape of `statuses.pending`. **Why:** `ADR-96` amendment of 2026-11-08 (placeholder items). | **substantive** |
 > | 2026-11-09 | Bumped to `0.122`. A back-pointer rule's `ignore_marker` is also refused at load when it has fewer than 3 non-whitespace characters, has no letter or digit, or is part of a declared record id head such as `ADR-`. **Why:** tightens the guard of the 2026-11-08 amendment, which refused only text inside a back-pointer keyword; `//`, `#` or `ADR-` loaded and excused every back-pointer line. | **substantive** |
 > | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 20203e601224 -> 921027c81b7e. Reason: config.rs: read the diff since the previous pin; it adds generic_marker_problem and its call in validate_ignore_markers (a back-pointer ignore_marker shorter than 3 characters, with no letter or digit, or inside a record id head is refused at load) plus its test; this adds the guard this record now documents (0.122 row above), and no other claim changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-09 | Bumped to `0.123`. Note on the log: The version numbers of earlier `Bumped to` rows are not strictly increasing, and history is not rewritten: the order of the rows is the order the changes landed, and the current `Version` header is authoritative. Rows affected: `0.6` after `0.7`; `0.10` after `0.11`; `0.8`, `0.21` and `0.84` each twice; `0.113` twice, the second after `0.114` (the claim-expiry documentation row). **Why:** a review found the out-of-order and repeated numbers and a reader could be misled about which row introduced which version. | **structural** |
