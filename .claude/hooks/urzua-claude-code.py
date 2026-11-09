@@ -41,9 +41,9 @@ a path only if it collapses to a shorter one. A tool that applies a patch or run
 shell command is not read.
 
 A call is judged cheapest first, and the first block ends it: every file against the
-acceptance and protected-path gates (milliseconds), then the strings the translator could
-not place, then the files whose judgement checks a record (seconds each). A call with more
-than 512 distinct short strings, or more than 8 files that are checked as records, is
+acceptance and protected-path gates (milliseconds, one engine process for all of them),
+then the strings the translator could not place, then the files whose judgement checks a record (seconds each). A call with more
+than 512 distinct short strings, more than 512 files, or more than 8 files that are checked as records, is
 not judged in full: it is an edit that was not judged, refused where the configuration
 says deny, never silently cut short.
 
@@ -82,6 +82,7 @@ MCP_MAX_LOOSE = 512
 # The most record-checking writes of one call that are judged: each costs a full
 # record check in the engine, so a call with more is an edit that was not judged.
 MCP_MAX_RECORDS = 8
+MCP_MAX_ITEMS = 512
 
 
 def _project_dir():
@@ -147,6 +148,13 @@ def closed_by_config_text(cwd):
     return False
 
 
+def reason_of(message):
+    """The reason inside a translator message, without its own prefix and
+    closing advice: the engine words the refusal or notice around it."""
+    m = re.match(r"^urzua harness: urzua did NOT judge this (?:edit|call) \((.*?)\)\. It is allowed .*$", message, re.S)
+    return m.group(1) if m else message
+
+
 def unjudged_result(message, argv, cwd, path, engine_failed, loud=True):
     """An edit the translator could not judge, as (kind, message): the engine
     says whether the configuration refuses it (acceptance or protected-paths
@@ -155,7 +163,7 @@ def unjudged_result(message, argv, cwd, path, engine_failed, loud=True):
     says nothing unless it is refused."""
     paths = path if isinstance(path, list) else ([path] if path else [])
     if not engine_failed and argv:
-        request = {"event": "edit", "tool": None, "paths": paths, "content": None, "actor": "agent", "cwd": cwd, "project_dir": PROJECT_DIR, "adapter_error": message}
+        request = {"event": "edit", "tool": None, "paths": paths, "content": None, "actor": "agent", "cwd": cwd, "project_dir": PROJECT_DIR, "adapter_error": reason_of(message)}
         try:
             verdict = engine(argv, request, cwd)
             if verdict.get("verdict") == "block":
@@ -430,26 +438,51 @@ def engine_unrunnable(argv, cwd, path):
 
 def judge_mcp(tool, target, argv, cwd):
     """Judges an MCP call's writes cheapest first and stops at the first block:
-    every file against the acceptance and protected-path gates (milliseconds),
-    then what the translator could not place, then the files whose judgement
-    checks a record (a full record check each, so no more than MCP_MAX_RECORDS)."""
+    every file against the acceptance and protected-path gates (one engine
+    process for all of them, however many), then what the translator could not
+    place, then the files whose judgement checks a record (a full record check
+    each, so no more than MCP_MAX_RECORDS). At most MCP_MAX_ITEMS files are
+    judged; the rest are an edit that was not judged."""
     results, records = [], []
-    for path, content in target["items"]:
-        request = {"event": "edit", "tool": tool, "paths": [path], "content": content, "actor": "agent", "cwd": cwd, "project_dir": PROJECT_DIR, "gates_only": True}
+    items = target["items"][:MCP_MAX_ITEMS]
+    overflow = [p for p, _ in target["items"][MCP_MAX_ITEMS:]]
+    if items:
+        request = {"event": "edit", "tool": tool, "paths": [p for p, _ in items], "content": items[0][1] if len(items) == 1 else None, "contents": [c for _, c in items], "actor": "agent", "cwd": cwd, "project_dir": PROJECT_DIR, "gates_only": True}
         try:
             verdict = engine(argv, request, cwd)
         except (OSError, ValueError, AttributeError):
-            results.append(engine_unrunnable(argv, cwd, path))
-            continue
-        kind, message = verdict.get("verdict"), verdict.get("message", "")
-        if kind == "block":
-            return decide([("block", message)])
-        if "record" not in verdict:
-            # An engine that does not know gates_only judged the file in full.
-            if kind in ("allow-unjudged", "allow-override", "allow-with-warnings"):
-                results.append(("note", message))
-        elif verdict["record"]:
-            records.append((path, content))
+            results.append(engine_unrunnable(argv, cwd, items[0][0]))
+            verdict = None
+        if verdict is not None:
+            kind, message = verdict.get("verdict"), verdict.get("message", "")
+            if kind == "block":
+                return decide([("block", message)])
+            flags = verdict.get("records")
+            if isinstance(flags, list) and len(flags) == len(items):
+                records = [item for item, flag in zip(items, flags) if flag]
+            else:
+                # An engine that does not read a batch (it gives no per-file
+                # answer, and read none of the contents): ask it one file at a
+                # time, at most MCP_MAX_ITEMS.
+                for path, content in items:
+                    request = {"event": "edit", "tool": tool, "paths": [path], "content": content, "actor": "agent", "cwd": cwd, "project_dir": PROJECT_DIR, "gates_only": True}
+                    try:
+                        verdict = engine(argv, request, cwd)
+                    except (OSError, ValueError, AttributeError):
+                        results.append(engine_unrunnable(argv, cwd, path))
+                        continue
+                    kind, message = verdict.get("verdict"), verdict.get("message", "")
+                    if kind == "block":
+                        return decide([("block", message)])
+                    if "record" not in verdict:
+                        # An engine that does not know gates_only judged the file in full.
+                        if kind in ("allow-unjudged", "allow-override", "allow-with-warnings"):
+                            results.append(("note", message))
+                    elif verdict["record"]:
+                        records.append((path, content))
+    if overflow:
+        message = "urzua harness: urzua did NOT judge this edit (%s writes %d files, more than the %d it reads in one call; the first %d were judged against the gates). It is allowed unless the configuration refuses an edit that was not judged; run 'urzua check' before committing." % (tool, len(target["items"]), MCP_MAX_ITEMS, MCP_MAX_ITEMS)
+        results.append(unjudged_result(message, argv, cwd, overflow, False))
     if target["deep"]:
         results.append(unjudged_result("urzua harness: urzua did NOT judge this edit (%s: its input has more strings or nests deeper than the translator reads). It is allowed unless the configuration refuses an edit that was not judged; run 'urzua check' before committing." % tool, argv, cwd, [], False))
     candidates = target["rest"] + target["loose"]

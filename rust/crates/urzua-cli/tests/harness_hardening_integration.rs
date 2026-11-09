@@ -900,12 +900,13 @@ fn a_file_uri_is_a_path_whatever_its_case_and_however_many_slashes() {
 }
 
 /// An engine that logs every request and blocks any naming `.claude`; a
-/// `gates_only` request is answered as a record.
+/// `gates_only` request is answered as a record, for every path it names.
 fn logging_engine(log: &Path) -> Vec<String> {
+    let script = "import json,sys\nraw=sys.stdin.read()\nopen(sys.argv[1],'a').write(raw.replace('\\n',' ')+'\\n')\nr=json.loads(raw)\nif '.claude' in raw:\n print(json.dumps({'verdict':'block','message':'protected'}))\nelif r.get('gates_only'):\n print(json.dumps({'verdict':'allow','message':'','record':True,'records':[True]*len(r['paths'])}))\nelse:\n print(json.dumps({'verdict':'allow','message':''}))";
     vec![
-        "sh".into(),
+        "python3".into(),
         "-c".into(),
-        "in=$(cat); printf '%s\\n' \"$in\" >> \"$0\"; case \"$in\" in *.claude*) echo '{\"verdict\":\"block\",\"message\":\"protected\"}';; *gates_only*) echo '{\"verdict\":\"allow\",\"message\":\"\",\"record\":true}';; *) echo '{\"verdict\":\"allow\",\"message\":\"\"}';; esac".into(),
+        script.into(),
         log.to_string_lossy().to_string(),
     ]
 }
@@ -948,9 +949,10 @@ fn a_multi_file_call_is_blocked_by_its_protected_file_before_any_record_is_check
         requests.iter().all(|r| r.contains("gates_only")),
         "no full record judgement before the denial: {requests:?}"
     );
-    assert!(
-        requests.len() <= 3,
-        "stops at the first block: {requests:?}"
+    assert_eq!(
+        requests.len(),
+        1,
+        "every file is asked of the engine at once: {requests:?}"
     );
 }
 
@@ -974,7 +976,11 @@ fn record_items_are_judged_in_full_only_after_every_gate_has_passed_and_stop_at_
     );
     let requests = logged(&log);
     let (gates, full): (Vec<_>, Vec<_>) = requests.iter().partition(|r| r.contains("gates_only"));
-    assert_eq!((gates.len(), full.len()), (2, 2), "{requests:?}");
+    assert_eq!(
+        (gates.len(), full.len()),
+        (1, 2),
+        "one gates request for the whole call, then one per record: {requests:?}"
+    );
 }
 
 #[test]
@@ -1369,6 +1375,44 @@ fn an_unchanged_status_gate_reports_no_shrink() {
 }
 
 #[test]
+fn widening_the_decider_group_of_a_status_gate_is_not_shrinkage_but_the_move_and_the_configuration_are_reported(
+) {
+    let cfg = config("").replace(
+        "maintainers: {logins: [Alice]}",
+        "maintainers: {logins: [Alice]}\n    everyone: {logins: [Alice, Bob]}",
+    );
+    let dir = fixture("status-gate-widened", &cfg);
+    run_event(&dir, "session-start");
+    bash(
+        &dir,
+        &format!(
+            "sed -i 's/to: \\[Accepted, Rejected\\], by: maintainers/to: [Accepted, Rejected], by: everyone/' .urzua/config.yaml && {SED_ACCEPT}"
+        ),
+    );
+    let v = post(&dir);
+    // The move is reported, naming the widened group the gate now has.
+    let moves = gated_moves(&v);
+    assert_eq!(moves.len(), 1, "{v}");
+    assert!(moves[0].contains("everyone"), "{moves:?}");
+    // The configuration is a protected path, so its change is reported.
+    let protected: Vec<&str> = v["protected_changes"]
+        .as_array()
+        .unwrap_or_else(|| panic!("no protected_changes: {v}"))
+        .iter()
+        .map(|l| l.as_str().unwrap())
+        .collect();
+    assert!(
+        protected.iter().any(|l| l.contains(".urzua/config.yaml")),
+        "{v}"
+    );
+    // The gate still covers the status, so nothing is said to have shrunk.
+    assert!(
+        !lines_of(&v).iter().any(|l| l.contains("shrank")),
+        "a change of `by` is not shrinkage: {v}"
+    );
+}
+
+#[test]
 fn a_change_reported_in_an_earlier_session_and_redone_in_the_next_is_reported_again() {
     let dir = fixture("session-forgets", &config(""));
     run_event(&dir, "session-start");
@@ -1463,4 +1507,172 @@ fn an_edit_through_a_hardlink_is_judged_as_the_file_it_writes() {
     std::fs::hard_link(dir.join("a.txt"), dir.join("b.txt")).unwrap();
     let (code, v) = run_edit(&dir, "b.txt", "y\n");
     assert_eq!(code, 0, "{v}");
+}
+
+fn many_files(dir: &Path, count: usize, protected_at: usize) -> serde_json::Value {
+    let items: Vec<serde_json::Value> = (0..count)
+        .map(|n| {
+            let file = if n == protected_at {
+                PROTECTED.to_string()
+            } else {
+                format!("notes/n{n}.txt")
+            };
+            serde_json::json!({"path": dir.join(file).to_string_lossy(), "content": "x"})
+        })
+        .collect();
+    serde_json::json!({"files": items})
+}
+
+#[test]
+fn the_gates_of_a_call_with_hundreds_of_files_are_one_engine_process() {
+    let dir = fixture("mcp-one-gates-process", &config(""));
+    let log = dir.join("requests.log");
+    // 500 ordinary files and the protected one last: judged by one request.
+    let v = translate_with(
+        &dir,
+        &mcp(&dir, "mcp__x__write_files", many_files(&dir, 500, 499)),
+        &logging_engine(&log),
+    );
+    assert_eq!(decision(&v), Some("deny"), "{v}");
+    let requests = logged(&log);
+    assert_eq!(requests.len(), 1, "one gates request: {}", requests.len());
+    assert!(requests[0].contains("gates_only"), "{}", requests[0]);
+    // Each file carries its own content in the request.
+    assert!(requests[0].contains("\"contents\""), "{}", requests[0]);
+}
+
+#[test]
+fn two_thousand_files_with_the_protected_one_last_are_refused_well_inside_the_hook_timeout() {
+    let dir = fixture("mcp-2200", &config(""));
+    let input = many_files(&dir, 2200, 2199);
+    let started = std::time::Instant::now();
+    let v = translate(&dir, &mcp(&dir, "mcp__x__write_files", input), &ENGINE);
+    let elapsed = started.elapsed();
+    assert_eq!(decision(&v), Some("deny"), "{v}");
+    assert!(
+        elapsed < std::time::Duration::from_secs(20),
+        "one gates process, not one per file: {elapsed:?}"
+    );
+    // The protected file inside the files that are read is refused by the gate.
+    let input = many_files(&dir, 2200, 100);
+    let started = std::time::Instant::now();
+    let v = translate(&dir, &mcp(&dir, "mcp__x__write_files", input), &ENGINE);
+    assert_eq!(decision(&v), Some("deny"), "{v}");
+    assert!(
+        v["hookSpecificOutput"]["permissionDecisionReason"]
+            .as_str()
+            .unwrap()
+            .contains("protected"),
+        "{v}"
+    );
+    assert!(started.elapsed() < std::time::Duration::from_secs(20));
+}
+
+#[test]
+fn files_beyond_the_cap_are_unjudged_and_refused_under_deny_allowed_loudly_otherwise() {
+    let dir = fixture("mcp-item-cap", &config(""));
+    // 513 files with the protected one as the last: it is beyond what is read,
+    // so the call is an edit that was not judged, and the protected path
+    // it names makes the guardrail refuse it.
+    let v = translate(
+        &dir,
+        &mcp(&dir, "mcp__x__write_files", many_files(&dir, 513, 512)),
+        &ENGINE,
+    );
+    assert_eq!(decision(&v), Some("deny"), "{v}");
+    let reason = v["hookSpecificOutput"]["permissionDecisionReason"]
+        .as_str()
+        .unwrap();
+    assert!(reason.contains("NOT judge"), "{reason}");
+    // The 512 that are read are judged in full, and none is protected.
+    let v = translate(
+        &dir,
+        &mcp(&dir, "mcp__x__write_files", many_files(&dir, 512, 9999)),
+        &ENGINE,
+    );
+    assert_eq!(decision(&v), None, "{v}");
+    assert!(v.is_null(), "{v}");
+    // Where unjudged edits are allowed, the overflow is allowed with a notice.
+    let open = fixture("mcp-item-cap-open", &config(", on_unjudged: allow"));
+    let v = translate(
+        &open,
+        &mcp(&open, "mcp__x__write_files", many_files(&open, 513, 512)),
+        &ENGINE,
+    );
+    assert_eq!(decision(&v), None, "{v}");
+    assert!(
+        v["systemMessage"].as_str().unwrap().contains("NOT judge"),
+        "{v}"
+    );
+}
+
+#[test]
+fn a_gated_status_among_many_files_is_judged_with_its_own_content() {
+    let dir = fixture("mcp-batch-contents", &config(""));
+    let abs = |f: &str| dir.join(f).to_string_lossy().to_string();
+    // Another file's content must not stand in for the record's.
+    let v = translate(
+        &dir,
+        &mcp(
+            &dir,
+            "mcp__x__write_files",
+            serde_json::json!({"files": [
+                {"path": abs("notes.txt"), "content": "hi"},
+                {"path": abs(PATH_1), "content": ACCEPTED},
+            ]}),
+        ),
+        &ENGINE,
+    );
+    assert_eq!(decision(&v), Some("deny"), "{v}");
+    let v = translate(
+        &dir,
+        &mcp(
+            &dir,
+            "mcp__x__write_files",
+            serde_json::json!({"files": [
+                {"path": abs("notes.txt"), "content": ACCEPTED},
+                {"path": abs(PATH_1), "content": PROPOSED},
+            ]}),
+        ),
+        &ENGINE,
+    );
+    assert_eq!(decision(&v), None, "{v}");
+}
+
+#[test]
+fn an_unjudged_notice_names_urzua_once() {
+    let dir = fixture("mcp-notice-once", &config(", on_unjudged: allow"));
+    let abs = |f: &str| dir.join(f).to_string_lossy().to_string();
+    let v = translate(
+        &dir,
+        &mcp(
+            &dir,
+            "mcp__fs__edit_file",
+            serde_json::json!({"path": abs("notes.txt"), "edits": [{"oldText": "a", "newText": "b"}]}),
+        ),
+        &ENGINE,
+    );
+    let message = v["systemMessage"].as_str().unwrap();
+    assert_eq!(
+        message.matches("urzua did NOT judge").count(),
+        1,
+        "{message}"
+    );
+    assert!(!message.contains("(urzua harness"), "{message}");
+    // Refused under deny, the reason reads once too.
+    let closed = fixture("mcp-notice-once-deny", &config(""));
+    let v = translate(
+        &closed,
+        &mcp(
+            &closed,
+            "mcp__fs__edit_file",
+            serde_json::json!({"path": closed.join(PROTECTED).to_string_lossy(), "edits": [{"oldText": "a", "newText": "b"}]}),
+        ),
+        &ENGINE,
+    );
+    let reason = v["hookSpecificOutput"]["permissionDecisionReason"]
+        .as_str()
+        .unwrap();
+    assert_eq!(reason.matches("urzua did NOT judge").count(), 1, "{reason}");
+    assert!(!reason.contains("(urzua harness"), "{reason}");
 }
