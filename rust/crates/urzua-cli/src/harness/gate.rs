@@ -349,27 +349,98 @@ pub(super) fn judge(
     None
 }
 
+/// One status gate as the post-command baseline remembers it, so a gate the
+/// command removed or narrowed still judges the move it was meant to stop.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub(super) struct StatusGateEntry {
+    pub record_type: String,
+    pub to: Vec<String>,
+    pub by: String,
+}
+
+/// The status gates in force: none unless the `acceptance` guardrail is on.
+pub(super) fn status_gate_entries(config: &Config) -> Vec<StatusGateEntry> {
+    let (Some(harness), Some(authority)) = (config.harness.as_ref(), config.authority.as_ref())
+    else {
+        return Vec::new();
+    };
+    if !harness.enabled("acceptance") {
+        return Vec::new();
+    }
+    authority
+        .gates
+        .iter()
+        .filter_map(|g| {
+            Some(StatusGateEntry {
+                record_type: g.record_type.clone()?,
+                to: g.to.clone(),
+                by: g.by.clone(),
+            })
+        })
+        .collect()
+}
+
+/// The `(type, status)` pairs `old` gated that `now` does not: a gate removed,
+/// narrowed, or lost to the guardrail being switched off. One line each.
+pub(super) fn lost_status_gates(old: &[StatusGateEntry], now: &[StatusGateEntry]) -> Vec<String> {
+    old.iter()
+        .filter_map(|o| {
+            let lost: Vec<&str> =
+                o.to.iter()
+                    .map(String::as_str)
+                    .filter(|s| {
+                        !now.iter()
+                            .any(|n| n.record_type == o.record_type && n.to.iter().any(|t| t == s))
+                    })
+                    .collect();
+            (!lost.is_empty()).then(|| format!("type {} to {}", o.record_type, lost.join(", ")))
+        })
+        .collect()
+}
+
 /// After a command has already run: the report line for a record whose status
 /// on disk is a gated one that `base` did not hold (a new record, or one at
 /// another status), else `None`. `base` is `HEAD`, or the commit the last
-/// post-command check saw when the command committed. It judges the same table
-/// as [`judge`] and only describes; the post-command check reports it and never
-/// blocks.
+/// post-command check saw when the command committed. It judges the table as
+/// [`judge`] does, and also the gates the baseline held (`baseline`): a gate
+/// the command removed or narrowed, or the guardrail it switched off, still
+/// reports the move it was meant to stop. It only describes; the post-command
+/// check reports it and never blocks.
 pub(super) fn gated_move_report(
     repo_root: &Path,
     config: &Config,
     rel: &Path,
     base: &str,
+    baseline: &[StatusGateEntry],
 ) -> Option<String> {
-    let (harness, authority) = (config.harness.as_ref()?, config.authority.as_ref()?);
-    if !harness.enabled("acceptance") || !authority.has_status_gate() {
-        return None;
-    }
     let folded = fold_to_declared_dir(config, rel);
     let rel = folded.as_path();
     let content = std::fs::read_to_string(repo_root.join(rel)).ok()?;
     let (record_type, status) = status_of(config, rel, &content)?;
-    let gate = authority.status_gates(&record_type, &status).next()?;
+    let current = status_gate_entries(config)
+        .into_iter()
+        .find(|g| g.record_type == record_type && g.to.contains(&status))
+        .map(|g| {
+            format!(
+                "gate: type {} to {}, by '{}'",
+                g.record_type,
+                g.to.join(", "),
+                g.by
+            )
+        });
+    let summary = current.or_else(|| {
+        baseline
+            .iter()
+            .find(|g| g.record_type == record_type && g.to.contains(&status))
+            .map(|g| {
+                format!(
+                    "gate: type {} to {}, by '{}', no longer in the configuration",
+                    g.record_type,
+                    g.to.join(", "),
+                    g.by
+                )
+            })
+    })?;
     let field = rules::relation_field_name(config, &record_type, RelationRole::Status);
     let before = match urzua_io::read_at_commit_if_present(repo_root, base, rel) {
         Ok(Some(text)) => match status_of(config, rel, &text) {
@@ -384,9 +455,8 @@ pub(super) fn gated_move_report(
         ),
     };
     Some(format!(
-        "  {} [acceptance] error: the command {before}, a move the authority table reserves for a decider ({}). It was not prevented; CI's diff.decider-required checks who made it.",
+        "  {} [acceptance] error: the command {before}, a move the authority table reserves for a decider ({summary}). It was not prevented; CI's diff.decider-required checks who made it.",
         rel.display(),
-        gate_summary(gate)
     ))
 }
 

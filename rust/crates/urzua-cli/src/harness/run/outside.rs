@@ -13,6 +13,7 @@
 //! - `deny`: an agent's write outside the session's repository is refused while
 //!   any guardrail is enabled, except under `allow_paths`.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use urzua_core::harness::OutsideWrites;
@@ -33,15 +34,28 @@ pub(super) fn denial(session_root: &Path, cwd: &Path, request: &Request) -> Opti
         return None;
     }
     let session = session_root.canonicalize().ok()?;
-    for path in &request.paths {
+    // One call may name hundreds of files: git is asked once per directory.
+    let session_top = toplevel_and_common_dir(&session);
+    let mut tops: HashMap<PathBuf, Option<(PathBuf, PathBuf)>> = HashMap::new();
+    for (index, path) in request.paths.iter().enumerate() {
         let abs = absolute(cwd, path);
         let target = resolve_links(&abs).unwrap_or_else(|| abs.clone());
-        if within_session(&session, &target) {
+        let found = tops
+            .entry(
+                target
+                    .ancestors()
+                    .find(|d| d.is_dir())
+                    .unwrap_or(&target)
+                    .to_path_buf(),
+            )
+            .or_insert_with(|| toplevel_and_common_dir(&target))
+            .clone();
+        if within_session(&session, session_top.as_ref(), &target, found.as_ref()) {
             continue;
         }
         let verdict = match mode {
             OutsideWrites::Deny => deny_outside(&session, &target, &harness.allow_paths, path),
-            _ => shared_denial(&session, &ws.config, &target, request),
+            _ => shared_denial(&session, &ws.config, &target, index, request),
         };
         if verdict.is_some() {
             return verdict;
@@ -54,14 +68,16 @@ pub(super) fn denial(session_root: &Path, cwd: &Path, request: &Request) -> Opti
 /// session root and its git toplevel is the session's. A linked worktree nested
 /// inside the session root (`git worktree add proj/nested`) is under the root
 /// but is a different working tree, possibly at an older commit, so it is not.
-fn within_session(session: &Path, target: &Path) -> bool {
+fn within_session(
+    session: &Path,
+    session_top: Option<&(PathBuf, PathBuf)>,
+    target: &Path,
+    target_top: Option<&(PathBuf, PathBuf)>,
+) -> bool {
     if !target.starts_with(session) {
         return false;
     }
-    match (
-        toplevel_and_common_dir(target),
-        toplevel_and_common_dir(session),
-    ) {
+    match (target_top, session_top) {
         (Some((top, _)), Some((session_top, _))) => top == session_top,
         _ => true,
     }
@@ -111,6 +127,7 @@ fn shared_denial(
     session: &Path,
     config: &urzua_core::config::Config,
     target: &Path,
+    index: usize,
     request: &Request,
 ) -> Option<Verdict> {
     let (toplevel, common) = toplevel_and_common_dir(target)?;
@@ -122,7 +139,7 @@ fn shared_denial(
     let mapped = session.join(rel).to_string_lossy().to_string();
     // A request without content is still judged by its path (a protected path);
     // the acceptance gate, which reads the content, then finds no status.
-    let content = request.content.as_deref().unwrap_or("");
+    let content = request.content_at(index).unwrap_or("");
     let mut verdict = gate_denial(session, config, &mapped, content, request)?;
     verdict.message = format!(
         "{} (the file is {} in a linked worktree of this repository at {}, judged by this repository's configuration)",

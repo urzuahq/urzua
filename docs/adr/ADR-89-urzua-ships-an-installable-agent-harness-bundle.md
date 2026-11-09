@@ -613,6 +613,48 @@ worktree of the repository, at a commit that holds no gates, an unjudged place t
   Route 1 now also names a commit made in a linked worktree and a push of a side branch: neither is seen by
   the post-command check, which reads the session's repository.
 
+## Amendment (2026-11-09, fifth review): the status gates and the MCP call bound
+
+Status of this amendment: accepted by the maintainer on 2026-11-09. It fixes behaviour against what this ADR promises and
+changes no decision.
+
+- **Route 1, a weakening of a status gate is reported like a path gate.** The post-command baseline also holds
+  the status gates and the `acceptance` flag. A gate removed or narrowed, or `acceptance` switched off, in the
+  same command as a move to the gated status still reports the move, and the loss is reported once ("the status
+  gates shrank"), at `session-start` as well. A later move is not reported, as for a path gate. A new session
+  clears the post-command memory, so a change reported in an earlier session and made again is reported again.
+- **A change of a status gate's decider group (`by`) is not shrinkage.** The baseline compares which
+  `(type, status)` pairs are gated, not who may decide them. A gate whose `by` is changed to a wider group (or any
+  other group) still gates the status, so the loss line ("the status gates shrank") is not raised for it. What is
+  reported instead: a move to the status in the same command is reported in `gated_moves`, naming the gate as the
+  configuration now has it, so the widened group is named; and `.urzua/config.yaml` is itself a protected path, so
+  its change is reported in `protected_changes`. Who may decide is checked by CI's `diff.decider-required` against
+  the head's table, which this amendment does not change. A report that names the new group is what the post-command
+  check can offer after the fact; it never prevents the change.
+- **The Timeout bullet above is replaced:** the `edit` hook entry sets `timeout` to 120 seconds. The Claude Code
+  translator judges an MCP call's files against the gates first, in one engine process for all of them (each file
+  with its own proposed content), however many files the call names, and stops at the first block. It then judges
+  at most 8 files that are checked as records (8.8 to 12.0 seconds each in the release build on a loaded 4-CPU
+  machine, the measurement is in `SPEC-24`). A call with more is an edit that was not judged. So is a call that
+  names more than 512 files (the first 512 are judged against the gates, the rest are not) and a call with more than
+  512 distinct short strings, rather than silently cut short. Not judged means what it means elsewhere: refused
+  where `acceptance` or `protected-paths` is `on_unjudged: deny` and covers a file the call names, allowed with a
+  notice otherwise. Before this the gates ran one engine process per file, 128 seconds for 2200 files with the
+  protected one last, past the timeout, where a host kill fails open.
+
+The maintainer is asked to accept exactly these:
+
+1. The post-command baseline holds the status gates and the `acceptance` flag, and a removed or narrowed gate, or
+   `acceptance` switched off, is reported like a path gate (route 1), at `session-start` as well; a new session
+   clears the post-command memory.
+2. A change of a status gate's `by` is not reported as shrinkage; the move and the configuration change are
+   reported as stated above.
+3. The `edit` hook entry's `timeout` of 120 seconds.
+4. The MCP bounds: one gates process for up to 512 files, each judged with its own content; more than 512 files,
+   more than 8 record-checking files or more than 512 short strings is an edit that was not judged.
+5. The engine request gains `contents` and the gates-only verdict gains `records` (`SPEC-24`); both are read only
+   by the translator of this bundle, and a translator that gets no `records` asks one file at a time.
+
 The Decision is unchanged. The Status of this ADR stays Accepted.
 
 ## References
@@ -647,3 +689,5 @@ The Decision is unchanged. The Status of this ADR stays Accepted.
 > | 2026-11-09 | Added an `## Amendment (2026-11-09)`, documentation of existing behaviour decided by the orchestrator under the maintainer's 2026-11-07 decision that the accepted-risk list be exact, pending maintainer review: a weakening is reported once and a later edit to a formerly protected path is not (route 1); deleting or forging the harness baseline in the same command as a gate removal hides the removal (route 6); deleting the whole `harness:` section turns the guardrails off, visible to the CI diff gate (new route 11). `Status` stays Accepted. **Why:** the review of pull request 459 found these three routes behaving as described and the list naming none of them. | **substantive** |
 > | 2026-11-09 | Amendment of 2026-11-09 (the accepted-risk list made exact: routes 1, 6 and 11) accepted. **Why:** Maintainer decision, 2026-11-09. | **substantive** |
 > | 2026-11-09 | Added an `## Amendment (2026-11-09, outside writes)`, accepted by the maintainer on 2026-11-09: `harness.outside_writes` (`allow`, `shared` or `deny`) (with `allow_paths` for `deny`) decides how an edit-tool write outside the session's repository is judged; under `shared` a file of a linked worktree of the same repository is also judged against the session's acceptance and protected-path gates, under `deny` any such write is refused except under `allow_paths`, undeclared acts as `allow`; `init` proposes `shared`, `doctor` warns when it is undeclared with a guardrail enabled; a separate clone joins the accepted-risk list as route 12 and routes 1 and 8 name the worktree commit and the side-branch push. `Status` stays Accepted. **Why:** Maintainer decision, 2026-11-09, on the review that found a linked worktree at a commit without gates an unjudged place to write. | **substantive** |
+> | 2026-11-09 | Added an `## Amendment (2026-11-09, fifth review)`, pending maintainer review: a removed or narrowed status gate, or `acceptance` switched off, is judged against the baseline in the post-command check (route 1); a change of a gate's `by` is not shrinkage (the move and the configuration are reported); the `edit` hook sets a 120 second `timeout` and the translator bounds an MCP call (all gates in one engine process for at most 512 files, then at most 8 record files). `Status` stays Accepted. **Why:** the fifth review of the harness found these behaving otherwise than the ADR promises. | **substantive** |
+> | 2026-11-09 | Amendment of 2026-11-09 (fifth review: the status gates and the MCP call bound) accepted. **Why:** Maintainer decision, 2026-11-09. | **substantive** |
