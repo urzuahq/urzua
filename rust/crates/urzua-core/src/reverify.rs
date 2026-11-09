@@ -542,6 +542,8 @@ pub struct Acknowledgement {
     pub evidence: Vec<String>,
     pub pins: Vec<(String, String)>,
     pub row: String,
+    /// The 1-indexed line of the row in the text it was read from.
+    pub line: usize,
 }
 
 /// Every `Re-verified` row of a record in the tool's shape that acknowledged
@@ -569,6 +571,7 @@ pub fn acknowledgements(
                     evidence: parsed.evidence,
                     pins: parsed.pins,
                     row: e.row.clone(),
+                    line: e.line,
                 }
             })
         })

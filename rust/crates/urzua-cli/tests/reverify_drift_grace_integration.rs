@@ -6,38 +6,10 @@
 
 mod common;
 
+use common::{commit_all, date_days_ago, git};
+
 use std::path::Path;
 use std::process::Command;
-
-fn git(dir: &Path, args: &[&str]) {
-    let status = Command::new("git")
-        .args(args)
-        .current_dir(dir)
-        .status()
-        .expect("git should run");
-    assert!(status.success(), "git {args:?} failed");
-}
-
-fn date_days_ago(n: u32) -> String {
-    let out = Command::new("date")
-        .args(["-u", "-d", &format!("{n} days ago"), "+%Y-%m-%dT12:00:00Z"])
-        .output()
-        .unwrap();
-    String::from_utf8(out.stdout).unwrap().trim().to_string()
-}
-
-fn commit_all(dir: &Path, days_ago: u32) {
-    git(dir, &["add", "-A"]);
-    let date = date_days_ago(days_ago);
-    let status = Command::new("git")
-        .args(["commit", "-q", "-m", "fixture"])
-        .env("GIT_AUTHOR_DATE", &date)
-        .env("GIT_COMMITTER_DATE", &date)
-        .current_dir(dir)
-        .status()
-        .unwrap();
-    assert!(status.success());
-}
 
 fn run_urzua(dir: &Path, args: &[&str]) -> std::process::Output {
     common::urzua()
@@ -467,11 +439,35 @@ fn a_row_not_dated_the_day_it_was_added_is_reported_on_a_base_run() {
     commit_all(&dir, 0);
     let found = renewal_findings(&dir);
     assert_eq!(misdated(&found), 1, "{found:?}");
-    // Earlier than the merge base's commit date.
+    // Not the date of the commit that added it.
     std::fs::write(dir.join(RECORD), redate(&text, "2026-01-02")).unwrap();
     commit_all(&dir, 0);
     let found = renewal_findings(&dir);
     assert_eq!(misdated(&found), 1, "{found:?}");
+}
+
+#[test]
+fn a_genuine_row_survives_main_moving_on_after_it_was_written() {
+    // Renewed three days ago; main moved two days ago; the branch merged main.
+    // The merge base is now newer than the row, which is still dated the day
+    // its commit added it.
+    let dir = drifted("movedon", "    drift: {spec: acknowledge}\n", false, "spec");
+    with_renewal_rule(&dir);
+    git(&dir, &["branch", "-M", "main"]);
+    git(&dir, &["checkout", "-q", "-b", "feat"]);
+    let parsed = renew(&dir);
+    assert_eq!(parsed["status"], "applied", "{parsed}");
+    let text = std::fs::read_to_string(dir.join(RECORD)).unwrap();
+    let (today, then) = (&date_days_ago(0)[..10], &date_days_ago(3)[..10]);
+    std::fs::write(dir.join(RECORD), text.replace(today, then)).unwrap();
+    commit_all(&dir, 3);
+    git(&dir, &["checkout", "-q", "main"]);
+    std::fs::write(dir.join("src/b.rs"), "fn b() {}\n").unwrap();
+    commit_all(&dir, 2);
+    git(&dir, &["checkout", "-q", "feat"]);
+    git(&dir, &["merge", "-q", "--no-edit", "main"]);
+    git(&dir, &["tag", "-f", "base", "main"]);
+    assert_eq!(renewal_findings(&dir), Vec::<String>::new());
 }
 
 #[test]

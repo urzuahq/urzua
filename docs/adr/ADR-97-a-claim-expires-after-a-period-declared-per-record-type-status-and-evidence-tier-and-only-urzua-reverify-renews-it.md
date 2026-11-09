@@ -611,7 +611,7 @@ drift on a renewal is a repository's declaration, per locator category:
    of the record: it reports a row naming a locator that had not drifted there (the claim's lines dated as of the
    merge base, the cited files' history as it stands), a row whose `Evidence:` list is not the record's current
    locators or lists a pin hash that is not the pin the record now holds, and a row whose date is not the date it
-   was added (later than the evaluation date, or earlier than the merge base's commit date). A row dated after the
+   was added (later than the evaluation date, or not the UTC date of the branch commit that added the row). A row dated after the
    evaluation date (today, or `--as-of`) clears nothing in any run. A hand-typed row that does not describe the real
    drift is therefore a finding at the pull request, and a correct one is equivalent to running the tool, as a
    re-pin row is once a reviewer has read it. The check does not see a reordered `Evidence:` list or a changed
@@ -651,3 +651,4 @@ row) carry the contract.
 > | 2026-11-09 | Consistency fix within the drift-policy amendment (the amendment stays maintainer-accepted; only its new item 6 is pending maintainer review): under `acknowledge`, a renewal clears the drift it acknowledged for `embodiment.consistency` (an unpinned locator is judged from the date of the acknowledging `Re-verified` row, a pinned one by its re-pin), and `reverify` no longer refuses a record whose only drift is in acknowledging categories because consistency reports it. The Decision text and `Status` are unchanged. **Why:** past `drift_grace_days` the drift made every such record refuse with "run `urzua fix` first", and a renewal after `fix` left a new consistency error, so `acknowledge` worked only inside the grace window. | **substantive** |
 > | 2026-11-09 | Item 6 (still pending maintainer review) tightened after review: a row clears only the locators it names, a row counts only in the exact shape `reverify` writes, the same-day granularity is stated, and `embodiment.claim-renewal-unattested` checks an added acknowledging row against the merge base's drift and the record's current locators. **Why:** a hand-typed or over-broad row cleared drift of locators nobody read. | **substantive** |
 > | 2026-11-09 | Item 6 of the drift-policy amendment accepted. **Why:** Maintainer decision, 2026-11-09. | **substantive** |
+> | 2026-11-09 | Item 6: the added row's date is compared with the commit that added it, not the merge base. **Why:** Maintainer decision, 2026-11-09. | **substantive** |
