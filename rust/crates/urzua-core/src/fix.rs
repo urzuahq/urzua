@@ -902,7 +902,7 @@ pub(crate) fn log_row(
     let mut cells = vec![String::new(); layout.width];
     cells[layout.date] = today.to_string();
     cells[layout.class] = format!("**{}**", shape.tool_class);
-    cells[narrative_at] = narrative.to_string();
+    cells[narrative_at] = narrative.replace('|', "\\|");
     Ok(format!("{prefix}| {} |", cells.join(" | ")))
 }
 
@@ -914,6 +914,25 @@ fn short(hash: &str) -> &str {
 mod tests {
     use super::*;
     use std::path::PathBuf;
+
+    #[test]
+    fn a_pipe_in_the_narrative_is_escaped_so_it_stays_one_cell() {
+        let layout = crate::rules::LogLayout {
+            width: 3,
+            date: 0,
+            class: 2,
+        };
+        let row = log_row(
+            "",
+            layout,
+            &crate::config::RevisionLogShape::default(),
+            "2026-11-09",
+            "Pinned a|b.rs",
+        )
+        .unwrap();
+        assert!(row.contains("Pinned a\\|b.rs"), "{row}");
+        assert_eq!(row.matches(" | ").count(), 2, "{row}");
+    }
 
     /// `detect_repairs` over a tree with no files, no blocked record and the
     /// given back-pointers.
