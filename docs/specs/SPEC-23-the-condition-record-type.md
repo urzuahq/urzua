@@ -2,9 +2,9 @@
 Stable-Id: 01M6NNNZJ92WC419AF3NQP471H
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:.urzua/config.yaml@sha256:cbb1c67c40a04562b517932dd635c9f9083378df4d05deeb58771286cc1487bb, code:rust/crates/urzua-core/src/rules/roadmap.rs@sha256:aeadbc1397d70dc3f7ab6422c160c4dc009592306c8a3743da44ad020983fb02, test:rust/crates/urzua-cli/tests/condition_type_integration.rs@sha256:fbf4c6b9927dfc724c1429040d48b4cda315bf2003da4f2c56af0356ef6af392, test:rust/crates/urzua-cli/tests/work_types_integration.rs@sha256:a319f14dc8d4b79971183ee16cf78de55366234377abe3d77e1fb3b5a0ebe7b2
+Realized-by: code:.urzua/config.yaml@sha256:21e9ab57a37acf5df4921e86bca7127e7e3881e648115b370e7357339549054d, code:rust/crates/urzua-core/src/rules/roadmap.rs@sha256:aeadbc1397d70dc3f7ab6422c160c4dc009592306c8a3743da44ad020983fb02, test:rust/crates/urzua-cli/tests/condition_type_integration.rs@sha256:fbf4c6b9927dfc724c1429040d48b4cda315bf2003da4f2c56af0356ef6af392, test:rust/crates/urzua-cli/tests/work_types_integration.rs@sha256:a319f14dc8d4b79971183ee16cf78de55366234377abe3d77e1fb3b5a0ebe7b2
 Date: 2026-11-05
-Version: '0.14'
+Version: '0.15'
 Author: beauwilliams
 Subject: 'The `condition` record type -- a dependency on a fact that is observed rather than built, declared in configuration alone.'
 Parent: —
@@ -142,3 +142,5 @@ whether the Signal is precise is a reviewer's judgement, as for any section (`SP
 > | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` 2f0e023ed5a5 -> cbb1c67c40a0. Reason: Read the diff of each pinned file since the old pin and the claim still holds. config.yaml: read the diff since the old pin; the only change is the added key authority.decider_table: base with its two-line comment (this repository declares the new decider_table option, ADR-89 amendment of 2026-11-09). No record type, rule, status, relation or other declaration this record relies on changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-09 | Bumped to `0.13`. The pins this spec's `Realized-by` holds on `.urzua/config.yaml` were re-baselined (the `Re-baselined` row above) after the config gained `authority.decider_table: base`; no behaviour this spec describes changed. **Why:** the version-bump rule requires a bump beside a structural revision row. | **structural** |
 > | 2026-11-09 | Bumped to `0.14`. Re-pin rows in this revision log were reworded to name who re-verified, matching the tool's wording since 2026-11-09; hashes, reasons and dates are unchanged. **Why:** Maintainer decision, 2026-11-09. | **structural** |
+> | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` cbb1c67c40a0 -> 21e9ab57a37a. Reason: Read the diff of .urzua/config.yaml: the authority section gains `waivable: never` and a two-line comment; no other key changed. The pinned evidence still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-09 | Bumped to `0.15`. Evidence pins on `.urzua/config.yaml` were re-pinned (row above) after the config's authority section gained `waivable: never`; the specification's content is unchanged. **Why:** `ADR-89` amendment of 2026-11-09 (gate waivers). | **substantive** |

@@ -104,6 +104,46 @@ impl DeciderTable {
     }
 }
 
+/// Whether a waiver may silence `diff.decider-required` (`authority.waivable`,
+/// `ADR-89` amendment of 2026-11-09, gate waivers). Ordered by strictness:
+/// `any` is the least, `never` the most.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+pub enum Waivable {
+    /// Any active, effective waiver of the rule counts (today's behaviour, and
+    /// the default).
+    #[serde(rename = "any")]
+    Any,
+    /// Only a waiver the base revision already holds unchanged counts: one the
+    /// pull request adds or edits is ignored.
+    #[serde(rename = "base")]
+    Base,
+    /// No waiver counts; a gated change is cleared by a decider, not a record.
+    #[serde(rename = "never")]
+    Never,
+}
+
+impl Waivable {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Waivable::Any => "any",
+            Waivable::Base => "base",
+            Waivable::Never => "never",
+        }
+    }
+}
+
+/// The waiver policy in force for a run: the stricter of the head's declaration
+/// and the base revision's, so a pull request cannot loosen it by editing the
+/// key. Undeclared reads as `any`.
+pub fn effective_waivable(head: Option<&AuthorityDecl>, base: &BaseAuthority) -> Waivable {
+    let head = head.and_then(|a| a.waivable).unwrap_or(Waivable::Any);
+    let base = base
+        .declared()
+        .and_then(|a| a.waivable)
+        .unwrap_or(Waivable::Any);
+    head.max(base)
+}
+
 /// The base revision's `authority` table, read by the caller from the config
 /// file at the merge base and handed to the rule as data.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -231,6 +271,10 @@ pub struct AuthorityDecl {
     /// Which revision's table decides; `None` is undeclared and reads as `head`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub decider_table: Option<DeciderTable>,
+    /// Whether a waiver may silence `diff.decider-required`; `None` is
+    /// undeclared and reads as `any`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub waivable: Option<Waivable>,
     pub deciders: BTreeMap<String, DeciderGroup>,
     /// The kinds of host evidence that may name a decider; any one suffices.
     /// `pr-author` unless declared: `pr-approver` can never be satisfied by a
@@ -240,7 +284,7 @@ pub struct AuthorityDecl {
     pub gates: Vec<Gate>,
 }
 
-const KEYS: &str = "deciders, evidence, gates, decider_table";
+const KEYS: &str = "deciders, evidence, gates, decider_table, waivable";
 
 fn problem(message: impl Into<String>) -> String {
     message.into()
@@ -398,12 +442,24 @@ fn decider_table_from_value(value: &yaml_serde::Value) -> Result<DeciderTable, S
     }
 }
 
+fn waivable_from_value(value: &yaml_serde::Value) -> Result<Waivable, String> {
+    match value.as_str().map(str::trim) {
+        Some("any") => Ok(Waivable::Any),
+        Some("base") => Ok(Waivable::Base),
+        Some("never") => Ok(Waivable::Never),
+        _ => Err(problem(
+            "authority.waivable must be one of never, base, any",
+        )),
+    }
+}
+
 impl AuthorityDecl {
     /// A table with no group and no gate: what the base revision holds when it
     /// declares no `authority`.
     pub fn none() -> AuthorityDecl {
         AuthorityDecl {
             decider_table: None,
+            waivable: None,
             deciders: BTreeMap::new(),
             evidence: vec![EvidenceKind::PrAuthor],
             gates: Vec::new(),
@@ -429,6 +485,7 @@ impl AuthorityDecl {
         };
         let mut decl = AuthorityDecl {
             decider_table: None,
+            waivable: None,
             deciders: BTreeMap::new(),
             evidence: vec![EvidenceKind::PrAuthor],
             gates: Vec::new(),
@@ -458,6 +515,7 @@ impl AuthorityDecl {
                 },
                 "evidence" => decl.evidence = evidence_from_value(v)?,
                 "decider_table" => decl.decider_table = Some(decider_table_from_value(v)?),
+                "waivable" => decl.waivable = Some(waivable_from_value(v)?),
                 "gates" => {
                     let Some(list) = v.as_sequence() else {
                         return Err(problem("authority.gates must be a list of gates"));

@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.133'
+Version: '0.134'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:d62499673ea966031198e95a718a5a3a325b321fcc72842ad6a71b2a304bdb0a, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:92a2b9ceca89133f30987a013734da66b9332c4e937a87e72e53571596e18093, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:3c8aa671582772499ab7345cdbfb5a4dc2c50462882851fb20f853992acfd57c
@@ -949,6 +949,7 @@ authority:
     maintainers: {logins: [beauwilliams]}   # the host's logins; compared without case
   evidence: [pr-author]                     # pr-author | pr-approver, any of; pr-author when omitted
   decider_table: base                       # base | head | both; head when omitted
+  waivable: never                           # never | base | any; any when omitted
   gates:
     - {type: adr, to: [Accepted, Rejected], by: maintainers}
     - {type: rfc, to: [Accepted, Rejected], by: maintainers}
@@ -975,10 +976,19 @@ authority:
   level and options and its `fail_on` are read too, and the stricter of the base's and the head's applies, so a
   pull request cannot switch the rule off, delete its entry, or lower it, and an `authority` the head dropped is
   still judged from the base. With no `--base` the head table is
-  used and, under `base` or `both`, an `info` notice says so. `urzua init` proposes `base`, and `urzua
+  used and, under `base` or `both` with `--actors` given, an `info` notice says so (a plain local check prints none). `urzua init` proposes `base`, and `urzua
   doctor` warns (`authority-decider-table`) when gates are declared and the key is not. Any other value is a
   load error.
   Stale base: when the base revision has no `authority` (for example a branch made before the gates were introduced), the head table is judged; a pull request whose head `authority` names its own author as a decider then passes, because that is indistinguishable from the first introduction of `authority`. Branch protection that requires an up-to-date branch, or a merge queue, removes this route by making the base current. (accepted by the maintainer on 2026-11-09)
+- **`waivable`** says whether a waiver record may silence `diff.decider-required` (`ADR-89`, amendment of
+  2026-11-09, gate waivers): `any` any active, effective waiver counts, as before (undeclared reads as `any`);
+  `base` only a waiver the base revision holds unchanged counts, and one the pull request adds or edits is
+  ignored for this rule with an `info` notice; `never` no waiver of the rule counts (both variants). The
+  stricter of the head's and the base's applies (`any` < `base` < `never`), so editing the key in a pull
+  request does not loosen it. Waivers of other rules are unaffected. `urzua init` proposes `never`, and `urzua
+  doctor` warns (`authority-waivable`) when gates are declared and the key is not. Any other value is a load
+  error. The configuration file is protected only if a gate lists `.urzua/config.yaml`; `urzua doctor` warns
+  (`authority-config-gated`) when gates are declared and none does.
 - **`gates`** is a list. `{type, to, by}` gates a move of a record of that type to one of those statuses;
   `{paths, by}` gates a change under those paths (a prefix or a glob, as in `diff.source-requires-record`).
   `by` names a declared group. A gate that names a type no record type declares, a status that type does not
@@ -2421,3 +2431,4 @@ proves this configuration produces the three findings.
 > | 2026-11-09 | Bumped to `0.132`. A back-pointer rule's `ignore_marker` is also refused when it is a fragment of a keyword run into an id head (`ements: ADR-`) or is itself a record id (`ADR-1`); `drift` keys that differ only by whitespace are refused at load. **Why:** both markers loaded and excused every back-pointer line of a type or every citation of an id and the ids it begins, and two keys collapsed silently into one policy. | **substantive** |
 > | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` c1fbbe868c77 -> d62499673ea9. Reason: config.rs: ignore_marker now refuses record-id markers (ADR-1) and keyword-fragment markers (ements: ADR-); drift keys differing only by whitespace are refused; nocite-style specific markers still load (test added); **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-09 | Bumped to `0.133`. The record file extension `.md` is matched in any case (`X.MD` is a record), so a case-insensitive filesystem cannot hide a record from discovery or the acceptance gate. **Why:** the sixth review of the harness. | **substantive** |
+> | 2026-11-09 | Bumped to `0.134`. Documents `authority.waivable` (`never`, `base`, `any`; undeclared is `any`): whether a waiver may silence `diff.decider-required`, the stricter of the base's and the head's applying; `init` proposes `never`; states that the configuration is protected only when a gate lists it. **Why:** `ADR-89` amendment of 2026-11-09 (gate waivers). | **substantive** |

@@ -498,6 +498,9 @@ pub fn render_config_yaml(proposed: &[ProposedRecordType]) -> String {
     // and gates are the adopter's to write: no corpus supplies them.
     let mut authority = Mapping::new();
     authority.insert(Value::from("decider_table"), Value::from("base"));
+    // A waiver record cannot silence the decider rule (`ADR-89` amendment of
+    // 2026-11-09, gate waivers): a gated change is cleared by a decider.
+    authority.insert(Value::from("waivable"), Value::from("never"));
     root.insert(Value::from("authority"), Value::Mapping(authority));
     // Proposed so a guardrail an adopter enables later also judges the files of
     // a linked worktree of this repository (ADR-89 amendment of 2026-11-09);

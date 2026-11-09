@@ -276,7 +276,10 @@ revision log):
 2. **`git commit --no-verify`**, which skips the commit hook.
 3. **A pull request that changes its own workflow.** The gate runs from the head commit's workflow, so a pull
    request can drop or weaken the gate step it is judged by. Only `CODEOWNERS` and branch protection, which
-   are host settings, can stop that, and neither is configured by this decision.
+   are host settings, can stop that, and neither is configured by this decision. The same holds for a
+   self-hosted gate whose binary is built from the pull request: a pull request that changes the code of the
+   binary the gate runs (this repository's `checks.yml` runs `rust/target/release/urzua` built from the pull
+   request, and `rust/` is under no path gate) can change the rule it is judged by.
 4. **An agent acting as the maintainer.** Agents use the maintainer's token. CI cannot tell an agent from the
    maintainer, so `pr-author` is always satisfied and no CI check can say who accepted.
 5. **The limits of what the editor hook can read.** A hard link is resolved to the protected or gated file on
@@ -315,8 +318,11 @@ revision log):
    `harness.instructions_file` names) is a control this decision relies on, but an edit tool can remove it
    with no refusal and no session-start note; only `urzua harness status` reports it `modified`.
 10. **A waiver record is not gated.** A waiver is an ordinary record, not a gated status, and
-    `diff.decider-required` and `override.unreviewed` are waivable, so an edit-tool waiver can silence the CI
-    gate for a gated move made by a Bash command. It adds no power beyond routes 1 and 4.
+    `override.unreviewed` is waivable, so an edit-tool waiver can silence that rule. Where
+    `authority.waivable` is undeclared or `any`, `diff.decider-required` is waivable too, and a non-decider can
+    accept a record by adding a waiver of it in the same pull request: that route needs no Bash write and no
+    token, and so adds power beyond routes 1 and 4. `authority.waivable: never` (or `base`) closes it for that
+    rule (amendment of 2026-11-09, gate waivers); `override.unreviewed` stays waivable.
 11. **Deleting the `harness:` section.** With no `harness` key no guardrail is enabled; `post-command` and
     `session-start` then report only "guardrail not enabled", and the CI diff gate at the pull request is the
     place the change is seen (amendment of 2026-11-09).
@@ -713,13 +719,43 @@ table.
 workflow command, or edits the workflow that runs the gate, still removes the check without touching the
 configuration: that is the remaining known limit and is accepted risk 3. Turning the rule off or downgrading it
 in the configuration is no longer part of that limit under `base` and `both`: it is judged under the base's
-stricter setting, and the configuration is a protected path when the base declares `authority`, so changing it needs a decider of the base table. On a stale base that has no `authority` the configuration is not a protected path, and the route in item 13 applies.
+stricter setting. The configuration is protected only if a gate lists `.urzua/config.yaml` (as this repository's does); `authority` does not make it a protected path by itself, so a pull request can edit `exclude_files`, `dir` or a status field name and accept a record without a decider unless a path gate covers the file. `urzua doctor` warns (`authority-config-gated`) when gates are declared and none lists it. On a stale base that has no `authority` the route in item 13 applies.
 
 Stale base: when the base revision has no `authority` (for example a branch made before the gates were introduced), the head table is judged; a pull request whose head `authority` names its own author as a decider then passes, because that is indistinguishable from the first introduction of `authority`. Branch protection that requires an up-to-date branch, or a merge queue, removes this route by making the base current. This sentence and accepted risk 13 were accepted by the maintainer on 2026-11-09, as was the rest of this amendment.
 With a single maintainer the evidence is still authorship, and the rule still cannot tell an agent acting under
 the maintainer's token from the maintainer (item 4).
 
 The Decision is otherwise unchanged. The Status of this ADR stays Accepted.
+
+## Amendment (2026-11-09, gate waivers)
+
+Status of this amendment: accepted by the maintainer on 2026-11-09. It changes whether a waiver can silence
+`diff.decider-required`; the rest of section 4 is unchanged.
+
+**The problem.** With `decider_table: base` the table is the base's, but waivers are read from the head. A
+non-decider who moves a record to a gated status and adds a waiver record (`Rule: diff.decider-required`, the
+record as `Scope`) in the same pull request had the finding listed as waived, and the gate passed. Risk 10
+called this no power beyond routes 1 and 4; it needs neither a Bash write nor the maintainer's token.
+
+**The decision.** `authority` takes a key `waivable`: `never`, `base` or `any`.
+
+- `any` is today's behaviour and what undeclared means: any active, effective waiver of the rule counts.
+- `base`: a waiver of `diff.decider-required` counts only if the same waiver record exists in the base revision
+  unchanged (the diff neither adds nor edits it). A waiver the pull request adds or edits is ignored for this
+  rule, and an `info` notice names it.
+- `never`: no waiver of either variant (`gated-move-without-decider`, `gated-path-without-decider`) counts; a
+  gated change is cleared by a decider, not by a record, as `status.done-with-unresolved-items` is.
+- The setting in force is the stricter of the head's and the base revision's (`never` > `base` > `any`), the
+  same rule as `decider_table`, so a pull request cannot loosen it by editing the key.
+- Waivers of other rules, including `override.unreviewed`, are unaffected.
+- `urzua init` proposes `waivable: never`. `urzua doctor` warns (`authority-waivable`) when gates are declared
+  and the key is not. This repository declares `never`.
+
+**Also decided in the same review.** Under `base` and `both` the base rule's options are merged as the stricter
+too: `require_evidence` is on when either side sets it, so a pull request that keeps the level and drops the
+option no longer turns a missing actors file into an `info`.
+
+Risk 10 is reworded above. The Decision is otherwise unchanged. The Status of this ADR stays Accepted.
 
 ## References
 
@@ -760,3 +796,5 @@ The Decision is otherwise unchanged. The Status of this ADR stays Accepted.
 > | 2026-11-09 | Added accepted risk 13 and a sentence to the decider-table amendment, documented by the orchestrator, pending maintainer review: with a stale base that has no `authority`, the head table is judged and a pull request naming its own author as a decider passes, indistinguishable from the first introduction of `authority`; an up-to-date branch requirement or a merge queue removes the route. The amendment no longer calls the configuration a protected path in that case. `Status` stays Accepted. **Why:** the review of pull request 469 found the route undocumented. | **substantive** |
 > | 2026-11-09 | Marked accepted risk 13 (a stale base) and the matching sentence of the decider-table amendment as accepted by the maintainer on 2026-11-09, replacing "documented by the orchestrator, pending maintainer review". `Status` stays Accepted. **Why:** maintainer decision of 2026-11-09: the stale-base route is an accepted risk, mitigated by requiring branches to be up to date before merging or a merge queue (`COND-0006`). | **substantive** |
 > | 2026-11-09 | Stated in the outside-writes amendment that under `deny` a plain git repository or a submodule nested inside the session repository counts as outside (refused unless under `allow_paths`), and that under `shared` it stays unjudged like a separate clone (route 12). Documents existing behaviour; no decision changes. **Why:** the review of the outside-writes amendment found the nested case unstated. | **substantive** |
+> | 2026-11-09 | Added an `## Amendment (2026-11-09, gate waivers)`, accepted by the maintainer on 2026-11-09: `authority.waivable` (`never`, `base`, `any`; undeclared is `any`) decides whether a waiver can silence `diff.decider-required`; under `base` only a waiver the base revision holds unchanged counts, under `never` none does, and the stricter of the base's and the head's applies; `init` proposes `never`, `doctor` warns when gates are declared and the key is not, and this repository declares `never`. Also under `base` and `both` the rule's `require_evidence` option is the stricter of the two. Risk 10 is reworded. `Status` stays Accepted. **Why:** Maintainer decision, 2026-11-09, on the review that found a non-decider accepting a record by adding a waiver record in the same pull request. | **substantive** |
+> | 2026-11-09 | Corrected the decider-table amendment: the configuration is a protected path only when a gate lists `.urzua/config.yaml`, not because the base declares `authority`; `doctor` warns (`authority-config-gated`) when no gate lists it. Risk 3 now names a self-hosted gate whose binary is built from the pull request. `Status` stays Accepted. **Why:** the sixth review found the amendment claiming a protection the engine does not give, and risk 3 not naming the PR-built binary. | **substantive** |
