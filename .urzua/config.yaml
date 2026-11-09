@@ -743,6 +743,12 @@ rules:
     level: warn
     anchor_field: "Last-audited"
     require_pin: [code, test]
+    # ADR-97, amendment of 2026-11-09: what drift of a cited locator does to a renewal, per
+    # category. A `spec:` locator cites a record that has its own lifecycle and is left
+    # unpinned, so `reverify --pin-only` cannot clear its drift: a reviewer's `--reason`
+    # renews over it and the revision row names the cited record and its newest revision
+    # row. Code and test drift stay blocked until the locator is re-pinned.
+    drift: {code: block, test: block, spec: acknowledge}
     max_batch: 10
     periods:
       - {type: milestone, status: [Done], days: 45, spread_days: 45}
