@@ -96,20 +96,8 @@ pub fn review_locators(
         let locator = match entry.parsed {
             Ok(l) => l,
             Err(e) => {
-                out.locators.push(LocatorReview {
-                    locator: entry.raw.clone(),
-                    category: entry.category,
-                    resolved: false,
-                    pinned: false,
-                    recorded_hash: None,
-                    current_hash: None,
-                    span: None,
-                    files: Vec::new(),
-                    check: LocatorCheck::Unresolved,
-                    reason: Some(format!("does not parse: {e}")),
-                    spelling: entry.raw,
-                    scoped: false,
-                });
+                out.locators
+                    .push(unparsed_review(entry.raw, entry.category, &e));
                 continue;
             }
         };
@@ -122,54 +110,82 @@ pub fn review_locators(
             continue;
         }
         seen.push(key);
-        let recorded = match &locator.anchor {
-            Some(Anchor::Pin(h)) => Some(h.clone()),
-            _ => None,
-        };
         let required = require_pin.contains(&entry.category);
-        let mut review = LocatorReview {
-            locator: locator.display(),
-            category: entry.category.clone(),
-            resolved: false,
-            pinned: recorded.is_some(),
-            recorded_hash: recorded.clone(),
-            current_hash: None,
-            span: None,
-            files: Vec::new(),
-            check: LocatorCheck::Unresolved,
-            reason: None,
-            spelling: locator.spelling.clone(),
-            scoped: locator.scope.is_some(),
-        };
-        if matches!(locator.anchor, Some(Anchor::Commit(_))) {
-            review.reason = Some("a commit anchor is not supported".to_string());
-            out.locators.push(review);
-            continue;
-        }
-        match read(&locator) {
-            PinRead::Current { hash, span, files } => {
-                review.resolved = true;
-                review.span = span;
-                review.files = files;
-                review.check = match &recorded {
-                    Some(r) if *r == hash => LocatorCheck::HashChecked,
-                    Some(_) => LocatorCheck::Changed,
-                    None if required => LocatorCheck::WillPin,
-                    None => LocatorCheck::HistoryOnly,
-                };
-                // A history-only locator is not hashed into the row.
-                if review.check != LocatorCheck::HistoryOnly {
-                    review.current_hash = Some(hash);
-                }
-            }
-            PinRead::Failed(reason) => review.reason = Some(reason),
-            PinRead::Unreadable => {
-                review.reason = Some(format!("file not found or unreadable: {}", locator.path));
-            }
-        }
-        out.locators.push(review);
+        out.locators
+            .push(review_locator(&locator, entry.category, required, read));
     }
     out
+}
+
+/// The review of a locator that does not parse.
+fn unparsed_review(raw: String, category: String, error: &dyn std::fmt::Display) -> LocatorReview {
+    LocatorReview {
+        locator: raw.clone(),
+        category,
+        resolved: false,
+        pinned: false,
+        recorded_hash: None,
+        current_hash: None,
+        span: None,
+        files: Vec::new(),
+        check: LocatorCheck::Unresolved,
+        reason: Some(format!("does not parse: {error}")),
+        spelling: raw,
+        scoped: false,
+    }
+}
+
+/// The review of one parsed locator: what it resolves to now against its pin.
+fn review_locator(
+    locator: &Locator,
+    category: String,
+    required: bool,
+    read: &dyn Fn(&Locator) -> PinRead,
+) -> LocatorReview {
+    let recorded = match &locator.anchor {
+        Some(Anchor::Pin(h)) => Some(h.clone()),
+        _ => None,
+    };
+    let mut review = LocatorReview {
+        locator: locator.display(),
+        category,
+        resolved: false,
+        pinned: recorded.is_some(),
+        recorded_hash: recorded.clone(),
+        current_hash: None,
+        span: None,
+        files: Vec::new(),
+        check: LocatorCheck::Unresolved,
+        reason: None,
+        spelling: locator.spelling.clone(),
+        scoped: locator.scope.is_some(),
+    };
+    if matches!(locator.anchor, Some(Anchor::Commit(_))) {
+        review.reason = Some("a commit anchor is not supported".to_string());
+        return review;
+    }
+    match read(locator) {
+        PinRead::Current { hash, span, files } => {
+            review.resolved = true;
+            review.span = span;
+            review.files = files;
+            review.check = match &recorded {
+                Some(r) if *r == hash => LocatorCheck::HashChecked,
+                Some(_) => LocatorCheck::Changed,
+                None if required => LocatorCheck::WillPin,
+                None => LocatorCheck::HistoryOnly,
+            };
+            // A history-only locator is not hashed into the row.
+            if review.check != LocatorCheck::HistoryOnly {
+                review.current_hash = Some(hash);
+            }
+        }
+        PinRead::Failed(reason) => review.reason = Some(reason),
+        PinRead::Unreadable => {
+            review.reason = Some(format!("file not found or unreadable: {}", locator.path));
+        }
+    }
+    review
 }
 
 /// A locator that gets its first pin.
