@@ -509,6 +509,27 @@ where
 const SYMBOL: &str = "{symbol}";
 const TRAIT: &str = "{trait}";
 
+/// A regex compiled once per distinct pattern text and shared by clone. The
+/// key is the whole pattern, so two configs that declare different resolvers
+/// never see each other's entry; a pattern that does not compile is cached as
+/// the error message, so the failure is reported the same way every time.
+fn cached_regex(
+    pattern: &str,
+    on_error: impl Fn(&regex::Error) -> String,
+) -> Result<regex::Regex, String> {
+    use std::collections::HashMap;
+    use std::sync::{Mutex, OnceLock};
+    static CACHE: OnceLock<Mutex<HashMap<String, Result<regex::Regex, String>>>> = OnceLock::new();
+    let compiled = || regex::Regex::new(pattern).map_err(|e| on_error(&e));
+    match CACHE.get_or_init(Default::default).lock() {
+        Ok(mut cache) => cache
+            .entry(pattern.to_string())
+            .or_insert_with(compiled)
+            .clone(),
+        Err(_) => compiled(),
+    }
+}
+
 fn compile(
     template: &str,
     symbol: &str,
@@ -518,8 +539,22 @@ fn compile(
     if let Some(t) = trait_name {
         pattern = pattern.replace(TRAIT, &regex::escape(t));
     }
-    regex::Regex::new(&pattern)
-        .map_err(|e| ScopeError::Unsupported(format!("a resolver pattern does not compile: {e}")))
+    cached_regex(&pattern, |e| {
+        format!("a resolver pattern does not compile: {e}")
+    })
+    .map_err(ScopeError::Unsupported)
+}
+
+/// The anchored regex of a resolver glob, compiled once per glob text.
+fn glob_regex(glob: &str) -> Option<regex::Regex> {
+    use std::collections::HashMap;
+    use std::sync::{Mutex, OnceLock};
+    static CACHE: OnceLock<Mutex<HashMap<String, Option<regex::Regex>>>> = OnceLock::new();
+    let build = || crate::rules::path_glob_regex(glob).ok();
+    match CACHE.get_or_init(Default::default).lock() {
+        Ok(mut cache) => cache.entry(glob.to_string()).or_insert_with(build).clone(),
+        Err(_) => build(),
+    }
 }
 
 /// Config-load validation (`ADR-64` clause 5): a malformed glob or pattern, a
@@ -614,11 +649,7 @@ pub fn select_resolver<'a>(
 ) -> Result<Option<&'a LocatorResolver>, ScopeError> {
     let covering: Vec<&LocatorResolver> = resolvers
         .iter()
-        .filter(|r| {
-            crate::rules::path_glob_regex(&r.glob)
-                .map(|re| re.is_match(path))
-                .unwrap_or(false)
-        })
+        .filter(|r| glob_regex(&r.glob).is_some_and(|re| re.is_match(path)))
         .collect();
     match covering.as_slice() {
         [] => Ok(None),
@@ -653,11 +684,6 @@ pub fn span_text(text: &str, span: Span) -> String {
     let from = span.start.saturating_sub(1).min(lines.len());
     let to = span.end.min(lines.len());
     lines[from..to].join("\n")
-}
-
-/// The number of lines of a text, as a range is measured against.
-pub fn line_count(text: &str) -> usize {
-    lines_of(text).len()
 }
 
 fn is_blank(line: &str) -> bool {
@@ -897,6 +923,54 @@ pub fn resolve_scope(
     resolver: Option<&LocatorResolver>,
     scope: &Scope,
 ) -> Result<Span, ScopeError> {
+    if matches!(scope, Scope::Range { .. }) {
+        return resolve_scope_uncached(text, resolver, scope);
+    }
+    // A check resolves the same symbol scope in the same text twice (the rule
+    // that checks it resolves, then the drift judge reads its pin), and a
+    // resolution scans every line. The result is a function of exactly
+    // (text, resolver, scope), so it is shared under that whole key, compared
+    // in full on a hit: a different config or file text never sees it.
+    use std::collections::HashMap;
+    use std::hash::{Hash, Hasher};
+    use std::sync::{Mutex, OnceLock};
+    struct Entry {
+        text: String,
+        resolver: Option<LocatorResolver>,
+        scope: Scope,
+        result: Result<Span, ScopeError>,
+    }
+    static MEMO: OnceLock<Mutex<HashMap<u64, Vec<Entry>>>> = OnceLock::new();
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    text.hash(&mut hasher);
+    format!("{scope:?}").hash(&mut hasher);
+    resolver.map(|r| r.name.as_str()).hash(&mut hasher);
+    let key = hasher.finish();
+    let Ok(mut memo) = MEMO.get_or_init(Default::default).lock() else {
+        return resolve_scope_uncached(text, resolver, scope);
+    };
+    let bucket = memo.entry(key).or_default();
+    if let Some(hit) = bucket
+        .iter()
+        .find(|e| e.text == text && e.resolver.as_ref() == resolver && &e.scope == scope)
+    {
+        return hit.result.clone();
+    }
+    let result = resolve_scope_uncached(text, resolver, scope);
+    bucket.push(Entry {
+        text: text.to_string(),
+        resolver: resolver.cloned(),
+        scope: scope.clone(),
+        result: result.clone(),
+    });
+    result
+}
+
+fn resolve_scope_uncached(
+    text: &str,
+    resolver: Option<&LocatorResolver>,
+    scope: &Scope,
+) -> Result<Span, ScopeError> {
     let lines = lines_of(text);
     let segments = match scope {
         Scope::Range { start, end } => {
@@ -917,9 +991,8 @@ pub fn resolve_scope(
             .leading
             .as_deref()
             .map(|l| {
-                regex::Regex::new(l).map_err(|e| {
-                    ScopeError::Unsupported(format!("the leading pattern does not compile: {e}"))
-                })
+                cached_regex(l, |e| format!("the leading pattern does not compile: {e}"))
+                    .map_err(ScopeError::Unsupported)
             })
             .transpose()?,
     };

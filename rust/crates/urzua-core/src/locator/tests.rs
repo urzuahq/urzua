@@ -916,3 +916,71 @@ mod covered_files {
         assert_eq!(text, files_pin_text(&[a, b]));
     }
 }
+
+// ---- shared work between resolutions -----------------------------------------
+//
+// A resolution is a function of exactly (text, resolver, scope). Compiled patterns
+// and finished resolutions are shared between calls, so each of the three inputs has
+// to be part of what is shared on: two resolvers with one name, two texts or two
+// scopes never see each other's result.
+
+#[test]
+fn a_repeated_resolution_gives_the_same_answer_every_time() {
+    let first = span(RUST_SRC, "Alpha");
+    for _ in 0..3 {
+        assert_eq!(span(RUST_SRC, "Alpha"), first);
+    }
+    let missing = span(RUST_SRC, "NoSuchThing");
+    assert!(
+        matches!(missing, Err(ScopeError::NotFound(_))),
+        "{missing:?}"
+    );
+    assert_eq!(span(RUST_SRC, "NoSuchThing"), missing);
+}
+
+#[test]
+fn two_resolvers_with_one_name_and_different_patterns_resolve_independently() {
+    let text = "alpha one\nbeta two\n";
+    let scope = sym(&["one"]);
+    let mut by_alpha = yaml_resolver("indent");
+    by_alpha.start = r"^alpha {symbol}\b".into();
+    let mut by_beta = by_alpha.clone();
+    by_beta.start = r"^beta {symbol}\b".into();
+    assert_eq!(by_alpha.name, by_beta.name);
+    for _ in 0..2 {
+        assert!(resolve_scope(text, Some(&by_alpha), &scope).is_ok());
+        assert!(matches!(
+            resolve_scope(text, Some(&by_beta), &scope),
+            Err(ScopeError::NotFound(_))
+        ));
+    }
+}
+
+#[test]
+fn one_resolver_and_scope_over_two_texts_resolve_each_text_on_its_own() {
+    let r = rust();
+    let scope = sym(&["Alpha"]);
+    let a = resolve_scope("pub struct Alpha {\n    x: u8,\n}\n", Some(&r), &scope).unwrap();
+    let b = resolve_scope("\n\npub struct Alpha {\n    x: u8,\n}\n", Some(&r), &scope).unwrap();
+    assert_eq!((a.start, a.end), (1, 3));
+    assert_eq!((b.start, b.end), (3, 5));
+    assert_eq!(
+        resolve_scope("pub struct Alpha {\n    x: u8,\n}\n", Some(&r), &scope).unwrap(),
+        a
+    );
+}
+
+#[test]
+fn a_leading_pattern_that_does_not_compile_is_reported_every_time() {
+    let mut r = rust();
+    r.leading = Some("(".into());
+    let scope = sym(&["Alpha"]);
+    for _ in 0..2 {
+        let err = resolve_scope(RUST_SRC, Some(&r), &scope).unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("the leading pattern does not compile"),
+            "{err}"
+        );
+    }
+}
