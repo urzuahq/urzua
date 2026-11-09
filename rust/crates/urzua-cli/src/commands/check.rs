@@ -1434,7 +1434,7 @@ fn load_context<'a>(
 
     let (record_index, collisions) = index_with_disclosures(session, &mut notices);
     let back_pointed = cited_records(sources.back_pointer_sources.as_ref(), config, &record_index);
-    let refs_snapshot = load_refs_with_notice(config, repo_root, &mut notices);
+    let refs_snapshot = load_refs_with_notice(config, repo_root, selection, &mut notices);
     let diff = read_diff_inputs(session, scope, &mut notices)?;
 
     Ok((
@@ -1636,10 +1636,15 @@ fn cited_records(
 fn load_refs_with_notice(
     config: &Config,
     repo_root: &Path,
+    selection: Option<&[String]>,
     notices: &mut Vec<Notice>,
 ) -> Result<RefsSnapshot, String> {
     let refs_snapshot = load_refs_snapshot(config, repo_root);
-    if let (Some(refs), Ok(snapshot)) = (issue_refs_declaration(config), &refs_snapshot) {
+    // Said only when the rule that reads the snapshot is part of the run.
+    let wanted = selection_wants(selection, &[rules::RULE_CITATION_ISSUE_EXISTS]);
+    if let (true, Some(refs), Ok(snapshot)) =
+        (wanted, issue_refs_declaration(config), &refs_snapshot)
+    {
         notices.push(refs_notice(&refs.snapshot, snapshot));
     }
     refs_snapshot

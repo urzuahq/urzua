@@ -595,6 +595,15 @@ drift on a renewal is a repository's declaration, per locator category:
    `drift_acknowledged`, and a claim it blocks as refused with the reason.
 5. Only `reverify` reads the policy. `embodiment.consistency` reports the same drift, and `embodiment.claim-expired`
    expires the same claims, whatever is declared; a hand edit of the `Realized-by` line is still no renewal.
+6. *(Consistency fix; pending maintainer review.)* An acknowledged renewal clears the drift it acknowledged. A
+   category that acknowledges drift is judged for an unpinned locator from the date of the record's newest
+   `Re-verified` row that carries a `Drift acknowledged` clause: a change of the cited file on or before that day
+   was read and attested, exactly as a re-pin moves a pinned locator's reference point, so `embodiment.consistency`
+   no longer reports it, once `drift_grace_days` has passed or not; a later change is drift again. A pinned
+   locator is cleared by its re-pin. `reverify` does not refuse a record only because `embodiment.consistency`
+   reports drift that all lies in categories that acknowledge it (the renewal clears it, so no `fix` first); it
+   still refuses a disagreement that would remain without that drift. A category that blocks, is undeclared or is
+   ignored behaves as before.
 
 `SPEC-2` (the rule table), `SPEC-3` (the option and its load errors) and `SPEC-8` (the refusals, the report and the
 row) carry the contract.
@@ -622,3 +631,4 @@ row) carry the contract.
 > | 2026-11-08 | Amendment added: a milestone whose evidence is its Done-means item clauses is judged, aged from its first evidence line and renewed by `reverify` with pins on the item locators; a record with neither a field nor item evidence stays not examined. The Decision text and `Status` are unchanged. **Why:** such a milestone never expired and `reverify` could not renew it, though drift and pinning already read its item evidence; accepted by the maintainer on 2026-11-08. | **substantive** |
 > | 2026-11-08 | Second amendment of the day added, accepted by the maintainer on 2026-11-08: the evaluation date is an input, a global `--as-of YYYY-MM-DD` echoed as the report's `as_of`, read by every date comparison from one clock, refused with `--apply`. The Decision text and `Status` are unchanged. **Why:** maintainer decision, 2026-11-08: a verdict must be reproducible and upcoming expiries previewable. | **substantive** |
 > | 2026-11-09 | Amendment added, accepted by the maintainer on 2026-11-09: `embodiment.claim-expired` takes a per-evidence-category `drift` policy (`block`, `acknowledge`, `ignore`; undeclared is `block`) that decides whether drift of a locator blocks a renewal by `reverify`, is renewed over with the drifted locators written into the `Re-verified` row (a drifted pinned locator is re-pinned in the same act, old -> new hash recorded, and a non-record file is named with the commit that last changed it), or is left out; refusals name the remedy for the policy. The Decision text and `Status` are unchanged. **Why:** a drifted `spec:` locator is unpinned by design, so `reverify --pin-only` could not clear it and the refusal suggested it anyway; the only way out was an unattested hand edit of the `Realized-by` line (66 of 355 claims). | **substantive** |
+> | 2026-11-09 | Consistency fix within the drift-policy amendment (the amendment stays maintainer-accepted; only its new item 6 is pending maintainer review): under `acknowledge`, a renewal clears the drift it acknowledged for `embodiment.consistency` (an unpinned locator is judged from the date of the acknowledging `Re-verified` row, a pinned one by its re-pin), and `reverify` no longer refuses a record whose only drift is in acknowledging categories because consistency reports it. The Decision text and `Status` are unchanged. **Why:** past `drift_grace_days` the drift made every such record refuse with "run `urzua fix` first", and a renewal after `fix` left a new consistency error, so `acknowledge` worked only inside the grace window. | **substantive** |

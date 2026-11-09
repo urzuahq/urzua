@@ -393,3 +393,18 @@ fn a_declared_header_field_is_checked_end_to_end_and_only_when_declared() {
         "{report}"
     );
 }
+
+#[test]
+fn the_snapshot_notice_is_said_only_when_the_citation_rule_is_selected_observed_failing() {
+    let rules = RULE.replacen("{ ", "{ header.required-fields: warn, ", 1);
+    let dir = fixture("notice-filter", &rules, BODY, Some(SNAPSHOT));
+    let (_, other, _) = urzua(&dir, &["check", "--rules", "header.required-fields"], &[]);
+    assert!(
+        !other["notices"].to_string().contains("known-refs"),
+        "{other}"
+    );
+    let (_, own, _) = urzua(&dir, &["check", "--rules", "citation.issue-exists"], &[]);
+    assert!(own["notices"].to_string().contains("known-refs"), "{own}");
+    let (_, all, _) = urzua(&dir, &["check"], &[]);
+    assert!(all["notices"].to_string().contains("known-refs"), "{all}");
+}

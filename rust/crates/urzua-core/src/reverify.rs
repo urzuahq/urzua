@@ -414,6 +414,31 @@ pub fn latest_revision_date(
     log.entries.iter().map(|e| e.date.clone()).max()
 }
 
+/// The clause a `Re-verified` row carries when the renewal acknowledged drift
+/// (`drift: acknowledge`); it ends the `Evidence` list.
+pub const DRIFT_ACKNOWLEDGED_CLAUSE: &str = "; Drift acknowledged:";
+
+/// The date of the newest `Re-verified` row of a record that acknowledged
+/// drift, or `None` when it has none or the log cannot be read. Drift of an
+/// acknowledging category is judged from this date on (`ADR-97`, amendment of
+/// 2026-11-09, consistency): what changed on or before it was read and
+/// attested, exactly as a re-pin moves a pinned locator's reference point.
+pub fn acknowledged_through(
+    content: &str,
+    log_id: &crate::config::RevisionLogId,
+    shape: &crate::config::RevisionLogShape,
+) -> Option<String> {
+    let log = crate::rules::find_revision_log_entries(content, log_id, shape)?.ok()?;
+    log.entries
+        .iter()
+        .filter(|e| {
+            e.row.contains("Re-verified (attested by") && e.row.contains(DRIFT_ACKNOWLEDGED_CLAUSE)
+        })
+        .map(|e| e.date.trim().to_string())
+        .filter(|d| crate::rules::date_unix(d).is_ok())
+        .max()
+}
+
 /// One record in a review: its standing, its locators and what refuses it.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct RecordReview {
@@ -559,7 +584,10 @@ pub fn reverified_row(
     let acknowledged = if renewal.acknowledged.is_empty() {
         String::new()
     } else {
-        format!("; Drift acknowledged: {}.", renewal.acknowledged.join(", "))
+        format!(
+            "{DRIFT_ACKNOWLEDGED_CLAUSE} {}.",
+            renewal.acknowledged.join(", ")
+        )
     };
     format!(
         "Re-verified (attested by {}): {total} locators re-resolved, {hashed} hash-checked, {history_text}. Evidence: {evidence}{acknowledged} Reason: {reason} **Why:** the claim was {} days old against a {}-day period.",
