@@ -387,8 +387,23 @@ pub struct ClaimExpiredOpts {
     pub level: crate::config::RuleLevel,
     pub anchor_field: Option<String>,
     pub require_pin: Vec<String>,
+    /// What drift does to a renewal, per category (`ADR-97`, amendment of
+    /// 2026-11-09); a category not named is `block`.
+    pub drift: std::collections::BTreeMap<String, crate::config::DriftPolicy>,
     pub max_batch: usize,
     pub periods: Vec<crate::config::ClaimPeriod>,
+}
+
+impl ClaimExpiredOpts {
+    /// The drift policy of `category`: `block` unless declared.
+    pub fn drift_policy(&self, category: &str) -> crate::config::DriftPolicy {
+        self.drift.get(category).copied().unwrap_or_default()
+    }
+
+    /// Whether `category` has a declared drift policy.
+    pub fn drift_declared(&self, category: &str) -> bool {
+        self.drift.contains_key(category)
+    }
 }
 
 impl Default for ClaimExpiredOpts {
@@ -397,6 +412,7 @@ impl Default for ClaimExpiredOpts {
             level: crate::config::RuleLevel::Off,
             anchor_field: None,
             require_pin: Vec::new(),
+            drift: std::collections::BTreeMap::new(),
             max_batch: 1,
             periods: Vec::new(),
         }
@@ -413,6 +429,12 @@ impl RuleOpts for ClaimExpiredOpts {
                 .iter()
                 .flatten()
                 .map(|c| c.trim().to_string())
+                .collect(),
+            drift: s
+                .drift
+                .iter()
+                .flatten()
+                .map(|(c, p)| (c.trim().to_string(), *p))
                 .collect(),
             max_batch: s.max_batch.map_or(1, |n| n as usize),
             periods: s.periods.clone().unwrap_or_default(),
