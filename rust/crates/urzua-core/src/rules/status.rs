@@ -84,28 +84,22 @@ fn run_status_rule(
                 let action_field = field
                     .clone()
                     .unwrap_or_else(|| judged.status_field.to_string());
-                findings.push(Finding {
-                    rule: rule_id.to_string(),
-                    severity: declared_severity.unwrap_or(FindingSeverity::Error),
-                    file: record.path.clone(),
-                    line: None,
-                    waived: None,
-                    declared_severity,
-                    suggested_action: None,
-                    action_source: ActionSource::new(variant).field(action_field),
-                    message,
-                });
+                findings.push(
+                    Finding::new(
+                        rule_id.to_string(),
+                        declared_severity.unwrap_or(FindingSeverity::Error),
+                        record.path.clone(),
+                        ActionSource::new(variant).field(action_field),
+                        message,
+                    )
+                    .declared_opt(declared_severity),
+                );
             }
             Outcome::Examined
         },
     );
     (
-        RuleExecution {
-            rule: rule_id.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records,
-        },
+        RuleExecution::ran(rule_id.to_string(), population, examined_records),
         findings,
     )
 }
@@ -427,12 +421,7 @@ pub fn status_delivery_agreement(
         },
     );
     (
-        RuleExecution {
-            rule: RULE_STATUS_DELIVERY_AGREEMENT.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records,
-        },
+        RuleExecution::ran(RULE_STATUS_DELIVERY_AGREEMENT, population, examined_records),
         findings,
     )
 }
@@ -498,17 +487,16 @@ fn delivery_finding(
             unresolved_items_report(record, config, decl, judged, unresolved, reopen_to)
         }
     };
-    Some(Finding {
-        rule: RULE_STATUS_DELIVERY_AGREEMENT.to_string(),
-        severity: FindingSeverity::Error,
-        file: record.path.clone(),
-        line,
-        waived: None,
-        declared_severity: None,
-        suggested_action: None,
-        action_source: source,
-        message,
-    })
+    Some(
+        Finding::new(
+            RULE_STATUS_DELIVERY_AGREEMENT,
+            FindingSeverity::Error,
+            record.path.clone(),
+            source,
+            message,
+        )
+        .at_opt(line),
+    )
 }
 
 /// The message and action for a `success` status with unresolved Done means
@@ -684,31 +672,25 @@ pub fn status_transition_allowed(
                 }
             };
             if let Some(message) = message {
-                findings.push(Finding {
-                    rule: RULE_ID.to_string(),
-                    severity: FindingSeverity::Error,
-                    file: record.path.clone(),
-                    line: None,
-                    waived: None,
-                    declared_severity: None,
-                    suggested_action: None,
-                    action_source: ActionSource::new("transition-not-allowed").field(status_field),
+                findings.push(Finding::new(
+                    RULE_ID,
+                    FindingSeverity::Error,
+                    record.path.clone(),
+                    ActionSource::new("transition-not-allowed").field(status_field),
                     message,
-                });
+                ));
             }
             Outcome::Examined
         },
     );
     (
         RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
             status: if committed.is_some() {
                 RuleStatus::Ran
             } else {
                 RuleStatus::NotApplicable
             },
-            examined_records,
+            ..RuleExecution::ran(RULE_ID, population, examined_records)
         },
         findings,
     )
@@ -734,32 +716,23 @@ pub fn status_unreachable(
                 return Outcome::Absent;
             }
             for status in decl.unreachable() {
-                findings.push(Finding {
-                    rule: RULE_ID.to_string(),
-                    severity: FindingSeverity::Warning,
-                    file: config_path.to_path_buf(),
-                    line: None,
-                    waived: None,
-                    declared_severity: None,
-                    suggested_action: None,
-                    action_source: ActionSource::new("status-unreachable")
+                findings.push(Finding::new(
+                    RULE_ID,
+                    FindingSeverity::Warning,
+                    config_path.to_path_buf(),
+                    ActionSource::new("status-unreachable")
                         .key_path(["record_types", type_name, "statuses", "transitions"]),
-                    message: format!(
+                    format!(
                         "record type '{type_name}' declares status '{status}' but no path of its transitions reaches it from initial ({})",
                         decl.initial.join(", ")
                     ),
-                });
+                ));
             }
             Outcome::Examined
         },
     );
     (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records: Vec::new(),
-        },
+        RuleExecution::ran(RULE_ID, population, Vec::new()),
         findings,
     )
 }

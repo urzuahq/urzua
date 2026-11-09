@@ -125,15 +125,7 @@ pub fn gate_and_run(
     use crate::config::RuleLevel;
 
     match config.rules.get(id).map(|s| s.level) {
-        None | Some(RuleLevel::Off) => (
-            RuleExecution {
-                rule: id.to_string(),
-                population: None,
-                status: RuleStatus::NotEnabled,
-                examined_records: Vec::new(),
-            },
-            Vec::new(),
-        ),
+        None | Some(RuleLevel::Off) => (RuleExecution::not_enabled(id), Vec::new()),
         Some(level) => {
             let severity = level
                 .severity()
@@ -205,17 +197,7 @@ pub fn run_phase_with(
         let can_report_on_a_record =
             matches!(d.anchor, Anchor::Record | Anchor::RecordOrDeclaredFile(_));
         if plan.record_only && !can_report_on_a_record {
-            out.push(gate_and_run(ctx.config, d.id, || {
-                (
-                    RuleExecution {
-                        rule: d.id.to_string(),
-                        population: None,
-                        status: RuleStatus::NotApplicable,
-                        examined_records: Vec::new(),
-                    },
-                    Vec::new(),
-                )
-            }));
+            out.push(gate_and_run(ctx.config, d.id, || not_applicable(d.id)));
             continue;
         }
         out.push(run_rule(d, ctx));

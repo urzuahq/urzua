@@ -57,12 +57,7 @@ pub fn waiver_matches_nothing(
     );
 
     (
-        RuleExecution {
-            rule: RULE_WAIVER_MATCHES_NOTHING.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records,
-        },
+        RuleExecution::ran(RULE_WAIVER_MATCHES_NOTHING, population, examined_records),
         out,
     )
 }
@@ -85,17 +80,13 @@ fn waiver_report(
     field: &str,
     message: String,
 ) -> Finding {
-    Finding {
-        rule: RULE_WAIVER_MATCHES_NOTHING.to_string(),
-        severity: FindingSeverity::Warning,
-        file: path.to_path_buf(),
-        line: None,
-        waived: None,
-        declared_severity: None,
-        suggested_action: None,
-        action_source: ActionSource::new(variant).field(field),
+    Finding::new(
+        RULE_WAIVER_MATCHES_NOTHING,
+        FindingSeverity::Warning,
+        path.to_path_buf(),
+        ActionSource::new(variant).field(field),
         message,
-    }
+    )
 }
 
 /// Implements: ADR-86 (the message names the unmet requirement)

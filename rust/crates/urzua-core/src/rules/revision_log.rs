@@ -35,12 +35,11 @@ pub fn revision_log_change_class(
     );
 
     (
-        RuleExecution {
-            rule: RULE_REVISION_LOG_CHANGE_CLASS_REQUIRED.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
+        RuleExecution::ran(
+            RULE_REVISION_LOG_CHANGE_CLASS_REQUIRED,
+            population,
             examined_records,
-        },
+        ),
         findings,
     )
 }
@@ -52,17 +51,14 @@ fn change_class_finding(
     source: ActionSource,
     message: String,
 ) -> Finding {
-    Finding {
-        rule: RULE_REVISION_LOG_CHANGE_CLASS_REQUIRED.to_string(),
-        severity: FindingSeverity::Error,
-        file: record.path.clone(),
-        line,
-        waived: None,
-        declared_severity: None,
-        suggested_action: None,
-        action_source: source,
+    Finding::new(
+        RULE_REVISION_LOG_CHANGE_CLASS_REQUIRED,
+        FindingSeverity::Error,
+        record.path.clone(),
+        source,
         message,
-    }
+    )
+    .at_opt(line)
 }
 
 fn judge_change_class(
@@ -152,15 +148,7 @@ pub fn revision_log_version_bump(
     base_text: &HashMap<std::path::PathBuf, String>,
 ) -> (RuleExecution, Vec<Finding>) {
     let Some(changed) = changed else {
-        return (
-            RuleExecution {
-                rule: RULE_REVISION_LOG_VERSION_BUMP_REQUIRED.to_string(),
-                population: None,
-                status: RuleStatus::NotApplicable,
-                examined_records: Vec::new(),
-            },
-            Vec::new(),
-        );
+        return not_applicable(RULE_REVISION_LOG_VERSION_BUMP_REQUIRED);
     };
     let changed: std::collections::HashSet<&std::path::PathBuf> = changed.iter().collect();
     // The changed records of a type that declares a bump, in path order.
@@ -184,12 +172,11 @@ pub fn revision_log_version_bump(
         |record| judge_version_bump(record, config, full_text, base_text, &mut findings),
     );
     (
-        RuleExecution {
-            rule: RULE_REVISION_LOG_VERSION_BUMP_REQUIRED.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
+        RuleExecution::ran(
+            RULE_REVISION_LOG_VERSION_BUMP_REQUIRED,
+            population,
             examined_records,
-        },
+        ),
         findings,
     )
 }
@@ -274,22 +261,19 @@ fn judge_version_bump(
     let field = bump.field.trim();
     let norm = |v: Option<&str>| v.map(|v| v.trim().to_string());
     if norm(before.header.get(field)) == norm(record.header.get(field)) {
-        findings.push(Finding {
-            rule: RULE_REVISION_LOG_VERSION_BUMP_REQUIRED.to_string(),
-            severity: FindingSeverity::Error,
-            file: record.path.clone(),
-            line: Some(first.line),
-            waived: None,
-            declared_severity: None,
-            suggested_action: None,
-            action_source: ActionSource::new("version-bump").field(field),
-            message: format!(
+        findings.push(Finding::new(
+            RULE_REVISION_LOG_VERSION_BUMP_REQUIRED,
+            FindingSeverity::Error,
+            record.path.clone(),
+            ActionSource::new("version-bump").field(field),
+            format!(
                 "revision log entry dated {} adds a {} change but '{field}' is unchanged from the merge base ({}) -- bump it",
                 first.date,
                 strip_emphasis(&first.change_class),
                 norm(record.header.get(field)).unwrap_or_else(|| "absent".to_string()),
             ),
-        });
+        )
+        .at(first.line));
     }
     Outcome::Examined
 }

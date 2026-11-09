@@ -28,30 +28,14 @@ fn under_any(path: &Path, entries: &[String]) -> bool {
     entries.iter().any(|e| path_matches_entry(path, e))
 }
 
-fn not_applicable(rule: &str) -> (RuleExecution, Vec<Finding>) {
-    (
-        RuleExecution {
-            rule: rule.to_string(),
-            population: None,
-            status: RuleStatus::NotApplicable,
-            examined_records: Vec::new(),
-        },
-        Vec::new(),
-    )
-}
-
 fn finding(rule: &str, file: PathBuf, message: String, action_source: ActionSource) -> Finding {
-    Finding {
-        rule: rule.to_string(),
-        severity: FindingSeverity::Error,
+    Finding::new(
+        rule.to_string(),
+        FindingSeverity::Error,
         file,
-        line: None,
-        message,
-        waived: None,
-        declared_severity: None,
-        suggested_action: None,
         action_source,
-    }
+        message,
+    )
 }
 
 fn sorted(changed: &[PathBuf]) -> Vec<&PathBuf> {
@@ -205,12 +189,7 @@ pub fn source_requires_record(
         Outcome::Examined
     });
     (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records: Vec::new(),
-        },
+        RuleExecution::ran(RULE_ID, population, Vec::new()),
         findings,
     )
 }
@@ -301,12 +280,7 @@ pub fn source_and_records_mixed(
         }
     });
     (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records: Vec::new(),
-        },
+        RuleExecution::ran(RULE_ID, population, Vec::new()),
         findings,
     )
 }

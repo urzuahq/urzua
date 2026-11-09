@@ -71,6 +71,57 @@ pub struct Finding {
     pub action_source: ActionSource,
 }
 
+impl Finding {
+    /// A finding with no line, no covering waiver, no declared field
+    /// severity and no resolved action: what a rule knows when it reports.
+    /// `action_source` is required so that no finding is built without
+    /// naming its variant (`ADR-73`); the rule table resolves
+    /// `suggested_action` from it later.
+    pub fn new(
+        rule: impl Into<String>,
+        severity: FindingSeverity,
+        file: impl Into<PathBuf>,
+        action_source: ActionSource,
+        message: impl Into<String>,
+    ) -> Self {
+        Finding {
+            rule: rule.into(),
+            severity,
+            file: file.into(),
+            line: None,
+            message: message.into(),
+            waived: None,
+            declared_severity: None,
+            suggested_action: None,
+            action_source,
+        }
+    }
+
+    /// The finding sits on this line of its file.
+    pub fn at(mut self, line: usize) -> Self {
+        self.line = Some(line);
+        self
+    }
+
+    /// The finding sits on this line when one is known.
+    pub fn at_opt(mut self, line: Option<usize>) -> Self {
+        self.line = line;
+        self
+    }
+
+    /// The severity the finding's own field was declared at (`MILE-140`).
+    pub fn declared(mut self, severity: FindingSeverity) -> Self {
+        self.declared_severity = Some(severity);
+        self
+    }
+
+    /// `declared`, when the rule declared one.
+    pub fn declared_opt(mut self, severity: Option<FindingSeverity>) -> Self {
+        self.declared_severity = severity;
+        self
+    }
+}
+
 /// The closed vocabulary of `suggested_action.kind` (`ADR-73`). Closed per
 /// release and extensible across releases: a consumer treats a kind it does
 /// not know as no machine-actionable guidance and reads `message`.
@@ -281,6 +332,42 @@ pub struct RuleExecution {
     /// filename and an external assertion are not records read.
     #[serde(skip)]
     pub examined_records: Vec<PathBuf>,
+}
+
+impl RuleExecution {
+    /// A rule that ran, over this population, reaching a verdict about
+    /// these records.
+    pub fn ran(
+        rule: impl Into<String>,
+        population: Population,
+        examined_records: Vec<PathBuf>,
+    ) -> Self {
+        RuleExecution {
+            rule: rule.into(),
+            population: Some(population),
+            status: RuleStatus::Ran,
+            examined_records,
+        }
+    }
+
+    /// A rule that did not apply: it was handed nothing it could judge.
+    pub fn not_applicable(rule: impl Into<String>) -> Self {
+        Self::unrun(rule, RuleStatus::NotApplicable)
+    }
+
+    /// A rule the repository did not turn on (`ADR-7`).
+    pub fn not_enabled(rule: impl Into<String>) -> Self {
+        Self::unrun(rule, RuleStatus::NotEnabled)
+    }
+
+    fn unrun(rule: impl Into<String>, status: RuleStatus) -> Self {
+        RuleExecution {
+            rule: rule.into(),
+            population: None,
+            status,
+            examined_records: Vec::new(),
+        }
+    }
 }
 
 /// The number of distinct records some rule reached a verdict about.

@@ -96,29 +96,23 @@ pub fn citation_resolution(
                 return Outcome::Absent;
             }
             if !index.contains_key(&crate::values::RecordId::new(&c.token)) {
-                findings.push(Finding {
-                    rule: RULE_ID.to_string(),
-                    severity: FindingSeverity::Error,
-                    file: c.record.path.clone(),
-                    line: Some(c.line),
-                    waived: None,
-                    declared_severity: None,
-                    suggested_action: None,
-                    action_source: ActionSource::new("citation-unresolved"),
-                    message: format!("{} is cited in prose but resolves to no record", c.token),
-                });
+                findings.push(
+                    Finding::new(
+                        RULE_ID,
+                        FindingSeverity::Error,
+                        c.record.path.clone(),
+                        ActionSource::new("citation-unresolved"),
+                        format!("{} is cited in prose but resolves to no record", c.token),
+                    )
+                    .at(c.line),
+                );
             }
             Outcome::Examined
         },
     );
 
     (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records,
-        },
+        RuleExecution::ran(RULE_ID, population, examined_records),
         findings,
     )
 }
@@ -193,12 +187,7 @@ pub fn citation_non_reference(
     );
 
     Some((
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records,
-        },
+        RuleExecution::ran(RULE_ID, population, examined_records),
         findings,
     ))
 }
@@ -270,17 +259,16 @@ fn judge_declared_entry(
     findings: &mut Vec<Finding>,
 ) {
     let mut report = |message: String, source: ActionSource| {
-        findings.push(Finding {
-            rule: RULE_CITATION_RESOLUTION.to_string(),
-            severity: FindingSeverity::Error,
-            file: c.record.path.clone(),
-            line: Some(c.declaration.line),
-            waived: None,
-            declared_severity: None,
-            suggested_action: None,
-            action_source: source,
-            message,
-        });
+        findings.push(
+            Finding::new(
+                RULE_CITATION_RESOLUTION,
+                FindingSeverity::Error,
+                c.record.path.clone(),
+                source,
+                message,
+            )
+            .at(c.declaration.line),
+        );
     };
     match &c.entry {
         DeclaredEntry::Malformed(entry, reason) => report(
@@ -481,28 +469,22 @@ pub fn citation_path_exists(
         |c| c.record.path.clone(),
         |c| {
             if !present(&c.path) {
-                findings.push(Finding {
-                    rule: RULE_ID.to_string(),
-                    severity: FindingSeverity::Error,
-                    file: c.record.path.clone(),
-                    line: Some(c.line),
-                    waived: None,
-                    declared_severity: None,
-                    suggested_action: None,
-                    action_source: ActionSource::new("path-missing").section(c.section.as_str()),
-                    message: format!("cites `{}`, which is not in the working tree", c.raw),
-                });
+                findings.push(
+                    Finding::new(
+                        RULE_ID,
+                        FindingSeverity::Error,
+                        c.record.path.clone(),
+                        ActionSource::new("path-missing").section(c.section.as_str()),
+                        format!("cites `{}`, which is not in the working tree", c.raw),
+                    )
+                    .at(c.line),
+                );
             }
             Outcome::Examined
         },
     );
     (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records,
-        },
+        RuleExecution::ran(RULE_ID, population, examined_records),
         findings,
     )
 }
@@ -528,15 +510,7 @@ pub fn citation_issue_exists(
     const RULE_ID: &str = RULE_CITATION_ISSUE_EXISTS;
     let setting = config.rules.get(RULE_ID);
     let Some(refs) = setting.and_then(|s| s.issue_refs.as_ref()) else {
-        return (
-            RuleExecution {
-                rule: RULE_ID.to_string(),
-                population: None,
-                status: RuleStatus::NotApplicable,
-                examined_records: Vec::new(),
-            },
-            Vec::new(),
-        );
+        return not_applicable(RULE_ID);
     };
     let scan = IssueScan::new(
         refs,
@@ -566,12 +540,7 @@ pub fn citation_issue_exists(
         },
     );
     (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records,
-        },
+        RuleExecution::ran(RULE_ID, population, examined_records),
         findings,
     )
 }
@@ -729,39 +698,31 @@ impl IssueScan {
 }
 
 fn snapshot_unusable_finding(snapshot_path: &str, reason: &str) -> Finding {
-    Finding {
-        rule: RULE_CITATION_ISSUE_EXISTS.to_string(),
-        severity: FindingSeverity::Error,
-        file: PathBuf::from(snapshot_path),
-        line: None,
-        waived: None,
-        declared_severity: None,
-        suggested_action: None,
-        action_source: ActionSource::new("snapshot-unusable"),
-        message: format!(
+    Finding::new(
+        RULE_CITATION_ISSUE_EXISTS,
+        FindingSeverity::Error,
+        PathBuf::from(snapshot_path),
+        ActionSource::new("snapshot-unusable"),
+        format!(
             "the snapshot of issue and pull request numbers could not be used, so no citation was checked: {reason}; run `urzua refs refresh`"
         ),
-    }
+    )
 }
 
 fn missing_issue_finding(
     c: &CitedIssue<'_>,
     snapshot: &crate::refs_snapshot::RefsSnapshot,
 ) -> Finding {
-    Finding {
-        rule: RULE_CITATION_ISSUE_EXISTS.to_string(),
-        severity: FindingSeverity::Error,
-        file: c.record.path.clone(),
-        line: Some(c.line),
-        waived: None,
-        declared_severity: None,
-        suggested_action: None,
-        action_source: match (&c.field, &c.section) {
+    Finding::new(
+        RULE_CITATION_ISSUE_EXISTS,
+        FindingSeverity::Error,
+        c.record.path.clone(),
+        match (&c.field, &c.section) {
             (Some(field), _) => ActionSource::new("issue-missing-in-field").field(field.as_str()),
             (None, section) => ActionSource::new("issue-missing-in-section")
                 .section(section.clone().unwrap_or_default()),
         },
-        message: format!(
+        format!(
             "cites {}{}, which is not an issue or pull request of {} in the snapshot generated {}; if it was opened since, run `urzua refs refresh`",
             c.raw,
             c.field
@@ -771,7 +732,8 @@ fn missing_issue_finding(
             snapshot.repository,
             snapshot.generated_at
         ),
-    }
+    )
+    .at(c.line)
 }
 
 /// `line` with each inline code span, delimiters included, replaced by spaces

@@ -66,19 +66,15 @@ pub fn pointer_target_status(
                         return;
                     };
                     if not_in.iter().any(|s| s == status) {
-                        findings.push(Finding {
-                            rule: RULE_ID.to_string(),
-                            severity: FindingSeverity::Warning,
-                            file: record.path.clone(),
-                            line: None,
-                            waived: None,
-                            declared_severity: None,
-                            suggested_action: None,
-                            action_source: ActionSource::new("pointer-target-status").field(field_name.as_str()),
-                            message: format!(
+                        findings.push(Finding::new(
+                            RULE_ID,
+                            FindingSeverity::Warning,
+                            record.path.clone(),
+                            ActionSource::new("pointer-target-status").field(field_name.as_str()),
+                            format!(
                                 "{field_name}: {reference} resolves, but its {target_status_field} is {status}"
                             ),
-                        });
+                        ));
                     }
                 },
             );
@@ -90,12 +86,7 @@ pub fn pointer_target_status(
     );
 
     (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records,
-        },
+        RuleExecution::ran(RULE_ID, population, examined_records),
         findings,
     )
 }
@@ -141,29 +132,20 @@ pub fn pointer_resolution(
                     ("pointer-unresolved", "pointer-untracked"),
                     "",
                 );
-                findings.push(Finding {
-                    rule: RULE_ID.to_string(),
-                    severity: FindingSeverity::Error,
-                    file: record.path.clone(),
-                    line: None,
-                    waived: None,
-                    declared_severity: None,
-                    suggested_action: None,
-                    action_source: ActionSource::new(variant).field(field_name.as_str()),
+                findings.push(Finding::new(
+                    RULE_ID,
+                    FindingSeverity::Error,
+                    record.path.clone(),
+                    ActionSource::new(variant).field(field_name.as_str()),
                     message,
-                });
+                ));
             }
             Outcome::Examined
         },
     );
 
     (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records,
-        },
+        RuleExecution::ran(RULE_ID, population, examined_records),
         findings,
     )
 }
@@ -223,19 +205,15 @@ pub fn header_pointer_field_clean(
                 let is_clean_reference =
                     is_record_reference(entry) || crate::values::is_no_value_sentinel(entry);
                 if !is_clean_reference {
-                    findings.push(Finding {
-                        rule: RULE_ID.to_string(),
-                        severity: FindingSeverity::Warning,
-                        file: record.path.clone(),
-                        line: None,
-                        waived: None,
-                        declared_severity: None,
-                        suggested_action: None,
-                        action_source: ActionSource::new("pointer-field-not-clean").field(field_name.as_str()),
-                        message: format!(
+                    findings.push(Finding::new(
+                        RULE_ID,
+                        FindingSeverity::Warning,
+                        record.path.clone(),
+                        ActionSource::new("pointer-field-not-clean").field(field_name.as_str()),
+                        format!(
                             "{field_name} entry {entry:?} isn't a clean reference -- pointer fields should hold only comma-separated reference IDs (e.g. \"RFC-1\", not \"RFC-1 (Accepted)\"); pointer.resolution already reports a resolved target's live Status"
                         ),
-                    });
+                    ));
                 }
             }
             Outcome::Examined
@@ -243,12 +221,7 @@ pub fn header_pointer_field_clean(
     );
 
     (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records,
-        },
+        RuleExecution::ran(RULE_ID, population, examined_records),
         findings,
     )
 }

@@ -334,17 +334,108 @@ mod tests {
         assert!(dead.is_empty(), "declared but never constructed: {dead:?}");
     }
 
+    /// The top-level arguments of every `Finding::new(` call in `live`, each
+    /// trimmed. A scanner, not a parser: it balances brackets and skips string
+    /// literals and line comments, which is all a rule module's calls need.
+    fn finding_new_calls(live: &str) -> Vec<Vec<String>> {
+        const CALL: &str = "Finding::new(";
+        let mut calls = Vec::new();
+        let mut from = 0;
+        while let Some(at) = live[from..].find(CALL) {
+            let start = from + at + CALL.len();
+            let bytes = live.as_bytes();
+            let (mut depth, mut i, mut arg_start) = (1usize, start, start);
+            let mut args = Vec::new();
+            while depth > 0 {
+                match bytes[i] {
+                    b'"' => {
+                        i += 1;
+                        while bytes[i] != b'"' {
+                            i += if bytes[i] == b'\\' { 2 } else { 1 };
+                        }
+                    }
+                    b'/' if bytes[i + 1] == b'/' => {
+                        while bytes[i] != b'\n' {
+                            i += 1;
+                        }
+                    }
+                    b'(' | b'[' | b'{' => depth += 1,
+                    b')' | b']' | b'}' => {
+                        depth -= 1;
+                        if depth == 0 {
+                            args.push(live[arg_start..i].trim().to_string());
+                        }
+                    }
+                    b',' if depth == 1 => {
+                        args.push(live[arg_start..i].trim().to_string());
+                        arg_start = i + 1;
+                    }
+                    _ => {}
+                }
+                i += 1;
+            }
+            // A trailing comma leaves an empty last argument.
+            if args.last().is_some_and(String::is_empty) {
+                args.pop();
+            }
+            calls.push(args);
+            from = i;
+        }
+        calls
+    }
+
+    /// Whether a `Finding::new` argument is an action source: built in place
+    /// (`ActionSource::new(` anywhere in the expression), a call to a helper
+    /// named `*_source`, a parameter declared as an `ActionSource`, or a local
+    /// bound to one a few lines above.
+    fn names_an_action_source(live: &str, arg: &str) -> bool {
+        if arg.contains("ActionSource::new(") {
+            return true;
+        }
+        let code: String = arg
+            .lines()
+            .filter(|line| !line.trim_start().starts_with("//"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let head: String = code
+            .trim()
+            .chars()
+            .take_while(|c| c.is_alphanumeric() || *c == '_')
+            .collect();
+        let bound_here = live.find(&format!("let {head} = ")).is_some_and(|at| {
+            let rest = &live[at..];
+            rest[..rest.len().min(400)].contains("ActionSource::new(")
+        });
+        !head.is_empty()
+            && (head.ends_with("_source") && code.trim()[head.len()..].starts_with('(')
+                || live.contains(&format!("{head}: ActionSource"))
+                || bound_here)
+    }
+
+    /// A finding is built either by a struct literal, which must carry an
+    /// `action_source` field, or by `Finding::new(rule, severity, file,
+    /// action_source, message)`, whose fourth argument must be one. Both
+    /// kinds are counted together, so a finding built either way without an
+    /// action source is caught.
     #[test]
     fn every_finding_a_rule_constructs_names_a_variant() {
         for (file, live) in rule_sources() {
-            let constructed = live.matches("Finding {").count()
+            let literals = live.matches("Finding {").count()
                 - live.matches("-> Finding {").count()
                 - live.matches("pub struct Finding {").count();
-            let sourced = live.matches("action_source: ").count()
+            let calls = finding_new_calls(&live);
+            let constructed = literals + calls.len();
+            let literal_sourced = live.matches("action_source: ").count()
                 + live.matches("                action_source,").count()
-                - live.matches("action_source: ActionSource,").count();
+                - live.matches("action_source: ActionSource,").count()
+                - live.matches("action_source: ActionSource)").count();
+            let call_sourced = calls
+                .iter()
+                .filter(|args| args.len() == 5 && names_an_action_source(&live, &args[3]))
+                .count();
             assert_eq!(
-                constructed, sourced,
+                constructed,
+                literal_sourced + call_sourced,
                 "{file}: a Finding is built without an action_source"
             );
             assert!(

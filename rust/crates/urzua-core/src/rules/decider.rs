@@ -15,18 +15,6 @@ use crate::authority::{Actors, AuthorityDecl, EvidenceKind, Gate};
 use crate::config::RelationRole;
 use crate::report::{census, Outcome};
 
-fn not_applicable(rule: &str) -> (RuleExecution, Vec<Finding>) {
-    (
-        RuleExecution {
-            rule: rule.to_string(),
-            population: None,
-            status: RuleStatus::NotApplicable,
-            examined_records: Vec::new(),
-        },
-        Vec::new(),
-    )
-}
-
 /// What the actors file says, in words, for the kinds of evidence the table
 /// accepts.
 fn evidence_text(authority: &AuthorityDecl, actors: &Actors) -> String {
@@ -181,17 +169,16 @@ pub fn decider_required(
                 (!opts.require_evidence).then_some(FindingSeverity::Info),
             ),
         };
-        findings.push(Finding {
-            rule: RULE_ID.to_string(),
-            severity: FindingSeverity::Error,
-            file: g.path.to_path_buf(),
-            line: None,
-            message,
-            waived: None,
-            declared_severity,
-            suggested_action: None,
-            action_source: ActionSource::new(g.variant),
-        });
+        findings.push(
+            Finding::new(
+                RULE_ID,
+                FindingSeverity::Error,
+                g.path.to_path_buf(),
+                ActionSource::new(g.variant),
+                message,
+            )
+            .declared_opt(declared_severity),
+        );
     }
     let gated_paths: HashSet<&Path> = gated.iter().map(|g| g.path).collect();
     let population = census(PopulationUnit::ChangedPath, paths, |path| {
@@ -202,12 +189,7 @@ pub fn decider_required(
         }
     });
     (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records: Vec::new(),
-        },
+        RuleExecution::ran(RULE_ID, population, Vec::new()),
         findings,
     )
 }

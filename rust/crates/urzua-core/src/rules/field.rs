@@ -54,31 +54,23 @@ pub fn field_pending(records: &[Record], config: &Config) -> (RuleExecution, Vec
             }
             if classify_with(record.header.get(field.as_str()), declared) == FieldState::Pending {
                 let declared_severity = declared_field_severity(config, RULE_ID, field.as_str());
-                findings.push(Finding {
-                    rule: RULE_ID.to_string(),
-                    severity: declared_severity.unwrap_or(FindingSeverity::Warning),
-                    file: record.path.clone(),
-                    line: None,
-                    waived: None,
-                    declared_severity,
-                    suggested_action: None,
-                    action_source: ActionSource::new("field-pending").field(field.as_str()),
-                    message: format!(
-                        "field '{field}' is marked pending -- work declared unfinished"
-                    ),
-                });
+                findings.push(
+                    Finding::new(
+                        RULE_ID,
+                        declared_severity.unwrap_or(FindingSeverity::Warning),
+                        record.path.clone(),
+                        ActionSource::new("field-pending").field(field.as_str()),
+                        format!("field '{field}' is marked pending -- work declared unfinished"),
+                    )
+                    .declared_opt(declared_severity),
+                );
             }
             Outcome::Examined
         },
     );
 
     (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records,
-        },
+        RuleExecution::ran(RULE_ID, population, examined_records),
         findings,
     )
 }
@@ -113,32 +105,23 @@ pub fn field_untrimmed_value(records: &[Record], config: &Config) -> (RuleExecut
                 return Outcome::Absent;
             };
             if value != value.trim() {
-                findings.push(Finding {
-                    rule: RULE_ID.to_string(),
-                    severity: FindingSeverity::Warning,
-                    file: record.path.clone(),
-                    line: None,
-                    waived: None,
-                    declared_severity: None,
-                    suggested_action: None,
-                    action_source: ActionSource::new("untrimmed-value").field(field.as_str()).text(value.trim()),
-                    message: format!(
+                findings.push(Finding::new(
+                    RULE_ID,
+                    FindingSeverity::Warning,
+                    record.path.clone(),
+                    ActionSource::new("untrimmed-value").field(field.as_str()).text(value.trim()),
+                    format!(
                         "field '{field}' is {value:?} -- the surrounding whitespace is part of the value, so any exact comparison against '{}' fails",
                         value.trim()
                     ),
-                });
+                ));
             }
             Outcome::Examined
         },
     );
 
     (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records,
-        },
+        RuleExecution::ran(RULE_ID, population, examined_records),
         findings,
     )
 }
@@ -191,19 +174,15 @@ pub fn field_leading_reserved_indicator(
             };
             if let Some(first) = value.chars().next() {
                 if RESERVED_LEADING_CHARS.contains(&first) {
-                    findings.push(Finding {
-                        rule: RULE_ID.to_string(),
-                        severity: FindingSeverity::Warning,
-                        file: record.path.clone(),
-                        line: None,
-                        waived: None,
-                        declared_severity: None,
-                        suggested_action: None,
-                        action_source: ActionSource::new("leading-reserved-indicator").field(field.as_str()),
-                        message: format!(
+                    findings.push(Finding::new(
+                        RULE_ID,
+                        FindingSeverity::Warning,
+                        record.path.clone(),
+                        ActionSource::new("leading-reserved-indicator").field(field.as_str()),
+                        format!(
                             "field '{field}' is {value:?} -- it needs quoting only because it starts with '{first}', a reserved YAML indicator character; confirm the character is meaningful, or drop it (BUG-18)"
                         ),
-                    });
+                    ));
                 }
             }
             Outcome::Examined
@@ -211,12 +190,7 @@ pub fn field_leading_reserved_indicator(
     );
 
     (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records,
-        },
+        RuleExecution::ran(RULE_ID, population, examined_records),
         findings,
     )
 }
@@ -297,29 +271,23 @@ pub fn field_quality(
             // keeping both here left no setting that was correct (BUG-38).
             if matches!(state, FieldState::Blank | FieldState::Placeholder) {
                 let declared_severity = declared_field_severity(config, RULE_ID, field.as_str());
-                findings.push(Finding {
-                    rule: RULE_ID.to_string(),
-                    severity: declared_severity.unwrap_or(FindingSeverity::Error),
-                    file: record.path.clone(),
-                    line: None,
-                    waived: None,
-                    declared_severity,
-                    suggested_action: None,
-                    action_source: ActionSource::new("field-quality").field(field.as_str()),
-                    message: format!("field '{field}' is {state:?} -- not a real, present value"),
-                });
+                findings.push(
+                    Finding::new(
+                        RULE_ID,
+                        declared_severity.unwrap_or(FindingSeverity::Error),
+                        record.path.clone(),
+                        ActionSource::new("field-quality").field(field.as_str()),
+                        format!("field '{field}' is {state:?} -- not a real, present value"),
+                    )
+                    .declared_opt(declared_severity),
+                );
             }
             Outcome::Examined
         },
     );
 
     (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records,
-        },
+        RuleExecution::ran(RULE_ID, population, examined_records),
         findings,
     )
 }

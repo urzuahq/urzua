@@ -64,19 +64,15 @@ pub fn narrative_field_stale(
                         &record.record_type,
                         crate::config::RelationRole::Status,
                     );
-                    findings.push(Finding {
-                        rule: RULE_ID.to_string(),
-                        severity: FindingSeverity::Warning,
-                        file: record.path.clone(),
-                        line: None,
-                        waived: None,
-                        declared_severity: None,
-                        suggested_action: None,
-                        action_source: ActionSource::new("narrative-field-stale").field(field_name.as_str()),
-                        message: format!(
+                    findings.push(Finding::new(
+                        RULE_ID,
+                        FindingSeverity::Warning,
+                        record.path.clone(),
+                        ActionSource::new("narrative-field-stale").field(field_name.as_str()),
+                        format!(
                             "{field_name}: {reference} has reached a terminal status ({status}) -- re-examine whether this record's {source_status_field}/{field_name} should update"
                         ),
-                    });
+                    ));
                 }
             }
             Outcome::Examined
@@ -84,12 +80,7 @@ pub fn narrative_field_stale(
     );
 
     (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records,
-        },
+        RuleExecution::ran(RULE_ID, population, examined_records),
         findings,
     )
 }

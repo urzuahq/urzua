@@ -44,31 +44,22 @@ pub fn identity_collision(
             .collect();
         paths.sort();
         for record in claimants.iter() {
-            findings.push(Finding {
-                rule: RULE_ID.to_string(),
-                severity: FindingSeverity::Error,
-                file: record.path.clone(),
-                line: None,
-                waived: None,
-                declared_severity: None,
-                suggested_action: None,
-                action_source: ActionSource::new("identifier-collision"),
-                message: format!(
+            findings.push(Finding::new(
+                RULE_ID,
+                FindingSeverity::Error,
+                record.path.clone(),
+                ActionSource::new("identifier-collision"),
+                format!(
                     "identifier {id} is claimed by {} records ({}) -- a reference to it resolves to only one of them",
                     claimants.len(),
                     paths.join(", ")
                 ),
-            });
+            ));
         }
     }
 
     (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records,
-        },
+        RuleExecution::ran(RULE_ID, population, examined_records),
         findings,
     )
 }

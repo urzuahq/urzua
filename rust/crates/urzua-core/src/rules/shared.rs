@@ -1,5 +1,11 @@
 use super::*;
 
+/// A rule that was handed nothing it could judge: reported
+/// `not-applicable`, with no finding.
+pub(super) fn not_applicable(rule: &str) -> (RuleExecution, Vec<Finding>) {
+    (RuleExecution::not_applicable(rule), Vec::new())
+}
+
 /// `census_records` for every rule that reads a record's header: the one place
 /// a `header_shape: none` type (`ADR-50`) is classified `OutOfScope`
 /// (`MILE-119`). Such a type has nowhere for a header to be, so its

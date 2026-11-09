@@ -89,12 +89,7 @@ pub fn embodiment_locator_on_back_pointer_path(
         },
     );
     (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records,
-        },
+        RuleExecution::ran(RULE_ID, population, examined_records),
         findings,
     )
 }
@@ -165,19 +160,15 @@ impl LighterMechanism<'_> {
         } else {
             format!("add the comment first, then drop this locator from {field}; keep the locator only where a comment cannot be written")
         };
-        Some(Finding {
-            rule: RULE_EMBODIMENT_LOCATOR_ON_BACK_POINTER_PATH.to_string(),
-            severity: FindingSeverity::Warning,
-            file: record.path.clone(),
-            line: None,
-            waived: None,
-            declared_severity: None,
-            suggested_action: None,
-            action_source: source.field(field),
-            message: format!(
+        Some(Finding::new(
+            RULE_EMBODIMENT_LOCATOR_ON_BACK_POINTER_PATH,
+            FindingSeverity::Warning,
+            record.path.clone(),
+            source.field(field),
+            format!(
                 "{field} names '{}' ({}:), a file under back_pointer_paths: a `{marker}: {id}` comment in that file is read automatically and counts as the same tier, so it cannot go stale away from the code; {next_step}",
                 locator.path, entry.category
             ),
-        })
+        ))
     }
 }

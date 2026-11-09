@@ -54,15 +54,7 @@ pub fn open_pr_collision(
     const RULE_ID: &str = RULE_IDENTITY_OPEN_PR_COLLISION;
     let Some(added) = added else {
         // A diff rule: without `--base` it judges nothing and says so.
-        return (
-            RuleExecution {
-                rule: RULE_ID.to_string(),
-                population: None,
-                status: RuleStatus::NotApplicable,
-                examined_records: Vec::new(),
-            },
-            Vec::new(),
-        );
+        return not_applicable(RULE_ID);
     };
     let added: std::collections::HashSet<&std::path::PathBuf> = added.iter().collect();
     let mut candidates: Vec<&Record> = records.iter().filter(|r| added.contains(&r.path)).collect();
@@ -80,16 +72,12 @@ pub fn open_pr_collision(
             if matches!((&own, &holder.stable_id), (Some(a), Some(b)) if a == b) {
                 continue;
             }
-            findings.push(Finding {
-                rule: RULE_ID.to_string(),
-                severity: FindingSeverity::Warning,
-                file: record.path.clone(),
-                line: None,
-                waived: None,
-                declared_severity: None,
-                suggested_action: None,
-                action_source: ActionSource::new("open-pr-collision"),
-                message: format!(
+            findings.push(Finding::new(
+                RULE_ID,
+                FindingSeverity::Warning,
+                record.path.clone(),
+                ActionSource::new("open-pr-collision"),
+                format!(
                     "{} is also used by {} on {} (Stable-Id {}, this record's {}) -- a different record. Rename the file and its H1 to the next free number (the one `urzua new` would take); if that pull request is closed and unmerged, waive this finding with a waiver naming it",
                     id.as_str(),
                     holder.path,
@@ -97,7 +85,7 @@ pub fn open_pr_collision(
                     holder.stable_id.as_deref().unwrap_or("absent"),
                     own.as_deref().unwrap_or("absent"),
                 ),
-            });
+            ));
         }
     }
     let examined: Vec<std::path::PathBuf> = if claims.refs.is_empty() {
@@ -108,13 +96,5 @@ pub fn open_pr_collision(
     let population = census(PopulationUnit::PullRef, claims.refs.clone(), |_| {
         Outcome::Examined
     });
-    (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records: examined,
-        },
-        findings,
-    )
+    (RuleExecution::ran(RULE_ID, population, examined), findings)
 }

@@ -52,28 +52,19 @@ pub fn type_record_outside_declared_dir(
 
     unowned.sort();
     for path in unowned {
-        findings.push(Finding {
-            rule: RULE_ID.to_string(),
-            severity: FindingSeverity::Warning,
-            file: path.clone(),
-            line: None,
-            message: "sits below a declared record type's dir but not directly in it, so no type \
+        findings.push(Finding::new(
+            RULE_ID,
+            FindingSeverity::Warning,
+            path.clone(),
+            ActionSource::new("record-outside-declared-dir"),
+            "sits below a declared record type's dir but not directly in it, so no type \
                       owns it and no rule examines it"
                 .to_string(),
-            waived: None,
-            declared_severity: None,
-            suggested_action: None,
-            action_source: ActionSource::new("record-outside-declared-dir"),
-        });
+        ));
     }
 
     (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records: Vec::new(),
-        },
+        RuleExecution::ran(RULE_ID, population, Vec::new()),
         findings,
     )
 }
@@ -128,12 +119,7 @@ pub fn type_dir_matches_nothing(
     });
 
     (
-        RuleExecution {
-            rule: RULE_TYPE_DIR_MATCHES_NOTHING.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records: Vec::new(),
-        },
+        RuleExecution::ran(RULE_TYPE_DIR_MATCHES_NOTHING, population, Vec::new()),
         findings,
     )
 }
@@ -149,17 +135,13 @@ struct TypeDirCheck<'a> {
 
 impl TypeDirCheck<'_> {
     fn finding(&self, action: ActionSource, message: String) -> Finding {
-        Finding {
-            rule: RULE_TYPE_DIR_MATCHES_NOTHING.to_string(),
-            severity: FindingSeverity::Warning,
-            file: self.config_path.to_path_buf(),
-            line: None,
-            waived: None,
-            declared_severity: None,
-            suggested_action: None,
-            action_source: action,
+        Finding::new(
+            RULE_TYPE_DIR_MATCHES_NOTHING,
+            FindingSeverity::Warning,
+            self.config_path.to_path_buf(),
+            action,
             message,
-        }
+        )
     }
 
     /// An `exclude_files` entry that names no tracked file directly in the dir.
@@ -248,12 +230,7 @@ pub(super) fn schema_inventory_rule(
         Outcome::Examined
     });
     (
-        RuleExecution {
-            rule: rule_id.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records: Vec::new(),
-        },
+        RuleExecution::ran(rule_id.to_string(), population, Vec::new()),
         findings,
     )
 }
@@ -267,19 +244,15 @@ pub fn type_no_declared_spec(
         RULE_TYPE_NO_DECLARED_SPEC,
         |type_name, type_config, findings| {
             if type_config.spec.is_none() {
-                findings.push(Finding {
-                    rule: RULE_TYPE_NO_DECLARED_SPEC.to_string(),
-                    severity: FindingSeverity::Warning,
-                    file: config_path.to_path_buf(),
-                    line: None,
-                    waived: None,
-                    declared_severity: None,
-                    suggested_action: None,
-                    action_source: ActionSource::new("no-declared-spec"),
-                    message: format!(
+                findings.push(Finding::new(
+                    RULE_TYPE_NO_DECLARED_SPEC,
+                    FindingSeverity::Warning,
+                    config_path.to_path_buf(),
+                    ActionSource::new("no-declared-spec"),
+                    format!(
                         "record type '{type_name}' has no declared spec -- add `spec = \"SPEC-N\"` once one exists, or leave undeclared if ADR-41's editorial judgment says one isn't warranted"
                     ),
-                });
+                ));
             }
         },
     )
@@ -320,17 +293,12 @@ pub fn config_scope_matches_nothing(
         if population.out_of_scope() == 0 {
             return Outcome::Examined;
         }
-        findings.push(Finding {
-            rule: RULE_ID.to_string(),
-            severity: FindingSeverity::Warning,
-            file: config_path.to_path_buf(),
-            line: None,
-            waived: None,
-            declared_severity: None,
-            suggested_action: None,
-            action_source: ActionSource::new("scope-matches-nothing")
-                .key_path(["rules", exec.rule.as_str()]),
-            message: format!(
+        findings.push(Finding::new(
+            RULE_ID,
+            FindingSeverity::Warning,
+            config_path.to_path_buf(),
+            ActionSource::new("scope-matches-nothing").key_path(["rules", exec.rule.as_str()]),
+            format!(
                 "'{}' was handed {} candidate(s) the configuration does not reach -- \
                  {} of {} are outside what this repository declared, so the rule cannot \
                  apply to them however the records are edited",
@@ -339,17 +307,12 @@ pub fn config_scope_matches_nothing(
                 population.out_of_scope(),
                 population.eligible()
             ),
-        });
+        ));
         Outcome::Examined
     });
 
     (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records: Vec::new(),
-        },
+        RuleExecution::ran(RULE_ID, population, Vec::new()),
         findings,
     )
 }
