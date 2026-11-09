@@ -23,17 +23,16 @@ pub fn filename_title_consistency(
             };
 
             let mut push = |line: Option<usize>, message: String| {
-                findings.push(Finding {
-                    rule: RULE_ID.to_string(),
-                    severity: FindingSeverity::Error,
-                    file: record.path.clone(),
-                    line,
-                    waived: None,
-                    declared_severity: None,
-                    suggested_action: None,
-                    action_source: ActionSource::new("title-mismatch"),
-                    message,
-                });
+                findings.push(
+                    Finding::new(
+                        RULE_ID,
+                        FindingSeverity::Error,
+                        record.path.clone(),
+                        ActionSource::new("title-mismatch"),
+                        message,
+                    )
+                    .at_opt(line),
+                );
             };
 
             // Skipping instead would drop a record the rule was asked about.
@@ -88,12 +87,7 @@ pub fn filename_title_consistency(
     );
 
     (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records,
-        },
+        RuleExecution::ran(RULE_ID, population, examined_records),
         findings,
     )
 }
@@ -301,12 +295,7 @@ pub fn filename_identity_pattern(
     }
 
     (
-        RuleExecution {
-            rule: RULE_FILENAME_IDENTITY_PATTERN.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records,
-        },
+        RuleExecution::ran(RULE_FILENAME_IDENTITY_PATTERN, population, examined_records),
         findings,
     )
 }
@@ -354,16 +343,12 @@ fn identity_findings_for_type(
             },
             |t| std::path::PathBuf::from(&t.dir),
         );
-        findings.push(Finding {
-            rule: RULE_FILENAME_IDENTITY_PATTERN.to_string(),
-            severity: FindingSeverity::Warning,
-            file: dir,
-            line: None,
-            waived: None,
-            declared_severity: None,
-            suggested_action: None,
-            action_source: ActionSource::new("identity-pattern-none-match"),
-            message: format!(
+        findings.push(Finding::new(
+            RULE_FILENAME_IDENTITY_PATTERN,
+            FindingSeverity::Warning,
+            dir,
+            ActionSource::new("identity-pattern-none-match"),
+            format!(
                 "none of record type '{type_name}''s {} file(s) matches {convention}, so \
                  no identity-reading rule can examine any of them; rename each: {}",
                 off.len(),
@@ -379,24 +364,20 @@ fn identity_findings_for_type(
                     names.join("; ")
                 }
             ),
-        });
+        ));
     } else {
         for record in off {
-            findings.push(Finding {
-                rule: RULE_FILENAME_IDENTITY_PATTERN.to_string(),
-                severity: FindingSeverity::Warning,
-                file: record.path.clone(),
-                line: None,
-                waived: None,
-                declared_severity: None,
-                suggested_action: None,
-                action_source: ActionSource::new("identity-pattern-mismatch"),
-                message: format!(
+            findings.push(Finding::new(
+                RULE_FILENAME_IDENTITY_PATTERN,
+                FindingSeverity::Warning,
+                record.path.clone(),
+                ActionSource::new("identity-pattern-mismatch"),
+                format!(
                     "file name does not match {convention} for record type '{type_name}', \
                      so it has no identity and identity-reading rules skip it; rename: {}",
                     guidance(record)
                 ),
-            });
+            ));
         }
     }
 }

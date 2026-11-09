@@ -412,12 +412,7 @@ pub fn embodiment_claim_expired(
         },
     );
     (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records,
-        },
+        RuleExecution::ran(RULE_ID, population, examined_records),
         findings,
     )
 }
@@ -478,38 +473,35 @@ fn claim_standing_findings(
     let mut findings = Vec::new();
     if let Some(problem) = &standing.anchor_problem {
         let field = opts.anchor_field.as_deref().unwrap_or_default();
-        findings.push(Finding {
-            rule: RULE_EMBODIMENT_CLAIM_EXPIRED.to_string(),
-            severity: FindingSeverity::Warning,
-            file: record.path.clone(),
-            line: None,
-            waived: None,
-            declared_severity: None,
-            suggested_action: None,
-            action_source: ActionSource::new("claim-anchor-invalid").field(field),
-            message: problem.clone(),
-        });
+        findings.push(Finding::new(
+            RULE_EMBODIMENT_CLAIM_EXPIRED,
+            FindingSeverity::Warning,
+            record.path.clone(),
+            ActionSource::new("claim-anchor-invalid").field(field),
+            problem.clone(),
+        ));
     }
     if standing.expired() {
-        findings.push(Finding {
-            rule: RULE_EMBODIMENT_CLAIM_EXPIRED.to_string(),
-            severity: FindingSeverity::Warning,
-            file: record.path.clone(),
-            line: None,
-            waived: None,
-            declared_severity: standing
-                .level_below_rule
-                .then(|| standing.level.severity())
-                .flatten(),
-            suggested_action: None,
-            action_source: ActionSource::new("claim-expired").argv([
-                "urzua",
-                "reverify",
-                "--ids",
-                &record.path.display().to_string(),
-            ]),
-            message: standing.message(&record.record_type),
-        });
+        findings.push(
+            Finding::new(
+                RULE_EMBODIMENT_CLAIM_EXPIRED,
+                FindingSeverity::Warning,
+                record.path.clone(),
+                ActionSource::new("claim-expired").argv([
+                    "urzua",
+                    "reverify",
+                    "--ids",
+                    &record.path.display().to_string(),
+                ]),
+                standing.message(&record.record_type),
+            )
+            .declared_opt(
+                standing
+                    .level_below_rule
+                    .then(|| standing.level.severity())
+                    .flatten(),
+            ),
+        );
     }
     findings
 }
@@ -535,23 +527,12 @@ pub fn embodiment_claim_renewal_unattested(
     scope: Option<&ChangedOnly>,
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_EMBODIMENT_CLAIM_RENEWAL_UNATTESTED;
-    let not_applicable = || {
-        (
-            RuleExecution {
-                rule: RULE_ID.to_string(),
-                population: None,
-                status: RuleStatus::NotApplicable,
-                examined_records: Vec::new(),
-            },
-            Vec::new(),
-        )
-    };
     let Some(changed) = changed else {
-        return not_applicable();
+        return not_applicable(RULE_ID);
     };
     let opts: ClaimExpiredOpts = config.rule_opts(RULE_EMBODIMENT_CLAIM_EXPIRED);
     let Some(field) = opts.anchor_field.as_deref() else {
-        return not_applicable();
+        return not_applicable(RULE_ID);
     };
     let changed: HashSet<&PathBuf> = changed.iter().collect();
     let candidates: Vec<&Record> = records
@@ -579,28 +560,19 @@ pub fn embodiment_claim_renewal_unattested(
                 return Outcome::Absent;
             };
             if let Some(message) = renewal_problem(config, record, field, now_text, then_text) {
-                findings.push(Finding {
-                    rule: RULE_ID.to_string(),
-                    severity: FindingSeverity::Warning,
-                    file: record.path.clone(),
-                    line: None,
-                    waived: None,
-                    declared_severity: None,
-                    suggested_action: None,
-                    action_source: ActionSource::new("claim-renewal-unattested"),
+                findings.push(Finding::new(
+                    RULE_ID,
+                    FindingSeverity::Warning,
+                    record.path.clone(),
+                    ActionSource::new("claim-renewal-unattested"),
                     message,
-                });
+                ));
             }
             Outcome::Examined
         },
     );
     (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records,
-        },
+        RuleExecution::ran(RULE_ID, population, examined_records),
         findings,
     )
 }

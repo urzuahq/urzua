@@ -184,19 +184,18 @@ impl ClaimJudge<'_> {
             ) {
                 continue;
             }
-            findings.push(Finding {
-                rule: RULE_CLAIM_STATUS_AGREEMENT.to_string(),
-                severity: FindingSeverity::Error,
-                file: PathBuf::from(path),
-                line: Some(line),
-                waived: None,
-                declared_severity: None,
-                suggested_action: None,
-                action_source: ActionSource::new("claim-status-disagrees"),
-                message: format!(
-                    "claims to close {reference}, but {reference} has {status_field} {status}"
-                ),
-            });
+            findings.push(
+                Finding::new(
+                    RULE_CLAIM_STATUS_AGREEMENT,
+                    FindingSeverity::Error,
+                    PathBuf::from(path),
+                    ActionSource::new("claim-status-disagrees"),
+                    format!(
+                        "claims to close {reference}, but {reference} has {status_field} {status}"
+                    ),
+                )
+                .at(line),
+            );
         }
     }
 
@@ -314,12 +313,7 @@ pub fn claim_status_agreement(
     }
 
     (
-        RuleExecution {
-            rule: RULE_CLAIM_STATUS_AGREEMENT.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records: Vec::new(),
-        },
+        RuleExecution::ran(RULE_CLAIM_STATUS_AGREEMENT, population, Vec::new()),
         findings,
     )
 }
@@ -334,19 +328,15 @@ enum Candidate<'a> {
 }
 
 fn field_finding(path: &str, line: usize, variant: &'static str, message: String) -> Finding {
-    Finding {
-        rule: RULE_CLAIM_STATUS_AGREEMENT.to_string(),
-        severity: FindingSeverity::Error,
-        file: PathBuf::from(path),
-        line: Some(line),
-        waived: None,
-        declared_severity: None,
-        suggested_action: None,
-        action_source: ActionSource::new(variant),
-        // The finding names itself the way the decision does (`claim.id-unresolved`),
+    Finding::new(
+        RULE_CLAIM_STATUS_AGREEMENT,
+        FindingSeverity::Error,
+        PathBuf::from(path),
+        ActionSource::new(variant), // The finding names itself the way the decision does (`claim.id-unresolved`),
         // so it can be searched for; the variant stays the unit `urzua rules` lists.
-        message: format!("{}: {message}", variant.replacen('-', ".", 1)),
-    }
+        format!("{}: {message}", variant.replacen('-', ".", 1)),
+    )
+    .at(line)
 }
 
 /// The lines the closing-verb reading looks at: every line of the file, less

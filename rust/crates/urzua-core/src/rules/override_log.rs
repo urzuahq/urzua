@@ -147,26 +147,24 @@ pub fn override_unreviewed(
     let Some(log) = log else {
         // Refused at config load; reaching here means the caller skipped it.
         return (
-            RuleExecution {
-                rule: RULE_ID.to_string(),
-                population: Some(census(PopulationUnit::Entry, vec![()], |_| Outcome::Absent)),
-                status: RuleStatus::Ran,
-                examined_records: Vec::new(),
-            },
+            RuleExecution::ran(
+                RULE_ID,
+                census(PopulationUnit::Entry, vec![()], |_| Outcome::Absent),
+                Vec::new(),
+            ),
             findings,
         );
     };
     let file = PathBuf::from(&log.path);
-    let finding = |line: Option<usize>, variant: &'static str, message: String| Finding {
-        rule: RULE_ID.to_string(),
-        severity: FindingSeverity::Warning,
-        file: file.clone(),
-        line,
-        message,
-        waived: None,
-        declared_severity: None,
-        suggested_action: None,
-        action_source: ActionSource::new(variant),
+    let finding = |line: Option<usize>, variant: &'static str, message: String| {
+        Finding::new(
+            RULE_ID,
+            FindingSeverity::Warning,
+            file.clone(),
+            ActionSource::new(variant),
+            message,
+        )
+        .at_opt(line)
     };
     let population = match &log.content {
         OverrideLogContent::Missing => {
@@ -227,12 +225,7 @@ pub fn override_unreviewed(
         }
     };
     (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records: Vec::new(),
-        },
+        RuleExecution::ran(RULE_ID, population, Vec::new()),
         findings,
     )
 }

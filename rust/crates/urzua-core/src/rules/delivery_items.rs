@@ -566,17 +566,13 @@ pub fn status_done_items_shape(
                 let value = record.header.get(kind.field.as_str()).map(str::trim);
                 if let Some(value) = value.filter(|v| !v.is_empty()) {
                     if !kind.kinds.iter().any(|k| k.name == value) {
-                        findings.push(Finding {
-                            rule: RULE_ID.to_string(),
-                            severity: FindingSeverity::Error,
-                            file: record.path.clone(),
-                            line: None,
-                            waived: None,
-                            declared_severity: None,
-                            suggested_action: None,
-                            action_source: ActionSource::new("done-items-shape")
+                        findings.push(Finding::new(
+                            RULE_ID,
+                            FindingSeverity::Error,
+                            record.path.clone(),
+                            ActionSource::new("done-items-shape")
                                 .section(section.clone()),
-                            message: format!(
+                            format!(
                                 "{} '{value}' is not a declared kind (one of: {}); the record is judged as one with no kind",
                                 kind.field,
                                 kind.kinds
@@ -585,36 +581,30 @@ pub fn status_done_items_shape(
                                     .collect::<Vec<_>>()
                                     .join(", ")
                             ),
-                        });
+                        ));
                     }
                 }
             }
             for issue in &items.issues {
                 let place = issue.item.map_or(String::new(), |n| format!("item {n}: "));
-                findings.push(Finding {
-                    rule: RULE_ID.to_string(),
-                    severity: FindingSeverity::Error,
-                    file: record.path.clone(),
-                    line: Some(issue.line),
-                    waived: None,
-                    declared_severity: None,
-                    suggested_action: None,
-                    action_source: ActionSource::new("done-items-shape")
-                        .section(section.clone())
-                        .line(issue.line),
-                    message: format!("{place}{}", issue.message),
-                });
+                findings.push(
+                    Finding::new(
+                        RULE_ID,
+                        FindingSeverity::Error,
+                        record.path.clone(),
+                        ActionSource::new("done-items-shape")
+                            .section(section.clone())
+                            .line(issue.line),
+                        format!("{place}{}", issue.message),
+                    )
+                    .at(issue.line),
+                );
             }
             Outcome::Examined
         },
     );
     (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records,
-        },
+        RuleExecution::ran(RULE_ID, population, examined_records),
         findings,
     )
 }
@@ -683,38 +673,32 @@ pub fn status_waived_item_stale(
                     continue;
                 };
                 for message in stale.reasons(standing, waiver, decl) {
-                    findings.push(Finding {
-                        rule: RULE_ID.to_string(),
-                        severity: FindingSeverity::Warning,
-                        file: record.path.clone(),
-                        line: Some(waiver.line),
-                        waived: None,
-                        declared_severity: None,
-                        suggested_action: None,
-                        action_source: ActionSource::new("waived-item-stale")
-                            .section(decl.section.clone())
-                            .line(waiver.line),
-                        message: format!(
-                            "{} {} item {} \"{}\" is waived as {}, and {message}",
-                            record_label(record),
-                            decl.section,
-                            standing.n,
-                            standing.text,
-                            waiver.category
-                        ),
-                    });
+                    findings.push(
+                        Finding::new(
+                            RULE_ID,
+                            FindingSeverity::Warning,
+                            record.path.clone(),
+                            ActionSource::new("waived-item-stale")
+                                .section(decl.section.clone())
+                                .line(waiver.line),
+                            format!(
+                                "{} {} item {} \"{}\" is waived as {}, and {message}",
+                                record_label(record),
+                                decl.section,
+                                standing.n,
+                                standing.text,
+                                waiver.category
+                            ),
+                        )
+                        .at(waiver.line),
+                    );
                 }
             }
             Outcome::Examined
         },
     );
     (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records,
-        },
+        RuleExecution::ran(RULE_ID, population, examined_records),
         findings,
     )
 }

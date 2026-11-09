@@ -249,12 +249,11 @@ pub fn published_path_reference(
     ));
 
     (
-        RuleExecution {
-            rule: RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records: Vec::new(),
-        },
+        RuleExecution::ran(
+            RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE,
+            population,
+            Vec::new(),
+        ),
         findings,
     )
 }
@@ -267,17 +266,15 @@ fn boundary_finding(
     message: String,
     source: ActionSource,
 ) -> Finding {
-    Finding {
-        rule: RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE.to_string(),
-        severity: b.severity,
-        file: file.to_path_buf(),
-        line,
+    Finding::new(
+        RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE,
+        b.severity,
+        file.to_path_buf(),
+        source,
         message,
-        waived: None,
-        declared_severity: Some(b.severity),
-        suggested_action: None,
-        action_source: source,
-    }
+    )
+    .at_opt(line)
+    .declared(b.severity)
 }
 
 fn boundary_reason_note(b: &ResolvedBoundary) -> String {

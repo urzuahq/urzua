@@ -46,17 +46,13 @@ pub fn sequence_cycle(
                 );
                 if let Some(report) = on_cycle.get(&key) {
                     if reported.insert(key) {
-                        findings.push(Finding {
-                            rule: RULE_ID.to_string(),
-                            severity: FindingSeverity::Error,
-                            file: slot.record.path.clone(),
-                            line: None,
-                            waived: None,
-                            declared_severity: None,
-                            suggested_action: None,
-                            action_source: ActionSource::new(report.variant),
-                            message: format!("{id} {}", report.message),
-                        });
+                        findings.push(Finding::new(
+                            RULE_ID,
+                            FindingSeverity::Error,
+                            slot.record.path.clone(),
+                            ActionSource::new(report.variant),
+                            format!("{id} {}", report.message),
+                        ));
                     }
                 }
             }
@@ -68,12 +64,7 @@ pub fn sequence_cycle(
     );
 
     (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records,
-        },
+        RuleExecution::ran(RULE_ID, population, examined_records),
         findings,
     )
 }
@@ -362,17 +353,13 @@ pub fn sequence_unresolved_blocker(
             let resolution_reported = is_pointer && enabled(RULE_POINTER_RESOLUTION);
             let prose_reported = is_pointer && enabled(RULE_HEADER_POINTER_FIELD_CLEAN);
             let mut push = |variant: &'static str, message: String| {
-                findings.push(Finding {
-                    rule: RULE_ID.to_string(),
-                    severity: FindingSeverity::Error,
-                    file: slot.record.path.clone(),
-                    line: None,
-                    waived: None,
-                    declared_severity: None,
-                    suggested_action: None,
-                    action_source: ActionSource::new(variant).field(field),
+                findings.push(Finding::new(
+                    RULE_ID,
+                    FindingSeverity::Error,
+                    slot.record.path.clone(),
+                    ActionSource::new(variant).field(field),
                     message,
-                });
+                ));
             };
             let value = slot.record.header.get(field).unwrap_or("");
             // An entry is a reference only when the whole trimmed entry is one
@@ -407,12 +394,7 @@ pub fn sequence_unresolved_blocker(
     );
 
     (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records,
-        },
+        RuleExecution::ran(RULE_ID, population, examined_records),
         findings,
     )
 }
@@ -579,12 +561,7 @@ pub fn sequence_status_agreement(
     );
 
     (
-        RuleExecution {
-            rule: RULE_SEQUENCE_STATUS_AGREEMENT.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records,
-        },
+        RuleExecution::ran(RULE_SEQUENCE_STATUS_AGREEMENT, population, examined_records),
         findings,
     )
 }
@@ -601,17 +578,13 @@ struct StatusAgreement<'a> {
 
 /// One `sequence.status-agreement` error on `record`.
 fn status_agreement_finding(record: &Record, source: ActionSource, message: String) -> Finding {
-    Finding {
-        rule: RULE_SEQUENCE_STATUS_AGREEMENT.to_string(),
-        severity: FindingSeverity::Error,
-        file: record.path.clone(),
-        line: None,
-        waived: None,
-        declared_severity: None,
-        suggested_action: None,
-        action_source: source,
+    Finding::new(
+        RULE_SEQUENCE_STATUS_AGREEMENT,
+        FindingSeverity::Error,
+        record.path.clone(),
+        source,
         message,
-    }
+    )
 }
 
 impl StatusAgreement<'_> {
@@ -734,20 +707,17 @@ impl StatusAgreement<'_> {
                     .is_some_and(|i| i.partial_status == status)
             });
         if let Some(items) = capped {
-            findings.push(Finding {
-                rule: RULE_SEQUENCE_STATUS_AGREEMENT.to_string(),
-                severity: FindingSeverity::Info,
-                file: record.path.clone(),
-                line: None,
-                waived: None,
-                declared_severity: Some(FindingSeverity::Info),
-                suggested_action: None,
-                action_source: ActionSource::new("status-blocked-capped"),
-                message: format!(
+            findings.push(Finding::new(
+                RULE_SEQUENCE_STATUS_AGREEMENT,
+                FindingSeverity::Info,
+                record.path.clone(),
+                ActionSource::new("status-blocked-capped"),
+                format!(
                     "{id} is {status_field} '{status}', not out of order: all items proven ahead of dependency {}, which caps the status",
                     items.capped_by.join(", ")
                 ),
-            });
+            )
+            .declared(FindingSeverity::Info));
             return Outcome::Examined;
         }
         let mut source = ActionSource::new("status-blocked-derived").field(status_field);

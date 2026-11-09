@@ -203,21 +203,20 @@ struct IndexSink<'a> {
 
 impl IndexSink<'_> {
     fn push(&mut self, variant: &'static str, line: Option<usize>, message: String) {
-        self.findings.push(Finding {
-            rule: RULE_INDEX_FRESHNESS.to_string(),
-            severity: FindingSeverity::Error,
-            file: self.file.clone(),
-            line,
-            message,
-            waived: None,
-            declared_severity: None,
-            suggested_action: None,
-            action_source: if variant == "index-stale" {
-                ActionSource::new(variant).argv(["urzua", "index", "--apply"])
-            } else {
-                ActionSource::new(variant)
-            },
-        });
+        self.findings.push(
+            Finding::new(
+                RULE_INDEX_FRESHNESS,
+                FindingSeverity::Error,
+                self.file.clone(),
+                if variant == "index-stale" {
+                    ActionSource::new(variant).argv(["urzua", "index", "--apply"])
+                } else {
+                    ActionSource::new(variant)
+                },
+                message,
+            )
+            .at_opt(line),
+        );
     }
 }
 
@@ -566,12 +565,7 @@ pub fn index_freshness(
         |artifact| check_index_artifact(records, full_text, artifact, &mut findings),
     );
     (
-        RuleExecution {
-            rule: RULE_INDEX_FRESHNESS.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records: Vec::new(),
-        },
+        RuleExecution::ran(RULE_INDEX_FRESHNESS, population, Vec::new()),
         findings,
     )
 }

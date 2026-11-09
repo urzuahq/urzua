@@ -34,12 +34,11 @@ pub fn supersession_reciprocity(
     );
 
     (
-        RuleExecution {
-            rule: RULE_RELATION_SUPERSESSION_RECIPROCITY.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
+        RuleExecution::ran(
+            RULE_RELATION_SUPERSESSION_RECIPROCITY,
+            population,
             examined_records,
-        },
+        ),
         findings,
     )
 }
@@ -118,17 +117,13 @@ impl SupersessionCheck<'_> {
                 ("supersession-unresolved", "supersession-untracked"),
                 "",
             );
-            findings.push(Finding {
-                rule: RULE_RELATION_SUPERSESSION_RECIPROCITY.to_string(),
-                severity: FindingSeverity::Error,
-                file: record.path.clone(),
-                line: None,
-                waived: None,
-                declared_severity: None,
-                suggested_action: None,
-                action_source: ActionSource::new(variant).field(*field),
+            findings.push(Finding::new(
+                RULE_RELATION_SUPERSESSION_RECIPROCITY,
+                FindingSeverity::Error,
+                record.path.clone(),
+                ActionSource::new(variant).field(*field),
                 message,
-            });
+            ));
             return;
         };
         // The target's header not parsing is its own defect, already
@@ -150,22 +145,18 @@ impl SupersessionCheck<'_> {
             .iter()
             .any(|r| crate::values::RecordId::new(r) == *normalized_id);
         if !target_names_back {
-            findings.push(Finding {
-                rule: RULE_RELATION_SUPERSESSION_RECIPROCITY.to_string(),
-                severity: FindingSeverity::Error,
-                file: record.path.clone(),
-                line: None,
-                waived: None,
-                declared_severity: None,
-                suggested_action: None,
-                action_source: ActionSource::new("supersession-unreciprocated")
+            findings.push(Finding::new(
+                RULE_RELATION_SUPERSESSION_RECIPROCITY,
+                FindingSeverity::Error,
+                record.path.clone(),
+                ActionSource::new("supersession-unreciprocated")
                     .file(target.path.clone())
                     .field(target_field)
                     .text(id.clone()),
-                message: format!(
+                format!(
                     "{field} claims a relation with {reference}, but {reference}'s {target_field} does not reciprocally name {id}"
                 ),
-            });
+            ));
         }
     }
 }
@@ -212,15 +203,11 @@ pub fn relation_target_status_undeclared(
                         .get(&target.record_type)
                         .is_some_and(|fields| fields.contains(target_status_field));
                     if !declared {
-                        findings.push(Finding {
-                            rule: RULE_ID.to_string(),
-                            severity: FindingSeverity::Warning,
-                            file: record.path.clone(),
-                            line: None,
-                            waived: None,
-                            declared_severity: None,
-                            suggested_action: None,
-                            action_source: match config.record_types.get(&target.record_type) {
+                        findings.push(Finding::new(
+                            RULE_ID,
+                            FindingSeverity::Warning,
+                            record.path.clone(),
+                            match config.record_types.get(&target.record_type) {
                                 Some(target_config) => super::declaration::known_fields_source(
                                     "target-status-undeclared",
                                     "target-status-undeclared-declare-set",
@@ -235,11 +222,11 @@ pub fn relation_target_status_undeclared(
                                     .key_path(["record_types", target.record_type.as_str(), "known_fields"])
                                     .list([target_status_field.to_string()]),
                             },
-                            message: format!(
+                            format!(
                                 "{field_name}: {reference} resolves, but its type '{}' does not declare {target_status_field} -- its status can never be checked",
                                 target.record_type
                             ),
-                        });
+                        ));
                     }
                 },
             );
@@ -251,12 +238,7 @@ pub fn relation_target_status_undeclared(
     );
 
     (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records,
-        },
+        RuleExecution::ran(RULE_ID, population, examined_records),
         findings,
     )
 }
@@ -433,12 +415,7 @@ pub fn relation_pair_reciprocity(
     );
 
     (
-        RuleExecution {
-            rule: RULE_RELATION_PAIR_RECIPROCITY.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records,
-        },
+        RuleExecution::ran(RULE_RELATION_PAIR_RECIPROCITY, population, examined_records),
         findings,
     )
 }
@@ -507,17 +484,13 @@ impl PairReciprocityCheck<'_> {
                 ("pair-unresolved", "pair-untracked"),
                 "",
             );
-            findings.push(Finding {
-                rule: RULE_RELATION_PAIR_RECIPROCITY.to_string(),
-                severity: FindingSeverity::Error,
-                file: record.path.clone(),
-                line: None,
-                waived: None,
-                declared_severity: None,
-                suggested_action: None,
-                action_source: ActionSource::new(variant).field(field),
+            findings.push(Finding::new(
+                RULE_RELATION_PAIR_RECIPROCITY,
+                FindingSeverity::Error,
+                record.path.clone(),
+                ActionSource::new(variant).field(field),
                 message,
-            });
+            ));
             return ClaimEcho::Checked;
         };
         // Its own `Unreadable` entry discloses this; reading it here
@@ -560,23 +533,20 @@ impl PairReciprocityCheck<'_> {
             } else {
                 String::new()
             };
-            findings.push(Finding {
-                rule: RULE_RELATION_PAIR_RECIPROCITY.to_string(),
-                severity: declared_severity.unwrap_or(FindingSeverity::Error),
-                file: record.path.clone(),
-                line: None,
-                waived: None,
-                declared_severity,
-                suggested_action: None,
-                action_source: ActionSource::new("pair-unreciprocated")
+            findings.push(Finding::new(
+                RULE_RELATION_PAIR_RECIPROCITY,
+                declared_severity.unwrap_or(FindingSeverity::Error),
+                record.path.clone(),
+                ActionSource::new("pair-unreciprocated")
                     .file(target.path.clone())
                     .field(echo)
                     .text(id.clone()),
-                message: format!(
+                format!(
                     "{field} claims a relation with {reference} (pair '{}'), but {reference}'s {echo} does not reciprocally name {id}{note}",
                     slot.pair.name
                 ),
-            });
+            )
+            .declared_opt(declared_severity));
         }
         ClaimEcho::Checked
     }
@@ -611,23 +581,19 @@ pub fn relation_cross_type_disallowed(
                     continue;
                 };
                 if target.record_type != slot.record.record_type {
-                    findings.push(Finding {
-                        rule: RULE_ID.to_string(),
-                        severity: FindingSeverity::Error,
-                        file: slot.record.path.clone(),
-                        line: None,
-                        waived: None,
-                        declared_severity: None,
-                        suggested_action: None,
-                        action_source: ActionSource::new("cross-type-claim").field(slot.own_field()).text(reference.clone()),
-                        message: format!(
+                    findings.push(Finding::new(
+                        RULE_ID,
+                        FindingSeverity::Error,
+                        slot.record.path.clone(),
+                        ActionSource::new("cross-type-claim").field(slot.own_field()).text(reference.clone()),
+                        format!(
                             "{}: {reference} is a '{}' record, but pair '{}' declares cross_type: false and this record is '{}'",
                             slot.own_field(),
                             target.record_type,
                             slot.pair.name,
                             slot.record.record_type
                         ),
-                    });
+                    ));
                 }
             }
             Outcome::Examined
@@ -635,12 +601,7 @@ pub fn relation_cross_type_disallowed(
     );
 
     (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records,
-        },
+        RuleExecution::ran(RULE_ID, population, examined_records),
         findings,
     )
 }

@@ -26,33 +26,24 @@ pub fn config_schema_version_outdated(
                     crate::schema_version::MIGRATE_COMMAND
                 )
             };
-            findings.push(Finding {
-                rule: RULE_ID.to_string(),
-                severity: FindingSeverity::Warning,
-                file: config_path.to_path_buf(),
-                line: None,
-                waived: None,
-                declared_severity: None,
-                suggested_action: None,
-                action_source: ActionSource::new("schema-version-outdated")
+            findings.push(Finding::new(
+                RULE_ID,
+                FindingSeverity::Warning,
+                config_path.to_path_buf(),
+                ActionSource::new("schema-version-outdated")
                     .argv(["urzua", "migrate", "config"]),
-                message: format!(
+                format!(
                     "the config is at schema_version {}, and this build writes {}; it was read by upgrading it in memory{dropped} -- run `{}` to rewrite the file",
                     upgrade.from,
                     crate::config::CURRENT_SCHEMA_VERSION,
                     crate::schema_version::MIGRATE_COMMAND
                 ),
-            });
+            ));
         }
         Outcome::Examined
     });
     (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records: Vec::new(),
-        },
+        RuleExecution::ran(RULE_ID, population, Vec::new()),
         findings,
     )
 }

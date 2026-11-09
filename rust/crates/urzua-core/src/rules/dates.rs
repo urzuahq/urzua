@@ -84,28 +84,19 @@ pub fn date_field_valid(records: &[Record], config: &Config) -> (RuleExecution, 
                 return Outcome::Absent;
             }
             if let Some(problem) = date_problem(value.trim()) {
-                findings.push(Finding {
-                    rule: RULE_ID.to_string(),
-                    severity: FindingSeverity::Error,
-                    file: record.path.clone(),
-                    line: None,
-                    waived: None,
-                    declared_severity: None,
-                    suggested_action: None,
-                    action_source: ActionSource::new("date-invalid").field(field.as_str()),
-                    message: format!("{field} '{}' {problem}", value.trim()),
-                });
+                findings.push(Finding::new(
+                    RULE_ID,
+                    FindingSeverity::Error,
+                    record.path.clone(),
+                    ActionSource::new("date-invalid").field(field.as_str()),
+                    format!("{field} '{}' {problem}", value.trim()),
+                ));
             }
             Outcome::Examined
         },
     );
     (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records,
-        },
+        RuleExecution::ran(RULE_ID, population, examined_records),
         findings,
     )
 }
@@ -161,31 +152,22 @@ pub fn date_field_order(records: &[Record], config: &Config) -> (RuleExecution, 
             }
             // `YYYY-MM-DD` orders lexically once both are real dates.
             if dates[0] > dates[1] {
-                findings.push(Finding {
-                    rule: RULE_ID.to_string(),
-                    severity: FindingSeverity::Error,
-                    file: record.path.clone(),
-                    line: None,
-                    waived: None,
-                    declared_severity: None,
-                    suggested_action: None,
-                    action_source: ActionSource::new("date-order").field(later.as_str()),
-                    message: format!(
+                findings.push(Finding::new(
+                    RULE_ID,
+                    FindingSeverity::Error,
+                    record.path.clone(),
+                    ActionSource::new("date-order").field(later.as_str()),
+                    format!(
                         "{earlier} '{}' is later than {later} '{}', but {earlier} must not be later than {later}",
                         dates[0], dates[1]
                     ),
-                });
+                ));
             }
             Outcome::Examined
         },
     );
     (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records,
-        },
+        RuleExecution::ran(RULE_ID, population, examined_records),
         findings,
     )
 }
