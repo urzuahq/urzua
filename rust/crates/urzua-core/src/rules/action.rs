@@ -277,8 +277,9 @@ mod tests {
         }
     }
 
-    /// The source of every rule module, test modules cut off: what a rule can
-    /// construct, which is the set of variants the table must cover.
+    /// The source of every rule module, test modules cut off (an item that is
+    /// only `#[cfg(test)]`, not a module, stays): what a rule can construct,
+    /// which is the set of variants the table must cover.
     fn rule_sources() -> Vec<(String, String)> {
         let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/rules");
         let mut out = Vec::new();
@@ -290,7 +291,7 @@ mod tests {
             }
             let text = std::fs::read_to_string(&path).unwrap();
             let live = text
-                .split("#[cfg(test)]")
+                .split("\n#[cfg(test)]\nmod ")
                 .next()
                 .unwrap_or_default()
                 .to_string();
