@@ -307,7 +307,10 @@ revision log):
    governed repository (a real git working tree with `.urzua/config.yaml`) that holds the file, inner or
    outer, and a deny from any wins (amendment of 2026-11-08). A repository the session did not start in can
    add restrictions and never remove them; one made with a Bash `git init` and a configuration can therefore
-   deny edits inside it, which costs the agent, not the guardrail.
+   deny edits inside it, which costs the agent, not the guardrail. A linked worktree of the session's
+   repository is judged against the session's gates too when `harness.outside_writes` is `shared` (amendment
+   of 2026-11-09, outside writes); with it undeclared or `allow`, a worktree at a commit without gates is
+   an unjudged place to write.
 9. **The agent-instructions block is not a protected path.** The block in `AGENTS.md` (or the file
    `harness.instructions_file` names) is a control this decision relies on, but an edit tool can remove it
    with no refusal and no session-start note; only `urzua harness status` reports it `modified`.
@@ -317,6 +320,10 @@ revision log):
 11. **Deleting the `harness:` section.** With no `harness` key no guardrail is enabled; `post-command` and
     `session-start` then report only "guardrail not enabled", and the CI diff gate at the pull request is the
     place the change is seen (amendment of 2026-11-09).
+12. **A separate clone.** A `git clone` of the repository shares no `git-common-dir` with the session's, so
+    `harness.outside_writes: shared` does not judge a write there, and a commit made in it, or a push of a
+    side branch from a linked worktree, is not seen by the post-command check (amendment of 2026-11-09,
+    outside writes). `outside_writes: deny` refuses the write; CI sees the pull request.
 
 What is claimed is therefore only this: through the edit tools (Write, Edit, MultiEdit, NotebookEdit and any MCP tool
 that carries a file path and content) an agent cannot move a gated record or write a
@@ -566,6 +573,48 @@ the post-command baseline found it.
 
 The Decision is unchanged. The Status of this ADR stays Accepted.
 
+## Amendment (2026-11-09, outside writes)
+
+Status of this amendment: accepted by the maintainer on 2026-11-09. It follows the review that found a linked
+worktree of the repository, at a commit that holds no gates, an unjudged place to write and to commit from.
+
+- **The problem.** An agent runs `git worktree add --detach ../wt <old commit>` (or clones the repository at an
+  old commit). The commit has no `harness` and no `authority`, so an edit-tool write to `../wt/.github/workflows/x.yml`
+  is judged by the worktree's own configuration, which enables nothing, and is allowed unjudged. The session's
+  repository does not hold the path, so its gates are not applied, and the post-command check reads only the
+  session's repository, so a commit made in the worktree and a push of a side branch are never seen. Route 8
+  said a repository the session did not start in only adds restrictions; here it removed them for the
+  repository's own files.
+- **The decision: `harness.outside_writes`.** A new key under `harness`, with one of three values, and an
+  optional list `harness.allow_paths` of absolute or `~`-relative directories read only with `deny`:
+  - `allow`: an edit is judged as before (the repository that holds the file judges it, and a place with no
+    gates judges nothing). This is also the meaning of an undeclared key: no behaviour change.
+  - `shared`: when the git toplevel of the file's working tree is not the session repository's own and shares
+    the session repository's `git rev-parse --git-common-dir` (a linked worktree of the same repository,
+    including one nested inside the session repository's directory), the file's path relative to that
+    toplevel is also judged against the session's configuration: its acceptance gates and its protected paths.
+    A file whose toplevel is the session repository's own is the session's and is judged as before. A request
+    that carries no content is still judged by its path (the protected paths).
+    A deny wins, as in the amendment of 2026-11-08. The record rules of the editor hook are not re-run on the
+    session's copy of the file; only the gates are.
+  - `deny`: an agent's edit-tool write to a file outside the session's repository (links resolved) is refused
+    while any guardrail is enabled, unless the file is under a directory in `allow_paths`. The override of
+    `ADR-78` is not accepted for this verdict.
+  Any other value, or an `allow_paths` entry that is not an absolute or `~`-relative directory, is a
+  configuration load error; `allow_paths` beside a mode other than `deny` is reported by `doctor` as read by
+  nothing. A person's edit (actor `human`) is not affected.
+- **Where it is declared.** `urzua init` proposes `harness: {outside_writes: shared}` (it enables no
+  guardrail by itself). `urzua doctor` warns when a guardrail is enabled and `outside_writes` is undeclared,
+  and recommends `shared`. The documentation recommends `shared`. This repository declares `shared`.
+- **Accepted risk, new route 12.** A fresh `git clone` (or any repository with its own object database)
+  shares no common directory with the session's, so `shared` does not reach it: a write there is judged by
+  that clone's own configuration or not at all, and its commits and pushes are never seen. `deny` closes the
+  write; nothing local closes the push, which CI sees at the pull request against the head's table.
+  Route 1 now also names a commit made in a linked worktree and a push of a side branch: neither is seen by
+  the post-command check, which reads the session's repository.
+
+The Decision is unchanged. The Status of this ADR stays Accepted.
+
 ## References
 
 - `ADR-69`, `ADR-70`, `ADR-71`: the hook, drafting commands and layered gate this extends; `ADR-70` gains an
@@ -597,3 +646,4 @@ The Decision is unchanged. The Status of this ADR stays Accepted.
 > | 2026-11-08 | Corrected the `## Amendment (2026-11-08)` after review of pull request 438: with `CLAUDE_PROJECT_DIR` unset, the settings command resolves the nearest real git working tree that holds the configuration and the translator, not the outermost configuration (which let a configuration written above the project take the wrapper); `body`, `data`, `payload` and `value` join the content keys. `Status` stays Accepted. **Why:** the independent review found the wrapper still taking an outer configuration. | **substantive** |
 > | 2026-11-09 | Added an `## Amendment (2026-11-09)`, documentation of existing behaviour decided by the orchestrator under the maintainer's 2026-11-07 decision that the accepted-risk list be exact, pending maintainer review: a weakening is reported once and a later edit to a formerly protected path is not (route 1); deleting or forging the harness baseline in the same command as a gate removal hides the removal (route 6); deleting the whole `harness:` section turns the guardrails off, visible to the CI diff gate (new route 11). `Status` stays Accepted. **Why:** the review of pull request 459 found these three routes behaving as described and the list naming none of them. | **substantive** |
 > | 2026-11-09 | Amendment of 2026-11-09 (the accepted-risk list made exact: routes 1, 6 and 11) accepted. **Why:** Maintainer decision, 2026-11-09. | **substantive** |
+> | 2026-11-09 | Added an `## Amendment (2026-11-09, outside writes)`, accepted by the maintainer on 2026-11-09: `harness.outside_writes` (`allow`, `shared` or `deny`) (with `allow_paths` for `deny`) decides how an edit-tool write outside the session's repository is judged; under `shared` a file of a linked worktree of the same repository is also judged against the session's acceptance and protected-path gates, under `deny` any such write is refused except under `allow_paths`, undeclared acts as `allow`; `init` proposes `shared`, `doctor` warns when it is undeclared with a guardrail enabled; a separate clone joins the accepted-risk list as route 12 and routes 1 and 8 name the worktree commit and the side-branch push. `Status` stays Accepted. **Why:** Maintainer decision, 2026-11-09, on the review that found a linked worktree at a commit without gates an unjudged place to write. | **substantive** |
