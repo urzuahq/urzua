@@ -110,6 +110,7 @@ struct Context<'a> {
     fail_on: urzua_core::config::FailOn,
     repo_root: PathBuf,
     base_text: HashMap<PathBuf, String>,
+    base_drift: HashMap<PathBuf, HashSet<String>>,
     templates: urzua_core::new_record::TemplateValues,
     /// A proposed record is being judged (`--stdin-path`).
     record_only: bool,
@@ -283,6 +284,7 @@ impl<'a> Context<'a> {
             claim_seeds: &self.claim_seeds,
             now_unix: self.now_unix,
             base_text: &self.base_text,
+            base_drift: &self.base_drift,
             changed_paths: self.changed_paths.as_deref(),
             added_paths: self.added_paths.as_deref(),
             pull_ref_claims: &self.pull_ref_claims,
@@ -1163,6 +1165,7 @@ fn index_with_disclosures<'a>(
 /// changed paths, the fetched pull-request claims and the templates.
 struct DiffInputs {
     base_text: HashMap<PathBuf, String>,
+    base_drift: HashMap<PathBuf, HashSet<String>>,
     added_paths: Option<Vec<PathBuf>>,
     pull_ref_claims: rules::PullRefClaims,
     templates: urzua_core::new_record::TemplateValues,
@@ -1171,6 +1174,58 @@ struct DiffInputs {
     base_authority: urzua_core::authority::BaseAuthority,
     gate_config: Option<Config>,
     fail_on: urzua_core::config::FailOn,
+}
+
+/// What had drifted at the merge base in each changed record that gained a
+/// drift-acknowledging `Re-verified` row, for
+/// `embodiment.claim-renewal-unattested` to hold the row's named locators
+/// against. Empty unless that rule is enabled on a `--base` run.
+fn load_base_drift(
+    session: &Session,
+    changes: Option<&urzua_io::GitChanges>,
+    base_text: &HashMap<PathBuf, String>,
+) -> HashMap<PathBuf, HashSet<String>> {
+    let mut out = HashMap::new();
+    let (config, repo_root) = (&session.config, &session.repo_root);
+    let Some(changes) = changes else {
+        return out;
+    };
+    if enabled_setting(config, rules::RULE_EMBODIMENT_CLAIM_RENEWAL_UNATTESTED).is_none() {
+        return out;
+    }
+    let cache = urzua_io::BlameCache::new(repo_root);
+    let now = urzua_io::now_unix();
+    for record in &session.records {
+        let Some(then_text) = base_text.get(&record.path) else {
+            continue;
+        };
+        let (id, shape) = (
+            config.revision_log_id(&record.record_type),
+            config.revision_log_shape(&record.record_type),
+        );
+        let Ok(now_text) = urzua_io::read_to_string(&repo_root.join(&record.path)) else {
+            continue;
+        };
+        let before = urzua_core::reverify::acknowledgements(then_text, &id, &shape);
+        let gained = urzua_core::reverify::acknowledgements(&now_text, &id, &shape)
+            .into_iter()
+            .any(|a| !before.iter().any(|b| b.row == a.row));
+        if !gained {
+            continue;
+        }
+        if let Some(drifted) = crate::discovery::compute_base_drift(
+            repo_root,
+            config,
+            &changes.merge_base,
+            &record.path,
+            then_text,
+            now,
+            &cache,
+        ) {
+            out.insert(record.path.clone(), drifted);
+        }
+    }
+    out
 }
 
 /// Stage 2c: read what the diff rules judge a change against.
@@ -1190,6 +1245,7 @@ fn read_diff_inputs(
         .map(|p| head_changes_for(repo_root, &p.path));
     let changes = scope.changed.as_ref().or(head_changes.as_ref());
     let base_text = load_base_text(session, changes, notices)?;
+    let base_drift = load_base_drift(session, changes, &base_text);
     let added_paths: Option<Vec<PathBuf>> = changes.map(|c| {
         let mut added: Vec<PathBuf> = c.added.iter().cloned().collect();
         added.sort();
@@ -1232,6 +1288,7 @@ fn read_diff_inputs(
     });
     Ok(DiffInputs {
         base_text,
+        base_drift,
         added_paths,
         pull_ref_claims,
         templates,
@@ -1478,6 +1535,7 @@ fn load_context<'a>(
             fail_on: diff.fail_on,
             repo_root: repo_root.clone(),
             base_text: diff.base_text,
+            base_drift: diff.base_drift,
             templates: diff.templates,
             record_only: scope.prospective.is_some(),
             selected: selection.map(|s| s.iter().cloned().collect()),

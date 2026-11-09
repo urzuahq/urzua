@@ -193,18 +193,31 @@ fn an_unpinned_spec_drift_past_grace_renews_and_stays_cleared_observed_failing()
     assert_eq!(check.status.code(), Some(0), "{check:?}");
 }
 
-/// An acknowledging row written 15 days ago, the way `reverify` writes one.
-fn acknowledge_15_days_ago(dir: &Path) {
+/// The row `reverify` writes for a renewal that acknowledged `names`, dated
+/// `day`, in the tool's exact shape.
+fn tool_row(day: &str, evidence: &str, names: &str) -> String {
+    format!(
+        "> | {day} | Re-verified (attested by ana, identity: asserted, actor: human): 2 locators re-resolved, 1 hash-checked, 1 spec locators checked by git history only. Evidence: {evidence}; Drift acknowledged: {names}. Reason: r **Why:** the claim was 40 days old against a 30-day period. | **structural** |\n"
+    )
+}
+
+const EVIDENCE: &str = "src/a.rs@sha256:5a1c2f0e9b8d, docs/adr/ADR-1-cited.md";
+
+/// An acknowledging row written 15 days ago naming `names`.
+fn acknowledge_15_days_ago_naming(dir: &Path, names: &str) {
     let day = date_days_ago(15)[..10].to_string();
     let text = std::fs::read_to_string(dir.join(RECORD)).unwrap();
     std::fs::write(
         dir.join(RECORD),
-        format!(
-            "{text}> | {day} | Re-verified (attested by ana (human)): 2 locators re-resolved, 1 hash-checked, 1 spec locators checked by git history only. Evidence: x; Drift acknowledged: spec:ADR-1 (latest revision 2026-11-01). Reason: r **Why:** w. | **structural** |\n"
-        ),
+        format!("{text}{}", tool_row(&day, EVIDENCE, names)),
     )
     .unwrap();
     commit_all(dir, 15);
+}
+
+/// An acknowledging row written 15 days ago, the way `reverify` writes one.
+fn acknowledge_15_days_ago(dir: &Path) {
+    acknowledge_15_days_ago_naming(dir, "spec:ADR-1 (latest revision 2026-11-01)");
 }
 
 #[test]
@@ -244,4 +257,157 @@ fn an_undeclared_policy_ignores_an_acknowledging_row_on_the_record() {
     let dir = drifted("row", "", false, "spec");
     acknowledge_15_days_ago(&dir);
     assert!(consistency_errors(&dir).contains("Drift detected"));
+}
+
+#[test]
+fn a_hand_typed_row_without_the_tools_shape_clears_nothing_observed_failing() {
+    let dir = drifted("typed", "    drift: {spec: acknowledge}\n", false, "spec");
+    let day = date_days_ago(15)[..10].to_string();
+    let text = std::fs::read_to_string(dir.join(RECORD)).unwrap();
+    std::fs::write(
+        dir.join(RECORD),
+        format!(
+            "{text}> | {day} | Re-verified (attested by ana (human)): looked. Evidence: x; Drift acknowledged: spec:ADR-1. Reason: r | **structural** |\n"
+        ),
+    )
+    .unwrap();
+    commit_all(&dir, 15);
+    assert!(consistency_errors(&dir).contains("Drift detected"));
+}
+
+/// Two cited records, both amended 20 days ago, and a claim over both.
+fn two_drifted(name: &str) -> common::TempDir {
+    let dir = drifted(name, "    drift: {spec: acknowledge}\n", false, "spec");
+    let other = "docs/adr/ADR-3-other.md";
+    let claim_text = std::fs::read_to_string(dir.join(RECORD)).unwrap();
+    std::fs::write(dir.join(RECORD), claim_text).unwrap();
+    // The second cited record exists from the start of the claim: rebuild the
+    // history so both changes postdate the claim's line.
+    std::fs::write(dir.join(other), adr("")).unwrap();
+    let text = std::fs::read_to_string(dir.join(RECORD)).unwrap();
+    std::fs::write(
+        dir.join(RECORD),
+        text.replace(
+            &format!("spec:{CITED}"),
+            &format!("spec:{CITED}, spec:{other}"),
+        ),
+    )
+    .unwrap();
+    commit_all(&dir, 40);
+    std::fs::write(
+        dir.join(other),
+        adr("> | 2026-11-01 | Amended. | **substantive** |\n"),
+    )
+    .unwrap();
+    commit_all(&dir, 20);
+    dir
+}
+
+#[test]
+fn a_row_clears_only_the_locators_it_names_observed_failing() {
+    let dir = two_drifted("named");
+    assert!(consistency_errors(&dir).contains("Drift detected"));
+    acknowledge_15_days_ago(&dir);
+    // ADR-1 is named and cleared; ADR-3 changed the same day and is not named.
+    let out = consistency_errors(&dir);
+    assert!(out.contains("Drift detected"), "{out}");
+    // Naming both clears both.
+    acknowledge_15_days_ago_naming(
+        &dir,
+        "spec:ADR-1 (latest revision 2026-11-01), spec:ADR-3 (latest revision 2026-11-01)",
+    );
+    let out = consistency_errors(&dir);
+    assert!(!out.contains("Drift detected"), "{out}");
+}
+
+#[test]
+fn a_change_on_the_rows_own_day_is_acknowledged_whatever_the_hour() {
+    // Day granularity: the row clears a change made later the same day. The
+    // caveat ADR-97 item 6 states.
+    let dir = drifted("sameday", "    drift: {spec: acknowledge}\n", false, "spec");
+    let today = date_days_ago(0)[..10].to_string();
+    let text = std::fs::read_to_string(dir.join(RECORD)).unwrap();
+    std::fs::write(
+        dir.join(RECORD),
+        format!(
+            "{text}{}",
+            tool_row(&today, EVIDENCE, "spec:ADR-1 (latest revision 2026-11-01)")
+        ),
+    )
+    .unwrap();
+    commit_all(&dir, 0);
+    std::fs::write(
+        dir.join(CITED),
+        adr("> | 2026-11-01 | Amended. | **substantive** |\n> | 2026-11-10 | Later the same day. | **substantive** |\n"),
+    )
+    .unwrap();
+    commit_all(&dir, 0);
+    let out = consistency_errors(&dir);
+    assert!(!out.contains("Drift detected"), "{out}");
+}
+
+const RENEWAL: &str = "embodiment.claim-renewal-unattested";
+
+fn renewal_findings(dir: &Path) -> Vec<String> {
+    let parsed = json(&run_urzua(
+        dir,
+        &["check", "--base", "base", "--rules", RENEWAL],
+    ));
+    parsed["findings"]
+        .as_array()
+        .map(|a| {
+            a.iter()
+                .filter(|f| f["rule"] == RENEWAL)
+                .map(|f| f["message"].as_str().unwrap().to_string())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn with_renewal_rule(dir: &Path) {
+    let cfg = std::fs::read_to_string(dir.join(".urzua/config.yaml")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        cfg.replace("rules:\n", &format!("rules:\n  {RENEWAL}: warn\n")),
+    )
+    .unwrap();
+    commit_all(dir, 25);
+}
+
+#[test]
+fn a_genuine_tool_row_passes_and_a_row_naming_the_wrong_locator_is_reported_observed_failing() {
+    let dir = drifted("diff", "    drift: {spec: acknowledge}\n", false, "spec");
+    with_renewal_rule(&dir);
+    git(&dir, &["tag", "base"]);
+    let parsed = renew(&dir);
+    assert_eq!(parsed["status"], "applied", "{parsed}");
+    commit_all(&dir, 0);
+    assert_eq!(renewal_findings(&dir), Vec::<String>::new());
+
+    // The same row naming a record that had not drifted.
+    let text = std::fs::read_to_string(dir.join(RECORD)).unwrap();
+    assert!(text.contains("Drift acknowledged: spec:ADR-1"), "{text}");
+    std::fs::write(
+        dir.join(RECORD),
+        text.replace(
+            "Drift acknowledged: spec:ADR-1",
+            "Drift acknowledged: spec:ADR-9",
+        ),
+    )
+    .unwrap();
+    commit_all(&dir, 0);
+    let found = renewal_findings(&dir);
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert!(found[0].contains("spec:ADR-9"), "{found:?}");
+
+    // The same row listing evidence that is not the record's locators.
+    std::fs::write(
+        dir.join(RECORD),
+        text.replace("Evidence: ", "Evidence: src/other.rs, "),
+    )
+    .unwrap();
+    commit_all(&dir, 0);
+    let found = renewal_findings(&dir);
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert!(found[0].contains("evidence"), "{found:?}");
 }

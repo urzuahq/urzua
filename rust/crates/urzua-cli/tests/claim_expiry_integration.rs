@@ -875,7 +875,7 @@ fn a_hand_typed_audit_date_is_reported_by_the_companion_rule_observed_failing() 
     std::fs::write(
         dir.join(M1),
         format!(
-            "{text}> | {today} | Re-verified (attested by ana, identity: asserted, actor: human): 1 locators re-resolved, 1 hash-checked, 0 spec locators checked by git history only. Reason: read it. **Why:** the claim was 20 days old against a 30-day period. | **structural** |\n"
+            "{text}> | {today} | Re-verified (attested by ana, identity: asserted, actor: human): 1 locators re-resolved, 1 hash-checked, 0 spec locators checked by git history only. Evidence: src/a.rs Reason: read it. **Why:** the claim was 20 days old against a 30-day period. | **structural** |\n"
         ),
     )
     .unwrap();
@@ -915,6 +915,41 @@ fn a_hand_typed_audit_date_is_reported_by_the_companion_rule_observed_failing() 
         found[0]["message"].as_str().unwrap().contains("removed"),
         "{found:?}"
     );
+}
+
+#[test]
+fn a_row_that_is_not_the_tools_shape_does_not_attest_a_date_observed_failing() {
+    let extra = "  embodiment.claim-renewal-unattested: warn\n";
+    let dir = fixture("unattested-shape", &config(RULE, extra));
+    let old = day_days_ago(20);
+    std::fs::write(
+        dir.join(M1),
+        record(
+            "MILE-1",
+            "Done",
+            "01AAAAAAAAAAAAAAAAAAAAAAAA",
+            &format!("Last-audited: {old}\n"),
+            "code:src/a.rs",
+        ),
+    )
+    .unwrap();
+    commit_all(&dir, 20);
+    git(&dir, &["branch", "-M", "main"]);
+    git(&dir, &["checkout", "-q", "-b", "topic"]);
+    let today = day_days_ago(0);
+    let text = std::fs::read_to_string(dir.join(M1)).unwrap();
+    std::fs::write(
+        dir.join(M1),
+        format!(
+            "{}> | {today} | Re-verified (attested by ana): I looked. | **structural** |\n",
+            text.replace(&old, &today)
+        ),
+    )
+    .unwrap();
+    commit_all(&dir, 0);
+    let parsed = json(&run_urzua(&dir, &["check", "--base", "main"]));
+    let found = findings(&parsed, "embodiment.claim-renewal-unattested");
+    assert_eq!(found.len(), 1, "{parsed}");
 }
 
 #[test]

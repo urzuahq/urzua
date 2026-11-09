@@ -81,6 +81,10 @@ pub struct RuleCtx<'a> {
     /// The merge base's text of each changed record (`--base`), read by the
     /// caller; a record new in the diff has no entry. Empty without `--base`.
     pub base_text: &'a HashMap<PathBuf, String>,
+    /// The locators (`category:locator` or `category:ID`) of each changed record
+    /// that had drifted at the merge base, read by the caller for the records
+    /// that gained a drift-acknowledging `Re-verified` row. Empty without `--base`.
+    pub base_drift: &'a HashMap<PathBuf, HashSet<String>>,
     /// `None` on a run with no `--base`.
     pub changed_paths: Option<&'a [PathBuf]>,
     /// The subset of `changed_paths` that did not exist at the merge base; `None`

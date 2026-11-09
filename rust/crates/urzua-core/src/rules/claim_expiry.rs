@@ -532,6 +532,7 @@ pub fn embodiment_claim_renewal_unattested(
     full_text: &HashMap<PathBuf, String>,
     base_text: &HashMap<PathBuf, String>,
     changed: Option<&[PathBuf]>,
+    base_drift: &HashMap<PathBuf, HashSet<String>>,
     scope: Option<&ChangedOnly>,
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_EMBODIMENT_CLAIM_RENEWAL_UNATTESTED;
@@ -567,7 +568,15 @@ pub fn embodiment_claim_renewal_unattested(
             else {
                 return Outcome::Absent;
             };
-            if let Some(message) = renewal_problem(config, record, field, now_text, then_text) {
+            let problems = renewal_problem(config, record, field, now_text, then_text)
+                .into_iter()
+                .chain(acknowledgement_problems(
+                    config,
+                    record,
+                    (now_text, then_text),
+                    base_drift.get(&record.path),
+                ));
+            for message in problems {
                 findings.push(Finding::new(
                     RULE_ID,
                     FindingSeverity::Warning,
@@ -583,6 +592,70 @@ pub fn embodiment_claim_renewal_unattested(
         RuleExecution::ran(RULE_ID, population, examined_records),
         findings,
     )
+}
+
+/// What is wrong with the drift acknowledgements a branch added to a record:
+/// each acknowledging `Re-verified` row the merge-base copy did not carry must
+/// name only locators that had drifted at the merge base (`base_drift`, read
+/// by the caller; absent when it could not be) and list the record's current
+/// locators as its evidence. A row typed by hand that does not describe the
+/// real drift is therefore a finding at the pull request, and a row the tool
+/// wrote passes, as a re-pin row does once a reviewer has read it.
+fn acknowledgement_problems(
+    config: &Config,
+    record: &Record,
+    (now_text, then_text): (&str, &str),
+    drifted: Option<&HashSet<String>>,
+) -> Vec<String> {
+    let id = config.revision_log_id(&record.record_type);
+    let shape = config.revision_log_shape(&record.record_type);
+    let before: Vec<String> = crate::reverify::acknowledgements(then_text, &id, &shape)
+        .into_iter()
+        .map(|a| a.row)
+        .collect();
+    let locator_field = relation_field_name(
+        config,
+        &record.record_type,
+        crate::config::RelationRole::EmbodimentLocator,
+    );
+    let current: HashSet<String> = delivery_items::evidence_text(record, locator_field)
+        .map(|value| {
+            crate::locator::realized_by_locators(&value)
+                .into_iter()
+                .map(|e| e.parsed.map_or(e.raw, |l| l.display()))
+                .collect()
+        })
+        .unwrap_or_default();
+    let mut problems = Vec::new();
+    for ack in crate::reverify::acknowledgements(now_text, &id, &shape)
+        .into_iter()
+        .filter(|a| !before.contains(&a.row))
+    {
+        let listed: HashSet<String> = ack.evidence.iter().cloned().collect();
+        if listed != current {
+            problems.push(format!(
+                "the Re-verified row dated {} lists evidence that is not the record's current locators ({}): only `urzua reverify` writes the row for the claim it re-verified",
+                ack.date,
+                ack.evidence.join(", ")
+            ));
+        }
+        if let Some(drifted) = drifted {
+            let invented: Vec<&str> = ack
+                .names
+                .iter()
+                .filter(|n| !drifted.contains(*n))
+                .map(String::as_str)
+                .collect();
+            if !invented.is_empty() {
+                problems.push(format!(
+                    "the Re-verified row dated {} acknowledges drift of {}, which had not drifted at the merge base: only `urzua reverify` writes the row for the drift it read",
+                    ack.date,
+                    invented.join(", ")
+                ));
+            }
+        }
+    }
+    problems
 }
 
 /// What is wrong with a changed record's anchor date against its merge-base
@@ -615,7 +688,8 @@ fn renewal_problem(
                 .and_then(Result::ok)
                 .is_some_and(|log| {
                     log.entries.iter().any(|e| {
-                        e.date.trim() == date && e.row.contains("Re-verified (attested by")
+                        e.date.trim() == date
+                            && crate::reverify::parse_reverified_row(&e.row).is_some()
                     })
                 });
             (!attested).then(|| {

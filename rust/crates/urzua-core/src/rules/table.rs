@@ -693,7 +693,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_EMBODIMENT_CLAIM_RENEWAL_UNATTESTED,
-        description: "On a `--base` run, a changed record whose `anchor_field` (declared by `embodiment.claim-expired`) is newer than in its merge-base copy and which gained no `Re-verified` revision row dated that day, or whose `anchor_field` the merge-base copy carried and the branch removed or left malformed, not a date (`ADR-97` section 6); the finding says \"was removed\" for a removed field and \"is malformed\" for one that is not a date. Prevention is not claimed, detection is: a date in a text file can be typed, and only `urzua reverify` writes the row that says who renewed the claim and what the tool checked. It cannot see a record that never carried the field, nor one new in the diff (no merge-base copy), and not-applicable on a run with no `--base`. Needs `embodiment.claim-expired` with an `anchor_field`; opt-in; its level is the repository's.",
+        description: "On a `--base` run, a changed record whose `anchor_field` (declared by `embodiment.claim-expired`) is newer than in its merge-base copy and which gained no `Re-verified` revision row dated that day, or whose `anchor_field` the merge-base copy carried and the branch removed or left malformed, not a date (`ADR-97` section 6); the finding says \"was removed\" for a removed field and \"is malformed\" for one that is not a date. A `Re-verified` row counts only in the shape `urzua reverify` writes (attested by, identity and actor, an `Evidence:` list, a `Reason:`); text that merely mentions a re-verification is not one. The rule also reports a drift-acknowledging `Re-verified` row the branch added that names a locator which had not drifted at the merge base (`category:locator`, or `category:ID` for a cited record, read from the merge base's copy of the record, its claim lines dated as of the merge base) or whose `Evidence:` list is not the record's current locators, so a row typed by hand that does not describe the real drift is a finding at the pull request and a row the tool wrote passes. Prevention is not claimed, detection is: a date in a text file can be typed, and only `urzua reverify` writes the row that says who renewed the claim and what the tool checked. It cannot see a record that never carried the field, nor one new in the diff (no merge-base copy), and not-applicable on a run with no `--base`. Needs `embodiment.claim-expired` with an `anchor_field`; opt-in; its level is the repository's.",
         scope: Scope::Records,
         anchor: Anchor::Record,
         judges: Judges::OneRecord,
@@ -718,6 +718,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
                 c.full_text,
                 c.base_text,
                 c.changed_paths,
+                c.base_drift,
                 changed_only(
                     c.config,
                     RULE_EMBODIMENT_CLAIM_RENEWAL_UNATTESTED,

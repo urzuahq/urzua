@@ -800,8 +800,6 @@ fn commits_since_line(
     out
 }
 
-/// The records whose stated `Embodiment` `embodiment.consistency` would
-/// report: the same computation `urzua fix` repairs from.
 /// The records whose every drifted locator is in a category whose drift
 /// policy is `acknowledge`: the renewal reads and attests all of it.
 fn acknowledged_only(
@@ -823,6 +821,8 @@ fn acknowledged_only(
         .collect()
 }
 
+/// The records whose stated `Embodiment` `embodiment.consistency` would
+/// report: the same computation `urzua fix` repairs from.
 fn embodiment_disagreements(
     repo_root: &std::path::Path,
     config: &Config,
