@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5Q0XVK27P5T8FN72BN
-Version: '0.42'
+Version: '0.43'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -489,3 +489,4 @@ asserted by test, not assumed by convention.
 > | 2026-11-09 | Bumped to `0.42`. The `Why` of a `Re-baselined` row names who re-verified by the actor kind (an agent, a person, or the attesting actor) instead of always saying a reviewer did. Earlier rows are unchanged. **Why:** an agent's re-pin read as if a reviewer had already re-verified the claim, which it had not; the row now says what the attestation records. | **substantive** |
 > | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/fix.rs` bfd53b872aaa -> 98b3bebce0fd. Reason: fix.rs: read the diff since the previous pin; it adds Attestation::rebaseline_why and uses it for the Why text of the re-baseline revision row (worded by actor kind) plus its test; nothing this record's claim covers changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/fix.rs` 98b3bebce0fd -> 0b23d692333e. Reason: Read the diff of fix.rs since the old pin against what this record evidences: the only change is log_row, which now writes a pipe in a revision-row narrative as an escaped pipe so the row keeps its columns (plus its unit test); the behaviour this record evidences is unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-09 | Bumped to `0.43`. The pinned `fix.rs` evidence moved when `log_row` began escaping a pipe in a revision-row narrative; no spec text changed. **Why:** the repository checker asks a dated structural revision row, such as the re-pin above, to carry a version bump. | **structural** |
