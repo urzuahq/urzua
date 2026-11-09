@@ -43,11 +43,11 @@ const HOOK_LAYERS: [&str; 2] = ["pre-commit", "pre-push"];
 /// relative to the working tree root) or the repository's own hooks dir.
 fn hooks_dir(repo_root: &std::path::Path) -> Result<PathBuf, String> {
     let git = |args: &[&str]| {
-        std::process::Command::new("git")
+        urzua_io::git::GitRun::new()
             .args(args)
-            .current_dir(repo_root)
+            .cwd(repo_root)
             .output()
-            .map_err(|e| format!("could not run git: {e}"))
+            .map_err(|e| format!("could not run git: {}", e.into_io()))
     };
     let configured = git(&["config", "--get", "core.hooksPath"])?;
     let value = String::from_utf8_lossy(&configured.stdout)
