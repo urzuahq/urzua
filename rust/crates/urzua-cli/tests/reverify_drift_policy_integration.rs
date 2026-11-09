@@ -161,7 +161,7 @@ fn a_spec_only_drift_under_acknowledge_renews_and_records_the_drift_observed_fai
         .find(|l| l.contains("| Re-verified ("))
         .unwrap_or_else(|| panic!("{text}"));
     assert!(
-        row.contains("Drift acknowledged: spec:ADR-1 (latest revision 2026-11-09).")
+        row.contains("; Drift acknowledged: spec:ADR-1 (latest revision 2026-11-09). Reason:")
             && row.contains("Reason: Read ADR-1's new row; the claim still holds."),
         "{row}"
     );
@@ -242,9 +242,18 @@ fn a_cited_file_that_is_not_a_record_is_acknowledged_by_path_and_hash_prefix_obs
             .unwrap();
         String::from_utf8(out.stdout).unwrap()[..12].to_string()
     };
+    let commit = {
+        let out = Command::new("git")
+            .args(["log", "-1", "--format=%h", "--", "docs/plain.md"])
+            .current_dir(&dir)
+            .output()
+            .unwrap();
+        String::from_utf8(out.stdout).unwrap().trim().to_string()
+    };
+    assert_eq!(commit.len(), 7, "{commit}");
     assert!(
         text.contains(&format!(
-            "Drift acknowledged: spec:docs/plain.md@sha256:{hash}."
+            "; Drift acknowledged: spec:docs/plain.md@sha256:{hash} (last changed in {commit}). Reason:"
         )),
         "{text}"
     );
@@ -286,4 +295,83 @@ fn drift_is_a_load_error_on_any_other_rule() {
     std::fs::write(dir.join(".urzua/config.yaml"), cfg).unwrap();
     let out = run_urzua(&dir, &["check"]);
     assert_eq!(out.status.code(), Some(2), "{out:?}");
+}
+
+fn sha256_of(content: &str) -> String {
+    let out = Command::new("sh")
+        .args(["-c", &format!("printf '{content}' | sha256sum")])
+        .output()
+        .unwrap();
+    String::from_utf8(out.stdout).unwrap()[..64].to_string()
+}
+
+/// The milestone pins `src/a.rs` and `src/t.rs` to their content, 40 days ago.
+fn pinned_fixture(name: &str, drift: &str) -> common::TempDir {
+    let dir = fixture(name, drift, ADR);
+    let locators = format!(
+        "code:src/a.rs@sha256:{}, test:src/t.rs@sha256:{}, spec:{ADR}",
+        sha256_of("fn a() {}\\n"),
+        sha256_of("fn t() {}\\n")
+    );
+    std::fs::write(dir.join(RECORD), milestone(&locators)).unwrap();
+    commit_all(&dir, 40);
+    dir
+}
+
+#[test]
+fn a_pinned_code_drift_under_acknowledge_is_re_pinned_with_the_old_and_new_hash_observed_failing() {
+    let dir = pinned_fixture(
+        "repin",
+        "    drift: {code: acknowledge, test: block, spec: acknowledge}\n",
+    );
+    std::fs::write(dir.join("src/a.rs"), "fn a() { let _ = 1; }\n").unwrap();
+    commit_all(&dir, 1);
+    let old = sha256_of("fn a() {}\\n");
+    let new = sha256_of("fn a() { let _ = 1; }\\n");
+
+    let detect = json(&run_urzua(&dir, &["reverify", "--ids", RECORD]));
+    assert!(refusals(&detect).is_empty(), "{detect}");
+    let parsed = apply(
+        &dir,
+        "Read the one-line change to src/a.rs; the claim holds.",
+    );
+    assert_eq!(parsed["status"], "applied", "{parsed}");
+
+    let text = read(&dir, RECORD);
+    assert!(
+        text.contains(&format!("code:src/a.rs@sha256:{new}")) && !text.contains(&old),
+        "{text}"
+    );
+    let row = text
+        .lines()
+        .find(|l| l.contains("| Re-verified ("))
+        .unwrap_or_else(|| panic!("{text}"));
+    assert!(
+        row.contains(&format!(
+            "; Drift acknowledged: code:src/a.rs@sha256:{} -> {} (last changed in ",
+            &old[..12],
+            &new[..12]
+        )) && row.contains("Reason: Read the one-line change"),
+        "{row}"
+    );
+    // The pin is current, so nothing reports drift or suggests a downgrade.
+    let check = run_urzua(&dir, &["check"]);
+    let out = String::from_utf8_lossy(&check.stdout).to_string();
+    assert!(!out.contains("drift") && !out.contains("Drift"), "{out}");
+    let rebase = json(&run_urzua(&dir, &["fix", "--rebaseline"]));
+    assert!(
+        rebase["records"].as_array().is_none_or(|r| r.is_empty()),
+        "{rebase}"
+    );
+}
+
+#[test]
+fn a_pinned_code_drift_under_block_keeps_its_stale_pin_refusal() {
+    let dir = pinned_fixture("repin-blk", "    drift: {code: block, spec: acknowledge}\n");
+    std::fs::write(dir.join("src/a.rs"), "fn a() { let _ = 1; }\n").unwrap();
+    commit_all(&dir, 1);
+    let before = read(&dir, RECORD);
+    let parsed = apply(&dir, "checked");
+    assert_eq!(parsed["status"], "partial-failure", "{parsed}");
+    assert_eq!(read(&dir, RECORD), before);
 }

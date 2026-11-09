@@ -4,7 +4,9 @@
 //! (`urzua-cli`) reads the tree, the clock and git; nothing here does.
 
 use crate::config::{Config, DriftPolicy, RelationRole};
-use crate::fix::{append_log_rows, evidence_edit_lines, Attestation, PinRead, PinSpan};
+use crate::fix::{
+    append_log_rows, evidence_edit_lines, replace_exact_pin, Attestation, PinRead, PinSpan,
+};
 use crate::line_edit::LineDoc;
 use crate::locator::{self, Anchor, Locator};
 use crate::record::Record;
@@ -224,6 +226,39 @@ impl FirstPin {
                     display: l.locator.clone(),
                     hash: l.current_hash.clone()?,
                     scoped: l.scoped,
+                })
+            })
+            .collect()
+    }
+}
+
+/// A pinned locator that moved, in a category whose drift policy is
+/// `acknowledge`: the renewal moves its pin to the hash read now, and the
+/// row names old -> new (`ADR-97`, amendment of 2026-11-09).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Repin {
+    pub display: String,
+    pub spelling: String,
+    pub old_hash: String,
+    pub new_hash: String,
+}
+
+impl Repin {
+    /// The pins a renewal moves: every `changed` locator of a category that
+    /// acknowledges its drift.
+    pub fn from_review(locators: &[LocatorReview], opts: &ClaimExpiredOpts) -> Vec<Repin> {
+        locators
+            .iter()
+            .filter(|l| {
+                l.check == LocatorCheck::Changed
+                    && opts.drift_policy(&l.category) == DriftPolicy::Acknowledge
+            })
+            .filter_map(|l| {
+                Some(Repin {
+                    display: l.locator.clone(),
+                    spelling: l.spelling.clone(),
+                    old_hash: l.recorded_hash.clone()?,
+                    new_hash: l.current_hash.clone()?,
                 })
             })
             .collect()
@@ -462,6 +497,8 @@ pub struct Renewal<'a> {
 pub struct ReverifyPlan<'a> {
     pub review: &'a LocatorsReview,
     pub pins: &'a [FirstPin],
+    /// Pins a renewal moves because their category acknowledges drift.
+    pub repins: &'a [Repin],
     pub renewal: Option<Renewal<'a>>,
 }
 
@@ -522,10 +559,10 @@ pub fn reverified_row(
     let acknowledged = if renewal.acknowledged.is_empty() {
         String::new()
     } else {
-        format!("Drift acknowledged: {}. ", renewal.acknowledged.join(", "))
+        format!("; Drift acknowledged: {}.", renewal.acknowledged.join(", "))
     };
     format!(
-        "Re-verified (attested by {}): {total} locators re-resolved, {hashed} hash-checked, {history_text}. Evidence: {evidence} {acknowledged}Reason: {reason} **Why:** the claim was {} days old against a {}-day period.",
+        "Re-verified (attested by {}): {total} locators re-resolved, {hashed} hash-checked, {history_text}. Evidence: {evidence}{acknowledged} Reason: {reason} **Why:** the claim was {} days old against a {}-day period.",
         attestation.label(),
         renewal.age_days,
         renewal.days,
@@ -571,6 +608,24 @@ pub fn apply_reverify(
                 &pin.display,
                 &review.field,
                 &review.items_section,
+            ));
+        }
+    }
+    for repin in plan.repins {
+        let old = format!("{}@sha256:{}", repin.spelling, repin.old_hash);
+        let new = format!("{}@sha256:{}", repin.spelling, repin.new_hash);
+        let mut placed = false;
+        for &at in &lines {
+            let line = doc.line(at).unwrap_or_default().to_string();
+            if let Some(edited) = replace_exact_pin(&line, &old, &new) {
+                doc.replace_line(at, edited);
+                placed = true;
+            }
+        }
+        if !placed {
+            return Err(format!(
+                "the pin on '{}' is no longer on the '{}' line or in a {} item clause -- the record may have changed since the review",
+                repin.display, review.field, review.items_section
             ));
         }
     }
@@ -743,7 +798,7 @@ mod tests {
         renewal.acknowledged = &said;
         let row = reverified_row(&a, &review, &renewal, "why");
         assert!(
-            row.contains("Evidence: docs/s.md Drift acknowledged: spec:ADR-1 (latest revision 2026-11-09). Reason: why **Why:**"),
+            row.contains("Evidence: docs/s.md; Drift acknowledged: spec:ADR-1 (latest revision 2026-11-09). Reason: why **Why:**"),
             "{row}"
         );
     }

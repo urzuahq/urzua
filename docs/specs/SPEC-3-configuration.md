@@ -3,7 +3,7 @@ Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
 Version: '0.124'
 Date: 2026-08-20
 Status: Shipped
-Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:3cfc01bcd73ed965227a1819c9e967d368c95a53746a03f1797b83b9be458f3b, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:92a2b9ceca89133f30987a013734da66b9332c4e937a87e72e53571596e18093, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:3c8aa671582772499ab7345cdbfb5a4dc2c50462882851fb20f853992acfd57c
+Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:a9ed379356481d887473b4623f74559b8ca8b83fd5184c518c677535a78646ff, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:92a2b9ceca89133f30987a013734da66b9332c4e937a87e72e53571596e18093, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:3c8aa671582772499ab7345cdbfb5a4dc2c50462882851fb20f853992acfd57c
 Embodiment: Verified
 Author: beauwilliams
 Subject: '`.urzua/config.yaml` -- the schema for record types, required/known fields, and per-type behavior.'
@@ -1671,8 +1671,10 @@ rules:
   reverify`: `block` refuses the renewal until the locator is re-pinned (a pinned locator by `fix
   --rebaseline`, an unpinned one in a `require_pin` category by `reverify --pin-only`); `acknowledge`
   lets `reverify --apply` renew, and the `Re-verified` row names each drifted locator of the category
-  (a cited record by its id and its newest revision-log date, any other file by its path and the
-  prefix of the hash read) together with the reviewer's `--reason`; `ignore` leaves the category's
+  (a cited record by its id and its newest revision-log date, any other file by its path, the
+  prefix of the hash read and the commit that last changed it) together with the reviewer's
+  `--reason`, and re-pins a drifted pinned locator of the category in the same act, recording old ->
+  new hash; `ignore` leaves the category's
   drift out of renewal, unlisted. A category not named is `block`, so a configuration without `drift`
   behaves as before. An unknown category (the load error lists the declared ones), an unknown policy
   (it lists `block`, `acknowledge`, `ignore`) and the option on any other rule are load errors. It
@@ -2376,3 +2378,4 @@ proves this configuration produces the three findings.
 > | 2026-11-09 | Bumped to `0.123`. A back-pointer rule's `ignore_marker` is also refused at load when, after removing the back-pointer keywords, the declared record id heads that start no record id, comment leaders and punctuation, it leaves fewer than 3 letters or digits (`// Implements:`, `# Verifies:`, `-- Implements: ADR`). **Why:** round-5 review: the guard refused only text inside a keyword or id head, so a padded marker such as `// Implements:` loaded and excused every back-pointer line. | **substantive** |
 > | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 921027c81b7e -> 3cfc01bcd73e. Reason: Read the diff of config.rs since the old pin against what this record evidences: the only change is generic_marker_problem and its new helper strip_generic_head (a back-pointer ignore_marker that is only keywords, id heads, comment leaders and punctuation around fewer than 3 letters or digits is refused at load) plus its test cases; the behaviour this record evidences is unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-09 | Bumped to `0.124`. Documents `drift` on `embodiment.claim-expired`: a per-evidence-category policy (`block`, `acknowledge`, `ignore`; undeclared is `block`) for what drift of a locator does to a renewal by `urzua reverify`, with its load errors. **Why:** `ADR-97` amendment of 2026-11-09 (drift policy); a drifted `spec:` locator is unpinned by design, so `reverify --pin-only` could not clear it and 66 of 355 claims could not be renewed. | **substantive** |
+> | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 3cfc01bcd73e -> a9ed37935648. Reason: Read the diff of each pinned file or span since the old pin against what this record evidences. rust/crates/urzua-core/src/config.rs: adds the DriftPolicy enum (block, acknowledge, ignore), the `drift` option on RuleSetting with its load check against the embodiment categories in claim_expiry_problems, and the option name in the two option tables; nothing else changed. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
