@@ -133,7 +133,8 @@ pub fn relation_field_name<'a>(
 /// scope to resolve in. `untracked_on_disk` is true for a path that exists but
 /// that git does not track, which is its own variant (`BUG-13`) because the
 /// repair is to track the file, not to correct the locator.
-pub fn embodiment_locator_exists(
+#[cfg(test)]
+pub(crate) fn embodiment_locator_exists(
     records: &[Record],
     config: &Config,
     tracked: &[PathBuf],
@@ -338,7 +339,8 @@ pub struct LocatorEnv<'a> {
 impl<'a> LocatorEnv<'a> {
     /// Runs `f` over a working tree with no file in it: for a caller with no
     /// filesystem (a unit test, a property test).
-    pub fn without_files<R>(config: &'a Config, f: impl FnOnce(&LocatorEnv<'_>) -> R) -> R {
+    #[cfg(test)]
+    pub(crate) fn without_files<R>(config: &'a Config, f: impl FnOnce(&LocatorEnv<'_>) -> R) -> R {
         let present = |_: &str| false;
         let env = LocatorEnv {
             config,

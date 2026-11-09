@@ -30,6 +30,33 @@ impl OnUnjudged {
     }
 }
 
+/// What an edit-tool write outside the session's repository does (`ADR-89`
+/// amendment of 2026-11-09, `harness.outside_writes`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum OutsideWrites {
+    /// The repository that holds the file judges it, and a place with no gates
+    /// judges nothing (the behaviour before the key existed).
+    #[default]
+    Allow,
+    /// A file of a linked worktree of the session's repository is also judged
+    /// against the session's own configuration; deny wins.
+    Shared,
+    /// An agent's write outside the session's repository is refused while any
+    /// guardrail is enabled, except under `allow_paths`.
+    Deny,
+}
+
+impl OutsideWrites {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            OutsideWrites::Allow => "allow",
+            OutsideWrites::Shared => "shared",
+            OutsideWrites::Deny => "deny",
+        }
+    }
+}
+
 /// One guardrail this build knows: its name, whether it takes `on_unjudged`,
 /// and what that defaults to. The acceptance and protected-path guardrails
 /// default to `deny` because an unjudged gate is not a gate.
@@ -140,6 +167,12 @@ pub struct HarnessDecl {
     /// block (`ADR-89` section 1). The engine assumes no name.
     pub instructions_file: Option<String>,
     pub guardrails: BTreeMap<String, Guardrail>,
+    /// `outside_writes`, when declared; `None` is undeclared, which acts as
+    /// `allow` and which `urzua doctor` warns about while a guardrail is on.
+    pub outside_writes: Option<OutsideWrites>,
+    /// Absolute or `~`-relative directories an agent may write under with
+    /// `outside_writes: deny`.
+    pub allow_paths: Vec<String>,
     /// Keys and guardrails this build does not know, and values a guardrail
     /// does not take. Reported at install and by `doctor`, never skipped.
     pub problems: Vec<String>,
@@ -163,7 +196,13 @@ pub struct UnknownKey {
 }
 
 /// The keys the `harness` mapping reads.
-const HARNESS_KEYS: &[&str] = &["adapters", "instructions_file", "guardrails"];
+const HARNESS_KEYS: &[&str] = &[
+    "adapters",
+    "instructions_file",
+    "guardrails",
+    "outside_writes",
+    "allow_paths",
+];
 
 impl GuardrailInfo {
     /// The keys a guardrail's mapping reads.
@@ -188,6 +227,16 @@ impl HarnessDecl {
             nearest: nearest_name(key, valid.iter().copied()).map(str::to_string),
             valid: valid.iter().map(|v| v.to_string()).collect(),
         });
+    }
+
+    /// The effective `outside_writes`: the declared value, else `allow`.
+    pub fn outside_writes(&self) -> OutsideWrites {
+        self.outside_writes.unwrap_or_default()
+    }
+
+    /// Whether any guardrail is enabled.
+    pub fn any_enabled(&self) -> bool {
+        self.guardrails.values().any(|g| g.enabled)
     }
 
     /// Whether the guardrail is named and on.
@@ -224,21 +273,7 @@ impl<'de> Deserialize<'de> for HarnessDecl {
         for (key, v) in map {
             let key = key.as_str().unwrap_or("?");
             match key {
-                "adapters" => {
-                    let list = v.as_sequence().ok_or_else(|| {
-                        D::Error::custom("harness.adapters must be a list of adapter names")
-                    })?;
-                    for entry in list {
-                        match entry.as_str().map(str::trim) {
-                            Some(name) if !name.is_empty() => decl.adapters.push(name.to_string()),
-                            _ => {
-                                return Err(D::Error::custom(
-                                    "harness.adapters must be a list of non-blank adapter names",
-                                ))
-                            }
-                        }
-                    }
-                }
+                "adapters" => decl.adapters = read_adapters::<D>(v)?,
                 "instructions_file" => match v.as_str().map(str::trim) {
                     Some(path) if !path.is_empty() => {
                         decl.instructions_file = Some(path.to_string())
@@ -301,16 +336,84 @@ impl<'de> Deserialize<'de> for HarnessDecl {
                         decl.guardrails.insert(name, guardrail);
                     }
                 }
+                "outside_writes" => decl.outside_writes = Some(read_outside_writes::<D>(v)?),
+                "allow_paths" => decl.allow_paths = read_allow_paths::<D>(v)?,
                 other => decl.note_unknown_key(
                     "harness".to_string(),
                     other,
                     HARNESS_KEYS,
-                    "which this build does not know (it reads adapters, instructions_file, guardrails)",
+                    "which this build does not know (it reads adapters, instructions_file, guardrails, outside_writes, allow_paths)",
                 ),
             }
         }
+        if !decl.allow_paths.is_empty() && decl.outside_writes() != OutsideWrites::Deny {
+            decl.problems.push(format!(
+                "harness.allow_paths is declared but harness.outside_writes is '{}', so it is read by nothing; it applies only with outside_writes: deny",
+                decl.outside_writes().as_str()
+            ));
+        }
         Ok(decl)
     }
+}
+
+/// `harness.adapters`: a list of non-blank adapter names.
+fn read_adapters<'de, D: serde::Deserializer<'de>>(
+    v: &yaml_serde::Value,
+) -> Result<Vec<String>, D::Error> {
+    use serde::de::Error;
+    let list = v
+        .as_sequence()
+        .ok_or_else(|| D::Error::custom("harness.adapters must be a list of adapter names"))?;
+    let mut adapters = Vec::new();
+    for entry in list {
+        match entry.as_str().map(str::trim) {
+            Some(name) if !name.is_empty() => adapters.push(name.to_string()),
+            _ => {
+                return Err(D::Error::custom(
+                    "harness.adapters must be a list of non-blank adapter names",
+                ))
+            }
+        }
+    }
+    Ok(adapters)
+}
+
+/// `harness.outside_writes`: `allow`, `shared` or `deny`.
+fn read_outside_writes<'de, D: serde::Deserializer<'de>>(
+    v: &yaml_serde::Value,
+) -> Result<OutsideWrites, D::Error> {
+    match v.as_str() {
+        Some("allow") => Ok(OutsideWrites::Allow),
+        Some("shared") => Ok(OutsideWrites::Shared),
+        Some("deny") => Ok(OutsideWrites::Deny),
+        _ => Err(serde::de::Error::custom(
+            "harness.outside_writes must be allow, shared or deny",
+        )),
+    }
+}
+
+/// `harness.allow_paths`: a list of absolute or `~`-relative directories.
+fn read_allow_paths<'de, D: serde::Deserializer<'de>>(
+    v: &yaml_serde::Value,
+) -> Result<Vec<String>, D::Error> {
+    use serde::de::Error;
+    let list = v.as_sequence().ok_or_else(|| {
+        D::Error::custom("harness.allow_paths must be a list of absolute or ~-relative directories")
+    })?;
+    let mut paths = Vec::new();
+    for entry in list {
+        match entry.as_str().map(str::trim) {
+            Some(p) if p.starts_with('/') || p == "~" || p.starts_with("~/") => {
+                paths.push(p.to_string())
+            }
+            _ => {
+                return Err(D::Error::custom(
+                    "harness.allow_paths entries must be absolute (/dir) or ~-relative (~/dir) directories",
+                ))
+            }
+        }
+    }
+    Ok(paths)
 }
 
 impl Serialize for HarnessDecl {
@@ -322,6 +425,12 @@ impl Serialize for HarnessDecl {
         }
         if let Some(file) = &self.instructions_file {
             map.serialize_entry("instructions_file", file)?;
+        }
+        if let Some(mode) = self.outside_writes {
+            map.serialize_entry("outside_writes", mode.as_str())?;
+        }
+        if !self.allow_paths.is_empty() {
+            map.serialize_entry("allow_paths", &self.allow_paths)?;
         }
         if !self.guardrails.is_empty() {
             let guardrails: BTreeMap<&str, yaml_serde::Value> = self
@@ -550,5 +659,55 @@ mod unknown_key_tests {
         assert_eq!(typo.valid, ["enabled"]);
         assert_eq!(find("colour").nearest, None);
         assert_eq!(h.unknown_keys.len(), h.problems.len());
+    }
+}
+
+#[cfg(test)]
+mod outside_writes_tests {
+    use super::*;
+
+    fn parse(yaml: &str) -> Result<HarnessDecl, yaml_serde::Error> {
+        yaml_serde::from_str(yaml)
+    }
+
+    #[test]
+    fn undeclared_acts_as_allow_and_each_value_reads_back() {
+        let h = parse("guardrails:\n  editor-hook: {enabled: true}\n").unwrap();
+        assert_eq!(h.outside_writes, None);
+        assert_eq!(h.outside_writes(), OutsideWrites::Allow);
+        assert!(h.any_enabled());
+        for (text, mode) in [
+            ("allow", OutsideWrites::Allow),
+            ("shared", OutsideWrites::Shared),
+            ("deny", OutsideWrites::Deny),
+        ] {
+            let h = parse(&format!("outside_writes: {text}\n")).unwrap();
+            assert_eq!(h.outside_writes, Some(mode));
+            assert!(h.problems.is_empty(), "{:?}", h.problems);
+        }
+    }
+
+    #[test]
+    fn an_unknown_value_or_a_relative_allow_path_is_a_load_error() {
+        assert!(parse("outside_writes: sharde\n").is_err());
+        assert!(parse("outside_writes: true\n").is_err());
+        assert!(parse("outside_writes: deny\nallow_paths: [relative/dir]\n").is_err());
+        assert!(parse("outside_writes: deny\nallow_paths: /tmp\n").is_err());
+    }
+
+    #[test]
+    fn allow_paths_without_deny_is_reported_not_silently_ignored() {
+        let h = parse("outside_writes: shared\nallow_paths: [\"~/scratch\", /tmp/x]\n").unwrap();
+        assert_eq!(h.allow_paths, ["~/scratch", "/tmp/x"]);
+        assert_eq!(h.problems.len(), 1, "{:?}", h.problems);
+        let h = parse("outside_writes: deny\nallow_paths: [/tmp/x]\n").unwrap();
+        assert!(h.problems.is_empty());
+    }
+
+    #[test]
+    fn the_declaration_round_trips() {
+        let h = parse("outside_writes: deny\nallow_paths: [\"~/s\"]\n").unwrap();
+        let again: HarnessDecl = yaml_serde::from_str(&yaml_serde::to_string(&h).unwrap()).unwrap();
+        assert_eq!(again, h);
     }
 }

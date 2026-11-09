@@ -601,6 +601,7 @@ attestation:
 # override of ADR-78 does not lift it); a person edits outside the agent harness. Both default to
 # on_unjudged: deny. `post-command` reports, never blocks, what a Bash command changed.
 harness:
+  outside_writes: shared
   adapters: [claude-code]
   instructions_file: AGENTS.md
   guardrails:

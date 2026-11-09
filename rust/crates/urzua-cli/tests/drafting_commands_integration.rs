@@ -8,7 +8,8 @@
 //! supplies, standing in for the agent. Because the commands are parsed rather than
 //! mirrored, editing a command's steps changes what is tested, and a command that
 //! stops calling `urzua new` or `urzua check` fails here. The fixture is a copy of this
-//! repository's own working tree, so the real `.urzua/config.yaml` is what runs.
+//! repository's records, configuration and commands (not its Rust sources or changesets,
+//! which no assertion here reads), so the real `.urzua/config.yaml` is what runs.
 
 mod common;
 
@@ -33,8 +34,20 @@ fn git(dir: &Path, args: &[&str]) -> String {
     String::from_utf8_lossy(&out.stdout).into_owned()
 }
 
+/// Directories the fixture leaves out: the Rust workspace and the changesets are about
+/// 900 files that every `check` in the fixture would read, and no test here looks at them.
+const NOT_COPIED: [&str; 2] = ["rust/", ".changeset/"];
+
+/// What stands in for the Rust workspace: the configuration names `rust` and two test
+/// directories as back-pointer paths, and an entry that covers no tracked file is a finding
+/// in its own right, so each of them keeps one (comment-only) file.
+const STAND_INS: [&str; 2] = [
+    "rust/crates/urzua-cli/tests/stand_in.rs",
+    "rust/crates/urzua-core/tests/stand_in.rs",
+];
+
 /// A throwaway git repo holding a copy of this repository's working tree (tracked and
-/// not-yet-tracked files, minus ignored ones), committed as the baseline.
+/// not-yet-tracked files, minus ignored ones and `NOT_COPIED`), committed as the baseline.
 fn fixture(name: &str) -> common::TempDir {
     let root = repo_root();
     static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
@@ -54,12 +67,21 @@ fn fixture(name: &str) -> common::TempDir {
         .stdout;
     for rel in String::from_utf8_lossy(&listing).split('\0') {
         let src = root.join(rel);
-        if rel.is_empty() || !src.is_file() {
+        if rel.is_empty() || NOT_COPIED.iter().any(|d| rel.starts_with(d)) || !src.is_file() {
             continue;
         }
         let dst = dir.join(rel);
         std::fs::create_dir_all(dst.parent().unwrap()).unwrap();
         std::fs::copy(&src, &dst).unwrap();
+    }
+    for rel in STAND_INS {
+        let dst = dir.join(rel);
+        std::fs::create_dir_all(dst.parent().unwrap()).unwrap();
+        std::fs::write(
+            dst,
+            "// Stands in for the Rust workspace in this fixture.\n",
+        )
+        .unwrap();
     }
     git(&dir, &["init", "-q"]);
     git(&dir, &["config", "user.email", "test@example.com"]);
