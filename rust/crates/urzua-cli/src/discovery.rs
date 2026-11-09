@@ -660,7 +660,7 @@ pub(crate) fn grace_notice(
         severity: urzua_core::report::NoticeSeverity::Info,
         subject: NOTICE_DRIFT_IN_GRACE.to_string(),
         message: format!(
-            "{n} record{} cite{} a file that changed after the pin and {} held back by drift_grace_days ({days}); the first is reported from {date}",
+            "{n} record{} cite{} a file that changed after the pin and {} held back by drift_grace_days ({days}); the first window ends on {date} UTC and a run after that instant reports it",
             if n == 1 { "" } else { "s" },
             if n == 1 { "s" } else { "" },
             if n == 1 { "is" } else { "are" },
@@ -937,21 +937,16 @@ impl<'a> DriftJudge<'a> {
         parsed: &urzua_core::locator::Locator,
         verdict: Judged,
     ) {
-        let inside_grace = match verdict {
+        match verdict {
             Judged::Next => return,
-            Judged::Fresh(leaves) => {
-                self.hold_back(record, leaves);
-                true
-            }
+            Judged::Fresh(leaves) => self.hold_back(record, leaves),
             Judged::Drifted => {
                 self.drifted.insert(record.path.clone());
-                false
             }
-        };
+        }
         let drift = urzua_core::reverify::LocatorDrift {
             category: category.to_string(),
             locator: parsed.display(),
-            inside_grace,
         };
         let known = self.locators.entry(record.path.clone()).or_default();
         if !known.contains(&drift) {

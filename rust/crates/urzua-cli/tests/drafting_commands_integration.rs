@@ -113,11 +113,32 @@ fn steps(command: &str) -> Vec<String> {
 }
 
 fn run_step(dir: &Path, script: &str, title: &str, record: &str) -> Output {
+    run_step_with_bin(dir, script, title, record, env!("CARGO_BIN_EXE_urzua"))
+}
+
+/// A `urzua` that pins `check` to `OWN_CORPUS_AS_OF` and passes every other command
+/// through. The finish step runs the hook, which checks the record with no way to pass
+/// `--as-of`, and the fixture borrows this repository's configuration, whose waivers
+/// lapse on a known date; the real clock would turn the test red then with no code change.
+fn pinned_bin(dir: &Path) -> String {
+    use std::os::unix::fs::PermissionsExt;
+    let path = dir.join(".urzua-pinned-bin.sh");
+    let script = format!(
+        "#!/usr/bin/env bash\nif [ \"$1\" = check ]; then shift; exec \"{bin}\" --as-of {as_of} check \"$@\"; fi\nexec \"{bin}\" \"$@\"\n",
+        bin = env!("CARGO_BIN_EXE_urzua"),
+        as_of = common::OWN_CORPUS_AS_OF
+    );
+    std::fs::write(&path, script).unwrap();
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    path.to_string_lossy().into_owned()
+}
+
+fn run_step_with_bin(dir: &Path, script: &str, title: &str, record: &str, bin: &str) -> Output {
     Command::new("bash")
         .args(["-ec", script])
         .env("TITLE", title)
         .env("RECORD", record)
-        .env("URZUA", env!("CARGO_BIN_EXE_urzua"))
+        .env("URZUA", bin)
         .env("PATH", common::path_with_stub_gh())
         .current_dir(dir)
         .output()
@@ -218,7 +239,8 @@ fn each_command_drafts_a_record_that_check_examined_and_passes() {
         let scaffolded_status = status_line(&dir.join(&record));
         fill(&dir.join(&record));
 
-        let out = run_step(&dir, &s[1], "", &record);
+        let pinned = pinned_bin(&dir);
+        let out = run_step_with_bin(&dir, &s[1], "", &record, &pinned);
         let stderr = String::from_utf8_lossy(&out.stderr);
         assert!(
             out.status.success(),
