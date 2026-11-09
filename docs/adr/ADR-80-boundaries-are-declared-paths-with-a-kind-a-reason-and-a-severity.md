@@ -141,7 +141,8 @@ line it is on), so the option is reused rather than a second one invented:
 - **The whole line is excused**, every id on it, including when the marker sits in the citation text
   (`// Implements: ADR-1 <marker>`). To keep that from excusing everything, a marker that is empty,
   whitespace, or equal to or contained in a back-pointer keyword (`Implements:`, `Verifies:`) is refused at
-  load.
+  load; so is one shorter than 3 non-whitespace characters, with no letter or digit, or contained in a declared
+  record id head such as `ADR-` (tightened 2026-11-09).
 - A back-pointer on an excused line is not reported, is not counted as evidence (code or test tier, so a
   delivery tier does not read it either), and is not judged for the cited record's status. A real citation
   on another line of the same file is unaffected.
@@ -197,3 +198,4 @@ matchers is cheap to keep and costly to lose, because merging them silently infl
 > | 2026-11-05 | Status changed from Proposed to Accepted, with the drafted choices on RFC-11's gaps. **Why:** Maintainer decision, 2026-11-05. | **substantive** |
 > | 2026-11-07 | Amendment added: the five questions listed as open in the Decision were resolved as drafted when the ADR was accepted. **Why:** the Decision still carried "for the maintainer before this is Accepted" after acceptance; `Status` stays `Accepted` and the Decision text is unchanged. | **structural** |
 > | 2026-11-08 | Amendment added: the declared `ignore_marker` is also accepted by `embodiment.back-pointer-resolution` and `embodiment.back-pointer-decision-accepted` as one marker shared with the evidence collector (differing values are a load error), excusing the whole line from reporting, status judgement and evidence, refused at load when it is empty or inside a back-pointer keyword, with the excused count disclosed in `check`, `fix` and `reverify` and an unused marker reported once per line; opt-in. Accepted by the maintainer on 2026-11-08; `Status` stays `Accepted` and the Decision text is unchanged. **Why:** a record-shaped literal inside a scanned test file had no per-line escape, only a file-level waiver or dropping the path, and this ADR already owns the per-line option. | **substantive** |
+> | 2026-11-09 | Tightened the 2026-11-08 amendment's marker guard: a back-pointer `ignore_marker` shorter than 3 non-whitespace characters, with no letter or digit, or contained in a declared record id head is refused at load. What the ADR decided is unchanged. **Why:** the guard covered only the back-pointer keywords, so `//`, `#` or `ADR-` loaded and excused every back-pointer line. | **substantive** |
