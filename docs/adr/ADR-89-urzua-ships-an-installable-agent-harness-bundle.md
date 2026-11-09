@@ -265,7 +265,8 @@ revision log):
    `.claude/settings.local.json` included, by content hash against a baseline taken at session start) and a
    commit the same command made, and a record changed after `git update-index --assume-unchanged` or
    `--skip-worktree` (found by comparing the file with the index). A change is reported once; the same change
-   again is silent, by design. A commit is seen only on the checked-out branch: a commit made on another
+   again is silent, by design. A later edit to a path that a reported weakening
+   un-protected is not reported (amendment of 2026-11-09). A commit is seen only on the checked-out branch: a commit made on another
    branch or in a sibling worktree is silent until it lands on the session's `HEAD`, and a
    `git push origin side:main` of another ref is never seen. An MCP tool that runs a shell command is not a
    Bash tool call (the post-command matcher is `Bash` only): what it writes is neither judged nor reported.
@@ -291,7 +292,8 @@ revision log):
    harness lock, the override log, `.git/hooks` or `.git/config`, but a Bash command can. A post-command
    baseline written ahead of a later change disarms the report for that change, an override row can be given
    a `Reviewed-by`, and a `core.hooksPath` turns the commit layer off; the post-command check does not report
-   these files.
+   these files. Deleting or forging the baseline (`.urzua/cache/protected-hashes.json` or the cache
+   directory) in the same command as a gate removal hides the removal (amendment of 2026-11-09).
 7. **The edit hook cannot run and the configuration cannot be read as text.** When python3 or the translator is
    missing, the settings command reads `.urzua/config.yaml` as text and refuses the edit only if it finds
    `acceptance` or `protected-paths` enabled without `on_unjudged: allow`; a configuration that scan misreads
@@ -312,6 +314,9 @@ revision log):
 10. **A waiver record is not gated.** A waiver is an ordinary record, not a gated status, and
     `diff.decider-required` and `override.unreviewed` are waivable, so an edit-tool waiver can silence the CI
     gate for a gated move made by a Bash command. It adds no power beyond routes 1 and 4.
+11. **Deleting the `harness:` section.** With no `harness` key no guardrail is enabled; `post-command` and
+    `session-start` then report only "guardrail not enabled", and the CI diff gate at the pull request is the
+    place the change is seen (amendment of 2026-11-09).
 
 What is claimed is therefore only this: through the edit tools (Write, Edit, MultiEdit, NotebookEdit and any MCP tool
 that carries a file path and content) an agent cannot move a gated record or write a
@@ -537,6 +542,30 @@ agent replace the session's gates with two writes outside the repository.
   instructions block is not a protected path (route 9) and a waiver record is not gated (route 10).
 The Status of this ADR stays Accepted.
 
+## Amendment (2026-11-09): the accepted-risk list, made exact for what the review of the baseline found
+
+Status of this amendment: documentation of existing behaviour, decided by the orchestrator under the
+maintainer's 2026-11-07 decision that the accepted-risk list be exact; pending maintainer review. It
+changes no code and no decision; it states what the harness already does, as the independent review of
+the post-command baseline found it.
+
+- **Route 1, a weakening is reported once.** The post-command check reports a removed gate (a path taken out
+  of the `authority` path gates, or the configuration itself) in the command that made it. A later edit to a
+  path that was protected before the removal is not reported, because the next baseline is taken from the
+  weakened configuration. The report is the only signal; it is not repeated.
+- **Route 6, the harness baseline can be deleted or forged in the same command.** Deleting or rewriting
+  `.urzua/cache/protected-hashes.json`, or the whole cache directory, in the same Bash command that removes a
+  gate hides the removal: with no baseline the check records one from the weakened configuration and has
+  nothing to compare, so it reports no shrunk set. The edit tools cannot write these files; a Bash command
+  can.
+- **Route 11 (new), deleting the whole `harness:` section turns the guardrails off.** With no `harness`
+  key no guardrail is enabled, so `post-command` and `session-start` report only that the guardrail is not
+  enabled, and the editor hook has no gate to apply. The change is a change to `.urzua/config.yaml`, which is
+  visible to the CI diff gate at the pull request, as any configuration change is; locally it is not
+  prevented and not reported beyond that note.
+
+The Decision is unchanged. The Status of this ADR stays Accepted.
+
 ## References
 
 - `ADR-69`, `ADR-70`, `ADR-71`: the hook, drafting commands and layered gate this extends; `ADR-70` gains an
@@ -566,3 +595,4 @@ The Status of this ADR stays Accepted.
 > | 2026-11-07 | Amendment (settings command, judged repository, harness-owned paths, override-log approval by PR review) accepted. **Why:** Maintainer decision, 2026-11-07. | **substantive** |
 > | 2026-11-08 | Added an `## Amendment (2026-11-08)`, accepted by the maintainer on 2026-11-08, after the fourth review of the harness: an edit is judged against the session's own repository and every governed repository that holds the file, and a deny from any wins (the "outermost" rule of the 2026-11-07 amendment is withdrawn, because two unjudged writes above the project minted a governing repository with no gates); a `.git` counts only when git accepts it; every hook command embeds the translator's sha256 and refuses to run a translator that differs; a read-named MCP tool is judged when the call names an output or carries content; MCP path strings are trimmed, NUL-cut and normalised before the length test. The Accepted-risk list is made exact (items 1, 5, 7 and 8 revised, items 9 and 10 added). `Status` stays Accepted. **Why:** Maintainer decisions, 2026-11-08, on the fourth review of the harness. | **substantive** |
 > | 2026-11-08 | Corrected the `## Amendment (2026-11-08)` after review of pull request 438: with `CLAUDE_PROJECT_DIR` unset, the settings command resolves the nearest real git working tree that holds the configuration and the translator, not the outermost configuration (which let a configuration written above the project take the wrapper); `body`, `data`, `payload` and `value` join the content keys. `Status` stays Accepted. **Why:** the independent review found the wrapper still taking an outer configuration. | **substantive** |
+> | 2026-11-09 | Added an `## Amendment (2026-11-09)`, documentation of existing behaviour decided by the orchestrator under the maintainer's 2026-11-07 decision that the accepted-risk list be exact, pending maintainer review: a weakening is reported once and a later edit to a formerly protected path is not (route 1); deleting or forging the harness baseline in the same command as a gate removal hides the removal (route 6); deleting the whole `harness:` section turns the guardrails off, visible to the CI diff gate (new route 11). `Status` stays Accepted. **Why:** the review of pull request 459 found these three routes behaving as described and the list naming none of them. | **substantive** |

@@ -206,12 +206,15 @@ fn judge_changes(
 
     // Protected files git does not show (ignored ones), by content hash.
     let scan = scan_protected(&repo_root, &config_path, &loaded, true);
-    let paths = changed_path_map(&repo_root, tree, committed, scan.changes);
+    let paths = changed_path_map(&repo_root, tree, committed, scan.changes.clone());
     let Selected {
         fresh,
-        protected,
+        mut protected,
         remembered,
-    } = select_unseen(&repo_root, &loaded, &paths);
+    } = select_unseen(&repo_root, &loaded, &paths, &scan.baseline_entries);
+    if !scan.shrunk.is_empty() {
+        protected.push(shrink_line(&repo_root, &config_path, &scan.shrunk));
+    }
     if fresh.is_empty() && protected.is_empty() {
         write_memory(&repo_root, &remembered);
         let mut v = PostVerdict::quiet(format!(
@@ -357,7 +360,18 @@ struct Selected {
     remembered: BTreeMap<String, String>,
 }
 
-fn select_unseen(repo_root: &Path, loaded: &Config, paths: &BTreeMap<String, bool>) -> Selected {
+fn select_unseen(
+    repo_root: &Path,
+    loaded: &Config,
+    paths: &BTreeMap<String, bool>,
+    baseline: &[String],
+) -> Selected {
+    // A path is protected when the edited configuration gates it or the
+    // baseline's configuration did: a gate the command removed still reports.
+    let protected_report = |rel: &str, deleted: bool| {
+        super::gate::protected_change_report(loaded, Path::new(rel), deleted)
+            .or_else(|| super::gate::baseline_protected_report(Path::new(rel), deleted, baseline))
+    };
     // Governed, still on disk, with the content hash the memory is keyed by;
     // and protected paths, a deleted one included.
     let hash_of = |rel: &str| match std::fs::read(repo_root.join(rel)) {
@@ -369,7 +383,7 @@ fn select_unseen(repo_root: &Path, loaded: &Config, paths: &BTreeMap<String, boo
     let mut protected_candidates: BTreeMap<String, (String, bool)> = BTreeMap::new();
     for (rel, deleted) in paths {
         let path = Path::new(rel);
-        if super::gate::protected_change_report(loaded, path, *deleted).is_some() {
+        if protected_report(rel, *deleted).is_some() {
             let hash = if *deleted {
                 "deleted".to_string()
             } else {
@@ -393,9 +407,7 @@ fn select_unseen(repo_root: &Path, loaded: &Config, paths: &BTreeMap<String, boo
     let protected: Vec<String> = protected_candidates
         .iter()
         .filter(|(p, (h, _))| h.is_empty() || seen.get(*p) != Some(h))
-        .filter_map(|(p, (_, deleted))| {
-            super::gate::protected_change_report(loaded, Path::new(p), *deleted)
-        })
+        .filter_map(|(p, (_, deleted))| protected_report(p, *deleted))
         .collect();
     let mut remembered = candidates;
     for (p, (h, _)) in &protected_candidates {
@@ -612,6 +624,55 @@ struct ProtectedScan {
     changes: Vec<(String, bool)>,
     /// A stated limit of this scan, for the report.
     note: Option<String>,
+    /// The protected entries the previous baseline held (empty with no
+    /// baseline or one taken with the guardrail off): judged beside the edited
+    /// configuration's, so a gate the command removed still reports.
+    baseline_entries: Vec<String>,
+    /// Baseline entries the configuration no longer gates.
+    shrunk: Vec<String>,
+}
+
+/// The entries the previous baseline protected that `entries` no longer does.
+fn shrunk_entries(old: Option<&ProtectedState>, entries: &[String]) -> Vec<String> {
+    old.filter(|o| o.enabled)
+        .map(|o| {
+            o.entries
+                .iter()
+                .filter(|e| !entries.contains(e))
+                .cloned()
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn shrink_line(root: &Path, config_path: &Path, shrunk: &[String]) -> String {
+    let rel = config_path.strip_prefix(root).unwrap_or(config_path);
+    format!(
+        "  {} [protected-paths] error: the protected set shrank: the configuration no longer gates {}. Those paths are not protected from now on. It was not prevented; CI's diff.decider-required checks who made it.",
+        rel.display(),
+        shrunk.join(", ")
+    )
+}
+
+/// At session start, before the baseline is taken from the configuration as it
+/// is now: the entries the previous baseline protected that it no longer gates.
+pub(super) fn protected_set_shrank(root: &Path, config: &Config) -> Option<String> {
+    let on = config
+        .harness
+        .as_ref()
+        .is_some_and(|h| h.enabled("protected-paths"));
+    let entries = if on {
+        super::gate::protected_entries(config)
+    } else {
+        Vec::new()
+    };
+    let shrunk = shrunk_entries(read_protected(root).as_ref(), &entries);
+    (!shrunk.is_empty()).then(|| {
+        format!(
+            "the protected set shrank since the last session: the configuration no longer gates {}, so those paths are not protected (review the change to the configuration)",
+            shrunk.join(", ")
+        )
+    })
 }
 
 /// Hashes every file under a protected path and, when `report` is set, returns
@@ -624,6 +685,8 @@ fn scan_protected(root: &Path, config_path: &Path, config: &Config, report: bool
     let mut scan = ProtectedScan {
         changes: Vec::new(),
         note: None,
+        baseline_entries: Vec::new(),
+        shrunk: Vec::new(),
     };
     let Some(sig) = urzua_io::sha256_hex_of_file(config_path) else {
         return scan;
@@ -640,26 +703,9 @@ fn scan_protected(root: &Path, config_path: &Path, config: &Config, report: bool
     let (found, truncated) = super::gate::walk_entries(root, &entries);
     let files = hash_files(root, &found);
     let old = read_protected(root);
-    if report && on {
+    if report {
         if let Some(old) = old.filter(|o| o.enabled) {
-            let same_config = old.config_sig == sig;
-            let covered = |rel: &str| {
-                same_config
-                    || old
-                        .entries
-                        .iter()
-                        .any(|e| urzua_core::rules::path_matches_entry(Path::new(rel), e))
-            };
-            for (rel, hash) in &files {
-                if covered(rel) && old.files.get(rel) != Some(hash) {
-                    scan.changes.push((rel.clone(), false));
-                }
-            }
-            for rel in old.files.keys() {
-                if !files.contains_key(rel) && !root.join(rel).exists() {
-                    scan.changes.push((rel.clone(), true));
-                }
-            }
+            compare_baseline(root, config_path, &old, &entries, (&files, &sig), &mut scan);
         }
     }
     if truncated {
@@ -678,6 +724,53 @@ fn scan_protected(root: &Path, config_path: &Path, config: &Config, report: bool
         },
     );
     scan
+}
+
+/// Compares the files now with the baseline. Files under an entry only the
+/// baseline had are hashed too, so a gate the command removed and a file it
+/// changed in the same command both report; the configuration file is a change
+/// of its own whenever its hash differs from the baseline's.
+fn compare_baseline(
+    root: &Path,
+    config_path: &Path,
+    old: &ProtectedState,
+    entries: &[String],
+    now: (&BTreeMap<String, String>, &str),
+    scan: &mut ProtectedScan,
+) {
+    let (files, sig) = now;
+    let same_config = old.config_sig == sig;
+    scan.baseline_entries = old.entries.clone();
+    scan.shrunk = shrunk_entries(Some(old), entries);
+    let removed: Vec<String> = scan.shrunk.clone();
+    let (extra_found, _) = super::gate::walk_entries(root, &removed);
+    let mut all = files.clone();
+    for (rel, hash) in hash_files(root, &extra_found) {
+        all.entry(rel).or_insert(hash);
+    }
+    let covered = |rel: &str| {
+        same_config
+            || old
+                .entries
+                .iter()
+                .any(|e| urzua_core::rules::path_matches_entry(Path::new(rel), e))
+    };
+    for (rel, hash) in &all {
+        if covered(rel) && old.files.get(rel) != Some(hash) {
+            scan.changes.push((rel.clone(), false));
+        }
+    }
+    for rel in old.files.keys() {
+        if !all.contains_key(rel) && !root.join(rel).exists() {
+            scan.changes.push((rel.clone(), true));
+        }
+    }
+    if !same_config {
+        if let Ok(rel) = config_path.strip_prefix(root) {
+            scan.changes
+                .push((rel.to_string_lossy().replace('\\', "/"), false));
+        }
+    }
 }
 
 /// Records the protected files' hashes as the baseline the next post-command
