@@ -173,7 +173,7 @@ impl<'de> Deserialize<'de> for PendingEntry {
 }
 
 impl PendingEntry {
-    fn matches(&self, value: &str) -> bool {
+    pub(crate) fn matches(&self, value: &str) -> bool {
         match self {
             PendingEntry::Value(v) => v.trim().eq_ignore_ascii_case(value),
             // Validated at load, so a pattern that does not compile here (a
@@ -580,6 +580,9 @@ fn validate_delivery(
     }
     if let Some(items) = &delivery.items {
         validate_items(rt, d, delivery, items, embodiment)?;
+        if let Some(pending) = &items.pending {
+            check_pending(pending).map_err(|e| format!("`delivery.items.pending`: {e}"))?;
+        }
         check_delivered_tiers_resolve(delivery, "delivery.items")?;
     }
     Ok(())

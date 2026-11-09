@@ -275,3 +275,53 @@ fn valid_evidence_lines_skip_a_clause_that_does_not_parse() {
     assert_eq!(d.valid_evidence_lines().len(), 1);
     assert_eq!(d.valid_evidence_lines()[0], d.evidence_lines()[1]);
 }
+
+fn decl_with_pending() -> ItemsDecl {
+    let mut d = decl();
+    d.pending = Some(vec![
+        crate::status_model::PendingEntry::Value("TODO".to_string()),
+        crate::status_model::PendingEntry::Pattern(crate::status_model::PendingPattern {
+            pattern: "^Replace this item".to_string(),
+        }),
+    ]);
+    d
+}
+
+#[test]
+fn a_pending_item_is_a_placeholder_and_a_shape_issue_naming_its_line() {
+    let d = parse_items(
+        "- Replace this item with one criterion.\n- todo\n- A real criterion. — evidence: code:rust/a.rs\n",
+        10,
+        9,
+        &decl_with_pending(),
+    );
+    assert!(d.items[0].placeholder && d.items[1].placeholder);
+    assert!(!d.items[2].placeholder);
+    let lines: Vec<usize> = d.issues.iter().map(|i| i.line).collect();
+    assert_eq!(lines, vec![10, 11], "{:?}", issues(&d));
+    assert!(d.issues[0].message.contains("unfilled placeholder"));
+}
+
+#[test]
+fn a_placeholder_item_carries_no_evidence_and_no_waiver() {
+    let d = parse_items(
+        "- TODO — evidence: code:rust/a.rs\n- Replace this item — waived: not-applicable -- nothing to do\n",
+        10,
+        9,
+        &decl_with_pending(),
+    );
+    assert!(d.items.iter().all(|i| i.placeholder));
+    assert!(d
+        .items
+        .iter()
+        .all(|i| i.evidence.is_none() && i.waiver.is_none()));
+    assert_eq!(d.locator_text(), None);
+}
+
+#[test]
+fn an_undeclared_pending_changes_nothing() {
+    let body = "- Replace this item with one criterion.\n- TODO\n";
+    let d = parse(body);
+    assert!(d.items.iter().all(|i| !i.placeholder));
+    assert!(d.issues.is_empty(), "{:?}", issues(&d));
+}
