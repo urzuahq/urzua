@@ -877,6 +877,130 @@ fn an_unchanged_protected_set_is_quiet_and_off_without_the_guardrail() {
     assert_eq!(post(&dir)["verdict"], "allow");
 }
 
+// ------------------------- a command that removes the gate on the configuration
+
+const SED_REMOVE_CONFIG: &str = "sed -i 's/, \".urzua\\/config.yaml\"//' .urzua/config.yaml";
+const SED_REMOVE_CLAUDE: &str = "sed -i 's/\".claude\", //' .urzua/config.yaml";
+
+fn lines_of(v: &serde_json::Value) -> Vec<String> {
+    v["protected_changes"]
+        .as_array()
+        .unwrap_or_else(|| panic!("no protected_changes: {v}"))
+        .iter()
+        .map(|l| l.as_str().unwrap().to_string())
+        .collect()
+}
+
+#[test]
+fn a_command_that_removes_the_configuration_from_its_own_gate_is_reported() {
+    let dir = fixture("config-self-removal", &config(""));
+    run_event(&dir, "session-start");
+    bash(&dir, SED_REMOVE_CONFIG);
+    let v = post(&dir);
+    assert_eq!(v["verdict"], "allow-with-warnings", "{v}");
+    let lines = lines_of(&v);
+    assert!(
+        lines.iter().any(|l| l.contains(".urzua/config.yaml")
+            && l.contains("[protected-paths]")
+            && l.contains("changed")),
+        "{v}"
+    );
+    assert!(
+        lines
+            .iter()
+            .any(|l| l.contains("protected set shrank") && l.contains(".urzua/config.yaml")),
+        "{v}"
+    );
+    // Reported once; the baseline moved.
+    assert_eq!(post(&dir)["verdict"], "allow", "{}", post(&dir));
+}
+
+#[test]
+fn the_removal_is_reported_when_git_is_told_to_ignore_the_configuration() {
+    for flag in ["--assume-unchanged", "--skip-worktree"] {
+        let dir = fixture("config-self-removal-hidden", &config(""));
+        run_event(&dir, "session-start");
+        git(&dir, &["update-index", flag, ".urzua/config.yaml"]);
+        bash(&dir, SED_REMOVE_CONFIG);
+        assert!(git(&dir, &["status", "--porcelain"]).trim().is_empty());
+        let v = post(&dir);
+        assert!(
+            lines_of(&v)
+                .iter()
+                .any(|l| l.contains(".urzua/config.yaml") && l.contains("changed")),
+            "{flag}: {v}"
+        );
+    }
+}
+
+#[test]
+fn removing_a_gate_and_editing_under_it_in_one_command_reports_both() {
+    let dir = fixture("gate-removal-and-edit", &config(""));
+    run_event(&dir, "session-start");
+    bash(
+        &dir,
+        &format!("{SED_REMOVE_CLAUDE} && echo '{{\"x\": 1}}' > .claude/settings.json"),
+    );
+    let lines = lines_of(&post(&dir));
+    assert!(
+        lines.iter().any(|l| l.contains(".claude/settings.json")),
+        "{lines:?}"
+    );
+    assert!(
+        lines
+            .iter()
+            .any(|l| l.contains(".urzua/config.yaml") && l.contains("changed")),
+        "{lines:?}"
+    );
+    assert!(
+        lines
+            .iter()
+            .any(|l| l.contains("protected set shrank") && l.contains(".claude")),
+        "{lines:?}"
+    );
+}
+
+#[test]
+fn a_gitignored_file_under_a_removed_gate_is_still_reported() {
+    let dir = ignored_fixture("gate-removal-ignored");
+    run_event(&dir, "session-start");
+    bash(
+        &dir,
+        &format!("{SED_REMOVE_CLAUDE} && echo x > .claude/settings.local.json"),
+    );
+    let lines = lines_of(&post(&dir));
+    assert!(
+        lines
+            .iter()
+            .any(|l| l.contains(".claude/settings.local.json")),
+        "{lines:?}"
+    );
+}
+
+#[test]
+fn session_start_reports_a_protected_set_that_shrank_before_it_reseeds() {
+    let dir = fixture("session-shrink", &config(""));
+    run_event(&dir, "session-start");
+    bash(&dir, SED_REMOVE_CONFIG);
+    let v = run_event(&dir, "session-start");
+    assert!(
+        v["message"]
+            .as_str()
+            .unwrap()
+            .contains("protected set shrank"),
+        "{v}"
+    );
+    // Reseeded: a later session does not repeat it.
+    let v = run_event(&dir, "session-start");
+    assert!(
+        !v["message"]
+            .as_str()
+            .unwrap()
+            .contains("protected set shrank"),
+        "{v}"
+    );
+}
+
 // ----------------------------------------------- Unicode case folding
 
 const UNICODE_TYPES: &str = "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/décisions\"\n    required_fields: [\"Status\"]\n    statuses:\n      values: [Proposed, Accepted, Rejected]\n";

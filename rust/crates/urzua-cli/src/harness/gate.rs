@@ -412,6 +412,26 @@ pub(super) fn protected_change_report(
     ))
 }
 
+/// The report line for a path the previous baseline protected through one of
+/// `baseline` (entries of the configuration as it was), for a gate the command
+/// removed. `None` when no baseline entry covers the path.
+pub(super) fn baseline_protected_report(
+    rel: &Path,
+    deleted: bool,
+    baseline: &[String],
+) -> Option<String> {
+    let folded = fold_path(&rel.to_string_lossy());
+    let entry = baseline
+        .iter()
+        .find(|e| rules::path_matches_entry(Path::new(&folded), &fold_path(e)))?;
+    Some(format!(
+        "  {} [protected-paths] error: the command {} a path the previous configuration protected (gate path '{}', no longer in the configuration). It was not prevented; CI's diff.decider-required checks who made it.",
+        rel.display(),
+        if deleted { "deleted" } else { "changed" },
+        entry
+    ))
+}
+
 /// What the raw configuration says about the gates when it does not load, read
 /// leniently so a broken file does not silently turn a denying gate into an
 /// allowing one (`ADR-89` section 3).

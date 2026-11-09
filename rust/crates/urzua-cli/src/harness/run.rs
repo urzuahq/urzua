@@ -1340,12 +1340,21 @@ fn session_start(config: Option<PathBuf>) -> Verdict {
         );
     }
     let harness = harness.expect("checked above");
+    let mut shrunk = None;
     if harness.enabled("post-command") {
         // The commit the first post-command check of the session starts from.
         super::post_command::seed_head(&ws.repo_root);
+        // Before the baseline is retaken from the configuration as it is now.
+        shrunk = super::post_command::protected_set_shrank(&ws.repo_root, &ws.config);
         super::post_command::seed_protected(&ws.repo_root, &ws.config_path, &ws.config);
     }
     let mut problems: Vec<Problem> = Vec::new();
+    if let Some(message) = shrunk {
+        problems.push(Problem {
+            check: "protected-paths",
+            message,
+        });
+    }
     for p in &harness.problems {
         problems.push(Problem {
             check: "config",
