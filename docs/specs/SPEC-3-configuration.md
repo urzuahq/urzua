@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.131'
+Version: '0.132'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:c1fbbe868c771bfabb448be195956f6be45465a4c627533419d7a9002d41955c, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:92a2b9ceca89133f30987a013734da66b9332c4e937a87e72e53571596e18093, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:3c8aa671582772499ab7345cdbfb5a4dc2c50462882851fb20f853992acfd57c
@@ -1054,7 +1054,7 @@ discovery:
 
 - **`include_untracked: true`** makes discovery include untracked, non-ignored files directly in a
   declared record directory (`dir` or any `extra_dirs` of a type) that the type owns, under the same
-  filename rules the loader applies (`.md`, not an `exclude_files` entry, not underscore-prefixed). It is
+  filename rules the loader applies (`.md` in any case, not an `exclude_files` entry, not underscore-prefixed). It is
   the choice of a repository that wants a record read before it is staged: a malformed draft is found
   before `git add`, and `files_examined` and `scope.untracked_included` count it. The price is that a
   scratch file in a record directory that looks like a record is governed: the author moves it, ignores
@@ -2418,3 +2418,4 @@ proves this configuration produces the three findings.
 > | 2026-11-09 | Bumped to `0.130`. Marks the stale-base sentence of `authority.decider_table` as accepted by the maintainer on 2026-11-09; states that under `outside_writes: deny` a nested plain repository or submodule is outside the session repository and under `shared` stays unjudged like a separate clone; a back-pointer rule's `ignore_marker` has its keywords and id heads removed whatever their case before the specificity check. **Why:** maintainer decision of 2026-11-09 on `ADR-89` accepted risk 13; the review of the outside-writes amendment; `implements:` and `adr` were accepted as specific markers though they sit on every back-pointer line. | **substantive** |
 > | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` dfce2332b3ce -> c1fbbe868c77. Reason: Read the diff of config.rs since the old pin and the claim still holds. The only change is in generic_marker_problem and validate_ignore_markers: a back-pointer ignore_marker has the back-pointer keywords and record id heads removed, and the keyword and id head containment checks made, case-insensitively, so implements:, IMPLEMENTS: ADR and adr alone are refused at load; plus new unit-test cases for those markers and for ADR-1 style markers that still load. Nothing this record evidences changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-09 | Bumped to `0.131`. Re-pin rows in this revision log were reworded to name who re-verified, matching the tool's wording since 2026-11-09; hashes, reasons and dates are unchanged. **Why:** Maintainer decision, 2026-11-09. | **structural** |
+> | 2026-11-09 | Bumped to `0.132`. The record file extension `.md` is matched in any case (`X.MD` is a record), so a case-insensitive filesystem cannot hide a record from discovery or the acceptance gate. **Why:** the sixth review of the harness. | **substantive** |

@@ -255,7 +255,20 @@ fn translator() -> PathBuf {
 /// The translator run the way the settings command runs it, with `engine` as the
 /// command after `--`.
 fn translate(dir: &Path, payload: &str, engine: &[&str]) -> serde_json::Value {
+    translate_home(dir, payload, engine, None)
+}
+
+/// [`translate`] with `HOME` set to `home`, for a path that starts with `~`.
+fn translate_home(
+    dir: &Path,
+    payload: &str,
+    engine: &[&str],
+    home: Option<&Path>,
+) -> serde_json::Value {
     let mut c = Command::new("python3");
+    if let Some(home) = home {
+        c.env("HOME", home);
+    }
     c.arg("-I")
         .arg(translator())
         .args(["edit", "--"])
@@ -1712,4 +1725,80 @@ fn an_unjudged_notice_names_urzua_once() {
         .unwrap();
     assert_eq!(reason.matches("urzua did NOT judge").count(), 1, "{reason}");
     assert!(!reason.contains("(urzua harness"), "{reason}");
+}
+
+// ============================================================ sixth pass
+
+#[test]
+fn an_mcp_path_starting_with_tilde_or_home_is_the_home_directory() {
+    // The project sits under HOME, as a filesystem MCP server would resolve it.
+    let dir = fixture("mcp-tilde", &config(""));
+    let home = dir.parent().unwrap().to_path_buf();
+    let name = dir.file_name().unwrap().to_string_lossy().to_string();
+    for spelled in [
+        format!("~/{name}/.claude/settings.json"),
+        format!("$HOME/{name}/.claude/settings.json"),
+        format!("${{HOME}}/{name}/.claude/./settings.json"),
+        format!("~/{name}/docs/../.claude/settings.json"),
+    ] {
+        let payload = mcp(
+            &dir,
+            "mcp__fs__write_file",
+            serde_json::json!({"path": spelled, "content": "{}"}),
+        );
+        let v = translate_home(&dir, &payload, &ENGINE, Some(&home));
+        assert_eq!(decision(&v), Some("deny"), "{spelled}: {v}");
+        // The same text in a list of paths.
+        let payload = mcp(
+            &dir,
+            "mcp__fs__move_file",
+            serde_json::json!({"source": "a.txt", "destination": spelled}),
+        );
+        let v = translate_home(&dir, &payload, &ENGINE, Some(&home));
+        assert_eq!(decision(&v), Some("deny"), "move to {spelled}: {v}");
+    }
+    // An ordinary file under the home directory stays allowed.
+    let payload = mcp(
+        &dir,
+        "mcp__fs__write_file",
+        serde_json::json!({"path": format!("~/{name}/notes.txt"), "content": "x"}),
+    );
+    let v = translate_home(&dir, &payload, &ENGINE, Some(&home));
+    assert_eq!(decision(&v), None, "{v}");
+}
+
+#[test]
+fn a_path_nested_under_a_content_key_is_judged_and_a_string_there_is_still_content() {
+    let dir = fixture("mcp-nested-content", &config(""));
+    let abs = |f: &str| dir.join(f).to_string_lossy().to_string();
+    for key in [
+        "data", "payload", "value", "body", "contents", "text", "content",
+    ] {
+        let as_dict = serde_json::json!({key: {"path": abs(".claude/x.json"), "content": "{}"}});
+        let as_list = serde_json::json!({key: [{"path": abs(".claude/x.json"), "content": "{}"}]});
+        for input in [as_dict, as_list] {
+            let v = translate(&dir, &mcp(&dir, "mcp__x__save", input.clone()), &ENGINE);
+            assert_eq!(decision(&v), Some("deny"), "{key}: {input}: {v}");
+        }
+        // A gated record's move nested the same way.
+        let input = serde_json::json!({key: {"path": abs(PATH_1), "content": ACCEPTED}});
+        let v = translate(&dir, &mcp(&dir, "mcp__x__save", input.clone()), &ENGINE);
+        assert_eq!(decision(&v), Some("deny"), "{key}: {input}: {v}");
+        // A string under the key is content, not a path to judge.
+        let input = serde_json::json!({"path": abs("notes.txt"), key: abs(".claude/x.json")});
+        let v = translate(&dir, &mcp(&dir, "mcp__x__save", input.clone()), &ENGINE);
+        assert_eq!(decision(&v), None, "{key}: {input}: {v}");
+    }
+}
+
+#[test]
+fn a_gated_record_with_an_upper_case_extension_is_judged_as_a_record() {
+    let dir = fixture("record-extension-case", &config(""));
+    for name in ["ADR-2-b.MD", "ADR-2-b.Md", "ADR-2-b.mD"] {
+        let (code, v) = run_edit(&dir, &format!("docs/adr/{name}"), ACCEPTED);
+        assert_eq!(code, 1, "{name}: {v}");
+        assert_eq!(v["verdict"], "block", "{name}: {v}");
+    }
+    let (code, v) = run_edit(&dir, "docs/adr/ADR-2-b.MD", PROPOSED);
+    assert_eq!(code, 0, "{v}");
 }

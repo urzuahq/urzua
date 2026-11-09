@@ -25,7 +25,7 @@ The editor hook covers Write, Edit, MultiEdit and NotebookEdit, and any MCP tool
 (`mcp__*`). For an MCP call it reads every path-like field, at any depth and in
 any list (`path`, `file`, `from`, `source`, `destination`, `uri` and the like, a
 `file:` URI included, whatever the case of its scheme and with one slash or
-three), and a key that is itself a path (`{"files": {"<path>": "<text>"}}`), and judges each one. An object with one path field and
+three; a `~` or `$HOME` at its start is the home directory), and a key that is itself a path (`{"files": {"<path>": "<text>"}}`), and judges each one. An object with one path field and
 a content field is judged as a write of that content to that path. A path that
 belongs to a call that looks like an edit, a move or a delete (an `edits` list,
 `old_string`, a tool name such as `edit_file`, `move_file` or `delete_file`) or
@@ -241,6 +241,20 @@ def words_of(text):
     return [w.lower() for w in re.findall(r"[A-Z]?[a-z]+|[A-Z]+(?![a-z])|[0-9]+", text)]
 
 
+def home_expanded(value):
+    """`value` with a leading `~`, `~/`, `$HOME` or `${HOME}` replaced by the home
+    directory, as the widely used filesystem MCP servers expand it before use, or
+    None when it starts with none of them or no home directory is known. `~user`
+    is not expanded."""
+    m = re.match(r"^(~|\$HOME|\$\{HOME\})(?=/|$)", value)
+    if not m:
+        return None
+    home = os.environ.get("HOME") or os.path.expanduser("~")
+    if not home or home == "~":
+        return None
+    return home + value[m.end():]
+
+
 def as_paths(value):
     """What a string names as a file, as (path, extras): `path` is the value a
     server would use once it trims surrounding whitespace and cuts a C string at
@@ -248,7 +262,9 @@ def as_paths(value):
     (the lexically normalised form a server such as Node's path.resolve uses, the
     text with its NULs removed), which are looked at only for a refusal. A
     `file://` URI is the path it carries; any other URL, and a string with a
-    newline inside it, are not paths. An over-long string is normalised first and
+    newline inside it, are not paths. A leading `~` or `$HOME` is the home
+    directory (the path read is the expanded one; the text as written is an extra
+    reading, a path below the working directory). An over-long string is normalised first and
     is a path only if that shortens it."""
     if not isinstance(value, str):
         return None, []
@@ -268,6 +284,10 @@ def as_paths(value):
             return None, []
     elif re.match(r"^[A-Za-z][A-Za-z0-9+.-]*://", value):
         return None, []
+    home = home_expanded(value)
+    if home is not None:
+        extras.append(posixpath.normpath(value))
+        value = home
     normal = posixpath.normpath(value)
     if len(value) > MCP_MAX_PATH:
         # Too long to be a path as written: only what it collapses to can be.
@@ -320,8 +340,13 @@ def mcp_scan(inp):
                         if p not in paths:
                             paths.append(p)
                 if k in MCP_CONTENT_KEYS:
-                    if isinstance(v, str) and content is None:
-                        content = v
+                    if isinstance(v, str):
+                        if content is None:
+                            content = v
+                    elif isinstance(v, (dict, list)):
+                        # Only a string is content: a structure under a content
+                        # key is walked like any other nested value.
+                        walk(v, depth + 1, False)
                     continue
                 if k in MCP_EDIT_KEYS:
                     partial = True

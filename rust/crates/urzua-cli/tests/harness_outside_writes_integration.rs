@@ -488,3 +488,21 @@ fn a_fresh_config_with_only_outside_writes_does_not_warn_that_the_harness_is_not
     let text = String::from_utf8_lossy(&out.stdout).to_string();
     assert!(text.contains("harness-installed"), "{text}");
 }
+
+#[test]
+fn shared_compares_a_record_with_the_worktrees_copy_not_the_sessions() {
+    let (parent, proj, old) = project("shared-before", "  outside_writes: shared\n");
+    let wt = worktree(&parent, &proj, &old);
+    // The session's copy is already Accepted; the worktree's is still Proposed.
+    std::fs::write(proj.join(ADR), ACCEPTED).unwrap();
+    assert_eq!(std::fs::read_to_string(wt.join(ADR)).unwrap(), PROPOSED);
+    let (code, v, _) = run_edit(&proj, &wt.join(ADR), ACCEPTED);
+    assert_eq!((code, verdict(&v)), (1, "block"), "{v}");
+    assert!(
+        v["message"].as_str().unwrap().contains("'Proposed'"),
+        "the move is from the worktree's status: {v}"
+    );
+    // Leaving the worktree's status where it is stays allowed.
+    let (code, v, _) = run_edit(&proj, &wt.join(ADR), PROPOSED);
+    assert_eq!(code, 0, "{v}");
+}
