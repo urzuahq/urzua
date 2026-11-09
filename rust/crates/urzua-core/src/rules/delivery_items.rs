@@ -657,6 +657,12 @@ pub fn status_waived_item_stale(
         .filter(|r| opted_in(&declared, &r.record_type))
         .collect();
     let mut findings = Vec::new();
+    let stale = StaleWaivers {
+        config,
+        index,
+        today,
+        declared: &declared,
+    };
     let (population, examined_records) = scoped_census_records(
         config,
         PopulationUnit::Record,
@@ -676,8 +682,7 @@ pub fn status_waived_item_stale(
                 let Some(waiver) = &standing.waived else {
                     continue;
                 };
-                let category = decl.category(&waiver.category);
-                let mut push = |message: String| {
+                for message in stale.reasons(standing, waiver, decl) {
                     findings.push(Finding {
                         rule: RULE_ID.to_string(),
                         severity: FindingSeverity::Warning,
@@ -698,40 +703,6 @@ pub fn status_waived_item_stale(
                             waiver.category
                         ),
                     });
-                };
-                if standing.resolved() {
-                    push("its evidence now resolves: remove the waiver".to_string());
-                }
-                if let (Some(cite), Some(category)) = (&waiver.cite, category) {
-                    let target = index.get(&crate::values::RecordId::new(cite));
-                    match target {
-                        None => push(format!("the cited record {cite} does not exist")),
-                        Some(target) if category.expires_required() => {
-                            let finished = declared.get(&target.record_type).is_some_and(|d| {
-                                let field = relation_field_name(
-                                    config,
-                                    &target.record_type,
-                                    crate::config::RelationRole::Status,
-                                );
-                                target
-                                    .header
-                                    .get(field)
-                                    .map(str::trim)
-                                    .is_some_and(|s| d.is_terminal(s))
-                            });
-                            if finished {
-                                push(format!(
-                                    "the deferral target {cite} is finished: evidence the item here, or re-point the cite"
-                                ));
-                            }
-                        }
-                        Some(_) => {}
-                    }
-                }
-                if let Some(date) = waiver.date.as_ref().filter(|_| waiver.is_expired(today)) {
-                    push(format!(
-                        "its expiry {date} has come: extend it with a new date, or resolve the item"
-                    ));
                 }
             }
             Outcome::Examined
@@ -746,6 +717,67 @@ pub fn status_waived_item_stale(
         },
         findings,
     )
+}
+
+/// What a waived item is judged against: the records its cite can name and
+/// the date its expiry is read at.
+struct StaleWaivers<'a> {
+    config: &'a Config,
+    index: &'a RecordIndex<'a>,
+    today: &'a str,
+    declared: &'a HashMap<String, StatusDecl>,
+}
+
+impl StaleWaivers<'_> {
+    /// Why a waiver no longer holds, in report order: its evidence resolves,
+    /// its cited target is missing or finished, its expiry has come.
+    fn reasons(
+        &self,
+        standing: &ItemStanding,
+        waiver: &done_items::Waiver,
+        decl: &done_items::ItemsDecl,
+    ) -> Vec<String> {
+        let mut reasons = Vec::new();
+        if standing.resolved() {
+            reasons.push("its evidence now resolves: remove the waiver".to_string());
+        }
+        if let (Some(cite), Some(category)) = (&waiver.cite, decl.category(&waiver.category)) {
+            match self.index.get(&crate::values::RecordId::new(cite)) {
+                None => reasons.push(format!("the cited record {cite} does not exist")),
+                Some(target) if category.expires_required() && self.is_finished(target) => {
+                    reasons.push(format!(
+                        "the deferral target {cite} is finished: evidence the item here, or re-point the cite"
+                    ));
+                }
+                Some(_) => {}
+            }
+        }
+        if let Some(date) = waiver
+            .date
+            .as_ref()
+            .filter(|_| waiver.is_expired(self.today))
+        {
+            reasons.push(format!(
+                "its expiry {date} has come: extend it with a new date, or resolve the item"
+            ));
+        }
+        reasons
+    }
+
+    fn is_finished(&self, target: &Record) -> bool {
+        self.declared.get(&target.record_type).is_some_and(|d| {
+            let field = relation_field_name(
+                self.config,
+                &target.record_type,
+                crate::config::RelationRole::Status,
+            );
+            target
+                .header
+                .get(field)
+                .map(str::trim)
+                .is_some_and(|s| d.is_terminal(s))
+        })
+    }
 }
 
 fn record_label(record: &Record) -> String {

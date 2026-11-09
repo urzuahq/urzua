@@ -267,25 +267,17 @@ fn parse_yaml_frontmatter(content: &str) -> Header {
     let content = content.strip_prefix('\u{feff}').unwrap_or(content);
     let mut lines = content.lines();
     let Some(first) = lines.next() else {
-        return Header {
-            fields: Vec::new(),
-            region: None,
-            parse_error: None,
-        };
+        return header_without_region(None);
     };
     if first.trim_end() != "---" {
         // A removed form is named, not mistaken for a record with no header
         // (MILE-85): the rule reporting the unreadable header carries this.
-        return Header {
-            fields: Vec::new(),
-            region: None,
-            parse_error: legacy_header_form(content).map(|form| {
-                format!(
-                    "the header is written as a {form} ({}), a form urzua no longer reads; rewrite it as YAML frontmatter (`---` ... `---` at the top of the file)",
-                    if form == "blockquote" { "`> Key: value`" } else { "`- **Key:** value`" }
-                )
-            }),
-        };
+        return header_without_region(legacy_header_form(content).map(|form| {
+            format!(
+                "the header is written as a {form} ({}), a form urzua no longer reads; rewrite it as YAML frontmatter (`---` ... `---` at the top of the file)",
+                if form == "blockquote" { "`> Key: value`" } else { "`- **Key:** value`" }
+            )
+        }));
     }
 
     let mut yaml_text = String::new();
@@ -301,11 +293,7 @@ fn parse_yaml_frontmatter(content: &str) -> Header {
     }
 
     let Some(closing_line) = closing_line else {
-        return Header {
-            fields: Vec::new(),
-            region: None,
-            parse_error: None,
-        };
+        return header_without_region(None);
     };
 
     // Unlike the two early returns above ("no anchor line matched at all"),
@@ -317,25 +305,35 @@ fn parse_yaml_frontmatter(content: &str) -> Header {
     let mapping = match parsed {
         Ok(yaml_serde::Value::Mapping(mapping)) => mapping,
         Ok(_) => {
-            return Header {
-                fields: Vec::new(),
-                region: None,
-                parse_error: Some(
-                    "YAML parse error: frontmatter must be a mapping of key: value pairs"
-                        .to_string(),
-                ),
-            };
+            return header_without_region(Some(
+                "YAML parse error: frontmatter must be a mapping of key: value pairs".to_string(),
+            ));
         }
         Err(e) => {
-            return Header {
-                fields: Vec::new(),
-                region: None,
-                parse_error: Some(format!("YAML parse error: {e}")),
-            };
+            return header_without_region(Some(format!("YAML parse error: {e}")));
         }
     };
 
-    let fields = mapping
+    Header {
+        fields: frontmatter_fields(&yaml_text, &mapping),
+        region: Some((1, closing_line)),
+        parse_error: None,
+    }
+}
+
+/// A header with no fields and no region, carrying why it could not be read.
+fn header_without_region(parse_error: Option<String>) -> Header {
+    Header {
+        fields: Vec::new(),
+        region: None,
+        parse_error,
+    }
+}
+
+/// The top-level keys of a frontmatter mapping, each with the source text of
+/// its value and the line it sits on.
+fn frontmatter_fields(yaml_text: &str, mapping: &yaml_serde::Mapping) -> Vec<HeaderField> {
+    mapping
         .iter()
         .map(|(key, value)| {
             // A non-string key (`1: x`, `true: x`) keeps its stringified form
@@ -344,9 +342,9 @@ fn parse_yaml_frontmatter(content: &str) -> Header {
                 yaml_serde::Value::Null => "null".to_string(),
                 other => stringify_yaml_value(other),
             };
-            let line = find_key_line(&yaml_text, &key);
+            let line = find_key_line(yaml_text, &key);
             let value = line
-                .and_then(|line| scalar_source_text(&yaml_text, line, value))
+                .and_then(|line| scalar_source_text(yaml_text, line, value))
                 .unwrap_or_else(|| stringify_yaml_value(value));
             HeaderField {
                 key: crate::values::FieldName::new(key),
@@ -354,13 +352,7 @@ fn parse_yaml_frontmatter(content: &str) -> Header {
                 line: line.unwrap_or(2),
             }
         })
-        .collect();
-
-    Header {
-        fields,
-        region: Some((1, closing_line)),
-        parse_error: None,
-    }
+        .collect()
 }
 
 /// Best-effort line lookup for a top-level YAML key, for diagnostics only --

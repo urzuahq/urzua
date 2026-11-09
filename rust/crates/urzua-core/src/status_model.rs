@@ -630,29 +630,7 @@ fn validate_items(
             if required.is_empty() { "none".to_string() } else { required.join(", ") }
         ));
     }
-    for (what, value) in [
-        ("clause_separator", &items.clause_separator),
-        ("evidence_marker", &items.evidence_marker),
-        ("waiver_marker", &items.waiver_marker),
-    ] {
-        if value.trim().is_empty() {
-            return Err(format!("`{key}.{what}` is blank"));
-        }
-    }
-    if items.evidence_marker == items.waiver_marker {
-        return Err(format!(
-            "`{key}.evidence_marker` and `{key}.waiver_marker` are both '{}'",
-            items.evidence_marker
-        ));
-    }
-    if items.evidence_marker.starts_with(&items.waiver_marker)
-        || items.waiver_marker.starts_with(&items.evidence_marker)
-    {
-        return Err(format!(
-            "`{key}`: one of the markers '{}' and '{}' is a prefix of the other, so a clause could not be told apart",
-            items.evidence_marker, items.waiver_marker
-        ));
-    }
+    validate_item_markers(items)?;
     if !d.declares(&items.partial_status) {
         return Err(format!(
             "`{key}.partial_status` names '{}', which is not in `values`",
@@ -690,6 +668,43 @@ fn validate_items(
     if let Some(kind) = &items.kind {
         validate_kind(rt, delivery, kind, embodiment)?;
     }
+    validate_waiver_categories(items)
+}
+
+/// The clause markers: none blank, and none a prefix of the other, so a clause
+/// can be told apart.
+fn validate_item_markers(items: &crate::done_items::ItemsDecl) -> Result<(), String> {
+    let key = "delivery.items";
+    for (what, value) in [
+        ("clause_separator", &items.clause_separator),
+        ("evidence_marker", &items.evidence_marker),
+        ("waiver_marker", &items.waiver_marker),
+    ] {
+        if value.trim().is_empty() {
+            return Err(format!("`{key}.{what}` is blank"));
+        }
+    }
+    if items.evidence_marker == items.waiver_marker {
+        return Err(format!(
+            "`{key}.evidence_marker` and `{key}.waiver_marker` are both '{}'",
+            items.evidence_marker
+        ));
+    }
+    if items.evidence_marker.starts_with(&items.waiver_marker)
+        || items.waiver_marker.starts_with(&items.evidence_marker)
+    {
+        return Err(format!(
+            "`{key}`: one of the markers '{}' and '{}' is a prefix of the other, so a clause could not be told apart",
+            items.evidence_marker, items.waiver_marker
+        ));
+    }
+    Ok(())
+}
+
+/// The waiver categories: named plainly, listed once, and a category that
+/// expires also cites its target.
+fn validate_waiver_categories(items: &crate::done_items::ItemsDecl) -> Result<(), String> {
+    let key = "delivery.items";
     let mut seen = std::collections::BTreeSet::new();
     for c in &items.waiver_categories {
         if c.name.trim().is_empty() {

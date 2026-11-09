@@ -202,29 +202,8 @@ pub fn published_path_reference(
     config: &Config,
     config_path: &std::path::Path,
 ) -> (RuleExecution, Vec<Finding>) {
-    const RULE_ID: &str = RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE;
     let prefixes = declared_prefixes(config);
     let mut findings = Vec::new();
-    let reason_note = |b: &ResolvedBoundary| {
-        b.reason
-            .as_deref()
-            .map_or(String::new(), |r| format!(" (declared because: {r})"))
-    };
-    let finding = |b: &ResolvedBoundary,
-                   file: &std::path::Path,
-                   line: Option<usize>,
-                   message: String,
-                   source: ActionSource| Finding {
-        rule: RULE_ID.to_string(),
-        severity: b.severity,
-        file: file.to_path_buf(),
-        line,
-        message,
-        waived: None,
-        declared_severity: Some(b.severity),
-        suggested_action: None,
-        action_source: source,
-    };
 
     // Files are not records, so none is offered to `records_read_by_any_rule`:
     // that number counts records, and a published source file inflating it
@@ -233,7 +212,7 @@ pub fn published_path_reference(
         // Every boundary judging the file; a file under none is out of scope.
         let covering: Vec<&ResolvedBoundary> =
             boundaries.iter().filter(|b| b.judges(&file.path)).collect();
-        let Some(first) = covering.first() else {
+        if covering.is_empty() {
             // Excused by every boundary covering it: eligible and unexamined,
             // never out of scope, which `config.scope-matches-nothing` would
             // read as a declaration that reaches nothing (the diff rules'
@@ -243,68 +222,105 @@ pub fn published_path_reference(
             } else {
                 Outcome::OutOfScope
             };
-        };
+        }
         let Some(content) = &file.content else {
             return Outcome::Unreadable;
         };
+        let scan = FileScan {
+            path: &file.path,
+            covering: &covering,
+            prefixes: &prefixes,
+            ignore_marker,
+        };
+        scan.scan(content, &mut findings);
+        // A vendored boundary declares the path and prohibits nothing, so a
+        // file only it covers was not judged: eligible, not examined.
+        if covering.iter().any(|b| b.kind != BoundaryKind::Vendored) {
+            Outcome::Examined
+        } else {
+            Outcome::Absent
+        }
+    });
+
+    findings.extend(boundary_declaration_findings(
+        files,
+        boundaries,
+        config_path,
+    ));
+
+    (
+        RuleExecution {
+            rule: RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE.to_string(),
+            population: Some(population),
+            status: RuleStatus::Ran,
+            examined_records: Vec::new(),
+        },
+        findings,
+    )
+}
+
+/// A finding of the boundary rule, at the boundary's own severity.
+fn boundary_finding(
+    b: &ResolvedBoundary,
+    file: &std::path::Path,
+    line: Option<usize>,
+    message: String,
+    source: ActionSource,
+) -> Finding {
+    Finding {
+        rule: RULE_BOUNDARY_PUBLISHED_PATH_REFERENCE.to_string(),
+        severity: b.severity,
+        file: file.to_path_buf(),
+        line,
+        message,
+        waived: None,
+        declared_severity: Some(b.severity),
+        suggested_action: None,
+        action_source: source,
+    }
+}
+
+fn boundary_reason_note(b: &ResolvedBoundary) -> String {
+    b.reason
+        .as_deref()
+        .map_or(String::new(), |r| format!(" (declared because: {r})"))
+}
+
+/// Overlapping boundaries can each report the same citation on one line; one
+/// finding per citation is kept, at the highest severity.
+fn keep_highest(here: &mut Vec<(String, Finding)>, key: String, f: Finding) {
+    match here.iter_mut().find(|(k, _)| *k == key) {
+        Some((_, kept)) => {
+            if f.severity.rank() > kept.severity.rank() {
+                *kept = f;
+            }
+        }
+        None => here.push((key, f)),
+    }
+}
+
+/// One judged file read line by line: the boundaries judging it and the
+/// declared inputs every line is read against.
+struct FileScan<'a> {
+    path: &'a std::path::Path,
+    covering: &'a [&'a ResolvedBoundary],
+    prefixes: &'a [String],
+    ignore_marker: Option<&'a str>,
+}
+
+impl FileScan<'_> {
+    fn scan(&self, content: &str, findings: &mut Vec<Finding>) {
+        // The caller found at least one boundary judging the file.
+        let first = self.covering[0];
         for (idx, line) in content.lines().enumerate() {
             let line_no = idx + 1;
-            // Overlapping boundaries can each report the same citation on this
-            // line; one finding per citation is kept, at the highest severity.
-            let mut here: Vec<(String, Finding)> = Vec::new();
-            let mut keep = |key: String, f: Finding| match here.iter_mut().find(|(k, _)| *k == key)
-            {
-                Some((_, kept)) => {
-                    if f.severity.rank() > kept.severity.rank() {
-                        *kept = f;
-                    }
-                }
-                None => here.push((key, f)),
-            };
-            for b in &covering {
-                match b.kind {
-                    BoundaryKind::Published => {
-                        let entry = b.entry_for(&file.path);
-                        for identifier in cited_identifiers(line, &prefixes) {
-                            keep(format!("cite {identifier}"), finding(
-                                b,
-                                &file.path,
-                                Some(line_no),
-                                format!(
-                                    "cites {identifier}, a record identifier no reader outside the \
-                                     repository can resolve, from inside the published path '{entry}'{}",
-                                    reason_note(b)
-                                ),
-                                ActionSource::new("published-path-reference"),
-                            ));
-                        }
-                    }
-                    BoundaryKind::Generated => {
-                        let entry = b.entry_for(&file.path);
-                        for marker in [MARKER_IMPLEMENTS, MARKER_VERIFIES] {
-                            for pointer in scan_marker_line(line, &prefixes, marker) {
-                                keep(format!("pointer {marker} {pointer}"), finding(
-                                    b,
-                                    &file.path,
-                                    Some(line_no),
-                                    format!(
-                                        "carries the back-pointer '{marker} {pointer}' inside the generated path '{entry}', where a human-authored marker is overwritten{}",
-                                        reason_note(b)
-                                    ),
-                                    ActionSource::new("generated-back-pointer"),
-                                ));
-                            }
-                        }
-                    }
-                    BoundaryKind::Vendored => {}
-                }
-            }
-            match ignore_marker {
+            let here = self.line_findings(line, line_no);
+            match self.ignore_marker {
                 Some(marker) if line_carries_ignore_marker(line, marker) => {
                     if here.is_empty() {
-                        findings.push(finding(
+                        findings.push(boundary_finding(
                             first,
-                            &file.path,
+                            self.path,
                             Some(line_no),
                             format!(
                                 "the ignore marker '{marker}' suppresses nothing: no boundary finding is on this line; remove the marker"
@@ -316,19 +332,83 @@ pub fn published_path_reference(
                 _ => findings.extend(here.into_iter().map(|(_, f)| f)),
             }
         }
-        // A vendored boundary declares the path and prohibits nothing, so a
-        // file only it covers was not judged: eligible, not examined.
-        if covering.iter().any(|b| b.kind != BoundaryKind::Vendored) {
-            Outcome::Examined
-        } else {
-            Outcome::Absent
-        }
-    });
+    }
 
-    // A prohibition fails closed (ADR-9): an entry covering no judged file
-    // leaves the rule nothing to judge, which is indistinguishable from
-    // compliance unless it is said. Usually a directory renamed or removed
-    // under the declaration, or every file under it excluded.
+    fn line_findings(&self, line: &str, line_no: usize) -> Vec<(String, Finding)> {
+        let mut here: Vec<(String, Finding)> = Vec::new();
+        for b in self.covering {
+            match b.kind {
+                BoundaryKind::Published => self.published_citations(b, line, line_no, &mut here),
+                BoundaryKind::Generated => self.generated_pointers(b, line, line_no, &mut here),
+                BoundaryKind::Vendored => {}
+            }
+        }
+        here
+    }
+
+    fn published_citations(
+        &self,
+        b: &ResolvedBoundary,
+        line: &str,
+        line_no: usize,
+        here: &mut Vec<(String, Finding)>,
+    ) {
+        let entry = b.entry_for(self.path);
+        for identifier in cited_identifiers(line, self.prefixes) {
+            keep_highest(
+                here,
+                format!("cite {identifier}"),
+                boundary_finding(
+                    b,
+                    self.path,
+                    Some(line_no),
+                    format!(
+                        "cites {identifier}, a record identifier no reader outside the \
+                     repository can resolve, from inside the published path '{entry}'{}",
+                        boundary_reason_note(b)
+                    ),
+                    ActionSource::new("published-path-reference"),
+                ),
+            );
+        }
+    }
+
+    fn generated_pointers(
+        &self,
+        b: &ResolvedBoundary,
+        line: &str,
+        line_no: usize,
+        here: &mut Vec<(String, Finding)>,
+    ) {
+        let entry = b.entry_for(self.path);
+        for marker in [MARKER_IMPLEMENTS, MARKER_VERIFIES] {
+            for pointer in scan_marker_line(line, self.prefixes, marker) {
+                keep_highest(here, format!("pointer {marker} {pointer}"), boundary_finding(
+                    b,
+                    self.path,
+                    Some(line_no),
+                    format!(
+                        "carries the back-pointer '{marker} {pointer}' inside the generated path '{entry}', where a human-authored marker is overwritten{}",
+                        boundary_reason_note(b)
+                    ),
+                    ActionSource::new("generated-back-pointer"),
+                ));
+            }
+        }
+    }
+}
+
+/// A prohibition fails closed (ADR-9): an entry covering no judged file
+/// leaves the rule nothing to judge, which is indistinguishable from
+/// compliance unless it is said. Usually a directory renamed or removed
+/// under the declaration, or every file under it excluded. An exclusion
+/// matching no file inside its own boundary excuses nothing.
+fn boundary_declaration_findings(
+    files: &[PublishedFile],
+    boundaries: &[ResolvedBoundary],
+    config_path: &std::path::Path,
+) -> Vec<Finding> {
+    let mut findings = Vec::new();
     for b in boundaries {
         for entry in &b.paths {
             let judged = files
@@ -351,11 +431,11 @@ pub fn published_path_reference(
                         "{} boundary path '{entry}' covers no tracked file that is not excluded, so nothing under it was \
                          checked; correct the path{}",
                         b.kind.as_str(),
-                        reason_note(b)
+                        boundary_reason_note(b)
                     ),
                 ),
             };
-            findings.push(finding(
+            findings.push(boundary_finding(
                 b,
                 std::path::Path::new(entry),
                 None,
@@ -365,7 +445,6 @@ pub fn published_path_reference(
                     .key_path(b.config_key("paths")),
             ));
         }
-        // An exclusion matching no file inside its own boundary excuses nothing.
         for entry in &b.exclude {
             if files
                 .iter()
@@ -373,14 +452,14 @@ pub fn published_path_reference(
             {
                 continue;
             }
-            findings.push(finding(
+            findings.push(boundary_finding(
                 b,
                 std::path::Path::new(entry),
                 None,
                 format!(
                     "exclude entry '{entry}' of the {} boundary matches no tracked file inside it, so it excuses nothing; remove the entry or correct the path{}",
                     b.kind.as_str(),
-                    reason_note(b)
+                    boundary_reason_note(b)
                 ),
                 ActionSource::new("boundary-exclude-unused")
                     .file(config_path)
@@ -389,16 +468,7 @@ pub fn published_path_reference(
             ));
         }
     }
-
-    (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records: Vec::new(),
-        },
-        findings,
-    )
+    findings
 }
 
 /// The record identifiers a back-pointer comment on `line` cites with `marker`:
