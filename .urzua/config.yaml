@@ -621,6 +621,9 @@ authority:
   # Who may decide is read from the base revision of the pull request, so a pull request cannot add
   # its author to a group in the change it asks to have approved (ADR-89, amendment of 2026-11-09).
   decider_table: base
+  # No waiver record can silence diff.decider-required: a gated change is cleared by a decider, not
+  # by a record the same pull request writes (ADR-89, amendment of 2026-11-09, gate waivers).
+  waivable: never
   deciders:
     maintainers: {logins: [beauwilliams]}
   gates:

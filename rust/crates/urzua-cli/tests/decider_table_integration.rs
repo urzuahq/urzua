@@ -311,7 +311,20 @@ fn a_run_with_no_base_says_the_head_table_is_used_under_base_and_both() {
         let cfg = config(&format!("  decider_table: {mode}\n"), "Alice", GATES);
         let dir = fixture(&format!("no-base-{mode}"), Some(&cfg));
         std::fs::write(dir.join(CONFIG), &cfg).unwrap();
-        let v = json(&run(&dir, &["check"]));
+        // A plain local check has nothing for the rule to judge: no notice.
+        let plain = json(&run(&dir, &["check"]));
+        assert!(
+            !plain["notices"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default()
+                .iter()
+                .any(|n| n["message"].as_str().unwrap_or("").contains("no --base")),
+            "{mode}: {plain}"
+        );
+        // `--actors` without `--base` names who made a change there is no base for.
+        let file = actors(&dir, "mallory", &[]);
+        let v = json(&run(&dir, &["check", "--actors", &file]));
         let notices = v["notices"].as_array().unwrap();
         assert!(
             notices
@@ -510,4 +523,140 @@ fn doctor_says_an_authority_with_no_gates_is_declared_but_gates_nothing() {
         .contains("declared, no gates"));
     let gated = doctor(&config(BASE, "Alice", GATES), "doctor-gates");
     assert_eq!(gated["status"], "ok", "{gated}");
+}
+
+const WAIVER_TYPES: &str = "  waiver:\n    dir: \"docs/waiver\"\n";
+const ADR_GATE: &str = "  gates:\n    - {type: adr, to: [Accepted, Rejected], by: maintainers}\n";
+const WAIVER_PATH: &str = "docs/waiver/WAIVER-9-x.md";
+const WAIVER: &str = "---\nRule: diff.decider-required\nScope: docs/adr/ADR-1-a.md\nReason: accepted\nExpires: 2099-12-31\n---\n# WAIVER-9: x\n";
+
+fn waiver_config(extra: &str) -> String {
+    format!(
+        "{TYPES}{WAIVER_TYPES}authority:\n{extra}  deciders:\n    maintainers: {{logins: [Alice]}}\n{ADR_GATE}"
+    )
+}
+
+/// The PR moves the record to Accepted as `mallory` and, when `add_waiver`,
+/// adds the waiver in the same change. `base_waiver` commits it at the base.
+fn waiver_pr(
+    name: &str,
+    base_cfg: &str,
+    head_cfg: &str,
+    base_waiver: bool,
+    add_waiver: bool,
+) -> (serde_json::Value, Option<i32>) {
+    let dir = common::TempDir::new(&format!("urzua-waivable-{name}"));
+    for d in ["docs/adr", "docs/waiver", ".urzua"] {
+        std::fs::create_dir_all(dir.join(d)).unwrap();
+    }
+    git(&dir, &["init", "-q"]);
+    git(&dir, &["config", "user.email", "t@example.com"]);
+    git(&dir, &["config", "user.name", "t"]);
+    std::fs::write(dir.join(PATH_1), PROPOSED).unwrap();
+    std::fs::write(dir.join(CONFIG), base_cfg).unwrap();
+    if base_waiver {
+        std::fs::write(dir.join(WAIVER_PATH), WAIVER).unwrap();
+    }
+    git(&dir, &["add", "-A"]);
+    git(&dir, &["commit", "-q", "-m", "base"]);
+    std::fs::write(dir.join(CONFIG), head_cfg).unwrap();
+    std::fs::write(dir.join(PATH_1), ACCEPTED).unwrap();
+    if add_waiver {
+        std::fs::write(dir.join(WAIVER_PATH), WAIVER).unwrap();
+        git(&dir, &["add", WAIVER_PATH]);
+    }
+    let file = actors(&dir, "mallory", &[]);
+    let out = run(&dir, &["check", "--base", "HEAD", "--actors", &file]);
+    (json(&out), out.status.code())
+}
+
+#[test]
+fn a_waiver_added_in_the_pull_request_clears_the_gate_under_any_and_undeclared() {
+    for extra in ["", "  decider_table: base\n  waivable: any\n"] {
+        let cfg = waiver_config(extra);
+        let (v, code) = waiver_pr("any", &cfg, &cfg, false, true);
+        assert_eq!(code, Some(0), "{extra:?}: {v}");
+        assert_eq!(findings(&v).len(), 1, "{v}");
+        assert!(!findings(&v)[0]["waived"].is_null(), "{v}");
+    }
+}
+
+#[test]
+fn a_waiver_added_in_the_pull_request_does_not_clear_the_gate_under_base_or_never() {
+    for w in ["base", "never"] {
+        let cfg = waiver_config(&format!("  decider_table: base\n  waivable: {w}\n"));
+        let (v, code) = waiver_pr(&format!("pr-{w}"), &cfg, &cfg, false, true);
+        assert_eq!(code, Some(1), "{w}: {v}");
+        assert!(findings(&v)[0]["waived"].is_null(), "{w}: {v}");
+        assert!(
+            v["notices"].as_array().unwrap().iter().any(|n| n["message"]
+                .as_str()
+                .unwrap()
+                .contains("authority.waivable")),
+            "{w}: {v}"
+        );
+    }
+}
+
+#[test]
+fn a_waiver_the_base_already_holds_still_waives_under_base_but_not_never() {
+    let base = waiver_config("  decider_table: base\n  waivable: base\n");
+    let (v, code) = waiver_pr("held-base", &base, &base, true, false);
+    assert_eq!(code, Some(0), "{v}");
+    let never = waiver_config("  decider_table: base\n  waivable: never\n");
+    let (v, code) = waiver_pr("held-never", &never, &never, true, false);
+    assert_eq!(code, Some(1), "{v}");
+}
+
+#[test]
+fn a_pull_request_cannot_loosen_waivable_by_editing_the_key() {
+    let base = waiver_config("  decider_table: base\n  waivable: never\n");
+    for head_extra in [
+        "  decider_table: base\n  waivable: any\n",
+        "  decider_table: base\n",
+    ] {
+        let head = waiver_config(head_extra);
+        let (v, code) = waiver_pr("loosen", &base, &head, false, true);
+        assert_eq!(code, Some(1), "{head_extra:?}: {v}");
+    }
+}
+
+#[test]
+fn the_pull_request_cannot_drop_require_evidence_at_the_same_level() {
+    let base = config(BASE, "Alice", GATES).replace(
+        "diff.decider-required: error",
+        "diff.decider-required: {level: error, require_evidence: true}",
+    );
+    let head = config(BASE, "Alice", GATES);
+    let dir = fixture("evidence-dropped", Some(&base));
+    std::fs::write(dir.join(CONFIG), &head).unwrap();
+    std::fs::write(dir.join(PATH_1), ACCEPTED).unwrap();
+    // No actors file: with the option kept this is an error, and must stay one.
+    let out = run(&dir, &["check", "--base", "HEAD"]);
+    let v = json(&out);
+    assert_eq!(severities(&v), ["error", "error"], "{v}");
+    assert_eq!(out.status.code(), Some(1), "{v}");
+}
+
+#[test]
+fn doctor_warns_on_an_undeclared_waivable_and_on_an_ungated_config() {
+    let doctor = |cfg: &str, name: &str, check: &str| {
+        let dir = fixture(name, Some(cfg));
+        let v = json(&run(&dir, &["doctor"]));
+        v["checks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["check"] == check)
+            .cloned()
+    };
+    let loose = waiver_config(BASE);
+    let w = doctor(&loose, "doc-waivable", "authority-waivable").expect("a check");
+    assert_eq!(w["status"], "warn", "{w}");
+    let c = doctor(&loose, "doc-config", "authority-config-gated").expect("a check");
+    assert_eq!(c["status"], "warn", "{c}");
+    let gated = config("  decider_table: base\n  waivable: never\n", "Alice", GATES);
+    let w = doctor(&gated, "doc-waivable-ok", "authority-waivable").expect("a check");
+    assert_eq!(w["status"], "ok", "{w}");
+    assert!(doctor(&gated, "doc-config-ok", "authority-config-gated").is_none());
 }

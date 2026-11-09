@@ -1378,6 +1378,35 @@ fn authority_checks(config: &urzua_core::config::Config) -> Vec<(Level, &'static
             "authority gates are declared but authority.decider_table is not, so the table is read from the pull request's own head and a pull request can add its author to a decider group in the same change; declare `decider_table: base` so who may decide is read from the base revision".to_string(),
         ));
     }
+    if has_gates && authority.is_some_and(|a| a.waivable.is_none()) {
+        out.push((
+            Level::Warn,
+            "authority-waivable",
+            "authority gates are declared but authority.waivable is not, so a waiver record in the same pull request can silence diff.decider-required and a non-decider can accept a record; declare `waivable: never` (or `base`)".to_string(),
+        ));
+    } else if let Some(w) = authority.and_then(|a| a.waivable) {
+        out.push((
+            Level::Ok,
+            "authority-waivable",
+            format!("authority.waivable is '{}'", w.as_str()),
+        ));
+    }
+    const CONFIG_FILE: &str = ".urzua/config.yaml";
+    if has_gates
+        && !authority.is_some_and(|a| {
+            a.gates.iter().any(|g| {
+                g.paths.iter().any(|e| {
+                    urzua_core::rules::path_matches_entry(std::path::Path::new(CONFIG_FILE), e)
+                })
+            })
+        })
+    {
+        out.push((
+            Level::Warn,
+            "authority-config-gated",
+            format!("authority gates are declared but no path gate lists {CONFIG_FILE}, so a pull request can edit the configuration (exclude_files, dir, relation fields) and accept a record without a decider; add {CONFIG_FILE} to a path gate"),
+        ));
+    }
     if !rule_on && has_gates {
         out.push((
             Level::Warn,

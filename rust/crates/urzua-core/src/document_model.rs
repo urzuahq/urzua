@@ -94,7 +94,7 @@ impl CompiledIdentity {
     /// Reads a file name (with or without `.md`). A name the pattern does not
     /// match, or whose `number` is not all ASCII digits, has no number.
     pub fn identify(&self, file_name: &str) -> DeclaredIdentity {
-        let stem = file_name.strip_suffix(".md").unwrap_or(file_name);
+        let stem = crate::record::strip_md_extension(file_name).unwrap_or(file_name);
         let Some(caps) = self.regex.captures(stem) else {
             return DeclaredIdentity::default();
         };
