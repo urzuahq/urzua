@@ -6382,6 +6382,7 @@ record_types:
             "urzua:allow",
             "example-only",
             "record-id-ok",
+            "nocite",
             "ok!x",
             "Implements: ADR-1",
         ] {
