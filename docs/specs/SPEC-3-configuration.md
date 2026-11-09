@@ -1,9 +1,9 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.121'
+Version: '0.122'
 Date: 2026-08-20
 Status: Shipped
-Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:20203e6012242d88f80f6c8b86a74b96a02db16c1afb99391b3c8814d9245681, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:92a2b9ceca89133f30987a013734da66b9332c4e937a87e72e53571596e18093, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:3c8aa671582772499ab7345cdbfb5a4dc2c50462882851fb20f853992acfd57c
+Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:921027c81b7ecf7d56c357dd548fa28c47c785c7cd322c261c14e0b46626b296, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:92a2b9ceca89133f30987a013734da66b9332c4e937a87e72e53571596e18093, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:3c8aa671582772499ab7345cdbfb5a4dc2c50462882851fb20f853992acfd57c
 Embodiment: Verified
 Author: beauwilliams
 Subject: '`.urzua/config.yaml` -- the schema for record types, required/known fields, and per-type behavior.'
@@ -1172,7 +1172,7 @@ rules:
   (prefixes or globs) remove paths from that boundary's violation check only; the excluded files
   stay in the population as eligible and unexamined, not out of scope, so
   `config.scope-matches-nothing` does not read a deliberate exclusion as an unreachable boundary. The declared `ignore_marker` text excuses the single line it appears
-  on and no other. The engine compiles in no marker.
+  on and no other. The engine compiles in no marker. A back-pointer rule's marker (`embodiment.back-pointer-resolution`, `embodiment.back-pointer-decision-accepted`) is refused at load when it would sit on every back-pointer line: fewer than 3 non-whitespace characters, no letter or digit (`//`, `#`), part of a back-pointer keyword (`Implements:`, `Verifies:`), or part of a declared record id head (`ADR-` for a type with prefix `ADR`). `ADR-1` or `urzua:allow` load.
 - **Nothing declared may match nothing silently.** Each of these is a finding at the boundary's
   severity: a `paths` entry covering no tracked file that is not excluded, an `exclude` entry
   matching no tracked file inside its own boundary, and an `ignore_marker` use on a line where
@@ -2357,3 +2357,5 @@ proves this configuration produces the three findings.
 > | 2026-11-08 | Bumped to `0.119`. Documents `ignore_marker` on `embodiment.back-pointer-resolution` and `embodiment.back-pointer-decision-accepted`: the boundary rule's option reused as one marker for both rules and the evidence collector (differing values are a load error), excusing the whole line (not reported, not judged, not evidence), a load-time guard against a marker inside a back-pointer keyword, disclosure as `excused_lines` and an `info` notice in `check`, `fix` and `reverify`, and an unused marker reported once per line; opt-in. **Why:** `ADR-80` amendment of 2026-11-08, accepted by the maintainer. | **substantive** |
 > | 2026-11-08 | Bumped to `0.120`. States that `urzua check` reports an unknown `harness` key, or an unknown key inside a guardrail, as a warning notice. **Why:** the `ADR-89` amendment of 2026-11-07 keeps these "reported, not an error", but only `harness install`, `doctor` and the session hook read them; a typo such as `enabeld` left the guardrail off while `check` was silent. | **substantive** |
 > | 2026-11-08 | Bumped to `0.121`. Documents `statuses.delivery.items.pending`, an optional placeholder vocabulary for Done-means items in the shape of `statuses.pending`. **Why:** `ADR-96` amendment of 2026-11-08 (placeholder items). | **substantive** |
+> | 2026-11-09 | Bumped to `0.122`. A back-pointer rule's `ignore_marker` is also refused at load when it has fewer than 3 non-whitespace characters, has no letter or digit, or is part of a declared record id head such as `ADR-`. **Why:** tightens the guard of the 2026-11-08 amendment, which refused only text inside a back-pointer keyword; `//`, `#` or `ADR-` loaded and excused every back-pointer line. | **substantive** |
+> | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 20203e601224 -> 921027c81b7e. Reason: config.rs: read the diff since the previous pin; it adds generic_marker_problem and its call in validate_ignore_markers (a back-pointer ignore_marker shorter than 3 characters, with no letter or digit, or inside a record id head is refused at load) plus its test; this adds the guard this record now documents (0.122 row above), and no other claim changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |

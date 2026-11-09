@@ -372,123 +372,150 @@ pub(crate) fn locator_defect(
     entry: &crate::locator::LocatorEntry,
     field: &str,
     env: &LocatorEnv<'_>,
-) -> Option<(&'static str, String)> {
-    use crate::config::LocatorKind;
-    use crate::locator::{self, Anchor, FileText, ScopeError};
-    const RULE_ID: &str = RULE_EMBODIMENT_LOCATOR_EXISTS;
-    let LocatorEnv {
-        config,
-        opts,
-        tracked,
-        present,
-        read,
-        untracked_on_disk,
-        records: _,
-    } = env;
-    macro_rules! defect {
-        ($variant:expr, $message:expr $(,)?) => {
-            return Some(($variant, $message))
-        };
-    }
+) -> Option<LocatorDefect> {
+    use crate::locator;
     let l = match &entry.parsed {
         Ok(l) => l,
         Err(e) => {
-            defect!(
+            return Some((
                 "locator-malformed",
                 format!(
                     "{field} names '{}', which does not parse: {e} (grammar: {})",
                     entry.raw,
                     locator::GRAMMAR
                 ),
-            );
+            ));
         }
     };
     // An empty locator joins to the repository root, which exists --
     // so it would pass while still computing to `Implemented`.
     if l.path.trim().is_empty() {
-        defect!("locator-empty", format!("{field} has an empty locator"));
+        return Some(("locator-empty", format!("{field} has an empty locator")));
     }
-    let matched = match locator::match_locator_files(&l.path, tracked, present) {
-        Ok(m) => m,
-        Err(e) => {
-            defect!(
-                "locator-malformed",
-                format!(
-                    "{field} names '{}', whose glob {e} (grammar: {})",
-                    l.path,
-                    locator::GRAMMAR
-                ),
-            );
-        }
+    let (kind, matched_any) = match locator_kind(l, field, env) {
+        Ok(found) => found,
+        Err(defect) => return Some(defect),
     };
+    locator_kind_defect(l, field, env, kind, matched_any)
+        .or_else(|| locator_scope_defect(l, field, env, kind))
+}
+
+/// The finding variant and message of a locator that points at nothing.
+pub(crate) type LocatorDefect = (&'static str, String);
+
+/// The kind of file set a locator's path names, and whether any tracked file
+/// matched it, or why the path points at nothing in the working tree.
+fn locator_kind(
+    l: &crate::locator::Locator,
+    field: &str,
+    env: &LocatorEnv<'_>,
+) -> Result<(crate::config::LocatorKind, bool), LocatorDefect> {
+    use crate::locator;
+    let matched = locator::match_locator_files(&l.path, env.tracked, env.present).map_err(|e| {
+        (
+            "locator-malformed",
+            format!(
+                "{field} names '{}', whose glob {e} (grammar: {})",
+                l.path,
+                locator::GRAMMAR
+            ),
+        )
+    })?;
     let Some(kind) = matched.kind else {
         // A `#` that did not parse as a scope stayed in the path: it
         // is a malformed scope, not a file missing from the tree.
-        if l.path.contains('#') {
-            defect!("locator-malformed", format!(
+        return Err(if l.path.contains('#') {
+            ("locator-malformed", format!(
                     "{field} names '{}', whose text after `#` is not a scope and which is not a file in the working tree (grammar: {})",
                     l.path,
                     locator::GRAMMAR
-                ));
-        } else if untracked_on_disk(&l.path) {
-            defect!(
+                ))
+        } else if (env.untracked_on_disk)(&l.path) {
+            (
                 "locator-untracked",
                 format!(
                     "{field} names '{}', which exists on disk but is not tracked by git",
                     l.path
                 ),
-            );
+            )
         } else {
-            defect!(
+            (
                 "locator-missing",
                 format!(
                     "{field} names '{}', which is not in the working tree",
                     l.path
                 ),
-            );
-        }
+            )
+        });
     };
-    // BUG-176: which kinds are legal, and which can be pinned, is config
+    Ok((kind, !matched.files.is_empty()))
+}
+
+/// BUG-176: which kinds are legal, and which can be pinned, is config; and a
+/// glob has to match something, and an anchor has to be a pin.
+fn locator_kind_defect(
+    l: &crate::locator::Locator,
+    field: &str,
+    env: &LocatorEnv<'_>,
+    kind: crate::config::LocatorKind,
+    matched_any: bool,
+) -> Option<LocatorDefect> {
+    use crate::config::LocatorKind;
+    use crate::locator::{Anchor, ScopeError};
+    const RULE_ID: &str = RULE_EMBODIMENT_LOCATOR_EXISTS;
+    let opts = &env.opts;
     if !opts.locator_kinds.contains(&kind) {
-        defect!(
-                "locator-kind-undeclared",
-                format!(
-                    "{field} names '{}', a {kind} locator, and `{RULE_ID}` does not accept that kind: add `{kind}` to its `locator_kinds` option, or name a file",
-                    l.path
-                ),
-            );
+        return Some((
+            "locator-kind-undeclared",
+            format!(
+                "{field} names '{}', a {kind} locator, and `{RULE_ID}` does not accept that kind: add `{kind}` to its `locator_kinds` option, or name a file",
+                l.path
+            ),
+        ));
     }
-    if kind != LocatorKind::File && matched.files.is_empty() {
-        defect!(
+    if kind != LocatorKind::File && !matched_any {
+        return Some((
             "locator-missing",
             format!(
                 "{field} names '{}', a glob that matches no tracked file in the working tree",
                 l.path
             ),
-        );
+        ));
     }
     if matches!(l.anchor, Some(Anchor::Commit(_))) {
-        defect!(
+        return Some((
             "locator-commit-anchor",
             format!(
                 "{field} names '{}': {}",
                 l.display(),
                 ScopeError::CommitAnchor
             ),
-        );
+        ));
     }
     if matches!(l.anchor, Some(Anchor::Pin(_))) && !opts.pinnable.contains(&kind) {
-        defect!(
-                "locator-kind-unpinnable",
-                format!(
-                    "{field} names '{}' with a pin, and `{RULE_ID}` does not allow a {kind} locator to be pinned: add `{kind}` to its `pinnable` option, or remove the pin",
-                    l.display()
-                ),
-            );
+        return Some((
+            "locator-kind-unpinnable",
+            format!(
+                "{field} names '{}' with a pin, and `{RULE_ID}` does not allow a {kind} locator to be pinned: add `{kind}` to its `pinnable` option, or remove the pin",
+                l.display()
+            ),
+        ));
     }
-    let Some(scope) = &l.scope else { return None };
+    None
+}
+
+/// A locator's `#scope` has to resolve in the file it names, and be pinned.
+fn locator_scope_defect(
+    l: &crate::locator::Locator,
+    field: &str,
+    env: &LocatorEnv<'_>,
+    kind: crate::config::LocatorKind,
+) -> Option<LocatorDefect> {
+    use crate::config::LocatorKind;
+    use crate::locator::{self, FileText, ScopeError};
+    let scope = l.scope.as_ref()?;
     if kind != LocatorKind::File {
-        defect!(
+        return Some((
             "locator-scope-unresolved",
             format!(
                 "{field} names '{}', whose scope does not resolve: {}",
@@ -497,10 +524,10 @@ pub(crate) fn locator_defect(
                     "a scope applies to one file, and this locator names a {kind}"
                 ))
             ),
-        );
+        ));
     }
-    let resolved = match &*read(&l.path) {
-        FileText::Text(text) => locator::select_resolver(&config.locator_resolvers, &l.path)
+    let resolved = match &*(env.read)(&l.path) {
+        FileText::Text(text) => locator::select_resolver(&env.config.locator_resolvers, &l.path)
             .and_then(|resolver| locator::resolve_scope(text, resolver, scope)),
         FileText::NotUtf8 => Err(ScopeError::NotUtf8),
         FileText::Missing => Err(ScopeError::NotFound(
@@ -508,19 +535,17 @@ pub(crate) fn locator_defect(
         )),
     };
     match resolved {
-            Err(e) => defect!("locator-scope-unresolved", format!(
-                "{field} names '{}', whose scope does not resolve: {e}",
-                l.display()
-            )),
-            Ok(_) if l.anchor.is_none() => defect!("locator-scope-unpinned", format!(
-                "{field} names '{}': scope given without a pin; drift is judged on the whole file (add `@sha256:` from `urzua explain {}`)",
-                l.display(),
-                l.display()
-            )),
-            Ok(_) => {}
-        }
-
-    None
+        Err(e) => Some(("locator-scope-unresolved", format!(
+            "{field} names '{}', whose scope does not resolve: {e}",
+            l.display()
+        ))),
+        Ok(_) if l.anchor.is_none() => Some(("locator-scope-unpinned", format!(
+            "{field} names '{}': scope given without a pin; drift is judged on the whole file (add `@sha256:` from `urzua explain {}`)",
+            l.display(),
+            l.display()
+        ))),
+        Ok(_) => None,
+    }
 }
 
 /// Rule (ADR-0018/ADR-0032): a record's stated `Embodiment` must agree with
@@ -551,13 +576,20 @@ pub fn embodiment_consistency(
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_EMBODIMENT_CONSISTENCY;
     let mut findings = Vec::new();
-    let max_age = config.rules.get(RULE_ID).and_then(|s| s.claim_max_age_days);
-    let sticky = sticky_states(config);
-    let audit_field = config
-        .rules
-        .get(RULE_ID)
-        .and_then(|s| s.drift_audit_field.as_deref())
-        .map(str::trim);
+    let judge = ConsistencyJudge {
+        config,
+        drifted,
+        fresh_drift,
+        back_pointed,
+        claim_age_days,
+        max_age: config.rules.get(RULE_ID).and_then(|s| s.claim_max_age_days),
+        sticky: sticky_states(config),
+        audit_field: config
+            .rules
+            .get(RULE_ID)
+            .and_then(|s| s.drift_audit_field.as_deref())
+            .map(str::trim),
+    };
 
     // The candidate is the *pair*: the rule needs both fields, so a record
     // carrying only one of them is handed to the rule and reaches no verdict.
@@ -576,117 +608,7 @@ pub fn embodiment_consistency(
         PopulationUnit::Field,
         slots,
         |record| *record,
-        |record| {
-            let state_field = relation_field_name(
-                config,
-                &record.record_type,
-                crate::config::RelationRole::EmbodimentState,
-            );
-            let locator_field = relation_field_name(
-                config,
-                &record.record_type,
-                crate::config::RelationRole::EmbodimentLocator,
-            );
-            let stated = match declared_value(record, state_field) {
-                Ok(v) => v,
-                Err(outcome) => return outcome,
-            };
-            // A sticky state is a human's, and no evidence can reproduce it
-            // (`MILE-148`): examined, and neither disagreement nor age applies.
-            if sticky.contains(stated.trim()) {
-                return Outcome::Examined;
-            }
-            // A malformed last-audit date is reported, never ignored: the grace
-            // window falls back to the file's last change for this record
-            // (`MILE-166`).
-            if let Some(field) = audit_field {
-                if let Ok(value) = declared_value(record, field) {
-                    if let Err(problem) = date_unix(value) {
-                        findings.push(Finding {
-                            rule: RULE_ID.to_string(),
-                            severity: FindingSeverity::Warning,
-                            file: record.path.clone(),
-                            line: None,
-                            waived: None,
-                            declared_severity: None,
-                            suggested_action: None,
-                            action_source: ActionSource::new("last-audit-date-invalid").field(field),
-                            message: format!(
-                                "last-audit field {field} value '{}' {problem}, so drift_grace_days counts from the cited file's last change for this record",
-                                value.trim()
-                            ),
-                        });
-                    }
-                }
-            }
-            let cited_by_code = back_pointed.code.contains(&record.path);
-            let cited_by_test = back_pointed.test.contains(&record.path);
-            // A missing `Realized-by` is judged when a back-pointer cites the
-            // record (`MILE-149`), or when the record states a tier that no
-            // evidence of either kind supports (`MILE-161`); one stating no
-            // tier stays unexamined, and an unreadable header is never judged.
-            let claims_a_tier = config.embodiment.claims_built(stated.trim());
-            let realized_by_value = match evidence_value(record, locator_field) {
-                Ok(v) => Some(v),
-                Err(Outcome::Absent) if cited_by_code || cited_by_test || claims_a_tier => None,
-                Err(outcome) => return outcome,
-            };
-
-            let computed = compute_embodiment(
-                &config.embodiment,
-                &realized_by_value
-                    .as_deref()
-                    .map(parse_realized_by)
-                    .unwrap_or_default(),
-                drifted.contains(&record.path),
-                cited_by_code,
-                cited_by_test,
-            );
-            let evidence = evidence_description(
-                locator_field,
-                realized_by_value.is_some(),
-                cited_by_code,
-                cited_by_test,
-            );
-            // Fresh drift (`drift_grace_days`) only holds back reporting: a
-            // record that already says `Drift detected` is right, not wrong.
-            let agrees_with_fresh_drift =
-                fresh_drift.contains(&record.path) && config.embodiment.is_drift(stated.trim());
-            if stated.trim() != computed && !agrees_with_fresh_drift {
-                findings.push(Finding {
-                    rule: RULE_ID.to_string(),
-                    severity: FindingSeverity::Warning,
-                    file: record.path.clone(),
-                    line: None,
-                    waived: None,
-                    declared_severity: None,
-                    suggested_action: None,
-                    action_source: if realized_by_value.is_some() || cited_by_code || cited_by_test { ActionSource::new("embodiment-drift").argv(["urzua", "fix", "--apply", "--ids", &record.path.display().to_string()]) } else { ActionSource::new("embodiment-unevidenced").field(state_field) },
-                    message: format!(
-                    "stated {state_field} '{}' disagrees with '{computed}', computed from {evidence}",
-                    stated.trim()
-                ),
-                });
-            }
-            if let (Some(max), Some(age)) = (max_age, claim_age_days.get(&record.path)) {
-                if *age > u64::from(max) {
-                    findings.push(Finding {
-                        rule: RULE_ID.to_string(),
-                        severity: FindingSeverity::Warning,
-                        file: record.path.clone(),
-                        line: None,
-                        waived: None,
-                        declared_severity: None,
-                        suggested_action: None,
-                        action_source: ActionSource::new("claim-too-old"),
-                        message: format!(
-                            "stated {state_field} was last verified {age} days ago, longer than the configured claim_max_age_days of {max}"
-                        ),
-                    });
-                }
-            }
-            Outcome::Examined
-        },
+        |record| judge.judge(record, &mut findings),
     );
 
     (
@@ -698,6 +620,170 @@ pub fn embodiment_consistency(
         },
         findings,
     )
+}
+
+/// What `embodiment.consistency` judges every record against: the caller's
+/// precomputed history and evidence, and the rule's own options.
+struct ConsistencyJudge<'a> {
+    config: &'a Config,
+    drifted: &'a HashSet<PathBuf>,
+    fresh_drift: &'a HashSet<PathBuf>,
+    back_pointed: &'a BackPointerEvidence,
+    claim_age_days: &'a HashMap<PathBuf, u64>,
+    max_age: Option<u32>,
+    sticky: HashSet<&'a str>,
+    audit_field: Option<&'a str>,
+}
+
+impl ConsistencyJudge<'_> {
+    fn judge(&self, record: &Record, findings: &mut Vec<Finding>) -> Outcome {
+        let config = self.config;
+        let state_field = relation_field_name(
+            config,
+            &record.record_type,
+            crate::config::RelationRole::EmbodimentState,
+        );
+        let locator_field = relation_field_name(
+            config,
+            &record.record_type,
+            crate::config::RelationRole::EmbodimentLocator,
+        );
+        let stated = match declared_value(record, state_field) {
+            Ok(v) => v,
+            Err(outcome) => return outcome,
+        };
+        // A sticky state is a human's, and no evidence can reproduce it
+        // (`MILE-148`): examined, and neither disagreement nor age applies.
+        if self.sticky.contains(stated.trim()) {
+            return Outcome::Examined;
+        }
+        findings.extend(self.audit_date_finding(record));
+        let cited_by_code = self.back_pointed.code.contains(&record.path);
+        let cited_by_test = self.back_pointed.test.contains(&record.path);
+        // A missing `Realized-by` is judged when a back-pointer cites the
+        // record (`MILE-149`), or when the record states a tier that no
+        // evidence of either kind supports (`MILE-161`); one stating no
+        // tier stays unexamined, and an unreadable header is never judged.
+        let claims_a_tier = config.embodiment.claims_built(stated.trim());
+        let realized_by_value = match evidence_value(record, locator_field) {
+            Ok(v) => Some(v),
+            Err(Outcome::Absent) if cited_by_code || cited_by_test || claims_a_tier => None,
+            Err(outcome) => return outcome,
+        };
+
+        let computed = compute_embodiment(
+            &config.embodiment,
+            &realized_by_value
+                .as_deref()
+                .map(parse_realized_by)
+                .unwrap_or_default(),
+            self.drifted.contains(&record.path),
+            cited_by_code,
+            cited_by_test,
+        );
+        let evidence = evidence_description(
+            locator_field,
+            realized_by_value.is_some(),
+            cited_by_code,
+            cited_by_test,
+        );
+        // Fresh drift (`drift_grace_days`) only holds back reporting: a
+        // record that already says `Drift detected` is right, not wrong.
+        let agrees_with_fresh_drift =
+            self.fresh_drift.contains(&record.path) && config.embodiment.is_drift(stated.trim());
+        if stated.trim() != computed && !agrees_with_fresh_drift {
+            let has_evidence = realized_by_value.is_some() || cited_by_code || cited_by_test;
+            findings.push(disagreement_finding(
+                record,
+                state_field,
+                stated.trim(),
+                computed,
+                &evidence,
+                has_evidence,
+            ));
+        }
+        findings.extend(self.claim_age_finding(record, state_field));
+        Outcome::Examined
+    }
+
+    /// A malformed last-audit date is reported, never ignored: the grace
+    /// window falls back to the file's last change for this record
+    /// (`MILE-166`).
+    fn audit_date_finding(&self, record: &Record) -> Option<Finding> {
+        let field = self.audit_field?;
+        let value = declared_value(record, field).ok()?;
+        let problem = date_unix(value).err()?;
+        Some(Finding {
+            rule: RULE_EMBODIMENT_CONSISTENCY.to_string(),
+            severity: FindingSeverity::Warning,
+            file: record.path.clone(),
+            line: None,
+            waived: None,
+            declared_severity: None,
+            suggested_action: None,
+            action_source: ActionSource::new("last-audit-date-invalid").field(field),
+            message: format!(
+                "last-audit field {field} value '{}' {problem}, so drift_grace_days counts from the cited file's last change for this record",
+                value.trim()
+            ),
+        })
+    }
+
+    /// A claim older than `claim_max_age_days` draws a warning in addition to
+    /// any disagreement.
+    fn claim_age_finding(&self, record: &Record, state_field: &str) -> Option<Finding> {
+        let (max, age) = (self.max_age?, self.claim_age_days.get(&record.path)?);
+        if *age <= u64::from(max) {
+            return None;
+        }
+        Some(Finding {
+            rule: RULE_EMBODIMENT_CONSISTENCY.to_string(),
+            severity: FindingSeverity::Warning,
+            file: record.path.clone(),
+            line: None,
+            waived: None,
+            declared_severity: None,
+            suggested_action: None,
+            action_source: ActionSource::new("claim-too-old"),
+            message: format!(
+                "stated {state_field} was last verified {age} days ago, longer than the configured claim_max_age_days of {max}"
+            ),
+        })
+    }
+}
+
+/// The stated tier disagrees with what the evidence computes to.
+fn disagreement_finding(
+    record: &Record,
+    state_field: &str,
+    stated: &str,
+    computed: &str,
+    evidence: &str,
+    has_evidence: bool,
+) -> Finding {
+    Finding {
+        rule: RULE_EMBODIMENT_CONSISTENCY.to_string(),
+        severity: FindingSeverity::Warning,
+        file: record.path.clone(),
+        line: None,
+        waived: None,
+        declared_severity: None,
+        suggested_action: None,
+        action_source: if has_evidence {
+            ActionSource::new("embodiment-drift").argv([
+                "urzua",
+                "fix",
+                "--apply",
+                "--ids",
+                &record.path.display().to_string(),
+            ])
+        } else {
+            ActionSource::new("embodiment-unevidenced").field(state_field)
+        },
+        message: format!(
+            "stated {state_field} '{stated}' disagrees with '{computed}', computed from {evidence}"
+        ),
+    }
 }
 
 /// The `Embodiment` values the repository declares as set by a human and not
@@ -762,18 +848,7 @@ pub fn embodiment_locator_promotion_candidate(
     config: &Config,
     scope: Option<&ChangedOnly>,
 ) -> (RuleExecution, Vec<Finding>) {
-    const RULE_ID: &str = RULE_EMBODIMENT_LOCATOR_PROMOTION_CANDIDATE;
-    let mut findings = Vec::new();
-
-    let mut citers: std::collections::BTreeMap<
-        String,
-        std::collections::BTreeSet<std::path::PathBuf>,
-    > = std::collections::BTreeMap::new();
-    // `scope: changed`: the citers that are changed records, per locator.
-    let mut changed_citers: std::collections::BTreeMap<
-        String,
-        std::collections::BTreeSet<std::path::PathBuf>,
-    > = std::collections::BTreeMap::new();
+    let mut citers = LocatorCiters::default();
 
     let slots = declared_slots_for_roles(
         records,
@@ -806,20 +881,7 @@ pub fn embodiment_locator_promotion_candidate(
                 .chain(parsed.code.iter())
                 .chain(parsed.test.iter())
             {
-                // A BTreeSet, not a Vec: the same record citing one locator
-                // under both `code:` and `test:` is still one record, not two
-                // independent citers -- cross-record duplication is what needs
-                // promotion, not cross-category duplication within one record.
-                citers
-                    .entry(locator.clone())
-                    .or_default()
-                    .insert(record.path.clone());
-                if scope.is_some_and(|s| !s.defers(record)) {
-                    changed_citers
-                        .entry(locator.clone())
-                        .or_default()
-                        .insert(record.path.clone());
-                }
+                citers.cite(locator, record, scope);
             }
             // `scope: changed` (`ADR-90`): the slot is eligible and counted as a
             // citer above, and not judged for a record the diff did not change.
@@ -830,51 +892,82 @@ pub fn embodiment_locator_promotion_candidate(
         },
     );
 
-    for (locator, paths) in citers {
-        if paths.len() < 2 {
-            continue;
-        }
-        let names: Vec<String> = paths.iter().map(|p| p.display().to_string()).collect();
-        // Under `scope: changed` (`ADR-90` amendment, point 5) one finding sits on
-        // each changed citer, so `check <path>` and a file-scoped waiver see the
-        // finding on the record they examine; a locator no changed record cites
-        // is not reported. Without the option, one finding on the first citer.
-        let anchors: Vec<std::path::PathBuf> = if scope.is_some() {
-            changed_citers
-                .get(&locator)
-                .map(|c| c.iter().cloned().collect())
-                .unwrap_or_default()
-        } else {
-            vec![paths.iter().next().expect("checked len >= 2 above").clone()]
-        };
-        for anchor in anchors {
-            findings.push(Finding {
-                rule: RULE_ID.to_string(),
-                severity: FindingSeverity::Warning,
-                file: anchor,
-                line: None,
-                waived: None,
-                declared_severity: None,
-                suggested_action: None,
-                action_source: ActionSource::new("locator-promotion-candidate"),
-                message: format!(
-                    "locator '{locator}' is cited by {} records ({}) -- consider promoting to a shared claim record",
-                    paths.len(),
-                    names.join(", ")
-                ),
-            });
-        }
-    }
-
     (
         RuleExecution {
-            rule: RULE_ID.to_string(),
+            rule: RULE_EMBODIMENT_LOCATOR_PROMOTION_CANDIDATE.to_string(),
             population: Some(population),
             status: RuleStatus::Ran,
             examined_records,
         },
-        findings,
+        citers.promotion_findings(scope.is_some()),
     )
+}
+
+/// Every record citing each locator, and under `scope: changed` the citers
+/// that are changed records, per locator.
+#[derive(Default)]
+struct LocatorCiters {
+    all: std::collections::BTreeMap<String, std::collections::BTreeSet<std::path::PathBuf>>,
+    changed: std::collections::BTreeMap<String, std::collections::BTreeSet<std::path::PathBuf>>,
+}
+
+impl LocatorCiters {
+    fn cite(&mut self, locator: &str, record: &Record, scope: Option<&ChangedOnly>) {
+        // A BTreeSet, not a Vec: the same record citing one locator
+        // under both `code:` and `test:` is still one record, not two
+        // independent citers -- cross-record duplication is what needs
+        // promotion, not cross-category duplication within one record.
+        self.all
+            .entry(locator.to_string())
+            .or_default()
+            .insert(record.path.clone());
+        if scope.is_some_and(|s| !s.defers(record)) {
+            self.changed
+                .entry(locator.to_string())
+                .or_default()
+                .insert(record.path.clone());
+        }
+    }
+
+    fn promotion_findings(self, scoped: bool) -> Vec<Finding> {
+        let mut findings = Vec::new();
+        for (locator, paths) in self.all {
+            if paths.len() < 2 {
+                continue;
+            }
+            let names: Vec<String> = paths.iter().map(|p| p.display().to_string()).collect();
+            // Under `scope: changed` (`ADR-90` amendment, point 5) one finding sits on
+            // each changed citer, so `check <path>` and a file-scoped waiver see the
+            // finding on the record they examine; a locator no changed record cites
+            // is not reported. Without the option, one finding on the first citer.
+            let anchors: Vec<std::path::PathBuf> = if scoped {
+                self.changed
+                    .get(&locator)
+                    .map(|c| c.iter().cloned().collect())
+                    .unwrap_or_default()
+            } else {
+                vec![paths.iter().next().expect("checked len >= 2 above").clone()]
+            };
+            for anchor in anchors {
+                findings.push(Finding {
+                    rule: RULE_EMBODIMENT_LOCATOR_PROMOTION_CANDIDATE.to_string(),
+                    severity: FindingSeverity::Warning,
+                    file: anchor,
+                    line: None,
+                    waived: None,
+                    declared_severity: None,
+                    suggested_action: None,
+                    action_source: ActionSource::new("locator-promotion-candidate"),
+                    message: format!(
+                        "locator '{locator}' is cited by {} records ({}) -- consider promoting to a shared claim record",
+                        paths.len(),
+                        names.join(", ")
+                    ),
+                });
+            }
+        }
+        findings
+    }
 }
 
 /// Rule (`MILE-138`): a record whose `Status` is not an accepted status cannot

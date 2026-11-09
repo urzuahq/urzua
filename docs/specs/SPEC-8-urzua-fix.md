@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5Q0XVK27P5T8FN72BN
-Version: '0.41'
+Version: '0.42'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/commands/fix.rs@sha256:9e52be4749a2a8d1e9895e8e762a7ea7ab282410652c04a718fd848fb32b38a6, code:rust/crates/urzua-core/src/fix.rs@sha256:bfd53b872aaaadb6b649a6fbd20f8798d09a9ba040b7e41dcb0d555479e76178, test:rust/crates/urzua-cli/tests/fix_paths_integration.rs@sha256:73cb06a1782f02abeaf6c0795632ed1d1939633d72f67033247120656c6927d2, test:rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs@sha256:27c91b75ad614811aa87db203bafedcadf05c64de434957d0859e2af55659bf0, test:rust/crates/urzua-cli/tests/fix_drift_integration.rs@sha256:ff69343ca324400bde79c266372f9a213728d4d4ef8202beca6e12e54aa35352
+Realized-by: code:rust/crates/urzua-cli/src/commands/fix.rs@sha256:9e52be4749a2a8d1e9895e8e762a7ea7ab282410652c04a718fd848fb32b38a6, code:rust/crates/urzua-core/src/fix.rs@sha256:98b3bebce0fdefa0a6c345b56bda9115993cd64628665992fa8bf21e2370e2a4, test:rust/crates/urzua-cli/tests/fix_paths_integration.rs@sha256:73cb06a1782f02abeaf6c0795632ed1d1939633d72f67033247120656c6927d2, test:rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs@sha256:27c91b75ad614811aa87db203bafedcadf05c64de434957d0859e2af55659bf0, test:rust/crates/urzua-cli/tests/fix_drift_integration.rs@sha256:ff69343ca324400bde79c266372f9a213728d4d4ef8202beca6e12e54aa35352
 Author: beauwilliams
 Subject: '`urzua fix` -- detecting and applying Embodiment corrections computed from evidence.'
 Implements: ADR-15, ADR-18, ADR-19, ADR-20
@@ -292,7 +292,7 @@ the same `PATHS` scoping.
   `structural` revision row names who attested (`RFC-25`: attribution, not cryptographic
   attestation), the identity source and the actor kind, the old and new hash prefixes and the reason:
   `Re-baselined (attested by NAME, identity: SOURCE, actor: ACTOR): re-pinned ...`, with the same
-  optional `, verified login: LOGIN`. Earlier rows, `Re-baselined (attested by NAME): ...`, are left
+  optional `, verified login: LOGIN`. The row ends `**Why:** the pinned evidence changed and ... re-verified that the claim still holds`, naming who re-verified by the actor kind: `an agent`, to be confirmed by a reviewer in the PR, for `agent`; `a person` for `human`; `the attesting actor` for `unspecified`. Earlier rows, `Re-baselined (attested by NAME): ...`, are left
   as they are.
 - **The record is the selector.** All of a record's stale pins move together; per-locator selection
   is not offered. A second run finds nothing to re-pin.
@@ -486,3 +486,5 @@ asserted by test, not assumed by convention.
 > | 2026-11-08 | Bumped to `0.40`. The pins this spec's `Realized-by` holds on files this change touched were re-baselined (the `Re-baselined` row above); no behaviour this spec describes changed. | **structural** |
 > | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/fix.rs` ac3b642b2a4a -> 9e52be4749a2, `rust/crates/urzua-core/src/fix.rs` 13699787830d -> bfd53b872aaa. Reason: Re-pinned after checking the delta in each pinned file against what this record evidences: commands/fix.rs: split run into run_checked, check_usage, select_scope, detect_repairs_in, apply_repairs, write_repair and authority_refusal, and run_rebaseline into rebaseline_checked, apply_rebaselines and write_rebaseline, with RebaselineArgs and ReportParts replacing two #[allow(clippy::too_many_arguments)] parameter lists; main's #444 excused-evidence notice (excused_evidence_notice, with_excused_notice applied to the unevidenced notices in detect_repairs_in) and #445 detail: None are carried in the split code; core fix.rs: split detect_repairs into the RepairScan methods embodiment and status, and detect_rebaselines into stale_pins and stale_item_lines; main's #445 detail: None on the two unevidenced notices is carried. Behaviour unchanged, outputs byte-identical (check, check --base origin/main, fix, fix --rebaseline, reverify, reverify --as-of 2027-06-01 and --help stdout, stderr and exit compared against a binary built from origin/main). **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
 > | 2026-11-08 | Bumped to `0.41`. The pins this spec's `Realized-by` holds on files split under the SPEC-22 function bound were re-baselined (the `Re-baselined` row above); no behaviour this spec describes changed. | **structural** |
+> | 2026-11-09 | Bumped to `0.42`. The `Why` of a `Re-baselined` row names who re-verified by the actor kind (an agent, a person, or the attesting actor) instead of always saying a reviewer did. Earlier rows are unchanged. **Why:** an agent's re-pin read as if a reviewer had already re-verified the claim, which it had not; the row now says what the attestation records. | **substantive** |
+> | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/fix.rs` bfd53b872aaa -> 98b3bebce0fd. Reason: fix.rs: read the diff since the previous pin; it adds Attestation::rebaseline_why and uses it for the Why text of the re-baseline revision row (worded by actor kind) plus its test; nothing this record's claim covers changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |

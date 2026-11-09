@@ -2536,6 +2536,31 @@ pub fn parse(content: &str) -> Result<Config, ConfigError> {
     parse_with_document_models(content).map(|(config, _)| config)
 }
 
+/// Why a back-pointer `ignore_marker` is too generic to excuse one line, or `None`.
+/// The marker excuses its whole line, so text that sits on every back-pointer line
+/// would excuse them all: under three non-whitespace characters, no letter or digit
+/// (comment leaders and punctuation such as `//`, `#`), or part of a declared record
+/// id head (`ADR-` for a type whose prefix is `ADR`).
+fn generic_marker_problem(config: &Config, marker: &str) -> Option<String> {
+    if marker.chars().filter(|c| !c.is_whitespace()).count() < 3 {
+        return Some(format!(
+            "'{marker}' is shorter than 3 non-whitespace characters and would match almost every back-pointer line; declare a specific text"
+        ));
+    }
+    if !marker.chars().any(char::is_alphanumeric) {
+        return Some(format!(
+            "'{marker}' is only comment leaders or punctuation and would match every back-pointer line; declare text with letters or digits"
+        ));
+    }
+    crate::rules::declared_prefixes(config)
+        .into_iter()
+        .map(|prefix| format!("{prefix}-"))
+        .find(|head| head.contains(marker))
+        .map(|head| {
+            format!("'{marker}' is part of the record id head '{head}' and would match every citation of that type; declare text that appears in no id")
+        })
+}
+
 /// The declared `ignore_marker` (`ADR-80`): only the boundary rule and the two
 /// back-pointer rules take one; it is one non-blank line with no padding; on a
 /// back-pointer rule it is not part of a back-pointer keyword (it would sit in
@@ -2576,6 +2601,9 @@ fn validate_ignore_markers(config: &Config) -> Result<(), ConfigError> {
             ));
         }
         if back_pointer_rules.contains(&name.as_str()) {
+            if let Some(reason) = generic_marker_problem(config, marker) {
+                return Err(bad(name, reason));
+            }
             if let Some(k) = keywords.iter().find(|k| k.contains(marker)) {
                 return Err(bad(
                     name,
@@ -6184,6 +6212,26 @@ record_types:
                 "schema_version: 2\nrecord_types:\n  adr:\n    dir: docs/adr\nrules:\n  embodiment.back-pointer-resolution:\n    level: error\n    back_pointer_paths: [src]\n    ignore_marker: \"{marker}\"\n"
             );
             assert!(parse(&cfg).is_err(), "{marker}");
+        }
+    }
+
+    #[test]
+    fn the_back_pointer_ignore_marker_must_be_specific_enough_to_excuse_one_line() {
+        let cfg = |marker: &str| {
+            format!(
+                "schema_version: 2\nrecord_types:\n  adr:\n    dir: docs/adr\n  milestone:\n    dir: docs/milestones\n    prefix: MILE\nrules:\n  embodiment.back-pointer-resolution:\n    level: error\n    back_pointer_paths: [src]\n    ignore_marker: \"{marker}\"\n"
+            )
+        };
+        // Too short, only comment leaders or punctuation, or part of a declared id head.
+        for marker in [
+            "//", "#", "x", "ab", "///", "--", "# -", "/*", "ADR-", "ADR", "DR-", "MILE-", "MIL",
+        ] {
+            let err = parse(&cfg(marker)).unwrap_err().to_string();
+            assert!(err.contains("ignore_marker"), "{marker}: {err}");
+        }
+        // Specific text still loads, including one that names a single record.
+        for marker in ["urzua:allow", "record-id-ok", "ADR-1", "ok!x"] {
+            assert!(parse(&cfg(marker)).is_ok(), "{marker}");
         }
     }
 
