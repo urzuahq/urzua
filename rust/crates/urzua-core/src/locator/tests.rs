@@ -971,6 +971,21 @@ fn one_resolver_and_scope_over_two_texts_resolve_each_text_on_its_own() {
 }
 
 #[test]
+fn two_texts_of_equal_length_with_one_resolver_and_scope_resolve_independently() {
+    let r = yaml_resolver("indent");
+    let scope = sym(&["one"]);
+    let with = "one:\n  a: 1\n";
+    let without = "ONE:\n  a: 1\n";
+    for _ in 0..2 {
+        assert!(resolve_scope(with, Some(&r), &scope).is_ok());
+        assert!(matches!(
+            resolve_scope(without, Some(&r), &scope),
+            Err(ScopeError::NotFound(_))
+        ));
+    }
+}
+
+#[test]
 fn a_leading_pattern_that_does_not_compile_is_reported_every_time() {
     let mut r = rust();
     r.leading = Some("(".into());

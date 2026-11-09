@@ -929,36 +929,34 @@ pub fn resolve_scope(
     // A check resolves the same symbol scope in the same text twice (the rule
     // that checks it resolves, then the drift judge reads its pin), and a
     // resolution scans every line. The result is a function of exactly
-    // (text, resolver, scope), so it is shared under that whole key, compared
-    // in full on a hit: a different config or file text never sees it.
+    // (text, resolver, scope). The memo keeps no copy of the text: it keys on
+    // the text's SHA-256 and compares the resolver and scope in full on a hit,
+    // so a different config or file text never sees another's result. A
+    // SHA-256 collision between two different file texts is not a practical
+    // concern (the pins already rely on the same hash to tell texts apart), so
+    // equal digests are taken to mean equal text.
+    use sha2::{Digest, Sha256};
     use std::collections::HashMap;
-    use std::hash::{Hash, Hasher};
     use std::sync::{Mutex, OnceLock};
     struct Entry {
-        text: String,
         resolver: Option<LocatorResolver>,
         scope: Scope,
         result: Result<Span, ScopeError>,
     }
-    static MEMO: OnceLock<Mutex<HashMap<u64, Vec<Entry>>>> = OnceLock::new();
-    let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    text.hash(&mut hasher);
-    format!("{scope:?}").hash(&mut hasher);
-    resolver.map(|r| r.name.as_str()).hash(&mut hasher);
-    let key = hasher.finish();
+    static MEMO: OnceLock<Mutex<HashMap<[u8; 32], Vec<Entry>>>> = OnceLock::new();
+    let key: [u8; 32] = Sha256::digest(text.as_bytes()).into();
     let Ok(mut memo) = MEMO.get_or_init(Default::default).lock() else {
         return resolve_scope_uncached(text, resolver, scope);
     };
     let bucket = memo.entry(key).or_default();
     if let Some(hit) = bucket
         .iter()
-        .find(|e| e.text == text && e.resolver.as_ref() == resolver && &e.scope == scope)
+        .find(|e| e.resolver.as_ref() == resolver && &e.scope == scope)
     {
         return hit.result.clone();
     }
     let result = resolve_scope_uncached(text, resolver, scope);
     bucket.push(Entry {
-        text: text.to_string(),
         resolver: resolver.cloned(),
         scope: scope.clone(),
         result: result.clone(),
