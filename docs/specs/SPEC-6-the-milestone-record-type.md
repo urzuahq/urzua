@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5QF32RM76Y50THPQEG
-Version: '0.24'
+Version: '0.26'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -15,7 +15,7 @@ Parent: —
 ## Purpose
 
 Tracks this project's own backlog — decided-but-unbuilt work, explicitly deferred work, undecided
-RFCs, and unrouted research findings — as a real, checkable corpus instead of conversation history
+RFCs, and unrouted candidate features and findings — as a real, checkable corpus instead of conversation history
 and an unstructured document. `milestone` is the first record type this project has added
 beyond ADR/RFC/Spec, and exercises RFC-4's generic layering claim directly: if the mechanism
 built for three types doesn't hold for a fourth, that's real evidence, not a hypothetical.
@@ -186,7 +186,7 @@ waiver    = category, [ " (", cite, [ ", ", date ], ")" ], " -- ", reason ;
    an ISO date. The reason is required, non-empty prose after ` -- `. A category declared
    `cite: required` without a parenthesis, a cite that is not a record id, a date on a category that
    takes none, and a category declared `expires: required` without a date are shape findings. A pull
-   request or an issue number is not a cite: it goes in the reason.
+   request or an issue number is not a cite: it goes in the reason. The date is the first day the waiver is stale, not the last day it holds: `deferred-to (MILE-1, 2026-11-09)` is expired on 2026-11-09 (`status.waived-item-stale`), whereas a `WAIVER` record's `Expires` is the last day it suppresses (`SPEC-2`). Clauses are written evidence first: on the first line or on final lines, a waiver clause before the evidence clause is a shape finding.
 7. **Leading checkbox.** `[x]` or `[ ]` at the start of item text is a shape finding: state is computed.
 
 Worked examples, each a fixture (`done_items/tests.rs` and `done_items_integration.rs`):
@@ -334,3 +334,5 @@ to another record — nothing to check for resolution, no cycle risk, no new rul
 > | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/status_model.rs` 2d90f7140553 -> 01c98f5a04ab. Reason: Read the diff of each pinned file since the old pin and the claim still holds. status_model.rs: DeliveryPending::matches is now pub(crate) and the delivery.items load validation also runs check_pending on the new optional pending list; no other behaviour changed. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
 > | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: unspecified): re-pinned `rust/crates/urzua-core/src/status_model.rs` 01c98f5a04ab -> 35b191cc38f8. Reason: Re-pinned after checking the delta in each pinned file against what this record evidences: status_model.rs: split validate_items into validate_item_markers and validate_waiver_categories; the blank-section, required-section, marker, partial-status, resolving-tier and kind checks keep their order with the same error text. Behaviour unchanged, outputs byte-identical (check, check --base, audit, fix --rebaseline and reverify JSON compared before and after, with and without --as-of). **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
 > | 2026-11-09 | Bumped to `0.24`. The pinned `status_model.rs` evidence moved when `validate_items` was split into helpers to meet the SPEC-22 function bound; no spec text changed. **Why:** the repository checker asks a dated structural revision row to carry a version bump, and the re-pin above is such a row. | **structural** |
+> | 2026-11-09 | Bumped to `0.25`. Removed an appeal to research a reader cannot open; the argument now rests on the backlog this type tracks. **Why:** a revision-log entry that adds a structural change needs a `Version` bump (`revision-log.version-bump-required`). | **structural** |
+> | 2026-11-09 | Bumped to `0.26`. States that an item waiver's date is exclusive while a waiver record's `Expires` is inclusive, and that a first-line waiver clause before the evidence clause is a shape finding as on final lines. **Why:** round-5 review: the first-line order swallowed the evidence into the waiver reason without a finding. | **substantive** |

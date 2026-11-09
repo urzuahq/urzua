@@ -2570,7 +2570,9 @@ pub fn parse(content: &str) -> Result<Config, ConfigError> {
 /// The marker excuses its whole line, so text that sits on every back-pointer line
 /// would excuse them all: under three non-whitespace characters, no letter or digit
 /// (comment leaders and punctuation such as `//`, `#`), or part of a declared record
-/// id head (`ADR-` for a type whose prefix is `ADR`).
+/// id head (`ADR-` for a type whose prefix is `ADR`), or padding around those: what
+/// is left after removing the back-pointer keywords and the declared id heads (a
+/// head that names no record, so not `ADR-1`) holds fewer than 3 letters or digits.
 fn generic_marker_problem(config: &Config, marker: &str) -> Option<String> {
     if marker.chars().filter(|c| !c.is_whitespace()).count() < 3 {
         return Some(format!(
@@ -2582,13 +2584,52 @@ fn generic_marker_problem(config: &Config, marker: &str) -> Option<String> {
             "'{marker}' is only comment leaders or punctuation and would match every back-pointer line; declare text with letters or digits"
         ));
     }
-    crate::rules::declared_prefixes(config)
-        .into_iter()
+    let prefixes = crate::rules::declared_prefixes(config);
+    if let Some(head) = prefixes
+        .iter()
         .map(|prefix| format!("{prefix}-"))
         .find(|head| head.contains(marker))
-        .map(|head| {
-            format!("'{marker}' is part of the record id head '{head}' and would match every citation of that type; declare text that appears in no id")
-        })
+    {
+        return Some(format!(
+            "'{marker}' is part of the record id head '{head}' and would match every citation of that type; declare text that appears in no id"
+        ));
+    }
+    let mut rest = marker.to_string();
+    for keyword in [
+        crate::rules::MARKER_IMPLEMENTS,
+        crate::rules::MARKER_VERIFIES,
+    ] {
+        rest = rest.replace(keyword, " ");
+    }
+    for prefix in &prefixes {
+        rest = strip_generic_head(&rest, prefix);
+    }
+    if rest.chars().filter(|c| c.is_alphanumeric()).count() < 3 {
+        return Some(format!(
+            "'{marker}' is only back-pointer keywords, record id heads, comment leaders and punctuation around fewer than 3 letters or digits, so it would match almost every back-pointer line; declare text that names something specific"
+        ));
+    }
+    None
+}
+
+/// `text` with each occurrence of the id head `PREFIX-` or the bare `PREFIX`
+/// removed unless it is the start of a record id (`PREFIX-1`, `PREFIX1`).
+fn strip_generic_head(text: &str, prefix: &str) -> String {
+    let mut out = String::new();
+    let mut rest = text;
+    while let Some(at) = rest.find(prefix) {
+        out.push_str(&rest[..at]);
+        let after = &rest[at + prefix.len()..];
+        let tail = after.strip_prefix('-').unwrap_or(after);
+        if tail.starts_with(|c: char| c.is_ascii_digit()) {
+            out.push_str(prefix);
+        } else {
+            out.push(' ');
+        }
+        rest = after;
+    }
+    out.push_str(rest);
+    out
 }
 
 /// The declared `ignore_marker` (`ADR-80`): only the boundary rule and the two
@@ -6255,13 +6296,36 @@ record_types:
         };
         // Too short, only comment leaders or punctuation, or part of a declared id head.
         for marker in [
-            "//", "#", "x", "ab", "///", "--", "# -", "/*", "ADR-", "ADR", "DR-", "MILE-", "MIL",
+            "//",
+            "#",
+            "x",
+            "ab",
+            "///",
+            "--",
+            "# -",
+            "/*",
+            "ADR-",
+            "ADR",
+            "DR-",
+            "MILE-",
+            "MIL",
+            "// Implements:",
+            "# Verifies:",
+            "-- Implements: ADR",
+            "// ADR-",
+            "Implements: ADR",
         ] {
             let err = parse(&cfg(marker)).unwrap_err().to_string();
             assert!(err.contains("ignore_marker"), "{marker}: {err}");
         }
         // Specific text still loads, including one that names a single record.
-        for marker in ["urzua:allow", "record-id-ok", "ADR-1", "ok!x"] {
+        for marker in [
+            "urzua:allow",
+            "example-only",
+            "record-id-ok",
+            "ADR-1",
+            "ok!x",
+        ] {
             assert!(parse(&cfg(marker)).is_ok(), "{marker}");
         }
     }

@@ -15,7 +15,7 @@ Prevent two agents from clobbering different fields of the same record, rather t
 
 ## Why
 
-Named in research as the #1 core mechanism gap; no RFC yet.
+`ADR-3` settles two agents creating different records at once and leaves two agents editing the same record open, which is the core mechanism gap; no RFC yet.
 
 ## Done means
 
@@ -33,3 +33,4 @@ Named in research as the #1 core mechanism gap; no RFC yet.
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |
 > | 2026-11-05 | `Depends-on: MILE-79` added. **Why:** Done means says the field-level merge guard is used by `urzua fix --apply` and the guarded edit command, which `MILE-79` builds. Proposed for maintainer review; `Status` unchanged. | **structural** |
 > | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |
+> | 2026-11-09 | Removed an appeal to research a reader cannot open; the argument now rests on `ADR-3`, which settles concurrent creation only. `Status` unchanged. | **structural** |

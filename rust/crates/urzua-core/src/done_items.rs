@@ -479,6 +479,8 @@ struct FirstLine {
     evidence: ClauseText,
     waiver: ClauseText,
     has_clauses: bool,
+    /// The first line writes the waiver clause before the evidence clause.
+    waiver_before_evidence: bool,
 }
 
 fn first_line_clauses(first: &ItemLine, decl: &ItemsDecl) -> FirstLine {
@@ -487,6 +489,7 @@ fn first_line_clauses(first: &ItemLine, decl: &ItemsDecl) -> FirstLine {
         evidence: None,
         waiver: None,
         has_clauses: false,
+        waiver_before_evidence: false,
     };
     if let Some((at, is_evidence)) = first_clause(&first.text, decl) {
         out.has_clauses = true;
@@ -503,10 +506,16 @@ fn first_line_clauses(first: &ItemLine, decl: &ItemsDecl) -> FirstLine {
                 None => out.evidence = Some((first.number, after.trim().to_string())),
             }
         } else {
-            out.waiver = Some((
-                first.number,
-                rest[decl.waiver_marker.len()..].trim().to_string(),
-            ));
+            let after = &rest[decl.waiver_marker.len()..];
+            let ev = format!("{}{}", decl.clause_separator, decl.evidence_marker);
+            match after.find(&ev) {
+                Some(e) => {
+                    out.waiver_before_evidence = true;
+                    out.waiver = Some((first.number, after[..e].trim().to_string()));
+                    out.evidence = Some((first.number, after[e + ev.len()..].trim().to_string()));
+                }
+                None => out.waiver = Some((first.number, after.trim().to_string())),
+            }
         }
     }
     out
@@ -581,6 +590,13 @@ fn build_item(n: usize, builder: Builder, decl: &ItemsDecl, issues: &mut Vec<Sha
         })
     };
     let mut clauses = first_line_clauses(&builder.lines[0], decl);
+    if clauses.waiver_before_evidence {
+        issue(
+            builder.lines[0].number,
+            "the waiver clause is before the evidence clause; the evidence clause comes first"
+                .to_string(),
+        );
+    }
     final_line_clauses(&builder, decl, &mut clauses, &mut issue);
     let FirstLine {
         text,

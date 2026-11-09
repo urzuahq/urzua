@@ -35,9 +35,8 @@ declared anywhere. Exactly the shape `ADR-53` argues against, at one remove.
 ## The open question this milestone owns
 
 Whether the shipped set is **minimal** (a few checks nothing could object to), **recommended** (the
-ones this project would defend), or **all-advisory** (today's `init` behaviour, made explicit). The
-research behind `ADR-53` argued presets should land *in the same release as* opt-in, precisely because
-opt-in without them pushes the full list onto every adopter. They did not, and this milestone is that
+ones this project would defend), or **all-advisory** (today's `init` behaviour, made explicit). `ADR-53` makes every rule opt-in, and opt-in without presets pushes the full list onto every adopter,
+so presets were meant to land *in the same release as* it. They did not, and this milestone is that
 debt, named rather than left implicit.
 
 Generating rather than inheriting is what keeps this consistent with `ADR-53`. A runtime `extends`
@@ -61,3 +60,4 @@ can delete lines from, and the engine never sees where it came from.
 > | 2026-09-17 | `Phase: '1'` → `'3'`. **Why:** filed against Phase 1 on the assumption that opt-in without presets is urgent debt. It is not: `urzua init` already writes every rule at `warn`, so an adopter gets a working config without hand-writing one. What remains is the convenience of choosing *which* starting set, which is the same distance out as the rest of Phase 3. | **structural** |
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |
 > | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |
+> | 2026-11-09 | Removed an appeal to research a reader cannot open; the argument now rests on `ADR-53`'s all-opt-in decision. `Status` unchanged. | **structural** |
