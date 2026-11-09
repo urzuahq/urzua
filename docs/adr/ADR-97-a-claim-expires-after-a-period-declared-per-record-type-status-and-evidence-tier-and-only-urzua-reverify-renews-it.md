@@ -552,6 +552,48 @@ not be previewed. The maintainer decided on 2026-11-08 that the evaluation date 
 
 Nothing else in the decision changes. `SPEC-1`, `SPEC-2` and `SPEC-8` carry the contract.
 
+## Amendment (2026-11-09, drift policy): what drift of a cited locator does to a renewal is declared per evidence category
+
+*Status of this amendment: accepted by the maintainer on 2026-11-09. `Status` stays `Accepted` and the Decision text above is unchanged.*
+
+Section 4 refuses a renewal when a locator drifted since the `Realized-by` line was last touched, whatever its
+category, and names two ways out: `reverify --pin-only` for an unpinned locator, `fix --rebaseline` for a pinned
+one. Section 4 also leaves a `spec:` locator unpinned by design. A claim whose only drifted locator is a `spec:`
+locator therefore had no way out: `--pin-only` refuses ("no unpinned locator of a required category to pin"), a
+plain renewal is refused again with the same drift message, and the only remaining act was a hand edit of the
+`Realized-by` line, which clears the drift and resets the claim's age with no attestation, the renewal the
+section 6 companion rule can only see when the anchor field is also typed. On 2026-11-09, 66 of the 355 claims
+listed by `urzua reverify --as-of 2099-01-01` in this repository were refused only for this reason, and every
+later amendment of a heavily cited record adds more. The maintainer decided on 2026-11-09 that the effect of
+drift on a renewal is a repository's declaration, per locator category:
+
+1. `embodiment.claim-expired` takes a `drift` option, a map from an evidence category (as the `embodiment`
+   declaration names them, the categories `require_pin` already uses) to a policy. The engine names no category;
+   an unknown category, or a policy other than the three below, is a load error that lists the valid ones, and
+   the option on any other rule is the usual option-not-taken load error.
+   - `block`: the renewal is refused until the locator is re-pinned. This is the behaviour of section 4.
+   - `acknowledge`: `reverify --apply` may renew over the drift. The `Re-verified` row gains a
+     `Drift acknowledged:` segment before the reviewer's `Reason`, naming each drifted locator of the category: a
+     cited record by its id and its newest revision-log date, any other file by its path and the 12-character
+     prefix of the hash the tool read. The `--reason` is the attestation that the drift was read. A drifted pinned
+     locator of the category is judged by this policy as well, not refused as a stale pin.
+   - `ignore`: the category's drift does not affect renewal and is not listed.
+2. A category not named is `block`, so a configuration that declares no `drift` refuses, reports and renews exactly
+   as before. This repository declares `drift: {code: block, test: block, spec: acknowledge}`: a `spec:`
+   locator cites a record with its own lifecycle, status and revision log (section 4), so its drift is read and
+   acknowledged, while a code or test file is re-pinned.
+3. Refusals name the remedy that works under the policy. For drift in a category with a pin to move, the message
+   is section 4's (`reverify --pin-only`, `fix --rebaseline`). For drift in a category that `--pin-only` cannot
+   pin, it names the category, says its policy is `block` (declared, or by default) and gives the `drift` setting
+   that lets a reviewer acknowledge it.
+4. Detect mode lists a claim the policy lets through as renewable, with the drift to be acknowledged shown in
+   `drift_acknowledged`, and a claim it blocks as refused with the reason.
+5. Only `reverify` reads the policy. `embodiment.consistency` reports the same drift, and `embodiment.claim-expired`
+   expires the same claims, whatever is declared; a hand edit of the `Realized-by` line is still no renewal.
+
+`SPEC-2` (the rule table), `SPEC-3` (the option and its load errors) and `SPEC-8` (the refusals, the report and the
+row) carry the contract.
+
 ## References
 
 - `ADR-67`, `ADR-74` -- pins, the grace window, the claim age, scoped pins and the audit date this extends.
@@ -574,3 +616,4 @@ Nothing else in the decision changes. `SPEC-1`, `SPEC-2` and `SPEC-8` carry the 
 | 2026-11-07 | Amended after the independent review of PR 425 (still Proposed): a renewal requires a pin on every `code:` and `test:` locator (`require_pin`), written by `reverify` or `reverify --pin-only` under the attestation rules, with spec locators left unpinned; the first expiry is spread by a deterministic `spread_days` offset from the `Stable-Id`; agent renewal, pin-before-renewal and a capped batch with one shared reason are decided, no longer open; the corpus pin run (164 records, 502 locators) and the new first-cycle distribution are measured; the 30-day count and the two-act hash refresh are worded exactly. **Why:** the review found that unpinned locators made a renewal only as strong as the git-history heuristic and that `rebaseline` could not clear their drift (blocker), and that 258 of 339 first expiries fell on two days (should fix). | **substantive** |
 > | 2026-11-08 | Amendment added: a milestone whose evidence is its Done-means item clauses is judged, aged from its first evidence line and renewed by `reverify` with pins on the item locators; a record with neither a field nor item evidence stays not examined. The Decision text and `Status` are unchanged. **Why:** such a milestone never expired and `reverify` could not renew it, though drift and pinning already read its item evidence; accepted by the maintainer on 2026-11-08. | **substantive** |
 > | 2026-11-08 | Second amendment of the day added, accepted by the maintainer on 2026-11-08: the evaluation date is an input, a global `--as-of YYYY-MM-DD` echoed as the report's `as_of`, read by every date comparison from one clock, refused with `--apply`. The Decision text and `Status` are unchanged. **Why:** maintainer decision, 2026-11-08: a verdict must be reproducible and upcoming expiries previewable. | **substantive** |
+> | 2026-11-09 | Amendment added, accepted by the maintainer on 2026-11-09: `embodiment.claim-expired` takes a per-evidence-category `drift` policy (`block`, `acknowledge`, `ignore`; undeclared is `block`) that decides whether drift of a locator blocks a renewal by `reverify`, is renewed over with the drifted locators written into the `Re-verified` row, or is left out; refusals name the remedy for the policy. The Decision text and `Status` are unchanged. **Why:** a drifted `spec:` locator is unpinned by design, so `reverify --pin-only` could not clear it and the refusal suggested it anyway; the only way out was an unattested hand edit of the `Realized-by` line (66 of 355 claims). | **substantive** |

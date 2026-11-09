@@ -9,7 +9,7 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use urzua_core::config::{Config, RuleLevel};
+use urzua_core::config::{Config, DriftPolicy, RuleLevel};
 use urzua_core::fix::{revision_log_refusal, ActorKind, Attestation, PinRead};
 use urzua_core::locator::Locator;
 use urzua_core::record::Record;
@@ -17,8 +17,9 @@ use urzua_core::report::{
     census, CouldNotRun, FixStatus, Notice, Outcome, Population, PopulationUnit,
 };
 use urzua_core::reverify::{
-    apply_reverify, review_locators, FirstPin, LocatorCheck, LocatorsReview, RecordReview, Renewal,
-    ReverifyPlan, ReverifyReport,
+    apply_reverify, judge_drift, latest_revision_date, review_locators, FirstPin, LocatorCheck,
+    LocatorReview, LocatorsReview, RecordReview, Renewal, ReverifyPlan, ReverifyReport,
+    REPIN_DRIFT_REFUSAL,
 };
 use urzua_core::rules::{self, ClaimExpiredOpts, ClaimSkip};
 
@@ -47,6 +48,8 @@ struct Reviewed {
     locators: LocatorsReview,
     pins: Vec<FirstPin>,
     renewal: Option<(i64, u32)>,
+    /// The drift a renewal acknowledges in its row (`drift: acknowledge`).
+    acknowledged: Vec<String>,
 }
 
 pub fn run(config_path: Option<PathBuf>, args: ReverifyArgs) -> ExitCode {
@@ -105,6 +108,7 @@ fn run_checked(config_path: Option<PathBuf>, args: ReverifyArgs) -> Result<ExitC
     let scan = ReviewScan {
         repo_root: &repo_root,
         config: &config,
+        records: &records,
         opts: &opts,
         now,
         measures: &evidence.measures,
@@ -121,20 +125,7 @@ fn run_checked(config_path: Option<PathBuf>, args: ReverifyArgs) -> Result<ExitC
         Outcome::Examined
     });
 
-    // What the mode lists: with names, those; otherwise what it finds.
-    let by_name = !args.ids.is_empty();
-    reviewed.retain(|r| {
-        if by_name {
-            true
-        } else if args.pin_only {
-            r.review
-                .locators
-                .iter()
-                .any(|l| l.check == LocatorCheck::WillPin)
-        } else {
-            r.review.finding.is_some()
-        }
-    });
+    retain_listed(&mut reviewed, !args.ids.is_empty(), args.pin_only);
 
     let batch = Batch {
         reviewed,
@@ -153,6 +144,23 @@ fn run_checked(config_path: Option<PathBuf>, args: ReverifyArgs) -> Result<ExitC
         reason: &reason,
     };
     apply_batch(&write, args.force, batch, identity, &evidence)
+}
+
+/// What the records under review are narrowed to.
+fn retain_listed(reviewed: &mut Vec<Reviewed>, by_name: bool, pin_only: bool) {
+    // What the mode lists: with names, those; otherwise what it finds.
+    reviewed.retain(|r| {
+        if by_name {
+            true
+        } else if pin_only {
+            r.review
+                .locators
+                .iter()
+                .any(|l| l.check == LocatorCheck::WillPin)
+        } else {
+            r.review.finding.is_some()
+        }
+    });
 }
 
 /// What the claim measures, drift and back-pointer scan found for a review.
@@ -343,6 +351,7 @@ fn select_subset(
 struct ReviewScan<'a> {
     repo_root: &'a Path,
     config: &'a Config,
+    records: &'a [Record],
     opts: &'a ClaimExpiredOpts,
     now: i64,
     measures: &'a ClaimMeasures,
@@ -373,9 +382,9 @@ impl ReviewScan<'_> {
         let tier = rules::computed_tier(record, config, self.back_pointed);
         let mut refused: Vec<String> = Vec::new();
         let standing = self.standing(record, &tier, &mut refused);
-        locator_refusals(&locators, &mut refused);
+        locator_refusals(&locators, self.opts, &mut refused);
         let pins = FirstPin::from_review(&locators.locators);
-        self.mode_refusals(record, &pins, &mut refused);
+        let acknowledged = self.mode_refusals(record, &pins, &locators, &mut refused);
         self.log_refusals(record, &mut refused);
         let mut commits_since = Vec::new();
         if self.pin_only && !pins.is_empty() {
@@ -392,10 +401,12 @@ impl ReviewScan<'_> {
                 locators: locators.locators.clone(),
                 commits_since,
                 refused,
+                drift_acknowledged: acknowledged.clone(),
             },
             locators,
             pins,
             renewal: standing.renewal,
+            acknowledged,
         }
     }
 
@@ -439,13 +450,21 @@ impl ReviewScan<'_> {
     }
 
     /// The refusals that depend on the mode: `--pin-only` needs something to
-    /// pin; a renewal needs an anchor field and locators that have not drifted.
-    fn mode_refusals(&self, record: &Record, pins: &[FirstPin], refused: &mut Vec<String>) {
+    /// pin; a renewal needs an anchor field and locators whose drift the
+    /// per-category policy lets through (`ADR-97`, amendment of 2026-11-09).
+    /// Returns the drift a renewal would acknowledge in its row.
+    fn mode_refusals(
+        &self,
+        record: &Record,
+        pins: &[FirstPin],
+        locators: &LocatorsReview,
+        refused: &mut Vec<String>,
+    ) -> Vec<String> {
         if self.pin_only {
             if pins.is_empty() {
                 refused.push("no unpinned locator of a required category to pin".to_string());
             }
-            return;
+            return Vec::new();
         }
         if self.opts.anchor_field.is_none() {
             refused.push(format!(
@@ -453,11 +472,62 @@ impl ReviewScan<'_> {
                 rules::RULE_EMBODIMENT_CLAIM_EXPIRED
             ));
         }
-        if self.drift.drifted.contains(&record.path) || self.drift.fresh.contains(&record.path) {
-            refused.push("a locator has drifted since the Realized-by line was last touched, even if inside drift_grace_days: re-pin an unpinned one with `urzua reverify --pin-only` (or a pinned one with `urzua fix --rebaseline`), then renew".to_string());
-        }
+        let acknowledged = self.drift_refusals(record, locators, refused);
         if self.disagreeing.contains(&record.path) {
             refused.push("the stated Embodiment disagrees with the one its locators compute to (embodiment.consistency would report it): run `urzua fix` first".to_string());
+        }
+        acknowledged
+    }
+
+    /// The drift policy applied to the record's drifted locators: what blocks
+    /// the renewal is refused, what is acknowledged is returned for the row.
+    fn drift_refusals(
+        &self,
+        record: &Record,
+        locators: &LocatorsReview,
+        refused: &mut Vec<String>,
+    ) -> Vec<String> {
+        let drifted =
+            self.drift.drifted.contains(&record.path) || self.drift.fresh.contains(&record.path);
+        if !drifted {
+            return Vec::new();
+        }
+        let Some(found) = self.drift.locators.get(&record.path) else {
+            refused.push(REPIN_DRIFT_REFUSAL.to_string());
+            return Vec::new();
+        };
+        let verdict = judge_drift(found, locators, self.opts, &|l| self.describe_drift(l));
+        refused.extend(verdict.refusals);
+        verdict.acknowledged
+    }
+
+    /// How the revision row names an acknowledged locator: a cited record by
+    /// its id and its newest revision-log row, any other file by its path and
+    /// the prefix of the hash the reviewer's tool read.
+    fn describe_drift(&self, l: &LocatorReview) -> String {
+        let cited = self
+            .records
+            .iter()
+            .find(|r| r.path.to_str() == Some(l.path.as_str()));
+        let Some(cited) = cited else {
+            let hash = l.read_hash.as_deref().map_or(String::new(), |h| {
+                format!("@sha256:{}", h.get(..12).unwrap_or(h))
+            });
+            return format!("{}:{}{hash}", l.category, l.locator);
+        };
+        let id = rules::record_id(cited).unwrap_or_else(|| l.path.clone());
+        let latest = urzua_io::read_to_string(&self.repo_root.join(&cited.path))
+            .ok()
+            .and_then(|content| {
+                latest_revision_date(
+                    &content,
+                    &self.config.revision_log_id(&cited.record_type),
+                    &self.config.revision_log_shape(&cited.record_type),
+                )
+            });
+        match latest {
+            Some(date) => format!("{}:{id} (latest revision {date})", l.category),
+            None => format!("{}:{id} (no dated revision row)", l.category),
         }
     }
 
@@ -476,7 +546,9 @@ impl ReviewScan<'_> {
 }
 
 /// The refusals for locators that do not resolve or no longer match their pin.
-fn locator_refusals(locators: &LocatorsReview, refused: &mut Vec<String>) {
+/// A pin that moved is drift, so a category whose drift policy is not `block`
+/// is judged by that policy instead (`ADR-97`, amendment of 2026-11-09).
+fn locator_refusals(locators: &LocatorsReview, opts: &ClaimExpiredOpts, refused: &mut Vec<String>) {
     for l in &locators.locators {
         match l.check {
             LocatorCheck::Unresolved => refused.push(format!(
@@ -484,10 +556,12 @@ fn locator_refusals(locators: &LocatorsReview, refused: &mut Vec<String>) {
                 l.locator,
                 l.reason.as_deref().unwrap_or("not found")
             )),
-            LocatorCheck::Changed => refused.push(format!(
-                "pinned locator '{}' no longer matches its pin: run `urzua fix --rebaseline` first, with its own reason",
-                l.locator
-            )),
+            LocatorCheck::Changed if opts.drift_policy(&l.category) == DriftPolicy::Block => {
+                refused.push(format!(
+                    "pinned locator '{}' no longer matches its pin: run `urzua fix --rebaseline` first, with its own reason",
+                    l.locator
+                ))
+            }
             _ => {}
         }
     }
@@ -533,6 +607,7 @@ impl RenewalWrite<'_> {
                     age_days,
                     days,
                     require_pin_empty: self.opts.require_pin.is_empty(),
+                    acknowledged: &item.acknowledged,
                 }),
                 _ => None,
             }

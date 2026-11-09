@@ -548,6 +548,11 @@ pub struct RuleSetting {
     /// meaningful to `embodiment.claim-expired`; omitted means none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub require_pin: Option<Vec<String>>,
+    /// What drift of a locator does to a renewal, per evidence category
+    /// (`ADR-97`, amendment of 2026-11-09). Only meaningful to
+    /// `embodiment.claim-expired`; a category not named is `block`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub drift: Option<std::collections::BTreeMap<String, DriftPolicy>>,
     /// The most records one `urzua reverify --apply` may name (`ADR-97`). Only
     /// meaningful to `embodiment.claim-expired`; omitted means 1.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -625,6 +630,20 @@ pub struct RuleSetting {
     /// writes the snapshot.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub issue_refs: Option<IssueRefs>,
+}
+
+/// What drift of a cited locator does to a renewal by `urzua reverify`
+/// (`ADR-97`, amendment of 2026-11-09), declared per evidence category.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum DriftPolicy {
+    /// Renewal is refused until the locator is re-pinned. The default.
+    #[default]
+    Block,
+    /// A reviewer's `--reason` may renew; the revision row names the drift.
+    Acknowledge,
+    /// The category's drift does not affect renewal and is not listed.
+    Ignore,
 }
 
 /// One `periods` entry of `embodiment.claim-expired` (`ADR-97`): a claim of a
@@ -2080,6 +2099,17 @@ fn claim_expiry_problems(
             ));
         }
     }
+    for category in setting.drift.iter().flat_map(|d| d.keys()) {
+        if !categories.contains(&category.trim()) {
+            return Err(bad(
+                "drift",
+                format!(
+                    "names the category '{category}', which the embodiment declaration does not use ({})",
+                    categories.join(", ")
+                ),
+            ));
+        }
+    }
     if setting.max_batch == Some(0) {
         return Err(bad(
             "max_batch",
@@ -3291,6 +3321,7 @@ fn check_rule_expiry_options(
         ("require_pin", setting.require_pin.is_some()),
         ("max_batch", setting.max_batch.is_some()),
         ("periods", setting.periods.is_some()),
+        ("drift", setting.drift.is_some()),
     ] {
         if present && !crate::rules::rule_accepts_option(name, option) {
             return Err(ConfigError::OptionNotApplicable {
@@ -6570,6 +6601,7 @@ mod option_table_tests {
         "require_pin",
         "max_batch",
         "periods",
+        "drift",
         "boundaries",
         "ignore_marker",
         "scope",

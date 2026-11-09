@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5Q0XVK27P5T8FN72BN
-Version: '0.42'
+Version: '0.43'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -341,7 +341,9 @@ declared and is `not-run` otherwise.
   `pinned`, `recorded_hash`, `current_hash`, `check` and, for a scoped one, `span` with its text, so
   the reviewer reads the content they attest. `check` is `hash-checked`, `will-pin`, `history-only`
   (a locator outside `require_pin`, such as `spec:`, re-resolved and judged by git history only),
-  `changed` or `unresolved`. `refused` lists why a record cannot be written; with `--pin-only`,
+  `changed` or `unresolved`. `drift_acknowledged` (absent when empty) lists the drifted locators of a
+  category declared `drift: acknowledge` that a renewal would write into its row, as the row names them,
+  so a record the policy lets through is listed as renewable with its drift shown. `refused` lists why a record cannot be written; with `--pin-only`,
   `commits_since` lists the commits that touched an unpinned locator since the `Realized-by` line
   was last touched. A record whose revision log a row cannot be appended to (no log section, an unreadable
   one, or one with no rows) is listed in `refused` with that reason, because both modes append an attested
@@ -357,7 +359,14 @@ declared and is `not-run` otherwise.
 - **Refused, writing nothing for that record:** a locator that does not resolve; a pinned locator
   whose hash differs (run `fix --rebaseline`); drift by the git-history rule, inside
   `drift_grace_days` too (attesting over a file that changed and was not re-read is the rubber stamp
-  this command exists to prevent); a stated `Embodiment` that `embodiment.consistency` would report;
+  this command exists to prevent), where the drift policy of the locator's category is `block`, the
+  default (`SPEC-3`, `drift`). A refusal for drift in a category with a pin to move names the re-pin
+  remedy; one for a category outside `require_pin` (a `spec:` locator, which `--pin-only` cannot pin)
+  names the category, that its policy is `block` (declared, or by default), and the `drift` setting
+  that lets a reviewer acknowledge it. Under `acknowledge` the renewal is written and the `Re-verified`
+  row gains `Drift acknowledged: <locator>, ...` before the `Reason`: a cited record as
+  `<category>:<id> (latest revision <date>)`, any other file as `<category>:<path>@sha256:<12 hex>`;
+  under `ignore` the drift is neither refused nor listed; a stated `Embodiment` that `embodiment.consistency` would report;
   a record the expiry rule does not judge (neither a `Realized-by` value nor a Done-means item evidence clause) or cannot date (no valid anchor date and no commit for its first evidence line: the `Realized-by` line, or the first item evidence clause); a rule with no `anchor_field`; a record with
   no usable revision log; and any actor but `--actor human` (`agent`, or none given) where the matching
   entry's level is `error`.
@@ -488,3 +497,4 @@ asserted by test, not assumed by convention.
 > | 2026-11-08 | Bumped to `0.41`. The pins this spec's `Realized-by` holds on files split under the SPEC-22 function bound were re-baselined (the `Re-baselined` row above); no behaviour this spec describes changed. | **structural** |
 > | 2026-11-09 | Bumped to `0.42`. The `Why` of a `Re-baselined` row names who re-verified by the actor kind (an agent, a person, or the attesting actor) instead of always saying a reviewer did. Earlier rows are unchanged. **Why:** an agent's re-pin read as if a reviewer had already re-verified the claim, which it had not; the row now says what the attestation records. | **substantive** |
 > | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/fix.rs` bfd53b872aaa -> 98b3bebce0fd. Reason: fix.rs: read the diff since the previous pin; it adds Attestation::rebaseline_why and uses it for the Why text of the re-baseline revision row (worded by actor kind) plus its test; nothing this record's claim covers changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-09 | Bumped to `0.43`. Documents the per-category drift policy of `reverify` (`block`, `acknowledge`, `ignore`): the corrected refusal for a drifted locator outside `require_pin`, `drift_acknowledged` in the detect report and the `Drift acknowledged` segment of the `Re-verified` row. **Why:** `ADR-97` amendment of 2026-11-09 (drift policy); the refusal told the reader to run `--pin-only`, which cannot pin a `spec:` locator. | **substantive** |
