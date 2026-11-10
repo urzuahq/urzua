@@ -99,6 +99,9 @@ pub struct RuleCtx<'a> {
     /// Each changed record's `Status` at the merge base, for the types that
     /// declare `transitions`; `None` on a run with no `--base` (`ADR-72`).
     pub committed_statuses: Option<&'a HashMap<PathBuf, CommittedStatus>>,
+    /// The records the diff deletes that are not a rename, for the types an
+    /// authority status gate names (`diff.decider-required`).
+    pub deleted_records: &'a [DeletedRecord],
     /// The identities the host supplied (`urzua check --actors`); `None` when
     /// no file was given (`MILE-200`).
     pub actors: Option<&'a crate::authority::Actors>,

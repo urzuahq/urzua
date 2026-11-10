@@ -26,7 +26,7 @@
 
 use std::path::{Path, PathBuf};
 
-use urzua_core::authority::Gate;
+use urzua_core::authority::{same_status, Gate};
 use urzua_core::config::{Config, RelationRole};
 use urzua_core::rules;
 
@@ -39,8 +39,8 @@ pub(super) struct Denial {
 fn status_of(config: &Config, rel: &Path, text: &str) -> Option<(String, String)> {
     let record = crate::discovery::parse_prospective_record(config, rel, text).ok()?;
     let field = rules::relation_field_name(config, &record.record_type, RelationRole::Status);
-    let status = record.header.get(field).map(str::trim)?.to_string();
-    (!status.is_empty()).then_some((record.record_type.clone(), status))
+    let status = urzua_core::authority::gate_status(&record.header, field)?.to_string();
+    Some((record.record_type.clone(), status))
 }
 
 /// The status the record holds before this edit: the copy on disk, else the
@@ -330,7 +330,7 @@ pub(super) fn judge(
         // An edit that leaves the status where it was is not a move; any other
         // edit to a gated status, a record filed straight at it included, is.
         let from = match status_before(repo_root, config, rel) {
-            Some(Some(before)) if before == status => return None,
+            Some(Some(before)) if same_status(&before, &status) => return None,
             Some(Some(before)) => format!("moves {} from {field} '{before}' to '{status}'", rel.display()),
             Some(None) => format!("files {} already at {field} '{status}'", rel.display()),
             None => format!(
@@ -389,8 +389,9 @@ pub(super) fn lost_status_gates(old: &[StatusGateEntry], now: &[StatusGateEntry]
                 o.to.iter()
                     .map(String::as_str)
                     .filter(|s| {
-                        !now.iter()
-                            .any(|n| n.record_type == o.record_type && n.to.iter().any(|t| t == s))
+                        !now.iter().any(|n| {
+                            n.record_type == o.record_type && n.to.iter().any(|t| same_status(t, s))
+                        })
                     })
                     .collect();
             (!lost.is_empty()).then(|| format!("type {} to {}", o.record_type, lost.join(", ")))
@@ -419,7 +420,7 @@ pub(super) fn gated_move_report(
     let (record_type, status) = status_of(config, rel, &content)?;
     let current = status_gate_entries(config)
         .into_iter()
-        .find(|g| g.record_type == record_type && g.to.contains(&status))
+        .find(|g| g.record_type == record_type && g.to.iter().any(|t| same_status(t, &status)))
         .map(|g| {
             format!(
                 "gate: type {} to {}, by '{}'",
@@ -431,7 +432,7 @@ pub(super) fn gated_move_report(
     let summary = current.or_else(|| {
         baseline
             .iter()
-            .find(|g| g.record_type == record_type && g.to.contains(&status))
+            .find(|g| g.record_type == record_type && g.to.iter().any(|t| same_status(t, &status)))
             .map(|g| {
                 format!(
                     "gate: type {} to {}, by '{}', no longer in the configuration",
@@ -444,7 +445,7 @@ pub(super) fn gated_move_report(
     let field = rules::relation_field_name(config, &record_type, RelationRole::Status);
     let before = match urzua_io::read_at_commit_if_present(repo_root, base, rel) {
         Ok(Some(text)) => match status_of(config, rel, &text) {
-            Some((_, before)) if before == status => return None,
+            Some((_, before)) if same_status(&before, &status) => return None,
             Some((_, before)) => format!("moved {} from {field} '{before}' to '{status}'", rel.display()),
             None => format!("set {} to {field} '{status}'", rel.display()),
         },
@@ -456,6 +457,65 @@ pub(super) fn gated_move_report(
     };
     Some(format!(
         "  {} [acceptance] error: the command {before}, a move the authority table reserves for a decider ({summary}). It was not prevented; CI's diff.decider-required checks who made it.",
+        rel.display(),
+    ))
+}
+
+/// The identity a rename keeps: a record's `Stable-Id` and record id.
+pub(super) type RecordIdentity = (String, String);
+
+/// The `(Stable-Id, record id)` of the record at `rel` holding `text`, `None`
+/// when it has either missing.
+pub(super) fn record_identity(config: &Config, rel: &Path, text: &str) -> Option<RecordIdentity> {
+    let record = crate::discovery::parse_prospective_record(config, rel, text).ok()?;
+    let sid = record.header.get_reserved("Stable-Id")?.trim().to_string();
+    let id = rules::record_id(&record)?;
+    (!sid.is_empty()).then(|| {
+        (
+            sid,
+            urzua_core::values::RecordId::new(&id).as_str().to_string(),
+        )
+    })
+}
+
+/// After a command has already run: the report line for a record it deleted
+/// whose status at `base` was one a gate names (`ADR-89` amendment of
+/// 2026-11-10, deletions), else `None`. A record that pairs with one of
+/// `survivors` (the same `Stable-Id` and record id) is a rename, not a
+/// deletion. Describes only, like [`gated_move_report`].
+pub(super) fn gated_deletion_report(
+    repo_root: &Path,
+    config: &Config,
+    rel: &Path,
+    base: &str,
+    baseline: &[StatusGateEntry],
+    survivors: &[RecordIdentity],
+) -> Option<String> {
+    let folded = fold_to_declared_dir(config, rel);
+    let rel = folded.as_path();
+    let text = urzua_io::read_at_commit_if_present(repo_root, base, rel)
+        .ok()
+        .flatten()?;
+    let (record_type, status) = status_of(config, rel, &text)?;
+    let summary = status_gate_entries(config)
+        .iter()
+        .chain(baseline)
+        .find(|g| g.record_type == record_type && g.to.iter().any(|t| same_status(t, &status)))
+        .map(|g| {
+            format!(
+                "gate: type {} to {}, by '{}'",
+                g.record_type,
+                g.to.join(", "),
+                g.by
+            )
+        })?;
+    if record_identity(config, rel, &text).is_some_and(|id| survivors.contains(&id)) {
+        return None;
+    }
+    let field = rules::relation_field_name(config, &record_type, RelationRole::Status);
+    Some(format!(
+        "  {} [acceptance] error: the command deleted {} while {field} was '{status}', a move the authority table reserves for a decider ({summary}). It was not prevented; CI's diff.decider-required checks who made it.",
+        rel.display(),
         rel.display(),
     ))
 }

@@ -168,6 +168,24 @@ fn deleted_by_stable_id(
     changes: &urzua_io::GitChanges,
 ) -> HashMap<String, Vec<DeletedCopy>> {
     let mut out: HashMap<String, Vec<DeletedCopy>> = HashMap::new();
+    for (_, sid, copy) in deleted_copies(repo_root, config, type_name, status_field, changes) {
+        if let Some(sid) = sid {
+            out.entry(sid).or_default().push(copy);
+        }
+    }
+    out
+}
+
+/// Every record of one type the diff deleted, as the base held it: its path,
+/// its `Stable-Id` (if any) and its [`DeletedCopy`], in path order.
+fn deleted_copies(
+    repo_root: &Path,
+    config: &Config,
+    type_name: &str,
+    status_field: &str,
+    changes: &urzua_io::GitChanges,
+) -> Vec<(PathBuf, Option<String>, DeletedCopy)> {
+    let mut out = Vec::new();
     let Some(type_config) = config.record_types.get(type_name) else {
         return out;
     };
@@ -207,19 +225,58 @@ fn deleted_by_stable_id(
                 prefix,
             ),
         };
-        let Some(id) = stable_id(&old).map(str::to_string) else {
-            continue;
-        };
-        let status = old
-            .header
-            .get(status_field)
-            .map(str::trim)
-            .filter(|v| !v.is_empty())
-            .map(str::to_string);
-        out.entry(id)
-            .or_default()
-            .push((rules::record_id(&old), status));
+        let status =
+            urzua_core::authority::gate_status(&old.header, status_field).map(str::to_string);
+        out.push((
+            path.clone(),
+            stable_id(&old).map(str::to_string),
+            (rules::record_id(&old), status),
+        ));
     }
+    out
+}
+
+/// The records the diff deletes that are not a rename, for the record types in
+/// `gated` (the types an authority status gate names), with the `Status` each
+/// held at the base (`ADR-89` amendment of 2026-11-10, deletions). A deleted
+/// record whose `Stable-Id` and record id both still exist on a head record of
+/// its type is that record renamed or moved, not removed, and is left out; one
+/// with no `Stable-Id` cannot pair and is deleted.
+pub(crate) fn deleted_gated_records(
+    repo_root: &Path,
+    config: &Config,
+    records: &[Record],
+    changes: &urzua_io::GitChanges,
+    gated: &std::collections::BTreeSet<&str>,
+) -> Vec<rules::DeletedRecord> {
+    let mut out = Vec::new();
+    if changes.deleted.is_empty() {
+        return out;
+    }
+    for type_name in gated {
+        let field = rules::relation_field_name(config, type_name, RelationRole::Status);
+        let heads: Vec<(&str, RecordId)> = records
+            .iter()
+            .filter(|r| r.record_type == *type_name)
+            .filter_map(|r| Some((stable_id(r)?, RecordId::new(&rules::record_id(r)?))))
+            .collect();
+        for (path, sid, (id, status)) in
+            deleted_copies(repo_root, config, type_name, field, changes)
+        {
+            let renamed = match (&sid, id.as_deref().map(RecordId::new)) {
+                (Some(sid), Some(id)) => heads.iter().any(|(s, h)| s == sid && *h == id),
+                _ => false,
+            };
+            if !renamed {
+                out.push(rules::DeletedRecord {
+                    path,
+                    record_type: type_name.to_string(),
+                    status,
+                });
+            }
+        }
+    }
+    out.sort_by(|a, b| a.path.cmp(&b.path));
     out
 }
 

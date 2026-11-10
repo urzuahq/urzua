@@ -97,6 +97,7 @@ struct Context<'a> {
     /// (`identity.open-pr-collision`); empty unless that rule is enabled.
     pull_ref_claims: rules::PullRefClaims,
     committed_statuses: Option<HashMap<PathBuf, rules::CommittedStatus>>,
+    deleted_records: Vec<rules::DeletedRecord>,
     /// The identities from `--actors` (`MILE-200`).
     actors: Option<urzua_core::authority::Actors>,
     /// The base revision's `authority` table (`authority.decider_table`).
@@ -291,6 +292,7 @@ impl<'a> Context<'a> {
             added_paths: self.added_paths.as_deref(),
             pull_ref_claims: &self.pull_ref_claims,
             committed_statuses: self.committed_statuses.as_ref(),
+            deleted_records: &self.deleted_records,
             actors: self.actors.as_ref(),
             base_authority: &self.base_authority,
             refs_snapshot: &self.refs_snapshot,
@@ -1169,6 +1171,7 @@ struct DiffInputs {
     templates: urzua_core::new_record::TemplateValues,
     changed_paths: Option<Vec<PathBuf>>,
     committed_statuses: Option<HashMap<PathBuf, rules::CommittedStatus>>,
+    deleted_records: Vec<rules::DeletedRecord>,
     base_authority: urzua_core::authority::BaseAuthority,
     gate_config: Option<Config>,
     fail_on: urzua_core::config::FailOn,
@@ -1317,11 +1320,11 @@ fn read_diff_inputs(
     let (gate_config, fail_on) =
         apply_base_gate(&session.config, &base_gate, changes.is_some(), notices);
     let rule_config = gate_config.as_ref().unwrap_or(&session.config);
-    let committed_statuses = changes.map(|c| {
-        // The types an authority status gate names (the head's and the base
-        // revision's) are read too, but only when `diff.decider-required`
-        // will use them.
-        let gated = if enabled_setting(rule_config, rules::RULE_DIFF_DECIDER_REQUIRED).is_some() {
+    // The types an authority status gate names (the head's and the base
+    // revision's) are read too, but only when `diff.decider-required` will use
+    // them.
+    let gated_types: std::collections::BTreeSet<&str> =
+        if enabled_setting(rule_config, rules::RULE_DIFF_DECIDER_REQUIRED).is_some() {
             let mut types = rule_config
                 .authority
                 .as_ref()
@@ -1334,15 +1337,27 @@ fn read_diff_inputs(
         } else {
             Default::default()
         };
+    let committed_statuses = changes.map(|c| {
         crate::diff_scope::committed_statuses(
             repo_root,
             &session.config,
             &session.records,
             c,
-            &gated,
+            &gated_types,
             notices,
         )
     });
+    let deleted_records = changes
+        .map(|c| {
+            crate::diff_scope::deleted_gated_records(
+                repo_root,
+                &session.config,
+                &session.records,
+                c,
+                &gated_types,
+            )
+        })
+        .unwrap_or_default();
     Ok(DiffInputs {
         base_text,
         base_drift,
@@ -1352,6 +1367,7 @@ fn read_diff_inputs(
         templates,
         changed_paths,
         committed_statuses,
+        deleted_records,
         base_authority,
         gate_config,
         fail_on,
@@ -1720,6 +1736,7 @@ fn load_context<'a>(
             added_paths: diff.added_paths,
             pull_ref_claims: diff.pull_ref_claims,
             committed_statuses: diff.committed_statuses,
+            deleted_records: diff.deleted_records,
             actors: None,
             base_authority: diff.base_authority,
             gate_config: diff.gate_config,

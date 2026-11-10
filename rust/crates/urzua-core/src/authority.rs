@@ -56,6 +56,25 @@ pub struct Gate {
     pub by: String,
 }
 
+/// Whether two Status strings are the same status for a gate: equal after
+/// trimming and folding case, so `accepted` and `ACCEPTED` are not a way past
+/// a gate on `Accepted`.
+pub fn same_status(a: &str, b: &str) -> bool {
+    a.trim().to_lowercase() == b.trim().to_lowercase()
+}
+
+/// The value of a record's status field as a gate reads it: the declared field
+/// name matched exactly first, else with case folded (`status:` for `Status`),
+/// trimmed, `None` when absent or blank. Only gates read it this way; the rules
+/// that judge the field's spelling still report it.
+pub fn gate_status<'a>(header: &'a crate::header::Header, field: &str) -> Option<&'a str> {
+    header
+        .get(field)
+        .or_else(|| header.get_reserved(field))
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+}
+
 impl Gate {
     /// Whether this gate is by status (`type` and `to`), the acceptance gate.
     pub fn is_status_gate(&self) -> bool {
@@ -600,8 +619,14 @@ impl AuthorityDecl {
         status: &'a str,
     ) -> impl Iterator<Item = &'a Gate> + 'a {
         self.gates.iter().filter(move |g| {
-            g.record_type.as_deref() == Some(record_type) && g.to.iter().any(|s| s == status)
+            g.record_type.as_deref() == Some(record_type)
+                && g.to.iter().any(|s| same_status(s, status))
         })
+    }
+
+    /// Whether any status gate of `record_type` names `status`.
+    pub fn gates_status(&self, record_type: &str, status: &str) -> bool {
+        self.status_gates(record_type, status).next().is_some()
     }
 
     /// The record types any status gate names.

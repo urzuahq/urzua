@@ -213,7 +213,13 @@ fn judge_changes(
         remembered,
     } = select_unseen(&repo_root, &loaded, &paths, &scan.baseline_entries);
     protected.extend(shrink_lines(&repo_root, &config_path, &scan));
-    if fresh.is_empty() && protected.is_empty() {
+    let deletions = gated_deletions(&repo_root, &loaded, &paths, base, &scan);
+    let mut remembered = remembered;
+    for (rel, _) in &deletions {
+        remembered.insert(rel.clone(), "deleted".to_string());
+    }
+    let deletions: Vec<String> = deletions.into_iter().map(|(_, line)| line).collect();
+    if fresh.is_empty() && protected.is_empty() && deletions.is_empty() {
         write_memory(&repo_root, &remembered);
         let mut v = PostVerdict::quiet(format!(
             "{P}: no governed record changed since the last check; no check ran"
@@ -228,7 +234,8 @@ fn judge_changes(
     // A gated move is judged on the same records, against the commit the
     // command started from: the command has already run, so this reports and
     // never blocks. It does not depend on `check` being able to run.
-    let gated = gated_moves(&repo_root, &loaded, &fresh, base, &scan);
+    let mut gated = gated_moves(&repo_root, &loaded, &fresh, base, &scan);
+    gated.extend(deletions);
 
     let report = match run_check(config, &fresh, gated.is_empty() && protected.is_empty()) {
         Ok(r) => r,
@@ -303,6 +310,46 @@ fn gated_moves(
                 base,
                 &scan.baseline_status_gates,
             )
+        })
+        .collect()
+}
+
+/// One report line per gated record the command deleted that the memory has not
+/// reported, with its path. A deletion that pairs with a record the command
+/// changed (the same `Stable-Id` and record id) is a rename, not reported.
+fn gated_deletions(
+    repo_root: &Path,
+    loaded: &Config,
+    paths: &BTreeMap<String, bool>,
+    base: &str,
+    scan: &ProtectedScan,
+) -> Vec<(String, String)> {
+    let deleted: Vec<&String> = paths.iter().filter(|(_, d)| **d).map(|(p, _)| p).collect();
+    if deleted.is_empty() {
+        return Vec::new();
+    }
+    let survivors: Vec<super::gate::RecordIdentity> = paths
+        .iter()
+        .filter(|(_, d)| !**d)
+        .filter_map(|(rel, _)| {
+            let text = std::fs::read_to_string(repo_root.join(rel)).ok()?;
+            super::gate::record_identity(loaded, Path::new(rel), &text)
+        })
+        .collect();
+    let seen = read_memory(repo_root);
+    deleted
+        .into_iter()
+        .filter(|rel| seen.get(*rel).map(String::as_str) != Some("deleted"))
+        .filter_map(|rel| {
+            super::gate::gated_deletion_report(
+                repo_root,
+                loaded,
+                Path::new(rel),
+                base,
+                &scan.baseline_status_gates,
+                &survivors,
+            )
+            .map(|line| (rel.clone(), line))
         })
         .collect()
 }
