@@ -190,6 +190,24 @@ jobs:
           # The authority table (ADR-89 section 4): the pull request's author and
           # current approvers, for diff.decider-required.
           actors: "true"
+      # No stale evidence pin may reach the main line. `fix --rebaseline` without
+      # --apply only reads: it lists each record whose pinned locator changed
+      # (the `rebaselines` array of its JSON report) and writes nothing. The
+      # step fails when that list is not empty, naming each stale path.
+      - name: no stale evidence pins (fix --rebaseline, report only)
+        working-directory: .
+        run: |
+          report="$(mktemp)"
+          rust/target/release/urzua fix --rebaseline > "$report"
+          stale="$(jq -r '(.rebaselines // [])[] | .record as $r | .pins[] | "\($r)  \(.locator)"' "$report")"
+          if [ -n "$stale" ]; then
+            echo "::error::stale evidence pins: re-pin each record with a per-file reason" >&2
+            echo "Stale pins (record  locator):" >&2
+            echo "$stale" >&2
+            echo "Re-pin with: urzua fix --rebaseline --apply --ids <record> --by <you> --reason '<what changed in the pinned code>' (see .claude/commands/repin.md). Read the diff of each pinned file first; list every re-pin and its reason in the PR body." >&2
+            exit 1
+          fi
+          echo "no stale evidence pins"
       # The installed agent-harness bundle (hooks, commands, lock) has not drifted from
       # what `urzua harness install` generates: a deleted hook entry or an edited
       # translator fails here, not only in a cargo test.
