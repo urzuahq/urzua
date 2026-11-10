@@ -87,7 +87,7 @@ pub struct RuleCtx<'a> {
     pub base_drift: &'a HashMap<PathBuf, HashSet<String>>,
     /// Per changed record, the UTC day (start, unix seconds) of the commit that
     /// added each `Re-verified` row of its text (`--base`); empty without one.
-    pub added_row_days: &'a HashMap<PathBuf, HashMap<String, i64>>,
+    pub added_row_days: &'a HashMap<PathBuf, super::RowWindows>,
     /// `None` on a run with no `--base`.
     pub changed_paths: Option<&'a [PathBuf]>,
     /// The subset of `changed_paths` that did not exist at the merge base; `None`

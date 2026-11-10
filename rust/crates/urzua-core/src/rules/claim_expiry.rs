@@ -522,15 +522,20 @@ fn header_value(text: &str, field: &str) -> Option<String> {
     (!value.is_empty()).then(|| value.to_string())
 }
 
+/// Per `Re-verified` row text, the UTC days (start, unix seconds) between which
+/// it may be dated: the branch's first commit day and its adding commit's day.
+pub type RowWindows = HashMap<String, (i64, i64)>;
+
 /// What a `--base` run reads beyond the two copies of a record, for
 /// `embodiment.claim-renewal-unattested`: the locators of each changed record
 /// that had drifted at the merge base (empty without `--base`), the evaluation
-/// time and, per changed record, the UTC day of the commit that added each
-/// `Re-verified` row of its text (a row git cannot date has no entry).
+/// time and, per changed record, the window of UTC days (the branch's first commit to the
+/// commit that added it) in which each `Re-verified` row of its text may be
+/// dated (a row git cannot date has no entry).
 pub struct BaseReads<'a> {
     pub drift: &'a HashMap<PathBuf, HashSet<String>>,
     pub now_unix: i64,
-    pub added_row_days: &'a HashMap<PathBuf, HashMap<String, i64>>,
+    pub added_row_days: &'a HashMap<PathBuf, RowWindows>,
 }
 
 /// `embodiment.claim-renewal-unattested` (`ADR-97` section 6): on a `--base`
@@ -645,7 +650,7 @@ fn acknowledgement_problems(
     record: &Record,
     (now_text, then_text): (&str, &str),
     drifted: Option<&HashSet<String>>,
-    (now_unix, added_days): (i64, Option<&HashMap<String, i64>>),
+    (now_unix, added_days): (i64, Option<&RowWindows>),
 ) -> Vec<String> {
     let id = config.revision_log_id(&record.record_type);
     let shape = config.revision_log_shape(&record.record_type);
@@ -684,11 +689,11 @@ fn acknowledgement_problems(
             day > now_unix
                 || added_days
                     .and_then(|d| d.get(&ack.row))
-                    .is_some_and(|d| *d != day)
+                    .is_some_and(|(first, added)| day < *first || day > *added)
         });
         if misdated {
             problems.push(format!(
-                "the Re-verified row dated {} is not dated the day it was added (after the evaluation date, or not the UTC date of the commit that added it): only `urzua reverify` writes the row, dated the day it ran",
+                "the Re-verified row dated {} is not dated within the branch (after the evaluation date, before the UTC day of the branch's first commit, or after the UTC day of the commit that added it): only `urzua reverify` writes the row, dated the day it ran",
                 ack.date
             ));
         }
