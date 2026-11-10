@@ -431,7 +431,7 @@ fn a_row_not_dated_the_day_it_was_added_is_reported_on_a_base_run() {
     let misdated = |found: &[String]| {
         found
             .iter()
-            .filter(|m| m.contains("not dated the day it was added"))
+            .filter(|m| m.contains("not dated within the branch"))
             .count()
     };
     // Later than the evaluation date.
@@ -439,11 +439,107 @@ fn a_row_not_dated_the_day_it_was_added_is_reported_on_a_base_run() {
     commit_all(&dir, 0);
     let found = renewal_findings(&dir);
     assert_eq!(misdated(&found), 1, "{found:?}");
-    // Not the date of the commit that added it.
+    // Before the branch's first commit.
     std::fs::write(dir.join(RECORD), redate(&text, "2026-01-02")).unwrap();
     commit_all(&dir, 0);
     let found = renewal_findings(&dir);
     assert_eq!(misdated(&found), 1, "{found:?}");
+}
+
+/// A renewal on a branch whose first commit (an unrelated file) is `first`
+/// days old: the row is dated `row` days ago and committed with author date
+/// `author` and committer date `committer` days ago. Returns the renewal
+/// findings of a `--base` run.
+fn window_case(
+    name: &str,
+    (first, row): (u32, u32),
+    (author, committer): (u32, u32),
+) -> Vec<String> {
+    let dir = drifted(name, "    drift: {spec: acknowledge}\n", false, "spec");
+    with_renewal_rule(&dir);
+    git(&dir, &["tag", "base"]);
+    std::fs::write(dir.join("src/b.rs"), "fn b() {}\n").unwrap();
+    commit_all(&dir, first);
+    let parsed = renew(&dir);
+    assert_eq!(parsed["status"], "applied", "{parsed}");
+    let text = std::fs::read_to_string(dir.join(RECORD)).unwrap();
+    std::fs::write(
+        dir.join(RECORD),
+        text.replace(&date_days_ago(0)[..10], &date_days_ago(row)[..10]),
+    )
+    .unwrap();
+    git(&dir, &["add", "-A"]);
+    let status = Command::new("git")
+        .args(["commit", "-q", "-m", "row"])
+        .env("GIT_AUTHOR_DATE", date_days_ago(author))
+        .env("GIT_COMMITTER_DATE", date_days_ago(committer))
+        .current_dir(&dir)
+        .status()
+        .unwrap();
+    assert!(status.success());
+    renewal_findings(&dir)
+}
+
+#[test]
+fn a_row_written_a_day_before_the_commit_that_added_it_is_accepted() {
+    // Reverify ran two days ago; the row was committed yesterday.
+    let found = window_case("dayafter", (3, 2), (1, 1));
+    assert_eq!(found, Vec::<String>::new());
+}
+
+#[test]
+fn a_row_added_by_an_amend_into_an_older_commit_is_accepted() {
+    // Reverify ran today; the row was amended into a commit authored three
+    // days ago, so the commit keeps its author date and gains a new committer date.
+    let found = window_case("amended", (3, 0), (3, 0));
+    assert_eq!(found, Vec::<String>::new());
+}
+
+#[test]
+fn a_row_whose_line_a_later_commit_touched_is_accepted() {
+    // The row is dated and committed three days ago; yesterday a commit
+    // reworded its Reason, so blame now names yesterday's commit.
+    let dir = drifted("touched", "    drift: {spec: acknowledge}\n", false, "spec");
+    with_renewal_rule(&dir);
+    git(&dir, &["tag", "base"]);
+    let parsed = renew(&dir);
+    assert_eq!(parsed["status"], "applied", "{parsed}");
+    let text = std::fs::read_to_string(dir.join(RECORD)).unwrap();
+    let three = &date_days_ago(3)[..10];
+    std::fs::write(
+        dir.join(RECORD),
+        text.replace(&date_days_ago(0)[..10], three),
+    )
+    .unwrap();
+    commit_all(&dir, 3);
+    let text = std::fs::read_to_string(dir.join(RECORD)).unwrap();
+    let reworded = text.replace("the claim still holds.", "the claim holds.");
+    assert_ne!(text, reworded);
+    std::fs::write(dir.join(RECORD), reworded).unwrap();
+    commit_all(&dir, 1);
+    assert_eq!(renewal_findings(&dir), Vec::<String>::new());
+}
+
+#[test]
+fn a_row_dated_before_the_branch_started_is_reported() {
+    // The branch began yesterday; the row claims five days ago.
+    let found = window_case("backdated", (1, 5), (0, 0));
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert!(
+        found[0].contains("not dated within the branch"),
+        "{found:?}"
+    );
+}
+
+#[test]
+fn a_row_dated_after_the_commit_that_added_it_is_reported() {
+    // Committed three days ago, dated yesterday.
+    let found = window_case("postdated", (4, 1), (3, 3));
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert!(
+        found[0].contains("not dated within the branch"),
+        "{found:?}"
+    );
 }
 
 #[test]

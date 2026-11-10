@@ -111,7 +111,7 @@ struct Context<'a> {
     repo_root: PathBuf,
     base_text: HashMap<PathBuf, String>,
     base_drift: HashMap<PathBuf, HashSet<String>>,
-    added_row_days: HashMap<PathBuf, HashMap<String, i64>>,
+    added_row_days: HashMap<PathBuf, rules::RowWindows>,
     templates: urzua_core::new_record::TemplateValues,
     /// A proposed record is being judged (`--stdin-path`).
     record_only: bool,
@@ -1163,7 +1163,7 @@ fn index_with_disclosures<'a>(
 struct DiffInputs {
     base_text: HashMap<PathBuf, String>,
     base_drift: HashMap<PathBuf, HashSet<String>>,
-    added_row_days: HashMap<PathBuf, HashMap<String, i64>>,
+    added_row_days: HashMap<PathBuf, rules::RowWindows>,
     added_paths: Option<Vec<PathBuf>>,
     pull_ref_claims: rules::PullRefClaims,
     templates: urzua_core::new_record::TemplateValues,
@@ -1226,26 +1226,31 @@ fn load_base_drift(
     out
 }
 
-/// The UTC day (start, unix seconds) of the commit that added each
-/// `Re-verified` row a changed record gained since the merge base, keyed by the
-/// row, for `embodiment.claim-renewal-unattested` (`ADR-97` item 6): the row is
-/// blamed in the head, and a row not yet committed counts as added today. A row
-/// git cannot date has no entry and is not judged on its date.
+/// The window of UTC days (start, unix seconds) in which each `Re-verified`
+/// row a changed record gained since the merge base may be dated, keyed by the
+/// row, for `embodiment.claim-renewal-unattested` (`ADR-97` item 6): from the
+/// author day of the branch's first commit to the later of the author and
+/// committer day of the commit the
+/// row is blamed to in the head (today for a row not yet committed). A row git
+/// cannot date has no entry and is not judged on its date.
 fn load_added_row_days(
     session: &Session,
     changes: Option<&urzua_io::GitChanges>,
     base_text: &HashMap<PathBuf, String>,
-) -> HashMap<PathBuf, HashMap<String, i64>> {
+) -> HashMap<PathBuf, rules::RowWindows> {
     const DAY: i64 = 86_400;
     let mut out = HashMap::new();
     let (config, repo_root) = (&session.config, &session.repo_root);
-    if changes.is_none()
-        || enabled_setting(config, rules::RULE_EMBODIMENT_CLAIM_RENEWAL_UNATTESTED).is_none()
-    {
+    let Some(changes) = changes else {
+        return out;
+    };
+    if enabled_setting(config, rules::RULE_EMBODIMENT_CLAIM_RENEWAL_UNATTESTED).is_none() {
         return out;
     }
     let cache = urzua_io::BlameCache::new(repo_root);
     let today = urzua_io::now_unix().div_euclid(DAY) * DAY;
+    let branch_start = urzua_io::branch_first_author_unix_time(repo_root, &changes.merge_base)
+        .map(|t| t.div_euclid(DAY) * DAY);
     for record in &session.records {
         let Some(then_text) = base_text.get(&record.path) else {
             continue;
@@ -1269,12 +1274,20 @@ fn load_added_row_days(
             let day = if commit.chars().all(|c| c == '0') {
                 Some(today)
             } else {
-                cache
-                    .commit_author_unix_time(&commit)
+                // The later of the author and committer day: an amend or a
+                // fixup keeps the author time and moves the committer time.
+                let (author, committer) = (
+                    cache.commit_author_unix_time(&commit),
+                    cache.commit_unix_time(&commit),
+                );
+                author
+                    .into_iter()
+                    .chain(committer)
+                    .max()
                     .map(|t| t.div_euclid(DAY) * DAY)
             };
             if let Some(day) = day {
-                days.insert(ack.row, day);
+                days.insert(ack.row, (branch_start.map_or(day, |s| s.min(day)), day));
             }
         }
         if !days.is_empty() {
