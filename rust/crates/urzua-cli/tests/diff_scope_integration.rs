@@ -996,3 +996,28 @@ fn a_renumber_that_keeps_the_stable_id_is_a_new_record_not_a_move() {
         "{report}"
     );
 }
+
+#[test]
+fn a_declared_identity_type_pairs_a_slug_rename_through_its_deleted_copy() {
+    // The type derives its record id from a declared pattern, and the file
+    // names are lower case, so the `ADR-N-slug` convention reads no id from
+    // them. The deleted base copy must be parsed with the declared model or it
+    // has no record id, never pairs, and Accepted back to Draft goes unjudged.
+    let config = sid_config().replace(
+        "    dir: \"docs/adr\"\n",
+        "    dir: \"docs/adr\"\n    identity: {from: filename, pattern: '^(?P<prefix>[a-z]+)-(?P<number>\\d+)-(?P<slug>.+)$'}\n    fields: {from: yaml-frontmatter}\n",
+    );
+    let dir = empty_repo("sid-declared-identity", &config);
+    sid_adr(&dir, "adr-1-old.md", "Accepted");
+    tag_base(&dir);
+    git(&dir, &["rm", "-q", "docs/adr/adr-1-old.md"]);
+    sid_adr(&dir, "adr-1-new.md", "Draft");
+    git(&dir, &["add", "-A"]);
+
+    let (_, report) = check(&dir, &["--base", "base"]);
+    assert_eq!(
+        transition_findings(&report),
+        vec!["docs/adr/adr-1-new.md"],
+        "{report}"
+    );
+}

@@ -759,8 +759,8 @@ Risk 10 is reworded above. The Decision is otherwise unchanged. The Status of th
 
 ## Amendment (2026-11-09, rename pairing)
 
-Status of this amendment: (2026-11-09, rename pairing) decided by the orchestrator as a fix to the gate's
-guarantee; pending maintainer review. It narrows how `diff.decider-required` and `status.transition-allowed`
+Status of this amendment: accepted by the maintainer on 2026-11-10 (first decided by the orchestrator as a fix to
+the gate's guarantee). It narrows how `diff.decider-required` and `status.transition-allowed`
 find a changed record's committed status; the rest of section 4 is unchanged.
 
 **The problem.** A record the base lacks at its path was paired with any record the diff deleted that carried
@@ -778,6 +778,13 @@ the file name or the type's declared identity) as well as the `Stable-Id`.
 - A record with no readable record id never pairs. Several deleted records with the same id and `Stable-Id`
   still count the record unreadable.
 - `status.transition-allowed` uses the same pairing, so a renumbered record is judged as new there too.
+- The deleted base copy is parsed with the type's declared document model, so a type that derives its record id
+  from a declared `identity` pattern gets the same id on both sides; parsed by file name convention alone, a
+  deleted copy of such a type would have no id and never pair.
+
+**Accepted consequence.** A slug rename that keeps the record id pairs even when its body changes, the same as an
+in-place edit of an Accepted record, which this ADR already leaves to the amendment convention and does not gate.
+A case-only file name rename (`adr-1-case.md` for `ADR-1-case.md`) reads as a new record and is gated.
 
 **Merge queue (nit).** On `merge_group` runs `checks.yml` passes no pull request number, so the gate action
 writes no actors file and a gated change in the queue run is reported `info` (or an error under
@@ -832,4 +839,5 @@ The Decision is otherwise unchanged. The Status of this ADR stays Accepted.
 > | 2026-11-09 | Stated in the outside-writes amendment that under `deny` a plain git repository or a submodule nested inside the session repository counts as outside (refused unless under `allow_paths`), and that under `shared` it stays unjudged like a separate clone (route 12). Documents existing behaviour; no decision changes. **Why:** the review of the outside-writes amendment found the nested case unstated. | **substantive** |
 > | 2026-11-09 | Added an `## Amendment (2026-11-09, gate waivers)`, accepted by the maintainer on 2026-11-09: `authority.waivable` (`never`, `base`, `any`; undeclared is `any`) decides whether a waiver can silence `diff.decider-required`; under `base` only a waiver the base revision holds unchanged counts, under `never` none does, and the stricter of the base's and the head's applies; `init` proposes `never`, `doctor` warns when gates are declared and the key is not, and this repository declares `never`. Also under `base` and `both` the rule's `require_evidence` option is the stricter of the two. Risk 10 is reworded. `Status` stays Accepted. **Why:** Maintainer decision, 2026-11-09, on the review that found a non-decider accepting a record by adding a waiver record in the same pull request. | **substantive** |
 > | 2026-11-09 | Corrected the decider-table amendment: the configuration is a protected path only when a gate lists `.urzua/config.yaml`, not because the base declares `authority`; `doctor` warns (`authority-config-gated`) when no gate lists it. Risk 3 now names a self-hosted gate whose binary is built from the pull request. `Status` stays Accepted. **Why:** the sixth review found the amendment claiming a protection the engine does not give, and risk 3 not naming the PR-built binary. | **substantive** |
-> | 2026-11-09 | Added an `## Amendment (2026-11-09, rename pairing)`, (2026-11-09, rename pairing) decided by the orchestrator as a fix to the gate's guarantee; pending maintainer review: a record the base lacks is paired with a deleted record of the same `Stable-Id` only when the record id (type and number) is also the same, so a new Accepted record copying a deleted record's `Stable-Id` is a gated move; a slug rename still pairs, a renumber is new; `status.transition-allowed` uses the same pairing. States that the merge-queue run passes no pull request number (the pull request run judged the change) and that an actors API outage passes the gate unless `require_evidence` is on. `Status` stays Accepted. **Why:** the seventh review reproduced a non-decider accepting a brand-new ADR with no finding. | **substantive** |
+> | 2026-11-09 | Added an `## Amendment (2026-11-09, rename pairing)`, first decided by the orchestrator, accepted by the maintainer on 2026-11-10: a record the base lacks is paired with a deleted record of the same `Stable-Id` only when the record id (type and number) is also the same, so a new Accepted record copying a deleted record's `Stable-Id` is a gated move; a slug rename still pairs, a renumber is new; the deleted copy is parsed with the type's declared document model; `status.transition-allowed` uses the same pairing. A slug rename that keeps the record id pairs even when its body changes, like an in-place edit; a case-only file rename reads as new and is gated. States that the merge-queue run passes no pull request number (the pull request run judged the change) and that an actors API outage passes the gate unless `require_evidence` is on. `Status` stays Accepted. **Why:** the seventh review reproduced a non-decider accepting a brand-new ADR with no finding. | **substantive** |
+> | 2026-11-10 | Rename-pairing amendment accepted. **Why:** Maintainer decision, 2026-11-10. | **substantive** |
