@@ -60,7 +60,10 @@ inputs:
       `diff.decider-required` reads. Only for a repository that declares
       `authority`. Needs `pr-number`. The file proves authorship and approval,
       not who decided. If the API cannot be read the file is not passed and the
-      rule reports what it could not check. Declare `authority.decider_table:
+      rule reports what it could not check; with `require_evidence` off that
+      is an `info`, so an API outage passes the gate (set `require_evidence:
+      true` on the rule to fail closed). A merge-queue run has no pull request
+      number and writes no file, so it is judged the same way. Declare `authority.decider_table:
       base` in the configuration (recommended): who may decide is then read
       from the pull request's base revision, so a pull request cannot add its
       author to a decider group, or delete a gate, in the change it asks to

@@ -921,3 +921,103 @@ fn a_path_the_base_lacks_is_still_a_new_record() {
     assert_eq!(execution["population"]["examined"], 1, "{report}");
     assert!(finding_files(&report).is_empty(), "{report}");
 }
+
+const SID: &str = "01M6R3NK40JBCPESD89J6FN865";
+
+fn sid_config() -> String {
+    TRANSITIONS_CONFIG.replace(
+        "known_fields: [\"Status\"]",
+        "known_fields: [\"Status\", \"Stable-Id\"]",
+    )
+}
+
+fn sid_adr(dir: &Path, file: &str, status: &str) {
+    std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
+    std::fs::write(
+        dir.join("docs/adr").join(file),
+        format!("---\nStable-Id: {SID}\nStatus: '{status}'\n---\n# {file}\n"),
+    )
+    .unwrap();
+}
+
+fn transition_findings(report: &serde_json::Value) -> Vec<String> {
+    rule_files(report, "status.transition-allowed")
+}
+
+#[test]
+fn a_slug_rename_with_the_same_number_and_stable_id_is_still_paired_with_its_base_copy() {
+    let dir = empty_repo("sid-slug-rename", &sid_config());
+    sid_adr(&dir, "ADR-1-old.md", "Draft");
+    tag_base(&dir);
+    git(&dir, &["rm", "-q", "docs/adr/ADR-1-old.md"]);
+    sid_adr(&dir, "ADR-1-new.md", "Accepted");
+    git(&dir, &["add", "-A"]);
+
+    let (_, report) = check(&dir, &["--base", "base"]);
+    // Draft to Accepted is an allowed edge; judged as new it would not be.
+    assert_eq!(
+        transition_execution(&report)["population"]["unreadable"],
+        0,
+        "{report}"
+    );
+    assert!(transition_findings(&report).is_empty(), "{report}");
+
+    // The paired base status is the one judged: Accepted back to Draft is refused.
+    let dir = empty_repo("sid-slug-rename-back", &sid_config());
+    sid_adr(&dir, "ADR-1-old.md", "Accepted");
+    tag_base(&dir);
+    git(&dir, &["rm", "-q", "docs/adr/ADR-1-old.md"]);
+    sid_adr(&dir, "ADR-1-new.md", "Draft");
+    git(&dir, &["add", "-A"]);
+    let (_, report) = check(&dir, &["--base", "base"]);
+    assert_eq!(
+        transition_findings(&report),
+        vec!["docs/adr/ADR-1-new.md"],
+        "{report}"
+    );
+}
+
+#[test]
+fn a_renumber_that_keeps_the_stable_id_is_a_new_record_not_a_move() {
+    // Judged as paired, Accepted to Draft would be a refused edge. A different
+    // record id is a different record: it reads as new, and a new Draft is fine.
+    let dir = empty_repo("sid-renumber", &sid_config());
+    sid_adr(&dir, "ADR-1-old.md", "Accepted");
+    tag_base(&dir);
+    git(&dir, &["rm", "-q", "docs/adr/ADR-1-old.md"]);
+    sid_adr(&dir, "ADR-9999-other.md", "Draft");
+    git(&dir, &["add", "-A"]);
+
+    let (_, report) = check(&dir, &["--base", "base"]);
+    assert!(transition_findings(&report).is_empty(), "{report}");
+    assert_eq!(
+        transition_execution(&report)["population"]["unreadable"],
+        0,
+        "{report}"
+    );
+}
+
+#[test]
+fn a_declared_identity_type_pairs_a_slug_rename_through_its_deleted_copy() {
+    // The type derives its record id from a declared pattern, and the file
+    // names are lower case, so the `ADR-N-slug` convention reads no id from
+    // them. The deleted base copy must be parsed with the declared model or it
+    // has no record id, never pairs, and Accepted back to Draft goes unjudged.
+    let config = sid_config().replace(
+        "    dir: \"docs/adr\"\n",
+        "    dir: \"docs/adr\"\n    identity: {from: filename, pattern: '^(?P<prefix>[a-z]+)-(?P<number>\\d+)-(?P<slug>.+)$'}\n    fields: {from: yaml-frontmatter}\n",
+    );
+    let dir = empty_repo("sid-declared-identity", &config);
+    sid_adr(&dir, "adr-1-old.md", "Accepted");
+    tag_base(&dir);
+    git(&dir, &["rm", "-q", "docs/adr/adr-1-old.md"]);
+    sid_adr(&dir, "adr-1-new.md", "Draft");
+    git(&dir, &["add", "-A"]);
+
+    let (_, report) = check(&dir, &["--base", "base"]);
+    assert_eq!(
+        transition_findings(&report),
+        vec!["docs/adr/adr-1-new.md"],
+        "{report}"
+    );
+}

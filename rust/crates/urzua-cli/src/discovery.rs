@@ -151,7 +151,7 @@ pub(crate) fn untracked_record_files(
 
 /// The resolved document model a record type declares, or the empty model when
 /// it declares none.
-fn resolved_model(
+pub(crate) fn resolved_model(
     type_name: &str,
     type_config: &urzua_core::config::RecordTypeConfig,
 ) -> Result<urzua_core::document_model::RecordModel, String> {
