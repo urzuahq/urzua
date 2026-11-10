@@ -789,10 +789,16 @@ fn a_new_accepted_record_copying_a_deleted_records_stable_id_is_a_gated_move() {
     let actors = mallory(&dir);
     let (code, v) = check_base(&dir, &["--actors", &actors]);
     assert_eq!(code, 1, "{v}");
+    // The new record is a move; the deleted Accepted one is a gated deletion,
+    // because the copy is not a rename (another record id).
     let found = decider_findings(&v);
-    assert_eq!(found.len(), 1, "{v}");
-    assert_eq!(found[0]["file"], "docs/adr/ADR-9999-evil.md");
-    assert_eq!(found[0]["severity"], "error");
+    assert_eq!(found.len(), 2, "{v}");
+    let files: Vec<&str> = found.iter().map(|f| f["file"].as_str().unwrap()).collect();
+    assert!(
+        files.contains(&"docs/adr/ADR-9999-evil.md") && files.contains(&PATH_1),
+        "{v}"
+    );
+    assert!(found.iter().all(|f| f["severity"] == "error"));
 }
 
 #[test]
@@ -818,5 +824,90 @@ fn a_renumber_with_the_same_stable_id_is_judged_as_a_new_record() {
     let actors = mallory(&dir);
     let (code, v) = check_base(&dir, &["--actors", &actors]);
     assert_eq!(code, 1, "{v}");
-    assert_eq!(decider_findings(&v).len(), 1, "{v}");
+    // The new number is a move, and the old number's Accepted record is gone.
+    assert_eq!(decider_findings(&v).len(), 2, "{v}");
+}
+
+// ---------------------------------------------- deleting a gated record
+
+fn actors_for(dir: &Path, login: &str) -> String {
+    write_actors(
+        dir,
+        serde_json::json!({"schema": 1, "pr_author": login, "approvers": []}),
+    )
+}
+
+#[test]
+fn deleting_an_accepted_record_is_a_gated_move_a_decider_can_make() {
+    let dir = sid_fixture("del-accepted", "Accepted");
+    git(&dir, &["rm", "-q", PATH_1]);
+    let (code, v) = check_base(&dir, &["--actors", &mallory(&dir)]);
+    assert_eq!(code, 1, "{v}");
+    let found = decider_findings(&v);
+    assert_eq!(found.len(), 1, "{v}");
+    assert_eq!(found[0]["file"], PATH_1);
+    assert_eq!(found[0]["severity"], "error");
+    assert!(
+        found[0]["message"]
+            .as_str()
+            .unwrap()
+            .contains("deleted while Status was 'Accepted'"),
+        "{v}"
+    );
+    let (code, v) = check_base(&dir, &["--actors", &actors_for(&dir, "alice")]);
+    assert_eq!(code, 0, "{v}");
+    assert!(decider_findings(&v).is_empty(), "{v}");
+}
+
+#[test]
+fn deleting_a_record_at_an_ungated_status_is_not_judged() {
+    let dir = sid_fixture("del-proposed", "Proposed");
+    git(&dir, &["rm", "-q", PATH_1]);
+    let (_, v) = check_base(&dir, &["--actors", &mallory(&dir)]);
+    assert!(decider_findings(&v).is_empty(), "{v}");
+}
+
+#[test]
+fn a_rename_pair_is_not_a_deletion() {
+    let dir = sid_fixture("del-rename", "Accepted");
+    git(&dir, &["mv", PATH_1, "docs/adr/ADR-1-other-slug.md"]);
+    let (code, v) = check_base(&dir, &["--actors", &mallory(&dir)]);
+    assert_eq!(code, 0, "{v}");
+    assert!(decider_findings(&v).is_empty(), "{v}");
+}
+
+#[test]
+fn a_case_variant_of_a_gated_status_is_still_a_gated_move() {
+    // The other rules that would catch the respelling are off or waived in the
+    // field; the gate must hold without them.
+    let cfg = config().replace("rules:\n", "rules:\n  status.undeclared-value: off\n");
+    for spelled in ["accepted", "ACCEPTED"] {
+        let dir = fixture("case-variant", &cfg);
+        std::fs::write(
+            dir.join(PATH_1),
+            format!("---\nStatus: {spelled}\n---\n# ADR-1: T\n\nprose\n"),
+        )
+        .unwrap();
+        let (code, v) = check_base(&dir, &["--actors", &mallory(&dir)]);
+        assert_eq!(code, 1, "{spelled}: {v}");
+        assert_eq!(decider_findings(&v).len(), 1, "{spelled}: {v}");
+        let (code, v) = check_base(&dir, &["--actors", &actors_for(&dir, "alice")]);
+        assert_eq!(code, 0, "{spelled}: {v}");
+    }
+}
+
+#[test]
+fn the_base_copys_status_key_is_read_folding_case_like_the_head_and_deletions() {
+    // The base and the head both spell the key `status`; an edit that leaves it
+    // at Accepted is not a move. An exact read of the base copy would find no
+    // `Status` there and treat the edit as a move.
+    let dir = fixture("base-key-case", &config());
+    let lower = "---\nstatus: Accepted\n---\n# ADR-1: T\n\nprose\n";
+    std::fs::write(dir.join(PATH_1), lower).unwrap();
+    git(&dir, &["add", "-A"]);
+    git(&dir, &["commit", "-q", "-m", "lower-case key"]);
+    std::fs::write(dir.join(PATH_1), format!("{lower}\nmore prose\n")).unwrap();
+    let (code, v) = check_base(&dir, &["--actors", &mallory(&dir)]);
+    assert_eq!(code, 0, "{v}");
+    assert!(decider_findings(&v).is_empty(), "{v}");
 }

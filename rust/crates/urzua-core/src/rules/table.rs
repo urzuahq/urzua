@@ -1996,6 +1996,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         population: PopulationUnit::ChangedPath,
         actions: &[
             VariantAction::new("gated-move-without-decider", ActionDecl::Exempt("accepting a record is a decider's act; no edit to the record supplies the pull request's author or approval")),
+            VariantAction::new("gated-deletion-without-decider", ActionDecl::Exempt("deleting a gated record is a decider's act; no edit to the repository supplies the pull request's author or approval")),
             VariantAction::new("gated-path-without-decider", ActionDecl::Exempt("changing a protected path is a decider's act; no edit to the file supplies the pull request's author or approval")),
         ],
         phase: Phase::Main,
@@ -2006,7 +2007,10 @@ pub const RULE_TABLE: &[RuleDef] = &[
                 c.changed_paths,
                 c.records,
                 c.config,
-                c.committed_statuses,
+                &BaseHistory {
+                    committed: c.committed_statuses,
+                    deleted: c.deleted_records,
+                },
                 c.actors,
                 c.base_authority,
                 &opts,

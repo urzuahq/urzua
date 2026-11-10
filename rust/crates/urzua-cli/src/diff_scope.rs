@@ -5,10 +5,10 @@
 //! change introduces in an unchanged record: delete a target and its
 //! referrer, untouched, is left pointing at nothing.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
-use urzua_core::config::{Config, RelationRole};
+use urzua_core::config::{Config, RecordTypeConfig, RelationRole};
 use urzua_core::record::Record;
 use urzua_core::report::{DiffScope, Notice, NoticeSeverity};
 use urzua_core::rules::{self, CommittedStatus};
@@ -168,21 +168,54 @@ fn deleted_by_stable_id(
     changes: &urzua_io::GitChanges,
 ) -> HashMap<String, Vec<DeletedCopy>> {
     let mut out: HashMap<String, Vec<DeletedCopy>> = HashMap::new();
-    let Some(type_config) = config.record_types.get(type_name) else {
+    for (_, sid, copy) in deleted_copies(repo_root, config, None, type_name, status_field, changes)
+    {
+        if let Some(sid) = sid {
+            out.entry(sid).or_default().push(copy);
+        }
+    }
+    out
+}
+
+/// Every record of one type the diff deleted, as the base held it: its path,
+/// its `Stable-Id` (if any) and its [`DeletedCopy`], in path order. A deleted
+/// file is a record of the type when the type's declaration (`dir`,
+/// `exclude_files`) says so in the head's `config` or, when `base_types` is
+/// given, in the base revision's: a pull request cannot take a record out of
+/// the type's reach by editing the declaration in the same change. The base's
+/// declaration is tried first, and parses the base copy.
+fn deleted_copies(
+    repo_root: &Path,
+    config: &Config,
+    base_types: Option<&BTreeMap<String, RecordTypeConfig>>,
+    type_name: &str,
+    status_field: &str,
+    changes: &urzua_io::GitChanges,
+) -> Vec<(PathBuf, Option<String>, DeletedCopy)> {
+    let mut out = Vec::new();
+    let declared: Vec<&RecordTypeConfig> = base_types
+        .and_then(|t| t.get(type_name))
+        .into_iter()
+        .chain(config.record_types.get(type_name))
+        .collect();
+    if declared.is_empty() {
         return out;
-    };
+    }
     let mut deleted: Vec<&PathBuf> = changes.deleted.iter().collect();
     deleted.sort();
     for path in deleted {
         let Some(file_name) = path.file_name().and_then(|n| n.to_str()) else {
             continue;
         };
-        if !urzua_core::record::is_governed_record_filename(file_name)
-            || !type_config.owns_dir(path.parent())
-            || type_config.excludes(file_name)
-        {
+        if !urzua_core::record::is_governed_record_filename(file_name) {
             continue;
         }
+        let Some(type_config) = declared
+            .iter()
+            .find(|t| t.owns_dir(path.parent()) && !t.excludes(file_name))
+        else {
+            continue;
+        };
         let Ok(content) = urzua_io::read_at_commit(repo_root, &changes.merge_base, path) else {
             continue;
         };
@@ -207,19 +240,62 @@ fn deleted_by_stable_id(
                 prefix,
             ),
         };
-        let Some(id) = stable_id(&old).map(str::to_string) else {
-            continue;
-        };
-        let status = old
-            .header
-            .get(status_field)
-            .map(str::trim)
-            .filter(|v| !v.is_empty())
-            .map(str::to_string);
-        out.entry(id)
-            .or_default()
-            .push((rules::record_id(&old), status));
+        let status =
+            urzua_core::authority::gate_status(&old.header, status_field).map(str::to_string);
+        out.push((
+            path.clone(),
+            stable_id(&old).map(str::to_string),
+            (rules::record_id(&old), status),
+        ));
     }
+    out
+}
+
+/// The records the diff deletes that are not a rename, for the record types in
+/// `gated` (the types an authority status gate names), with the `Status` each
+/// held at the base (`ADR-89` amendment of 2026-11-10, deletions). A deleted
+/// record whose `Stable-Id` and record id both still exist on a head record of
+/// its type is that record renamed or moved, not removed, and is left out; one
+/// with no `Stable-Id` cannot pair and is deleted. `base_types` is the base
+/// revision's record types, given under `authority.decider_table: base` or
+/// `both`: a file is a record of a gated type when either revision's
+/// declaration owns it.
+pub(crate) fn deleted_gated_records(
+    repo_root: &Path,
+    config: &Config,
+    base_types: Option<&BTreeMap<String, RecordTypeConfig>>,
+    records: &[Record],
+    changes: &urzua_io::GitChanges,
+    gated: &std::collections::BTreeSet<&str>,
+) -> Vec<rules::DeletedRecord> {
+    let mut out = Vec::new();
+    if changes.deleted.is_empty() {
+        return out;
+    }
+    for type_name in gated {
+        let field = rules::relation_field_name(config, type_name, RelationRole::Status);
+        let heads: Vec<(&str, RecordId)> = records
+            .iter()
+            .filter(|r| r.record_type == *type_name)
+            .filter_map(|r| Some((stable_id(r)?, RecordId::new(&rules::record_id(r)?))))
+            .collect();
+        for (path, sid, (id, status)) in
+            deleted_copies(repo_root, config, base_types, type_name, field, changes)
+        {
+            let renamed = match (&sid, id.as_deref().map(RecordId::new)) {
+                (Some(sid), Some(id)) => heads.iter().any(|(s, h)| s == sid && *h == id),
+                _ => false,
+            };
+            if !renamed {
+                out.push(rules::DeletedRecord {
+                    path,
+                    record_type: type_name.to_string(),
+                    status,
+                });
+            }
+        }
+    }
+    out.sort_by(|a, b| a.path.cmp(&b.path));
     out
 }
 
@@ -320,9 +396,9 @@ pub(crate) fn committed_statuses(
                 );
                 let field =
                     rules::relation_field_name(config, &record.record_type, RelationRole::Status);
-                match old.header.get(field).map(str::trim) {
-                    Some(v) if !v.is_empty() => CommittedStatus::Status(v.to_string()),
-                    _ => CommittedStatus::Unreadable,
+                match urzua_core::authority::gate_status(&old.header, field) {
+                    Some(v) => CommittedStatus::Status(v.to_string()),
+                    None => CommittedStatus::Unreadable,
                 }
             }
         };

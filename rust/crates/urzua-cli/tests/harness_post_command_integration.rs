@@ -164,6 +164,36 @@ fn a_bash_edit_that_moves_a_record_to_a_gated_status_is_reported_and_not_blocked
     );
 }
 
+const GATED_CONFIG: &str = "schema_version: 2\nrules: {embodiment.consistency: error}\nembodiment:\n  drift: Drift detected\n  tiers:\n    - {state: Verified, evidence: test, claims_built: true}\n    - {state: Implemented, evidence: code, claims_built: true}\n    - {state: Specified, evidence: spec}\n  none: Not started\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\"]\n    known_fields: [\"Embodiment\", \"Realized-by\"]\n    statuses:\n      values: [Proposed, Accepted, Rejected]\nharness:\n  adapters: [claude-code]\n  guardrails:\n    acceptance: {enabled: true}\n    post-command: {enabled: true}\nauthority:\n  deciders:\n    maintainers: {logins: [Alice]}\n  gates:\n    - {type: adr, to: [Accepted, Rejected], by: maintainers}\n";
+
+/// ADR-89 amendment of 2026-11-10: removing a record that held a gated status
+/// is reported as a gated move, and a rename (same Stable-Id and record id) is
+/// not.
+#[test]
+fn a_bash_rm_of_a_gated_record_is_reported_and_a_rename_is_not() {
+    let sid = "01M6R3NK40JBCPESD89J6FN865";
+    let accepted = format!("---\nStable-Id: {sid}\nStatus: Accepted\n---\n# ADR-1: T\n\nprose\n");
+    let dir = fixture("gated-rm", GATED_CONFIG, &accepted);
+    bash(&dir, &format!("git mv {PATH_1} docs/adr/ADR-1-b.md"));
+    let v = post(&dir);
+    assert!(
+        !v["gated_moves"].to_string().contains("deleted"),
+        "a rename is not a deletion: {v}"
+    );
+    bash(&dir, "git reset -q --hard");
+
+    bash(&dir, &format!("rm {PATH_1}"));
+    let v = post(&dir);
+    assert_eq!(v["verdict"], "allow-with-warnings", "{v}");
+    let moves = v["gated_moves"].as_array().unwrap();
+    assert_eq!(moves.len(), 1, "{v}");
+    let line = moves[0].as_str().unwrap();
+    assert!(
+        line.contains(PATH_1) && line.contains("deleted") && line.contains("'Accepted'"),
+        "{line}"
+    );
+}
+
 // ----------------------------------------------------- the three writers
 
 #[test]

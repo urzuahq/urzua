@@ -67,11 +67,27 @@ struct Gated<'a> {
 /// The status a changed record holds now, by its type's declared status field.
 fn current_status<'r>(record: &'r Record, config: &Config) -> Option<&'r str> {
     let field = relation_field_name(config, &record.record_type, RelationRole::Status);
-    record
-        .header
-        .get(field)
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
+    crate::authority::gate_status(&record.header, field)
+}
+
+/// What the merge base says about the records the diff touches: each changed
+/// record's committed status, and the records the diff deletes.
+#[derive(Clone, Copy)]
+pub struct BaseHistory<'a> {
+    pub committed: Option<&'a HashMap<PathBuf, CommittedStatus>>,
+    pub deleted: &'a [DeletedRecord],
+}
+
+/// A record the diff deletes, as the merge base held it (`ADR-89` amendment of
+/// 2026-11-10, deletions). The caller leaves out a record that pairs as a
+/// rename (the same `Stable-Id` and record id still exists in the head), so
+/// every entry here is a record that is gone.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeletedRecord {
+    pub path: PathBuf,
+    pub record_type: String,
+    /// Its `Status` at the base; `None` where the base copy has no readable one.
+    pub status: Option<String>,
 }
 
 fn gated_changes<'a>(
@@ -80,15 +96,34 @@ fn gated_changes<'a>(
     config: &Config,
     authority: &'a AuthorityDecl,
     committed: Option<&HashMap<PathBuf, CommittedStatus>>,
+    deleted: &'a [DeletedRecord],
 ) -> Vec<Gated<'a>> {
     let mut out = Vec::new();
+    for d in deleted {
+        let Some(status) = d.status.as_deref() else {
+            continue;
+        };
+        let field = relation_field_name(config, &d.record_type, RelationRole::Status);
+        for gate in authority.status_gates(&d.record_type, status) {
+            out.push(Gated {
+                path: &d.path,
+                gate,
+                what: format!("the record was deleted while {field} was '{status}'"),
+                variant: "gated-deletion-without-decider",
+            });
+        }
+    }
     for path in paths {
         if let Some(record) = records.iter().find(|r| &r.path == *path) {
             if let Some(status) = current_status(record, config) {
                 let field = relation_field_name(config, &record.record_type, RelationRole::Status);
                 for gate in authority.status_gates(&record.record_type, status) {
                     let what = match committed.and_then(|c| c.get(&record.path)) {
-                        Some(CommittedStatus::Status(old)) if old == status => continue,
+                        Some(CommittedStatus::Status(old))
+                            if crate::authority::same_status(old, status) =>
+                        {
+                            continue
+                        }
                         Some(CommittedStatus::Status(old)) => {
                             format!("{field} moved from '{old}' to '{status}'")
                         }
@@ -211,11 +246,14 @@ fn finding_for(
 /// Which table is the gate's is `authority.decider_table` (`ADR-89` amendment
 /// of 2026-11-09): `head` (undeclared) reads the checkout's, `base` reads the
 /// base revision's, `both` judges each gated change under both.
+///
+/// A record the diff deletes (`deleted`) while its base `Status` is one a gate
+/// names is a gated move too, judged the same way.
 pub fn decider_required(
     changed: Option<&[PathBuf]>,
     records: &[Record],
     config: &Config,
-    committed: Option<&HashMap<PathBuf, CommittedStatus>>,
+    history: &BaseHistory<'_>,
     actors: Option<&Actors>,
     base: &BaseAuthority,
     opts: &DeciderRequiredOpts,
@@ -231,7 +269,14 @@ pub fn decider_required(
     let mut findings = Vec::new();
     let mut gated_paths: HashSet<&Path> = HashSet::new();
     for judged in judged_tables(mode, head, base) {
-        let gated = gated_changes(&paths, records, config, judged.table, committed);
+        let gated = gated_changes(
+            &paths,
+            records,
+            config,
+            judged.table,
+            history.committed,
+            history.deleted,
+        );
         for g in &gated {
             gated_paths.insert(g.path);
             findings.extend(finding_for(g, &judged, actors, opts));
@@ -292,7 +337,10 @@ mod tests {
             Some(&changed),
             &[adr(status)],
             &config(),
-            Some(&committed(base)),
+            &BaseHistory {
+                committed: Some(&committed(base)),
+                deleted: &[],
+            },
             who,
             &BaseAuthority::Absent,
             &DeciderRequiredOpts {
@@ -309,7 +357,10 @@ mod tests {
             None,
             &[],
             &config(),
-            None,
+            &BaseHistory {
+                committed: None,
+                deleted: &[],
+            },
             None,
             &BaseAuthority::Absent,
             &DeciderRequiredOpts::default(),
@@ -399,5 +450,63 @@ mod tests {
         assert!(f[0].message.contains("--actors"));
         let (_, f) = run(&[REC], "Accepted", base(), None, true);
         assert_eq!(f[0].declared_severity, None);
+    }
+
+    fn deleted(status: Option<&str>) -> Vec<DeletedRecord> {
+        vec![DeletedRecord {
+            path: PathBuf::from(REC),
+            record_type: "adr".into(),
+            status: status.map(str::to_string),
+        }]
+    }
+
+    fn run_deleted(status: Option<&str>, who: &Actors) -> Vec<Finding> {
+        decider_required(
+            Some(&[PathBuf::from(REC)]),
+            &[],
+            &config(),
+            &BaseHistory {
+                committed: Some(&HashMap::new()),
+                deleted: &deleted(status),
+            },
+            Some(who),
+            &BaseAuthority::Absent,
+            &DeciderRequiredOpts::default(),
+        )
+        .1
+    }
+
+    #[test]
+    fn deleting_a_record_at_a_gated_status_is_a_gated_move() {
+        let f = run_deleted(Some("Accepted"), &actors("mallory"));
+        assert_eq!(f.len(), 1);
+        assert_eq!(f[0].action_source.variant, "gated-deletion-without-decider");
+        assert!(f[0].message.contains("deleted while Status was 'Accepted'"));
+        assert!(run_deleted(Some("Accepted"), &actors("alice")).is_empty());
+        assert!(run_deleted(Some("accepted"), &actors("mallory")).len() == 1);
+        assert!(run_deleted(Some("Proposed"), &actors("mallory")).is_empty());
+        assert!(run_deleted(None, &actors("mallory")).is_empty());
+    }
+
+    #[test]
+    fn a_case_variant_of_a_gated_status_is_still_gated() {
+        for status in ["accepted", "ACCEPTED", " Accepted "] {
+            let (_, f) = run(
+                &[REC],
+                status,
+                CommittedStatus::Status("Proposed".into()),
+                Some(&actors("mallory")),
+                false,
+            );
+            assert_eq!(f.len(), 1, "{status}");
+        }
+        let (_, f) = run(
+            &[REC],
+            "accepted",
+            CommittedStatus::Status("Accepted".into()),
+            Some(&actors("mallory")),
+            false,
+        );
+        assert!(f.is_empty(), "a case-only difference is not a move");
     }
 }

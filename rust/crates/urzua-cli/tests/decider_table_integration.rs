@@ -660,3 +660,70 @@ fn doctor_warns_on_an_undeclared_waivable_and_on_an_ungated_config() {
     assert_eq!(w["status"], "ok", "{w}");
     assert!(doctor(&gated, "doc-config-ok", "authority-config-gated").is_none());
 }
+
+// ----------------------------- deletions use the base revision's type config
+
+/// `TYPES` with `adr` declaring `extra` (indented type-body lines) as well.
+fn config_with_adr(extra: &str, mode: &str) -> String {
+    format!(
+        "{}{extra}authority:\n{mode}  deciders:\n    maintainers: {{logins: [Alice]}}\n{GATES}",
+        TYPES
+    )
+}
+
+/// A repository whose base holds an Accepted `ADR-1` and `base_config`; the
+/// working tree is the pull request.
+fn accepted_fixture(name: &str, base_config: &str) -> common::TempDir {
+    let dir = fixture(name, Some(base_config));
+    std::fs::write(dir.join(PATH_1), ACCEPTED).unwrap();
+    git(&dir, &["add", "-A"]);
+    git(&dir, &["commit", "-q", "-m", "accepted"]);
+    dir
+}
+
+/// The pull request deletes the Accepted record and writes `head_config`.
+fn delete_pr(dir: &Path, head_config: &str) -> serde_json::Value {
+    std::fs::write(dir.join(CONFIG), head_config).unwrap();
+    std::fs::remove_file(dir.join(PATH_1)).unwrap();
+    let file = actors(dir, "mallory", &[]);
+    json(&run(dir, &["check", "--base", "HEAD", "--actors", &file]))
+}
+
+#[test]
+fn deleting_an_accepted_record_and_excluding_it_in_the_same_pr_is_a_deletion_under_base() {
+    for mode in ["base", "both"] {
+        let m = format!("  decider_table: {mode}\n");
+        let base = config_with_adr("", &m);
+        let head = config_with_adr("    exclude_files: [\"ADR-1-a.md\"]\n", &m);
+        let dir = accepted_fixture(&format!("del-exclude-{mode}"), &base);
+        let v = delete_pr(&dir, &head);
+        assert!(files(&v).contains(&PATH_1.to_string()), "{mode}: {v}");
+    }
+}
+
+#[test]
+fn deleting_an_accepted_record_and_moving_the_type_dir_in_the_same_pr_is_a_deletion_under_base() {
+    let m = "  decider_table: base\n";
+    let base = config_with_adr("", m);
+    let head = config_with_adr("", m).replace("dir: \"docs/adr\"", "dir: \"docs/decisions\"");
+    let dir = accepted_fixture("del-dir", &base);
+    let v = delete_pr(&dir, &head);
+    assert!(files(&v).contains(&PATH_1.to_string()), "{v}");
+}
+
+#[test]
+fn the_same_pull_requests_are_not_deletions_under_head_or_when_undeclared() {
+    for m in ["  decider_table: head\n", ""] {
+        let base = config_with_adr("", m);
+        let excluded = config_with_adr("    exclude_files: [\"ADR-1-a.md\"]\n", m);
+        let moved = config_with_adr("", m).replace("dir: \"docs/adr\"", "dir: \"docs/decisions\"");
+        for (label, head) in [("exclude", excluded), ("dir", moved)] {
+            let dir = accepted_fixture(&format!("del-head-{label}"), &base);
+            let v = delete_pr(&dir, &head);
+            assert!(
+                !files(&v).contains(&PATH_1.to_string()),
+                "{m:?} {label}: {v}"
+            );
+        }
+    }
+}
