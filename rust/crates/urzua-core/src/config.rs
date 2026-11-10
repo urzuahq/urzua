@@ -2596,17 +2596,26 @@ fn generic_marker_problem(config: &Config, marker: &str) -> Option<String> {
         ));
     }
     let prefixes = crate::rules::declared_prefixes(config);
-    // A marker that is itself a record id (`ADR-1`) excuses every citation of that id
-    // and of the ids it begins (`ADR-10` to `ADR-19`, ...).
+    // A marker that is itself a record id (`ADR-1`), or the tail of an id head and
+    // a number (`DR-1`, `R-12`, `-3`, `5`), is a substring of every citation of
+    // that id and of the ids it begins (`ADR-10` to `ADR-19`, ...).
     let lowered = marker.to_lowercase();
-    if let Some(prefix) = prefixes.iter().find(|prefix| {
-        lowered
-            .strip_prefix(&format!("{}-", prefix.to_lowercase()))
-            .is_some_and(|n| !n.is_empty() && n.chars().all(|c| c.is_ascii_digit()))
-    }) {
-        return Some(format!(
-            "'{marker}' is a record id ({prefix}-N) and would excuse every citation of it and of every id it begins; declare text that appears in no id"
-        ));
+    for prefix in &prefixes {
+        let head = format!("{}-", prefix.to_lowercase());
+        let id_tail = head
+            .char_indices()
+            .map(|(at, _)| at)
+            .chain([head.len()])
+            .any(|at| {
+                lowered
+                    .strip_prefix(&head[at..])
+                    .is_some_and(|n| !n.is_empty() && n.chars().all(|c| c.is_ascii_digit()))
+            });
+        if id_tail {
+            return Some(format!(
+                "'{marker}' is, or is the end of, a record id ({prefix}-N) and would excuse every citation of it and of every id it begins; declare text that appears in no id"
+            ));
+        }
     }
     // A fragment of a keyword run into an id head (`ements: ADR-`) sits on every
     // back-pointer line of that type.
@@ -6373,6 +6382,13 @@ record_types:
             "adr-1",
             "ADR-26",
             "MILE-3",
+            // The tail of an id head and a number is inside ADR-1, ADR-10..19.
+            "DR-1",
+            "R-12",
+            "dr-2",
+            "E-3",
+            "-12",
+            "123",
         ] {
             let err = parse(&cfg(marker)).unwrap_err().to_string();
             assert!(err.contains("ignore_marker"), "{marker}: {err}");
@@ -6385,6 +6401,8 @@ record_types:
             "nocite",
             "ok!x",
             "Implements: ADR-1",
+            "r-12x",
+            "dr-x1",
         ] {
             assert!(parse(&cfg(marker)).is_ok(), "{marker}");
         }

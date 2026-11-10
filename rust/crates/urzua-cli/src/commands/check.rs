@@ -111,7 +111,7 @@ struct Context<'a> {
     repo_root: PathBuf,
     base_text: HashMap<PathBuf, String>,
     base_drift: HashMap<PathBuf, HashSet<String>>,
-    merge_base_unix: Option<i64>,
+    added_row_days: HashMap<PathBuf, HashMap<String, i64>>,
     templates: urzua_core::new_record::TemplateValues,
     /// A proposed record is being judged (`--stdin-path`).
     record_only: bool,
@@ -286,7 +286,7 @@ impl<'a> Context<'a> {
             now_unix: self.now_unix,
             base_text: &self.base_text,
             base_drift: &self.base_drift,
-            merge_base_unix: self.merge_base_unix,
+            added_row_days: &self.added_row_days,
             changed_paths: self.changed_paths.as_deref(),
             added_paths: self.added_paths.as_deref(),
             pull_ref_claims: &self.pull_ref_claims,
@@ -1163,7 +1163,7 @@ fn index_with_disclosures<'a>(
 struct DiffInputs {
     base_text: HashMap<PathBuf, String>,
     base_drift: HashMap<PathBuf, HashSet<String>>,
-    merge_base_unix: Option<i64>,
+    added_row_days: HashMap<PathBuf, HashMap<String, i64>>,
     added_paths: Option<Vec<PathBuf>>,
     pull_ref_claims: rules::PullRefClaims,
     templates: urzua_core::new_record::TemplateValues,
@@ -1226,6 +1226,64 @@ fn load_base_drift(
     out
 }
 
+/// The UTC day (start, unix seconds) of the commit that added each
+/// `Re-verified` row a changed record gained since the merge base, keyed by the
+/// row, for `embodiment.claim-renewal-unattested` (`ADR-97` item 6): the row is
+/// blamed in the head, and a row not yet committed counts as added today. A row
+/// git cannot date has no entry and is not judged on its date.
+fn load_added_row_days(
+    session: &Session,
+    changes: Option<&urzua_io::GitChanges>,
+    base_text: &HashMap<PathBuf, String>,
+) -> HashMap<PathBuf, HashMap<String, i64>> {
+    const DAY: i64 = 86_400;
+    let mut out = HashMap::new();
+    let (config, repo_root) = (&session.config, &session.repo_root);
+    if changes.is_none()
+        || enabled_setting(config, rules::RULE_EMBODIMENT_CLAIM_RENEWAL_UNATTESTED).is_none()
+    {
+        return out;
+    }
+    let cache = urzua_io::BlameCache::new(repo_root);
+    let today = urzua_io::now_unix().div_euclid(DAY) * DAY;
+    for record in &session.records {
+        let Some(then_text) = base_text.get(&record.path) else {
+            continue;
+        };
+        let (id, shape) = (
+            config.revision_log_id(&record.record_type),
+            config.revision_log_shape(&record.record_type),
+        );
+        let Ok(now_text) = urzua_io::read_to_string(&repo_root.join(&record.path)) else {
+            continue;
+        };
+        let before = urzua_core::reverify::acknowledgements(then_text, &id, &shape);
+        let mut days = HashMap::new();
+        for ack in urzua_core::reverify::acknowledgements(&now_text, &id, &shape)
+            .into_iter()
+            .filter(|a| !before.iter().any(|b| b.row == a.row))
+        {
+            let Ok(Some(commit)) = cache.commit_for_line(&record.path, ack.line, None) else {
+                continue;
+            };
+            let day = if commit.chars().all(|c| c == '0') {
+                Some(today)
+            } else {
+                cache
+                    .commit_author_unix_time(&commit)
+                    .map(|t| t.div_euclid(DAY) * DAY)
+            };
+            if let Some(day) = day {
+                days.insert(ack.row, day);
+            }
+        }
+        if !days.is_empty() {
+            out.insert(record.path.clone(), days);
+        }
+    }
+    out
+}
+
 /// Stage 2c: read what the diff rules judge a change against.
 fn read_diff_inputs(
     session: &Session,
@@ -1244,8 +1302,7 @@ fn read_diff_inputs(
     let changes = scope.changed.as_ref().or(head_changes.as_ref());
     let base_text = load_base_text(session, changes, notices)?;
     let base_drift = load_base_drift(session, changes, &base_text);
-    let merge_base_unix =
-        changes.and_then(|c| urzua_io::commit_unix_time(repo_root, &c.merge_base));
+    let added_row_days = load_added_row_days(session, changes, &base_text);
     let added_paths: Option<Vec<PathBuf>> = changes.map(|c| {
         let mut added: Vec<PathBuf> = c.added.iter().cloned().collect();
         added.sort();
@@ -1289,7 +1346,7 @@ fn read_diff_inputs(
     Ok(DiffInputs {
         base_text,
         base_drift,
-        merge_base_unix,
+        added_row_days,
         added_paths,
         pull_ref_claims,
         templates,
@@ -1670,7 +1727,7 @@ fn load_context<'a>(
             repo_root: repo_root.clone(),
             base_text: diff.base_text,
             base_drift: diff.base_drift,
-            merge_base_unix: diff.merge_base_unix,
+            added_row_days: diff.added_row_days,
             templates: diff.templates,
             record_only: scope.prospective.is_some(),
             selected: selection.map(|s| s.iter().cloned().collect()),

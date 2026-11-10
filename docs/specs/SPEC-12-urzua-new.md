@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5C0WX34AQKF79DQDS5
-Version: '0.24'
+Version: '0.25'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/commands/new.rs@sha256:7abffc2519d4afca971621f8f4ed85ee88231a2faeab539683bd98f5b6191ec1, code:rust/crates/urzua-core/src/new_record.rs@sha256:21f5012c2b5ff34c2492d7ad9ca7c0a0a35fdc743df9fc76ae124a8210430e67, test:rust/crates/urzua-cli/tests/new_integration.rs@sha256:c319a5750aa11e1bd2b6be9fc6a2d707f34150c514d49c35290ad353f0ef61f7
+Realized-by: code:rust/crates/urzua-cli/src/commands/new.rs@sha256:7abffc2519d4afca971621f8f4ed85ee88231a2faeab539683bd98f5b6191ec1, code:rust/crates/urzua-core/src/new_record.rs@sha256:0f9f2d4f6a94e3adeaf4d8e8a15d7615084315c4b2d5cf752488379baf349ce1, test:rust/crates/urzua-cli/tests/new_integration.rs@sha256:c319a5750aa11e1bd2b6be9fc6a2d707f34150c514d49c35290ad353f0ef61f7
 Author: beauwilliams
 Subject: '`urzua new` -- generating a record''s initial content with a real stable ID assigned.'
 Implements: ADR-27
@@ -211,3 +211,5 @@ take content and parameters, returning a string.
 > | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/new.rs` 98d7b5cb1f70 -> 7abffc2519d4. Reason: Read the diff of each pinned file since the old pin and the claim still holds. new.rs: the local git_output helper is gone and the for-each-ref read calls urzua_io::git::stdout_in, which words a failure the same way ('could not run git: ..', 'git <cmd> failed: ..'); nothing else changed; behaviour unchanged, outputs byte-identical. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-09 | Bumped to `0.23`. The pins this spec's `Realized-by` holds on files this change touched were re-baselined (the `Re-baselined` row above); no behaviour this spec describes changed. | **structural** |
 > | 2026-11-09 | Bumped to `0.24`. Re-pin rows in this revision log were reworded to name who re-verified, matching the tool's wording since 2026-11-09; hashes, reasons and dates are unchanged. **Why:** Maintainer decision, 2026-11-09. | **structural** |
+> | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/new_record.rs` 21f5012c2b5f -> 0f9f2d4f6a94. Reason: Read the diff of each pinned file since the previous pin. rust/crates/urzua-core/src/new_record.rs: parse_record_filename reads the extension through strip_md_extension (any case), with a unit test; nothing else changed. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-09 | Bumped to `0.25`. Evidence pins re-baselined for this change; the specification text is unchanged. **Why:** a revision-log entry that adds a structural change bumps `Version`. | **structural** |

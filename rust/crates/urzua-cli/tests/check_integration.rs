@@ -1591,6 +1591,43 @@ fn a_scoped_invocation_still_reports_a_claim_finding_observed_failing() {
     assert_eq!(parsed["blocking"], true, "{parsed}");
 }
 
+/// A claim file is any-case `.md`, as record files are: `X.MD` under
+/// `claim_paths` is read, not skipped in silence.
+#[test]
+fn a_claim_file_with_an_upper_case_extension_is_read_observed_failing() {
+    let dir = fixture_repo("claim-upper-md");
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
+    std::fs::create_dir_all(dir.join("changes")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2\nrules:\n\
+         \x20 claim.status-agreement:\n    level: error\n    claim_paths: [\"changes\"]\n    closed_statuses: [\"Fixed\"]\n\n\
+         record_types:\n\
+         \x20 adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\"]\n    header_shape: \"yaml-frontmatter\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("docs/adr/ADR-1-x.md"),
+        "---\nStatus: Open\n---\n# 1 — X\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("changes/0001-x.MD"),
+        "---\ndefault: patch\n---\n\nCloses ADR-1.\n",
+    )
+    .unwrap();
+    commit_all(&dir);
+
+    let out = run_urzua(&dir, &["check"]);
+    let parsed: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    let found = parsed["findings"].as_array().is_some_and(|f| {
+        f.iter()
+            .any(|f| f["rule"] == "claim.status-agreement" && f["file"].to_string().contains(".MD"))
+    });
+    assert!(found, "{parsed}");
+}
+
 #[test]
 fn a_record_below_a_declared_dir_but_not_in_it_is_reported_not_dropped() {
     let dir = fixture_repo("unowned");

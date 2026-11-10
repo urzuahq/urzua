@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5EEDKBJSNGJHTYE0QZ
-Version: '0.15'
+Version: '0.16'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/commands/migrate.rs@sha256:f3fe484ef1e800cafe0af678597102d62432a421e15f176981aacf4e8d20622f, code:rust/crates/urzua-core/src/migrate.rs@sha256:a8b30583f9658b1ffdcd5920fb2bd08adf9e41bd55d406ac94aaaaf5f59fe768, test:rust/crates/urzua-core/src/migrate.rs@sha256:a8b30583f9658b1ffdcd5920fb2bd08adf9e41bd55d406ac94aaaaf5f59fe768, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:5ab61b95fd5864a41566dee0d902fac000dca3552f90316331ecf90617c3f9b0
+Realized-by: code:rust/crates/urzua-cli/src/commands/migrate.rs@sha256:f3fe484ef1e800cafe0af678597102d62432a421e15f176981aacf4e8d20622f, code:rust/crates/urzua-core/src/migrate.rs@sha256:a8b30583f9658b1ffdcd5920fb2bd08adf9e41bd55d406ac94aaaaf5f59fe768, test:rust/crates/urzua-core/src/migrate.rs@sha256:a8b30583f9658b1ffdcd5920fb2bd08adf9e41bd55d406ac94aaaaf5f59fe768, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:a60c9c61b94c5707e0aa4e96713a843556cd50bce97e01c514826d61ca0aac08
 Author: beauwilliams
 Subject: '`urzua migrate ids`/`urzua migrate schema`/`urzua migrate config` -- backfilling stable IDs, previewing schema changes and rewriting a config to the current schema version.'
 Implements: ADR-21, ADR-22, ADR-77
@@ -145,3 +145,5 @@ path of a rename or a move; `value` is what an added or changed key now holds; `
 > | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/migrate.rs` 58ae3634352f -> a8b30583f965. Reason: Read the diff of each re-pinned file against main. core/migrate.rs: the Notice literal gains detail: None; no behaviour change. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-08 | Bumped to `0.14`. The pins this spec's `Realized-by` holds on files this change touched were re-baselined (the `Re-baselined` row above); no behaviour this spec describes changed. | **structural** |
 > | 2026-11-09 | Bumped to `0.15`. Re-pin rows in this revision log were reworded to name who re-verified, matching the tool's wording since 2026-11-09; hashes, reasons and dates are unchanged. **Why:** Maintainer decision, 2026-11-09. | **structural** |
+> | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/check_integration.rs` 5ab61b95fd58 -> a60c9c61b94c. Reason: Read the diff of each pinned file since the previous pin. rust/crates/urzua-cli/tests/check_integration.rs: adds one regression test that a claim file with an upper-case .MD extension under claim_paths is read; nothing else changed. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-09 | Bumped to `0.16`. Evidence pins re-baselined for this change; the specification text is unchanged. **Why:** a revision-log entry that adds a structural change bumps `Version`. | **structural** |

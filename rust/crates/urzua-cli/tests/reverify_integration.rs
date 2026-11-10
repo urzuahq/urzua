@@ -5,17 +5,10 @@
 
 mod common;
 
+use common::git;
+
 use std::path::Path;
 use std::process::Command;
-
-fn git(dir: &Path, args: &[&str]) {
-    let status = Command::new("git")
-        .args(args)
-        .current_dir(dir)
-        .status()
-        .expect("git should run");
-    assert!(status.success(), "git {args:?} failed");
-}
 
 fn date_days_ago(n: u32) -> String {
     let out = Command::new("date")
