@@ -624,11 +624,6 @@ impl AuthorityDecl {
         })
     }
 
-    /// Whether any status gate of `record_type` names `status`.
-    pub fn gates_status(&self, record_type: &str, status: &str) -> bool {
-        self.status_gates(record_type, status).next().is_some()
-    }
-
     /// The record types any status gate names.
     pub fn gated_types(&self) -> BTreeSet<&str> {
         self.gates

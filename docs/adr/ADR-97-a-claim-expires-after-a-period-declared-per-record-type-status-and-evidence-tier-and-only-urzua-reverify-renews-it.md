@@ -611,7 +611,7 @@ drift on a renewal is a repository's declaration, per locator category:
    of the record: it reports a row naming a locator that had not drifted there (the claim's lines dated as of the
    merge base, the cited files' history as it stands), a row whose `Evidence:` list is not the record's current
    locators or lists a pin hash that is not the pin the record now holds, and a row dated outside the branch: later than
-   the evaluation date, before the UTC author day of the branch's first commit, or after the later of the UTC author day and committer day
+   the evaluation date, before the UTC author day of the branch's first commit (see the amendment of 2026-11-10, window start), or after the later of the UTC author day and committer day
    of the commit git blame assigns the row's line to (today for a line not yet committed). The window, not equality, lets a row
    written on one day be committed on the next, amended or fixed up into an older branch commit, or sit on a line a
    later commit touched. The commit author and committer dates are settable (`GIT_AUTHOR_DATE`), which is no stronger than the typed
@@ -627,6 +627,17 @@ drift on a renewal is a repository's declaration, per locator category:
 
 `SPEC-2` (the rule table), `SPEC-3` (the option and its load errors) and `SPEC-8` (the refusals, the report and the
 row) carry the contract.
+
+## Amendment (2026-11-10, window start): the lower bound of the date window is a day before the branch began
+
+Accepted by the maintainer on 2026-11-10. Item 6 dates an acknowledging row against a window whose lower bound
+is the UTC author day of the branch's first commit. That bound is one day earlier: a row is also accepted when it
+is dated the UTC day before the author day of the branch's first commit. `urzua reverify` writes the wall-clock
+UTC date, so one run just before UTC midnight on a branch whose only commit is authored just after it wrote a
+row the window refused. A branch with no commit past the merge base has no first commit, so its bound is the
+author day of the merge base's commit (less the same day), and a row `reverify` wrote yesterday that is not yet
+committed is not reported by a local `--base` run. The upper bound, the settable-date caveat and everything else
+in item 6 are unchanged; a row dated two or more UTC days before the branch began is still reported.
 
 ## References
 
@@ -657,3 +668,4 @@ row) carry the contract.
 > | 2026-11-09 | Item 6 of the drift-policy amendment accepted. **Why:** Maintainer decision, 2026-11-09. | **substantive** |
 > | 2026-11-09 | Item 6: the added row's date is compared with the commit that added it, not the merge base. **Why:** Maintainer decision, 2026-11-09. | **substantive** |
 > | 2026-11-10 | Item 6: an added row is accepted between the branch's first commit day and its adding commit's day. **Why:** Maintainer decision, 2026-11-10 (the adding commit's day is the later of its author and committer day, so an amend or fixup, which keeps the author date, is covered). | **substantive** |
+> | 2026-11-10 | Amendment added, accepted by the maintainer on 2026-11-10: the lower bound of item 6's date window is one UTC day before the author day of the branch's first commit (the merge base's author day when the branch has no commit). The Decision text and `Status` are unchanged. **Why:** a row written just before UTC midnight on a single-commit branch authored after midnight was reported, and an uncommitted row dated yesterday was reported by a local `--base` run on a branch with no commit. | **substantive** |

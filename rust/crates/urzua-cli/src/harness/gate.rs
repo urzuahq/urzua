@@ -468,14 +468,7 @@ pub(super) type RecordIdentity = (String, String);
 /// when it has either missing.
 pub(super) fn record_identity(config: &Config, rel: &Path, text: &str) -> Option<RecordIdentity> {
     let record = crate::discovery::parse_prospective_record(config, rel, text).ok()?;
-    let sid = record.header.get_reserved("Stable-Id")?.trim().to_string();
-    let id = rules::record_id(&record)?;
-    (!sid.is_empty()).then(|| {
-        (
-            sid,
-            urzua_core::values::RecordId::new(&id).as_str().to_string(),
-        )
-    })
+    rules::rename_identity(&record)
 }
 
 /// After a command has already run: the report line for a record it deleted

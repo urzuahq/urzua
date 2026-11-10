@@ -1252,8 +1252,13 @@ fn load_added_row_days(
     }
     let cache = urzua_io::BlameCache::new(repo_root);
     let today = urzua_io::now_unix().div_euclid(DAY) * DAY;
+    // One day of slack before the branch began: `reverify` may run just before
+    // UTC midnight and the first commit be authored just after it. A branch
+    // with no commit yet starts at its merge base, so a row written yesterday
+    // and not yet committed passes.
     let branch_start = urzua_io::branch_first_author_unix_time(repo_root, &changes.merge_base)
-        .map(|t| t.div_euclid(DAY) * DAY);
+        .or_else(|| urzua_io::commit_author_unix_time(repo_root, &changes.merge_base))
+        .map(|t| t.div_euclid(DAY) * DAY - DAY);
     for record in &session.records {
         let Some(then_text) = base_text.get(&record.path) else {
             continue;
@@ -1300,6 +1305,59 @@ fn load_added_row_days(
     out
 }
 
+/// The types an authority status gate names (the head's and the base
+/// revision's), read only when `diff.decider-required` will use them.
+fn gated_type_names<'a>(
+    rule_config: &'a Config,
+    base_authority: &'a urzua_core::authority::BaseAuthority,
+) -> std::collections::BTreeSet<&'a str> {
+    if enabled_setting(rule_config, rules::RULE_DIFF_DECIDER_REQUIRED).is_none() {
+        return Default::default();
+    }
+    let mut types = rule_config
+        .authority
+        .as_ref()
+        .map(|a| a.gated_types())
+        .unwrap_or_default();
+    if let Some(base) = base_authority.declared() {
+        types.extend(base.gated_types());
+    }
+    types
+}
+
+/// The records the diff deleted that are not a rename, for the gated types.
+/// Under `base`/`both` a deleted file is a record of a gated type when the
+/// base revision's declaration owns it too, so a pull request cannot exclude
+/// or move the record in the change that deletes it.
+fn load_deleted_records(
+    session: &Session,
+    changes: Option<&urzua_io::GitChanges>,
+    base_authority: &urzua_core::authority::BaseAuthority,
+    gated_types: &std::collections::BTreeSet<&str>,
+    notices: &mut Vec<Notice>,
+) -> Vec<rules::DeletedRecord> {
+    let Some(c) = changes else {
+        return Vec::new();
+    };
+    let base_types = match gate_mode(session, base_authority) {
+        urzua_core::authority::DeciderTable::Base | urzua_core::authority::DeciderTable::Both
+            if !gated_types.is_empty() =>
+        {
+            load_base_record_types(session, c, notices)
+        }
+        _ => None,
+    };
+    crate::diff_scope::deleted_gated_records(
+        &session.repo_root,
+        &session.config,
+        base_types.as_ref(),
+        &session.records,
+        c,
+        gated_types,
+        notices,
+    )
+}
+
 /// Stage 2c: read what the diff rules judge a change against.
 fn read_diff_inputs(
     session: &Session,
@@ -1333,23 +1391,7 @@ fn read_diff_inputs(
     let (gate_config, fail_on) =
         apply_base_gate(&session.config, &base_gate, changes.is_some(), notices);
     let rule_config = gate_config.as_ref().unwrap_or(&session.config);
-    // The types an authority status gate names (the head's and the base
-    // revision's) are read too, but only when `diff.decider-required` will use
-    // them.
-    let gated_types: std::collections::BTreeSet<&str> =
-        if enabled_setting(rule_config, rules::RULE_DIFF_DECIDER_REQUIRED).is_some() {
-            let mut types = rule_config
-                .authority
-                .as_ref()
-                .map(|a| a.gated_types())
-                .unwrap_or_default();
-            if let Some(base) = base_authority.declared() {
-                types.extend(base.gated_types());
-            }
-            types
-        } else {
-            Default::default()
-        };
+    let gated_types = gated_type_names(rule_config, &base_authority);
     let committed_statuses = changes.map(|c| {
         crate::diff_scope::committed_statuses(
             repo_root,
@@ -1360,28 +1402,8 @@ fn read_diff_inputs(
             notices,
         )
     });
-    // Under `base`/`both` a deleted file is a record of a gated type when the
-    // base revision's declaration owns it too, so a pull request cannot
-    // exclude or move the record in the change that deletes it.
-    let base_types = match (changes, gate_mode(session, &base_authority)) {
-        (
-            Some(c),
-            urzua_core::authority::DeciderTable::Base | urzua_core::authority::DeciderTable::Both,
-        ) if !gated_types.is_empty() => load_base_record_types(session, c, notices),
-        _ => None,
-    };
-    let deleted_records = changes
-        .map(|c| {
-            crate::diff_scope::deleted_gated_records(
-                repo_root,
-                &session.config,
-                base_types.as_ref(),
-                &session.records,
-                c,
-                &gated_types,
-            )
-        })
-        .unwrap_or_default();
+    let deleted_records =
+        load_deleted_records(session, changes, &base_authority, &gated_types, notices);
     Ok(DiffInputs {
         base_text,
         base_drift,

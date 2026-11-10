@@ -521,6 +521,43 @@ fn a_row_whose_line_a_later_commit_touched_is_accepted() {
 }
 
 #[test]
+fn a_row_written_before_utc_midnight_on_a_single_commit_branch_is_accepted() {
+    // The branch's only commit was authored yesterday; reverify ran the day
+    // before, just before UTC midnight. The window starts a day early.
+    let found = window_case("midnight", (1, 2), (0, 0));
+    assert_eq!(found, Vec::<String>::new());
+}
+
+#[test]
+fn a_row_dated_two_days_before_the_branch_started_is_still_reported() {
+    let found = window_case("twodays", (1, 3), (0, 0));
+    assert_eq!(found.len(), 1, "{found:?}");
+}
+
+#[test]
+fn an_uncommitted_row_dated_yesterday_passes_when_the_branch_has_no_commit() {
+    // No commit past the merge base: the window starts at the merge base's
+    // day, so a row written yesterday and not yet committed is not misdated.
+    let dir = drifted(
+        "uncommitted",
+        "    drift: {spec: acknowledge}\n",
+        false,
+        "spec",
+    );
+    with_renewal_rule(&dir);
+    git(&dir, &["tag", "base"]);
+    let parsed = renew(&dir);
+    assert_eq!(parsed["status"], "applied", "{parsed}");
+    let text = std::fs::read_to_string(dir.join(RECORD)).unwrap();
+    std::fs::write(
+        dir.join(RECORD),
+        text.replace(&date_days_ago(0)[..10], &date_days_ago(1)[..10]),
+    )
+    .unwrap();
+    assert_eq!(renewal_findings(&dir), Vec::<String>::new());
+}
+
+#[test]
 fn a_row_dated_before_the_branch_started_is_reported() {
     // The branch began yesterday; the row claims five days ago.
     let found = window_case("backdated", (1, 5), (0, 0));

@@ -523,7 +523,7 @@ fn header_value(text: &str, field: &str) -> Option<String> {
 }
 
 /// Per `Re-verified` row text, the UTC days (start, unix seconds) between which
-/// it may be dated: the branch's first commit day and its adding commit's day.
+/// it may be dated: from a day before the branch's first commit day to its adding commit's day.
 pub type RowWindows = HashMap<String, (i64, i64)>;
 
 /// What a `--base` run reads beyond the two copies of a record, for
@@ -693,7 +693,7 @@ fn acknowledgement_problems(
         });
         if misdated {
             problems.push(format!(
-                "the Re-verified row dated {} is not dated within the branch (after the evaluation date, before the UTC day of the branch's first commit, or after the UTC day of the commit that added it): only `urzua reverify` writes the row, dated the day it ran",
+                "the Re-verified row dated {} is not dated within the branch (after the evaluation date, more than a day before the UTC day of the branch's first commit, or after the UTC day of the commit that added it): only `urzua reverify` writes the row, dated the day it ran",
                 ack.date
             ));
         }
