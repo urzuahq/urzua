@@ -191,19 +191,23 @@ jobs:
           # current approvers, for diff.decider-required.
           actors: "true"
       # No stale evidence pin may reach the main line. `fix --rebaseline` without
-      # --apply only reads: it lists each record whose pinned locator changed
-      # (the `rebaselines` array of its JSON report) and writes nothing. The
-      # step fails when that list is not empty, naming each stale path.
+      # --apply only reads: it writes nothing. The step passes only when the
+      # JSON report says `status: ok`; any other status, a missing key, empty or
+      # unparseable output fails it, and the stale paths (`rebaselines`) and the
+      # pins that cannot be re-pinned (`failed_pins`) are named.
       - name: no stale evidence pins (fix --rebaseline, report only)
         working-directory: .
+        shell: bash -eo pipefail {0}
         run: |
           report="$(mktemp)"
-          rust/target/release/urzua fix --rebaseline > "$report"
-          stale="$(jq -r '(.rebaselines // [])[] | .record as $r | .pins[] | "\($r)  \(.locator)"' "$report")"
-          if [ -n "$stale" ]; then
-            echo "::error::stale evidence pins: re-pin each record with a per-file reason" >&2
+          rust/target/release/urzua fix --rebaseline > "$report" || true
+          if ! jq -e '.status == "ok"' "$report" > /dev/null; then
+            echo "::error::stale or unreadable evidence pins: re-pin each record with a per-file reason" >&2
             echo "Stale pins (record  locator):" >&2
-            echo "$stale" >&2
+            jq -r '(.rebaselines // [])[] | .record as $r | .pins[] | "\($r)  \(.locator)"' "$report" >&2 || true
+            echo "Pins that cannot be re-pinned (record  locator  reason):" >&2
+            jq -r '(.failed_pins // [])[] | "\(.record)  \(.locator)  \(.reason)"' "$report" >&2 || true
+            echo "Report status: $(jq -r '.status // "none"' "$report" 2>/dev/null || echo unreadable)" >&2
             echo "Re-pin with: urzua fix --rebaseline --apply --ids <record> --by <you> --reason '<what changed in the pinned code>' (see .claude/commands/repin.md). Read the diff of each pinned file first; list every re-pin and its reason in the PR body." >&2
             exit 1
           fi
