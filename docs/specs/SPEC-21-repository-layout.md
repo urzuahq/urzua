@@ -1,5 +1,5 @@
 ---
-Version: '0.5'
+Version: '0.6'
 Date: 2026-09-19
 Status: Accepted
 Embodiment: Verified
@@ -89,3 +89,4 @@ the speculative reservation this spec exists to stop accumulating.
 > | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.github/workflows/checks.yml` 3bd0a6795184 -> a201f4e57f5f. Reason: checks.yml: the only change since the pinned version is the four tool-download curl lines (cargo-deny, cargo-machete), which gained --retry 5 --retry-all-errors --retry-delay 5 and changed -sSLfo to -sSLf with a separate -o (#441); no step, job or check changed, so the evidence still holds **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-09 | Bumped to `0.5`. Re-pin rows in this revision log were reworded to name who re-verified, matching the tool's wording since 2026-11-09; hashes, reasons and dates are unchanged. **Why:** Maintainer decision, 2026-11-09. | **structural** |
 > | 2026-11-10 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.github/workflows/checks.yml` a201f4e57f5f -> 90c26745f60b. Reason: checks.yml gained one report-only step in the build job (no stale evidence pins, running fix --rebaseline and failing on a non-empty list); no existing step changed, so the claim still holds **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-10 | Bumped to `0.6`. The re-baseline row above records a structural change, which requires a version bump; the Decision and the pinned claim are unchanged. **Why:** the new stale-pin guard step changed the pinned `checks.yml`, so this record was re-pinned in the same pull request. | **structural** |
