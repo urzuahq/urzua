@@ -25,6 +25,8 @@ the build leaves it alone and says so.
 `make help` lists every target. Native `cargo` commands work fine inside `rust/` for anyone who
 prefers them; `make ci` is the thing CI actually runs, so it's the one to trust before pushing.
 
+CI also fails a pull request when `urzua fix --rebaseline` lists a stale evidence pin; re-pin it with a per-file reason (`.claude/commands/repin.md`).
+
 ## Adding a rule to `urzua check`
 
 Every rule lives in `rust/crates/urzua-core/src/rules.rs`, returns a `(RuleExecution, Vec<Finding>)`
