@@ -5,36 +5,17 @@
 
 mod common;
 
-use common::git;
+use common::{commit_all, date_days_ago, git};
 
 use std::path::Path;
 use std::process::Command;
-
-fn date_days_ago(n: u32) -> String {
-    let out = Command::new("date")
-        .args([
-            "-u",
-            "-d",
-            &format!("{} 12:00:00 UTC - {n} days", today()),
-            "+%Y-%m-%dT12:00:00Z",
-        ])
-        .output()
-        .unwrap();
-    String::from_utf8(out.stdout).unwrap().trim().to_string()
-}
 
 /// The date this test process's fixtures are built on: read once, so the fixture dates, the
 /// `--as-of` passed to read-only runs and every assertion agree. `reverify --apply` refuses
 /// `--as-of` and stamps the real date, so an assertion on what it wrote accepts either side
 /// of a midnight UTC that fell inside the run (see `stamped_today`).
 fn today() -> String {
-    static TODAY: std::sync::OnceLock<String> = std::sync::OnceLock::new();
-    TODAY
-        .get_or_init(|| {
-            let out = Command::new("date").args(["-u", "+%F"]).output().unwrap();
-            String::from_utf8(out.stdout).unwrap().trim().to_string()
-        })
-        .clone()
+    date_days_ago(0)[..10].to_string()
 }
 
 /// Whether `text` carries the `Last-audited` stamp an apply run wrote: the fixture's date, or
@@ -53,19 +34,6 @@ fn stamped_today(text: &str) -> bool {
     [today(), now]
         .iter()
         .any(|d| text.contains(&format!("Last-audited: {d}")))
-}
-
-fn commit_all(dir: &Path, days_ago: u32) {
-    git(dir, &["add", "-A"]);
-    let date = date_days_ago(days_ago);
-    let status = Command::new("git")
-        .args(["commit", "-q", "-m", "fixture"])
-        .env("GIT_AUTHOR_DATE", &date)
-        .env("GIT_COMMITTER_DATE", &date)
-        .current_dir(dir)
-        .status()
-        .unwrap();
-    assert!(status.success());
 }
 
 fn run_urzua(dir: &Path, args: &[&str]) -> std::process::Output {

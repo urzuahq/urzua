@@ -1458,6 +1458,25 @@ pub fn commit_author_unix_time(repo_root: &Path, commit: &str) -> Option<i64> {
     commit_time(repo_root, commit, "%at")
 }
 
+/// The earliest author time among the commits the head carries beyond
+/// `merge_base` (the day the branch's work began), or `None` when it has none
+/// or git cannot say. Amend and fixup keep an author time, so this is the
+/// earliest day any commit of the branch was written.
+pub fn branch_first_author_unix_time(repo_root: &Path, merge_base: &str) -> Option<i64> {
+    let output = GitRun::new()
+        .args(["log", "--format=%at", &format!("{merge_base}..HEAD")])
+        .cwd(repo_root)
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .filter_map(|l| l.trim().parse::<i64>().ok())
+        .min()
+}
+
 fn commit_time(repo_root: &Path, commit: &str, format: &str) -> Option<i64> {
     let output = GitRun::new()
         .args(["show", "-s", &format!("--format={format}"), commit])

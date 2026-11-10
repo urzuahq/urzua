@@ -176,13 +176,32 @@ pub fn git(dir: &Path, args: &[&str]) {
     assert!(status.success(), "git {args:?} failed");
 }
 
-/// `YYYY-MM-DDT12:00:00Z`, `n` whole days before today (UTC). GNU `date`.
+/// The UTC calendar day (days since 1970-01-01) the test process reads once, so every
+/// fixture date and assertion of a run agree even when midnight UTC passes inside it.
+fn today_epoch_day() -> i64 {
+    static DAY: OnceLock<i64> = OnceLock::new();
+    *DAY.get_or_init(|| {
+        let secs = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("the clock is after 1970")
+            .as_secs();
+        (secs / 86_400) as i64
+    })
+}
+
+/// `YYYY-MM-DDT12:00:00Z`, `n` whole days before today (UTC, read once per process).
 pub fn date_days_ago(n: u32) -> String {
-    let out = std::process::Command::new("date")
-        .args(["-u", "-d", &format!("{n} days ago"), "+%Y-%m-%dT12:00:00Z"])
-        .output()
-        .unwrap();
-    String::from_utf8(out.stdout).unwrap().trim().to_string()
+    // Days to civil date (Howard Hinnant's algorithm).
+    let z = today_epoch_day() - i64::from(n) + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z.rem_euclid(146_097);
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = if mp < 10 { mp + 3 } else { mp - 9 };
+    let year = yoe + era * 400 + i64::from(month <= 2);
+    format!("{year:04}-{month:02}-{day:02}T12:00:00Z")
 }
 
 /// Stages everything and commits it as `days_ago` days ago (author and committer).

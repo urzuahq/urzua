@@ -895,3 +895,19 @@ fn a_case_variant_of_a_gated_status_is_still_a_gated_move() {
         assert_eq!(code, 0, "{spelled}: {v}");
     }
 }
+
+#[test]
+fn the_base_copys_status_key_is_read_folding_case_like_the_head_and_deletions() {
+    // The base and the head both spell the key `status`; an edit that leaves it
+    // at Accepted is not a move. An exact read of the base copy would find no
+    // `Status` there and treat the edit as a move.
+    let dir = fixture("base-key-case", &config());
+    let lower = "---\nstatus: Accepted\n---\n# ADR-1: T\n\nprose\n";
+    std::fs::write(dir.join(PATH_1), lower).unwrap();
+    git(&dir, &["add", "-A"]);
+    git(&dir, &["commit", "-q", "-m", "lower-case key"]);
+    std::fs::write(dir.join(PATH_1), format!("{lower}\nmore prose\n")).unwrap();
+    let (code, v) = check_base(&dir, &["--actors", &mallory(&dir)]);
+    assert_eq!(code, 0, "{v}");
+    assert!(decider_findings(&v).is_empty(), "{v}");
+}

@@ -610,8 +610,12 @@ drift on a renewal is a repository's declaration, per locator category:
    `embodiment.claim-renewal-unattested` reads each acknowledging row the branch added against the merge base's copy
    of the record: it reports a row naming a locator that had not drifted there (the claim's lines dated as of the
    merge base, the cited files' history as it stands), a row whose `Evidence:` list is not the record's current
-   locators or lists a pin hash that is not the pin the record now holds, and a row whose date is not the date it
-   was added (later than the evaluation date, or not the UTC date of the branch commit that added the row). A row dated after the
+   locators or lists a pin hash that is not the pin the record now holds, and a row dated outside the branch: later than
+   the evaluation date, before the UTC author day of the branch's first commit, or after the later of the UTC author day and committer day
+   of the commit git blame assigns the row's line to (today for a line not yet committed). The window, not equality, lets a row
+   written on one day be committed on the next, amended or fixed up into an older branch commit, or sit on a line a
+   later commit touched. The commit author and committer dates are settable (`GIT_AUTHOR_DATE`), which is no stronger than the typed
+   row date: the check detects a careless date, it does not prevent a forged one. A row dated after the
    evaluation date (today, or `--as-of`) clears nothing in any run. A hand-typed row that does not describe the real
    drift is therefore a finding at the pull request, and a correct one is equivalent to running the tool, as a
    re-pin row is once a reviewer has read it. The check does not see a reordered `Evidence:` list or a changed
@@ -652,3 +656,4 @@ row) carry the contract.
 > | 2026-11-09 | Item 6 (still pending maintainer review) tightened after review: a row clears only the locators it names, a row counts only in the exact shape `reverify` writes, the same-day granularity is stated, and `embodiment.claim-renewal-unattested` checks an added acknowledging row against the merge base's drift and the record's current locators. **Why:** a hand-typed or over-broad row cleared drift of locators nobody read. | **substantive** |
 > | 2026-11-09 | Item 6 of the drift-policy amendment accepted. **Why:** Maintainer decision, 2026-11-09. | **substantive** |
 > | 2026-11-09 | Item 6: the added row's date is compared with the commit that added it, not the merge base. **Why:** Maintainer decision, 2026-11-09. | **substantive** |
+> | 2026-11-10 | Item 6: an added row is accepted between the branch's first commit day and its adding commit's day. **Why:** Maintainer decision, 2026-11-10 (the adding commit's day is the later of its author and committer day, so an amend or fixup, which keeps the author date, is covered). | **substantive** |

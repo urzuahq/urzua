@@ -13,7 +13,7 @@ Report waived findings in `urzua check` output as counts per rule, with the find
 
 ## Why
 
-On an adopter with 465 ADRs the report is 133 KB for 21 live findings, because the 168 waived findings are re-listed in full (adopter end-to-end second pass, L3). The size costs every consumer that parses the report. Consumers read the waived list today, so the change needs a decision on the contract, which is the milestone's first step.
+On an adopter with several hundred ADRs the report is very large for a handful of live findings, because every waived finding is re-listed in full (adopter end-to-end second pass, L3). The size costs every consumer that parses the report. Consumers read the waived list today, so the change needs a decision on the contract, which is the milestone's first step.
 
 ## Done means
 
@@ -30,3 +30,4 @@ On an adopter with 465 ADRs the report is 133 KB for 21 live findings, because t
 > |---|---|---|
 > | 2026-11-07 | Initial record. **Why:** deferred during Phase 0 hardening and tracked by no record. | **structural** |
 > | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |
+> | 2026-11-10 | Why reworded to name no adopter count; the Done means are unchanged. **Why:** a distinctive count of one private corpus does not belong in the public tree. | **structural** |
