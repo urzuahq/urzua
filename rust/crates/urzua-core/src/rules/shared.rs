@@ -263,6 +263,22 @@ pub(super) fn fields_with_capability(
     result
 }
 
+/// What pairs a deleted record with the one it was renamed or moved to: its
+/// `Stable-Id` (trimmed) and its record id (normalised), `None` when either is
+/// missing or blank. A rename keeps both; a record that only copies a
+/// `Stable-Id` under another id, or has no id, does not pair. The single
+/// definition the diff scope and the harness both pair by.
+pub fn rename_identity(record: &Record) -> Option<(String, String)> {
+    let sid = record.header.get_reserved("Stable-Id")?.trim();
+    let id = record_id(record)?;
+    (!sid.is_empty()).then(|| {
+        (
+            sid.to_string(),
+            crate::values::RecordId::new(&id).as_str().to_string(),
+        )
+    })
+}
+
 /// A record's own identifier, derived from its filename: `TYPE-NNNN-slug.md`,
 /// type prefix explicit in the filename, matching how a record is referenced
 /// in prose everywhere else (e.g. `Implements: ADR-36`). Filename-derived,

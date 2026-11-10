@@ -215,9 +215,7 @@ fn judge_changes(
     protected.extend(shrink_lines(&repo_root, &config_path, &scan));
     let deletions = gated_deletions(&repo_root, &loaded, &paths, base, &scan);
     let mut remembered = remembered;
-    for (rel, _) in &deletions {
-        remembered.insert(rel.clone(), "deleted".to_string());
-    }
+    remember_deletions(&repo_root, &paths, &deletions, &mut remembered);
     let deletions: Vec<String> = deletions.into_iter().map(|(_, line)| line).collect();
     if fresh.is_empty() && protected.is_empty() && deletions.is_empty() {
         write_memory(&repo_root, &remembered);
@@ -245,8 +243,20 @@ fn judge_changes(
     let (old, new) = partition_by_head(config, &all, base);
     write_memory(&repo_root, &remembered);
 
+    report_verdict(&fresh, protected, gated, (new, old), scan.note.as_deref())
+}
+
+/// The verdict for a judged command: the findings `check` reported on the
+/// changed records, the gated moves and the protected changes.
+fn report_verdict(
+    fresh: &[String],
+    protected: Vec<String>,
+    gated: Vec<String>,
+    (new, old): (Vec<&Finding>, Vec<&Finding>),
+    note: Option<&str>,
+) -> PostVerdict {
     let mut v = PostVerdict::quiet(String::new());
-    v.checked = fresh.clone();
+    v.checked = fresh.to_vec();
     v.findings = to_json(&new);
     v.pre_existing = to_json(&old);
     v.gated_moves = gated.clone();
@@ -256,7 +266,7 @@ fn judge_changes(
             "{P}: checked {} changed record(s); no findings",
             fresh.len()
         );
-        if let Some(note) = &scan.note {
+        if let Some(note) = note {
             v.verdict = "allow-with-warnings";
             v.message.push_str(&format!(" {note}"));
         }
@@ -269,7 +279,7 @@ fn judge_changes(
         old: &old,
         gated: &gated,
         protected: &protected,
-        note: scan.note.as_deref(),
+        note,
     });
     v
 }
@@ -312,6 +322,24 @@ fn gated_moves(
             )
         })
         .collect()
+}
+
+/// Keeps a deletion in the memory once it is reported, and for as long as the
+/// path stays deleted, so the next command does not report it again.
+fn remember_deletions(
+    repo_root: &Path,
+    paths: &BTreeMap<String, bool>,
+    reported: &[(String, String)],
+    remembered: &mut BTreeMap<String, String>,
+) {
+    for (rel, _) in reported {
+        remembered.insert(rel.clone(), "deleted".to_string());
+    }
+    for (rel, state) in read_memory(repo_root) {
+        if state == "deleted" && paths.get(&rel) == Some(&true) {
+            remembered.insert(rel, state);
+        }
+    }
 }
 
 /// One report line per gated record the command deleted that the memory has not

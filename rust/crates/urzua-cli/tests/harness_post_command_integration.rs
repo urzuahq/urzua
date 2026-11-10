@@ -194,6 +194,24 @@ fn a_bash_rm_of_a_gated_record_is_reported_and_a_rename_is_not() {
     );
 }
 
+/// A gated deletion is reported by the first check that sees it and by no
+/// later one while the path stays deleted.
+#[test]
+fn a_gated_deletion_is_reported_once_across_repeated_commands() {
+    let sid = "01M6R3NK40JBCPESD89J6FN865";
+    let accepted = format!("---\nStable-Id: {sid}\nStatus: Accepted\n---\n# ADR-1: T\n\nprose\n");
+    let dir = fixture("gated-rm-once", GATED_CONFIG, &accepted);
+    bash(&dir, &format!("rm {PATH_1}"));
+    let counts: Vec<usize> = (0..4)
+        .map(|_| post(&dir)["gated_moves"].as_array().map_or(0, Vec::len))
+        .collect();
+    assert_eq!(
+        counts,
+        [1, 0, 0, 0],
+        "reported once, not every second command"
+    );
+}
+
 // ----------------------------------------------------- the three writers
 
 #[test]
