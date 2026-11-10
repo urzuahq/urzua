@@ -3,6 +3,8 @@
 
 mod common;
 
+use common::date_days_ago;
+
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
@@ -244,14 +246,6 @@ fn a_command_that_compares_no_dates_refuses_the_flag_instead_of_ignoring_it() {
 }
 
 // ---- claim ages -----------------------------------------------------------
-
-fn date_days_ago(n: u32) -> String {
-    let out = Command::new("date")
-        .args(["-u", "-d", &format!("{n} days ago"), "+%Y-%m-%dT12:00:00Z"])
-        .output()
-        .unwrap();
-    String::from_utf8(out.stdout).unwrap().trim().to_string()
-}
 
 fn claim_corpus(name: &str) -> common::TempDir {
     let cfg = "schema_version: 2

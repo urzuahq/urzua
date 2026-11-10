@@ -1713,7 +1713,11 @@ fn claim_markdown_paths(
                 if visited.insert(resolved) {
                     pending.push(path);
                 }
-            } else if target.is_file() && path.extension().is_some_and(|e| e == "md") {
+            } else if target.is_file()
+                && path
+                    .extension()
+                    .is_some_and(|e| e.eq_ignore_ascii_case("md"))
+            {
                 // A linked file is read, so its *target* must also stay
                 // inside the repository: a symlink named `.md` otherwise
                 // feeds an arbitrary file on the machine to the claim

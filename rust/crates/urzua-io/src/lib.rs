@@ -1052,6 +1052,7 @@ pub struct BlameCache {
     repo_root: PathBuf,
     lines: std::sync::Mutex<std::collections::HashMap<BlameKey, LineBlame>>,
     times: std::sync::Mutex<std::collections::HashMap<String, Option<i64>>>,
+    author_times: std::sync::Mutex<std::collections::HashMap<String, Option<i64>>>,
 }
 
 impl BlameCache {
@@ -1060,6 +1061,7 @@ impl BlameCache {
             repo_root: repo_root.to_path_buf(),
             lines: Default::default(),
             times: Default::default(),
+            author_times: Default::default(),
         }
     }
 
@@ -1134,6 +1136,17 @@ impl BlameCache {
             .get(&(path.to_path_buf(), contents.map(str::to_string), line))
             .cloned()
             .unwrap_or(Ok(None))
+    }
+
+    /// [`commit_author_unix_time`], asked of git once per commit.
+    pub fn commit_author_unix_time(&self, commit: &str) -> Option<i64> {
+        let mut times = self.author_times.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(time) = times.get(commit) {
+            return *time;
+        }
+        let time = commit_author_unix_time(&self.repo_root, commit);
+        times.insert(commit.to_string(), time);
+        time
     }
 
     /// [`commit_unix_time`], asked of git once per commit.
@@ -1436,8 +1449,18 @@ fn is_no_history_stderr(stderr: &str) -> bool {
 /// `None` when git cannot say, so a grace window or claim age never fires on
 /// a commit it could not date.
 pub fn commit_unix_time(repo_root: &Path, commit: &str) -> Option<i64> {
+    commit_time(repo_root, commit, "%ct")
+}
+
+/// As [`commit_unix_time`], the commit's author time: the day the change was
+/// written, which a rebase or a merge of the base does not move.
+pub fn commit_author_unix_time(repo_root: &Path, commit: &str) -> Option<i64> {
+    commit_time(repo_root, commit, "%at")
+}
+
+fn commit_time(repo_root: &Path, commit: &str, format: &str) -> Option<i64> {
     let output = GitRun::new()
-        .args(["show", "-s", "--format=%ct", commit])
+        .args(["show", "-s", &format!("--format={format}"), commit])
         .cwd(repo_root)
         .output()
         .ok()?;

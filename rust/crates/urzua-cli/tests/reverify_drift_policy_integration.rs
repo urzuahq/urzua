@@ -7,38 +7,10 @@
 
 mod common;
 
+use common::{commit_all, git};
+
 use std::path::Path;
 use std::process::Command;
-
-fn git(dir: &Path, args: &[&str]) {
-    let status = Command::new("git")
-        .args(args)
-        .current_dir(dir)
-        .status()
-        .expect("git should run");
-    assert!(status.success(), "git {args:?} failed");
-}
-
-fn date_days_ago(n: u32) -> String {
-    let out = Command::new("date")
-        .args(["-u", "-d", &format!("{n} days ago"), "+%Y-%m-%dT12:00:00Z"])
-        .output()
-        .unwrap();
-    String::from_utf8(out.stdout).unwrap().trim().to_string()
-}
-
-fn commit_all(dir: &Path, days_ago: u32) {
-    git(dir, &["add", "-A"]);
-    let date = date_days_ago(days_ago);
-    let status = Command::new("git")
-        .args(["commit", "-q", "-m", "fixture"])
-        .env("GIT_AUTHOR_DATE", &date)
-        .env("GIT_COMMITTER_DATE", &date)
-        .current_dir(dir)
-        .status()
-        .unwrap();
-    assert!(status.success());
-}
 
 fn run_urzua(dir: &Path, args: &[&str]) -> std::process::Output {
     common::urzua()

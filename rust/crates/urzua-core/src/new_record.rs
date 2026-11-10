@@ -26,7 +26,7 @@
 /// adopt scan: two separate recognisers accepting disjoint sets makes each
 /// blind to exactly what the other requires (`BUG-37`).
 pub fn parse_record_filename(file_name: &str) -> Option<(Option<&str>, u32)> {
-    let stem = file_name.strip_suffix(".md")?;
+    let stem = crate::record::strip_md_extension(file_name)?;
 
     let segments: Vec<&str> = stem.split('-').collect();
     // The number is the first all-digit segment, wherever it sits: a type
@@ -614,6 +614,13 @@ mod tests {
         assert_eq!(parse_record_filename("-999-slug.md"), None);
         assert_eq!(parse_record_filename("ADR-999"), None);
         assert_eq!(parse_record_filename("notes.md"), None);
+    }
+
+    #[test]
+    fn parse_record_filename_reads_an_any_case_extension() {
+        assert_eq!(parse_record_filename("ADR-5-x.MD"), Some((Some("ADR"), 5)));
+        assert_eq!(parse_record_filename("0007-slug.Md"), Some((None, 7)));
+        assert_eq!(parse_record_filename("ADR-5-x.mdx"), None);
     }
 
     #[test]

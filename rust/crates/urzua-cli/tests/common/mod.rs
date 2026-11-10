@@ -165,3 +165,36 @@ impl AsRef<std::ffi::OsStr> for TempFile {
         self.path.as_os_str()
     }
 }
+
+/// Runs `git` in `dir` and asserts it succeeded.
+pub fn git(dir: &Path, args: &[&str]) {
+    let status = std::process::Command::new("git")
+        .args(args)
+        .current_dir(dir)
+        .status()
+        .expect("git should run");
+    assert!(status.success(), "git {args:?} failed");
+}
+
+/// `YYYY-MM-DDT12:00:00Z`, `n` whole days before today (UTC). GNU `date`.
+pub fn date_days_ago(n: u32) -> String {
+    let out = std::process::Command::new("date")
+        .args(["-u", "-d", &format!("{n} days ago"), "+%Y-%m-%dT12:00:00Z"])
+        .output()
+        .unwrap();
+    String::from_utf8(out.stdout).unwrap().trim().to_string()
+}
+
+/// Stages everything and commits it as `days_ago` days ago (author and committer).
+pub fn commit_all(dir: &Path, days_ago: u32) {
+    git(dir, &["add", "-A"]);
+    let date = date_days_ago(days_ago);
+    let status = std::process::Command::new("git")
+        .args(["commit", "-q", "-m", "fixture"])
+        .env("GIT_AUTHOR_DATE", &date)
+        .env("GIT_COMMITTER_DATE", &date)
+        .current_dir(dir)
+        .status()
+        .unwrap();
+    assert!(status.success());
+}

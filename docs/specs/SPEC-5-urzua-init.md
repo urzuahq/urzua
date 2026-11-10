@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5PKKQRJF9WFZJA105B
-Version: '0.22'
+Version: '0.23'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/commands/init.rs@sha256:1cb2edb3e555be440a8fbb4a6186e68fce238d8f65bfef1f8aa3a1954b25b13b, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:5ab61b95fd5864a41566dee0d902fac000dca3552f90316331ecf90617c3f9b0
+Realized-by: code:rust/crates/urzua-cli/src/commands/init.rs@sha256:1cb2edb3e555be440a8fbb4a6186e68fce238d8f65bfef1f8aa3a1954b25b13b, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:a60c9c61b94c5707e0aa4e96713a843556cd50bce97e01c514826d61ca0aac08
 Author: beauwilliams
 Subject: '`urzua init` -- the adopt-existing-corpus path and `.urzua/` layout.'
 Implements: RFC-1
@@ -221,3 +221,5 @@ adopt should infer rules or only structure, and multi-corpus-per-repo).
 > | 2026-11-09 | Bumped to `0.21`. Re-pin rows in this revision log were reworded to name who re-verified, matching the tool's wording since 2026-11-09; hashes, reasons and dates are unchanged. **Why:** Maintainer decision, 2026-11-09. | **structural** |
 > | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/init.rs` ee569c2dd2ff -> 1cb2edb3e555. Reason: Read the diff of init.rs: the authority block `urzua init` writes gains `waivable: never`; nothing else changed. The pinned evidence still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-09 | Bumped to `0.22`. Evidence pins on `.urzua/config.yaml` were re-pinned (row above) after the config's authority section gained `waivable: never`; the specification's content is unchanged. **Why:** `ADR-89` amendment of 2026-11-09 (gate waivers). | **substantive** |
+> | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/check_integration.rs` 5ab61b95fd58 -> a60c9c61b94c. Reason: Read the diff of each pinned file since the previous pin. rust/crates/urzua-cli/tests/check_integration.rs: adds one regression test that a claim file with an upper-case .MD extension under claim_paths is read; nothing else changed. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-09 | Bumped to `0.23`. Evidence pins re-baselined for this change; the specification text is unchanged. **Why:** a revision-log entry that adds a structural change bumps `Version`. | **structural** |
