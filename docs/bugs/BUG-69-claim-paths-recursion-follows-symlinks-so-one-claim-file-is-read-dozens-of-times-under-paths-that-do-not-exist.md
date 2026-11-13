@@ -2,7 +2,7 @@
 Stable-Id: 01M2WG828ADQJWBQ5T43XSENE0
 Status: Fixed
 Found-in: "Round 7 of the 0.4.0 review"
-Regression-test: "rust/crates/urzua-cli/tests/check_integration.rs::a_symlink_inside_a_claim_path_is_not_descended_into"
+Realized-by: test:rust/crates/urzua-cli/tests/check_integration.rs#a_symlink_cycle_inside_a_claim_path_terminates_and_reads_each_claim_once@sha256:ea2178098d2da4779e8fc9820e50aac8c422e0d939cb7f2203be21ccb4e38c5b
 ---
 # 69 — claim_paths recursion follows symlinks so one claim file is read dozens of times under paths that do not exist
 
@@ -46,3 +46,4 @@ one directory listing became a walk.
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

@@ -1,8 +1,11 @@
 ---
-default: minor
+default: major
+closes: [BUG-184]
 ---
 
-Remove the `blockquote` (`> Key: value`) and `bold-list` (`- **Key:** value`) header shapes. YAML
+**Breaking: the `blockquote` and `bold-list` header shapes are removed.**
+
+The `blockquote` (`> Key: value`) and `bold-list` (`- **Key:** value`) header shapes no longer have a reader. YAML
 frontmatter is the one header shape with a reader (alongside `none` for a type with no header), and
 `header_shape` now defaults to `yaml-frontmatter` when omitted.
 

@@ -1,0 +1,14 @@
+schema_version: 2
+rules:
+  header.required-fields: error
+  identity.collision: error
+  config.scope-matches-nothing: warn
+record_types:
+  note:
+    dir: bare
+    prefix: NOTE
+    header_shape: yaml-frontmatter
+    required_fields: [Status]
+    known_fields: [Status]
+    pointer_fields: []
+    narrative_fields: []

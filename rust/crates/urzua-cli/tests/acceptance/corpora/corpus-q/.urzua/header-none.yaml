@@ -1,0 +1,13 @@
+schema_version: 2
+rules:
+  header.required-fields: error
+  config.header-none-has-no-required-fields: error
+record_types:
+  note:
+    dir: records
+    prefix: NOTE
+    header_shape: none
+    required_fields: [Status]
+    known_fields: []
+    pointer_fields: []
+    narrative_fields: []

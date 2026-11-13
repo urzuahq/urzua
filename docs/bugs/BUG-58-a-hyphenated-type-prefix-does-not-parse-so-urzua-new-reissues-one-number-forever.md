@@ -2,7 +2,7 @@
 Stable-Id: 01M2WA9W3CBVRXXBCH2VTFTS6T
 Status: Fixed
 Found-in: 'The fifth cumulative review of the 0.4.0 release diff, reproduced end to end against the built binary'
-Regression-test: 'rust/crates/urzua-core/src/new_record.rs::a_hyphenated_type_prefix_parses_observed_failing -- DOC-ADR-2-slug parses, a lower-case segment does not, a number with nothing after it does not, and next_display_number advances'
+Realized-by: test:rust/crates/urzua-core/src/new_record.rs#a_hyphenated_type_prefix_parses_observed_failing@sha256:6c70397f7b9475d1a181aa9eb1064ce83842f96ecd3017c58ca0fdae478b57a5
 Blocked-on: —
 ---
 # 58 — A hyphenated type prefix does not parse, so `urzua new` reissues one number forever
@@ -47,3 +47,5 @@ year with a month of 1-12 and a day of 1-31 is a date.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-19 | Filed and fixed. **Why:** found by the fifth cumulative review of the release diff. Two functions agreed about the filename shape the author had in mind and disagreed about the one the tool generates, with nothing exercising the round trip between them. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/new_record.rs#a_hyphenated_type_prefix_parses_observed_failing` (lines 532-561) 7fb83ce76730 -> 6c70397f7b94. Reason: Read the diff of each pinned span since the old pin and the claim still holds. new_record.rs#a_hyphenated_type_prefix_parses_observed_failing: the calls to next_display_number now unwrap its Result (it reports an exhausted number instead of overflowing), the expected numbers are unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |

@@ -27,3 +27,7 @@ dist/
 # Urzua's own derived/cache state (SPEC-0005) -- config.yaml and templates/
 # are tracked; cache/ is derived and never authoritative.
 .urzua/cache/
+build.log
+
+# Local build and test output
+*.log

@@ -2,7 +2,6 @@
 Stable-Id: 01M265JQ75D573RGZQGVZ8YT3Y
 Status: Fixed
 Found-in: 'hit live on the very first real run of ADR-45''s prepare-release workflow, merging PR #23 into main: PR #24 (the actual "chore: prepare release 0.2.0" PR it opened) failed `rust (fmt, clippy, test, build)` outright -- `cargo clippy --workspace --all-targets --locked` refused to run, "the lock file needs to be updated but --locked was passed"'
-Regression-test: 'no automated test -- verified by hand: `cargo check --offline --manifest-path rust/Cargo.toml --workspace` before vs. after the fix, confirming it produces exactly the five workspace-member version bumps and nothing else (no external dependency changes)'
 ---
 # 14 — knope's PrepareRelease bumps Cargo.toml but never regenerates the workspace Cargo.lock
 
@@ -34,8 +33,13 @@ produced a commit with a changed `Cargo.toml` and an untouched `Cargo.lock` side
 - ADR-45 -- the two-step release flow this bug was found realizing for the first time.
 - PR #24 -- the actual release PR this defect broke on its first real run.
 
+## Regression test
+
+no automated test -- verified by hand: `cargo check --offline --manifest-path rust/Cargo.toml --workspace` before vs. after the fix, confirming it produces exactly the five workspace-member version bumps and nothing else (no external dependency changes)
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-10 | Found and fixed same-day, on the first real run of `ADR-45`'s mechanism. `knope.toml`'s `prepare-release` workflow gains a `cargo check --offline` step (regenerates only the local workspace members' recorded versions, touches no external dependency, needs no network) plus an explicit `git add rust/Cargo.lock`, both before the release-prep commit. `Status: Fixed`. | **substantive** |
+> | 2026-11-05 | `Regression-test` retired (ADR-84); it named no test, so `Realized-by` is unchanged and the original text is kept under Regression test. **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

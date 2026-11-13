@@ -2,7 +2,7 @@
 Stable-Id: 01M2VJYJPSGXWM7YB2E0T53DEN
 Status: Fixed
 Found-in: 'Cutting 0.4.0 -- the release branch was three days stale while `prepare release` reported success on every push'
-Regression-test: '.github/scripts/release-guard.test.sh -- plants an unmatched-package fragment and asserts a nonzero exit, with the empty and successful cases asserted alongside it. Observed failing: neutering the guard makes the planted case report `want exit 1, got 0`.'
+Realized-by: test:.github/scripts/release-guard.test.sh@sha256:5fca6fe029d9bc486b023e4a401d0ae297f0e4e57ed9bb7a4f54fe62f9ceb82f
 ---
 # 48 — Seven changesets named a package that does not exist, and the release guard reported it as nothing to release
 
@@ -66,3 +66,5 @@ misspelled name.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-19 | Filed and fixed. **Why:** found while cutting 0.4.0, when the release PR that should have existed did not. The fragments were the typo; the guard treating seven inert fragments as "nothing to release" is the defect, and it is why three green runs hid it. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |
+> | 2026-11-08 | Pinned (attested by beauwilliams, identity: gh-verified, actor: agent): 1 locators pinned, 1 file-level, 0 scoped. Evidence: .github/scripts/release-guard.test.sh@sha256:5fca6fe029d9 Reason: Pinned the files as they are now after checking each against the record it evidences: publish-release.yml still builds and uploads the archives itself (BUG-28), new_record.rs still renders only the configured YAML header and new_integration.rs still holds the test that a blockquote template does not override it (BUG-3), waiver.rs is_active still parses Expires as a date (BUG-31), prepare-release.yml still hands knope's nothing-to-release exit to release-guard.sh instead of failing (BUG-33), ci.yml's changeset job still reads the label live (BUG-34), knope.toml still releases from changesets only (BUG-35), main.rs and check_integration.rs still emit doctor as JSON (BUG-4), release-guard.test.sh still plants an unmatched-package fragment and asserts a nonzero exit (BUG-48), field_state.rs still carries the retired placeholder tokens (BUG-5), and generate-rule-table.py and the Makefile rule-table-check target still compare SPEC-2's rule table with the shipped rule set (BUG-52). BUG-29 and BUG-30 are not in this batch because the filename.title-consistency code they cite moved out of rules.rs. **Why:** a claim is renewed only over pinned code and test evidence. | **structural** |

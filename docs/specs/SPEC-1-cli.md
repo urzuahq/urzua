@@ -1,9 +1,10 @@
 ---
-Version: '0.12'
+Stable-Id: 01M6R3NK5AJB7EBVDWVSMCSYZQ
+Version: '0.36'
 Date: 2026-07-29
-Status: Accepted
+Status: Shipped
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/main.rs@sha256:e085b319c36373a235488b6fd0a2b5568df9a95a3aa2841179b0d75d191e6510, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:b668d62f2f4a538e1b48383362b11314795407225697dd62f3f560ada9e74348, test:rust/crates/urzua-cli/tests/export_integration.rs@sha256:e1ad4b495f5bf06a98b8127ca42d562e40ecf25114744bf42526c1ca655da78f
+Realized-by: code:rust/crates/urzua-cli/src/main.rs#Command@sha256:3476a956db42d6ad4e5fffb773edf176a5fecffad335dc42243a5afbca366224, code:rust/crates/urzua-cli/src/main.rs#emit@sha256:29d071bbb8232c8cd5678d8c5d104830ec9b083471d1575ab768050e59704a71, test:rust/crates/urzua-cli/tests/check_integration.rs#help_exits_0_with_plain_text_not_json@sha256:b188b2cc76395b745caae8e5012ca7a91f5d0e52f9a68aabe377b0cd9fc81c3e, test:rust/crates/urzua-cli/tests/check_integration.rs#a_bad_flag_emits_json_not_a_panic@sha256:eb8bfb4d74748038835831064ab072943e8c32648f99c1202940cb169993747a, test:rust/crates/urzua-cli/tests/check_integration.rs#check_exits_0_on_a_clean_corpus@sha256:585cb12f3f55fb534592e1802d0448163e7aa3fa06e5a91709bc32ab641fecb9, test:rust/crates/urzua-cli/tests/check_integration.rs#check_exits_1_on_a_missing_required_field@sha256:95b88e795e9a4ffb4fe1983f76bf57a3a3191dfc5c579f4ff207381a3ff0c307, test:rust/crates/urzua-cli/tests/check_integration.rs#check_exits_2_when_no_config_exists@sha256:ebf81ea1fb85124a9510dd6f7e0f737e8fd55d4532b0907a23eaa7f46152a5b5, test:rust/crates/urzua-cli/tests/export_integration.rs@sha256:05e83d2904484c2059524a4e60ad40d6141e6025dae569de536528f765954689
 Author: beauwilliams
 Subject: 'The `urzua` CLI: its command surface, output contract, and the cross-cutting rules every command obeys -- the parent of the per-command and per-type specs split out from it.'
 Implements: ADR-1, ADR-2, ADR-3
@@ -40,10 +41,10 @@ because you cannot sell a decision graph you have never run against a real corpu
 > | **SPEC-8** | `urzua fix` — eligibility test, detect/apply | Accepted |
 > | **SPEC-9** | the `bug` record type | Accepted |
 > | **SPEC-10** | the `waiver` record type | Accepted |
-> | **SPEC-11** | `urzua audit` | Accepted |
+> | **SPEC-11** | `urzua audit` — a deprecated alias of `check` (`ADR-79`) | Accepted |
 > | **SPEC-12** | `urzua new` | Accepted |
 > | **SPEC-13** | `urzua explain` / `urzua graph` | Accepted |
-> | **SPEC-14** | `urzua migrate ids` / `urzua migrate schema` | Accepted |
+> | **SPEC-14** | `urzua migrate ids` / `urzua migrate schema` / `urzua migrate config` | Accepted |
 > | **SPEC-15** | `urzua doctor` | Accepted |
 >
 > Its number and identity are unchanged deliberately. Roughly thirty-five records, comments and
@@ -94,11 +95,17 @@ original command surface — the gap surfaced when the bootstrap plan needed it.
 
 ### `urzua new <type> [title]`
 **Specified in full by SPEC-12.** Creates a record from the configured template with a stable ID
-assigned, never asking the author to pick a number.
+assigned, never asking the author to pick a number. The numbers it passed over because a branch, an open
+pull request or a sibling worktree already holds them are in the report's `skipped` list, each with its
+reason, and not on stderr (`ADR-93`, Amendment of 2026-11-07).
 
 ### `urzua check [paths...]`
 **Specified in full by SPEC-2.** The validator. Exit non-zero on error; stdout is always the JSON
 report, unconditionally (ADR-23) — no flag needed for CI or an agent to get structured output.
+`urzua check --stdin-path <path>` judges one record's proposed content from stdin against every enabled
+rule without writing (`SPEC-2`), the call an editor hook relays (`ADR-78`).
+`urzua check --base REF --actors FILE` hands the host's identities for the change (the pull request's
+author and current approvers, a JSON file the gate action writes) to `diff.decider-required` (`SPEC-2`).
 Covers the rule set documented in the acceptance suite:
 
 - **Field presence with real semantics** — blank ≠ placeholder ≠ pending are three distinct states,
@@ -119,15 +126,27 @@ silently examining an empty set — a zero-error report that isn't evidence the 
 failure mode this tool exists to eliminate, and shipping it would be self-refuting.
 
 ### `urzua explain <path>` / `urzua graph`
-**Specified in full by SPEC-13.** Read-only relationship queries over data `check` already parses.
+**Specified in full by SPEC-13.** Read-only relationship queries over data `check` already parses. `urzua explain --rule <rule-id>` is the rule mode: what one rule is, from the rule table `urzua rules` prints, with the level this repository sets. A bare argument is always a path.
 
 ### `urzua audit`
-**Specified in full by SPEC-11.** Cross-record reconciliation, separate from per-record validation:
-supersession reciprocity and dangling cross-references. Never writes.
+**Specified in full by SPEC-11.** Deprecated (`ADR-79`): an alias of `urzua check` over the configured
+rules, with no rule set of its own, that adds one deprecation `Notice`. Never writes. Removed the
+release after. `urzua check --rules <id>,...` (`SPEC-2`) selects declared rules, and is the replacement
+for the narrower report `audit` used to give.
 
 ### `urzua fix`
 **Specified in full by SPEC-8.** Detects fields whose stated value disagrees with what the tool
 computes from evidence already in the record; apply mode writes the computed value back, gated hard.
+Without `--apply` nothing is written: `--ids` narrows the report (an entry matching nothing is a failure,
+as under `--apply`), and `--force`, `--by` and `--actor` are usage errors (exit 2), never ignored.
+
+### `urzua roadmap`
+**Specified in full by SPEC-2** (the roadmap output). The order of work computed from the records:
+waves, the ready set, the critical path, what each record blocks and a grouping, over the sequencing
+pairs `roadmap.pairs` declares (SPEC-3). Read-only, nothing stored, always JSON. A repository that
+declares no pair gets a `no-sequencing-pair` note, not an empty roadmap. Exit 0 whenever it could be
+computed; the roadmap reports cycles and records to re-plan in its own output and does not fail on
+them. `ADR-82`.
 
 ### `urzua refs refresh`
 Rewrites the committed snapshot of the repository's issue and pull request numbers that
@@ -145,9 +164,10 @@ commit, never a flaky run.
 - Pages of 100 are requested by `page=N` until the listing's `Link` header has no `rel="next"`; the
   `Link` URL itself is never followed, so the token only goes to the configured origin. An entry
   with a `pull_request` key is a pull request, any other an issue.
-- Output is the snapshot, `{schema_version, repository, generated_at, issues, pulls}`, both lists
+- Output is the snapshot, `{schema_version, repository, generated_at, issues, pulls}` (`generated_at`
+  is the current UTC date), both lists
   ascending and de-duplicated, pretty-printed with a final newline, so the same answers give the
-  same bytes and a refresh that learns nothing new on the same day leaves the file untouched
+  same bytes and a refresh that learns nothing new on the same UTC day leaves the file untouched
   (`outcome: current`; otherwise `created` or `written`). The file is replaced only after every
   page was fetched.
 - Stdout is one JSON report (`status`, `snapshot`, `repository`, `generated_at`, `outcome`,
@@ -156,15 +176,16 @@ commit, never a flaky run.
   declared `issue_refs` is exit `2` with `status: not-run` and the reason in `error`, and the
   existing snapshot is left as it was.
 
-### `urzua migrate ids` / `urzua migrate schema`
-**Specified in full by SPEC-14.** Backfills stable identifiers onto existing records, and previews
-what a newly-required field would break before it's added to config.
+### `urzua migrate ids` / `urzua migrate schema` / `urzua migrate config`
+**Specified in full by SPEC-14.** Backfills stable identifiers onto existing records, previews
+what a newly-required field would break before it's added to config, and rewrites a config from the
+previous schema version to the current one.
 
 ### `urzua export --format json`
 Every record of every configured type as plain JSON data, so tooling reads records through the one
 parser `check` uses instead of a second one. Takes no paths: it always exports the whole tracked
-corpus. `--format json` must be named explicitly; `urzua export` with no flag still selects
-`agdr`, which is not implemented (exit 2). The exact fields are under "Export contract" below.
+corpus. `--format` is required, for `export` and `import` alike: there is no default format, and a
+bare `urzua export` exits 2 asking for one. `--format agdr` is not implemented (exit 2). The exact fields are under "Export contract" below.
 
 ### `urzua export --format=agdr` / `urzua import`
 AgDR compatibility (ADR-2). Lossy export warns rather than silently dropping fields. Not
@@ -177,8 +198,8 @@ Stdout is the only stream, success or failure, every invocation. No stderr for a
 codebase's own code can structure into JSON, including genuine errors (ADR-26's amendment).
 
 - **`Report` is behavior, not a shared struct.** Each command's report (`CheckReport`, `GraphReport`,
-  `ExplainReport`, `ExportReport`, `NewReport`, `FixReport`, `MigrateSchemaReport`, `MigrateIdsReport`, `InitReport`,
-  `DoctorReport`, `CouldNotRun`)
+  `ExplainReport`, `ExportReport`, `RoadmapReport`, `NewReport`, `FixReport`, `MigrateSchemaReport`, `MigrateIdsReport`, `InitReport`,
+  `DoctorReport`, `MigrateConfigReport`, `CouldNotRun`)
   stays its own fully-typed struct; `Report` only requires `notices()` and `exit_code()`. There is
   no generic envelope wrapping every payload — an earlier design tried that via `#[serde(flatten)]`
   and was killed by a confirmed duplicate-JSON-key bug before it shipped.
@@ -189,6 +210,19 @@ codebase's own code can structure into JSON, including genuine errors (ADR-26's 
 - **Exit code is a channel independent of stdout/stderr content.** `Report::exit_code()` drives it —
   0 clean, 1 blocking findings, 2 could not run — the same contract a CI script gates on (`urzua
   check docs/ || exit 1`) whether output is JSON, plain text, or nothing at all.
+- **A could-not-run caused by the config's `schema_version` carries the cause as data.** When the
+  version is outside the window the release reads, `CouldNotRun` adds a `schema_version_error` object
+  (`found`, `supported`, `current`, `migration`; `SPEC-3`, `ADR-77`) beside the usual `error` sentence,
+  and is omitted otherwise.
+- **The evaluation date is an input (`ADR-97`, second amendment of 2026-11-08).** A global option
+  `--as-of YYYY-MM-DD` fixes the UTC date every date comparison reads: waiver `Expires`, claim age
+  (including ages taken from git history, measured to the end of that day), status expiry and the audit
+  grace. Without it the date is the machine's UTC date, read once per run, and behaviour is unchanged.
+  A report of a command that compares dates (`check`, `audit`, `fix`, `reverify`) carries a top-level
+  `as_of` object, always present: `{"date": "YYYY-MM-DD", "source": "flag" | "clock"}`. A malformed or
+  impossible date is a `CouldNotRun` (exit 2). The option is refused, never ignored, by a command that
+  compares no dates, and by `fix --apply` and `reverify --apply`, whose revision rows and anchors carry
+  the real date; preview with `--as-of` and no `--apply`. The wall clock is read in one place.
 - **`--help`/`--version` are the one stated plain-text exception** — clap's own output, never
   JSON-wrapped, matching `cargo`'s own convention that help/version generation is never gated behind
   a machine-format flag.
@@ -210,6 +244,7 @@ directory whose real path resolves outside the repository (a symlink) makes the 
 | `record_count` | integer | Length of `records`. |
 | `types` | array | One entry per configured type, in sorted name order: `type`, `dir`, `records` (the count exported). A type with no records is listed with `0`, so "empty" and "not configured" differ. |
 | `records` | array | Every record, ordered by `type` then `path`. |
+| `roadmap` | object | The computed roadmap, the same object `urzua roadmap` prints (SPEC-2). Present only when `roadmap.pairs` is declared (SPEC-3), so a repository that has not opted in sees no new key. |
 | `notices` | array | Omitted when empty, as for every report. |
 
 Each `records` entry:
@@ -306,7 +341,41 @@ None. Every question this spec carried has been answered or routed:
 > | 2026-09-18 | `Status: Draft` → `Accepted`, with `Embodiment`/`Realized-by` declared. **Why:** Every command this spec names ships: `new`, `check`, `explain`, `graph`, `audit`, `migrate`, `export` (with `--format`), `import`, `init`, `doctor`, `fix`. `main.rs` declares `//! Implements: SPEC-0001`. Its one outstanding promise -- *"which checks are errors vs. warnings"* as a v0 configuration surface -- was built by `MILE-80`. Verified against the binary before flipping rather than flipped in bulk -- `BUG-26` asked for exactly that, and it is why `SPEC-4` and `SPEC-5` are not flipped with these. | **substantive** |
 > | 2026-11-04 | Moved two revision rows (2026-09-17, 2026-09-18) that sat above the revision log marker, outside its table, into the table. No wording changed. **Why:** the rows were orphaned from the log, so the revision-log table was not what `citation.path-exists` set aside. | **structural** |
 > | 2026-11-04 | Bumped to `0.9`. Added `urzua refs refresh`, which rewrites the committed snapshot of issue and pull request numbers from the GitHub REST API (token from `GITHUB_TOKEN` or `GH_TOKEN`, `curl` transport, deterministic sorted output, exit `2` and no write on any failure); it is the only command that touches the network. **Why:** `MILE-143` -- the issue and pull request half of the cited-reference check needs a snapshot that `check` can read offline. | **substantive** |
-> | 2026-11-04 | Bumped to `0.10`. A panic exits 2, the documented code for could not run, after printing its `not-run` result (Rust's default is 101); a closed stdout pipe ends the run without a panic. **Why:** `MILE-176` -- the hook's JSON contract and the process exit code disagreed, and `urzua check | head -1` panicked. | **substantive** |
-> | 2026-11-04 | Re-baselined (attested by beauwilliams): re-pinned `rust/crates/urzua-cli/src/main.rs` 1b6a076de8bd -> e085b319c363, `rust/crates/urzua-cli/tests/check_integration.rs` 288a08b371a8 -> b668d62f2f4a, `rust/crates/urzua-cli/tests/export_integration.rs` 510343733f3f -> e1ad4b495f5b. Reason: Re-verified: spec revision log is current through v0.10; main.rs and test changes add index, refs, fix flags, --fail-on and panic exit 2, all specified. **Why:** the pinned evidence changed and a reviewer re-verified that the claim still holds. | **structural** |
+> | 2026-11-04 | Bumped to `0.10`. A panic exits 2, the documented code for could not run, after printing its `not-run` result (Rust's default is 101); a closed stdout pipe ends the run without a panic. **Why:** `MILE-176` -- the hook's JSON contract and the process exit code disagreed, and `urzua check \| head -1` panicked. | **substantive** |
+> | 2026-11-04 | Re-baselined (attested by beauwilliams): re-pinned `rust/crates/urzua-cli/src/main.rs` 1b6a076de8bd -> e085b319c363, `rust/crates/urzua-cli/tests/check_integration.rs` 288a08b371a8 -> b668d62f2f4a, `rust/crates/urzua-cli/tests/export_integration.rs` 510343733f3f -> e1ad4b495f5b. Reason: Re-verified: spec revision log is current through v0.10; main.rs and test changes add index, refs, fix flags, --fail-on and panic exit 2, all specified. **Why:** the pinned evidence changed and the attesting actor re-verified that the claim still holds. | **structural** |
 > | 2026-11-04 | Bumped to `0.11`. Added rows for `urzua rules` and `urzua index` to the child-spec table; both commands are specified in `SPEC-2` (the rule table, `index.freshness`) and `SPEC-3` (`indexes`). No behaviour changes. **Why:** drift review of 2026-11-04: the table named neither command, so a reader could not tell where they are specified. | **structural** |
 > | 2026-11-04 | Bumped to `0.12`. The export contract gains `sections` and `preamble` (`MILE-115`). **Why:** the ADR, bug and milestone types now declare `sections`, so the condition the contract named for adding them holds. A type with no declaration gets an explicit `null`, not an absent key: absence reads as "not exported", while `null` states "no declaration" and `[]` states "declared, none present", so no consumer takes a silent default. Aliases resolve to the declared name as in `MILE-165`. | **substantive** |
+> | 2026-11-05 | Bumped to `0.13`. Narrowed to the item the decision concerns; re-pin approved by the maintainer's 2026-11-04 drift decision (`ADR-74`, `MILE-185`): `main.rs` to `Command` (lines 89-237), `emit` (lines 39-56); `check_integration.rs` to `help_exits_0_with_plain_text_not_json` (lines 773-790), `a_bad_flag_emits_json_not_a_panic` (lines 792-808), `check_exits_0_on_a_clean_corpus` (lines 68-93), `check_exits_1_on_a_missing_required_field` (lines 95-117), `check_exits_2_when_no_config_exists` (lines 119-129). **Why:** an unrelated edit to a volatile file must not stale this pin again; the spans were chosen by the author of this change and not reviewed line by line by the maintainer. | **structural** |
+> | 2026-11-05 | Re-baselined (attested by beauwilliams): re-pinned `rust/crates/urzua-cli/tests/export_integration.rs` e1ad4b495f5b -> ee81adceb0d7. Reason: Drift review of 2026-11-04, recommendation (a). The only change to export_integration.rs since the pin is one added fixture and test (`export_json_emits_declared_sections...`, MILE-115, 76 lines); no existing test changed, so the output-contract coverage this spec cites holds. **Why:** the pinned evidence changed and the attesting actor re-verified that the claim still holds. | **structural** |
+> | 2026-11-05 | Bumped to `0.14`; the existing `Realized-by` evidence is unchanged. **Why:** the maintainer approved moving this spec to `Shipped`, and a spec is a living document whose version moves with each such change. | **structural** |
+> | 2026-11-05 | Bumped to `0.15`. Status changed from Accepted to Shipped. **Why:** Maintainer decision, 2026-11-05: its Realized-by evidence computes Verified and an independent review judged it sound. | **substantive** |
+> | 2026-11-05 | Bumped to `0.16`. Re-baselined (BUG-50, attested by this PR's review): re-pinned `rust/crates/urzua-cli/tests/check_integration.rs#check_exits_0_on_a_clean_corpus` 890414a9c2c9 -> 07cd765af78d. Reason: BUG-50 made a missing revision log a finding, so the clean-corpus fixture gained a revision log; the exit-0-on-a-clean-corpus behaviour this spec cites is unchanged **Why:** the pinned evidence changed and the PR review is the human re-verification that the claim still holds. | **structural** |
+> | 2026-11-05 | Bumped to `0.17`. `check` gains `--stdin-path`, named under `urzua check` and specified in `SPEC-2`. **Why:** `MILE-191`, `ADR-78` item 2. | **substantive** |
+> | 2026-11-05 | Re-baselined (attested by beauwilliams): re-pinned `rust/crates/urzua-cli/src/main.rs#Command` (lines 89-243) 4ec5a0737546 -> 4d5cc9cf4b35. Reason: The Command enum span changed only to add check's --stdin-path flag, which this spec now names; the rest of the pinned surface is unchanged **Why:** the pinned evidence changed and the attesting actor re-verified that the claim still holds. | **structural** |
+> | 2026-11-05 | Bumped to `0.15`. `urzua audit` is a deprecated alias of `check`, and `check` takes `--rules`. **Why:** `MILE-190`, `ADR-79`. | **substantive** |
+> | 2026-11-05 | Re-baselined (attested by beauwilliams): re-pinned `rust/crates/urzua-cli/src/main.rs#Command` (lines 89-249) 4d5cc9cf4b35 -> 2e660f5d188b. Reason: The Command enum span changed to add check's --rules flag, which this spec now names; the rest of the pinned surface is unchanged **Why:** the pinned evidence changed and the attesting actor re-verified that the claim still holds. | **structural** |
+> | 2026-11-05 | Re-baselined (attested by beauwilliams): re-pinned `rust/crates/urzua-cli/src/main.rs#Command` (lines 89-248) 4d5cc9cf4b35 -> 6329cd27ceb0. Reason: audit.rs now runs check's engine over the configured rules with a deprecation notice, and Command::Audit's help describes the deprecated alias (ADR-79 as amended, MILE-190); the supersession-reciprocity behaviour ADR-30 cites is unchanged, now reported through check, and the pinned test body changed only to match **Why:** the pinned evidence changed and the attesting actor re-verified that the claim still holds. | **structural** |
+> | 2026-11-05 | Bumped to `0.19`. Named `urzua migrate config` beside the other two `migrate` operations and added `schema_version_error` to the could-not-run contract. **Why:** `ADR-77` / `MILE-34`. | **substantive** |
+> | 2026-11-05 | Bumped to `0.20`. Adds `urzua roadmap` to the command surface and `RoadmapReport` to the report list; the export contract gains an optional `roadmap` key, present only when `roadmap.pairs` is declared. **Why:** `MILE-182`, decided in `ADR-82`: the roadmap is part of `export --format json` only for a repository that opted in. | **substantive** |
+> | 2026-11-05 | Re-baselined (attested by beauwilliams): re-pinned `rust/crates/urzua-cli/src/main.rs#Command` (lines 89-256) 6329cd27ceb0 -> e253d0d7ef6f. Reason: The Command enum span (main.rs#Command) changed only by adding the Roadmap subcommand variant for 'urzua roadmap' (MILE-182, ADR-82), a doc comment and a unit variant; no existing variant or its attributes changed, so the command surface this spec cites is intact and the new subcommand is documented in SPEC-1 0.20 and SPEC-2. **Why:** the pinned evidence changed and the attesting actor re-verified that the claim still holds. | **structural** |
+> | 2026-11-05 | Bumped to `0.21`. Re-baselined (attested by beauwilliams): re-pinned `rust/crates/urzua-cli/tests/check_integration.rs#help_exits_0_with_plain_text_not_json` (lines 884-899) 1e3eb7deafd1 -> b188b2cc7639, `rust/crates/urzua-cli/tests/check_integration.rs#a_bad_flag_emits_json_not_a_panic` (lines 901-915) 21de607499b2 -> eb8bfb4d7474, `rust/crates/urzua-cli/tests/check_integration.rs#check_exits_0_on_a_clean_corpus` (lines 67-90) 07cd765af78d -> 585cb12f3f55, `rust/crates/urzua-cli/tests/check_integration.rs#check_exits_1_on_a_missing_required_field` (lines 92-112) cca33395d984 -> 95b88e795e9a, `rust/crates/urzua-cli/tests/check_integration.rs#check_exits_2_when_no_config_exists` (lines 114-122) fffd3008d4cf -> ebf81ea1fb85, `rust/crates/urzua-cli/tests/export_integration.rs` ee81adceb0d7 -> ffeb24dfae4a. Reason: The cited tests only changed how their fixture directory is owned: each now holds a common::TempDir (or common::TempFile) guard that removes it on drop instead of calling remove_dir_all (BUG-193); the assertions and the command surface and export contract they pin are unchanged. **Why:** the pinned evidence changed and the attesting actor re-verified that the claim still holds. | **structural** |
+> | 2026-11-05 | Bumped to `0.22`. Corrects the two `#311` rows that re-pinned `rust/crates/urzua-cli/src/main.rs#Command` (the row for lines 89-249, 4d5cc9cf4b35 -> 2e660f5d188b, and the row for lines 89-248, 4d5cc9cf4b35 -> 6329cd27ceb0; the second is the live pin). Accurate reason for both: `check` gained `--rules <ID,...>` and `Audit`'s doc comment now describes the deprecated alias; no other variant changed. The second row's reason was copied from `ADR-30`'s row and cited a test (the supersession-reciprocity test) that this spec does not pin. **Why:** an independent check of the re-pin reasons found the earlier row incomplete or inaccurate; corrected here without rewriting it. | **structural** |
+> | 2026-11-06 | Re-baselined (attested by beauwilliams): re-pinned `rust/crates/urzua-cli/src/main.rs#Command` (lines 92-273) e253d0d7ef6f -> d0015ed73762. Reason: The pinned Command enum in main.rs gained a Harness subcommand variant (urzua harness) with the HarnessTarget and HarnessRun enums defined beside it; the other variants, the pinned emit function and the pinned tests are unchanged. **Why:** the pinned evidence changed and the attesting actor re-verified that the claim still holds. | **structural** |
+> | 2026-11-06 | Bumped to `0.24`. Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/main.rs#Command` (lines 92-278) d0015ed73762 -> 6f77c3055678. Reason: The pinned Command enum span in main.rs, which already carries the Harness variant from the harness install change, gained only the optional --actor argument (agent or human) with its doc comment on the Fix variant (MILE-201, ADR-89); the ActorArg enum sits outside the pinned span. No existing variant or option changed, so the command surface this spec cites is intact. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-06 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/main.rs#Command` (lines 92-285) 6f77c3055678 -> 6be4a09f031d. Reason: The Command enum span changed only to add check's --actors FILE flag (the identities diff.decider-required reads), which SPEC-1 now names under urzua check; every other subcommand in the pinned span is unchanged **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-06 | Bumped to `0.25`. Names `urzua check --base REF --actors FILE` under `urzua check`, the host identities `diff.decider-required` reads (`SPEC-2`). **Why:** `MILE-200`, `ADR-89` section 4. | **substantive** |
+> | 2026-11-06 | Bumped to `0.26`. `urzua export` and `urzua import` require `--format`; the `agdr` default is gone, so a bare `urzua export` says a format is required instead of reporting an unimplemented one. `urzua fix --help` says what is implemented (tier 1 and `--rebaseline`). **Why:** the second-pass review (`cli.md` #11): the defaults named a format that is not implemented and the help text no longer matched `fix`. | **substantive** |
+> | 2026-11-06 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: unspecified): re-pinned `rust/crates/urzua-cli/src/main.rs#Command` (lines 92-288) 6be4a09f031d -> c61774c9d4cb, `rust/crates/urzua-cli/tests/export_integration.rs` ffeb24dfae4a -> 188eded0b56a. Reason: main.rs#Command: export and import now require --format (the agdr default is removed) and the fix help text names what fix does; no change to any other command, flag or output; export_integration.rs: the bare `export` case now asserts the `--format` required error instead of the not-implemented one, and the `agdr` case is kept **Why:** the pinned evidence changed and the attesting actor re-verified that the claim still holds. | **structural** |
+> | 2026-11-06 | Bumped to `0.27`. `urzua refs refresh` dates the snapshot with the current UTC date. **Why:** maintainer decision of 2026-11-05: every date comparison uses UTC; the date was the machine's local date. | **substantive** |
+> | 2026-11-07 | Bumped to `0.28`. `urzua new` names the numbers it skipped, with the reason, in the report and not on stderr. **Why:** Maintainer decision, 2026-11-07, recorded as an amendment to `ADR-93`; the detail is in `SPEC-12`. | **substantive** |
+> | 2026-11-07 | Bumped to `0.29`. `urzua fix` without `--apply`: `--ids` narrows the dry-run report and an `--ids` entry that matches nothing is a failure, as under `--apply`; `--force`, `--by` and `--actor` are usage errors (exit 2). **Why:** maintainer decision of 2026-11-07, from the CLI review: a typo'd `--ids` read as "nothing to do". | **substantive** |
+> | 2026-11-07 | Bumped to `0.30`. One earlier revision-log row now writes the pipe inside its code span as `\|`, so the table reads the same under the escape-aware row parser; no behaviour of the CLI changes. **Why:** `MILE-213` -- a log's columns are read by header name, and an unescaped pipe in a cell widens the row. | **structural** |
+> | 2026-11-07 | Bumped to `0.31`. `urzua explain` takes `--rule <rule-id>` in place of a path, to print one rule; the command's pointer to `SPEC-13` says so. **Why:** maintainer decision of 2026-11-07 (the `ADR-96` amendment of that date). | **substantive** |
+> | 2026-11-07 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/main.rs#Command` (lines 94-302) c61774c9d4cb -> 166509473a45, `rust/crates/urzua-cli/tests/export_integration.rs` 188eded0b56a -> 05e83d290448. Reason: main.rs#Command: the Explain variant gained an optional --rule <RULE_ID> flag, its path argument became optional (required unless --rule is given) and its doc comment and usage line were extended; no other variant changed. export_integration.rs: its only change since the pin is the earlier one-line switch of run_urzua to common::urzua() (stubbed gh), unrelated to this PR; both cited behaviours (the Command surface, export) still hold. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/main.rs#Command` (lines 94-338) 166509473a45 -> a6f09ebb5aa7. Reason: Read the diff of the pinned main.rs Command enum: it gained a Reverify variant (the new urzua reverify subcommand with its --ids, --apply, --pin-only, --by, --actor, --force and --reason flags) and an arm in main's dispatch; every existing variant is unchanged, so the command surface SPEC-1 describes still holds with one added command. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-08 | Bumped to `0.32`. The CLI gains `urzua reverify` (`ADR-97`, `SPEC-8`), the attributed renewal of an expired claim; the pin on the `Command` enum is re-baselined above. No other command changes. **Why:** `MILE-129`, the build of `ADR-97`. | **substantive** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/main.rs#Command` (lines 94-338) a6f09ebb5aa7 -> 3476a956db42. Reason: Read the diff of each pinned file since the old pin and the claim still holds. main.rs#Command: only the doc comment on the Init variant changed, so its --help text now says --dry-run prints the config the real run would write instead of calling it byte-identical to the real run; no variant, flag or argument changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-08 | Bumped to `0.33`. The pins this spec's `Realized-by` holds on files changed in this change were re-baselined (the `Re-baselined` row above); no behaviour this spec describes changed. **Why:** a revision-log entry that adds a structural change needs a `Version` bump (`revision-log.version-bump-required`). | **structural** |
+> | 2026-11-08 | Bumped to `0.34`. The CLI gains the global `--as-of YYYY-MM-DD` evaluation date and a top-level `as_of` on the reports of `check`, `audit`, `fix` and `reverify`, with its refusals; no pinned symbol of this spec changed. **Why:** maintainer decision of 2026-11-08 (the second `ADR-97` amendment of that date): a verdict must be reproducible and upcoming expiries previewable. | **substantive** |
+> | 2026-11-09 | Bumped to `0.35`. Note on the log: The version numbers of earlier `Bumped to` rows are not strictly increasing, and history is not rewritten: the order of the rows is the order the changes landed, and the current `Version` header is authoritative. Rows affected: `0.15` appears twice (the `Accepted` to `Shipped` row and the later `urzua audit` row), and the `0.15` `audit` row comes after `0.17`. **Why:** a review found the out-of-order and repeated numbers and a reader could be misled about which row introduced which version. | **structural** |
+> | 2026-11-09 | Bumped to `0.36`. Re-pin rows in this revision log were reworded to name who re-verified, matching the tool's wording since 2026-11-09; hashes, reasons and dates are unchanged. **Why:** Maintainer decision, 2026-11-09. | **structural** |

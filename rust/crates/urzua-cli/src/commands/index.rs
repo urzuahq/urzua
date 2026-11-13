@@ -5,13 +5,15 @@
 //! `--apply` writes them. Regeneration is deterministic, so a second run
 //! reports every artifact `current` and writes nothing.
 
-use std::path::PathBuf;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
+use urzua_core::record::Record;
 use urzua_core::report::{
     CouldNotRun, IndexOutcome, IndexReport, IndexResult, IndexStatus, Notice, NoticeSeverity,
 };
-use urzua_core::rules::{regenerate_index, render_index_entries, IndexContent};
+use urzua_core::rules::{regenerate_index, render_index_entries, IndexArtifact, IndexContent};
 
 use crate::emit;
 use crate::session::{Session, Workspace};
@@ -46,58 +48,10 @@ pub fn run(config_path: Option<PathBuf>, apply: bool) -> ExitCode {
         Err(e) => return emit(&CouldNotRun::from(e)),
     };
 
-    let mut results = Vec::new();
-    for artifact in &artifacts {
-        let spec = &artifact.spec;
-        let entries = render_index_entries(spec, &records, &full_text)
-            .map(|e| e.len())
-            .unwrap_or(0);
-        let fail = |error: String| IndexResult {
-            path: PathBuf::from(&spec.path),
-            outcome: IndexOutcome::Failed,
-            entries,
-            error: Some(error),
-        };
-        let wanted = match regenerate_index(spec, &records, &full_text, &artifact.content) {
-            Ok(text) => text,
-            Err(e) => {
-                results.push(fail(e));
-                continue;
-            }
-        };
-        let existing = match &artifact.content {
-            IndexContent::Text(text) => Some(text.as_str()),
-            _ => None,
-        };
-        let outcome = match (existing, apply) {
-            (Some(text), _) if text == wanted => IndexOutcome::Current,
-            (Some(_), false) => IndexOutcome::Stale,
-            (None, false) => IndexOutcome::Missing,
-            (current, true) => {
-                let full = repo_root.join(&spec.path);
-                if let Some(parent) = full.parent() {
-                    if let Err(e) = std::fs::create_dir_all(parent) {
-                        results.push(fail(format!("could not create {}: {e}", parent.display())));
-                        continue;
-                    }
-                }
-                match std::fs::write(&full, &wanted) {
-                    Ok(()) if current.is_some() => IndexOutcome::Written,
-                    Ok(()) => IndexOutcome::Created,
-                    Err(e) => {
-                        results.push(fail(format!("could not write {}: {e}", spec.path)));
-                        continue;
-                    }
-                }
-            }
-        };
-        results.push(IndexResult {
-            path: PathBuf::from(&spec.path),
-            outcome,
-            entries,
-            error: None,
-        });
-    }
+    let results: Vec<IndexResult> = artifacts
+        .iter()
+        .map(|artifact| regenerate_artifact(artifact, &records, &full_text, &repo_root, apply))
+        .collect();
 
     let failed = results.iter().any(|r| r.outcome == IndexOutcome::Failed);
     let changed = results.iter().any(|r| {
@@ -121,15 +75,71 @@ pub fn run(config_path: Option<PathBuf>, apply: bool) -> ExitCode {
     let notices = if apply || !changed {
         Vec::new()
     } else {
-        vec![Notice {
-            severity: NoticeSeverity::Info,
-            subject: "index".to_string(),
-            message: "run `urzua index --apply` to write the regenerated artifacts".to_string(),
-        }]
+        vec![Notice::new(
+            NoticeSeverity::Info,
+            "index".to_string(),
+            "run `urzua index --apply` to write the regenerated artifacts".to_string(),
+        )]
     };
     emit(&IndexReport {
         status,
         indexes: results,
         notices,
     })
+}
+
+/// Regenerates one declared artifact: compares it with the wanted text and,
+/// with `apply`, writes it.
+fn regenerate_artifact(
+    artifact: &IndexArtifact,
+    records: &[Record],
+    full_text: &HashMap<PathBuf, String>,
+    repo_root: &Path,
+    apply: bool,
+) -> IndexResult {
+    let spec = &artifact.spec;
+    let entries = render_index_entries(spec, records, full_text)
+        .map(|e| e.len())
+        .unwrap_or(0);
+    let fail = |error: String| IndexResult {
+        path: PathBuf::from(&spec.path),
+        outcome: IndexOutcome::Failed,
+        entries,
+        error: Some(error),
+    };
+    let wanted = match regenerate_index(spec, records, full_text, &artifact.content) {
+        Ok(text) => text,
+        Err(e) => return fail(e),
+    };
+    let existing = match &artifact.content {
+        IndexContent::Text(text) => Some(text.as_str()),
+        _ => None,
+    };
+    let outcome = match (existing, apply) {
+        (Some(text), _) if text == wanted => IndexOutcome::Current,
+        (Some(_), false) => IndexOutcome::Stale,
+        (None, false) => IndexOutcome::Missing,
+        (current, true) => {
+            let full = repo_root.join(&spec.path);
+            if let Err(e) = urzua_io::confine_to_root(repo_root, &full) {
+                return fail(e);
+            }
+            if let Some(parent) = full.parent() {
+                if let Err(e) = std::fs::create_dir_all(parent) {
+                    return fail(format!("could not create {}: {e}", parent.display()));
+                }
+            }
+            match urzua_io::write_atomic_in(repo_root, &full, &wanted) {
+                Ok(()) if current.is_some() => IndexOutcome::Written,
+                Ok(()) => IndexOutcome::Created,
+                Err(e) => return fail(format!("could not write {}: {e}", spec.path)),
+            }
+        }
+    };
+    IndexResult {
+        path: PathBuf::from(&spec.path),
+        outcome,
+        entries,
+        error: None,
+    }
 }

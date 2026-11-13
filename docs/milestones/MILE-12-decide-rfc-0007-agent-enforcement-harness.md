@@ -1,8 +1,10 @@
 ---
-Status: Planned
+Status: Done
+Realized-by: spec:docs/adr/ADR-69-a-record-edit-is-judged-by-urzua-before-it-is-written-and-the-harness-hook-only-relays-the-verdict.md, spec:docs/adr/ADR-70-drafting-commands-scaffold-through-urzua-new-and-carry-no-schema-knowledge-of-their-own.md, spec:docs/adr/ADR-71-one-gate-runs-at-the-editor-the-commit-the-push-and-ci-and-only-ci-is-relied-on-as-the-guarantee.md, spec:docs/adr/ADR-78-rfc-7-s-remaining-enforcement-harness-decisions.md
 Stable-Id: 01M1Y5JJECJSQBGTZSAH8WHYRP
 Phase: '0'
 Track: governance-process
+Kind: decision
 Implements: RFC-7
 Blocked-on: —
 ---
@@ -18,7 +20,9 @@ Still Draft; genuinely undecided.
 
 ## Done means
 
-The parts of `RFC-7` that Phase 0 builds are recorded as Accepted ADRs (`ADR-69`, `ADR-70`, `ADR-71`), and each part left open states that it is deferred and why: the independent audit trail, which is not the editing agent's own compliance, is either decided in an ADR or listed as an open question on `RFC-7` naming its owner.
+- The parts of `RFC-7` that Phase 0 builds are recorded as Accepted ADRs (`ADR-69`, `ADR-70`, `ADR-71`). — evidence: spec:docs/adr/ADR-69-a-record-edit-is-judged-by-urzua-before-it-is-written-and-the-harness-hook-only-relays-the-verdict.md, spec:docs/adr/ADR-70-drafting-commands-scaffold-through-urzua-new-and-carry-no-schema-knowledge-of-their-own.md, spec:docs/adr/ADR-71-one-gate-runs-at-the-editor-the-commit-the-push-and-ci-and-only-ci-is-relied-on-as-the-guarantee.md
+- Each part of `RFC-7` left open states that it is deferred and why. — evidence: spec:docs/adr/ADR-78-rfc-7-s-remaining-enforcement-harness-decisions.md
+- The independent audit trail, which is not the editing agent's own compliance, is either decided in an ADR or listed as an open question on `RFC-7` naming its owner. — evidence: spec:docs/adr/ADR-78-rfc-7-s-remaining-enforcement-harness-decisions.md
 
 > **Revision log**
 >
@@ -28,3 +32,8 @@ The parts of `RFC-7` that Phase 0 builds are recorded as Accepted ADRs (`ADR-69`
 > | 2026-11-04 | Moved from Phase 2 to Phase 0. The enforcement harness is part of the tooling around a real adopter's records linter (an editor hook, git hooks, a CI integration and agent commands: `MILE-177` to `MILE-180`), and `ADR-69` to `ADR-71` draft the parts of `RFC-7` those milestones would build; this milestone is the decision they derive from. `Status` stays `Planned`. **Why:** Maintainer decision, 2026-11-04: Phase 0 parity includes the tooling around the linter, not only its checks. | **substantive** |
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |
 > | 2026-11-05 | `ADR-78` (Proposed) records the remaining decisions on `RFC-7`: the override log, the hook judging every rule on the edited record, section 4 satisfied by the existing `diff.source-and-records-mixed`, the section 5 nudge, a waiver for a skipped stage, and no revision record for a blocked edit. This milestone closes when `ADR-78` is accepted. `Status` stays `Planned`. **Why:** Maintainer decision, 2026-11-05: with `ADR-69` to `ADR-71` and `ADR-78`, every part of `RFC-7` is decided or deferred by name; closing waits for the maintainer to accept `ADR-78`. | **substantive** |
+> | 2026-11-05 | `ADR-78` is Accepted (maintainer decision, 2026-11-05). Its parts that need building are filed: `MILE-191` (`check --stdin-path` and the hook relaying every finding), `MILE-188` (the committed override log and its unreviewed-override finding) and `MILE-189` (the `Realized-by` mechanism nudge); item 3 is the existing `diff.source-and-records-mixed` (`MILE-142`) and items 5 and 6 build nothing. This milestone closes, with `Realized-by` and `Status: Done`, in the pull request that completes the last of the three. `Status` stays `Planned`. **Why:** `ADR-78` notes that no milestone existed for these parts. | **substantive** |
+> | 2026-11-05 | Two of the three `ADR-78` milestones are built: `MILE-191` (#308) and `MILE-188` (#309). `MILE-189`, the `Realized-by` mechanism nudge, is built as a rule but not yet enabled in this repository, because enabled it reports 308 warnings and this repository fails on any warning; see its revision log. This milestone stays open until that is decided and `MILE-189` is `Done`. `Status` stays `Planned`. **Why:** Done means asks for `ADR-78`'s parts to be built, and one is not delivered. | **substantive** |
+> | 2026-11-05 | Closed: `Status: Done`, with `Realized-by` citing `ADR-69`, `ADR-70`, `ADR-71` and `ADR-78`, all Accepted. Each part of `RFC-7` is an Accepted ADR or built by name: the hook, drafting commands and layered gate (`ADR-69` to `ADR-71`), and the override log, hook scope, section 4, the section 5 nudge, the stage-skip waiver and no revision record for a blocked edit (`ADR-78`). `MILE-191`, `MILE-188` and `MILE-189` build the parts that need code and are tracked on their own. **Why:** this milestone decides `RFC-7`, and `ADR-78` says it closes when accepted; tying it to the build of `MILE-191`, `MILE-188` and `MILE-189` would contradict both that sentence and this record's Done means. | **substantive** |
+> | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |
+> | 2026-11-07 | `Kind: decision` added. **Why:** maintainer decision of 2026-11-07 (`ADR-96` amendment, milestone kinds): this milestone records a decision, so it is judged against a decided record (an Accepted decision or a Shipped spec) rather than a built tier. Its `Status` is computed from its Done means items by `urzua fix`, not set by hand. | **structural** |

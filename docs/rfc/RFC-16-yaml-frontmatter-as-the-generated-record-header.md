@@ -1,4 +1,5 @@
 ---
+Stable-Id: 01M6R3NK53ZC1NG657R3W88PDD
 Status: Accepted
 Date: 2026-09-05
 Accepted-on: 2026-09-05
@@ -109,3 +110,9 @@ to clear.
   format rather than another bespoke line-recognizer.
 - ADR-1, ADR-5/6, ADR-13 — the pure-core and cross-compilation constraints the dependency
   choice was verified against.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-05 | Revision log added, 2026-11-05. | **structural** |

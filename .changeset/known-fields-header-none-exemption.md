@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: [BUG-124]
 ---
 
 Fixes `BUG-124`: the new `config.known-fields-declaration-missing` rule (`RFC-43`/`ADR-62`) flagged a

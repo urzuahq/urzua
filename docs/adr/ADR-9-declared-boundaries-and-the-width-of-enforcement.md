@@ -1,4 +1,5 @@
 ---
+Stable-Id: 01M6R3NK4V1W334NH3SGZZZ2K6
 Status: Accepted
 Embodiment: Not started
 Date: 2026-09-04
@@ -61,3 +62,9 @@ once records in the wild declare it one way.
 
 - RFC-11 — the proposal this partially decides; §6 remains open per the RFC's own text.
 - ADR-5, ADR-8 — prior instances of the same width-comparison discipline this ADR generalizes.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-05 | Revision log added, 2026-11-05. | **structural** |

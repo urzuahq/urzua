@@ -1,0 +1,13 @@
+# SPEC-22 function-size ratchet: the functions that were over the 100-line bound
+# when the gate was introduced, each with its length then (signature to closing
+# brace). One line per function: `<key><TAB><ceiling>`. The key is the file from
+# `rust/` and the function's path (enclosing mod, impl and fn names), never a line
+# number.
+#
+# The list only shrinks. `tests/fn_length_ratchet.rs` fails when
+#   - a function not listed here is over 100 lines (split it; never add it here),
+#   - a listed function is longer than its ceiling,
+#   - a listed function is at most 100 lines, or shorter than its ceiling (delete
+#     the entry, or lower it to the new length).
+# Print the current offenders in this format with:
+#   cargo test -p urzua-cli --test fn_length_ratchet -- --ignored --nocapture

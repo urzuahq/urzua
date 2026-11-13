@@ -2,10 +2,15 @@
 //! in CI. Apply mode (`--ids`, `--by`, `--force`) writes computed values
 //! back, gated hard.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use urzua_core::report::{CouldNotRun, FixFailure, FixReport, FixStatus, Notice, NoticeSeverity};
+use urzua_core::config::{Config, RuleLevel};
+use urzua_core::fix::{Attestation, FailedPin, Rebaseline, Repair};
+use urzua_core::record::Record;
+use urzua_core::report::{
+    CouldNotRun, Failure, FixFailure, FixReport, FixStatus, Notice, NoticeSeverity, Population,
+};
 
 use crate::session::Session;
 use crate::{emit, NOTICE_IDENTITY};
@@ -18,190 +23,272 @@ pub struct FixArgs {
     pub apply: bool,
     pub ids: Vec<String>,
     pub by: Option<String>,
+    pub actor: urzua_core::fix::ActorKind,
     pub force: bool,
     pub rebaseline: bool,
     pub reason: Option<String>,
 }
 
+/// Why a command could not run: the sentence `urzua` prints as `not-run`.
+pub(crate) type Refusal = Failure;
+
+pub(crate) fn refuse(reason: impl Into<Failure>) -> Refusal {
+    reason.into()
+}
+
 pub fn run(config_path: Option<PathBuf>, args: FixArgs) -> ExitCode {
-    let FixArgs {
-        paths,
-        stdin_path,
-        tier,
-        apply,
-        ids,
-        by,
-        force,
-        rebaseline,
-        reason,
-    } = args;
-    if tier != 1 {
-        return emit(&CouldNotRun::from(
-            "only tier 1 is implemented so far -- tiers 2 and 3 are not yet built",
-        ));
-    }
-    if apply && ids.is_empty() && !force {
-        return emit(&CouldNotRun::from(
-            "urzua fix --apply: pass --ids <record,...> or --force (never the default)",
-        ));
-    }
+    run_checked(config_path, args).unwrap_or_else(|e| emit(&CouldNotRun::from(e)))
+}
 
-    if rebaseline && stdin_path.is_some() {
-        return emit(&CouldNotRun::from(
-            "urzua fix --rebaseline works on files in the tree: it cannot be combined with --stdin-path",
-        ));
-    }
-    if !rebaseline && reason.is_some() {
-        return emit(&CouldNotRun::from(
-            "urzua fix --reason belongs to --rebaseline: a Tier 1 repair records its computation, not a reason",
-        ));
-    }
-    let reason = match (rebaseline && apply, reason.as_deref().map(str::trim)) {
-        (true, None | Some("")) => {
-            return emit(&CouldNotRun::from(
-                "urzua fix --rebaseline --apply: pass --reason <why the evidence still holds>; a re-pin without a reason is a rubber stamp",
-            ))
-        }
-        (_, Some(r)) if r.contains('|') || r.contains('\n') => {
-            return emit(&CouldNotRun::from(
-                "--reason must be one line without '|' (it is written into a revision-log table row)",
-            ))
-        }
-        (_, r) => r.unwrap_or_default().to_string(),
-    };
+/// Whether the configuration declares `rule` at a level above `off`.
+pub(crate) fn rule_enabled(config: &Config, rule: &str) -> bool {
+    config
+        .rules
+        .get(rule)
+        .is_some_and(|s| s.level != RuleLevel::Off)
+}
 
-    if stdin_path.is_some()
-        && (apply || force || !ids.is_empty() || by.is_some() || !paths.is_empty())
-    {
-        return emit(&CouldNotRun::from(
-            "urzua fix --stdin-path judges proposed content and writes nothing: it cannot be combined with PATHS, --apply, --ids, --by or --force",
-        ));
-    }
+/// `run` with every refusal as an `Err`, so each step can stop with `?`.
+fn run_checked(config_path: Option<PathBuf>, args: FixArgs) -> Result<ExitCode, Refusal> {
+    let reason = check_usage(&args)?;
     let Session {
         repo_root,
         config,
         discovered,
         mut records,
         ..
-    } = match Session::open(config_path) {
-        Ok(session) => session,
-        Err(e) => return emit(&CouldNotRun::from(e)),
-    };
+    } = Session::open(config_path).map_err(refuse)?;
     // `PATHS` narrow what is examined, drifted and repaired (`MILE-159`); the
     // corpus a back-pointer resolves against stays whole. A path that matches
     // no record is a failure naming it, never a silent skip.
-    let mut proposed: Option<String> = None;
-    let (scoped, unmatched) = if let Some(stdin_path) = &stdin_path {
-        // The proposed content replaces the on-disk record (or adds a new one)
-        // for this one path; nothing else is examined or drifted.
-        let rel = match relative_to_root(&repo_root, stdin_path) {
-            Ok(rel) => rel,
-            Err(e) => return emit(&CouldNotRun::from(e)),
-        };
-        let mut content = String::new();
-        if let Err(e) = std::io::Read::read_to_string(&mut std::io::stdin(), &mut content) {
-            return emit(&CouldNotRun::from(format!(
-                "could not read the proposed content from stdin: {e}"
-            )));
-        }
-        let record = match crate::discovery::parse_prospective_record(&config, &rel, &content) {
-            Ok(r) => r,
-            Err(e) => return emit(&CouldNotRun::from(e)),
-        };
-        records.retain(|r| r.path != rel);
-        records.push(record.clone());
-        proposed = Some(content);
-        (vec![record], Vec::new())
-    } else {
-        scope_records(&repo_root, &paths, &records)
-    };
+    let (scoped, unmatched, proposed) = select_scope(&repo_root, &config, &mut records, &args)?;
     // Drift is the expensive part (several `git` subprocesses per record) and
     // its only consumer is `embodiment.consistency`; with that rule off `fix`
     // has no embodiment verdict to repair, so say so instead of computing a
     // verdict from an empty drift set (`MILE-159`, as `check` gates it). The
     // `Status` repair (`MILE-183`) is the other thing `fix` writes, and needs
     // no drift, so `status.delivery-agreement` being on is enough to proceed.
-    let enabled = |rule: &str| {
-        config
-            .rules
-            .get(rule)
-            .is_some_and(|s| s.level != urzua_core::config::RuleLevel::Off)
-    };
-    if !enabled(urzua_core::rules::RULE_EMBODIMENT_CONSISTENCY)
-        && !enabled(urzua_core::rules::RULE_STATUS_DELIVERY_AGREEMENT)
+    if !rule_enabled(&config, urzua_core::rules::RULE_EMBODIMENT_CONSISTENCY)
+        && !rule_enabled(&config, urzua_core::rules::RULE_STATUS_DELIVERY_AGREEMENT)
     {
-        return emit(&CouldNotRun::from(
+        return Err(refuse(
             "urzua fix repairs the Embodiment field that embodiment.consistency judges and the Status that status.delivery-agreement judges, and both rules are off or undeclared in the configuration: nothing to repair",
         ));
     }
-    if rebaseline {
-        return run_rebaseline(
-            &repo_root, &config, &records, &scoped, unmatched, apply, &ids, force, by, &reason,
-        );
+    if args.rebaseline {
+        return Ok(run_rebaseline(RebaselineArgs {
+            repo_root: &repo_root,
+            config: &config,
+            records: &records,
+            scoped: &scoped,
+            unmatched,
+            apply: args.apply,
+            ids: &args.ids,
+            force: args.force,
+            by: args.by.as_deref(),
+            actor: args.actor,
+            reason: &reason,
+            after_lock: &|| {},
+        }));
     }
-    let drift = if !enabled(urzua_core::rules::RULE_EMBODIMENT_CONSISTENCY) {
-        Default::default()
-    } else {
-        match &proposed {
-            Some(content) => crate::discovery::compute_drifted_records_for_content(
-                &repo_root, &scoped, &config, content,
-            ),
-            None => crate::discovery::compute_drifted_records(&repo_root, &scoped, &config),
-        }
+    let tree = Tree {
+        repo_root: &repo_root,
+        config: &config,
+        discovered: &discovered,
+        records: &records,
     };
-    let mut drift_notices = crate::discovery::drift_notices(drift.shallow, &drift.git_problems);
-    let back_pointed =
-        match crate::discovery::read_back_pointer_sources(&repo_root, &discovered, &config) {
-            Ok(Some(sources)) => {
-                let (index, _) = urzua_core::rules::build_index_reporting_collisions(&records);
-                urzua_core::rules::back_pointer_evidence(
-                    &sources.files,
-                    &sources.back_pointer_paths,
-                    &sources.test_paths,
-                    &config,
-                    &index,
-                )
-            }
-            Ok(None) => Default::default(),
-            Err(e) => return emit(&CouldNotRun::from(e)),
-        };
-    drift_notices.extend(urzua_core::fix::unevidenced_successes(
-        &scoped,
-        &config,
-        &back_pointed,
-    ));
-    let (population, repairs) = urzua_core::fix::detect_repairs(
-        &scoped,
-        &config,
-        &drift.drifted,
-        &drift.fresh,
-        &back_pointed,
-    );
-
-    if !apply {
-        return emit(&build_fix_report(
-            population,
+    let detected = detect_repairs_in(&tree, &scoped, proposed.as_deref())?;
+    if !args.apply {
+        let (repairs, unmatched) = narrow_to_ids(
+            detected.repairs,
+            |r| r.record.display().to_string(),
+            &args.ids,
+            unmatched,
+            "matched no pending repair (an entry is a record's repo-relative path, e.g. docs/adr/ADR-1-title.md)",
+        );
+        return Ok(emit(&build_fix_report(
+            detected.population,
             repairs,
             unmatched,
             None,
             false,
-            drift_notices,
+            detected.notices,
+        )));
+    }
+    apply_repairs(&tree, &args, detected, unmatched)
+}
+
+/// The usage errors of the command line that need no repository, in the order
+/// they are reported; the validated `--reason` (empty when none applies).
+fn check_usage(args: &FixArgs) -> Result<String, Refusal> {
+    if args.tier != 1 {
+        return Err(refuse(
+            "only tier 1 is implemented so far -- tiers 2 and 3 are not yet built",
         ));
     }
+    if args.apply && args.ids.is_empty() && !args.force {
+        return Err(refuse(
+            "urzua fix --apply: pass --ids <record,...> or --force (never the default)",
+        ));
+    }
+    // `--force`, `--by` and `--actor` belong to a write; without `--apply` they
+    // would be silently ignored, so they are a usage error (`--ids` instead
+    // narrows the dry-run report).
+    if !args.apply
+        && (args.force
+            || args.by.is_some()
+            || args.actor != urzua_core::fix::ActorKind::Unspecified)
+    {
+        return Err(refuse(
+            "urzua fix --force, --by and --actor belong to --apply: without it nothing is written, so they would be ignored (--ids alone narrows the dry-run report)",
+        ));
+    }
+    if args.rebaseline && args.stdin_path.is_some() {
+        return Err(refuse(
+            "urzua fix --rebaseline works on files in the tree: it cannot be combined with --stdin-path",
+        ));
+    }
+    if !args.rebaseline && args.reason.is_some() {
+        return Err(refuse(
+            "urzua fix --reason belongs to --rebaseline: a Tier 1 repair records its computation, not a reason",
+        ));
+    }
+    let reason = validate_reason(
+        args.rebaseline && args.apply,
+        args.reason.as_deref(),
+        "urzua fix --rebaseline --apply: pass --reason <why the evidence still holds>; a re-pin without a reason is a rubber stamp",
+    )
+    .map_err(refuse)?;
+    if args.stdin_path.is_some()
+        && (args.apply
+            || args.force
+            || !args.ids.is_empty()
+            || args.by.is_some()
+            || !args.paths.is_empty())
+    {
+        return Err(refuse(
+            "urzua fix --stdin-path judges proposed content and writes nothing: it cannot be combined with PATHS, --apply, --ids, --by or --force",
+        ));
+    }
+    Ok(reason)
+}
 
-    let identity = match urzua_io::resolve_identity(by.as_deref(), &repo_root) {
-        Ok(id) => id,
-        Err(e) => return emit(&CouldNotRun::from(e)),
+/// The records `fix` examines, the `PATHS` that matched none, and the proposed
+/// content when `--stdin-path` supplies it.
+type Scope = (Vec<Record>, Vec<(PathBuf, String)>, Option<String>);
+
+fn select_scope(
+    repo_root: &Path,
+    config: &Config,
+    records: &mut Vec<Record>,
+    args: &FixArgs,
+) -> Result<Scope, Refusal> {
+    let Some(stdin_path) = &args.stdin_path else {
+        let (scoped, unmatched) = scope_records(repo_root, &args.paths, records);
+        return Ok((scoped, unmatched, None));
     };
-    let _lock = match urzua_io::FixLock::acquire(&repo_root) {
-        Ok(lock) => lock,
-        Err(e) => return emit(&CouldNotRun::from(e)),
+    // The proposed content replaces the on-disk record (or adds a new one)
+    // for this one path; nothing else is examined or drifted.
+    let rel = crate::discovery::relative_to_root(repo_root, stdin_path).map_err(refuse)?;
+    let mut content = String::new();
+    if let Err(e) = std::io::Read::read_to_string(&mut std::io::stdin(), &mut content) {
+        return Err(refuse(format!(
+            "could not read the proposed content from stdin: {e}"
+        )));
+    }
+    let record =
+        crate::discovery::parse_prospective_record(config, &rel, &content).map_err(refuse)?;
+    records.retain(|r| r.path != rel);
+    records.push(record.clone());
+    Ok((vec![record], Vec::new(), Some(content)))
+}
+
+/// The loaded repository a `fix` pass reads.
+struct Tree<'a> {
+    repo_root: &'a Path,
+    config: &'a Config,
+    discovered: &'a urzua_io::DiscoveredFiles,
+    records: &'a [Record],
+}
+
+/// What the detect pass found: the population, the pending repairs and the
+/// notices the report carries.
+struct Detected {
+    population: Population,
+    repairs: Vec<Repair>,
+    notices: Vec<Notice>,
+}
+
+/// The detect pass of Tier 1: drift, back-pointer evidence and the repairs
+/// `scoped` needs. `proposed` is the `--stdin-path` content, if any.
+fn detect_repairs_in(
+    tree: &Tree<'_>,
+    scoped: &[Record],
+    proposed: Option<&str>,
+) -> Result<Detected, Refusal> {
+    let Tree {
+        repo_root,
+        config,
+        discovered,
+        records,
+    } = *tree;
+    let drift = if !rule_enabled(config, urzua_core::rules::RULE_EMBODIMENT_CONSISTENCY) {
+        Default::default()
+    } else {
+        match proposed {
+            Some(content) => crate::discovery::compute_drifted_records_for_content(
+                repo_root, scoped, config, content,
+            ),
+            None => crate::discovery::compute_drifted_records(repo_root, scoped, config),
+        }
     };
+    let mut notices = crate::discovery::drift_notices(drift.shallow, &drift.git_problems);
+    let back_pointed =
+        back_pointer_evidence(repo_root, discovered, config, records).map_err(refuse)?;
+    // The derived-blocked records (`ADR-96` section 7): `fix` writes no
+    // `progress` status to one. Computed only when a type is opted in.
+    let blocked = if scoped.iter().any(|r| r.items.is_some()) {
+        urzua_core::rules::derived_blocked_records(records, config)
+    } else {
+        Default::default()
+    };
+    let (population, repairs, unevidenced) =
+        crate::file_texts::with_locator_env(repo_root, config, &discovered.paths, records, |env| {
+            let ctx = urzua_core::rules::DeliveryContext {
+                back_pointed: &back_pointed,
+                env,
+                blocked: &blocked,
+            };
+            let notices = urzua_core::fix::unevidenced_successes(scoped, config, &ctx);
+            let (population, repairs) =
+                urzua_core::fix::detect_repairs(scoped, config, &drift.drifted, &drift.fresh, &ctx);
+            (population, repairs, notices)
+        });
+    notices.extend(with_excused_notice(unevidenced, &back_pointed));
+    Ok(Detected {
+        population,
+        repairs,
+        notices,
+    })
+}
+
+/// `fix --apply`: write the selected repairs, each under the lock and after a
+/// re-read, and report what was applied and what failed.
+fn apply_repairs(
+    tree: &Tree<'_>,
+    args: &FixArgs,
+    detected: Detected,
+    unmatched: Vec<(PathBuf, String)>,
+) -> Result<ExitCode, Refusal> {
+    let identity = resolve_attestation(args.by.as_deref(), args.actor, tree.repo_root, tree.config)
+        .map_err(refuse)?;
+    let _lock = urzua_io::FixLock::acquire(tree.repo_root).map_err(refuse)?;
 
     let today = urzua_io::today();
-    let selected: Vec<_> = repairs
+    let selected: Vec<_> = detected
+        .repairs
         .into_iter()
-        .filter(|r| force || ids.contains(&r.record.display().to_string()))
+        .filter(|r| args.force || args.ids.contains(&r.record.display().to_string()))
         .collect();
 
     let mut applied = Vec::new();
@@ -211,93 +298,231 @@ pub fn run(config_path: Option<PathBuf>, args: FixArgs) -> ExitCode {
     // path, and a typo or a record id (`ADR-1`) would otherwise read as
     // "checked, nothing to do" while a repair is still pending. `--force`
     // selects every repair regardless, so it has no selectors to miss.
-    if !force {
-        for id in &ids {
-            if !selected
-                .iter()
-                .any(|r| r.record.display().to_string() == *id)
-            {
-                failed.push((
-                    PathBuf::from(id),
-                    format!(
-                        "--ids entry '{id}' matched no pending repair (an entry is a record's repo-relative path, e.g. docs/adr/ADR-1-title.md)"
-                    ),
-                ));
-            }
-        }
+    if !args.force {
+        failed.extend(missing_ids(
+            &selected,
+            |r| r.record.display().to_string(),
+            &args.ids,
+            "matched no pending repair (an entry is a record's repo-relative path, e.g. docs/adr/ADR-1-title.md)",
+        ));
     }
     for repair in selected {
-        let full_path = repo_root.join(&repair.record);
-        // Re-read from disk right before writing (RFC-0008 §4's
-        // re-verify-before-write): apply_repair itself fails if the current
-        // value it was told to replace is no longer there, which is exactly
-        // the case a concurrent edit since detect ran would produce.
-        let fresh_content = match urzua_io::read_to_string(&full_path) {
-            Ok(c) => c,
-            Err(e) => {
-                failed.push((repair.record.clone(), format!("could not re-read: {e}")));
-                continue;
-            }
-        };
-        let record_type = records
-            .iter()
-            .find(|r| r.path == repair.record)
-            .map(|r| r.record_type.as_str());
-        let log_id = record_type
-            .map(|t| config.revision_log_id(t))
-            .unwrap_or_default();
-        let log_required = record_type.is_none_or(|t| config.revision_log_required(t));
-        match urzua_core::fix::apply_repair(
-            &fresh_content,
-            &repair,
-            &today,
-            &identity.name,
-            &log_id,
-            log_required,
-        ) {
-            Ok(new_content) => match std::fs::write(&full_path, new_content) {
-                Ok(()) => applied.push(repair),
-                Err(e) => failed.push((repair.record.clone(), format!("could not write: {e}"))),
-            },
+        match write_repair(tree, &repair, &today, &identity.attestation) {
+            Ok(()) => applied.push(repair),
             Err(e) => failed.push((repair.record.clone(), e)),
         }
     }
 
-    emit(&build_fix_report(
-        population,
+    Ok(emit(&build_fix_report(
+        detected.population,
         applied,
         failed,
-        identity.warning,
+        Some(identity),
         true,
-        drift_notices,
-    ))
+        detected.notices,
+    )))
 }
 
-/// `p` (absolute, or relative to the working directory) as a repo-relative
-/// path, without requiring that it exist.
-fn relative_to_root(repo_root: &std::path::Path, p: &std::path::Path) -> Result<PathBuf, String> {
-    let cwd = std::env::current_dir()
-        .and_then(|c| c.canonicalize())
-        .unwrap_or_default();
-    let joined = if p.is_absolute() {
-        p.to_path_buf()
-    } else {
-        cwd.join(p)
-    };
-    let mut normal = PathBuf::new();
-    for c in joined.components() {
-        match c {
-            std::path::Component::ParentDir => {
-                normal.pop();
-            }
-            std::path::Component::CurDir => {}
-            other => normal.push(other),
-        }
+/// Writes one repair into its record; the error is the failure's message.
+fn write_repair(
+    tree: &Tree<'_>,
+    repair: &Repair,
+    today: &str,
+    attestation: &Attestation,
+) -> Result<(), String> {
+    let (repo_root, config) = (tree.repo_root, tree.config);
+    let full_path = repo_root.join(&repair.record);
+    // Re-read from disk right before writing (RFC-0008 §4's
+    // re-verify-before-write): apply_repair itself fails if the current
+    // value it was told to replace is no longer there, which is exactly
+    // the case a concurrent edit since detect ran would produce.
+    let fresh_content =
+        urzua_io::read_to_string(&full_path).map_err(|e| format!("could not re-read: {e}"))?;
+    let record_type = tree
+        .records
+        .iter()
+        .find(|r| r.path == repair.record)
+        .map(|r| r.record_type.as_str());
+    if let Some(refusal) = authority_refusal(config, record_type, repair) {
+        return Err(refusal);
     }
-    normal
-        .strip_prefix(repo_root)
-        .map(PathBuf::from)
-        .map_err(|_| format!("{} is outside the repository", p.display()))
+    let log_id = record_type
+        .map(|t| config.revision_log_id(t))
+        .unwrap_or_default();
+    let log_shape = record_type
+        .map(|t| config.revision_log_shape(t))
+        .unwrap_or_default();
+    let log_required = record_type.is_none_or(|t| config.revision_log_required(t));
+    let new_content = urzua_core::fix::apply_repair(
+        &fresh_content,
+        repair,
+        today,
+        attestation,
+        &log_id,
+        &log_shape,
+        log_required,
+    )?;
+    urzua_io::write_atomic_in(repo_root, &full_path, &new_content)
+        .map_err(|e| format!("could not write: {e}"))
+}
+
+/// The refusal for a repair that would write a status an `authority` gate
+/// names: that is a decider's, never computed from evidence and written
+/// (`ADR-70` amendment, `ADR-89` section 4).
+fn authority_refusal(
+    config: &Config,
+    record_type: Option<&str>,
+    repair: &Repair,
+) -> Option<String> {
+    let (t, authority) = (record_type?, config.authority.as_ref()?);
+    let status_field =
+        urzua_core::rules::relation_field_name(config, t, urzua_core::config::RelationRole::Status);
+    let gated = authority
+        .status_gates(t, &repair.computed_value)
+        .next()
+        .is_some();
+    (repair.field == status_field && gated).then(|| {
+        format!(
+            "refused: '{}' is a {status_field} an authority gate names, so only a decider sets it and fix never writes it",
+            repair.computed_value
+        )
+    })
+}
+
+/// The `--reason` of an attributed write: required (and said so with
+/// `required_message`) when `required`, always one line without `|` because it
+/// is written into a revision-log table row. Shared by `fix --rebaseline` and
+/// `reverify`.
+pub(crate) fn validate_reason(
+    required: bool,
+    reason: Option<&str>,
+    required_message: &str,
+) -> Result<String, String> {
+    match (required, reason.map(str::trim)) {
+        (true, None | Some("")) => Err(required_message.to_string()),
+        (_, Some(r)) if r.contains('|') || r.contains(['\n', '\r']) => Err(
+            "--reason must be one line without '|' (it is written into a revision-log table row)"
+                .to_string(),
+        ),
+        (_, r) => Ok(r.unwrap_or_default().to_string()),
+    }
+}
+
+/// The info notice that says how many lines a declared back-pointer
+/// `ignore_marker` kept out of the evidence a command read (`ADR-80`), or none
+/// when no line was excused.
+pub(crate) fn excused_evidence_notice(
+    evidence: &urzua_core::rules::BackPointerEvidence,
+) -> Option<urzua_core::report::Notice> {
+    let n = evidence.excused_lines;
+    (n > 0).then(|| urzua_core::report::Notice {
+        severity: urzua_core::report::NoticeSeverity::Info,
+        subject: urzua_core::rules::RULE_EMBODIMENT_BACK_POINTER_RESOLUTION.to_string(),
+        message: format!(
+            "ignore_marker -- {n} line{} excused from back-pointer evidence; a line carrying the declared marker is not counted as evidence",
+            if n == 1 { "" } else { "s" }
+        ),
+        detail: None,
+    })
+}
+
+/// `notices` with the excused-evidence notice (`excused_evidence_notice`) added.
+fn with_excused_notice(
+    mut notices: Vec<Notice>,
+    evidence: &urzua_core::rules::BackPointerEvidence,
+) -> Vec<Notice> {
+    notices.extend(excused_evidence_notice(evidence));
+    notices
+}
+
+/// What the back-pointer scan finds in the tree, for the delivery tiers.
+pub(crate) fn back_pointer_evidence(
+    repo_root: &std::path::Path,
+    discovered: &urzua_io::DiscoveredFiles,
+    config: &urzua_core::config::Config,
+    records: &[urzua_core::record::Record],
+) -> Result<urzua_core::rules::BackPointerEvidence, String> {
+    Ok(
+        match crate::discovery::read_back_pointer_sources(repo_root, discovered, config)? {
+            Some(sources) => {
+                let (index, _) = urzua_core::rules::build_index_reporting_collisions(records);
+                urzua_core::rules::back_pointer_evidence(
+                    &sources.files,
+                    &sources.back_pointer_paths,
+                    &sources.test_paths,
+                    config,
+                    &index,
+                )
+            }
+            None => Default::default(),
+        },
+    )
+}
+
+/// The report's `failed` list from `(record, error)` pairs.
+pub(crate) fn into_failures(failed: Vec<(PathBuf, String)>) -> Vec<FixFailure> {
+    failed
+        .into_iter()
+        .map(|(record, error)| FixFailure { record, error })
+        .collect()
+}
+
+/// The notice for a replaced `--by`, when the attestation carries one.
+pub(crate) fn identity_notices(identity: Option<&ResolvedAttestation>) -> Vec<Notice> {
+    identity
+        .and_then(|i| i.warning.clone())
+        .into_iter()
+        .map(|message| Notice {
+            severity: NoticeSeverity::Warning,
+            subject: NOTICE_IDENTITY.to_string(),
+            message,
+            detail: None,
+        })
+        .collect()
+}
+
+/// The identity an apply writes under: the attestation the revision rows
+/// carry, the report's account of it, and the notice for a replaced `--by`.
+pub(crate) struct ResolvedAttestation {
+    pub(crate) attestation: urzua_core::fix::Attestation,
+    pub(crate) report: urzua_core::report::AttestationReport,
+    pub(crate) warning: Option<String>,
+}
+
+/// Resolve who attests under the configuration's `attestation` (`ADR-89`
+/// section 5, `MILE-201`). Runs before the lock and any write, so a refusal
+/// (`require_verified` with no `gh` answer) writes nothing.
+pub(crate) fn resolve_attestation(
+    by: Option<&str>,
+    actor: urzua_core::fix::ActorKind,
+    repo_root: &std::path::Path,
+    config: &urzua_core::config::Config,
+) -> Result<ResolvedAttestation, String> {
+    use urzua_core::fix::IdentitySource as Source;
+    let policy = urzua_io::IdentityPolicy {
+        asserted: config.attestation.identity == urzua_core::config::AttestationIdentity::Asserted,
+        require_verified: config.attestation.require_verified,
+    };
+    let resolved = urzua_io::resolve_identity_with(by, repo_root, policy)?;
+    let source = match resolved.source {
+        urzua_io::IdentitySource::GhVerified => Source::GhVerified,
+        urzua_io::IdentitySource::Asserted => Source::Asserted,
+        urzua_io::IdentitySource::GitConfig => Source::GitConfig,
+    };
+    let mut attestation = urzua_core::fix::Attestation::new(&resolved.name, source, actor);
+    attestation.verified_login = resolved.verified_login.clone();
+    let report = urzua_core::report::AttestationReport {
+        name: resolved.name,
+        source,
+        actor,
+        replaced_by: resolved.replaced_by,
+        verified_login: resolved.verified_login,
+    };
+    Ok(ResolvedAttestation {
+        attestation,
+        report,
+        warning: resolved.warning,
+    })
 }
 
 /// The records `PATHS` select: a record whose repo-relative path equals a
@@ -314,7 +539,7 @@ fn scope_records(
     let mut unmatched = Vec::new();
     let mut scopes = Vec::new();
     for p in paths {
-        match relative_to_root(repo_root, p) {
+        match crate::discovery::relative_to_root(repo_root, p) {
             Ok(rel) => scopes.push((p.clone(), rel)),
             Err(e) => unmatched.push((p.clone(), e)),
         }
@@ -346,36 +571,51 @@ fn scope_records(
 /// to fail on exits 0, not 2, matching the pre-existing behavior this
 /// refactor must not silently change.
 fn build_fix_report(
-    population: urzua_core::report::Population,
-    repairs: Vec<urzua_core::fix::Repair>,
+    population: Population,
+    repairs: Vec<Repair>,
     failed: Vec<(PathBuf, String)>,
-    warning: Option<String>,
+    identity: Option<ResolvedAttestation>,
     ran_apply: bool,
     extra_notices: Vec<Notice>,
 ) -> FixReport {
-    build_report(
+    build_report(ReportParts {
         population,
         repairs,
-        Vec::new(),
+        rebaselines: Vec::new(),
+        failed_pins: Vec::new(),
         failed,
-        warning,
+        identity,
         ran_apply,
         extra_notices,
-    )
+    })
 }
 
-fn build_report(
-    population: urzua_core::report::Population,
-    repairs: Vec<urzua_core::fix::Repair>,
-    rebaselines: Vec<urzua_core::fix::Rebaseline>,
+/// Everything a `fix` report is made of.
+struct ReportParts {
+    population: Population,
+    repairs: Vec<Repair>,
+    rebaselines: Vec<Rebaseline>,
+    failed_pins: Vec<FailedPin>,
     failed: Vec<(PathBuf, String)>,
-    warning: Option<String>,
+    identity: Option<ResolvedAttestation>,
     ran_apply: bool,
     extra_notices: Vec<Notice>,
-) -> FixReport {
+}
+
+fn build_report(parts: ReportParts) -> FixReport {
+    let ReportParts {
+        population,
+        repairs,
+        rebaselines,
+        failed_pins,
+        failed,
+        identity,
+        ran_apply,
+        extra_notices,
+    } = parts;
     let status = if population.examined() == 0 && !ran_apply && failed.is_empty() {
         FixStatus::NotRun
-    } else if !failed.is_empty() {
+    } else if !failed.is_empty() || !failed_pins.is_empty() {
         FixStatus::PartialFailure
     } else if repairs.is_empty() && rebaselines.is_empty() {
         FixStatus::Ok
@@ -386,24 +626,86 @@ fn build_report(
     };
 
     FixReport {
+        as_of: crate::as_of(),
         status,
         population,
         repairs,
         rebaselines,
-        failed: failed
+        failed_pins,
+        failed: into_failures(failed),
+        identity: identity.as_ref().map(|i| i.report.clone()),
+        notices: identity_notices(identity.as_ref())
             .into_iter()
-            .map(|(record, error)| FixFailure { record, error })
-            .collect(),
-        notices: warning
-            .into_iter()
-            .map(|message| Notice {
-                severity: NoticeSeverity::Warning,
-                subject: NOTICE_IDENTITY.to_string(),
-                message,
-            })
             .chain(extra_notices)
             .collect(),
     }
+}
+
+/// An `--ids` entry that names none of `items` as a failure naming it, saying
+/// `unmatched_reason`. The selector is matched against a record's
+/// repo-relative path, so a typo or a record id (`ADR-1`) is reported, not read
+/// as "checked, nothing to do".
+fn missing_ids<T>(
+    items: &[T],
+    key: impl Fn(&T) -> String,
+    ids: &[String],
+    unmatched_reason: &str,
+) -> Vec<(PathBuf, String)> {
+    ids.iter()
+        .filter(|id| !items.iter().any(|i| key(i) == **id))
+        .map(|id| {
+            (
+                PathBuf::from(id),
+                format!("--ids entry '{id}' {unmatched_reason}"),
+            )
+        })
+        .collect()
+}
+
+/// The dry-run counterpart of `--apply`'s `--ids` selection: keep only the
+/// entries an `--ids` value names, and report an `--ids` value that named none
+/// as a failure, as `--apply` does. No `--ids` keeps everything.
+fn narrow_to_ids<T>(
+    items: Vec<T>,
+    key: impl Fn(&T) -> String,
+    ids: &[String],
+    mut failed: Vec<(PathBuf, String)>,
+    unmatched_reason: &str,
+) -> (Vec<T>, Vec<(PathBuf, String)>) {
+    if ids.is_empty() {
+        return (items, failed);
+    }
+    failed.extend(missing_ids(&items, &key, ids, unmatched_reason));
+    let kept = items
+        .into_iter()
+        .filter(|i| ids.contains(&key(i)))
+        .collect();
+    (kept, failed)
+}
+
+const REBASELINE_UNMATCHED: &str = "matched no record with a stale @sha256: pin (an entry is a record's repo-relative path; only pinned locators are re-baselined)";
+
+/// What `fix --rebaseline` reads and selects by.
+struct RebaselineArgs<'a> {
+    repo_root: &'a Path,
+    config: &'a Config,
+    records: &'a [Record],
+    scoped: &'a [Record],
+    unmatched: Vec<(PathBuf, String)>,
+    apply: bool,
+    ids: &'a [String],
+    force: bool,
+    by: Option<&'a str>,
+    actor: urzua_core::fix::ActorKind,
+    reason: &'a str,
+    after_lock: &'a dyn Fn(),
+}
+
+/// What the re-baseline detect pass found.
+struct RebaselineScan {
+    population: Population,
+    found: Vec<Rebaseline>,
+    failed_pins: Vec<FailedPin>,
 }
 
 // Implements: ADR-67 (attributed re-baselining of a pin)
@@ -412,94 +714,225 @@ fn build_report(
 /// lock and re-read-before-write are exactly Tier 1 apply's, so the two modes
 /// share one set of gates. A record is the selector (`--ids` takes its
 /// repo-relative path), and all of its stale pins move together.
-#[allow(clippy::too_many_arguments)]
-fn run_rebaseline(
-    repo_root: &std::path::Path,
-    config: &urzua_core::config::Config,
-    records: &[urzua_core::record::Record],
-    scoped: &[urzua_core::record::Record],
-    unmatched: Vec<(PathBuf, String)>,
-    apply: bool,
-    ids: &[String],
-    force: bool,
-    by: Option<String>,
-    reason: &str,
-) -> ExitCode {
-    let hash = |locator: &str| urzua_io::sha256_hex_of_file(&repo_root.join(locator));
-    let (population, found) = urzua_core::fix::detect_rebaselines(scoped, config, &hash);
-    if !apply {
-        return emit(&build_report(
-            population,
-            Vec::new(),
-            found,
+fn run_rebaseline(args: RebaselineArgs<'_>) -> ExitCode {
+    rebaseline_checked(args).unwrap_or_else(|e| emit(&CouldNotRun::from(e)))
+}
+
+fn rebaseline_checked(mut args: RebaselineArgs<'_>) -> Result<ExitCode, Refusal> {
+    let (repo_root, config) = (args.repo_root, args.config);
+    // The pin hashes written come from this detect pass, so for `--apply` the
+    // lock is taken first: evidence edited between an earlier detect and the
+    // lock would otherwise be hashed stale and attested as current.
+    let identity = if args.apply {
+        Some(resolve_attestation(args.by, args.actor, repo_root, config).map_err(refuse)?)
+    } else {
+        None
+    };
+    let _lock = if args.apply {
+        Some(urzua_io::FixLock::acquire(repo_root).map_err(refuse)?)
+    } else {
+        None
+    };
+    (args.after_lock)();
+    let texts = crate::file_texts::FileTexts::new(repo_root.to_path_buf(), config);
+    let read = |locator: &urzua_core::locator::Locator| {
+        crate::pins::read_pin(repo_root, config, &texts, locator)
+    };
+    let (population, found, failed_pins) =
+        urzua_core::fix::detect_rebaselines(args.scoped, config, &read);
+    let scan = RebaselineScan {
+        population,
+        found,
+        failed_pins,
+    };
+    let unmatched = std::mem::take(&mut args.unmatched);
+    let Some(identity) = identity else {
+        let (found, unmatched) = narrow_to_ids(
+            scan.found,
+            |r| r.record.display().to_string(),
+            args.ids,
             unmatched,
-            None,
-            false,
-            Vec::new(),
-        ));
-    }
-    let identity = match urzua_io::resolve_identity(by.as_deref(), repo_root) {
-        Ok(id) => id,
-        Err(e) => return emit(&CouldNotRun::from(e)),
+            REBASELINE_UNMATCHED,
+        );
+        return Ok(emit(&build_report(ReportParts {
+            population: scan.population,
+            repairs: Vec::new(),
+            rebaselines: found,
+            failed_pins: scan.failed_pins,
+            failed: unmatched,
+            identity: None,
+            ran_apply: false,
+            extra_notices: Vec::new(),
+        })));
     };
-    let _lock = match urzua_io::FixLock::acquire(repo_root) {
-        Ok(lock) => lock,
-        Err(e) => return emit(&CouldNotRun::from(e)),
-    };
+    Ok(apply_rebaselines(&args, identity, scan, unmatched))
+}
+
+/// `fix --rebaseline --apply`: re-pin the selected records and report what
+/// was applied and what failed.
+fn apply_rebaselines(
+    args: &RebaselineArgs<'_>,
+    identity: ResolvedAttestation,
+    scan: RebaselineScan,
+    unmatched: Vec<(PathBuf, String)>,
+) -> ExitCode {
     let today = urzua_io::today();
     let mut failed = unmatched;
-    if !force {
-        for id in ids {
-            if !found.iter().any(|r| r.record.display().to_string() == *id) {
-                failed.push((
-                    PathBuf::from(id),
-                    format!(
-                        "--ids entry '{id}' matched no record with a stale @sha256: pin (an entry is a record's repo-relative path; only pinned locators are re-baselined)"
-                    ),
-                ));
-            }
-        }
+    if !args.force {
+        failed.extend(missing_ids(
+            &scan.found,
+            |r| r.record.display().to_string(),
+            args.ids,
+            REBASELINE_UNMATCHED,
+        ));
     }
     let mut applied = Vec::new();
-    for rb in found
+    for rb in scan
+        .found
         .into_iter()
-        .filter(|r| force || ids.contains(&r.record.display().to_string()))
+        .filter(|r| args.force || args.ids.contains(&r.record.display().to_string()))
     {
-        let full_path = repo_root.join(&rb.record);
-        let fresh = match urzua_io::read_to_string(&full_path) {
-            Ok(c) => c,
-            Err(e) => {
-                failed.push((rb.record.clone(), format!("could not re-read: {e}")));
-                continue;
-            }
-        };
-        let log_id = records
-            .iter()
-            .find(|r| r.path == rb.record)
-            .map(|r| config.revision_log_id(&r.record_type))
-            .unwrap_or_default();
-        match urzua_core::fix::apply_rebaseline(
-            &fresh,
-            &rb,
-            &today,
-            &identity.name,
-            reason,
-            &log_id,
-        ) {
-            Ok(new) => match std::fs::write(&full_path, new) {
-                Ok(()) => applied.push(rb),
-                Err(e) => failed.push((rb.record.clone(), format!("could not write: {e}"))),
-            },
+        match write_rebaseline(args, &rb, &today, &identity.attestation) {
+            Ok(()) => applied.push(rb),
             Err(e) => failed.push((rb.record.clone(), e)),
         }
     }
-    emit(&build_report(
-        population,
-        Vec::new(),
-        applied,
+    emit(&build_report(ReportParts {
+        population: scan.population,
+        repairs: Vec::new(),
+        rebaselines: applied,
+        failed_pins: scan.failed_pins,
         failed,
-        identity.warning,
-        true,
-        Vec::new(),
-    ))
+        identity: Some(identity),
+        ran_apply: true,
+        extra_notices: Vec::new(),
+    }))
+}
+
+/// Re-pins one record on disk; the error is the failure's message.
+fn write_rebaseline(
+    args: &RebaselineArgs<'_>,
+    rb: &Rebaseline,
+    today: &str,
+    attestation: &Attestation,
+) -> Result<(), String> {
+    let full_path = args.repo_root.join(&rb.record);
+    let fresh =
+        urzua_io::read_to_string(&full_path).map_err(|e| format!("could not re-read: {e}"))?;
+    let record_type = args
+        .records
+        .iter()
+        .find(|r| r.path == rb.record)
+        .map(|r| r.record_type.as_str());
+    let log_id = record_type
+        .map(|t| args.config.revision_log_id(t))
+        .unwrap_or_default();
+    let log_shape = record_type
+        .map(|t| args.config.revision_log_shape(t))
+        .unwrap_or_default();
+    let new = urzua_core::fix::apply_rebaseline(
+        &fresh,
+        rb,
+        today,
+        attestation,
+        args.reason,
+        &log_id,
+        &log_shape,
+    )?;
+    urzua_io::write_atomic_in(args.repo_root, &full_path, &new)
+        .map_err(|e| format!("could not write: {e}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::session::{Session, Workspace};
+
+    fn git(dir: &std::path::Path, args: &[&str]) {
+        let status = std::process::Command::new("git")
+            .args(args)
+            .current_dir(dir)
+            .status()
+            .expect("git should run");
+        assert!(status.success(), "git {args:?} failed");
+    }
+
+    struct Scratch(PathBuf);
+    impl Drop for Scratch {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    /// The evidence is hashed under the lock: a file edited after the
+    /// re-baseline was started but before the lock was held is pinned at the
+    /// text it has then, not the text an earlier read saw.
+    #[test]
+    fn rebaseline_apply_hashes_the_evidence_as_it_is_under_the_lock() {
+        let v1 = "fn a() {}\n";
+        let v2 = "fn a() { let _ = 1; }\n";
+        let v3 = "fn a() { let _ = 3; }\n";
+        let dir = Scratch(
+            std::env::temp_dir().join(format!("urzua-fix-lock-race-{}", std::process::id())),
+        );
+        let _ = std::fs::remove_dir_all(&dir.0);
+        std::fs::create_dir_all(dir.0.join("docs/adr")).unwrap();
+        std::fs::create_dir_all(dir.0.join("src")).unwrap();
+        std::fs::create_dir_all(dir.0.join(".urzua")).unwrap();
+        git(&dir.0, &["init", "-q"]);
+        git(&dir.0, &["config", "user.email", "t@example.com"]);
+        git(&dir.0, &["config", "user.name", "t"]);
+        std::fs::write(
+            dir.0.join(".urzua/config.yaml"),
+            "schema_version: 2\nrules: {embodiment.consistency: error}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n",
+        )
+        .unwrap();
+        let record = format!(
+            "---\nEmbodiment: Implemented\nRealized-by: 'code:src/a.rs@sha256:{}'\n---\n# ADR-1: T\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Initial. | **structural** |\n",
+            urzua_io::sha256_hex_of_str(v1)
+        );
+        std::fs::write(dir.0.join("docs/adr/ADR-1-a.md"), record).unwrap();
+        std::fs::write(dir.0.join("src/a.rs"), v1).unwrap();
+        git(&dir.0, &["add", "-A"]);
+        git(&dir.0, &["commit", "-q", "-m", "fixture"]);
+        std::fs::write(dir.0.join("src/a.rs"), v2).unwrap();
+        git(&dir.0, &["commit", "-qam", "edit"]);
+
+        let root = dir.0.canonicalize().unwrap();
+        let config_path = root.join(".urzua/config.yaml");
+        let config = crate::discovery::load_config(&config_path).unwrap();
+        let session = Session::load(
+            Workspace {
+                repo_root: root.clone(),
+                config_path,
+                config,
+            },
+            |_, _, _| Ok(()),
+        )
+        .unwrap();
+        let evidence = root.join("src/a.rs");
+        run_rebaseline(RebaselineArgs {
+            repo_root: &root,
+            config: &session.config,
+            records: &session.records,
+            scoped: &session.records,
+            unmatched: Vec::new(),
+            apply: true,
+            ids: &[],
+            force: true,
+            by: Some("ana"),
+            actor: urzua_core::fix::ActorKind::Unspecified,
+            reason: "checked",
+            after_lock: &|| std::fs::write(&evidence, v3).unwrap(),
+        });
+        let written = std::fs::read_to_string(root.join("docs/adr/ADR-1-a.md")).unwrap();
+        assert!(
+            written.contains(&format!("@sha256:{}", urzua_io::sha256_hex_of_str(v3))),
+            "{written}"
+        );
+        assert!(
+            !written.contains(&urzua_io::sha256_hex_of_str(v2)),
+            "{written}"
+        );
+    }
 }

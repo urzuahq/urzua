@@ -1,7 +1,10 @@
 ---
-Version: '0.7'
+Stable-Id: 01M6R3NK5N2PD9ZYBJPZHN05W7
+Version: '0.20'
 Date: 2026-08-20
-Status: Draft
+Status: Shipped
+Embodiment: Verified
+Realized-by: code:rust/crates/urzua-cli/tests/acceptance.rs@sha256:ae174f312e2879a85ee1f4c35178007a41e9d818994602af0401ec15c6e829a6, test:rust/crates/urzua-cli/tests/acceptance_property.rs@sha256:776f499ed6f76ab895ab380e38f62e1bacba4613b5dcd49074f31b99662d248e
 Author: beauwilliams
 Subject: 'The corpus acceptance suite -- documented bug classes `check` must reproduce against real corpora.'
 Parent: SPEC-1
@@ -30,13 +33,14 @@ the slowest one. This is Phase D.
 corpora/
   <corpus-id>/
     records/          synthetic record files, engineered to exhibit specific variance
-    manifest.yaml     what irregularity each record was built to exhibit
+                      (and any other fixture directory a case needs, such as src/)
+    manifest.yaml     what irregularity each fixture was built to exhibit
     .urzua/           the config this corpus is validated under
     expectations/
       <case-id>.yaml  one per acceptance case
 ```
 
-Corpus ids are opaque (`corpus-a`, `corpus-b`, `corpus-c`). Nothing in `corpora/` may name an
+Corpus ids are opaque (`corpus-a` to `corpus-l`; `corpus-zero` is this repository, held in place). Nothing in `corpora/` may name an
 organization, repository, product, or person — a corpus is a synthetic fixture engineered to exhibit
 specific variance, not a record of anything real.
 
@@ -66,14 +70,15 @@ Rules:
 Each case is a corpus, a config, an invocation, and an expected result:
 
 ```yaml
-id: "blank-field-misdetection"
-corpus: "corpus-a"
-invocation: ["check", "records/"]
+id: "blank-field-is-not-absent"
+corpus: "corpus-d"
+invocation: ["check"]
 expect_exit: 1
 expect_findings:
-  - rule: "field.blank-vs-placeholder"
-    file: "..."
-    line: 12
+  - rule: "field.quality"
+    file: "records/ADR-0002-blank-author.md"
+    severity: "error"
+    message_contains: "'Author' is Blank"
 ```
 
 The suite is red before the rule exists and green after. A case that passes against a build with the
@@ -81,30 +86,34 @@ rule removed is not a case.
 
 ### Field-quality and structural cases
 
-| Case | Corpus |
-|---|---|
-| Blank-field misdetection | corpus-a |
-| Provisional-status misclassification | corpus-b |
-| Reciprocity-checker data loss | corpus-c |
-| Decoy-corpus silent no-op | corpus-a |
-| Regex invalidated by realistic corpus variance | corpus-a |
-| Filename/title mismatch | corpus-a |
-| Enum completeness against corpus prose | corpus-a |
-| Check exists vs check wired | corpus-a |
-| Discovery scoped to VCS, not filesystem | corpus-a |
-| Pre-retrofit reverse-reference scan | corpus-a |
-| Structural presence vs content scope (permanent ceiling — asserted as *not* mechanically closable) | corpus-a |
-| Header field satisfied by a body bullet | corpus-c |
-| Multi-line continuation silently truncated | corpus-c |
-| Header slice truncated at the first heading | corpus-c |
-| Machine channel reports `ok` while prose says "nothing to compare" | corpus-c |
-| Agent invents a schema field mid-edit | corpus-b |
-| Gate reports drift while exiting 0 | corpus-b |
-| A derived value computed by a near-neighbour query | corpus-b |
-| A number holding no decision fails checks presupposing one | corpus-b |
+The bug classes below are the catalog the suite was proposed from. The right-hand column says where each is
+exercised now, by `corpus/case-id`. Some are exercised by the nearest case the built corpora hold, and a few
+are not an acceptance case at all; those say so.
 
-The last two are the strongest cases in the suite, because both produce **well-formed, plausible,
-confidently wrong output** rather than an error — the class no smoke test catches.
+| Case | Built as |
+|---|---|
+| Blank-field misdetection | `corpus-d/blank-field-is-not-absent` |
+| Provisional-status misclassification | `corpus-d/pending-field-is-not-blank` and `corpus-d/accepted-requires-its-declared-fields` (the nearest cases) |
+| Reciprocity-checker data loss | `corpus-d/one-sided-supersession-is-reported`; `corpus-b/audit-reports-one-sided-supersession` holds the bare-number variant, which `audit` answers with rename guidance |
+| Decoy-corpus silent no-op | `corpus-d/mistyped-dir-beside-a-working-type-is-reported`, `record-in-a-subdirectory-is-not-silently-ungoverned`, `all-rules-run-over-a-real-population` |
+| Regex invalidated by realistic corpus variance | `corpus-d/wrapped-field-value-is-read-whole`, `lower-case-key-is-a-case-mismatch`, `untrimmed-value-is-reported` |
+| Filename/title mismatch | `corpus-d/filename-and-title-number-must-agree` |
+| Enum completeness against corpus prose | `corpus-d/status-with-free-text-tail-is-undeclared` covers a status outside the declared enum; the completeness of an enum against prose is not an acceptance case |
+| Check exists vs check wired | Not an acceptance case: `doctor`'s CI-wired check is tested in `check_integration.rs` |
+| Discovery scoped to VCS, not filesystem | Not an acceptance case: `discovery_untracked_integration.rs` |
+| Pre-retrofit reverse-reference scan | Not built |
+| Structural presence vs content scope (permanent ceiling, asserted as *not* mechanically closable) | `corpus-h/structure-without-content-is-not-closable` |
+| Header field satisfied by a body bullet | `corpus-d/body-bullet-does-not-satisfy-a-header-field` |
+| Multi-line continuation silently truncated | `corpus-d/wrapped-field-value-is-read-whole` |
+| Header slice truncated at the first heading | `corpus-d/header-is-not-cut-at-a-hash-line` |
+| Machine channel reports `ok` while prose says "nothing to compare" | `corpus-g/shallow-clone-is-a-notice-never-a-clean-zero` (the nearest case); `corpus-g/a-scope-changed-rule-judges-nothing-on-a-plain-check-and-says-why` |
+| Agent invents a schema field mid-edit | `corpus-d/invented-field-is-undeclared` |
+| Gate reports drift while exiting 0 | `corpus-g/drift-is-reported-with-a-blocking-exit` |
+| A derived value computed by a near-neighbour query | `corpus-g/neighbouring-file-change-is-not-drift-of-the-cited-file` |
+| A number holding no decision fails checks presupposing one | Not built |
+
+The last two catalog entries are the strongest cases in the suite as proposed, because both produce **well-formed, plausible,
+confidently wrong output** rather than an error, the class no smoke test catches. The first is built; the second is not.
 
 ### Silent zeros from a derived rule
 
@@ -113,12 +122,12 @@ Four cases, one shape: the rule runs, examines every record, and returns a clean
 files-examined / rules-executed report — which is why SPEC-2's no-silent-no-op criterion was
 tightened to report each rule's input population.
 
-| Case | What the rule reports |
-|---|---|
-| History query stops at a rename (`git log` without `--follow`) | 0 of 91 records had readable prior state; corpus reported fully clean |
-| `-S` (occurrence count) used where `-G` (line content) was needed | Every value-only edit invisible, so no field change was ever detected |
-| A record's *filename* pattern reused to resolve *references* | A reference written in prose matched nothing; the rule could not fire |
-| Defined identifiers collected by mention rather than by definition | A typo'd back-pointer **defined its own target** and validated against itself |
+| Case | What the rule reports | Built as |
+|---|---|---|
+| History query stops at a rename (`git log` without `--follow`) | 0 of 91 records had readable prior state; corpus reported fully clean | `corpus-g/renamed-record-keeps-its-prior-state` |
+| `-S` (occurrence count) used where `-G` (line content) was needed | Every value-only edit invisible, so no field change was ever detected | `corpus-g/value-only-edit-of-a-cited-file-is-drift` |
+| A record's *filename* pattern reused to resolve *references* | A reference written in prose matched nothing; the rule could not fire | `corpus-d/prose-citation-of-a-missing-record-is-reported` |
+| Defined identifiers collected by mention rather than by definition | A typo'd back-pointer **defined its own target** and validated against itself | `corpus-g/dangling-back-pointer-is-not-defined-by-a-mention` |
 
 The last is the most instructive: gathering "which identifiers exist" by scanning for the identifier
 pattern makes the validation circular, so the rule can never fire for anyone. Definitions must be
@@ -130,7 +139,7 @@ One case tests whether a *design* holds rather than whether an input produces an
 
 | Case | What it asserts |
 |---|---|
-| The Nth record type costs a declaration, not a checker | Declare a throwaway record type as data and nothing else; it must receive the full rule set, with planted violations firing, and **no code change** |
+| The Nth record type costs a declaration, not a checker | Declare a throwaway record type as data and nothing else; it must receive the full rule set, with planted violations firing, and **no code change** (`corpus-e/nth-record-type-costs-a-declaration-not-a-checker`) |
 
 This is the only executable test of RFC-1 §1a's "profiles are declared, not enumerated by the
 tool". The claim is otherwise asserted and unfalsifiable; running it converts the claim into an
@@ -139,15 +148,15 @@ observation. If adding the next type is not cheap, the profile mechanism is not 
 ### Corpus zero — this repository
 
 `docs/` is a corpus with the property none of the synthetic ones have: it is live, and its defects
-are found by the tool as they are introduced rather than reconstructed after the fact.
+are found by the tool as they are introduced rather than reconstructed after the fact. It is run in place
+(`corpus: "@repo"`) under this repository's own `.urzua/config.yaml`; its cases are listed under "Added by
+MILE-170" below.
 
-| Case | What |
-|---|---|
-| Three header formats in one corpus | RFC and ADR share a shape; SPEC-1 uses it while SPEC-2 to SPEC-4 use a pipe-delimited line with bold keys. |
-| Six `Implements:` pointers at `Draft` records | Every RFC that `docs/specs/` declares it implements is undecided. |
-
-Both are the seed rules for SPEC-2 Phase A. Neither is fixed ahead of the checker on purpose: a
-corpus with no defects cannot demonstrate that a checker works.
+The two seed cases this section once listed, three header formats in one corpus and `Implements:` pointers
+at `Draft` records, no longer exist: every record here is now YAML frontmatter, and the corpus is held at
+zero unwaived findings, so neither defect can be shown on it. A corpus with no defects cannot demonstrate
+that a checker works, which is why the synthetic corpora carry the planted violations and corpus zero
+carries the assertion that the real rules run over a real population and find nothing.
 
 ### Property: no input is ever silently ignored
 
@@ -194,7 +203,7 @@ built, and where it differs from the sketch:
   (e.g. `init`).
 - `corpus: "@repo"` runs in place against this repository (corpus zero); nothing is copied.
 - Expectations: `expect_exit`, `expect_stdout_contains`, `expect_json` (`at` is a JSON pointer, with
-  `equals` or `gt`), `expect_findings` / `expect_no_findings` (match on `rule`, `file`, `severity`).
+  `equals` or `gt`), `expect_findings` / `expect_no_findings` (match on `rule`, `file` as a path suffix, `severity` and `message_contains`; also `suggested_action`, a subset the finding's action must contain, `no_suggested_action` and `unwaived`, which skips a finding a waiver suppresses).
 - `manifest.yaml` is read: every fixture file must be listed with a non-empty irregularity and every
   listed path must exist, so the record of intent cannot rot.
 - `known_gap: {ref, reason}` marks a case whose expectation is the correct behaviour that does not
@@ -217,9 +226,29 @@ built, and where it differs from the sketch:
   with neither is rejected. `expect_rules_ran` asserts the same thing for each rule it lists (status
   `ran` over a non-empty population), so only its first rule is switched off; the others count once that
   held, which keeps a case over corpus zero to two runs.
-- **Coverage report.** An unfiltered run prints how many rules in `ALL_RULES` have a case whose
-  mutation proof held and lists every rule that has none (`uncovered  <rule>`). It reports and does
-  not fail: a rule added by another change has no case yet, and the list is where that is seen.
+- **Coverage report.** An unfiltered run states, for every rule in `ALL_RULES`, how far the suite
+  proves it, in three tiers that are never added together. A rule has a **failing case** when a case
+  names it in `expect_findings` and fails with the rule off: the suite shows the rule can fire. A rule
+  **ran clean only** (`ran-only  <rule>`) when its sole proof is `expect_rules_ran` or `proves`: a case
+  shows the rule executes over a population, and none expects it to report anything, so the suite does
+  not show it can fire. A rule with **no case** is listed as `uncovered  <rule>`. The count of rules with
+  a failing case is the number the suite proves; the other two are what it does not. A rule
+  with no failing case here may still have a unit or integration test that plants its violation; this
+  report is about the acceptance layer only.
+- **Coverage gate.** The same unfiltered run fails when a rule in `ALL_RULES` has no failing case and is
+  not on the committed allow-list, `tests/acceptance/coverage-allowlist.yaml` (decided 2026-11-07). Each
+  entry is a `rule` id and a `reason`; an entry with no reason fails. The list only shrinks: the gate
+  holds a fixed ceiling of the ids the list may name (`CEILING` in `tests/acceptance/coverage_gate.rs`),
+  so an entry for any other rule is refused, and a rule the table gains has to come with a failing case
+  rather than a listing. An entry is stale, and fails, once its rule has a failing case or has left the
+  rule table, so the entry is deleted in the same change that earns or removes it. A name-filtered run
+  does not run the gate, for the same reason it does not report coverage. `acceptance_coverage_gate.rs`
+  tests the gate, including that a new rule without a failing case fails it.
+- **Scratch names.** A case's temporary repository and its mutated config are named by process, corpus
+  and case id. Cases run on several threads, and two corpora (a private one merged in through
+  `URZUA_ACCEPTANCE_EXTRA`, say) may each declare a case with one id, so a name keyed on the id alone would
+  be a directory the second case deletes from under the first. The runner fails a run in which two queued
+  cases would share one, and `corpus-c` and `corpus-m` carry a case of the same id to exercise it.
 - **More expectations.** `expect_rules_ran`, `expect_mirrored` (two path prefixes whose findings name
   the same non-empty set of rules), and `message_contains` on a finding matcher. Cases run on a few
   threads and an identical read-only run over `@repo` is made once.
@@ -229,15 +258,16 @@ built, and where it differs from the sketch:
   annotation that cites references, a missing section, a prose citation and a cited path that do not
   resolve, a record one directory below its type's `dir`, a mistyped `dir` beside a working type).
   `corpus-e` is the "Nth record type" case. `corpus-f` covers the shape, forbidden-field,
-  case-variant-key and cross-type rules. Corpus zero has one case per rule family, each asserting
-  that the family's enabled rules run over a non-empty population and that the whole check is clean.
+  case-variant-key and cross-type rules. Corpus zero has one case per rule family (`own-config-<family>-rules-run`), each asserting
+  that the family's enabled rules run over a non-empty population and that the whole check is clean,
+  and two more: its `docs/` has no unwaived error, and its findings that declare no action carry none.
 - **The "Nth record type" case.** `corpus-e` declares a throwaway type, `gizmo`, named nowhere in the
   source, beside `adr`. The same planted violations sit in both type directories and must be met by the
   same rules; the control run with the declaration removed examines none of the gizmo files.
 - **The generative property** is `rust/crates/urzua-cli/tests/acceptance_property.rs`, run by
   `cargo test`. A fixed-seed generator makes it reproducible. Field names from a wide alphabet are each
-  accepted as declared or reported by name; wrapping a record's body in every fence variant, a comment
-  or a quote leaves the verdict unchanged; relation values with annotations that cite references
+  accepted as declared or reported by name; wrapping a fake header in a record's body in every fence variant, a comment
+  or a quote leaves the verdict unchanged (the wrapped content follows the real header; content before the header is not generated); relation values with annotations that cite references
   round-trip to the reference that begins each entry. Each property is also run with its rule off (or,
   for invariance, against an input that really changes the verdict) and must then fail.
 
@@ -256,7 +286,7 @@ built, and where it differs from the sketch:
   plausible wrong answer); a `Implements:` back-pointer to an identifier that only a record's prose
   mentions is dangling (identifiers are defined by role, not mention); a locator two records cite is a
   promotion candidate.
-- **`corpus-h` (gates and ceiling).** `diff.source-requires-record` and `diff.source-and-records-mixed`
+- **`corpus-h` (gates and ceiling).** `diff.source-requires-record` (including its decision gate, `MILE-133`) and `diff.source-and-records-mixed`
   over a second commit; `boundary.published-path-reference`; `citation.issue-exists` against a snapshot
   checked into the corpus (no network); `status.delivery-agreement` in both directions; and the permanent
   ceiling: a required `Context` section holding off-topic text passes `section.required`, because no
@@ -267,17 +297,119 @@ built, and where it differs from the sketch:
   with no identity in the extra directory, a declared extra directory that does not exist, and
   `urzua new` numbering past the highest id in either (`MILE-130`). urzua's own `.urzua/config.yaml`
   has no type spanning directories, so no natural own-config use exists and the corpus is the exercise.
-- **Coverage.** Every rule in `ALL_RULES` now has a case whose mutation proof holds, and the report lists
-  none uncovered.
+- **Coverage.** Every rule in `ALL_RULES` had a case whose mutation proof held when `MILE-170` finished,
+  but 22 of them held it through `expect_rules_ran` or `proves` alone, so the count of 57 of 65 overstated what the
+  suite showed: it counted a rule that ran as a rule that can fire. Later rules were added with no case at
+  all. The report now keeps the tiers apart (see "Coverage report"). Rules with a failing case grew from 35
+  of 65 to 58 with `corpus-m` to `corpus-t` (see "Added by the hardening of CI and release tests"). Rules with a failing case are now 60 of 65, with
+  `corpus-u` (`narrative-field.stale`, `waiver.matches-nothing`). Five rules remain on the allow-list (see
+  "Coverage gate"): `claim.status-agreement` and `embodiment.back-pointer-decision-accepted` ran clean only;
+  `index.freshness` has no mutation-provable case, because switching the rule off leaves its `indexes`
+  option on a disabled rule and the config is rejected; `config.schema-version-outdated` has a failing case
+  that cannot be mutated, because a version-1 config has no `rules` table to switch the rule off in; and
+  `identity.open-pr-collision` has none, because a case cannot create the pull-request refs it reads. Each
+  has a planted-violation test at the integration or unit level. The counts are the run's output when this was written; the coverage report is authoritative.
+
+### Added since
+
+- **`corpus-j` (status transitions).** The declared transition graph: an allowed edge is clean, an edge the
+  graph does not list is reported, a terminal status cannot be left, a new record must start at an initial
+  status, a renamed record keeps its committed status, a whole-repository run judges no transition, a status
+  no edge reaches is reported and a graph naming an undeclared status is refused.
+- **`corpus-k` (schema version).** The current configuration schema version loads clean, the previous one
+  loads with one warning, a version newer than the current or older than the window is a structured error,
+  and `migrate config` reports every key it touched and does nothing on a second run.
+- **`corpus-l` (sequencing).** The roadmap over a declared acyclic pair: a cycle, including one across two
+  declared pairs, is reported and never looped on, a claim that resolves to nothing is reported, a pair no
+  record carries a value for is reported, a dependency in a failure terminal keeps its dependents out, the
+  critical path is the smallest id sequence among the longest chains, and a repository with no acyclic pair
+  has no roadmap.
+- **`corpus-a`, `corpus-b`, `corpus-c`.** The bold-list and blockquote header shapes were removed (`MILE-85`),
+  so `corpus-a` now holds the cases that name the removed form: `check` and `init` say so, and a
+  configuration that declares it is rejected at load. `corpus-b` holds the rename guidance `audit` gives a
+  bare-numbered corpus. `corpus-c` is the clean YAML frontmatter positive control.
 
 Not built: mutation of a defect reintroduced into the source rather than a rule switched off, and the
 "silent zeros" cases whose defect lives in a git query this build does not make (the rename case is covered
 through the record's blame history; the `-S`/`-G` case through the value-only edit).
 
+### Added by the hardening of CI and release tests
+
+Failing cases for rules that had only a clean run or no case, each with a mutation proof that holds:
+
+- **`corpus-m` (sequencing).** A three-record cycle in an acyclic `Depends-on` pair (`sequence.cycle`),
+  a dependency on a record that does not exist (`sequence.unresolved-blocker`) and an `InProgress`
+  record blocked by an unfinished dependency (`sequence.status-agreement`).
+- **`corpus-n` (version bump).** Two specs each gain a substantive revision row after the base commit;
+  only the one that leaves `Version` alone is reported (`revision-log.version-bump-required`).
+- **`corpus-o` (who decides).** A move to `Accepted` authored outside the deciders group, read from an
+  actors file in the corpus, is reported, and the same move authored by a decider is not
+  (`diff.decider-required`).
+- **`corpus-p` (override log).** An override row with no reviewer is reported on the log
+  (`override.unreviewed`).
+- **`corpus-q` (configuration declarations).** One config per rule, each selected with `--config`:
+  a companion pair with one side undeclared, a relation role naming an undeclared field, a header-less
+  type with required fields, a type with no `known_fields`, a pointer field the type does not know, a
+  pointer list without a narrative list, a field in both lists, and a declared directory whose only file
+  carries no identity (`config.scope-matches-nothing`).
+- **`corpus-r` (field values and dates).** A value starting with a reserved YAML indicator
+  (`field.leading-reserved-indicator`) and an acceptance dated before the record
+  (`date.field-order`).
+- **`corpus-s` (relations and pointers).** A supersession claim the other record does not return
+  (`relation.pair-reciprocity`), a pointer to a record in a status the rule rejects
+  (`pointer.target-status`), a pointer to a record whose type declares no status
+  (`relation.target-status-undeclared`), prose in a pointer field (`header.pointer-field-clean`) and a
+  type with no declared spec (`type.no-declared-spec`).
+- **`corpus-t` (locators).** A locator naming a file that does not exist (`embodiment.locator-exists`)
+  and an embodiment stated before the record is accepted (`embodiment.requires-accepted-status`).
+- **`corpus-w` (revision-log vocabulary and columns).** A type that declares its own classes and
+  names its class and date columns, with a reordered `Class | Date | Change` table; a class outside
+  the vocabulary, a header lacking the declared column and one repeating it
+  (`revision-log.change-class-required`), and a version bump that follows the declared class column
+  (`revision-log.version-bump-required`).
+
+## CI shard protocol (`ADR-98`)
+
+The runner is one custom-harness process (`harness = false`), so nextest cannot partition it. CI runs it
+as several processes instead, controlled by three environment variables, which `.github/scripts/ci-tests.sh`
+sets and `.github/workflows/ci.yml` runs as the `acceptance` shards and the `acceptance-gate` job
+(`SPEC-20`):
+
+- **`URZUA_ACCEPTANCE_SHARD=i/n`** (`1 <= i <= n`): the cases are dealt round-robin in discovery order
+  and this process runs the ones at position `p` where `p mod n = i - 1`. Every case keeps its own
+  mutation proof and its corpus-and-case scratch directory, so a case behaves the same alone or in a
+  shard. An unset variable runs every case, as before.
+- **`URZUA_ACCEPTANCE_PROVEN_OUT=<file>`**: a shard cannot judge the coverage gate (a rule's failing case
+  may live in another shard), so it writes what it proved: a header line `shard i/n discovered D ran R`,
+  then one `rule<TAB>detects|ran-only` line per rule whose mutation proof held.
+- **`URZUA_ACCEPTANCE_MERGE=<dir>`**: reads every shard file in the directory and judges the coverage gate
+  (the allow-list and its shrink-only ceiling) over the union, where a rule with a failing case in any
+  shard counts as detected. The merge fails closed: a set that is not exactly shards `1..n` of one
+  discovery is refused, so a shard file that is missing, repeated, from a different shard count or
+  discovered-case count, or an empty directory, and a total of cases run that differs from the cases
+  discovered, are each an error naming the cause.
+
+The protocol lives in `rust/crates/urzua-cli/tests/acceptance/sharding.rs`.
+
+## Cases over this repository's own corpus pin the evaluation date
+
+A case with `corpus: "@repo"` runs `check` over this repository's live records. Claim expiry (`ADR-97`)
+is judged against the real clock by the records gate (`make records`, the CI build job) and by nothing
+else, so the first claim to expire would turn every one of these cases red with no code change, which
+is a flaky test by this repository's own definition. Each such case therefore starts its invocation
+with the global `--as-of 2026-11-09`, a date inside the validity window of every claim and one past which no
+record is dated that `check` would read as an error. The same date is `OWN_CORPUS_AS_OF` in
+`tests/common/mod.rs` for the integration tests that judge the repository root, and
+`every_own_corpus_acceptance_case_pins_the_evaluation_date` in `audit_fold_integration.rs` fails when an
+own-corpus case lacks the flag. A case over a fixture corpus needs none.
+
 ## Success criteria
 
-1. Every case above is executable and named in `expectations/`.
-2. Each case has been observed failing against a build without its rule.
+1. Every case in the suite is executable and named in `expectations/`. A catalog entry marked "Not built" is
+   not yet part of the suite.
+2. Each case that proves a rule has been observed failing with that rule switched off, on every run (the
+   mutation proof). A case that proves no rule, such as a positive control or a config error, says why in
+   `mutation_exempt`.
 3. Adding a corpus requires no code change — only a directory and a config, which is the same
    claim SPEC-3 makes, tested from the other side.
 
@@ -308,3 +440,19 @@ through the record's blame history; the `-S`/`-G` case through the value-only ed
 > | 2026-11-04 | Bumped to `0.5`. **Why:** `MILE-170` built the rest of the harness: mutation proof of every case, the coverage report of rules with no case, the "Nth record type" case, the generative property, corpora `corpus-d` to `corpus-f` and one corpus-zero case per rule family. Recorded under "Added by MILE-170"; the success criteria are unchanged and criterion 2 now holds for every case by construction. | **substantive** |
 > | 2026-11-04 | Bumped to `0.6`. **Why:** `MILE-170` finished the harness: cases can make commits, pass `--base` and run shallow; `corpus-g` and `corpus-h` add the git-history, drift, derived-value, diff-gate, boundary, issue-snapshot, delivery and permanent-ceiling cases; every shipped rule now has a proven case. Recorded under "Added by the rest of MILE-170". | **substantive** |
 > | 2026-11-04 | Bumped to `0.7`. `corpus-i` (one type over two directories) added: pointer resolution, collision, identity filename and missing-directory cases, and `urzua new` numbering across both. **Why:** `MILE-130` -- urzua's own repository has no type spanning directories, so the corpus is where the feature is exercised. | **substantive** |
+> | 2026-11-05 | Bumped to `0.8`. `corpus-h` gains the declared-boundary cases: a published boundary whose declared severity beats the rule's level, a back-pointer inside a generated boundary (and a plain id there that is not reported), a vendored boundary that prohibits nothing, an ignore marker that suppresses nothing, and an exclude and a boundary path that match nothing. **Why:** `MILE-125`; each case names `boundary.published-path-reference` and its mutation proof holds. | **substantive** |
+> | 2026-11-05 | Bumped to `0.9`. `corpus-h` gains the decision-gate cases of `diff.source-requires-record`: a source change beside a Proposed decision is held, and one beside an Accepted decision, a milestone implementing one or a bug record is released. **Why:** `MILE-133`. | **substantive** |
+> | 2026-11-07 | Bumped to `0.10`. Checked against `acceptance.rs`, `acceptance_property.rs` and the corpora, and corrected: the example case uses the matcher fields the runner reads (it had `line`, which the runner rejects) and a real case; the catalog tables say where each bug class is built and which are not, so success criterion 1 no longer claims every catalog entry is a case; the corpus zero section no longer lists two seed cases that cannot exist on a corpus held at zero findings; the coverage statement says rules without a mutation-proof case exist and that the run's report, not the spec, holds the count and the list, where it claimed none were missing; `corpus-j`, `corpus-k`, `corpus-l` and the other matcher fields are documented. **Why:** the maintainer approved moving this spec to `Shipped` (2026-11-07), which required verifying each section against the built suite. | **substantive** |
+> | 2026-11-07 | Bumped to `0.11`. Status changed from Draft to Accepted. **Why:** Maintainer decision, 2026-11-07: the maintainer approved moving this spec to `Shipped`, and the lifecycle moves one step at a time (`Draft` to `Accepted` to `Shipped`). | **substantive** |
+> | 2026-11-07 | Bumped to `0.12`. Realized-by names the implementing code and tests, ready for `Shipped` (`MILE-7`). **Why:** Maintainer decision, 2026-11-07: moving this spec to `Shipped` requires `Embodiment` and `Realized-by`. | **structural** |
+> | 2026-11-07 | Tool-authored (by beauwilliams, identity: gh-verified, actor: agent): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-cli/tests/acceptance.rs, test:rust/crates/urzua-cli/tests/acceptance_property.rs` -- stated `Not started` disagreed with the computed value `Verified`. | **structural** |
+> | 2026-11-07 | Bumped to `0.13`. Status changed from Accepted to Shipped. **Why:** Maintainer decision, 2026-11-07: its `Realized-by` evidence computes `Verified`, and each section was checked against the built code and tests. | **substantive** |
+> | 2026-11-07 | Bumped to `0.14`. The coverage report keeps three tiers apart: rules with a failing case, rules that ran clean only (`ran-only`) and rules with no case (`uncovered`), and no longer adds them into one figure; the "Coverage" claim that every rule has a case and none is uncovered is replaced by the count, and the seven rules without a failing acceptance case are named. Scratch repositories and mutated configs are named by corpus as well as case, and the runner fails a run in which two cases would share one. `corpus-m` to `corpus-t` add failing cases for 23 rules. **Why:** the report said 57 of 65 rules were proven, but 22 of them were counted from `expect_rules_ran` or `proves`, which show a rule runs and not that it can fire, so the figure overstated the proof and the spec claimed more than the suite showed; and a case id shared by two corpora made concurrent cases delete each other's repository. | **substantive** |
+> | 2026-11-07 | Bumped to `0.15`. The coverage report is now a gate: an unfiltered run fails when a rule has no failing case and is not on the committed allow-list, each entry carrying a rule id and a reason, and the list may only shrink (an entry outside a fixed ceiling is refused, and an entry for a rule that gained a case or left the table is stale). The allow-list holds the five rules still without a failing case; `corpus-u` adds failing cases for `narrative-field.stale` and `waiver.matches-nothing`. **Why:** maintainer decision, 2026-11-07: the report only reported, so a rule could be added with no failing case and CI stayed green. | **substantive** |
+> | 2026-11-07 | Bumped to `0.16`. `corpus-w` (revision-log vocabulary and columns) is added: a type declaring its own classes and a reordered `Class \| Date \| Change` table, a class outside the vocabulary, a header lacking or repeating the declared column, and a version bump read from the declared class column. **Why:** `MILE-213`, the build of `ADR-94`; this repository's own config declares today's values, so only a corpus with another vocabulary exercises the declared path. | **substantive** |
+> | 2026-11-08 | Pinned (attested by beauwilliams, identity: gh-verified, actor: agent): 2 locators pinned, 2 file-level, 0 scoped. Evidence: rust/crates/urzua-cli/tests/acceptance.rs@sha256:5268644d3380, rust/crates/urzua-cli/tests/acceptance_property.rs@sha256:776f499ed6f7 Reason: Pinned the files as they are now after checking each against the record it evidences: config.yaml and the own-config test still declare the adr, rfc, spec and condition types that SPEC-16, SPEC-17, SPEC-18 and SPEC-23 describe, with spec_shipped_integration.rs, rules/roadmap.rs, condition_type_integration.rs and work_types_integration.rs behind them, check.rs, rules.rs, check_integration.rs and fail_on_integration.rs still implement urzua check (SPEC-2), the workflows, the install-knope action and the release and gate test scripts still make up the pipeline SPEC-20 describes, the Makefile and checks.yml still dispatch the repository layout of SPEC-21, the harness modules, the bundled hook script and the harness integration tests still implement the request, verdict and adapter layout of SPEC-24, config.rs and the own-config and field-levels tests still implement SPEC-3, and acceptance.rs and acceptance_property.rs still implement SPEC-4. **Why:** a claim is renewed only over pinned code and test evidence. | **structural** |
+> | 2026-11-08 | Bumped to `0.17`. The `code:` and `test:` locators of `Realized-by` are now hash-pinned by `urzua reverify --pin-only` (the `Pinned` row above) and, where the record stated `Drift detected`, its `Embodiment` was recomputed (the tool-authored row above); no behaviour this spec describes changes. **Why:** `MILE-129`, `ADR-97` section 10: a claim is renewed only over pinned code and test evidence, so the corpus is pinned once before expiry is enabled. | **structural** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/acceptance.rs` 5268644d3380 -> ae174f312e28. Reason: Read the diff of each pinned file since the pin taken earlier in this branch (the changes main landed in ADR-98's sharded CI and the milestone Kind amendment) and the claim still holds. acceptance.rs: acceptance.rs gained sharding (URZUA_ACCEPTANCE_SHARD, URZUA_ACCEPTANCE_PROVEN_OUT and a merge run under URZUA_ACCEPTANCE_MERGE) so each shard proves its cases and the coverage gate is judged over their union, and the cases, the mutation proof and the gate are unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-08 | Bumped to `0.18`. Added the "CI shard protocol" section: `URZUA_ACCEPTANCE_SHARD`, `URZUA_ACCEPTANCE_PROVEN_OUT` and `URZUA_ACCEPTANCE_MERGE`, how the cases are dealt, what a shard file holds, and what makes the merge refuse a set. **Why:** the protocol was built by `ADR-98` and described only in `SPEC-20` and an ADR, while this spec, which owns the runner and its coverage gate, did not say that the gate is now judged over merged shard files. No behaviour of the runner changed. | **substantive** |
+> | 2026-11-09 | Bumped to `0.19`. Added "Cases over this repository's own corpus pin the evaluation date": every `corpus: "@repo"` case passes `--as-of 2026-11-09`, and a test enforces it. **Why:** a review found those cases, and the integration tests over the repository root, would fail on 2026-12-23, when the first claim expires, with no code change; claim expiry is the records gate's job under the real clock. | **substantive** |
+> | 2026-11-09 | Bumped to `0.20`. Re-pin rows in this revision log were reworded to name who re-verified, matching the tool's wording since 2026-11-09; hashes, reasons and dates are unchanged. **Why:** Maintainer decision, 2026-11-09. | **structural** |

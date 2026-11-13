@@ -1,4 +1,5 @@
 use super::*;
+use crate::config::strip_emphasis;
 
 /// Rule 6 (ADR-0014): every existing revision-log entry names a real
 /// `change_class`. A `—` or blank Class column is exactly the failure
@@ -6,15 +7,16 @@ use super::*;
 /// "no class recorded," undetectable by any per-field presence check because
 /// the field itself is present, just not a real value.
 ///
-/// This rule does not require a revision log to exist at all -- that is
-/// SPEC-0002's separate "required sections per profile" rule. It only checks
-/// entries in a section that is already there.
+/// A record of a type that declares `revision_log: {required: true}` and has
+/// no revision-log section is itself a finding (`BUG-50`): absence is not
+/// compliance. A type that does not declare it, or declares `required: false`,
+/// is not held to a log, and its records without one are eligible and
+/// unexamined, as before.
 pub fn revision_log_change_class(
     records: &[Record],
     config: &Config,
     full_text: &HashMap<std::path::PathBuf, String>,
 ) -> (RuleExecution, Vec<Finding>) {
-    const RULE_ID: &str = RULE_REVISION_LOG_CHANGE_CLASS_REQUIRED;
     let mut findings = Vec::new();
 
     // Every record is eligible. A record with no revision-log section (its type's declared identity) is
@@ -29,48 +31,105 @@ pub fn revision_log_change_class(
         PopulationUnit::Record,
         candidates,
         |record| record.path.clone(),
-        |record| {
-            let Some(content) = full_text.get(&record.path) else {
-                return Outcome::Absent;
-            };
-            let Some(entries) =
-                find_revision_log_entries(content, &config.revision_log_id(&record.record_type))
-            else {
-                return Outcome::Absent;
-            };
-
-            for entry in entries {
-                let class = entry.change_class.trim_matches('*').trim();
-                if !matches!(class, "substantive" | "structural") {
-                    findings.push(Finding {
-                    rule: RULE_ID.to_string(),
-                    severity: FindingSeverity::Error,
-                    file: record.path.clone(),
-                    line: Some(entry.line),
-                    waived: None,
-                    declared_severity: None,
-                    suggested_action: None,
-                    action_source: ActionSource::new("change-class-missing").section(config.revision_log_id(&record.record_type).name()),
-                    message: format!(
-                        "revision log entry dated {} has no real change_class (found {:?}) -- expected \"substantive\" or \"structural\"",
-                        entry.date, entry.change_class
-                    ),
-                });
-                }
-            }
-            Outcome::Examined
-        },
+        |record| judge_change_class(record, config, full_text, &mut findings),
     );
 
     (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
+        RuleExecution::ran(
+            RULE_REVISION_LOG_CHANGE_CLASS_REQUIRED,
+            population,
             examined_records,
-        },
+        ),
         findings,
     )
+}
+
+/// One `revision-log.change-class-required` error on `record`.
+fn change_class_finding(
+    record: &Record,
+    line: Option<usize>,
+    source: ActionSource,
+    message: String,
+) -> Finding {
+    Finding::new(
+        RULE_REVISION_LOG_CHANGE_CLASS_REQUIRED,
+        FindingSeverity::Error,
+        record.path.clone(),
+        source,
+        message,
+    )
+    .at_opt(line)
+}
+
+fn judge_change_class(
+    record: &Record,
+    config: &Config,
+    full_text: &HashMap<std::path::PathBuf, String>,
+    findings: &mut Vec<Finding>,
+) -> Outcome {
+    let Some(content) = full_text.get(&record.path) else {
+        return Outcome::Absent;
+    };
+    let id = config.revision_log_id(&record.record_type);
+    let shape = config.revision_log_shape(&record.record_type);
+    let Some(log) = find_revision_log_entries(content, &id, &shape) else {
+        if !config.revision_log_declared_required(&record.record_type) {
+            return Outcome::Absent;
+        }
+        findings.push(change_class_finding(
+            record,
+            None,
+            ActionSource::new("revision-log-missing").section(id.name()),
+            format!(
+                "record has no revision log; its type requires one ({})",
+                id.describe()
+            ),
+        ));
+        return Outcome::Examined;
+    };
+    let log = match log {
+        Ok(log) => log,
+        Err(problem) => {
+            // A declared column that matches nothing is reported, not
+            // skipped: one finding, and no row is judged (ADR-94).
+            findings.push(change_class_finding(
+                record,
+                Some(problem.line),
+                ActionSource::new("revision-log-column-unreadable").section(id.name()),
+                problem.message,
+            ));
+            return Outcome::Examined;
+        }
+    };
+
+    let declared_columns = shape.class_column.is_some() || shape.date_column.is_some();
+    for entry in log.entries {
+        if declared_columns && entry.cells > log.layout.width {
+            findings.push(change_class_finding(
+                record,
+                Some(entry.line),
+                ActionSource::new("change-class-missing").section(id.name()),
+                format!(
+                    "revision log row at line {} has {} cells but the header has {}; a pipe inside a cell must be written \\| (the declared columns cannot be placed in this row)",
+                    entry.line, entry.cells, log.layout.width
+                ),
+            ));
+            continue;
+        }
+        let class = strip_emphasis(&entry.change_class);
+        if !shape.classes.iter().any(|c| c == class) {
+            findings.push(change_class_finding(
+                record,
+                Some(entry.line),
+                ActionSource::new("change-class-missing").section(id.name()),
+                format!(
+                    "revision log entry dated {} has no real change_class (found {:?}) -- expected {}",
+                    entry.date, entry.change_class, list_classes(&shape.classes)
+                ),
+            ));
+        }
+    }
+    Outcome::Examined
 }
 
 /// `BUG-51`: a changed record that adds a revision-log row of a class its
@@ -88,17 +147,8 @@ pub fn revision_log_version_bump(
     changed: Option<&[std::path::PathBuf]>,
     base_text: &HashMap<std::path::PathBuf, String>,
 ) -> (RuleExecution, Vec<Finding>) {
-    const RULE_ID: &str = RULE_REVISION_LOG_VERSION_BUMP_REQUIRED;
     let Some(changed) = changed else {
-        return (
-            RuleExecution {
-                rule: RULE_ID.to_string(),
-                population: None,
-                status: RuleStatus::NotApplicable,
-                examined_records: Vec::new(),
-            },
-            Vec::new(),
-        );
+        return not_applicable(RULE_REVISION_LOG_VERSION_BUMP_REQUIRED);
     };
     let changed: std::collections::HashSet<&std::path::PathBuf> = changed.iter().collect();
     // The changed records of a type that declares a bump, in path order.
@@ -119,85 +169,113 @@ pub fn revision_log_version_bump(
         PopulationUnit::Record,
         candidates,
         |record| record.path.clone(),
-        |record| {
-            let Some(type_config) = config.record_types.get(&record.record_type) else {
-                return Outcome::Absent;
-            };
-            let Some(bump) = type_config.version_bump() else {
-                return Outcome::Absent;
-            };
-            if record.header.is_unreadable() {
-                return Outcome::Unreadable;
-            }
-            let (Some(now_text), Some(then_text)) =
-                (full_text.get(&record.path), base_text.get(&record.path))
-            else {
-                return Outcome::Absent;
-            };
-            let id = config.revision_log_id(&record.record_type);
-            let now = find_revision_log_entries(now_text, &id).unwrap_or_default();
-            let mut then: Vec<String> = find_revision_log_entries(then_text, &id)
-                .unwrap_or_default()
-                .into_iter()
-                .map(|e| e.row)
-                .collect();
-            // A multiset difference: a row present before is consumed once.
-            let added: Vec<&RevisionLogEntry> = now
-                .iter()
-                .filter(|e| match then.iter().position(|r| *r == e.row) {
-                    Some(i) => {
-                        then.swap_remove(i);
-                        false
-                    }
-                    None => true,
-                })
-                .filter(|e| {
-                    let class = e.change_class.trim_matches('*').trim();
-                    bump.classes.iter().any(|c| c.trim() == class)
-                })
-                .collect();
-            let Some(first) = added.first() else {
-                return Outcome::Examined;
-            };
-            let before = crate::record::Record::parse_with_shape_and_prefix(
-                record.path.clone(),
-                record.record_type.clone(),
-                then_text,
-                type_config.header_shape,
-                record.type_prefix.clone(),
-            );
-            let field = bump.field.trim();
-            let norm = |v: Option<&str>| v.map(|v| v.trim().to_string());
-            if norm(before.header.get(field)) == norm(record.header.get(field)) {
-                findings.push(Finding {
-                    rule: RULE_ID.to_string(),
-                    severity: FindingSeverity::Error,
-                    file: record.path.clone(),
-                    line: Some(first.line),
-                    waived: None,
-                    declared_severity: None,
-                    suggested_action: None,
-                    action_source: ActionSource::new("version-bump").field(field),
-                    message: format!(
-                        "revision log entry dated {} adds a {} change but '{field}' is unchanged from the merge base ({}) -- bump it",
-                        first.date,
-                        first.change_class.trim_matches('*').trim(),
-                        norm(record.header.get(field)).unwrap_or_else(|| "absent".to_string()),
-                    ),
-                });
-            }
-            Outcome::Examined
-        },
+        |record| judge_version_bump(record, config, full_text, base_text, &mut findings),
     );
     (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
+        RuleExecution::ran(
+            RULE_REVISION_LOG_VERSION_BUMP_REQUIRED,
+            population,
             examined_records,
-        },
+        ),
         findings,
     )
+}
+
+/// The rows of a log, read as empty when the section is absent. A log whose
+/// declared columns cannot be found is `Err`: reading it as empty would make
+/// every current row look added (ADR-94).
+fn log_entries_or_empty(
+    text: &str,
+    id: &crate::config::RevisionLogId,
+    shape: &crate::config::RevisionLogShape,
+) -> Result<Vec<RevisionLogEntry>, ColumnProblem> {
+    find_revision_log_entries(text, id, shape)
+        .map_or_else(|| Ok(Vec::new()), |r| r.map(|log| log.entries))
+}
+
+/// The rows of `now` not in `then` (a multiset difference: a row present
+/// before is consumed once) whose class is one the bump governs.
+fn added_bump_rows<'a>(
+    now: &'a [RevisionLogEntry],
+    mut then: Vec<String>,
+    bump: &crate::config::VersionBumpDecl,
+) -> Vec<&'a RevisionLogEntry> {
+    now.iter()
+        .filter(|e| match then.iter().position(|r| *r == e.row) {
+            Some(i) => {
+                then.swap_remove(i);
+                false
+            }
+            None => true,
+        })
+        .filter(|e| {
+            let class = strip_emphasis(&e.change_class);
+            bump.classes.iter().any(|c| strip_emphasis(c) == class)
+        })
+        .collect()
+}
+
+fn judge_version_bump(
+    record: &Record,
+    config: &Config,
+    full_text: &HashMap<std::path::PathBuf, String>,
+    base_text: &HashMap<std::path::PathBuf, String>,
+    findings: &mut Vec<Finding>,
+) -> Outcome {
+    let Some(type_config) = config.record_types.get(&record.record_type) else {
+        return Outcome::Absent;
+    };
+    let Some(bump) = type_config.version_bump() else {
+        return Outcome::Absent;
+    };
+    if record.header.is_unreadable() {
+        return Outcome::Unreadable;
+    }
+    let (Some(now_text), Some(then_text)) =
+        (full_text.get(&record.path), base_text.get(&record.path))
+    else {
+        return Outcome::Absent;
+    };
+    let id = config.revision_log_id(&record.record_type);
+    let shape = config.revision_log_shape(&record.record_type);
+    // A log with no section is empty; a log whose declared columns
+    // cannot be found, now or at the merge base, is unreadable.
+    let Ok(now) = log_entries_or_empty(now_text, &id, &shape) else {
+        return Outcome::Unreadable;
+    };
+    let Ok(then) = log_entries_or_empty(then_text, &id, &shape) else {
+        return Outcome::Unreadable;
+    };
+    let then: Vec<String> = then.into_iter().map(|e| e.row).collect();
+    let added = added_bump_rows(&now, then, bump);
+    let Some(first) = added.first() else {
+        return Outcome::Examined;
+    };
+    let before = crate::record::Record::parse_with_shape_and_prefix(
+        record.path.clone(),
+        record.record_type.clone(),
+        then_text,
+        type_config.header_shape,
+        record.type_prefix.clone(),
+    );
+    let field = bump.field.trim();
+    let norm = |v: Option<&str>| v.map(|v| v.trim().to_string());
+    if norm(before.header.get(field)) == norm(record.header.get(field)) {
+        findings.push(Finding::new(
+            RULE_REVISION_LOG_VERSION_BUMP_REQUIRED,
+            FindingSeverity::Error,
+            record.path.clone(),
+            ActionSource::new("version-bump").field(field),
+            format!(
+                "revision log entry dated {} adds a {} change but '{field}' is unchanged from the merge base ({}) -- bump it",
+                first.date,
+                strip_emphasis(&first.change_class),
+                norm(record.header.get(field)).unwrap_or_else(|| "absent".to_string()),
+            ),
+        )
+        .at(first.line));
+    }
+    Outcome::Examined
 }
 
 pub(crate) struct RevisionLogEntry {
@@ -207,21 +285,132 @@ pub(crate) struct RevisionLogEntry {
     pub(crate) date: String,
     pub(crate) change_class: String,
     pub(crate) line: usize,
+    /// How many cells the row has. A row wider than its header holds an
+    /// unescaped pipe in a cell, so a declared column cannot be placed in it
+    /// (`ADR-94`): the class rule reports the row rather than guess.
+    pub(crate) cells: usize,
+}
+
+/// A table row's cells, trimmed. `\|` is a literal pipe inside a cell (GFM),
+/// not a separator; the backslash stays in the cell text.
+fn split_cells(row: &str) -> Vec<&str> {
+    let row = row.trim();
+    let row = row.strip_prefix('|').unwrap_or(row);
+    let row = if row.ends_with('|') && !row.ends_with("\\|") {
+        &row[..row.len() - 1]
+    } else {
+        row
+    };
+    let mut cells = Vec::new();
+    let mut start = 0;
+    let mut escaped = false;
+    for (i, ch) in row.char_indices() {
+        match ch {
+            '\\' => escaped = !escaped,
+            '|' if !escaped => {
+                cells.push(row[start..i].trim());
+                start = i + 1;
+            }
+            _ => escaped = false,
+        }
+    }
+    cells.push(row[start..].trim());
+    cells
+}
+
+/// Where the date and class sit in a log's table, by index, and how wide the
+/// header is. `urzua fix` lays its row out by this (`ADR-94`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct LogLayout {
+    pub(crate) width: usize,
+    pub(crate) date: usize,
+    pub(crate) class: usize,
+}
+
+/// A parsed revision log: its rows and the layout of its header.
+pub(crate) struct RevisionLog {
+    pub(crate) entries: Vec<RevisionLogEntry>,
+    pub(crate) layout: LogLayout,
+}
+
+/// A declared column the header lacks or repeats: the log cannot be read.
+#[derive(Debug)]
+pub(crate) struct ColumnProblem {
+    /// The header row's line number.
+    pub(crate) line: usize,
+    pub(crate) message: String,
+}
+
+/// The classes as a sentence: `"a"`, `"a" or "b"`, `"a", "b" or "c"`.
+fn list_classes(classes: &[String]) -> String {
+    let quoted: Vec<String> = classes.iter().map(|c| format!("{c:?}")).collect();
+    match quoted.split_last() {
+        None => String::new(),
+        Some((last, [])) => last.clone(),
+        Some((last, rest)) => format!("{} or {last}", rest.join(", ")),
+    }
+}
+
+/// The index of the header cell named `wanted` (emphasis and whitespace
+/// stripped, exact and case-sensitive), or why there is none (`ADR-94`).
+fn column_index(header: &[&str], wanted: &str, key: &str) -> Result<usize, String> {
+    let wanted = strip_emphasis(wanted);
+    let at: Vec<usize> = header
+        .iter()
+        .enumerate()
+        .filter(|(_, cell)| strip_emphasis(cell) == wanted)
+        .map(|(i, _)| i + 1)
+        .collect();
+    let found = header
+        .iter()
+        .map(|c| format!("{:?}", strip_emphasis(c)))
+        .collect::<Vec<_>>()
+        .join(", ");
+    match at.as_slice() {
+        [one] => Ok(one - 1),
+        [] => Err(format!(
+            "revision log header has no column named {wanted:?} (`{key}`); found cells: {found}"
+        )),
+        many => {
+            let (last, rest) = many.split_last().expect("at least two");
+            let positions = format!(
+                "{} and {last}",
+                rest.iter()
+                    .map(|p| p.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+            Err(format!(
+                "revision log header has the column {wanted:?} (`{key}`) more than once, at cells {positions}; found cells: {found}"
+            ))
+        }
+    }
 }
 
 /// Finds the line that opens the revision log (`id`, the type's declared
 /// identity: a line that is the marker or heading, never one that merely
 /// mentions it, and never one inside a fenced code block) and parses the
 /// pipe-delimited table that follows it. `None` means no such section exists
-/// in this record at all -- distinct from `Some(vec![])`, an existing but empty
-/// table, though both currently produce no findings from this rule.
+/// in this record at all -- distinct from an existing but empty table, though
+/// both currently produce no findings from the class rule.
+///
+/// The class and date cells are read from the columns `shape` names by header
+/// (`ADR-94`), or from the last and first cell when it names none. A header
+/// lacking a declared column, or repeating it, is `Some(Err(..))`: the log
+/// cannot be read, and no row is.
 pub(crate) fn find_revision_log_entries(
     content: &str,
     id: &crate::config::RevisionLogId,
-) -> Option<Vec<RevisionLogEntry>> {
+    shape: &crate::config::RevisionLogShape,
+) -> Option<Result<RevisionLog, ColumnProblem>> {
     let lines: Vec<&str> = content.lines().collect();
+    let marker_idx = log_marker_line(&lines, id)?;
+    Some(parse_log_table(&lines, marker_idx, shape))
+}
+
+/// The index of the line that opens the log, outside any fenced code block.
+fn log_marker_line(lines: &[&str], id: &crate::config::RevisionLogId) -> Option<usize> {
     let mut fence: Option<char> = None;
-    let mut marker_idx = None;
     for (idx, line) in lines.iter().enumerate() {
         let stripped = line.trim_start_matches(|c: char| c == '>' || c.is_whitespace());
         let fence_char = ["```", "~~~"]
@@ -234,15 +423,52 @@ pub(crate) fn find_revision_log_entries(
             (Some(_), _) => {}
             (None, None) => {
                 if id.opens_at(line) {
-                    marker_idx = Some(idx);
-                    break;
+                    return Some(idx);
                 }
             }
         }
     }
-    let marker_idx = marker_idx?;
+    None
+}
 
+/// The layout of a log from its header row "Date | Change | Class".
+/// Undeclared columns are the first and last cell, whatever the header says.
+fn header_layout(
+    cells: &[&str],
+    shape: &crate::config::RevisionLogShape,
+    line: usize,
+) -> Result<LogLayout, ColumnProblem> {
+    let mut problems = Vec::new();
+    let mut by_name = |name: &Option<String>, key: &str, default: usize| match name {
+        None => default,
+        Some(name) => column_index(cells, name, key).unwrap_or_else(|why| {
+            problems.push(why);
+            default
+        }),
+    };
+    let date = by_name(&shape.date_column, "date_column", 0);
+    let class = by_name(&shape.class_column, "class_column", cells.len() - 1);
+    if !problems.is_empty() {
+        return Err(ColumnProblem {
+            line,
+            message: problems.join("; "),
+        });
+    }
+    Ok(LogLayout {
+        width: cells.len(),
+        date,
+        class,
+    })
+}
+
+/// Parses the pipe table that follows the opening line at `marker_idx`.
+fn parse_log_table(
+    lines: &[&str],
+    marker_idx: usize,
+    shape: &crate::config::RevisionLogShape,
+) -> Result<RevisionLog, ColumnProblem> {
     let mut entries = Vec::new();
+    let mut layout: Option<LogLayout> = None;
     let mut row_index = 0; // 0 before the header row, 1 = header seen, 2+ = data rows
     for (idx, raw_line) in lines.iter().enumerate().skip(marker_idx + 1) {
         let stripped = raw_line.trim_start().trim_start_matches('>').trim();
@@ -256,34 +482,41 @@ pub(crate) fn find_revision_log_entries(
             break;
         }
 
-        let cells: Vec<&str> = stripped
-            .trim_matches('|')
-            .split('|')
-            .map(|c| c.trim())
-            .collect();
+        let cells = split_cells(stripped);
         row_index += 1;
         if row_index == 1 {
-            continue; // header row: "Date | Change | Class"
+            layout = Some(header_layout(&cells, shape, idx + 1)?);
+            continue;
         }
-        if cells
-            .iter()
-            .all(|c| !c.is_empty() && c.chars().all(|ch| ch == '-'))
-        {
+        if super::section::is_delimiter_row(stripped) {
             continue; // separator row: |---|---|---|
         }
 
-        let (Some(date), Some(class)) = (cells.first(), cells.last()) else {
-            continue;
-        };
+        let layout = layout.expect("the header row precedes every data row");
+        // Columns are read at their header position; a row of another width
+        // is not guessed at (see `RevisionLogEntry::cells`).
+        let cell = |at: usize| cells.get(at).copied().unwrap_or_default().to_string();
         entries.push(RevisionLogEntry {
             row: cells.join("|"),
-            date: date.to_string(),
-            change_class: class.to_string(),
+            date: cell(layout.date),
+            // Undeclared, the class is the row's own last cell, whatever the
+            // header's width.
+            change_class: match shape.class_column {
+                None => cells.last().copied().unwrap_or_default().to_string(),
+                Some(_) => cell(layout.class),
+            },
+            cells: cells.len(),
             line: idx + 1,
         });
     }
 
-    Some(entries)
+    // A section with no table has no header to read: the undeclared layout.
+    let layout = layout.unwrap_or(LogLayout {
+        width: 0,
+        date: 0,
+        class: 0,
+    });
+    Ok(RevisionLog { entries, layout })
 }
 
 #[cfg(test)]
@@ -317,16 +550,84 @@ mod tests {
     }
 
     #[test]
-    fn a_record_with_no_revision_log_section_is_not_examined() {
+    fn an_alignment_row_is_a_delimiter_not_a_data_row_observed_failing() {
+        let content = "# 0001 — X\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |:---|:---|:---:|\n> | 2026-08-20 | Split. | structural |\n";
+        let r = record("docs/specs/0001-x.md", "spec", content);
+        let mut full_text = HashMap::new();
+        full_text.insert(r.path.clone(), content.to_string());
+        let (_, findings) = revision_log_change_class(&[r], &config_with_types(vec![]), &full_text);
+        assert!(findings.is_empty(), "unexpected findings: {findings:?}");
+    }
+
+    fn log_decl(required: Option<bool>) -> crate::config::RevisionLogDecl {
+        crate::config::RevisionLogDecl {
+            marker: None,
+            heading: None,
+            required,
+            version_bump: None,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn a_record_of_a_type_declaring_required_true_with_no_revision_log_section_is_a_finding() {
+        // BUG-50: absence of the section is a finding, with the add-section action.
         let content = "---\nStatus: Draft\n---\n# 0001 — X\n";
         let r = record("docs/adr/0001-x.md", "adr", content);
         let mut full_text = HashMap::new();
         full_text.insert(r.path.clone(), content.to_string());
+        let mut t = type_config(None);
+        t.revision_log = Some(log_decl(Some(true)));
 
         let (exec, findings) =
-            revision_log_change_class(&[r], &config_with_types(vec![]), &full_text);
+            revision_log_change_class(&[r], &config_with_types(vec![("adr", t)]), &full_text);
+        assert_eq!(examined(&exec), 1);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert_eq!(findings[0].action_source.variant, "revision-log-missing");
+        assert_eq!(
+            findings[0].action_source.target.section.as_deref(),
+            Some("**Revision log**")
+        );
+        assert!(findings[0].message.contains("no revision log"));
+    }
+
+    #[test]
+    fn a_record_of_a_type_that_does_not_declare_revision_log_with_no_log_is_absent_and_silent() {
+        // Opt-in: a config that never declared `revision_log` is unchanged.
+        let content = "---\nStatus: Draft\n---\n# 0001 — X\n";
+        for t in [type_config(None), {
+            let mut t = type_config(None);
+            t.revision_log = Some(log_decl(None));
+            t
+        }] {
+            let r = record("docs/adr/0001-x.md", "adr", content);
+            let mut full_text = HashMap::new();
+            full_text.insert(r.path.clone(), content.to_string());
+            let (exec, findings) =
+                revision_log_change_class(&[r], &config_with_types(vec![("adr", t)]), &full_text);
+            assert_eq!(examined(&exec), 0);
+            assert!(findings.is_empty(), "{findings:?}");
+        }
+    }
+
+    #[test]
+    fn a_record_of_a_type_declaring_required_false_with_no_log_is_absent_and_silent() {
+        let mut t = type_config(None);
+        t.revision_log = Some(crate::config::RevisionLogDecl {
+            marker: None,
+            heading: None,
+            required: Some(false),
+            version_bump: None,
+            ..Default::default()
+        });
+        let config = config_with_types(vec![("waiver", t)]);
+        let content = "# 1\n\nNo log.\n";
+        let r = record("docs/waivers/1.md", "waiver", content);
+        let mut full_text = HashMap::new();
+        full_text.insert(r.path.clone(), content.to_string());
+        let (exec, findings) = revision_log_change_class(&[r], &config, &full_text);
         assert_eq!(examined(&exec), 0);
-        assert!(findings.is_empty());
+        assert!(findings.is_empty(), "{findings:?}");
     }
 
     fn check(config: &Config, content: &str) -> (RuleExecution, Vec<Finding>) {
@@ -353,9 +654,12 @@ mod tests {
     #[test]
     fn a_marker_inside_a_fenced_block_is_not_the_log() {
         let content = format!("# 1\n\n```\n**Revision log**\n{LOG}```\n");
-        let (exec, findings) = check(&config_with_types(vec![]), &content);
-        assert_eq!(examined(&exec), 0);
-        assert!(findings.is_empty());
+        let mut t = type_config(None);
+        t.revision_log = Some(log_decl(Some(true)));
+        let (exec, findings) = check(&config_with_types(vec![("spec", t)]), &content);
+        assert_eq!(examined(&exec), 1);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert_eq!(findings[0].action_source.variant, "revision-log-missing");
     }
 
     #[test]
@@ -364,8 +668,9 @@ mod tests {
         t.revision_log = Some(crate::config::RevisionLogDecl {
             marker: None,
             heading: Some("History".into()),
-            required: None,
+            required: Some(true),
             version_bump: None,
+            ..Default::default()
         });
         let config = config_with_types(vec![("spec", t)]);
         let content = format!("# 1\n\n## History\n\n{LOG}");
@@ -374,7 +679,361 @@ mod tests {
         assert_eq!(findings.len(), 1, "{findings:?}");
         // The default marker is no longer this type's log.
         let old = format!("# 1\n\n**Revision log**\n\n{LOG}");
-        let (exec, _) = check(&config, &old);
+        let (_, findings) = check(&config, &old);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert_eq!(findings[0].action_source.variant, "revision-log-missing");
+        assert_eq!(
+            findings[0].action_source.target.section.as_deref(),
+            Some("History")
+        );
+    }
+
+    // ---- ADR-94: declared vocabulary, columns and the unreadable-log outcome ----
+
+    fn declared(decl: crate::config::RevisionLogDecl) -> Config {
+        let mut t = type_config(None);
+        t.revision_log = Some(decl);
+        config_with_types(vec![("spec", t)])
+    }
+
+    fn decl(
+        classes: Option<&[&str]>,
+        class_column: Option<&str>,
+        date_column: Option<&str>,
+    ) -> crate::config::RevisionLogDecl {
+        crate::config::RevisionLogDecl {
+            required: Some(true),
+            classes: classes.map(|c| c.iter().map(|c| c.to_string()).collect()),
+            class_column: class_column.map(str::to_string),
+            date_column: date_column.map(str::to_string),
+            ..Default::default()
+        }
+    }
+
+    fn table(header: &str, rows: &[&str]) -> String {
+        let cols = header.matches('|').count() - 1;
+        let sep = format!("|{}", "---|".repeat(cols));
+        let mut out = format!("# 1\n\n> **Revision log**\n>\n> {header}\n> {sep}\n");
+        for r in rows {
+            out.push_str(&format!("> {r}\n"));
+        }
+        out
+    }
+
+    #[test]
+    fn a_declared_vocabulary_accepts_exactly_its_classes_and_the_finding_lists_them() {
+        let config = declared(decl(Some(&["major", "minor", "structural"]), None, None));
+        let content = table(
+            "| Date | Change | Class |",
+            &[
+                "| 2026-01-01 | A. | **major** |",
+                "| 2026-01-02 | B. | minor |",
+                "| 2026-01-03 | C. | substantive |",
+            ],
+        );
+        let (_, findings) = check(&config, &content);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(findings[0].message.contains("2026-01-03"), "{findings:?}");
+        assert!(
+            findings[0]
+                .message
+                .contains("expected \"major\", \"minor\" or \"structural\""),
+            "{findings:?}"
+        );
+    }
+
+    #[test]
+    fn a_single_declared_class_is_listed_alone_and_the_default_message_is_unchanged() {
+        let config = declared(decl(Some(&["structural"]), None, None));
+        let content = table(
+            "| Date | Change | Class |",
+            &["| 2026-01-01 | A. | other |"],
+        );
+        let (_, findings) = check(&config, &content);
+        assert!(
+            findings[0].message.ends_with("expected \"structural\""),
+            "{findings:?}"
+        );
+        // No declaration: the message reads as it always did.
+        let (_, findings) = check(&config_with_types(vec![]), &content);
+        assert_eq!(
+            findings[0].message,
+            "revision log entry dated 2026-01-01 has no real change_class (found \"other\") -- expected \"substantive\" or \"structural\""
+        );
+    }
+
+    #[test]
+    fn a_class_column_selects_the_cell_by_header_name_in_any_position() {
+        let content = table(
+            "| Class | Date | Change |",
+            &[
+                "| **major** | 2026-01-01 | A. |",
+                "| other | 2026-01-02 | B. |",
+            ],
+        );
+        // Undeclared: the last cell is the class, exactly as today.
+        let (_, findings) = check(&config_with_types(vec![]), &content);
+        assert_eq!(findings.len(), 2, "{findings:?}");
+        // Declared: the Class column, wherever it is.
+        let config = declared(decl(Some(&["major", "minor"]), Some("Class"), Some("Date")));
+        let (exec, findings) = check(&config, &content);
+        assert_eq!(examined(&exec), 1);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(
+            findings[0].message.contains("dated 2026-01-02"),
+            "{findings:?}"
+        );
+        assert!(
+            findings[0].message.contains("found \"other\""),
+            "{findings:?}"
+        );
+    }
+
+    #[test]
+    fn a_trailing_notes_column_does_not_hide_the_class() {
+        let config = declared(decl(None, Some("Class"), None));
+        let content = table(
+            "| Date | Change | **Class** | Notes |",
+            &[
+                "| 2026-01-01 | A. | structural | n |",
+                "| 2026-01-02 | B. | — | n |",
+            ],
+        );
+        let (_, findings) = check(&config, &content);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(findings[0].message.contains("2026-01-02"), "{findings:?}");
+    }
+
+    #[test]
+    fn a_row_shorter_than_the_class_column_has_a_blank_class() {
+        let config = declared(decl(None, Some("Class"), None));
+        let content = table("| Date | Change | Class |", &["| 2026-01-01 | A. |"]);
+        let (_, findings) = check(&config, &content);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(findings[0].message.contains("found \"\""), "{findings:?}");
+    }
+
+    #[test]
+    fn a_header_without_the_declared_column_is_one_finding_with_an_action_and_no_row_is_judged() {
+        // Case-sensitive: `class` is not `Class`.
+        for (decl, header) in [
+            (decl(None, Some("Class"), None), "| Date | Change | class |"),
+            (decl(None, None, Some("Date")), "| When | Change | Class |"),
+        ] {
+            let config = declared(decl);
+            let content = table(
+                header,
+                &["| 2026-01-01 | A. | — |", "| 2026-01-02 | B. | — |"],
+            );
+            let (exec, findings) = check(&config, &content);
+            assert_eq!(examined(&exec), 1);
+            assert_eq!(findings.len(), 1, "{header}: {findings:?}");
+            let f = &findings[0];
+            assert_eq!(f.action_source.variant, "revision-log-column-unreadable");
+            assert_eq!(
+                f.action_source.target.section.as_deref(),
+                Some("**Revision log**")
+            );
+            assert_eq!(f.line, Some(5), "the header line");
+            assert!(f.message.contains("no column named"), "{f:?}");
+            assert!(f.message.contains("found"), "{f:?}");
+            for cell in header.trim_matches('|').split('|').map(str::trim) {
+                assert!(f.message.contains(cell), "{cell} in {}", f.message);
+            }
+        }
+    }
+
+    #[test]
+    fn a_duplicate_header_cell_is_a_finding_naming_the_positions_not_the_first_match() {
+        let config = declared(decl(None, Some("Class"), None));
+        // Distinct is case-sensitive after stripping: `**Class**` and `Class` collide.
+        let content = table(
+            "| Date | **Class** | Class |",
+            &["| 2026-01-01 | structural | structural |"],
+        );
+        let (_, findings) = check(&config, &content);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        let f = &findings[0];
+        assert_eq!(f.action_source.variant, "revision-log-column-unreadable");
+        assert!(f.message.contains("more than once"), "{f:?}");
+        assert!(f.message.contains("2 and 3"), "{f:?}");
+        // `class` and `Class` are two headers.
+        let content = table(
+            "| Date | class | Class |",
+            &["| 2026-01-01 | x | structural |"],
+        );
+        let (_, findings) = check(&config, &content);
+        assert!(findings.is_empty(), "{findings:?}");
+    }
+
+    #[test]
+    fn the_declared_columns_are_checked_even_when_the_log_has_no_rows() {
+        let config = declared(decl(None, Some("Class"), None));
+        let content = table("| Date | Change | Kind |", &[]);
+        let (_, findings) = check(&config, &content);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+    }
+
+    #[test]
+    fn an_undeclared_type_reads_the_first_and_last_cell_whatever_the_header_says() {
+        let content = table("| A | A | A |", &["| 2026-01-01 | x | — |"]);
+        let (_, findings) = check(&config_with_types(vec![]), &content);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert_eq!(findings[0].action_source.variant, "change-class-missing");
+    }
+
+    // The version-bump rule.
+
+    fn bump_config(decl: crate::config::RevisionLogDecl) -> Config {
+        declared(crate::config::RevisionLogDecl {
+            version_bump: Some(crate::config::VersionBumpDecl {
+                field: "Version".into(),
+                classes: vec!["major".into()],
+                initial: None,
+            }),
+            ..decl
+        })
+    }
+
+    fn bump(config: &Config, now: &str, then: Option<&str>) -> (RuleExecution, Vec<Finding>) {
+        let r = record("docs/specs/0001-x.md", "spec", now);
+        let mut full = HashMap::new();
+        full.insert(r.path.clone(), now.to_string());
+        let mut base = HashMap::new();
+        if let Some(then) = then {
+            base.insert(r.path.clone(), then.to_string());
+        }
+        let changed = vec![r.path.clone()];
+        revision_log_version_bump(&[r], config, &full, Some(&changed), &base)
+    }
+
+    fn spec_text(header: &str, rows: &[&str]) -> String {
+        format!("---\nVersion: '1'\n---\n{}", table(header, rows))
+    }
+
+    #[test]
+    fn the_bump_rule_reads_the_declared_class_column_and_a_class_outside_the_bump_list_requires_none(
+    ) {
+        let config = bump_config(decl(Some(&["major", "cosmetic"]), Some("Class"), None));
+        let header = "| Class | Date | Change |";
+        let then = spec_text(header, &["| major | 2026-01-01 | A. |"]);
+        let cosmetic = spec_text(
+            header,
+            &[
+                "| major | 2026-01-01 | A. |",
+                "| cosmetic | 2026-01-02 | B. |",
+            ],
+        );
+        let (exec, findings) = bump(&config, &cosmetic, Some(&then));
+        assert_eq!(examined(&exec), 1);
+        assert!(findings.is_empty(), "{findings:?}");
+        let major = spec_text(
+            header,
+            &["| major | 2026-01-01 | A. |", "| major | 2026-01-02 | B. |"],
+        );
+        let (_, findings) = bump(&config, &major, Some(&then));
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(
+            findings[0].message.contains("adds a major change"),
+            "{findings:?}"
+        );
+    }
+
+    #[test]
+    fn a_log_whose_declared_column_is_missing_makes_the_record_unreadable_to_the_bump_rule() {
+        let config = bump_config(decl(None, Some("Class"), None));
+        let ok = spec_text(
+            "| Date | Change | Class |",
+            &["| 2026-01-01 | A. | major |"],
+        );
+        let bad = spec_text(
+            "| Date | Change | Kind |",
+            &["| 2026-01-01 | A. | major |", "| 2026-01-02 | B. | major |"],
+        );
+        let (exec, findings) = bump(&config, &bad, Some(&ok));
+        assert_eq!(unreadable(&exec), 1);
         assert_eq!(examined(&exec), 0);
+        assert!(findings.is_empty(), "no second finding: {findings:?}");
+    }
+
+    #[test]
+    fn a_base_log_the_rule_cannot_read_is_unreadable_not_an_empty_log() {
+        let config = bump_config(decl(None, Some("Class"), None));
+        let now = spec_text(
+            "| Date | Change | Class |",
+            &["| 2026-01-01 | A. | major |"],
+        );
+        let then = spec_text("| Date | Change | Kind |", &["| 2026-01-01 | A. | major |"]);
+        let (exec, findings) = bump(&config, &now, Some(&then));
+        assert_eq!(unreadable(&exec), 1);
+        assert!(
+            findings.is_empty(),
+            "an unreadable base must not raise a false bump finding: {findings:?}"
+        );
+    }
+
+    #[test]
+    fn an_undeclared_class_is_each_rows_last_cell_even_when_an_escaped_pipe_widens_the_row() {
+        let content = table(
+            "| Date | Change | Class |",
+            &["| 2026-01-01 | introduced \\| all. | **structural** |"],
+        );
+        let (_, findings) = check(&config_with_types(vec![]), &content);
+        assert!(findings.is_empty(), "{findings:?}");
+    }
+
+    #[test]
+    fn an_escaped_pipe_stays_inside_its_cell_so_the_declared_columns_still_line_up() {
+        for (class_column, header) in [
+            ("Class", "| Date | Change | Class |"),
+            ("Class", "| Date | Class | Change |"),
+        ] {
+            let config = declared(decl(None, Some(class_column), Some("Date")));
+            let row = if header.ends_with("Class |") {
+                "| 2026-01-01 | `true\\|false` is read. | **structural** |"
+            } else {
+                "| 2026-01-01 | structural | `true\\|false` is read. |"
+            };
+            let (_, findings) = check(&config, &table(header, &[row]));
+            assert!(findings.is_empty(), "{header}: {findings:?}");
+        }
+    }
+
+    #[test]
+    fn a_row_wider_than_its_header_is_reported_not_guessed_when_columns_are_declared() {
+        // The pipe sits before the class column: reading by position would take
+        // part of the Change cell for the class, and a guess could pass or fail
+        // by luck. One clear finding names the cause instead.
+        let config = declared(decl(None, Some("Class"), Some("Date")));
+        for (header, row) in [
+            (
+                "| Date | Class | Change |",
+                "| 2026-01-01 | structural | `true|false` is read. |",
+            ),
+            (
+                "| Date | Change | Class |",
+                "| 2026-01-01 | `true|false` is read. | **structural** |",
+            ),
+        ] {
+            let (_, findings) = check(&config, &table(header, &[row]));
+            assert_eq!(findings.len(), 1, "{header}: {findings:?}");
+            assert!(
+                findings[0]
+                    .message
+                    .contains("has 4 cells but the header has 3"),
+                "{findings:?}"
+            );
+            assert!(findings[0].message.contains("\\|"), "{findings:?}");
+        }
+    }
+
+    #[test]
+    fn an_undeclared_type_never_judges_row_width() {
+        let content = table(
+            "| Date | Change | Class |",
+            &["| 2026-01-01 | `true|false` is read. | **structural** |"],
+        );
+        let (_, findings) = check(&config_with_types(vec![]), &content);
+        assert!(findings.is_empty(), "{findings:?}");
     }
 }

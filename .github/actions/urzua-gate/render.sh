@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Renders urzua's JSON reports for a pull request. A consumer of the JSON
-# contract, outside the engine: stdout of `urzua check` stays JSON (ADR-23) and
+# contract, outside the engine: stdout of `urzua check` stays JSON and
 # this reads it.
 #
 #   render.sh OUT_MD [LABEL REPORT_JSON EXIT_CODE]...
@@ -17,17 +17,21 @@ max_rows=50
 out="$1"
 shift
 
+# A report can be megabytes (every waived finding is listed), and one argv entry
+# is capped near 128 KB, so reports reach jq through files and stdin, never argv.
+work="$(mktemp -d)"
+trap 'rm -rf "$work"' EXIT
 runs='[]'
 while [ "$#" -ge 3 ]; do
   label="$1" file="$2" code="$3"
   shift 3
   if [ -s "$file" ] && jq -e 'type == "object"' "$file" >/dev/null 2>&1; then
-    report="$(cat "$file")"
+    cp "$file" "$work/report.json"
   else
-    report='null'
+    echo null >"$work/report.json"
   fi
-  runs="$(jq -c --arg label "$label" --argjson code "$code" --argjson report "$report" '
-    . + [{label: $label, code: $code, report: $report}]' <<<"$runs")"
+  runs="$(jq -c --arg label "$label" --argjson code "$code" --slurpfile report "$work/report.json" '
+    . + [{label: $label, code: $code, report: $report[0]}]' <<<"$runs")"
 done
 
 jq -r --arg marker "$marker" --argjson max "$max_rows" '
@@ -51,7 +55,7 @@ jq -r --arg marker "$marker" --argjson max "$max_rows" '
   | {
       annotations: [
         $findings[] | select(.file != null)
-        | "::\(if .severity == "error" then "error" else "warning" end) file=\(.file | escp)\(if .line != null then ",line=\(.line)" else "" end),title=\(.rule | escp)::\(.message | esc)"
+        | "::\(if .severity == "error" then "error" elif .severity == "info" then "notice" else "warning" end) file=\(.file | escp)\(if .line != null then ",line=\(.line)" else "" end),title=\(.rule | escp)::\(.message | esc)"
       ][:$max],
       body: (
         [$marker, "## urzua gate", ""]

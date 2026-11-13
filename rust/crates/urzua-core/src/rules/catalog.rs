@@ -6,6 +6,7 @@ pub const RULE_TYPE_NO_DECLARED_SPEC: &str = "type.no-declared-spec";
 pub const RULE_TYPE_DIR_MATCHES_NOTHING: &str = "type.dir-matches-nothing";
 pub const RULE_TYPE_RECORD_OUTSIDE_DECLARED_DIR: &str = "type.record-outside-declared-dir";
 pub const RULE_IDENTITY_COLLISION: &str = "identity.collision";
+pub const RULE_IDENTITY_OPEN_PR_COLLISION: &str = "identity.open-pr-collision";
 pub const RULE_CONFIG_POINTER_DECLARATION_MISSING: &str = "config.pointer-declaration-missing";
 pub const RULE_CONFIG_POINTER_FIELD_NOT_KNOWN: &str = "config.pointer-field-not-known";
 pub const RULE_CONFIG_POINTER_NARRATIVE_OVERLAP: &str = "config.pointer-narrative-overlap";
@@ -31,7 +32,9 @@ pub const RULE_RELATION_PAIR_RECIPROCITY: &str = "relation.pair-reciprocity";
 pub const RULE_RELATION_CROSS_TYPE_DISALLOWED: &str = "relation.cross-type-disallowed";
 pub const RULE_SEQUENCE_CYCLE: &str = "sequence.cycle";
 pub const RULE_SEQUENCE_UNRESOLVED_BLOCKER: &str = "sequence.unresolved-blocker";
+pub const RULE_SEQUENCE_STATUS_AGREEMENT: &str = "sequence.status-agreement";
 pub const RULE_RELATION_TARGET_STATUS_UNDECLARED: &str = "relation.target-status-undeclared";
+pub const RULE_CONFIG_SCHEMA_VERSION_OUTDATED: &str = "config.schema-version-outdated";
 pub const RULE_CONFIG_SCOPE_MATCHES_NOTHING: &str = "config.scope-matches-nothing";
 pub const RULE_FIELD_UNTRIMMED_VALUE: &str = "field.untrimmed-value";
 pub const RULE_HEADER_FIELD_CASE_MISMATCH: &str = "header.field-case-mismatch";
@@ -48,6 +51,7 @@ pub const RULE_SECTION_REQUIRED: &str = "section.required";
 pub const RULE_SECTION_SHAPE: &str = "section.shape";
 pub const RULE_DIFF_SOURCE_REQUIRES_RECORD: &str = "diff.source-requires-record";
 pub const RULE_DIFF_SOURCE_AND_RECORDS_MIXED: &str = "diff.source-and-records-mixed";
+pub const RULE_DIFF_DECIDER_REQUIRED: &str = "diff.decider-required";
 pub const RULE_FILENAME_IDENTITY_PATTERN: &str = "filename.identity-pattern";
 pub const RULE_STATUS_UNDECLARED_VALUE: &str = "status.undeclared-value";
 pub const RULE_STATUS_REQUIRED_FIELD_MISSING: &str = "status.required-field-missing";
@@ -55,6 +59,8 @@ pub const RULE_STATUS_FORBIDDEN_FIELD_PRESENT: &str = "status.forbidden-field-pr
 pub const RULE_STATUS_DELIVERY_AGREEMENT: &str = "status.delivery-agreement";
 pub const RULE_STATUS_TRANSITION_ALLOWED: &str = "status.transition-allowed";
 pub const RULE_STATUS_UNREACHABLE: &str = "status.unreachable-state";
+pub const RULE_STATUS_DONE_ITEMS_SHAPE: &str = "status.done-items-shape";
+pub const RULE_STATUS_WAIVED_ITEM_STALE: &str = "status.waived-item-stale";
 
 pub const RULE_INDEX_FRESHNESS: &str = "index.freshness";
 pub const RULE_EMBODIMENT_BACK_POINTER_RESOLUTION: &str = "embodiment.back-pointer-resolution";
@@ -65,3 +71,10 @@ pub const RULE_EMBODIMENT_BACK_POINTER_DECISION_ACCEPTED: &str =
     "embodiment.back-pointer-decision-accepted";
 
 pub const RULE_WAIVER_MATCHES_NOTHING: &str = "waiver.matches-nothing";
+
+pub const RULE_OVERRIDE_UNREVIEWED: &str = "override.unreviewed";
+pub const RULE_EMBODIMENT_LOCATOR_ON_BACK_POINTER_PATH: &str =
+    "embodiment.locator-on-back-pointer-path";
+
+pub const RULE_EMBODIMENT_CLAIM_EXPIRED: &str = "embodiment.claim-expired";
+pub const RULE_EMBODIMENT_CLAIM_RENEWAL_UNATTESTED: &str = "embodiment.claim-renewal-unattested";

@@ -7,6 +7,9 @@ fixtures:
   - path: .urzua/promotion.yaml
     irregularity: >-
       a config enabling only the locator-promotion-candidate rule; not a record.
+  - path: .urzua/nudge.yaml
+    irregularity: >-
+      a config enabling the locator nudge with `scope: changed`, beside one rule that keeps the run valid when the nudge is switched off; not a record.
   - path: records/ADR-0001-queue.md
     irregularity: >-
       cites src/queue.rs, which has neighbours (src/queue.rs.bak, src/queue_ext.rs) a near-match query would confuse

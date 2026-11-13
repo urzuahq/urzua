@@ -1,0 +1,29 @@
+{
+  "status": "repairs-available",
+  "population": {
+    "unit": "record",
+    "eligible": 13,
+    "examined": 4,
+    "out_of_scope": 0,
+    "unreadable": 0
+  },
+  "repairs": [
+    {
+      "record": "docs/milestones/MILE-2-b.md",
+      "field": "Status",
+      "line": 2,
+      "current_value": "Planned",
+      "computed_value": "Done",
+      "tier": 1,
+      "evidence": "Realized-by computes to Verified"
+    }
+  ],
+  "failed": [],
+  "notices": [
+    {
+      "severity": "warning",
+      "subject": "docs/milestones/MILE-1-a.md",
+      "message": "Status is 'Done' with no delivery evidence (computes to 'Not started'); not downgraded -- add the evidence that delivered it"
+    }
+  ]
+}

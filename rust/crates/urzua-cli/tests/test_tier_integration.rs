@@ -4,6 +4,8 @@
 //! `Implements:` elsewhere computes `Implemented`, and a record cited by
 //! neither is not judged.
 
+mod common;
+
 use std::path::Path;
 use std::process::Command;
 
@@ -17,7 +19,7 @@ fn git(dir: &Path, args: &[&str]) {
 }
 
 fn run_urzua(dir: &Path, args: &[&str]) -> std::process::Output {
-    Command::new(env!("CARGO_BIN_EXE_urzua"))
+    common::urzua()
         .args(args)
         .current_dir(dir)
         .output()
@@ -35,9 +37,8 @@ fn adr(dir: &Path, n: u32, embodiment: &str) {
 /// ADR-1: stated Verified, cited by `Verifies:` in a test file and by
 /// `Implements:` in source. ADR-2: stated Verified, cited by `Implements:`
 /// only. ADR-3: stated Verified, cited by nothing. ADR-4: states no tier. None has `Realized-by`.
-fn repo(name: &str, test_paths: &str) -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join(format!("urzua-tier-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+fn repo(name: &str, test_paths: &str) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-tier-{name}"));
     for d in ["docs/adr", "src", "src/tests", ".urzua"] {
         std::fs::create_dir_all(dir.join(d)).unwrap();
     }
@@ -106,7 +107,6 @@ fn a_test_pointer_verifies_and_a_code_pointer_alone_does_not() {
     assert!(message.contains("'Implemented'"), "{message}");
     assert!(message.contains("source back-pointers"), "{message}");
     assert!(message.contains("no Realized-by field"), "{message}");
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -115,7 +115,6 @@ fn with_no_test_class_declared_a_verifies_comment_is_not_evidence() {
     let out = run_urzua(&dir, &["check"]);
     // ADR-1 and ADR-2 both compute Implemented; ADR-3 has no evidence.
     assert_eq!(consistency(&out).len(), 3);
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -126,7 +125,6 @@ fn fix_proposes_the_repair_for_a_cited_record_with_no_realized_by() {
     let repairs = parsed["repairs"].as_array().unwrap();
     assert_eq!(repairs.len(), 1, "{parsed}");
     assert_eq!(repairs[0]["computed_value"], "Implemented");
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -137,7 +135,6 @@ fn a_test_path_outside_every_back_pointer_path_is_refused_at_load() {
     let text =
         String::from_utf8_lossy(&out.stdout).to_string() + &String::from_utf8_lossy(&out.stderr);
     assert!(text.contains("test_paths"), "{text}");
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -174,8 +171,6 @@ fn a_glob_test_path_and_a_prefix_work_together_and_an_unmatched_entry_is_reporte
                 .contains("test path '**/*.nomatch.*'")
     });
     assert!(hit, "{parsed}");
-    std::fs::remove_dir_all(&dir).ok();
-    std::fs::remove_dir_all(&dir2).ok();
 }
 
 #[test]
@@ -183,5 +178,4 @@ fn a_malformed_glob_test_path_is_refused_at_load() {
     let dir = repo("badglob", "    test_paths: [\"src/[\"]\n");
     let out = run_urzua(&dir, &["check"]);
     assert!(!out.status.success());
-    std::fs::remove_dir_all(&dir).ok();
 }

@@ -1,0 +1,10 @@
+id: an-in-progress-record-blocked-by-an-unfinished-one-is-reported
+corpus: corpus-m
+invocation: [check]
+expect_exit: 1
+# MILE-5 states InProgress while its dependency MILE-6 is Planned: the record is
+# blocked by the derived rule, and a blocked record may not claim progress.
+expect_findings:
+  - {rule: sequence.status-agreement, severity: error, file: docs/milestones/MILE-5-started-early.md, message_contains: "blocked by MILE-6"}
+expect_no_findings:
+  - {rule: sequence.status-agreement, file: docs/milestones/MILE-6-not-done.md}

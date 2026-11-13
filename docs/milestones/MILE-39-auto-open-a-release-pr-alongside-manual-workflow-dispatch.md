@@ -5,7 +5,7 @@ Phase: '1'
 Track: release-process
 Implements: ADR-45
 Blocked-on: —
-Realized-by: code:.github/workflows/prepare-release.yml
+Realized-by: code:.github/workflows/prepare-release.yml@sha256:0e4d28280d1a77819841035b7ed7da5ee570cf96e80875d2f1e8cc83d7596b8d, code:knope.toml@sha256:08a547f0466a1644c3fdf68782538ef13af3535220f7028d460a1b0b25f08f8e, code:.github/scripts/release-guard.sh@sha256:d4ea7d90a19766e0b90b00ecfa5b3eb3b18bd01d27de44fb630320c645b90078
 ---
 # 39 — Auto-open a release PR alongside manual workflow_dispatch
 
@@ -30,7 +30,9 @@ that opens itself is a standing, visible reminder instead of a step nobody's wat
 
 ## Done means
 
-`prepare-release.yml` triggers on push to `main` and, when unreleased changesets exist, opens or updates a release pull request carrying the staged version bump and compiled `CHANGELOG.md`, so a maintainer reviews and merges a normal PR; it has no trigger that pushes a release straight to `main` (`ADR-45` replaced the `workflow_dispatch` path this milestone first planned to keep).
+- `prepare-release.yml` triggers on push to `main`. — evidence: code:.github/workflows/prepare-release.yml@sha256:0e4d28280d1a77819841035b7ed7da5ee570cf96e80875d2f1e8cc83d7596b8d
+- When unreleased changesets exist, `prepare-release.yml` opens or updates a release pull request carrying the staged version bump and compiled `CHANGELOG.md`, so a maintainer reviews and merges a normal PR. — evidence: code:.github/workflows/prepare-release.yml@sha256:0e4d28280d1a77819841035b7ed7da5ee570cf96e80875d2f1e8cc83d7596b8d, code:knope.toml@sha256:08a547f0466a1644c3fdf68782538ef13af3535220f7028d460a1b0b25f08f8e, code:.github/scripts/release-guard.sh@sha256:d4ea7d90a19766e0b90b00ecfa5b3eb3b18bd01d27de44fb630320c645b90078
+- `prepare-release.yml` has no trigger that pushes a release straight to `main` (`ADR-45` replaced the `workflow_dispatch` path this milestone first planned to keep). — evidence: code:.github/workflows/prepare-release.yml@sha256:0e4d28280d1a77819841035b7ed7da5ee570cf96e80875d2f1e8cc83d7596b8d
 
 > **Revision log**
 >
@@ -42,3 +44,5 @@ that opens itself is a standing, visible reminder instead of a step nobody's wat
 > | 2026-11-04 | `Realized-by` added; `Status` stays Done. **Why:** `status.delivery-agreement` (`MILE-183`) asks a `Done` milestone for delivery evidence; the locators name the code, tests or decision record that deliver it, taken from the changes that built it. | **structural** |
 > | 2026-11-04 | Superseded in part by `ADR-45`; `Status` stays Done. **Why:** the closure audit of #234 found that the instruction to keep `workflow_dispatch` working no longer holds: `prepare-release.yml` has only a `push` trigger on `main`, the release PR being the mechanism `ADR-45` decided. What this milestone delivered, the release PR opened or updated automatically on push to `main`, is unchanged. | **structural** |
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. The criteria are those the delivered work met, checked against `Realized-by` and the code; `Status` stays Done. | **structural** |
+> | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |
+> | 2026-11-08 | Pinned (attested by beauwilliams, identity: gh-verified, actor: agent): 3 locators pinned, 3 file-level, 0 scoped. Evidence: .github/workflows/prepare-release.yml@sha256:0e4d28280d1a, knope.toml@sha256:08a547f0466a, .github/scripts/release-guard.sh@sha256:d4ea7d90a197 Reason: Pinned the files as they are now after checking each against the record it evidences: schema_version.rs, commands/migrate.rs, table.rs and config.yaml still carry the schema version window and the cross-record rules (MILE-34), AGENTS.md still instructs agents to track work in the record types, verify against real runs, never silently rewrite an Accepted decision and not build speculative capability (MILE-36), prepare-release.yml still triggers only on push to main and opens a release pull request with knope.toml and release-guard.sh (MILE-39), section.rs still implements required sections and the y-statement shape (MILE-4, MILE-5), CHANGELOG.md, rust/Cargo.toml and the release workflows still show releases past v0.1.0 consuming changesets (MILE-40), report.rs, action.rs, table.rs and generate-rule-table.py still give every finding a suggested action (MILE-44), report.rs, config.rs and runner.rs still carry the info level (MILE-46), document_model.rs still reads a second corpus's declared model (MILE-51), and the Phase A rule modules, config.yaml and checks.yml still hold the header, pointer, field, filename and supersession rules (MILE-56). **Why:** a claim is renewed only over pinned code and test evidence. | **structural** |

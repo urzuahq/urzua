@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: [MILE-27]
 ---
 
 Add `acyclic: true` to a `relation_pairs` entry to declare it a sequencing relation, for example

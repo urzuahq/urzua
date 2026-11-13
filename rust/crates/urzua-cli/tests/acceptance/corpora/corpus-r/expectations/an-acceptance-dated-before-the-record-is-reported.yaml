@@ -1,0 +1,10 @@
+id: an-acceptance-dated-before-the-record-is-reported
+corpus: corpus-r
+invocation: [check]
+# ADR-2 carries Date 2026-03-02 and Accepted-on 2026-03-01: the declared order says
+# the earlier field may not come after the later. ADR-3 is in order.
+expect_exit: 1
+expect_findings:
+  - {rule: date.field-order, severity: error, file: docs/adr/ADR-2-accepted-first.md, message_contains: Accepted-on}
+expect_no_findings:
+  - {rule: date.field-order, file: docs/adr/ADR-3-in-order.md}

@@ -2,7 +2,7 @@
 Stable-Id: 01M2W6DTP0TWNCMETZ3YM0G9H5
 Status: Fixed
 Found-in: 'Auditing which of this session''s failure modes are checkable rather than only discipline'
-Regression-test: 'rust/crates/urzua-core/src/rules/status.rs::a_declared_pending_value_does_not_satisfy_a_requirement_observed_failing, rust/crates/urzua-core/src/rules/field.rs::pending_is_legitimate_until_the_required_status_observed_failing'
+Realized-by: test:rust/crates/urzua-core/src/rules/status.rs#a_declared_pending_value_does_not_satisfy_a_requirement_observed_failing@sha256:49ca989ed24942d6d1fdf94f3b5d539199273c15c7d875fae6d6f0437ec0f910, test:rust/crates/urzua-core/src/rules/field.rs#pending_is_legitimate_until_the_required_status_observed_failing@sha256:831e14ee29357f9fb914d54a33e3023296f63acc912ddd3298b0bfebc73a67be
 Blocked-on: —
 ---
 # 57 — A `Fixed` bug can declare `Regression-test: not yet written` and nothing objects
@@ -56,3 +56,4 @@ caller-supplied existence check.
 > |---|---|---|
 > | 2026-09-19 | Filed. **Why:** auditing which of this session's failure modes are mechanizable rather than discipline. Skipping the planted-violation test was the most expensive one -- four fixes shipped that compiled, ran and did nothing -- and the corpus already carries a field asserting the test exists, which nothing checks. Eight live instances, four of them stale fields and one a genuinely absent test. | **substantive** |
 > | 2026-11-04 | `Status` set to `Fixed`; `Blocked-on` cleared; `Regression-test` names the covering tests. Fixed in #173 (`MILE-132`: `status.required-field-missing` reads the type's declared `statuses.require` and `statuses.pending`, so a `Fixed` bug whose `Regression-test` is a placeholder is an error) and #224 (`MILE-169`: the seven `Fixed` bugs that held a placeholder were given their real test, and `field.pending` stays quiet only until the status that requires the field). Verified on main: setting `BUG-180`'s `Regression-test` to `not yet written -- later` makes `urzua check` report `status.required-field-missing` (error) and `field.pending`. **Why:** the pairing this record asked for is built as a declaration, not a hardcoded comparison, so nothing waits on `MILE-98`. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 2 `test:` locators and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

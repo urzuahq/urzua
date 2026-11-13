@@ -33,17 +33,12 @@ pub fn section_required(
             if find_section(sections, slot.required).is_none()
                 && !preamble_carries_marker(slot.required, &slot.preamble(sections))
             {
-                findings.push(Finding {
-                    rule: RULE_SECTION_REQUIRED.to_string(),
-                    severity: FindingSeverity::Error,
-                    file: slot.record.path.clone(),
-                    line: None,
-                    waived: None,
-                    declared_severity: None,
-                    suggested_action: None,
-                    action_source: ActionSource::new("section-missing")
-                        .section(slot.required.name.as_str()),
-                    message: if slot.required.aliases.is_empty() {
+                findings.push(Finding::new(
+                    RULE_SECTION_REQUIRED,
+                    FindingSeverity::Error,
+                    slot.record.path.clone(),
+                    ActionSource::new("section-missing").section(slot.required.name.as_str()),
+                    if slot.required.aliases.is_empty() {
                         format!(
                             "required section {} is missing",
                             label(slot.required, &slot.required.name)
@@ -61,20 +56,73 @@ pub fn section_required(
                             aliases.join(", ")
                         )
                     },
-                });
+                ));
             }
             Outcome::Examined
         },
     );
     (
-        RuleExecution {
-            rule: RULE_SECTION_REQUIRED.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records,
-        },
+        RuleExecution::ran(RULE_SECTION_REQUIRED, population, examined_records),
         findings,
     )
+}
+
+/// The exemptions a configuration declares that no record uses (`MILE-7`): a
+/// status listed in a type's `sections.exempt_statuses` that none of the type's
+/// records holds sets nothing aside, so the declaration silently does nothing
+/// (a typo, a status that was renamed or never used). One finding per such
+/// status, on the configuration file, naming the type and the status.
+///
+/// A type with no records is `type.dir-matches-nothing`'s to report, and a
+/// header-less type has no status to match (its records are counted out of
+/// scope by `section.required` itself). Reported under `type.dir-matches-nothing`,
+/// the rule for a declaration that silently does nothing. A record whose header cannot be read
+/// holds no status that could match.
+pub fn section_exemptions_matching_nothing(
+    records: &[Record],
+    config: &Config,
+    config_path: &std::path::Path,
+) -> Vec<Finding> {
+    let mut findings = Vec::new();
+    for (name, rt) in &config.record_types {
+        let Some(decl) = declared_model(name, rt)
+            .ok()
+            .flatten()
+            .and_then(|m| m.sections)
+        else {
+            continue;
+        };
+        if decl.exempt_statuses.is_empty() || rt.has_no_header() {
+            continue;
+        }
+        let field = relation_field_name(config, name, RelationRole::Status);
+        let mut held: std::collections::BTreeSet<String> = Default::default();
+        let mut any = false;
+        for record in records.iter().filter(|r| &r.record_type == name) {
+            any = true;
+            if let crate::header::FieldRead::Present(value) = record.header.read_declared(field) {
+                held.insert(value.trim().to_string());
+            }
+        }
+        if !any {
+            continue;
+        }
+        for status in decl.exempt_statuses.iter().filter(|s| !held.contains(*s)) {
+            findings.push(Finding::new(
+                RULE_TYPE_DIR_MATCHES_NOTHING,
+                FindingSeverity::Warning,
+                config_path.to_path_buf(),
+                ActionSource::new("exempt-status-matches-nothing")
+                    .key_path(["record_types", name.as_str(), "sections", "exempt_statuses"]),
+                format!(
+                    "record type '{name}' declares `sections.exempt_statuses` entry '{status}', but \
+                     no '{name}' record has that status -- the exemption sets nothing aside; \
+                     remove it or correct the status"
+                ),
+            ));
+        }
+    }
+    findings
 }
 
 pub fn section_shape(
@@ -105,16 +153,12 @@ pub fn section_shape(
             };
             let shape = slot.required.shape.as_ref().expect("filtered on shape");
             if let Err((line, message)) = check_shape(section, shape) {
-                findings.push(Finding {
-                    rule: RULE_SECTION_SHAPE.to_string(),
-                    severity: FindingSeverity::Error,
-                    file: slot.record.path.clone(),
-                    line: Some(line),
-                    waived: None,
-                    declared_severity: None,
-                    suggested_action: None,
-                    action_source: ActionSource::new("section-shape").section(slot.required.name.as_str()),
-                    message: if outside {
+                findings.push(Finding::new(
+                    RULE_SECTION_SHAPE,
+                    FindingSeverity::Error,
+                    slot.record.path.clone(),
+                    ActionSource::new("section-shape").section(slot.required.name.as_str()),
+                    if outside {
                         format!(
                             "the preamble (before the first `##` section, where {} is absent): {message}",
                             label(slot.required, &slot.required.name)
@@ -125,18 +169,14 @@ pub fn section_shape(
                             label(slot.required, &slot.required.name)
                         )
                     },
-                });
+                )
+                .at(line));
             }
             Outcome::Examined
         },
     );
     (
-        RuleExecution {
-            rule: RULE_SECTION_SHAPE.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records,
-        },
+        RuleExecution::ran(RULE_SECTION_SHAPE, population, examined_records),
         findings,
     )
 }
@@ -363,7 +403,7 @@ pub(super) fn record_sections(record: &Record, text: &str) -> Vec<Section> {
 
 /// The record's sections down to the type's declared `depth`, nested ones
 /// included, with file-relative line numbers.
-fn record_section_tree(record: &Record, text: &str, depth: u8) -> Vec<Section> {
+pub(super) fn record_section_tree(record: &Record, text: &str, depth: u8) -> Vec<Section> {
     let skip = record.header.region.map_or(0, |(_, end)| end);
     parse_sections_to_depth(&after_header(text, skip), skip + 1, depth)
 }
@@ -377,7 +417,7 @@ fn after_header(text: &str, skip: usize) -> String {
 
 /// The section satisfying `required`, with the heading it was found under:
 /// the `name` first, then each alias in the order declared.
-fn find_section<'a>(
+pub(super) fn find_section<'a>(
     sections: &'a [Section],
     required: &'a RequiredSection,
 ) -> Option<(&'a Section, &'a str)> {
@@ -439,6 +479,7 @@ pub fn section_alias_notices(
                     paths.len(),
                     paths.join(", ")
                 ),
+                detail: None,
             }
         })
         .collect()
@@ -611,7 +652,7 @@ fn cells(line: &str) -> Vec<&str> {
     t.split('|').map(str::trim).collect()
 }
 
-fn is_delimiter_row(line: &str) -> bool {
+pub(crate) fn is_delimiter_row(line: &str) -> bool {
     line.contains('-')
         && cells(line).iter().all(|c| {
             let c = c.strip_prefix(':').unwrap_or(c);
@@ -753,6 +794,49 @@ mod tests {
         assert!(scope.is_empty(), "{scope:?}");
         let (_, f) = run(section_required, REQ, &doc("Accepted", "## Other\n"));
         assert_eq!(f.len(), 2, "the same body under a live status is flagged");
+    }
+
+    #[test]
+    fn an_exemption_that_matches_no_record_is_a_finding_observed_failing() {
+        // `Withdrawn` is declared but no record holds it: the exemption does
+        // nothing, which must be said rather than left silent (`MILE-7`).
+        let r = record("docs/adr/ADR-1-x.md", "adr", &doc("Accepted", ""));
+        let f = section_exemptions_matching_nothing(
+            &[r],
+            &config(REQ),
+            std::path::Path::new(".urzua/config.yaml"),
+        );
+        assert_eq!(f.len(), 1, "{f:?}");
+        assert_eq!(f[0].rule, RULE_TYPE_DIR_MATCHES_NOTHING);
+        assert!(f[0].file.ends_with(".urzua/config.yaml"));
+        assert!(
+            f[0].message.contains("Withdrawn") && f[0].message.contains("adr"),
+            "{}",
+            f[0].message
+        );
+    }
+
+    #[test]
+    fn an_exemption_a_record_holds_is_not_reported() {
+        let r = record("docs/adr/ADR-1-x.md", "adr", &doc("Withdrawn", ""));
+        let f = section_exemptions_matching_nothing(
+            &[r],
+            &config(REQ),
+            std::path::Path::new(".urzua/config.yaml"),
+        );
+        assert!(f.is_empty(), "{f:?}");
+    }
+
+    #[test]
+    fn only_the_unmatched_status_of_several_is_reported() {
+        let r = record("docs/adr/ADR-1-x.md", "adr", &doc("Withdrawn", ""));
+        let f = section_exemptions_matching_nothing(
+            &[r],
+            &config("{from: headings, required: [{name: Context}], exempt_statuses: [Withdrawn, Retired]}"),
+            std::path::Path::new(".urzua/config.yaml"),
+        );
+        assert_eq!(f.len(), 1, "{f:?}");
+        assert!(f[0].message.contains("Retired"), "{}", f[0].message);
     }
 
     #[test]

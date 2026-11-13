@@ -38,6 +38,7 @@ sha256_of() {
 }
 
 work="$(mktemp -d)"
+trap 'rm -rf "$work"' EXIT
 archive="$work/urzua-$target.tar.gz"
 url="$base_url/$repo/releases/download/$version/urzua-$target.tar.gz"
 curl -fsSL -o "$archive" "$url" || fail "could not download $url"
@@ -49,7 +50,7 @@ fi
 
 # The attestation binds this exact digest to the release workflow that built
 # it; a swapped archive fails here even when no checksum was pinned.
-if ! gh attestation verify "$archive" --repo "$repo" >&2; then
+if ! gh attestation verify "$archive" --repo "$repo" --signer-workflow "$repo/.github/workflows/publish-release.yml" >&2; then
   fail "build provenance attestation failed for urzua-$target.tar.gz ($actual)"
 fi
 
@@ -61,7 +62,7 @@ install -m 0755 "$bin" "$dest/urzua"
 
 reported="$("$dest/urzua" --version 2>&1 || true)"
 case "$reported" in
-  *"${version#v}"*) ;;
+  *" ${version#v}"|*" ${version#v} "*) ;;
   *) fail "installed binary reports '$reported', not the pinned $version" ;;
 esac
 

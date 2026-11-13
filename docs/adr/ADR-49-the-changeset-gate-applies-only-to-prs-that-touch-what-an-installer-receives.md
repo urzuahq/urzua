@@ -1,8 +1,8 @@
 ---
 Stable-Id: 01M2MRXWKQW6E283350K1SJ0YQ
 Status: Accepted
-Embodiment: Drift detected
-Realized-by: code:.github/release-paths, code:.github/workflows/ci.yml
+Embodiment: Implemented
+Realized-by: code:.github/release-paths@sha256:a2e6ccc8a52efa7b2ba9e17151a0d6e8816a9529f67ee4ae2e78f362362685e3, code:.github/workflows/ci.yml@sha256:a2b83039753098dd01df37de8b7a526422e290f9fb11ed400ced6a92849ca4ea
 Date: 2026-09-16
 Accepted-on: 2026-09-16
 Author: beauwilliams
@@ -100,3 +100,6 @@ format changes.
 > | 2026-11-04 | `Embodiment` recomputed by `urzua fix`: `Drift detected`. **Why:** every file named in `Realized-by` has changed since this line was last verified, and this pass did not re-verify it, so the record states the drift instead of a stale `Implemented`; the Decision is unchanged. | **substantive** |
 > | 2026-11-04 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:.github/release-paths, code:.github/workflows/ci.yml` -- stated `Implemented` disagreed with the computed value. | **structural** |
 > | 2026-11-04 | Backfilled `Accepted-on` from git history, commit 08222833f. | **structural** |
+> | 2026-11-08 | Pinned (attested by beauwilliams, identity: gh-verified, actor: agent): 2 locators pinned, 2 file-level, 0 scoped. Evidence: .github/release-paths@sha256:a2e6ccc8a52e, .github/workflows/ci.yml@sha256:3d22f5501990 Reason: Pinned the files as they are now after checking each against the record it evidences: header.rs still parses the declared YAML frontmatter shape (ADR-17), fix.rs still has detect_repairs (ADR-19), urzua-id still builds ULID stable ids (ADR-21), main.rs still prints JSON with no --format flag on check (ADR-23), urzua-io still resolves the attesting identity in the ADR-31 order, scripts/generate-dashboard.py still generates the static dashboard (ADR-37), report.rs still defines Report and Notice and main.rs still emits them (ADR-46), publish-release.yml still verifies the tree it ships through checks.yml (ADR-47), knope.toml still releases from changesets (ADR-48), and ci.yml still gates changesets on .github/release-paths (ADR-49). **Why:** a claim is renewed only over pinned code and test evidence. | **structural** |
+> | 2026-11-08 | Tool-authored (by beauwilliams, identity: gh-verified, actor: agent): recomputed `Embodiment` from `Realized-by: code:.github/release-paths@sha256:a2e6ccc8a52efa7b2ba9e17151a0d6e8816a9529f67ee4ae2e78f362362685e3, code:.github/workflows/ci.yml@sha256:3d22f5501990754b5b20fd4a05ebb02b6ed70013382eb19a4f838ffd49610036` -- stated `Drift detected` disagreed with the computed value `Implemented`. | **structural** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.github/workflows/ci.yml` 3d22f5501990 -> a2b830397530. Reason: Read the diff of each pinned file since the pin taken earlier in this branch (the changes main landed in ADR-98's sharded CI and the milestone Kind amendment) and the claim still holds. ci.yml: the required-check job now passes the toJSON of every needed job to .github/scripts/ci-gate.sh (a failure, a cancellation and a skip all fail it, only changeset may skip on a pull request) where it counted failures and cancellations inline, and the jobs and triggers the record names are unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |

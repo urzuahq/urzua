@@ -1,4 +1,5 @@
 ---
+Stable-Id: 01M6R3NK40JBCPESD89J6FN865
 Status: Accepted
 Embodiment: Not started
 Date: 2026-07-29
@@ -80,3 +81,9 @@ hooks, a library API). The window for changing this cheaply is roughly "before v
 ## References
 
 - `README.md` — flagged Rust as named but unjustified
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-05 | Revision log added, 2026-11-05. | **structural** |

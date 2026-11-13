@@ -1,4 +1,5 @@
 ---
+Stable-Id: 01M6R3NK45W4752PXE2MZN5MZW
 Status: Accepted
 Embodiment: Not started
 Date: 2026-09-05
@@ -73,9 +74,25 @@ missing rather than the claim being wrong (RFC-12 §5 carries this argument).
   Tier 3, and whether the single-valued clause holds for display numbers under concurrent merges
   (SPEC-1's hardest open correctness problem).
 
+## Amendment (2026-11-07): the class the tool writes is declared per ADR-94
+
+*Status of this amendment: accepted by the maintainer on 2026-11-07. `Status` stays `Accepted` and the Decision text above is unchanged; `MILE-213` builds it.*
+
+Reversibility says every applied write appends a `structural` revision-log entry. Per `ADR-94`, the class vocabulary
+and the class and date columns are declared on the record type, and the entry carries the type's `tool_class`, laid
+out by the log's own header. The default is `structural`, and a type that declares nothing writes exactly what it
+wrote before.
+
 ## References
 
 - RFC-8 — the proposal this decides.
 - RFC-2 — the detect/apply split and identity resolution this ADR reuses rather than redesigns.
 - ADR-14 — the revision log this ADR's reversibility clause depends on.
 - RFC-12 §5 — the argument for why Embodiment is excluded despite satisfying the eligibility test.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-05 | Revision log added, 2026-11-05. | **structural** |
+> | 2026-11-07 | Amendment added, accepted by the maintainer on 2026-11-07: the class the tool writes is the type's `tool_class` declared per `ADR-94`, defaulting to `structural`. The Decision text and `Status` are unchanged. **Why:** maintainer decision, 2026-11-07, accepting `ADR-94`. | **substantive** |

@@ -1,4 +1,5 @@
 ---
+Stable-Id: 01M6R3NK55Q3CT5TRZVKCHNWWE
 Status: Accepted
 Date: 2026-07-30
 Accepted-on: 2026-09-06
@@ -145,3 +146,9 @@ a real, open future `fix` tier, not retrofitted here.
 - The motivating scenario: a `--refresh-hashes --by "<name>"` invocation
   where the attestation was accurate in substance but the tool had no way
   to distinguish that from a rubber stamp, and `--by` accepted unverified free text.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-05 | Revision log added, 2026-11-05. | **structural** |

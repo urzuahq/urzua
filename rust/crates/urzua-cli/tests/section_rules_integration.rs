@@ -3,6 +3,8 @@
 //! opt-in and read the type's declared `sections`, so one test proves a type
 //! without the declaration is untouched and the rest prove what ran.
 
+mod common;
+
 use std::path::Path;
 use std::process::Command;
 
@@ -24,14 +26,8 @@ const SECTIONS: &str = "    sections:
       exempt_statuses: [Withdrawn]
 ";
 
-fn fixture(
-    name: &str,
-    rules: &str,
-    sections: &str,
-    records: &[(&str, &str)],
-) -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join(format!("urzua-section-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+fn fixture(name: &str, rules: &str, sections: &str, records: &[(&str, &str)]) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-section-{name}"));
     std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     git(&dir, &["init", "-q"]);
@@ -53,7 +49,7 @@ fn fixture(
 }
 
 fn check(dir: &Path) -> (i32, serde_json::Value) {
-    let output = Command::new(env!("CARGO_BIN_EXE_urzua"))
+    let output = common::urzua()
         .args(["check", "docs/"])
         .current_dir(dir)
         .output()
@@ -184,7 +180,6 @@ fn an_exempted_record_does_not_trigger_scope_matches_nothing_observed_failing() 
         findings_of(&report, "config.scope-matches-nothing").is_empty(),
         "{report}"
     );
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 const NESTED: &str = "    sections:
@@ -194,6 +189,39 @@ const NESTED: &str = "    sections:
         - {name: Proposal}
         - {name: Alternatives considered, level: 3, under: Proposal}
 ";
+
+/// `MILE-7`: an exemption no record uses sets nothing aside. It is reported on
+/// the configuration, not left a silent no-op, and a record in the exempt status
+/// clears it.
+#[test]
+fn an_exemption_that_matches_no_record_is_reported_observed_failing() {
+    let dir = fixture(
+        "exempt-unused",
+        "{ type.dir-matches-nothing: warn }",
+        SECTIONS,
+        &[("ADR-1-good.md", GOOD)],
+    );
+    let (_, report) = check(&dir);
+    let found = findings_of(&report, "type.dir-matches-nothing");
+    assert_eq!(found.len(), 1, "{report}");
+    assert!(found[0]["file"]
+        .as_str()
+        .unwrap()
+        .ends_with(".urzua/config.yaml"));
+    assert!(found[0]["message"].as_str().unwrap().contains("Withdrawn"));
+
+    let dir = fixture(
+        "exempt-used",
+        "{ type.dir-matches-nothing: warn }",
+        SECTIONS,
+        &[("ADR-1-good.md", GOOD), ("ADR-3-gone.md", WITHDRAWN)],
+    );
+    let (_, report) = check(&dir);
+    assert!(
+        findings_of(&report, "type.dir-matches-nothing").is_empty(),
+        "{report}"
+    );
+}
 
 #[test]
 fn a_required_h3_under_its_h2_is_checked_end_to_end() {

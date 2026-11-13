@@ -1,0 +1,15 @@
+schema_version: 2
+rules:
+  header.required-fields: error
+  revision-log.version-bump-required: error
+record_types:
+  spec:
+    dir: docs/specs
+    prefix: SPEC
+    required_fields: [Status, Version]
+    header_shape: yaml-frontmatter
+    revision_log:
+      marker: "**Revision log**"
+      version_bump:
+        field: Version
+        classes: [substantive, structural]

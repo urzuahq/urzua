@@ -1,0 +1,10 @@
+id: a-type-with-no-declared-spec-is-reported
+corpus: corpus-s
+invocation: [check]
+# The adr type declares no `spec`; the note type declares SPEC-1. The warning is on
+# the configuration and names the type that lacks one.
+expect_exit: 1
+expect_findings:
+  - {rule: type.no-declared-spec, severity: warning, file: .urzua/config.yaml, message_contains: "record type 'adr'"}
+expect_no_findings:
+  - {rule: type.no-declared-spec, message_contains: "record type 'note'"}

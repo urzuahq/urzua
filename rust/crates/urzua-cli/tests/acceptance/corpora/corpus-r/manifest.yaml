@@ -1,0 +1,9 @@
+fixtures:
+  - path: .urzua/config.yaml
+    irregularity: the config the corpus is validated under, enabling field.leading-reserved-indicator and date.field-order (Date before Accepted-on); not a record.
+  - path: docs/adr/ADR-1-decorated-author.md
+    irregularity: Author is '@ana', a value that begins with the reserved YAML indicator @, which only parses because it is quoted.
+  - path: docs/adr/ADR-2-accepted-first.md
+    irregularity: Accepted-on 2026-03-01 is earlier than Date 2026-03-02, so the record was accepted before it was written.
+  - path: docs/adr/ADR-3-in-order.md
+    irregularity: none -- Accepted-on follows Date, the control for the date-order rule.

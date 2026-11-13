@@ -26,6 +26,8 @@ case "$1" in
   api)
     [ "${FAKE_API:-ok}" = "fail" ] && { echo "HTTP 403" >&2; exit 1; }
     case "$*" in
+      *"/pulls/"*"/reviews"*) cat "$FAKE_REVIEWS"; exit 0 ;;
+      *"/pulls/"*) cat "$FAKE_PULL"; exit 0 ;;
       *"-X PATCH"* | *"-X POST"*) cat "$(echo "$*" | sed -n 's/.*body=@\([^ ]*\).*/\1/p')" >>"$FAKE_GH_LOG"; exit 0 ;;
       *) printf '%s' "${FAKE_COMMENT_ID:-}"; [ -n "${FAKE_COMMENT_ID:-}" ] && echo; exit 0 ;;
     esac ;;
@@ -55,6 +57,16 @@ expect "render: a run that did not run is NOT RUN with its reason, never clean" 
 grep -q 'NOT RUN' "$tmp/c.md"
 expect "render: a missing report is NOT RUN, not clean" $?
 
+# A report over the 128 KB single-argument limit: generated here, mostly waived
+# findings (which a report lists in full), plus two live ones.
+jq -c '.findings = ([range(0; 700) | {rule: "example.rule", severity: "warning", file: "docs/example/\(.).md", line: 1, message: ("a waived finding with a long message " + ("x" * 150)), waived: "docs/waiver/W-1.md"}] + [.findings[0:2][]])' \
+  "$here/fixtures/whole-findings.json" >"$tmp/large.json"
+[ "$(wc -c <"$tmp/large.json")" -gt 200000 ]
+expect "render: the large-report fixture is over 200 KB" $?
+"$here/render.sh" "$tmp/c.md" check "$tmp/large.json" 1 >"$tmp/ann.txt"
+{ ! grep -q 'NOT RUN' "$tmp/c.md" && grep -q '701 waived' "$tmp/c.md" && grep -q '^::' "$tmp/ann.txt"; }
+expect "render: a report over 200 KB renders its findings, not NOT RUN" $?
+
 # ---- post-comment ----
 export REPO=o/r PR_NUMBER=7 GH_TOKEN=x
 "$here/render.sh" "$tmp/findings.md" check "$here/fixtures/whole-findings.json" 1 >/dev/null
@@ -80,6 +92,45 @@ FAKE_API=fail "$here/post-comment.sh" "$tmp/findings.md" >"$tmp/out.txt"
 rc=$?
 { [ "$rc" -eq 0 ] && grep -q '::warning' "$tmp/out.txt"; }
 expect "comment: a failed post warns and exits 0 (never changes the verdict)" $?
+
+: >"$FAKE_GH_LOG"; FAKE_COMMENT_ID=4242 "$here/post-comment.sh" "$tmp/findings.md" >/dev/null
+grep -q 'select(.user.type == "Bot" and' "$FAKE_GH_LOG"
+expect "comment: only a comment authored by a bot account is taken for the gate's own" $?
+
+# The filter itself, on a comment list with a marker planted by a person.
+printf '%s' '[{"id":1,"user":{"type":"User"},"body":"x <!-- urzua-gate --> y"},{"id":2,"user":{"type":"Bot"},"body":"<!-- urzua-gate -->"}]' >"$tmp/comments.json"
+[ "$(jq -r ".[] | select(.user.type == \"Bot\" and (.body | contains(\"<!-- urzua-gate -->\"))) | .id" "$tmp/comments.json")" = "2" ]
+expect "comment: the filter skips a person's comment that carries the marker" $?
+
+# ---- actors ----
+actors() { # pull fixture, reviews fixture -> the file's JSON on stdout
+  FAKE_PULL="$here/fixtures/$1" FAKE_REVIEWS="$here/fixtures/$2" \
+    REPO=o/r PR_NUMBER=7 "$here/actors.sh" "$tmp/actors.json" && cat "$tmp/actors.json"
+}
+
+actors pull.json reviews-approved.json >"$tmp/a.json"
+{ [ "$(jq -c . "$tmp/a.json")" = '{"schema":1,"pr_author":"alice","head_sha":"bbbb222","approvers":["bob"]}' ]; }
+expect "actors: an approved pull request lists its author and the approver on the head commit" $?
+
+actors pull.json reviews-none.json >"$tmp/a.json"
+{ [ "$(jq -c '.approvers' "$tmp/a.json")" = '[]' ] && [ "$(jq -r '.pr_author' "$tmp/a.json")" = alice ]; }
+expect "actors: an unapproved, self-authored pull request lists its author and no approver" $?
+
+actors pull-agent-authored.json reviews-none.json >"$tmp/a.json"
+{ [ "$(jq -r '.pr_author' "$tmp/a.json")" = mallory ] && [ "$(jq -c '.approvers' "$tmp/a.json")" = '[]' ]; }
+expect "actors: a pull request authored by someone outside the group is just that author, with no approver" $?
+
+actors pull.json reviews-stale.json >"$tmp/a.json"
+{ [ "$(jq -c '.approvers' "$tmp/a.json")" = '[]' ]; }
+expect "actors: an approval given before a later push, and one later withdrawn, are not current" $?
+
+FAKE_API=fail actors pull.json reviews-approved.json >"$tmp/out.txt" 2>&1; rc=$?
+{ [ "$rc" -ne 0 ] && grep -q 'could not read pull request' "$tmp/out.txt"; }
+expect "actors: an API failure fails with a stated reason and writes no pass" $?
+
+REPO= PR_NUMBER= "$here/actors.sh" "$tmp/x.json" >"$tmp/out.txt" 2>&1; rc=$?
+{ [ "$rc" -ne 0 ] && grep -q 'REPO and PR_NUMBER are required' "$tmp/out.txt"; }
+expect "actors: a missing repository or pull request number fails" $?
 
 # ---- history ----
 git init -q "$tmp/origin" && (
@@ -113,8 +164,9 @@ mk_release() { # version reported
 mk_release 1.2.3
 archive="$tmp/rel/o/r/releases/download/v1.2.3/urzua-x86_64-unknown-linux-gnu.tar.gz"
 sum="$(sha256sum "$archive" | cut -d' ' -f1)"
+mkdir -p "$tmp/inst-tmp"
 inst() { # extra env assignments via "$@"
-  env VERSION=v1.2.3 REPO=o/r RELEASE_BASE_URL="file://$tmp/rel" DEST="$tmp/dest" TARGET_OS=Linux TARGET_ARCH=X64 "$@" \
+  env VERSION=v1.2.3 REPO=o/r RELEASE_BASE_URL="file://$tmp/rel" DEST="$tmp/dest" TARGET_OS=Linux TARGET_ARCH=X64 TMPDIR="$tmp/inst-tmp" "$@" \
     "$here/install.sh"
 }
 
@@ -125,6 +177,9 @@ expect "install: a pinned release with a matching checksum and attestation insta
 inst SHA256=deadbeef >/dev/null 2>"$tmp/err.txt"; rc=$?
 { [ "$rc" -ne 0 ] && grep -q 'checksum mismatch' "$tmp/err.txt"; }
 expect "install: a checksum mismatch fails" $?
+
+grep -q -- "--signer-workflow o/r/.github/workflows/publish-release.yml" "$tmp/gh.log"
+expect "install: the attestation is pinned to the release workflow" $?
 
 FAKE_ATTEST=fail inst >/dev/null 2>"$tmp/err.txt"; rc=$?
 { [ "$rc" -ne 0 ] && grep -q 'attestation failed' "$tmp/err.txt"; }
@@ -142,5 +197,16 @@ mk_release 9.9.9
 inst >/dev/null 2>"$tmp/err.txt"; rc=$?
 { [ "$rc" -ne 0 ] && grep -q 'not the pinned' "$tmp/err.txt"; }
 expect "install: a binary that reports another version fails" $?
+
+# A reported version that merely contains the pinned one as a substring is another version.
+mk_release 11.2.35
+inst >/dev/null 2>"$tmp/err.txt"; rc=$?
+{ [ "$rc" -ne 0 ] && grep -q 'not the pinned' "$tmp/err.txt"; }
+expect "install: a reported version that only contains the pinned one fails" $?
+
+# Every install above, successful or refused, downloaded into a work directory
+# under TMPDIR; none may be left behind on the runner.
+[ -z "$(ls -A "$tmp/inst-tmp")" ]
+expect "install: no work directory is left behind, on success or on a refusal" $?
 
 [ "$fails" -eq 0 ] && echo "urzua-gate: all tests passed" || { echo "urzua-gate: $fails test(s) failed" >&2; exit 1; }

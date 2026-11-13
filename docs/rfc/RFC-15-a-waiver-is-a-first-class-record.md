@@ -1,4 +1,5 @@
 ---
+Stable-Id: 01M6R3NK52SDJ2YZ1ZNAMVXE1P
 Status: Accepted
 Date: 2026-09-04
 Accepted-on: 2026-09-05
@@ -83,3 +84,9 @@ waiver's `expires` field, which is itself a normal, visible, reviewable edit to 
 - SPEC-3 — "a disabled rule is reported as skipped, never omitted," the principle §2 extends to
   waived findings.
 - ADR-10 — the core+profile schema a `waiver` record type extends.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-05 | Revision log added, 2026-11-05. | **structural** |

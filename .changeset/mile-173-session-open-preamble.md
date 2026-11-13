@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: []
 ---
 
 The commands that read the corpus now share one startup path (repository root, config, tracked-file

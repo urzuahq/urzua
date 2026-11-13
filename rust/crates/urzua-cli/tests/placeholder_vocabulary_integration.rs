@@ -3,6 +3,8 @@
 //! `.urzua/config.yaml` against planted records, so the shipped declaration is
 //! what is exercised, not a fixture's.
 
+mod common;
+
 use std::path::Path;
 use std::process::Command;
 
@@ -12,8 +14,7 @@ fn own_config() -> String {
 }
 
 fn run_with_own_config(name: &str, adr: &str) -> serde_json::Value {
-    let dir = std::env::temp_dir().join(format!("urzua-placeholder-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+    let dir = common::TempDir::new(&format!("urzua-placeholder-{name}"));
     std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     assert!(Command::new("git")
@@ -30,7 +31,7 @@ fn run_with_own_config(name: &str, adr: &str) -> serde_json::Value {
         .status()
         .unwrap()
         .success());
-    let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
+    let out = common::urzua()
         .args(["check", "docs/"])
         .current_dir(&dir)
         .output()
@@ -40,7 +41,7 @@ fn run_with_own_config(name: &str, adr: &str) -> serde_json::Value {
 
 fn adr(deciders: &str) -> String {
     format!(
-        "---\nStatus: Accepted\nDate: 2026-11-04\nAuthor: Ana\nDeciders: {deciders}\n---\n# 1 - First\n"
+        "---\nStatus: Accepted\nDate: 2026-11-04\nAccepted-on: 2026-11-04\nAuthor: Ana\nDeciders: {deciders}\n---\n# 1 - First\n"
     )
 }
 

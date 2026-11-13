@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: []
 ---
 
 Adds the first slice of `SPEC-4`'s acceptance suite (`MILE-101`): a seeded, hand-rolled generator over

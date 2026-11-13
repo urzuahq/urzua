@@ -3,9 +3,11 @@
 //! offline; `refresh` is exercised against a loopback server that replays the
 //! recorded GitHub responses in `tests/fixtures/github`, never the network.
 
+mod common;
+
 use std::io::{Read, Write};
 use std::net::TcpListener;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 
@@ -20,9 +22,8 @@ fn git(dir: &Path, args: &[&str]) {
 
 const RULE: &str = "{ citation.issue-exists: { level: warn, reference_sections: [\"References\"], skip_revision_log: true, issue_refs: { snapshot: \".urzua/known-refs.json\", repository: \"urzuahq/urzua\", forms: [number, url] } } }";
 
-fn fixture(name: &str, rules: &str, body: &str, snapshot: Option<&str>) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("urzua-refs-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+fn fixture(name: &str, rules: &str, body: &str, snapshot: Option<&str>) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-refs-{name}"));
     std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     git(&dir, &["init", "-q"]);
@@ -45,7 +46,7 @@ fn fixture(name: &str, rules: &str, body: &str, snapshot: Option<&str>) -> PathB
 }
 
 fn urzua(dir: &Path, args: &[&str], envs: &[(&str, &str)]) -> (i32, serde_json::Value, String) {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_urzua"));
+    let mut command = common::urzua();
     command
         .args(args)
         .current_dir(dir)
@@ -391,4 +392,19 @@ fn a_declared_header_field_is_checked_end_to_end_and_only_when_declared() {
         findings_of(&report, "citation.issue-exists").is_empty(),
         "{report}"
     );
+}
+
+#[test]
+fn the_snapshot_notice_is_said_only_when_the_citation_rule_is_selected_observed_failing() {
+    let rules = RULE.replacen("{ ", "{ header.required-fields: warn, ", 1);
+    let dir = fixture("notice-filter", &rules, BODY, Some(SNAPSHOT));
+    let (_, other, _) = urzua(&dir, &["check", "--rules", "header.required-fields"], &[]);
+    assert!(
+        !other["notices"].to_string().contains("known-refs"),
+        "{other}"
+    );
+    let (_, own, _) = urzua(&dir, &["check", "--rules", "citation.issue-exists"], &[]);
+    assert!(own["notices"].to_string().contains("known-refs"), "{own}");
+    let (_, all, _) = urzua(&dir, &["check"], &[]);
+    assert!(all["notices"].to_string().contains("known-refs"), "{all}");
 }

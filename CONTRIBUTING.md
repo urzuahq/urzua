@@ -18,11 +18,14 @@ The first `make build` of a clone wires the versioned hooks: `pre-commit` runs `
 and `pre-push` runs fmt, clippy and `urzua check`. `make hooks-install` does only the wiring. When
 the binary is not built, or `check` cannot run, the commit hook prints a `NOT RUN` banner on stderr
 and lets the commit through, because CI is the guarantee (ADR-71); blocking findings stop the
-commit. `urzua doctor` reports each hook's state. If you already use a `core.hooksPath` of your own,
+commit. In Claude Code an editor hook (`.claude/settings.json`, ADR-69) also judges a `Write` or
+`Edit` of a governed record before it is written and blocks an error the edit introduced. `urzua doctor` reports each hook's state. If you already use a `core.hooksPath` of your own,
 the build leaves it alone and says so.
 
 `make help` lists every target. Native `cargo` commands work fine inside `rust/` for anyone who
 prefers them; `make ci` is the thing CI actually runs, so it's the one to trust before pushing.
+
+CI also fails a pull request when `urzua fix --rebaseline` lists a stale evidence pin; re-pin it with a per-file reason (`.claude/commands/repin.md`).
 
 ## Adding a rule to `urzua check`
 
@@ -57,6 +60,7 @@ while the change is fresh rather than reconstructed later at release time (ADR-2
 ```markdown
 ---
 default: minor
+closes: []
 ---
 
 # Add `urzua new`
@@ -66,7 +70,13 @@ pick a number.
 ```
 
 `default` is the package identifier (there's one package in this repo); the value is `major`,
-`minor`, or `patch`. Everything after the closing `---` is the changelog entry itself — written for
+`minor`, or `patch`. `closes` lists, on one line, the records the change closes (`closes: [BUG-60,
+BUG-61]`, one id, or `closes: []` when it closes none); every fragment carries it, and `urzua check`
+fails a fragment that lists a record still open, an id that names no record, or a value that is not
+a one-line list (a block list is rejected by the release tool as well). It is a claim made as data:
+a record the change merely mentions is not listed, and a mention in the text is never read as a
+claim. The release tool ignores the key, so the records a release closes do not reach `CHANGELOG.md`;
+a release note that wants them says so in the text (ADR-85). Everything after the closing `---` is the changelog entry itself — written for
 the person installing the tool, not a restatement of the commit. Create one with `knope
 document-change` (interactive) or write the file by hand, named anything ending in `.md`. CI fails a
 PR with neither a changeset nor the `no-changeset` label (for changes with nothing to tell an
@@ -78,12 +88,14 @@ tag-triggered release workflow takes it from there.
 
 ## Ground rules
 
-- **Every RFC follows [`docs/rfc/_template.md`](docs/rfc/_template.md) exactly** — banner block,
-  then Summary / Motivation / Proposal / Open questions / Non-goals / References.
+- **Start every record with `urzua new <type> "<title>"`** (or `/rfc`, `/adr`, `/milestone` in
+  Claude Code). It writes the YAML-frontmatter header and the section skeleton from
+  `.urzua/templates/`; an RFC keeps Summary / Motivation / Proposal / Open questions / Non-goals /
+  References.
 - **Open questions stay open.** Don't smooth over uncertainty to make a proposal look more decided
   than it is.
 - **A `Status` value is never silently rewritten** during an otherwise structural edit. Substantive
   changes get called out as substantive.
 - **A waiver, not an ignore list.** If `urzua check` flags something in your own corpus that's a
-  reviewed exception, see ADR-11 for the waiver record shape — don't reach for a config-level
+  reviewed exception, see SPEC-10 for the waiver record shape — don't reach for a config-level
   exclusion.

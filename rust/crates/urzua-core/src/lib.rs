@@ -9,14 +9,18 @@
 
 #![forbid(unsafe_code)]
 
+pub mod authority;
 pub mod config;
 pub mod document_model;
+pub mod done_items;
 pub mod embodiment_model;
 pub mod field_state;
 pub mod fix;
 pub mod graph;
+pub mod harness;
 pub mod header;
 pub mod line_edit;
+pub mod locator;
 pub mod migrate;
 pub mod new_record;
 /// `SPEC-4`'s acceptance suite (`MILE-101`). Test-only: it exercises the
@@ -26,7 +30,9 @@ mod property;
 pub mod record;
 pub mod refs_snapshot;
 pub mod report;
+pub mod reverify;
 pub mod rules;
+pub mod schema_version;
 pub mod section;
 pub mod status_model;
 pub mod values;
@@ -47,12 +53,4 @@ pub enum FieldState {
     Pending,
     /// Field holds a real value.
     Present,
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum Error {
-    #[error("unrecognized status: {0}")]
-    UnknownStatus(String),
-    #[error("unrecognized embodiment: {0}")]
-    UnknownEmbodiment(String),
 }

@@ -1,4 +1,5 @@
 ---
+Stable-Id: 01M6R3NK4J12XGX9E1X5A28VF8
 Status: Accepted
 Embodiment: Implemented
 Date: 2026-07-29
@@ -64,13 +65,14 @@ Specifics:
    assigning a display number can never break a link.
 4. **Filenames** carry the display number for browsability
    (`0042-some-decision.md`), with the stable ID in the record's frontmatter as the authority. A
-   filename/ID mismatch is a lint error — a check that already exists in the source implementations.
+   mismatch between the filename's number and the number in the H1 title is a lint error:
+   `filename.title-consistency` already makes that check, which covers the display-number half only.
 5. **Back-pointers in code** (`Implements: ...`) accept either form. Display numbers are what humans
    type; the resolver maps them to stable IDs, and the linter flags any display number that has
    drifted from the record it names.
 6. **Existing corpora migrate** by retaining their current sequential numbers as display numbers and
    backfilling stable IDs from git history timestamps. No renumbering, no invalidated references —
-   a hard requirement, since breaking three real corpora to fix a theoretical collision would be
+   a hard requirement, since breaking existing corpora to fix a theoretical collision would be
    self-defeating.
 
 Exact ID encoding (ULID vs. UUIDv7 vs. a scheme with a shorter human-typable prefix) is an
@@ -82,8 +84,7 @@ implementation detail deferred to the v0 spec, not decided here. The load-bearin
 **Poorly reversible once records exist — this is the least reversible decision of the first three.**
 Identifiers are referenced by every other record, by code back-pointers, and potentially by external
 systems. Changing the scheme later means rewriting every cross-reference in every corpus, which is
-exactly the class of bulk-rewrite operation that has caused documented data-loss incidents
-elsewhere.
+exactly the class of bulk-rewrite operation that can lose data.
 
 The mitigation is that the *encoding* stays deferred and swappable, while the *separation of
 identity from display* — the part that's hard to undo — is the part with the strongest argument
@@ -117,3 +118,4 @@ behind it.
 > |---|---|---|
 > | 2026-11-04 | `Embodiment` recomputed: `Not started` to `Implemented`, by hand with the row `urzua fix` would write. **Why:** the `urzua-id` crate cites this record with an `Implements:` back-pointer, and `embodiment.consistency` now judges a record with no `Realized-by` field that a back-pointer cites (`MILE-149`); the Decision is unchanged. | **structural** |
 > | 2026-11-04 | Backfilled `Accepted-on` from git history, commit 8946a0b1d. | **structural** |
+> | 2026-11-09 | Removed an appeal to research a reader cannot open; the argument now rests on the Context's own reasoning and the `filename.title-consistency` rule; the Decision is unchanged. | **structural** |

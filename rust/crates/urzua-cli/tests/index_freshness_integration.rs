@@ -2,6 +2,8 @@
 //! declared index artifacts, the rule compares them with the records, and a
 //! run says how many it compared.
 
+mod common;
+
 use std::path::Path;
 use std::process::Command;
 
@@ -14,9 +16,8 @@ fn git(dir: &Path, args: &[&str]) {
     assert!(status.success(), "git {args:?} failed");
 }
 
-fn repo(name: &str, indexes: &str) -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join(format!("urzua-index-test-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+fn repo(name: &str, indexes: &str) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-index-test-{name}"));
     std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     git(&dir, &["init", "-q"]);
@@ -47,7 +48,7 @@ fn commit_all(dir: &Path) {
 }
 
 fn check(dir: &Path) -> (std::process::Output, serde_json::Value) {
-    let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
+    let out = common::urzua()
         .arg("check")
         .current_dir(dir)
         .output()
@@ -92,7 +93,6 @@ fn a_current_index_passes_and_the_census_counts_it() {
         .find(|r| r["rule"] == "index.freshness")
         .unwrap();
     assert_eq!(exec["population"]["examined"], 1, "{exec}");
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -116,7 +116,6 @@ fn a_missing_record_an_extra_entry_and_a_stale_title_each_block() {
     assert!(text.iter().any(|m| m.contains("title 'Old'")));
     assert!(all.iter().all(|f| f["file"] == "docs/adr/README.md"));
     assert_eq!(out.status.code(), Some(1), "{parsed}");
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -133,7 +132,6 @@ fn a_missing_index_file_and_a_removed_marker_pair_block() {
     assert_eq!(all.len(), 1, "{parsed}");
     assert!(all[0]["message"].as_str().unwrap().contains("marker"));
     assert_eq!(out.status.code(), Some(1));
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -155,7 +153,7 @@ fn the_rule_does_not_load_without_indexes_or_with_a_bad_format() {
     ] {
         let dir = repo(name, declaration);
         commit_all(&dir);
-        let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
+        let out = common::urzua()
             .arg("check")
             .current_dir(&dir)
             .output()
@@ -166,12 +164,11 @@ fn the_rule_does_not_load_without_indexes_or_with_a_bad_format() {
             "{name}: {}",
             String::from_utf8_lossy(&out.stdout)
         );
-        std::fs::remove_dir_all(&dir).ok();
     }
 }
 
 fn index_cmd(dir: &Path, apply: bool) -> (i32, serde_json::Value) {
-    let mut cmd = Command::new(env!("CARGO_BIN_EXE_urzua"));
+    let mut cmd = common::urzua();
     cmd.arg("index").current_dir(dir);
     if apply {
         cmd.arg("--apply");

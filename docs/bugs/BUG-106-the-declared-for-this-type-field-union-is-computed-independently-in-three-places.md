@@ -2,7 +2,7 @@
 Stable-Id: 01M33QPNXNC0ARDJAP27B5HGDH
 Status: Fixed
 Found-in: "A /code-review v0.3.0...main pass, reviewing everything landed for the 0.4.0 release"
-Regression-test: "declared_fields_unions_required_and_known, config.rs"
+Realized-by: test:rust/crates/urzua-core/src/config.rs#declared_fields_unions_required_and_known@sha256:f7b2584fedb2431840f75abbe6d4d4770418ba8529783abdd3e18bb4d273b771
 ---
 # 106 — the declared for this type field union is computed independently in three places
 
@@ -40,3 +40,5 @@ projection-wiring bug was found, by inspection rather than a test.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-22 | Filed and fixed in one pass. **Why:** found by a full-release code review; a mechanical extraction with no design decision to defer. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs#declared_fields_unions_required_and_known` (lines 4151-4181) 79057f66868f -> f7b2584fedb2. Reason: Read the diff of each pinned span since the old pin and the claim still holds. config.rs#declared_fields_unions_required_and_known: the test's Config or report fixture literal gained newly added default fields (for example roadmap, attestation, new, discovery, harness, authority, permanent, rules_selected, include_untracked), assertions unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |

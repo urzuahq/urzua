@@ -2,6 +2,16 @@ schema_version: 2
 # Warnings fail this repository's own CI (MILE-145): the zero-warning state
 # must not regress. Both checks.yml steps read this, whole-repo and --base.
 fail_on: warning
+# `urzua new` fetches pull-request head refs and skips the numbers they hold, and
+# the sibling worktrees' (ADR-93, MILE-89); the gate fetches the same refs for
+# identity.open-pr-collision. Plain git: no gh, no API.
+new:
+  check_open_prs: true
+# Govern the records an author has written and not yet staged (ADR-92, MILE-206):
+# discovery includes untracked, non-ignored files directly under a declared
+# record directory, so a plain `check` and the gate read a draft before `git add`.
+discovery:
+  include_untracked: true
 # The Embodiment vocabulary (MILE-144): the states evidence computes to, highest
 # tier first, and the evidence category that lifts a record to each. The engine
 # knows no state name; `claims_built` marks the states that say work was built.
@@ -13,6 +23,49 @@ embodiment:
     - {state: Implemented, evidence: code, claims_built: true}
     - {state: Specified, evidence: spec}
   none: Not started
+# Symbol resolvers for scoped evidence pins (ADR-74, MILE-185): how a `Realized-by`
+# locator `path#Symbol` finds the item it pins. The engine knows no language; each
+# file type a decision cites at symbol level is declared here, with its own
+# test vectors in SPEC-3. A line range (`#L10-L40`) needs no resolver.
+locator_resolvers:
+  - name: rust
+    glob: "**/*.rs"
+    # A type, function, trait or union, with its visibility and qualifiers (`const fn` included).
+    # `const`, `static`, `type` and `mod x;` end at a `;`, not a brace, so a brace_balanced end would
+    # run on into the next item: they are not addressable by symbol; pin a line range instead.
+    start: '^\s*(pub(\([^)]*\))?\s+)?((const|async|unsafe)\s+)*(fn|struct|enum|trait|union)\s+{symbol}\b'
+    end: brace_balanced
+    # Doc comments and attributes directly above an item are part of it.
+    leading: '^\s*(#\[|///|//!)'
+    # `Type::member`: a `struct Type {` or an inherent `impl Type {` / `impl<T> Type<T> {`, in as many blocks as the file has.
+    container:
+      start: '^\s*(impl(<.*?>)?\s+|(pub(\([^)]*\))?\s+)?struct\s+){symbol}(<[^{]*>)?\s*(where\b.*|\{.*)?$'
+      end: brace_balanced
+      spans: all
+    # Two member patterns, counted together: a method ends at its closing brace, and
+    # a struct field (`Type::field`, in the `struct Type {` span) at the next field.
+    member:
+      - start: '^\s*(pub(\([^)]*\))?\s+)?((const|async|unsafe)\s+)*fn\s+{symbol}\b'
+        end: brace_balanced
+      - start: '^\s*(pub(\([^)]*\))?\s+)?{symbol}\s*:([^:]|$)'
+        end: indent
+    # `Type::<Trait>::member`: `impl Trait for Type {`, with an optional path before the trait.
+    trait_container:
+      start: '^\s*impl(<.*?>)?\s+([A-Za-z_][A-Za-z0-9_]*::)*{trait}(<[^{]*>)?\s+for\s+{symbol}\b'
+      end: brace_balanced
+      spans: all
+  # `record_types::bug` pins the `bug` entry of this file; `rules::embodiment.consistency` one rule.
+  - name: yaml
+    glob: "**/*.yaml"
+    start: '^\s*{symbol}:'
+    end: indent
+    container:
+      start: '^{symbol}:'
+      end: indent
+    member:
+      start: '^\s+{symbol}:'
+      end: indent
+
 record_types:
   adr:
     dir: "docs/adr"
@@ -24,11 +77,15 @@ record_types:
       - "Date"
       - "Author"
       - "Deciders"
+      - "Stable-Id"
     header_shape: "yaml-frontmatter"
+    # The fields `urzua new` fills with today and the author (MILE-176). Named here so the
+    # declaration is read from this repository's config; they equal the defaults.
+    relation_fields: {date: "Date", author: "Author"}
     known_fields:
       - "Embodiment"
+      - "Last-audited"
       - "Realized-by"
-      - "Stable-Id"
       - "Accepted-on"
       - "Derives-from"
       - "Supersedes / Superseded-by"
@@ -56,8 +113,13 @@ record_types:
         - "unknown"
         - "none recorded"
         - {pattern: '(?i)^(tbd|to be (decided|determined))\b'}
+      # The acceptance date (SPEC-3, MILE-132): present once a decision has been
+      # accepted, whatever became of it after, and absent before or without it.
       require:
         - {when: ["Accepted"], fields: ["Deciders"]}
+        - {when: ["Accepted", "Superseded", "Retired"], fields: ["Accepted-on"]}
+      forbid:
+        - {when: ["Proposed", "Rejected"], fields: ["Accepted-on"]}
     spec: "SPEC-16"
     # How this type's revision log is found (MILE-167): the line itself, not
     # any line that mentions the text. This is the default, declared here so
@@ -65,7 +127,13 @@ record_types:
     # (also the default) makes `urzua fix --apply` refuse a record with no log
     # to record the write in; `required: false` would apply without a row
     # (MILE-159).
-    revision_log: {marker: "**Revision log**", required: true}
+    revision_log:
+      marker: "**Revision log**"
+      required: true
+      classes: [substantive, structural]
+      class_column: Class
+      date_column: Date
+      tool_class: structural
     # A type declares Embodiment and Realized-by together (BUG-41); this checks the type, not each record.
     companion_fields:
       - [embodiment_state, embodiment_locator]
@@ -77,8 +145,11 @@ record_types:
     # unexamined, not a configuration that reaches nothing.
     sections:
       from: headings
+      depth: 2
       required:
         - {name: Context}
+        - {name: Decision}
+        - {name: Consequences}
       exempt_statuses: ["Rejected"]
   rfc:
     dir: "docs/rfc"
@@ -86,9 +157,12 @@ record_types:
       - "Status"
       - "Date"
       - "Author"
-    header_shape: "yaml-frontmatter"
-    known_fields:
       - "Stable-Id"
+    header_shape: "yaml-frontmatter"
+    # The fields `urzua new` fills with today and the author (MILE-176). Named here so the
+    # declaration is read from this repository's config; they equal the defaults.
+    relation_fields: {date: "Date", author: "Author"}
+    known_fields:
       - "Accepted-on"
       - "Supersedes / Superseded-by"
       - "Amends"
@@ -108,11 +182,35 @@ record_types:
         Accepted: ["Superseded"]
         # A rejected proposal can be reopened as a draft (RFC-30).
         Rejected: ["Draft"]
+      # The acceptance date, as for an ADR: present once accepted (and after it
+      # is superseded), absent while a proposal is open or after it is rejected.
+      require:
+        - {when: ["Accepted", "Superseded"], fields: ["Accepted-on"]}
+      forbid:
+        - {when: ["Draft", "Discussion", "Rejected"], fields: ["Accepted-on"]}
     spec: "SPEC-17"
+    # An RFC carries a revision log (BUG-50): a record without one is a finding
+    # of revision-log.change-class-required, which is opt-in per type.
+    revision_log:
+      marker: "**Revision log**"
+      required: true
+      classes: [substantive, structural]
+      class_column: Class
+      date_column: Date
+      tool_class: structural
     pointer_fields:
       - "Implements"
       - "Amends"
     narrative_fields: []
+    # Every proposal states what it is, why, and the design (the template's
+    # headings). A Rejected proposal still made its case, so none is exempt.
+    sections:
+      from: headings
+      depth: 2
+      required:
+        - {name: Summary}
+        - {name: Motivation}
+        - {name: Proposal}
   spec:
     dir: "docs/specs"
     # The directory index is not a spec (MILE-152).
@@ -127,9 +225,14 @@ record_types:
       - "Version"
       - "Author"
       - "Subject"
-    header_shape: "yaml-frontmatter"
-    known_fields:
       - "Stable-Id"
+    header_shape: "yaml-frontmatter"
+    # The fields `urzua new` fills with today and the author (MILE-176). Named here so the
+    # declaration is read from this repository's config; they equal the defaults. `title`
+    # names the field it fills with the record's title: a spec's Subject, so a scaffold
+    # is not born failing `field.quality` on a blank required field (MILE-74).
+    relation_fields: {date: "Date", author: "Author", title: "Subject"}
+    known_fields:
       - "Embodiment"
       - "Realized-by"
       - "Derives-from"
@@ -159,46 +262,69 @@ record_types:
     # A substantive or structural revision-log row on a changed spec means its
     # Version moves (BUG-51, SPEC-18): `revision-log.version-bump-required`
     # compares against the merge base's copy.
+    # The vocabulary, columns and tool class are today's values, declared (ADR-94, MILE-213).
     revision_log:
       marker: "**Revision log**"
       required: true
-      version_bump: {field: "Version", classes: ["substantive", "structural"]}
+      classes: [substantive, structural]
+      class_column: Class
+      date_column: Date
+      tool_class: structural
+      version_bump: {field: "Version", classes: ["substantive", "structural"], initial: "0.1"}
     pointer_fields:
       - "Derives-from"
       - "Implements"
       - "Parent"
     narrative_fields: []
+    sections:
+      from: headings
+      required:
+        - {name: Purpose}
   milestone:
     dir: "docs/milestones"
+    # A record of this type carries a revision log (BUG-50); opt-in per type.
+    revision_log:
+      marker: "**Revision log**"
+      required: true
+      classes: [substantive, structural]
+      class_column: Class
+      date_column: Date
+      tool_class: structural
     prefix: "MILE"
     required_fields:
       - "Status"
       - "Phase"
       - "Track"
+      - "Stable-Id"
     header_shape: "yaml-frontmatter"
     known_fields:
-      - "Stable-Id"
       - "Implements"
       - "Blocked-on"
       - "Depends-on"
       - "Blocks"
+      - "Last-audited"
       - "Realized-by"
+      - "Kind"
+      - "Non-reference-ids"
     statuses:
-      values: ["Planned", "InProgress", "Blocked", "Done", "WontDo"]
+      values: ["Planned", "InProgress", "Done", "WontDo"]
       success: ["Done"]
       failure: ["WontDo"]
+      # Blocked is derived only (RFC-48, ADR-83): a milestone is blocked when a
+      # Depends-on target is not Done, and no milestone writes it as a status.
+      # A blocked milestone may be Planned; InProgress and Done claim progress
+      # a blocked milestone cannot have (sequence.status-agreement).
+      progress: ["InProgress", "Done"]
       # Done is implementable: code that implements a delivered milestone keeps
       # citing it (MILE-133), so a back-pointer to a Done milestone is not a
       # change landing ahead of its decision.
       implementable: ["Planned", "InProgress", "Done"]
-      # A milestone starts Planned, or Blocked when filed already waiting, or Done
-      # when the PR that files it delivers it. Done can be reopened; WontDo is
-      # terminal (SPEC-6).
-      initial: ["Planned", "Blocked", "Done"]
+      # A milestone starts Planned, or Done when the PR that files it delivers
+      # it. Done can be reopened; WontDo is terminal (SPEC-6).
+      initial: ["Planned", "Done"]
       transitions:
-        Planned: ["InProgress", "Blocked", "Done", "WontDo"]
-        InProgress: ["Planned", "Blocked", "Done", "WontDo"]
-        Blocked: ["Planned", "InProgress", "Done", "WontDo"]
+        Planned: ["InProgress", "Done", "WontDo"]
+        InProgress: ["Planned", "Done", "WontDo"]
         Done: ["Planned", "InProgress"]
       # Status is held to the evidence (MILE-183): the PR that delivers a
       # milestone sets Realized-by and Done together. Implemented or Verified
@@ -209,8 +335,41 @@ record_types:
       delivery:
         delivered_tiers: ["Implemented", "Verified"]
         unevidenced_tiers: ["Not started"]
-        not_done: ["Planned", "InProgress", "Blocked"]
+        not_done: ["Planned", "InProgress"]
         set_status: "Done"
+        # A milestone's Done means is a checklist whose items each name their
+        # evidence, and its status is computed from the items (ADR-96,
+        # MILE-215). The bug type is not itemised.
+        items:
+          section: "Done means"
+          clause_separator: " — "
+          evidence_marker: "evidence:"
+          waiver_marker: "waived:"
+          partial_status: "InProgress"
+          resolving_tiers: ["Specified", "Implemented", "Verified"]
+          # A milestone declares its kind (ADR-96, amendment of 2026-11-07). A
+          # `decision` milestone is done when every item cites a decided record
+          # (an Accepted ADR or RFC, an Accepted or Shipped spec) or evidence
+          # above one: a Draft or Proposed record does not count. `build`, and a
+          # milestone that declares no kind, keep `delivered_tiers` above.
+          kind:
+            field: "Kind"
+            kinds:
+              - {name: build}
+              - name: decision
+                delivered_tiers: ["Specified", "Implemented", "Verified"]
+                cited_records: success
+          waiver_categories:
+            - {name: not-applicable}
+            - {name: superseded-by-decision, cite: required}
+            - {name: deferred-to, cite: required, expires: required}
+            - {name: process-outcome}
+          # An item still holding the milestone template's placeholder text is
+          # unfilled: it never resolves and `status.done-items-shape` reports it
+          # (ADR-96, amendment of 2026-11-08).
+          pending:
+            - {pattern: "^Replace this item"}
+            - {pattern: "^Add one item per criterion"}
     # Every milestone, open or closed, states its Done means (maintainer
     # decision of 2026-11-04): a Done milestone is judged against it and not
     # against its What. A WontDo milestone is set aside on purpose, as a
@@ -229,14 +388,22 @@ record_types:
       - "Blocked-on"
   bug:
     dir: "docs/bugs"
+    # A record of this type carries a revision log (BUG-50); opt-in per type.
+    revision_log:
+      marker: "**Revision log**"
+      required: true
+      classes: [substantive, structural]
+      class_column: Class
+      date_column: Date
+      tool_class: structural
     required_fields:
       - "Status"
       - "Found-in"
-      - "Regression-test"
+      - "Stable-Id"
     header_shape: "yaml-frontmatter"
     known_fields:
+      - "Last-audited"
       - "Realized-by"
-      - "Stable-Id"
       - "Implements"
       - "Blocked-on"
     statuses:
@@ -253,17 +420,26 @@ record_types:
         WontFix: ["Open"]
         "Not a bug": ["Open"]
         Rejected: ["Open"]
-      # Whole values only (BUG-65): a Regression-test that merely mentions
-      # the word, or names a test called a_pending_..., is a real value.
+      # Whole values only (BUG-65): a field that merely mentions the word is
+      # a real value, and a placeholder like these is not.
       pending:
         - "pending"
         - "not yet written"
         - {pattern: '(?i)^(not yet written|planned:)'}
-      # A placeholder Regression-test is legitimate while a bug is Open and a
-      # gap once it is Fixed (MILE-169): status.required-field-missing flags the
-      # Fixed ones, and field.pending (pending_until_required) stays quiet until then.
-      require:
-        - {when: ["Fixed"], fields: ["Regression-test"]}
+      # Status is held to the evidence (ADR-84): a bug's evidence is its
+      # Realized-by, as for every other type. A `test:` locator computes to
+      # Verified, a `code:` locator to Implemented; either under Open is a
+      # disagreement `urzua fix --apply` repairs, and a deliberately open bug
+      # with evidence is waived with a reason. A Fixed bug with no evidence is
+      # reported (a done record with no evidence is reported, ADR-84); one
+      # that legitimately has none is waived. A source back-pointer is not
+      # evidence here: only the declared field counts.
+      delivery:
+        delivered_tiers: ["Verified", "Implemented"]
+        unevidenced_tiers: ["Not started"]
+        not_done: ["Open"]
+        set_status: "Fixed"
+        back_pointer_evidence: false
     # Bug records name their first section "What was wrong" or, in older ones,
     # one of the aliases below: they are accepted, and `urzua check` discloses
     # which records use one (MILE-165).
@@ -278,6 +454,20 @@ record_types:
       - "Blocked-on"
   waiver:
     dir: "docs/waiver"
+    # A record of this type carries a revision log (BUG-50); opt-in per type.
+    revision_log:
+      marker: "**Revision log**"
+      required: true
+      classes: [substantive, structural]
+      class_column: Class
+      date_column: Date
+      tool_class: structural
+    # The suppression type (BUG-74): the engine reads this declaration, not the
+    # type name, so the records here suppress findings whatever the type is called.
+    role: suppression
+    # A waiver without a real Reason suppresses nothing (BUG-177): SPEC-10 calls
+    # the Reason the whole reviewability point of not using an ignore list.
+    effective_requires: [Reason]
     # The padded form, chosen so the declared identity is exercised here
     # (MILE-151): `urzua new waiver` fits its file name and H1 to this pattern,
     # and the identity rules read the same grammar back. The one existing
@@ -287,12 +477,75 @@ record_types:
       - "Rule"
       - "Scope"
       - "Reason"
+      - "Stable-Id"
     header_shape: "yaml-frontmatter"
     known_fields:
-      - "Stable-Id"
       - "Expires"
+      - "Category"
+      - "Justified-by"
     spec: "SPEC-10"
-    pointer_fields: []
+    # The record that justifies a permanent waiver (ADR-86).
+    pointer_fields: ["Justified-by"]
+    narrative_fields: []
+    # Where a waiver without Expires may take effect (ADR-86, MILE-193). Declaring
+    # this closes permanence for every other rule. Each category is a cause that
+    # will not change; "covered by an existing suite" is not one, a covering suite
+    # is cited in Realized-by.
+    permanent:
+      - rule: status.delivery-agreement
+        reason_field: Category
+        categories:
+          - {name: docs-or-workflow-only}
+          - {name: performance-only}
+          - {name: test-removed-by-decision, cite: required}
+          - {name: behaviour-preserving-refactor}
+          - {name: unreachable-failure}
+        cite_field: Justified-by
+  # A fact nobody builds (RFC-48, MILE-187): an open question or an observed
+  # signal that a Depends-on can point at. Declared from configuration alone, with
+  # primitives that already exist: a directory, a prefix and a padded identity, a
+  # status vocabulary with success and failure sets, transitions, and
+  # statuses.require. The engine knows no type called condition; MILE-187's test
+  # declares the same shape under another name and gets the same findings.
+  condition:
+    dir: "docs/conditions"
+    prefix: "COND"
+    identity: {from: filename, pattern: '^(?P<prefix>COND)-(?P<number>\d{4})-(?P<slug>.+)$'}
+    revision_log:
+      marker: "**Revision log**"
+      required: true
+      classes: [substantive, structural]
+      class_column: Class
+      date_column: Date
+      tool_class: structural
+    required_fields:
+      - "Status"
+      - "Stable-Id"
+    header_shape: "yaml-frontmatter"
+    known_fields:
+      - "Met-by"
+    statuses:
+      values: ["Open", "Met", "Dropped"]
+      success: ["Met"]
+      failure: ["Dropped"]
+      # A condition is filed Open; a person moves it to Met or Dropped, both
+      # terminal. Met names its evidence in Met-by.
+      initial: ["Open"]
+      transitions:
+        Open: ["Met", "Dropped"]
+      require:
+        - {when: ["Met"], fields: ["Met-by"]}
+      # Unset while Open: naming a record before the signal happened asserts
+      # evidence that does not exist (SPEC-23).
+      forbid:
+        - {when: ["Open"], fields: ["Met-by"]}
+    sections:
+      from: headings
+      required:
+        - {name: Signal}
+    spec: "SPEC-23"
+    pointer_fields:
+      - "Met-by"
     narrative_fields: []
 
 # An RFC that amends another is echoed by the amended RFC's Amended-by. A claim
@@ -325,10 +578,78 @@ relation_pairs:
     cross_type: true
     acyclic: true
 
+# The committed log of editor-hook overrides (ADR-78, MILE-188): the hook appends a row
+# whenever a named override lets a blocked edit through, and override.unreviewed
+# reports a row no person has reviewed, so it surfaces in the pull request.
+override_log: .urzua/override-log.md
+# Which errors the editor hook blocks on (ADR-78 amendment, MILE-195, SPEC-3): only an
+# error the edit introduces. CI holds the repository at zero findings, so a record on
+# disk with an error does not reach main; `all` is for a repository without that gate.
+block_on: introduced
+# Who an attestation names (ADR-89 section 5, MILE-201, SPEC-3): a verified gh login wins over
+# --by, as RFC-2 and MILE-66 set. The row records the source and the actor kind. Agents here run
+# under the maintainer's token, so a gh-verified row names the maintainer: pass `--actor agent`.
+# require_verified stays off so a run without a gh session is recorded as `asserted`, not refused.
+attestation:
+  identity: gh-verified
+  require_verified: false
+
+# The agent harness this repository declares and has installed (ADR-89, MILE-200, MILE-202).
+# `urzua harness install` writes the adapter's hook entries and translator; a guardrail is on only
+# when named. `acceptance` and `protected-paths` make `urzua harness run edit` refuse an agent's
+# Write, Edit or MultiEdit that moves a record to a gated status or writes a protected path (the
+# override of ADR-78 does not lift it); a person edits outside the agent harness. Both default to
+# on_unjudged: deny. `post-command` reports, never blocks, what a Bash command changed.
+harness:
+  outside_writes: shared
+  adapters: [claude-code]
+  instructions_file: AGENTS.md
+  guardrails:
+    acceptance: {enabled: true}
+    protected-paths: {enabled: true}
+    editor-hook: {enabled: true}
+    post-command: {enabled: true}
+    session-start: {enabled: true}
+# Who may accept a record and change a protected path (ADR-89 section 4, MILE-200, SPEC-3). CI reads
+# this through diff.decider-required and the actors file the gate action writes; the evidence is the
+# pull request's author (`pr-author`, the default: a host bars an author from approving their own
+# pull request, so `pr-approver` could never be met by one maintainer). That proves authorship only:
+# agents here run under the maintainer's token, so the rule cannot tell an agent from the maintainer.
+# The bypasses (a Bash write, a shell edit of the guardrails, a pull request that changes its own
+# workflow, an agent acting as the maintainer) are the accepted risk of ADR-89 section 4.
+authority:
+  # Who may decide is read from the base revision of the pull request, so a pull request cannot add
+  # its author to a group in the change it asks to have approved (ADR-89, amendment of 2026-11-09).
+  decider_table: base
+  # No waiver record can silence diff.decider-required: a gated change is cleared by a decider, not
+  # by a record the same pull request writes (ADR-89, amendment of 2026-11-09, gate waivers).
+  waivable: never
+  deciders:
+    maintainers: {logins: [beauwilliams]}
+  gates:
+    - {type: adr, to: [Accepted, Rejected, Superseded, Retired], by: maintainers}
+    - {type: rfc, to: [Accepted, Rejected, Superseded], by: maintainers}
+    - paths: [".claude", ".git-hooks", ".github/workflows", ".github/actions", ".github/scripts", "knope.toml", ".urzua/config.yaml", ".urzua/templates"]
+      by: maintainers
+
+# The pairs that are dependencies, and how `urzua roadmap` groups its records
+# (ADR-82, ADR-83). The derived blocked value reads these and no other acyclic
+# pair, and a containment pair declared acyclic would not order work or block
+# its children, so only the sequencing pair is named. The engine names no grouping field.
+# work_types (ADR-82, Amendment of 2026-11-05, MILE-196) lists every type the roadmap
+# orders. A condition is a fact that is met or dropped, never built, so it is left out:
+# it still blocks its dependents and is listed under waiting_on, but it is in no wave,
+# not in the ready set and not on the critical path.
+roadmap:
+  pairs: ["sequencing"]
+  group_by: ["Phase", "Track"]
+  work_types: ["adr", "rfc", "spec", "milestone", "bug", "waiver"]
+
 # Every rule this repository has turned on, and at what level. A rule that is
 # not named here does not run (ADR-53) and is reported as not-enabled rather
 # than omitted (ADR-7).
 rules:
+  override.unreviewed: warn
   embodiment.requires-accepted-status:
     level: warn
   # A milestone's Status agrees with its delivery evidence (MILE-183): the PR
@@ -336,11 +657,19 @@ rules:
   # when they disagree.
   status.delivery-agreement: error
   header.required-fields: error
-  header.field-set-consistency: warn
+  # A condition's own extension prefix (MILE-141): `ext-` keys pass the closed
+  # key set on that type; every other type stays on the closed set.
+  header.field-set-consistency:
+    level: warn
+    extension_prefixes:
+      condition: "ext-"
   header.pointer-field-clean: warn
   type.no-declared-spec: warn
   type.dir-matches-nothing: warn
   identity.collision: error
+  # An added record that shares a number with a fetched pull request (ADR-93). A
+  # warning, because plain git cannot tell a closed pull request from an open one.
+  identity.open-pr-collision: warn
   type.record-outside-declared-dir: warn
   config.pointer-declaration-missing: error
   config.companion-declaration-missing: error
@@ -349,6 +678,8 @@ rules:
   config.known-fields-declaration-missing: error
   config.header-none-has-no-required-fields: error
   config.scope-matches-nothing: warn
+  # Reports this file when it is read through a schema upgrade (ADR-77, MILE-34).
+  config.schema-version-outdated: warn
   section.required: error
   config.pointer-narrative-overlap: error
   pointer.resolution: error
@@ -366,6 +697,7 @@ rules:
   status.transition-allowed: error
   status.unreachable-state: warn
   status.required-field-missing: error
+  status.forbidden-field-present: error
   date.field-valid:
     level: error
     date_fields: ["Date", "Accepted-on"]
@@ -378,6 +710,7 @@ rules:
   field.untrimmed-value: warn
   field.leading-reserved-indicator: warn
   header.field-case-mismatch: error
+  header.case-variant-key: warn
   filename.title-consistency: error
   filename.identity-pattern: warn
   relation.supersession-reciprocity: error
@@ -387,13 +720,13 @@ rules:
   # names nothing.
   sequence.cycle: error
   sequence.unresolved-blocker: error
+  # A blocked milestone does not state a status that claims progress (MILE-144).
+  sequence.status-agreement: error
   revision-log.change-class-required: error
   # Judged on a `--base` run against the merge base's copy of the record
   # (BUG-51); `not-applicable` on a whole-repo run.
   revision-log.version-bump-required: error
-  narrative-field.stale:
-    level: warn
-    terminal_statuses: ["Fixed", "WontFix", "Accepted", "Rejected", "Superseded", "Retired", "Done", "WontDo"]
+  narrative-field.stale: warn
   # Maintainer decision 2026-11-04: a 14-day grace window, so a code change can
   # land before its record catches up without breaking a zero-warning build (MILE-129).
   embodiment.consistency:
@@ -406,28 +739,78 @@ rules:
     # States a human sets that no evidence can compute (MILE-148): a record
     # stating one is not reported as drift, and `urzua fix` leaves it alone.
     sticky_states: ["Deprecated", "Inactive"]
+  # A claim expires after a period declared per record type, status and evidence
+  # tier, and only `urzua reverify` renews it (ADR-97, MILE-129). `Last-audited` is
+  # the day a claim was re-verified, written by the command alone; `require_pin`
+  # makes a renewal refuse code or test evidence that is not hash-pinned. The
+  # first expiry of a record with no `Last-audited` is spread by `spread_days`,
+  # an offset from its Stable-Id, so the corpus does not expire on two days.
+  embodiment.claim-expired:
+    level: warn
+    anchor_field: "Last-audited"
+    require_pin: [code, test]
+    # ADR-97, amendment of 2026-11-09: what drift of a cited locator does to a renewal, per
+    # category. A `spec:` locator cites a record that has its own lifecycle and is left
+    # unpinned, so `reverify --pin-only` cannot clear its drift: a reviewer's `--reason`
+    # renews over it and the revision row names the cited record and its newest revision
+    # row. Code and test drift stay blocked until the locator is re-pinned.
+    drift: {code: block, test: block, spec: acknowledge}
+    max_batch: 10
+    periods:
+      - {type: milestone, status: [Done], days: 45, spread_days: 45}
+      - {type: bug, status: [Fixed], days: 60, spread_days: 60}
+      - {type: spec, status: [Shipped, Accepted], days: 60, spread_days: 60}
+      - {type: adr, status: [Accepted], days: 90, spread_days: 90}
+  # ADR-96: a Done item's evidence is shape-checked (a leading checkbox, an unknown kind, a
+  # waiver that is not a locator clause), and a waived item is judged against the record that
+  # grounds it. Both are errors here because the milestone corpus is built on them (MILE-215).
+  status.done-items-shape: error
+  status.waived-item-stale: warn
+  # ADR-97 section 6: the companion of claim-expired. A hand-typed `Last-audited` extends a
+  # claim and a drift window, so one not written by `urzua reverify` is reported.
+  embodiment.claim-renewal-unattested: warn
+  # Declared off, not left undeclared (MILE-80): this repository has no pair with
+  # `cross_type: false`, no `section_shapes` declaration and no `application_paths`
+  # for a source-and-records diff, so each rule would have nothing to judge. A rule
+  # declared `off` reports `not-enabled` exactly as an undeclared one does; the
+  # declaration only records that leaving it off was a choice.
+  relation.cross-type-disallowed: off
+  section.shape: off
+  diff.source-and-records-mixed: off
   embodiment.locator-exists: error
-  # Off: an advisory suggestion, and several ADRs citing one rule module is
-  # expected now that the rule engine is split into modules (MILE-131).
-  embodiment.locator-promotion-candidate: off
+  # Advisory (MILE-46, ADR-87): several ADRs citing one rule module is expected now that
+  # the rule engine is split into modules (MILE-131), so the nudge is reported and counted
+  # but never fails `fail_on: warning`. `scope: changed` (ADR-90) keeps it to the moment a
+  # record that cites a shared locator is touched, so it does not list records nobody edited.
+  embodiment.locator-promotion-candidate:
+    level: info
+    scope: changed
   # Superseded only, for now. Draft is available and deliberately not enabled:
   # 28 records point at a Draft target today, and turning it on before deciding
   # whether that is acceptable here would be adopting a policy by accident.
   # Catches a changeset announcing it closed a record the record itself says
   # is still open -- exactly what shipped and had to be corrected on
-  # 2026-09-17. Statuses are declared: a built-in list would stop applying the
-  # moment a type used one it did not know.
+  # 2026-09-17. Which statuses close a record is each type's own `success` and
+  # `failure` declaration (BUG-178), so no `closed_statuses` list is kept here.
   claim.status-agreement:
     level: error
     claim_paths: [".changeset"]
-    closed_statuses: ["Fixed", "Done", "Accepted", "Rejected", "Superseded", "Retired", "Withdrawn"]
+    # A changeset says which records it closes as data (ADR-85, BUG-66), and the
+    # rule checks that instead of a sentence. `strict`: every fragment carries the
+    # key, `closes: []` when it closes nothing. A record the change only mentions
+    # is not listed.
+    closes: closes
+    strict: true
+    # Prose is not read for a claim (ADR-88, MILE-197): `strict` is on and every
+    # fragment carries `closes:`, so the field is the only claim.
+    verb_claims: false
   pointer.target-status:
     level: warn
     not_in: ["Superseded"]
     # Every declared pointer/narrative field except Derives-from: lineage to a
     # Superseded record is permanently true history, not a stale dependency
     # (BUG-172).
-    fields: ["Implements", "Amends", "Parent", "Blocked-on", "Depends-on"]
+    fields: ["Implements", "Amends", "Parent", "Blocked-on", "Depends-on", "Justified-by"]
   # Code that cites a record (`Implements: ADR-12`) must cite one at a status
   # its type declares `implementable` (MILE-133). Zero findings when enabled.
   embodiment.back-pointer-decision-accepted:
@@ -441,15 +824,63 @@ rules:
     level: error
     back_pointer_paths: ["rust", "scripts", "ts", "platform"]
     test_paths: ["rust/crates/urzua-cli/tests", "rust/crates/*-core/tests"]
+  # Advisory (MILE-189, ADR-87): a `Realized-by` locator on a file under these paths
+  # could be an `Implements:` or `Verifies:` comment in that file. At `info` the
+  # findings are reported and counted but never fail `fail_on: warning`. `scope:
+  # changed` (ADR-90, MILE-203) judges only the records a `--base` diff adds or
+  # changes: the closed records that cite source files here are nobody's to edit,
+  # so the nudge appears when someone touches one.
+  embodiment.locator-on-back-pointer-path:
+    level: info
+    scope: changed
+    back_pointer_paths: ["rust", "scripts", "ts", "platform"]
+    test_paths: ["rust/crates/urzua-cli/tests", "rust/crates/*-core/tests"]
+  # Declared boundaries (MILE-125, ADR-80): the paths that leave the corpus, with
+  # why, and what each kind forbids. A boundary's severity is the level of its
+  # findings; the rule's level only turns the rule on.
+  boundary.published-path-reference:
+    level: error
+    boundaries:
+      # The composite action adopters reference by `uses:`. A record id in it
+      # points at a document no adopter's checkout holds. The fixtures are test
+      # inputs shaped like real findings, so they are excused here, in the
+      # declaration, and nowhere else.
+      - paths: [".github/actions/urzua-gate"]
+        kind: published
+        reason: "The gate action ships to adopting repositories, whose readers cannot resolve this repository's record ids."
+        severity: error
+        exclude: [".github/actions/urzua-gate/fixtures"]
+      # Written by `urzua index --apply` from the records (MILE-152); a
+      # human-authored back-pointer there is overwritten on the next run.
+      - paths: ["docs/adr/README.md", "docs/specs/README.md"]
+        kind: generated
+        reason: "The two directory indexes are generated from the records and rewritten wholesale."
+        severity: error
   # The PR gate (`urzua check --base`, checks.yml): a diff that changes the
   # Rust sources must change a governing record in the same diff (MILE-124).
   # Inert on a whole-repo run, where it reports not-applicable.
   # Integration tests sit in each crate's tests/ directory, so a change to
   # them alone is not a change to behaviour needing a record (MILE-158).
+  # The decision gate (MILE-133): the diff must also change an adr at Accepted,
+  # a spec at Accepted or Shipped, a record whose Implements names one (a
+  # milestone), or a bug (a mechanical fix needs no decision, AGENTS.md). A
+  # Proposed ADR or a Draft spec does not release it.
   diff.source-requires-record:
     level: error
     source_paths: ["rust/crates"]
     exclude_paths: ["rust/crates/*/tests"]
+    decision_types:
+      adr: ["Accepted"]
+      spec: ["Accepted", "Shipped"]
+    fix_types: ["bug"]
+    link_fields: ["Implements"]
+  # A gated move (an ADR or RFC to Accepted, Rejected or Superseded, an ADR also to Retired) or a protected path in the diff needs the
+  # pull request's author in the `maintainers` group (ADR-89 section 4, MILE-200). The gate action
+  # writes the actors file and passes it as `--actors`; a local run has none and reports `info`. It
+  # proves authorship only, and cannot tell an agent under the maintainer's token from the maintainer.
+  # `require_evidence` stays off here (maintainer decision, 2026-11-06): CI records the actors and does
+  # not fail on them, which matches the accepted risk of ADR-89 section 4.
+  diff.decider-required: error
   # Prose citations of decision ids resolve (MILE-136). RFC-822 and RFC-4122
   # are public standards that share the RFC prefix, not records (MILE-156).
   citation.resolution:

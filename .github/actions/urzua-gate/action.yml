@@ -4,7 +4,7 @@ description: >-
   checks the checkout has the history drift reads, runs `urzua check` and, on a
   pull request, `urzua check --base`, and reports the findings as inline
   annotations and one summary comment that is updated rather than stacked.
-# Implements: MILE-180, ADR-71
+# A reusable gate for repositories that adopt urzua.
 #
 # Adopting repositories:
 #
@@ -52,6 +52,24 @@ inputs:
     description: The directory holding the checkout to check.
     required: false
     default: "."
+  actors:
+    description: >-
+      "true" writes the pull request's author and the logins whose approval is
+      current for its head commit from the GitHub API (`actors.sh`) and passes
+      the file to `urzua check --base` as `--actors`, which the rule
+      `diff.decider-required` reads. Only for a repository that declares
+      `authority`. Needs `pr-number`. The file proves authorship and approval,
+      not who decided. If the API cannot be read the file is not passed and the
+      rule reports what it could not check; with `require_evidence` off that
+      is an `info`, so an API outage passes the gate (set `require_evidence:
+      true` on the rule to fail closed). A merge-queue run has no pull request
+      number and writes no file, so it is judged the same way. Declare `authority.decider_table:
+      base` in the configuration (recommended): who may decide is then read
+      from the pull request's base revision, so a pull request cannot add its
+      author to a decider group, or delete a gate, in the change it asks to
+      have approved. Undeclared reads the pull request's own table.
+    required: false
+    default: "false"
   annotate:
     description: Emit inline annotations for findings ("true" or "false").
     required: false
@@ -103,21 +121,37 @@ runs:
         BIN: ${{ inputs.binary != '' && inputs.binary || steps.install.outputs.bin }}
         BASE_REF: ${{ inputs.base-ref }}
         WORKDIR: ${{ inputs.working-directory }}
+        ACTORS: ${{ inputs.actors }}
+        PR_NUMBER: ${{ inputs.pr-number }}
+        REPO: ${{ github.repository }}
+        GH_TOKEN: ${{ inputs.github-token }}
       run: |
         set -uo pipefail
         # Relative paths are relative to the workspace, whatever job-level
         # defaults.run.working-directory a caller set.
         cd "$GITHUB_WORKSPACE"
-        BIN="$(realpath "$BIN")"
+        BIN="$(realpath "$BIN")" || exit 2
         out="$RUNNER_TEMP/urzua-gate"
         mkdir -p "$out"
-        cd "$WORKDIR"
+        cd "$WORKDIR" || exit 2
         # Exit codes: 0 pass, 1 blocking findings, 2 could not run. Every run
         # is kept and reported before the verdict is given.
         "$BIN" check >"$out/check.json"
         echo "check_code=$?" >> "$GITHUB_OUTPUT"
         if [ -n "$BASE_REF" ]; then
-          "$BIN" check --base "origin/$BASE_REF" >"$out/base.json"
+          # Who made the change, for `diff.decider-required`.
+          # Written by the API, passed as data: urzua fetches nothing.
+          actors_args=()
+          if [ "$ACTORS" = "true" ]; then
+            if [ -z "$PR_NUMBER" ]; then
+              echo "::warning::urzua-gate: actors is true but there is no pull request number, so no actors file was written"
+            elif "$GITHUB_ACTION_PATH/actors.sh" "$out/actors.json"; then
+              actors_args=(--actors "$out/actors.json")
+            else
+              echo "::warning::urzua-gate: the actors file could not be written, so gated changes are judged without it"
+            fi
+          fi
+          "$BIN" check --base "origin/$BASE_REF" ${actors_args[@]+"${actors_args[@]}"} >"$out/base.json"
           echo "base_code=$?" >> "$GITHUB_OUTPUT"
         fi
         echo "dir=$out" >> "$GITHUB_OUTPUT"

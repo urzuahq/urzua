@@ -1,7 +1,9 @@
 //! MILE-159: `revision_log.required` governs whether `fix --apply` needs a log section.
 //! Real git-repo fixtures, real binary; all output is JSON.
 
-use std::path::{Path, PathBuf};
+mod common;
+
+use std::path::Path;
 use std::process::Command;
 
 fn git(dir: &Path, args: &[&str]) {
@@ -19,7 +21,7 @@ fn commit_all(dir: &Path) {
 }
 
 fn run_urzua(dir: &Path, args: &[&str]) -> std::process::Output {
-    Command::new(env!("CARGO_BIN_EXE_urzua"))
+    common::urzua()
         .args(args)
         .current_dir(dir)
         .output()
@@ -38,9 +40,8 @@ const PATH: &str = "docs/adr/ADR-1-a.md";
 const LOGLESS: &str =
     "---\nEmbodiment: Not started\nRealized-by: code:src/a.rs\n---\n# ADR-1: T\n\nBody.\n";
 
-fn fixture(name: &str, revision_log: &str, record: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("urzua-fix-log-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+fn fixture(name: &str, revision_log: &str, record: &str) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-fix-log-{name}"));
     std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
     std::fs::create_dir_all(dir.join("src")).unwrap();
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
@@ -66,7 +67,6 @@ fn not_required_apply_writes_the_field_without_a_log_row() {
         after.replace("Embodiment: Implemented", "Embodiment: Not started"),
         LOGLESS
     );
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -86,7 +86,6 @@ fn required_by_default_a_missing_section_fails_naming_the_record() {
     assert!(std::fs::read_to_string(dir.join(PATH))
         .unwrap()
         .contains("Not started"));
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -108,7 +107,6 @@ fn required_true_declared_with_a_heading_fails_without_the_section() {
             .contains("History"),
         "{v}"
     );
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -116,5 +114,27 @@ fn a_non_boolean_required_is_a_config_error() {
     let dir = fixture("bad", "    revision_log: {required: maybe}\n", LOGLESS);
     let out = run_urzua(&dir, &["fix"]);
     assert_eq!(out.status.code(), Some(2), "{out:?}");
-    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// MILE-213 (ADR-94): `fix --apply` writes the type's `tool_class`, laid out by
+/// the log's own header, so a repository whose vocabulary has no `structural`
+/// never gets a row its own rule rejects.
+#[test]
+fn apply_writes_the_declared_tool_class_into_the_declared_columns() {
+    let record = "---\nEmbodiment: Not started\nRealized-by: code:src/a.rs\n---\n# ADR-1: T\n\n> **Revision log**\n>\n> | Class | Date | Change |\n> |---|---|---|\n> | **major** | 2026-01-01 | Initial. |\n";
+    let dir = fixture(
+        "tool-class",
+        "    revision_log:\n      marker: \"**Revision log**\"\n      classes: [major, minor]\n      class_column: Class\n      date_column: Date\n      tool_class: minor\n",
+        record,
+    );
+    let out = run_urzua(&dir, &["fix", "--apply", "--force", "--by", "me"]);
+    let v = json(&out);
+    assert_eq!(v["status"], "applied", "{v}");
+    let after = std::fs::read_to_string(dir.join(PATH)).unwrap();
+    let row = after
+        .lines()
+        .find(|l| l.contains("Tool-authored"))
+        .unwrap_or_else(|| panic!("no tool row in {after}"));
+    assert!(row.starts_with("> | **minor** | "), "{row}");
+    assert!(!after.contains("**structural**"), "{after}");
 }

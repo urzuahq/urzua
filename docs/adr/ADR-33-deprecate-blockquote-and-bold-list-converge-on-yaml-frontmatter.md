@@ -1,4 +1,5 @@
 ---
+Stable-Id: 01M6R3NK4MKC5E0K2GWT7DA61K
 Status: Accepted
 Embodiment: Not started
 Date: 2026-09-07
@@ -140,3 +141,9 @@ support stays, and full removal remains separately decided.
   empties that ADR's own declared axis.
 - MILE-85 — the deferred full-removal decision this amendment names explicitly rather than leaving
   as unstructured prose.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-05 | Revision log added, 2026-11-05. | **structural** |

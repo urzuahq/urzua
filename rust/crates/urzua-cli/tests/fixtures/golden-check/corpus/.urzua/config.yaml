@@ -1,0 +1,42 @@
+schema_version: 2
+rules:
+  header.required-fields: error
+  header.field-set-consistency: warn
+  pointer.resolution: error
+  field.quality: error
+  field.pending: warn
+  filename.title-consistency: error
+  relation.supersession-reciprocity: error
+  revision-log.change-class-required: error
+  embodiment.consistency: warn
+  embodiment.locator-exists: error
+  field.untrimmed-value: warn
+  header.field-case-mismatch: warn
+  type.dir-matches-nothing: warn
+  identity.collision: error
+  type.record-outside-declared-dir: warn
+  type.no-declared-spec: warn
+  header.pointer-field-clean: warn
+  config.pointer-declaration-missing: warn
+  config.pointer-field-not-known: warn
+  config.pointer-narrative-overlap: warn
+  config.header-none-has-no-required-fields: warn
+  config.relation-field-not-known: warn
+  config.known-fields-declaration-missing: warn
+  config.scope-matches-nothing: warn
+record_types:
+  adr:
+    dir: "docs/adr"
+    prefix: "ADR"
+    header_shape: "yaml-frontmatter"
+    required_fields: ["Status", "Date", "Author", "Stable-Id"]
+    known_fields: ["Supersedes", "Superseded-by", "Derives-from", "Embodiment", "Realized-by"]
+    pointer_fields: ["Supersedes", "Superseded-by", "Derives-from"]
+  milestone:
+    dir: "docs/milestones"
+    prefix: "MILE"
+    header_shape: "yaml-frontmatter"
+    required_fields: ["Status", "Stable-Id"]
+    known_fields: ["Implements", "Blocked-on", "Realized-by"]
+    pointer_fields: ["Implements"]
+    narrative_fields: ["Blocked-on"]

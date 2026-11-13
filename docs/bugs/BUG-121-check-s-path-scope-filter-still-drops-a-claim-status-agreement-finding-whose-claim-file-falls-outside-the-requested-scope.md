@@ -2,7 +2,7 @@
 Stable-Id: 01M35XZVT5BX5XWPGCFQ6X4AA4
 Status: Fixed
 Found-in: "A /code-review v0.3.0...main pass, reviewing everything landed for the 0.4.0 release"
-Regression-test: "a_scoped_invocation_still_reports_a_claim_finding_observed_failing, check_integration.rs"
+Realized-by: test:rust/crates/urzua-cli/tests/check_integration.rs#a_scoped_invocation_still_reports_a_claim_finding_observed_failing@sha256:c7e0d6223203a666dd0dd2b6a228a5484229259bafcf6e294a61ac6173362917
 ---
 # 121 — check's path-scope filter still drops a claim.status-agreement finding whose claim file falls outside the requested scope
 
@@ -41,3 +41,4 @@ declared-list pattern as `IDENTITY_DEPENDENT_RULES`.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-23 | Filed and fixed in one pass. **Why:** found by a full-release code review; a planted-violation test (a scoped `check docs/adr` over a false claim under `changes/`) observed failing before the fix and passing after. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

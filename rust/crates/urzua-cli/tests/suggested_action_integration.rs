@@ -3,6 +3,8 @@
 //! promise a `run-command` action makes -- that running it would produce the
 //! repair the finding stands for.
 
+mod common;
+
 use std::path::Path;
 use std::process::Command;
 
@@ -16,7 +18,7 @@ fn git(dir: &Path, args: &[&str]) {
 }
 
 fn urzua(dir: &Path, args: &[&str]) -> std::process::Output {
-    Command::new(env!("CARGO_BIN_EXE_urzua"))
+    common::urzua()
         .args(args)
         .current_dir(dir)
         .output()
@@ -80,10 +82,8 @@ record_types:
         - {when: [Open], fields: [Closed-on]}
 ";
 
-fn shape_repo(name: &str) -> std::path::PathBuf {
-    let dir =
-        std::env::temp_dir().join(format!("urzua-action-shape-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+fn shape_repo(name: &str) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-action-shape-{name}"));
     for d in ["docs/notes", ".urzua"] {
         std::fs::create_dir_all(dir.join(d)).unwrap();
     }
@@ -184,6 +184,245 @@ fn a_configuration_edit_names_the_repository_relative_config_and_a_key_path() {
     );
 }
 
+/// Applies one `edit-config` suggested action to the configuration file, the
+/// way an agent following it would: `set` replaces the value at the key path,
+/// `append` pushes onto the list there (creating it when absent).
+fn apply_config_action(dir: &Path, action: &serde_json::Value) {
+    let path = dir.join(".urzua/config.yaml");
+    let mut doc: yaml_serde::Value =
+        yaml_serde::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    let key_path: Vec<&str> = action["target"]["key_path"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|k| k.as_str().unwrap())
+        .collect();
+    let (last, parents) = key_path.split_last().unwrap();
+    let mut node = &mut doc;
+    for key in parents {
+        node = node.get_mut(*key).expect("the key path resolves");
+    }
+    let map = node.as_mapping_mut().unwrap();
+    let value: yaml_serde::Value = yaml_serde::to_value(&action["value"]).unwrap();
+    match action["op"].as_str().unwrap() {
+        "set" => {
+            map.insert(yaml_serde::Value::from(*last), value);
+        }
+        "append" => {
+            let entry = map
+                .entry(yaml_serde::Value::from(*last))
+                .or_insert_with(|| yaml_serde::Value::Sequence(Vec::new()));
+            entry.as_sequence_mut().unwrap().push(value);
+        }
+        other => panic!("unexpected op {other}"),
+    }
+    std::fs::write(&path, yaml_serde::to_string(&doc).unwrap()).unwrap();
+}
+
+#[test]
+fn a_known_fields_suggestion_for_a_type_declaring_none_leaves_the_config_clean() {
+    let dir = common::TempDir::new("urzua-action-known-fields");
+    for d in ["docs/notes", ".urzua"] {
+        std::fs::create_dir_all(dir.join(d)).unwrap();
+    }
+    git(&dir, &["init", "-q"]);
+    git(&dir, &["config", "user.email", "test@example.com"]);
+    git(&dir, &["config", "user.name", "test"]);
+    // `note` declares no `known_fields`; its records use `Owner` and `Tags`
+    // beyond the required `Status`, and the pointer field `Feeds-into` is
+    // declared nowhere.
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2
+rules:
+  config.pointer-field-not-known: error
+  header.field-set-consistency: error
+record_types:
+  note:
+    dir: docs/notes
+    prefix: NOTE
+    header_shape: yaml-frontmatter
+    required_fields: [Status]
+    pointer_fields: [Feeds-into]
+    narrative_fields: []
+",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("docs/notes/NOTE-1-a.md"),
+        "---\nStatus: Open\nOwner: a\nFeeds-into: NOTE-2\n---\n# 1 - A\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("docs/notes/NOTE-2-b.md"),
+        "---\nStatus: Open\nTags: x\n---\n# 2 - B\n",
+    )
+    .unwrap();
+    git(&dir, &["add", "-A"]);
+    git(&dir, &["commit", "-q", "-m", "init"]);
+
+    let report = parsed(&urzua(&dir, &["check"]));
+    let missing = findings(&report, "config.pointer-field-not-known");
+    assert_eq!(missing.len(), 1, "{report}");
+    let action = &missing[0]["suggested_action"];
+    assert_eq!(
+        *action,
+        serde_json::json!({
+            "kind": "edit-config",
+            "op": "set",
+            "target": {
+                "file": ".urzua/config.yaml",
+                "key_path": ["record_types", "note", "known_fields"]
+            },
+            "value": ["Feeds-into", "Owner", "Tags"]
+        }),
+        "{report}"
+    );
+
+    apply_config_action(&dir, action);
+    let after = parsed(&urzua(&dir, &["check"]));
+    assert_eq!(after["findings"], serde_json::json!([]), "{after}");
+}
+
+fn notes_repo(prefix: &str, config: &str, records: &[(&str, &str)]) -> common::TempDir {
+    let dir = common::TempDir::new(prefix);
+    for d in ["docs/notes", "docs/refs", ".urzua"] {
+        std::fs::create_dir_all(dir.join(d)).unwrap();
+    }
+    git(&dir, &["init", "-q"]);
+    git(&dir, &["config", "user.email", "test@example.com"]);
+    git(&dir, &["config", "user.name", "test"]);
+    std::fs::write(dir.join(".urzua/config.yaml"), config).unwrap();
+    for (path, body) in records {
+        std::fs::write(dir.join(path), body).unwrap();
+    }
+    git(&dir, &["add", "-A"]);
+    git(&dir, &["commit", "-q", "-m", "init"]);
+    dir
+}
+
+#[test]
+fn a_target_status_suggestion_for_a_type_declaring_no_known_fields_leaves_the_config_clean() {
+    let dir = notes_repo(
+        "urzua-action-target-status",
+        "schema_version: 2
+rules:
+  relation.target-status-undeclared: error
+  header.field-set-consistency: error
+record_types:
+  note:
+    dir: docs/notes
+    prefix: NOTE
+    header_shape: yaml-frontmatter
+    required_fields: [Date]
+    pointer_fields: [Feeds-into]
+    narrative_fields: []
+    known_fields: [Feeds-into]
+  ref:
+    dir: docs/refs
+    prefix: REF
+    header_shape: yaml-frontmatter
+    required_fields: [Date]
+    pointer_fields: []
+    narrative_fields: []
+",
+        &[
+            (
+                "docs/notes/NOTE-1-a.md",
+                "---\nDate: 2026-01-01\nFeeds-into: REF-1\n---\n# 1 - A\n",
+            ),
+            (
+                "docs/refs/REF-1-b.md",
+                "---\nDate: 2026-01-01\nOwner: a\n---\n# 1 - B\n",
+            ),
+            (
+                "docs/refs/REF-2-c.md",
+                "---\nDate: 2026-01-01\nTags: x\n---\n# 2 - C\n",
+            ),
+        ],
+    );
+    let report = parsed(&urzua(&dir, &["check"]));
+    let missing = findings(&report, "relation.target-status-undeclared");
+    assert_eq!(missing.len(), 1, "{report}");
+    let action = &missing[0]["suggested_action"];
+    assert_eq!(
+        *action,
+        serde_json::json!({
+            "kind": "edit-config",
+            "op": "set",
+            "target": {
+                "file": ".urzua/config.yaml",
+                "key_path": ["record_types", "ref", "known_fields"]
+            },
+            "value": ["Owner", "Status", "Tags"]
+        }),
+        "{report}"
+    );
+    apply_config_action(&dir, action);
+    let after = parsed(&urzua(&dir, &["check"]));
+    assert!(
+        findings(&after, "header.field-set-consistency").is_empty()
+            && findings(&after, "relation.target-status-undeclared").is_empty(),
+        "{after}"
+    );
+}
+
+#[test]
+fn a_companion_suggestion_for_a_type_declaring_no_known_fields_leaves_the_config_clean() {
+    let dir = notes_repo(
+        "urzua-action-companion",
+        "schema_version: 2
+rules:
+  config.companion-declaration-missing: error
+  header.field-set-consistency: error
+record_types:
+  note:
+    dir: docs/notes
+    prefix: NOTE
+    header_shape: yaml-frontmatter
+    required_fields: [Status, Embodiment]
+    pointer_fields: []
+    narrative_fields: []
+    companion_fields:
+      - [embodiment_state, embodiment_locator]
+",
+        &[
+            (
+                "docs/notes/NOTE-1-a.md",
+                "---\nStatus: Open\nEmbodiment: Not started\nOwner: a\n---\n# 1 - A\n",
+            ),
+            (
+                "docs/notes/NOTE-2-b.md",
+                "---\nStatus: Open\nEmbodiment: Not started\nTags: x\n---\n# 2 - B\n",
+            ),
+        ],
+    );
+    let report = parsed(&urzua(&dir, &["check"]));
+    let missing = findings(&report, "config.companion-declaration-missing");
+    assert_eq!(missing.len(), 1, "{report}");
+    let action = &missing[0]["suggested_action"];
+    assert_eq!(
+        *action,
+        serde_json::json!({
+            "kind": "edit-config",
+            "op": "set",
+            "target": {
+                "file": ".urzua/config.yaml",
+                "key_path": ["record_types", "note", "known_fields"]
+            },
+            "value": ["Owner", "Realized-by", "Tags"]
+        }),
+        "{report}"
+    );
+    apply_config_action(&dir, action);
+    let after = parsed(&urzua(&dir, &["check"]));
+    assert!(
+        findings(&after, "header.field-set-consistency").is_empty()
+            && findings(&after, "config.companion-declaration-missing").is_empty(),
+        "{after}"
+    );
+}
+
 #[test]
 fn an_exempt_variant_omits_the_key_and_no_action_holds_a_null() {
     let dir = shape_repo("an_exempt_va");
@@ -256,7 +495,7 @@ fn rules_lists_each_variant_with_its_action_or_its_exemption_reason() {
     let dir = std::env::temp_dir();
     let rules = parsed(&urzua(&dir, &["rules"]));
     let all = rules["rules"].as_array().unwrap();
-    assert_eq!(all.len(), 59, "every shipped rule is listed");
+    assert_eq!(all.len(), 69, "every shipped rule is listed");
     let find = |id: &str| {
         all.iter()
             .find(|r| r["id"] == id)
@@ -345,9 +584,8 @@ fn milestone(status: &str, extra: &str, n: u32) -> String {
     )
 }
 
-fn command_repo(name: &str) -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join(format!("urzua-action-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+fn command_repo(name: &str) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-action-{name}"));
     for d in ["docs/milestones", "src", ".urzua"] {
         std::fs::create_dir_all(dir.join(d)).unwrap();
     }
@@ -512,7 +750,7 @@ fn the_editor_hook_output_is_not_wired_to_findings() {
     // `fix --stdin-path` (ADR-69) reads `repairs`; it never carries findings or
     // a suggested_action.
     let dir = command_repo("hook");
-    let mut child = Command::new(env!("CARGO_BIN_EXE_urzua"))
+    let mut child = common::urzua()
         .args(["fix", "--stdin-path", "docs/milestones/MILE-2-b.md"])
         .current_dir(&dir)
         .stdin(std::process::Stdio::piped())

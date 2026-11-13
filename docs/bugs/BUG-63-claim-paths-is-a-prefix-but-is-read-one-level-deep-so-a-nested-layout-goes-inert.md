@@ -2,7 +2,7 @@
 Stable-Id: 01M2WCN8QRXB4EN7779QV4X19K
 Status: Fixed
 Found-in: "Round 6 of the 0.4.0 release review"
-Regression-test: "rust/crates/urzua-cli/tests/check_integration.rs::a_claim_path_prefix_is_read_to_any_depth"
+Realized-by: test:rust/crates/urzua-cli/tests/check_integration.rs#a_claim_path_prefix_is_read_to_any_depth@sha256:9125bf74211b220fbd6b5211556933ff65084838e7d14c1e1e41ecc3416947a5
 ---
 # 63 — claim_paths is a prefix but is read one level deep so a nested layout goes inert
 
@@ -41,3 +41,4 @@ No test supplies a nested claim layout.
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

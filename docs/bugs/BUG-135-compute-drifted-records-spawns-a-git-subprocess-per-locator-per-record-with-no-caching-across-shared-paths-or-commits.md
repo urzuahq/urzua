@@ -2,7 +2,7 @@
 Stable-Id: 01M36S913RRNHGMYP5W7V0R3CW
 Status: Fixed
 Found-in: "A /code-review v0.3.0...main pass, round 24"
-Regression-test: two_records_citing_the_same_locator_are_both_detected_as_drifted (rust/crates/urzua-cli/tests/check_integration.rs)
+Realized-by: test:rust/crates/urzua-cli/tests/check_integration.rs#two_records_citing_the_same_locator_are_both_detected_as_drifted@sha256:2c2aee75d904ad504a7263aeba961ceddd1599caed330ca6605d51741d001af0
 ---
 # 135 — compute_drifted_records spawns a git subprocess per locator per record with no caching across shared paths or commits
 
@@ -52,3 +52,5 @@ cache's correctness against a future edit, not a fix for a wrong verdict.
 > |---|---|---|
 > | 2026-09-23 | Filed. **Why:** found by a full-release code review; verified no caching exists across records/locators sharing a path or commit. Performance-only and not yet visible on this repository's own corpus size, left `Status: Open` for its own change. | **substantive** |
 > | 2026-09-23 | Fixed. Memoized `last_commit_for_path` per path and `commit_strictly_before` per commit pair inside `compute_drifted_records`'s own loop. Regression test confirms two records citing the same locator are both still independently detected as drifted. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/check_integration.rs#two_records_citing_the_same_locator_are_both_detected_as_drifted` (lines 2949-2998) 8d4f79e88528 -> 2c2aee75d904. Reason: Read the diff of each pinned span since the old pin and the claim still holds. check_integration.rs#two_records_citing_the_same_locator_are_both_detected_as_drifted: the test body only dropped its manual remove_dir_all of the fixture directory (a TempDir guard removes it on drop), every fixture and assertion is unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |

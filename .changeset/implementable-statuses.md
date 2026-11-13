@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: []
 ---
 
 A record type's `statuses` declaration accepts an optional `implementable` list: the statuses at

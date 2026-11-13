@@ -2,7 +2,9 @@
 //! must change its declared version field. Judged against the merge base's
 //! copy of the record, so it runs only on a `--base` run.
 
-use std::path::{Path, PathBuf};
+mod common;
+
+use std::path::Path;
 use std::process::Command;
 
 fn git(dir: &Path, args: &[&str]) {
@@ -43,9 +45,8 @@ const ROW2: &str = "2026-11-04 | Rewrote the intro. | **substantive**";
 const ROW3: &str = "2026-11-04 | Renamed a field. | **structural**";
 const ROW_OTHER: &str = "2026-11-04 | Tidied wording. | **editorial**";
 
-fn fixture(name: &str, decl: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("urzua-vbump-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+fn fixture(name: &str, decl: &str) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-vbump-{name}"));
     std::fs::create_dir_all(dir.join("docs/specs")).unwrap();
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     git(&dir, &["init", "-q"]);
@@ -60,7 +61,7 @@ fn fixture(name: &str, decl: &str) -> PathBuf {
 }
 
 fn run(dir: &Path, args: &[&str]) -> serde_json::Value {
-    let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
+    let out = common::urzua()
         .arg("check")
         .args(args)
         .current_dir(dir)

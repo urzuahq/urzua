@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: []
 ---
 
 `urzua fix --stdin-path <path>` reads the proposed content of one record from stdin and judges it

@@ -1,6 +1,8 @@
 //! `urzua export --format json` (SPEC-1): run the real binary against a small
 //! git-repo fixture holding two record types in two header shapes.
 
+mod common;
+
 use std::path::Path;
 use std::process::Command;
 
@@ -13,12 +15,8 @@ fn git(dir: &Path, args: &[&str]) {
     assert!(status.success(), "git {args:?} failed");
 }
 
-fn fixture_repo(name: &str) -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join(format!(
-        "urzua-cli-export-test-{name}-{}",
-        std::process::id()
-    ));
-    let _ = std::fs::remove_dir_all(&dir);
+fn fixture_repo(name: &str) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-cli-export-test-{name}"));
     std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
     std::fs::create_dir_all(dir.join("docs/notes")).unwrap();
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
@@ -48,7 +46,7 @@ fn fixture_repo(name: &str) -> std::path::PathBuf {
 }
 
 fn run_urzua(dir: &Path, args: &[&str]) -> std::process::Output {
-    Command::new(env!("CARGO_BIN_EXE_urzua"))
+    common::urzua()
         .args(args)
         .current_dir(dir)
         .output()
@@ -108,13 +106,17 @@ fn export_json_emits_every_record_with_parsed_header_and_raw_text() {
 #[test]
 fn export_agdr_stays_unimplemented_and_json_must_be_named() {
     let dir = fixture_repo("agdr");
-    for args in [&["export", "--format", "agdr"][..], &["export"][..]] {
-        let output = run_urzua(&dir, args);
-        assert_eq!(output.status.code(), Some(2), "args: {args:?}");
-        let v: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
-        assert_eq!(v["status"], "not-run");
-        assert!(v["error"].as_str().unwrap().contains("not implemented"));
-    }
+    let output = run_urzua(&dir, &["export", "--format", "agdr"]);
+    assert_eq!(output.status.code(), Some(2));
+    let v: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(v["status"], "not-run");
+    assert!(v["error"].as_str().unwrap().contains("not implemented"));
+    // No default format: a bare export asks for one instead of naming agdr.
+    let output = run_urzua(&dir, &["export"]);
+    assert_eq!(output.status.code(), Some(2));
+    let v: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(v["status"], "not-run");
+    assert!(v["error"].as_str().unwrap().contains("--format"));
 }
 
 #[test]
@@ -169,7 +171,7 @@ fn export_json_treats_a_headerless_type_as_readable() {
 #[test]
 fn export_json_refuses_a_record_symlinked_outside_the_repository() {
     let dir = fixture_repo("symlink-escape");
-    let outside = std::env::temp_dir().join(format!("urzua-export-secret-{}", std::process::id()));
+    let outside = common::TempFile::new("urzua-export-secret");
     std::fs::write(
         &outside,
         "---\nStatus: Accepted\n---\n# 9 — secret contents\n",
@@ -186,10 +188,9 @@ fn export_json_refuses_a_record_symlinked_outside_the_repository() {
         stdout.contains("resolves outside the repository"),
         "{stdout}"
     );
-    std::fs::remove_file(&outside).ok();
 }
 
-fn sections_repo(name: &str) -> std::path::PathBuf {
+fn sections_repo(name: &str) -> common::TempDir {
     let dir = fixture_repo(name);
     std::fs::write(
         dir.join(".urzua/config.yaml"),

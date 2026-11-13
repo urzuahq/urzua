@@ -2,7 +2,7 @@
 Stable-Id: 01M371W3V40P7MTF96QVDXA81N
 Status: Fixed
 Found-in: "A /code-review v0.3.0...main pass, round 25"
-Regression-test: "a_header_none_type_is_not_reported_as_unreadable_observed_failing, migrate.rs"
+Realized-by: test:rust/crates/urzua-core/src/migrate.rs#a_header_none_type_is_not_reported_as_unreadable_observed_failing@sha256:cd5555a829f94f2c058356b2d24d2528cc94781d844b88bd963df66690f7d292
 ---
 # 137 — migrate schema-report fails to gate on ADR-50's header-shape-none types
 
@@ -36,3 +36,5 @@ if someone had thought to. No existing test used a `header_shape: none` type.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-23 | Filed and fixed in one pass. **Why:** found by a full-release code review; a planted-violation test observed failing (reported `Unreadable` instead of `OutOfScope`) before the fix. `schema_report` now takes `config: &Config`; its one production call site and four test call sites updated. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/migrate.rs#a_header_none_type_is_not_reported_as_unreadable_observed_failing` (lines 202-229) 36852057e2e6 -> cd5555a829f9. Reason: Read the diff of each pinned span since the old pin and the claim still holds. migrate.rs#a_header_none_type_is_not_reported_as_unreadable_observed_failing: schema_report now takes a templates argument that the test passes as Default::default(), assertions unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |

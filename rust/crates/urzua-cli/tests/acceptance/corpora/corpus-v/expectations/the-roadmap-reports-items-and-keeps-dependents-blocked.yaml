@@ -1,0 +1,13 @@
+id: the-roadmap-reports-items-and-keeps-dependents-blocked
+corpus: corpus-v
+invocation: [roadmap]
+# A partly delivered milestone is open work in wave 0 with its counts; the
+# milestone that depends on it stays blocked.
+expect_exit: 0
+expect_json:
+  - {at: /roadmap/records/MILE-3/items/total, equals: 2}
+  - {at: /roadmap/records/MILE-3/items/resolved, equals: 1}
+  - {at: /roadmap/records/MILE-3/wave, equals: 0}
+  - {at: /roadmap/records/MILE-7/blocked, equals: true}
+  - {at: /roadmap/records/MILE-7/blocked_by/0, equals: MILE-3}
+mutation_exempt: the roadmap reads no rule; its counts and blocked set do not change with a rule's absence.

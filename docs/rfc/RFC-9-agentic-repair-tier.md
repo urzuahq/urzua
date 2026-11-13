@@ -1,4 +1,5 @@
 ---
+Stable-Id: 01M6R3NK5AFNXFWXCMGQ81SP69
 Status: Draft
 Date: 2026-08-07
 Author: beauwilliams
@@ -155,3 +156,9 @@ explicit to invoke, and removable without the rest of the product losing a capab
 - RFC-5 §1 — mechanical-first, unchanged by this proposal.
 - SPEC-1 — content-scope correctness as a permanent ceiling; the class this tier targets and the
   reason §3's gate may not reach all of it.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-05 | Revision log added, 2026-11-05. | **structural** |

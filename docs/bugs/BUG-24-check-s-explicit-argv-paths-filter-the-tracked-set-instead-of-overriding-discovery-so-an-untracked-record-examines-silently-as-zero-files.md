@@ -2,7 +2,7 @@
 Stable-Id: 01M28KB0425HYMCHHAWZTEKDSN
 Status: Fixed
 Found-in: 'hit live filing RFC-27: ran `urzua check docs/rfc/RFC-27-....md` on the freshly created record and got `"status": "not-run", "files_examined": 0` with zero findings. The same command after `git add` on the same unchanged file returned `"status": "ok", "files_examined": 1`.'
-Regression-test: 'an_untracked_file_named_explicitly_is_examined_not_silently_dropped_observed_failing, an_untracked_file_below_an_explicitly_requested_directory_is_not_examined, check_integration.rs'
+Realized-by: test:rust/crates/urzua-cli/tests/check_integration.rs#an_untracked_file_named_explicitly_is_examined_not_silently_dropped_observed_failing@sha256:079d16615c39a6e6d0997594b04fe4ec73cc941e9876defe5975538e08ad73f8, test:rust/crates/urzua-cli/tests/check_integration.rs#an_untracked_file_below_an_explicitly_requested_directory_is_not_examined@sha256:d748dc78d1815a2c68b2d2446042237c5622ee6c2e8ddaae63fc6383183d5757
 ---
 # 24 — check's explicit argv paths filter the tracked set instead of overriding discovery, so an untracked record examines silently as zero files
 
@@ -76,3 +76,4 @@ spec line being revisited. The spec was not updated, so SPEC-2 still specifies o
 > |---|---|---|
 > | 2026-09-11 | Initial bug record, `Status: Open`. Not fixed -- the fix direction (argv truly overriding discovery vs. amending SPEC-2 to match the implemented intersection, plus a finding when a requested path is dropped) is a real decision, not an obvious patch. | **structural** |
 > | 2026-09-23 | Fixed: argv paths truly override discovery, matching SPEC-2's literal contract, for a directly-named file. **Why:** decided rather than deferred further; a directory argument deliberately keeps the tracked-only sweep unchanged (`an_untracked_scratch_file_is_never_examined`, `ADR-6`) -- only a path naming one file precisely bypasses the tracked-set filter, additive to the tracked sweep per `BUG-60`'s non-regression requirement, never a replacement of the corpus pointers resolve against. New `ScopeSource::Argv`/`DiscoverySource::Argv` report which mode actually ran. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 2 `test:` locators and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

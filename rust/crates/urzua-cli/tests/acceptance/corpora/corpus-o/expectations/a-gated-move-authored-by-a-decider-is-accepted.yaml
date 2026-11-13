@@ -1,0 +1,13 @@
+id: a-gated-move-authored-by-a-decider-is-accepted
+corpus: corpus-o
+# The same move, authored by alice. The rule runs over the gated change and finds
+# the author in the group, so it reports nothing: the control for the case above.
+commits:
+  - write:
+      docs/adr/ADR-1-queue.md: "---\nStatus: Accepted\n---\n# ADR-1: Queue\n\nprose\n"
+invocation: [check, --base, base, --actors, actors-decider.json]
+expect_exit: 0
+expect_no_findings:
+  - {rule: diff.decider-required}
+expect_rules_ran:
+  - diff.decider-required

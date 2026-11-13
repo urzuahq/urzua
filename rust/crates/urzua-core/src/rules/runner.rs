@@ -1,5 +1,5 @@
 use super::*;
-use crate::waiver::Waiver;
+use crate::waiver::Suppression;
 use std::path::Path;
 
 /// Source files a back-pointer rule scans, with the `back_pointer_paths` that
@@ -17,7 +17,7 @@ pub struct RunState<'a> {
     pub executions: &'a [RuleExecution],
     /// The findings left after scoping, before waivers apply.
     pub findings: &'a [Finding],
-    pub waivers: &'a [Waiver],
+    pub waivers: &'a [Suppression],
     /// The run covers the whole corpus: no path scope, no `--base`.
     pub whole_corpus: bool,
     /// Whether a path is inside what the run reports on.
@@ -52,11 +52,18 @@ pub struct RuleCtx<'a> {
     /// Resolves a reference to a record; built once for every rule that resolves one.
     pub index: &'a RecordIndex<'a>,
     pub collisions: &'a [IdentifierCollision<'a>],
+    /// Record files on disk that git does not track, by id (`BUG-13`); read by
+    /// the rules that report an unresolved reference.
+    pub untracked_records: &'a UntrackedRecords,
     /// Claim files read from the declared `claim_paths`, as (path, text).
     pub claims: &'a [(String, String)],
     pub published_files: &'a [PublishedFile],
-    pub published_paths: &'a [String],
+    pub boundaries: &'a [ResolvedBoundary],
+    pub ignore_marker: Option<&'a str>,
     pub index_artifacts: &'a [IndexArtifact],
+    /// The declared override log, read by the caller; `None` when `override_log`
+    /// is not declared (`MILE-188`).
+    pub override_log: Option<&'a OverrideLog>,
     /// `None` when the rule is absent or off.
     pub back_pointer_sources: Option<&'a BackPointerSources>,
     pub decision_gate_sources: Option<&'a BackPointerSources>,
@@ -64,14 +71,43 @@ pub struct RuleCtx<'a> {
     pub drifted: &'a HashSet<PathBuf>,
     pub fresh: &'a HashSet<PathBuf>,
     pub claim_ages: &'a HashMap<PathBuf, u64>,
+    /// The commit time of each record's `Realized-by` line, read only while
+    /// `embodiment.claim-expired` is enabled (`ADR-97`).
+    pub claim_line_times: &'a HashMap<PathBuf, i64>,
+    /// Each record's first-cycle offset seed (`ADR-97` section 2).
+    pub claim_seeds: &'a HashMap<PathBuf, u64>,
+    /// Now, in seconds since the epoch: the one clock the expiry rule reads.
+    pub now_unix: i64,
     /// The merge base's text of each changed record (`--base`), read by the
     /// caller; a record new in the diff has no entry. Empty without `--base`.
     pub base_text: &'a HashMap<PathBuf, String>,
+    /// The locators (`category:locator` or `category:ID`) of each changed record
+    /// that had drifted at the merge base, read by the caller for the records
+    /// that gained a drift-acknowledging `Re-verified` row. Empty without `--base`.
+    pub base_drift: &'a HashMap<PathBuf, HashSet<String>>,
+    /// Per changed record, the UTC day (start, unix seconds) of the commit that
+    /// added each `Re-verified` row of its text (`--base`); empty without one.
+    pub added_row_days: &'a HashMap<PathBuf, super::RowWindows>,
     /// `None` on a run with no `--base`.
     pub changed_paths: Option<&'a [PathBuf]>,
+    /// The subset of `changed_paths` that did not exist at the merge base; `None`
+    /// on a run with no `--base`.
+    pub added_paths: Option<&'a [PathBuf]>,
+    /// What the fetched pull-request refs hold that matters to this diff; empty
+    /// unless `identity.open-pr-collision` is enabled on a `--base` run.
+    pub pull_ref_claims: &'a PullRefClaims,
     /// Each changed record's `Status` at the merge base, for the types that
     /// declare `transitions`; `None` on a run with no `--base` (`ADR-72`).
     pub committed_statuses: Option<&'a HashMap<PathBuf, CommittedStatus>>,
+    /// The records the diff deletes that are not a rename, for the types an
+    /// authority status gate names (`diff.decider-required`).
+    pub deleted_records: &'a [DeletedRecord],
+    /// The identities the host supplied (`urzua check --actors`); `None` when
+    /// no file was given (`MILE-200`).
+    pub actors: Option<&'a crate::authority::Actors>,
+    /// The base revision's `authority` table (`authority.decider_table`);
+    /// `Absent` on a run with no `--base`.
+    pub base_authority: &'a crate::authority::BaseAuthority,
     pub refs_snapshot: &'a Result<crate::refs_snapshot::RefsSnapshot, String>,
     /// Every discovered path, staged deletions included.
     pub tracked_paths: &'a [PathBuf],
@@ -81,6 +117,8 @@ pub struct RuleCtx<'a> {
     /// so a blocking finding is never raised on a guess.
     pub may_exist: &'a dyn Fn(&Path) -> bool,
     pub dir_exists: &'a dyn Fn(&str) -> bool,
+    /// A file's text for a scoped locator to resolve in; read once per path.
+    pub read_text: &'a dyn Fn(&str) -> crate::locator::SharedText,
     pub run: RunState<'a>,
 }
 
@@ -100,28 +138,31 @@ pub fn gate_and_run(
     use crate::config::RuleLevel;
 
     match config.rules.get(id).map(|s| s.level) {
-        None | Some(RuleLevel::Off) => (
-            RuleExecution {
-                rule: id.to_string(),
-                population: None,
-                status: RuleStatus::NotEnabled,
-                examined_records: Vec::new(),
-            },
-            Vec::new(),
-        ),
+        None | Some(RuleLevel::Off) => (RuleExecution::not_enabled(id), Vec::new()),
         Some(level) => {
-            let severity = match level {
-                RuleLevel::Error => FindingSeverity::Error,
-                RuleLevel::Warn => FindingSeverity::Warning,
-                RuleLevel::Off => unreachable!("handled above"),
-            };
+            let severity = level
+                .severity()
+                .expect("a level other than off has a severity");
             let (exec, mut findings) = run();
             resolve_actions(id, &mut findings);
             for f in &mut findings {
                 // A level the rule declared for this finding's own field
-                // (`field_levels`, `MILE-140`) outranks the rule level; every
+                // (`field_levels`, `MILE-140`) or boundary outranks the rule
+                // level, except that a rule set to `info` is advisory
+                // whatever a declaration says (`ADR-87` point 10); every
                 // other finding takes the rule level.
-                f.severity = f.declared_severity.unwrap_or(severity);
+                // Implements: ADR-87 (a declared severity never lifts a rule set to info)
+                f.severity = match (level, f.declared_severity) {
+                    (RuleLevel::Info, _) => severity,
+                    (_, Some(declared)) => declared,
+                    (_, None) => severity,
+                };
+                // A variant's declared floor outranks every setting above: the
+                // repository's level applies to the rule's other variants, and
+                // cannot lower this one (`ADR-96`).
+                if let Some(floor) = variant_declaration(f).and_then(|v| v.severity_floor) {
+                    f.severity = f.severity.at_least(floor);
+                }
             }
             (exec, findings)
         }
@@ -134,12 +175,58 @@ pub fn run_rule(def: &RuleDef, ctx: &RuleCtx<'_>) -> (RuleExecution, Vec<Finding
 }
 
 /// Every rule of `phase`, in table order.
+///
+/// A rule with a companion population (`MILE-186`) contributes its second
+/// execution straight after its first, so `rules_executed` keeps table order.
 pub fn run_phase(phase: Phase, ctx: &RuleCtx<'_>) -> Vec<(RuleExecution, Vec<Finding>)> {
-    RULE_TABLE
-        .iter()
-        .filter(|d| d.phase == phase)
-        .map(|d| run_rule(d, ctx))
-        .collect()
+    run_phase_with(phase, ctx, &PhasePlan::default())
+}
+
+/// How a run restricts the rules of a phase.
+#[derive(Default)]
+pub struct PhasePlan<'a> {
+    /// The run reports on one record's proposed content (`check --stdin-path`,
+    /// `MILE-191`). A rule whose findings are anchored outside the records (the
+    /// configuration, a source file, an index, a diff) cannot report on that
+    /// record, so an enabled one is not run and says so: `not-applicable`,
+    /// never `ran` with nothing found.
+    pub record_only: bool,
+    /// `check --rules` (`ADR-79`): only these rule ids are run. The others are
+    /// not run and not listed; selection narrows what runs and enables nothing.
+    pub selected: Option<&'a HashSet<String>>,
+}
+
+/// [`run_phase`] under a [`PhasePlan`].
+pub fn run_phase_with(
+    phase: Phase,
+    ctx: &RuleCtx<'_>,
+    plan: &PhasePlan<'_>,
+) -> Vec<(RuleExecution, Vec<Finding>)> {
+    let mut out = Vec::new();
+    for d in RULE_TABLE.iter().filter(|d| d.phase == phase) {
+        if plan.selected.is_some_and(|s| !s.contains(d.id)) {
+            continue;
+        }
+        let can_report_on_a_record =
+            matches!(d.anchor, Anchor::Record | Anchor::RecordOrDeclaredFile(_));
+        if plan.record_only && !can_report_on_a_record {
+            out.push(gate_and_run(ctx.config, d.id, || not_applicable(d.id)));
+            continue;
+        }
+        out.push(run_rule(d, ctx));
+        if let Some((_, companion)) = d.companion {
+            // Never called for a rule the repository has not enabled.
+            let enabled = ctx
+                .config
+                .rules
+                .get(d.id)
+                .is_some_and(|s| s.level != crate::config::RuleLevel::Off);
+            if let Some(extra) = enabled.then(|| companion(ctx)).flatten() {
+                out.push(gate_and_run(ctx.config, d.id, || extra));
+            }
+        }
+    }
+    out
 }
 
 /// How a run narrows what it reports on.

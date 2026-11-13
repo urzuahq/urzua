@@ -18,7 +18,11 @@ Every relationship the schema has today points backward: a record cites its evid
 
 ## Done means
 
-An `affects` field is declared in config as a list of paths and globs on a decision record, `check` reports a pattern that matches nothing, and a record whose affected path changed since the record was last touched is reported by a rule distinct from `embodiment.consistency`; a fixture covers a changed path and an untouched one, and the field is exercised on urzua's own ADRs.
+- An `affects` field is declared in config as a list of paths and globs on a decision record.
+- `check` reports a pattern that matches nothing.
+- A record whose affected path changed since the record was last touched is reported by a rule distinct from `embodiment.consistency`.
+- A fixture covers a changed path and an untouched one.
+- The field is exercised on urzua's own ADRs.
 
 > **Revision log**
 >
@@ -26,3 +30,4 @@ An `affects` field is declared in config as a list of paths and globs on a decis
 > |---|---|---|
 
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |
+> | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |

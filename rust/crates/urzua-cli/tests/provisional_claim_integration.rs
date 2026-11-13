@@ -1,12 +1,13 @@
 //! MILE-154: a pair's provisional split, run through this repository's own
 //! `.urzua/config.yaml` (the `amendment` pair) against planted RFCs.
 
+mod common;
+
 use std::path::Path;
 use std::process::Command;
 
 fn run_with_own_config(name: &str, files: &[(&str, &str)]) -> serde_json::Value {
-    let dir = std::env::temp_dir().join(format!("urzua-provisional-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+    let dir = common::TempDir::new(&format!("urzua-provisional-{name}"));
     std::fs::create_dir_all(dir.join("docs/rfc")).unwrap();
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../.urzua/config.yaml");
@@ -22,7 +23,7 @@ fn run_with_own_config(name: &str, files: &[(&str, &str)]) -> serde_json::Value 
             .unwrap()
             .success());
     }
-    let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
+    let out = common::urzua()
         .args(["check", "docs/"])
         .current_dir(&dir)
         .output()

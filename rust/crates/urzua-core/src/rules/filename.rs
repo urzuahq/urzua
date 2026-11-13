@@ -23,17 +23,16 @@ pub fn filename_title_consistency(
             };
 
             let mut push = |line: Option<usize>, message: String| {
-                findings.push(Finding {
-                    rule: RULE_ID.to_string(),
-                    severity: FindingSeverity::Error,
-                    file: record.path.clone(),
-                    line,
-                    waived: None,
-                    declared_severity: None,
-                    suggested_action: None,
-                    action_source: ActionSource::new("title-mismatch"),
-                    message,
-                });
+                findings.push(
+                    Finding::new(
+                        RULE_ID,
+                        FindingSeverity::Error,
+                        record.path.clone(),
+                        ActionSource::new("title-mismatch"),
+                        message,
+                    )
+                    .at_opt(line),
+                );
             };
 
             // Skipping instead would drop a record the rule was asked about.
@@ -46,45 +45,49 @@ pub fn filename_title_consistency(
             };
 
             match first_h1(content, record.header.region) {
-            None => push(
-                None,
-                "no H1 title found to check against the filename's number".to_string(),
-            ),
-            Some(h1) => match h1.number {
                 None => push(
-                    Some(h1.line),
-                    format!(
-                        "H1 title '{}' carries no number to check against the filename's number {filename_number}",
-                        elided(h1.text)
-                    ),
+                    None,
+                    "no H1 title found to check against the filename's number".to_string(),
                 ),
-                Some(n) if n != filename_number => push(
-                    Some(h1.line),
-                    format!(
-                        "filename claims number {filename_number}, but the H1 title '{}' claims {n}",
-                        elided(h1.text)
-                    ),
-                ),
-                Some(_) => {
-                    if let Some(declared) = &record.identity {
-                        if let Some(problem) = title_form_problem(declared, h1.first_token) {
-                            push(Some(h1.line), problem);
-                        }
+                Some(h1) => match h1_id(h1.first_token, record.identity.as_ref()) {
+                    H1Id::Absent => {
+                        let declared_form = record
+                            .identity
+                            .as_ref()
+                            .and_then(|declared| title_form_problem(declared, h1.first_token));
+                        push(
+                            Some(h1.line),
+                            declared_form.unwrap_or_else(|| {
+                                format!(
+                                    "H1 title '{}' carries no record id to check against the filename's number {filename_number}",
+                                    elided(h1.text)
+                                )
+                            }),
+                        );
                     }
-                }
-            },
-        }
+                    H1Id::Overflow => push(
+                        Some(h1.line),
+                        format!(
+                            "H1 title '{}' claims a number too large to compare",
+                            elided(h1.text)
+                        ),
+                    ),
+                    H1Id::Number(n) if n != filename_number => push(
+                        Some(h1.line),
+                        format!(
+                            "filename claims number {filename_number}, but the H1 title '{}' claims {n}",
+                            elided(h1.text)
+                        ),
+                    ),
+                    H1Id::Number(_) => {}
+                },
+            }
             Outcome::Examined
         },
     );
 
     (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records,
-        },
+        RuleExecution::ran(RULE_ID, population, examined_records),
         findings,
     )
 }
@@ -101,6 +104,48 @@ fn filename_number(record: &Record) -> Option<String> {
     // all-digit by `record_id`'s own guard, so a hyphenated type prefix
     // (`DOC-ADR-2`) still splits correctly.
     id.rsplit_once('-').map(|(_, number)| number.to_string())
+}
+
+/// What an H1's leading token says about the record's id.
+enum H1Id {
+    Number(u64),
+    /// The token is not an id: reported as such, never mangled into one.
+    Absent,
+    /// An id whose digits do not fit a `u64`.
+    Overflow,
+}
+
+/// Reads an H1's id the way a filename's is read (`BUG-32`, `MILE-151`): the
+/// id is the number of a `PREFIX-N` token, ASCII digits only, padding kept out
+/// of the value. A type whose identity pattern declares a `prefix` capture
+/// reads exactly that prefix; a type with no pattern keeps a strict read: a
+/// leading `PREFIX-N` (an upper-case prefix, hyphenated if the type's is) or a
+/// bare `N`. A trailing `.` or `:` is punctuation. Digits are never gathered
+/// out of a token with other characters in it, so `2026-09-16` and `v1.2`
+/// carry no id.
+fn h1_id(first_token: &str, declared: Option<&crate::document_model::DeclaredIdentity>) -> H1Id {
+    let token = first_token.trim_end_matches(['.', ':']);
+    let digits = match declared.and_then(|d| d.title_prefix.as_deref()) {
+        Some(prefix) => token
+            .strip_prefix(prefix)
+            .and_then(|rest| rest.strip_prefix('-')),
+        None => match token.rsplit_once('-') {
+            None => Some(token),
+            Some((prefix, number))
+                if prefix.starts_with(|c: char| c.is_ascii_uppercase())
+                    && prefix.split('-').all(crate::new_record::is_prefix_segment) =>
+            {
+                Some(number)
+            }
+            Some(_) => None,
+        },
+    };
+    match digits {
+        Some(d) if crate::new_record::is_digit_segment(d) => {
+            d.parse().map_or(H1Id::Overflow, H1Id::Number)
+        }
+        _ => H1Id::Absent,
+    }
 }
 
 /// A type that declares an `identity` pattern also declares its title form
@@ -125,17 +170,14 @@ fn title_form_problem(
     ))
 }
 
-/// Whether an H1 exists and whether it carries a number are independent
-/// questions, so they stay independent `Option`s rather than collapsing into
-/// one absent value.
+/// Whether an H1 exists and whether it carries an id are independent
+/// questions: this is the title, and [`h1_id`] reads the id from it.
 pub(super) struct H1<'a> {
     /// 1-indexed, matching [`crate::header::Header::region`].
     line: usize,
     pub(super) text: &'a str,
     /// The first whitespace-separated word of the title.
     pub(super) first_token: &'a str,
-    /// Compared by numeric value (BUG-0002), so padding never mismatches.
-    number: Option<u64>,
 }
 
 /// Frontmatter is skipped because a YAML comment line inside it starts with
@@ -187,19 +229,10 @@ pub(super) fn first_h1(content: &str, header_region: Option<(usize, usize)>) -> 
         if text.is_empty() {
             continue;
         }
-        let digits: String = text
-            .split_whitespace()
-            .next()
-            .unwrap_or_default()
-            .chars()
-            .filter(char::is_ascii_digit)
-            .collect();
-
         return Some(H1 {
             line: lineno,
             text,
             first_token: text.split_whitespace().next().unwrap_or_default(),
-            number: digits.parse().ok(),
         });
     }
 
@@ -232,7 +265,6 @@ pub fn filename_identity_pattern(
     records: &[Record],
     config: &Config,
 ) -> (RuleExecution, Vec<Finding>) {
-    const RULE_ID: &str = RULE_FILENAME_IDENTITY_PATTERN;
     let mut findings = Vec::new();
 
     let mut off_pattern: HashMap<&str, Vec<&Record>> = HashMap::new();
@@ -258,89 +290,96 @@ pub fn filename_identity_pattern(
     for type_name in type_names {
         let mut off = off_pattern.remove(type_name).unwrap_or_default();
         off.sort_by(|a, b| a.path.cmp(&b.path));
-        let type_config = config.record_types.get(type_name);
-        let identity = type_config
-            .and_then(|t| {
-                crate::document_model::declared_model(type_name, t)
-                    .ok()
-                    .flatten()
-            })
-            .and_then(|m| m.resolve().ok())
-            .and_then(|m| m.identity);
-        let pattern = type_config
-            .and_then(|t| t.identity.as_ref())
-            .and_then(|v| v.get("pattern"))
-            .and_then(|v| v.as_str());
-        let convention = match pattern {
-            Some(p) => format!("the declared identity pattern '{p}'"),
-            None => "the 'TYPE-NNNN-slug.md' convention".to_string(),
-        };
-        let guidance = |record: &Record| -> String {
-            let name = file_name_of(record);
-            let expected = expected_name(&record.type_prefix, &name, identity.as_ref());
-            format!("{name} -> {expected}")
-        };
-
-        if off.len() == totals.get(type_name).copied().unwrap_or(0) {
-            let dir = type_config.map_or_else(
-                || {
-                    off[0]
-                        .path
-                        .parent()
-                        .map(|p| p.to_path_buf())
-                        .unwrap_or_default()
-                },
-                |t| std::path::PathBuf::from(&t.dir),
-            );
-            findings.push(Finding {
-                rule: RULE_ID.to_string(),
-                severity: FindingSeverity::Warning,
-                file: dir,
-                line: None,
-                waived: None,
-                declared_severity: None,
-                suggested_action: None,
-                action_source: ActionSource::new("identity-pattern-none-match"),
-                message: format!(
-                    "none of record type '{type_name}''s {} file(s) matches {convention}, so \
-                     no identity-reading rule can examine any of them; rename each: {}",
-                    off.len(),
-                    off.iter()
-                        .map(|r| guidance(r))
-                        .collect::<Vec<_>>()
-                        .join("; ")
-                ),
-            });
-        } else {
-            for record in off {
-                findings.push(Finding {
-                    rule: RULE_ID.to_string(),
-                    severity: FindingSeverity::Warning,
-                    file: record.path.clone(),
-                    line: None,
-                    waived: None,
-                    declared_severity: None,
-                    suggested_action: None,
-                    action_source: ActionSource::new("identity-pattern-mismatch"),
-                    message: format!(
-                        "file name does not match {convention} for record type '{type_name}', \
-                         so it has no identity and identity-reading rules skip it; rename: {}",
-                        guidance(record)
-                    ),
-                });
-            }
-        }
+        let total = totals.get(type_name).copied().unwrap_or(0);
+        identity_findings_for_type(type_name, off, total, config, &mut findings);
     }
 
     (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records,
-        },
+        RuleExecution::ran(RULE_FILENAME_IDENTITY_PATTERN, population, examined_records),
         findings,
     )
+}
+
+/// The findings for one type's off-pattern files: one on the directory when
+/// every file of the type is off-pattern (`total`), else one per file.
+fn identity_findings_for_type(
+    type_name: &str,
+    off: Vec<&Record>,
+    total: usize,
+    config: &Config,
+    findings: &mut Vec<Finding>,
+) {
+    let type_config = config.record_types.get(type_name);
+    let identity = type_config
+        .and_then(|t| {
+            crate::document_model::declared_model(type_name, t)
+                .ok()
+                .flatten()
+        })
+        .and_then(|m| m.resolve().ok())
+        .and_then(|m| m.identity);
+    let pattern = type_config
+        .and_then(|t| t.identity.as_ref())
+        .and_then(|v| v.get("pattern"))
+        .and_then(|v| v.as_str());
+    let convention = match pattern {
+        Some(p) => format!("the declared identity pattern '{p}'"),
+        None => "the 'TYPE-NNNN-slug.md' convention".to_string(),
+    };
+    let guidance = |record: &Record| -> String {
+        let name = file_name_of(record);
+        let expected = expected_name(&record.type_prefix, &name, identity.as_ref());
+        format!("{name} -> {expected}")
+    };
+
+    if off.len() == total {
+        let dir = type_config.map_or_else(
+            || {
+                off[0]
+                    .path
+                    .parent()
+                    .map(|p| p.to_path_buf())
+                    .unwrap_or_default()
+            },
+            |t| std::path::PathBuf::from(&t.dir),
+        );
+        findings.push(Finding::new(
+            RULE_FILENAME_IDENTITY_PATTERN,
+            FindingSeverity::Warning,
+            dir,
+            ActionSource::new("identity-pattern-none-match"),
+            format!(
+                "none of record type '{type_name}''s {} file(s) matches {convention}, so \
+                 no identity-reading rule can examine any of them; rename each: {}",
+                off.len(),
+                {
+                    // A corpus can hold hundreds of such files; naming every
+                    // rename in one string made the finding unreadable.
+                    const SHOWN: usize = 5;
+                    let mut names: Vec<String> =
+                        off.iter().take(SHOWN).map(|r| guidance(r)).collect();
+                    if off.len() > SHOWN {
+                        names.push(format!("and {} more", off.len() - SHOWN));
+                    }
+                    names.join("; ")
+                }
+            ),
+        ));
+    } else {
+        for record in off {
+            findings.push(Finding::new(
+                RULE_FILENAME_IDENTITY_PATTERN,
+                FindingSeverity::Warning,
+                record.path.clone(),
+                ActionSource::new("identity-pattern-mismatch"),
+                format!(
+                    "file name does not match {convention} for record type '{type_name}', \
+                     so it has no identity and identity-reading rules skip it; rename: {}",
+                    guidance(record)
+                ),
+            ));
+        }
+    }
 }
 
 fn file_name_of(record: &Record) -> String {
@@ -362,7 +401,7 @@ fn expected_name(
     file_name: &str,
     identity: Option<&crate::document_model::CompiledIdentity>,
 ) -> String {
-    let stem = file_name.strip_suffix(".md").unwrap_or(file_name);
+    let stem = crate::record::strip_md_extension(file_name).unwrap_or(file_name);
     let digits = stem.chars().take_while(char::is_ascii_digit).count();
     let (number, rest) = stem.split_at(digits);
     let rest = rest.trim_start_matches(['-', '_', ' ']);
@@ -483,6 +522,81 @@ mod tests {
             "expected the title quoted back, got: {}",
             findings[0].message
         );
+    }
+
+    #[test]
+    fn a_date_or_version_title_is_not_an_id_observed_failing() {
+        // The leading token of `# 2026-09-16 Notes` held digits, and filtering
+        // everything else out of it made the number 20260916, a number the
+        // title never carried.
+        for title in ["2026-09-16 Notes", "v1.2 Release", "2026-09 Notes", "Notes"] {
+            let (r, full_text) = yaml_record(
+                "docs/adr/ADR-7-x.md",
+                &format!("---\nStatus: Accepted\n---\n# {title}\n"),
+            );
+            let (_, findings) = filename_title_consistency(&[r], &full_text);
+            assert_eq!(findings.len(), 1, "{title}: {findings:?}");
+            let m = &findings[0].message;
+            assert!(m.contains("carries no record id"), "{title}: {m}");
+            assert!(!m.contains("claims"), "{title}: {m}");
+        }
+    }
+
+    #[test]
+    fn a_title_id_is_a_leading_prefix_n_or_a_bare_n_when_no_pattern_is_declared() {
+        for title in [
+            "7 — X",
+            "0007 — X",
+            "ADR-7 — X",
+            "ADR-0007: X",
+            "7. X",
+            "DOC-ADR-7 X",
+        ] {
+            let (r, full_text) = yaml_record(
+                "docs/adr/ADR-7-x.md",
+                &format!("---\nStatus: Accepted\n---\n# {title}\n"),
+            );
+            let (_, findings) = filename_title_consistency(&[r], &full_text);
+            assert!(findings.is_empty(), "{title}: {findings:?}");
+        }
+    }
+
+    #[test]
+    fn a_title_number_too_large_to_compare_is_reported_as_overflow_not_as_absent_observed_failing()
+    {
+        let (r, full_text) = yaml_record(
+            "docs/adr/ADR-7-x.md",
+            "---\nStatus: Accepted\n---\n# 99999999999999999999999 — X\n",
+        );
+        let (_, findings) = filename_title_consistency(&[r], &full_text);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(
+            findings[0].message.contains("too large to compare"),
+            "{}",
+            findings[0].message
+        );
+        assert!(!findings[0].message.contains("carries no"));
+    }
+
+    #[test]
+    fn a_declared_pattern_reads_the_title_id_as_its_prefix_and_a_number() {
+        let padded = r"^(?P<prefix>SPEC)-(?P<number>\d{4})-.+$";
+        // The declared prefix and a number, padded or not, are the id.
+        assert!(declared_title("d/SPEC-0003-x.md", padded, "# SPEC-3 — X\n").is_empty());
+        assert!(declared_title("d/SPEC-0003-x.md", padded, "# SPEC-0003: X\n").is_empty());
+        // A date is not an id, and is not read as 20260916.
+        let f = declared_title("d/SPEC-0003-x.md", padded, "# 2026-09-16 Notes\n");
+        assert_eq!(f.len(), 1, "{f:?}");
+        assert!(f[0].message.contains("'SPEC-N'"), "{}", f[0].message);
+        assert!(!f[0].message.contains("claims"), "{}", f[0].message);
+        // Another type's prefix is not this type's id.
+        let f = declared_title("d/SPEC-0003-x.md", padded, "# ADR-3 — X\n");
+        assert_eq!(f.len(), 1, "{f:?}");
+        assert!(f[0].message.contains("'SPEC-N'"), "{}", f[0].message);
+        // A real mismatch is still a mismatch.
+        let f = declared_title("d/SPEC-0003-x.md", padded, "# SPEC-4 — X\n");
+        assert_eq!(f.len(), 1, "{f:?}");
+        assert!(f[0].message.contains("claims 4"), "{}", f[0].message);
     }
 
     #[test]

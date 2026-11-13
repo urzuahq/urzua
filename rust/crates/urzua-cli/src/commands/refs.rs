@@ -76,7 +76,7 @@ pub fn run_refresh(config_path: Option<PathBuf>) -> ExitCode {
         None => RefsRefreshOutcome::Created,
     };
     if outcome != RefsRefreshOutcome::Current {
-        if let Err(e) = write_atomically(&path, &text) {
+        if let Err(e) = write_atomically(&repo_root, &path, &text) {
             return emit(&CouldNotRun::from(format!(
                 "could not write {}: {e}",
                 refs.snapshot
@@ -89,6 +89,7 @@ pub fn run_refresh(config_path: Option<PathBuf>) -> ExitCode {
             severity: NoticeSeverity::Info,
             subject: "refs".to_string(),
             message: "no GITHUB_TOKEN or GH_TOKEN was set; the request was unauthenticated and subject to the lower rate limit".to_string(),
+            detail: None,
         });
     }
     emit(&RefsRefreshReport {
@@ -106,17 +107,17 @@ pub fn run_refresh(config_path: Option<PathBuf>) -> ExitCode {
 
 /// Replace `path` only once the whole text exists, so a failed write never
 /// leaves half a snapshot that a later `check` would read as a stale one.
-fn write_atomically(path: &std::path::Path, text: &str) -> std::io::Result<()> {
+fn write_atomically(
+    repo_root: &std::path::Path,
+    path: &std::path::Path,
+    text: &str,
+) -> std::io::Result<()> {
+    urzua_io::confine_to_root(repo_root, path)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::PermissionDenied, e))?;
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    let mut temp = path.as_os_str().to_owned();
-    temp.push(".tmp");
-    let temp = PathBuf::from(temp);
-    std::fs::write(&temp, text)?;
-    std::fs::rename(&temp, path).inspect_err(|_| {
-        let _ = std::fs::remove_file(&temp);
-    })
+    urzua_io::write_atomic(path, text)
 }
 
 /// One HTTP response, as much as the refresh reads.

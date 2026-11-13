@@ -3,7 +3,9 @@
 //! option is off by default, so each test that turns one on has a sibling
 //! asserting the default behaviour is unchanged.
 
-use std::path::{Path, PathBuf};
+mod common;
+
+use std::path::Path;
 use std::process::Command;
 
 fn git(dir: &Path, args: &[&str], date: Option<&str>) {
@@ -23,9 +25,15 @@ fn commit_all(dir: &Path, date: Option<&str>) {
     git(dir, &["commit", "-q", "-m", "fixture"], date);
 }
 
+/// Every run is evaluated as of the date the fixture was built on, passed explicitly, so the
+/// fixture's `Audited` date and the process's evaluation date cannot straddle midnight UTC.
+/// A test that passes its own `--as-of` (the grace-window tests) keeps it.
 fn run_urzua(dir: &Path, args: &[&str]) -> std::process::Output {
-    Command::new(env!("CARGO_BIN_EXE_urzua"))
-        .args(args)
+    let mut cmd = common::urzua();
+    if !args.contains(&"--as-of") {
+        cmd.args(["--as-of", &today()]);
+    }
+    cmd.args(args)
         .current_dir(dir)
         .output()
         .expect("urzua binary should run")
@@ -56,14 +64,9 @@ fn record_stating(state: &str, realized_by: &str) -> String {
 }
 
 fn sha256(content: &str) -> String {
-    let path = std::env::temp_dir().join(format!(
-        "urzua-pin-{}-{}",
-        std::process::id(),
-        content.len()
-    ));
+    let path = common::TempFile::new("urzua-pin");
     std::fs::write(&path, content).unwrap();
     let out = Command::new("sha256sum").arg(&path).output().unwrap();
-    std::fs::remove_file(&path).ok();
     String::from_utf8(out.stdout)
         .unwrap()
         .split_whitespace()
@@ -72,9 +75,8 @@ fn sha256(content: &str) -> String {
         .to_string()
 }
 
-fn repo(name: &str, consistency: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("urzua-pins-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+fn repo(name: &str, consistency: &str) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-pins-{name}"));
     std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
     std::fs::create_dir_all(dir.join("src")).unwrap();
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
@@ -171,7 +173,7 @@ fn a_pin_that_no_longer_matches_is_drift_even_when_the_record_is_newer_observed_
     );
 }
 
-fn drifted_repo(name: &str, consistency: &str, locator_date: Option<&str>) -> PathBuf {
+fn drifted_repo(name: &str, consistency: &str, locator_date: Option<&str>) -> common::TempDir {
     let dir = repo(name, consistency);
     std::fs::write(dir.join("src/a.rs"), V1).unwrap();
     std::fs::write(dir.join(RECORD_PATH), record("code:src/a.rs")).unwrap();
@@ -220,7 +222,7 @@ fn with_no_grace_window_a_fresh_change_reports_as_before() {
     );
 }
 
-fn aged_repo(name: &str, consistency: &str) -> PathBuf {
+fn aged_repo(name: &str, consistency: &str) -> common::TempDir {
     let dir = repo(name, consistency);
     std::fs::write(dir.join("src/a.rs"), V1).unwrap();
     std::fs::write(dir.join(RECORD_PATH), record("code:src/a.rs")).unwrap();
@@ -293,7 +295,7 @@ fn the_new_options_belong_to_embodiment_consistency_only() {
 
 /// The record is committed first and the locator changes after, so the drift
 /// is fresh. The record already says `Drift detected`.
-fn stated_drift_repo(name: &str, locator_date: Option<&str>) -> PathBuf {
+fn stated_drift_repo(name: &str, locator_date: Option<&str>) -> common::TempDir {
     let dir = repo(name, "{level: error, drift_grace_days: 7}");
     std::fs::write(dir.join("src/a.rs"), V1).unwrap();
     std::fs::write(
@@ -355,7 +357,7 @@ fn fix_does_not_flip_a_stated_drift_detected_while_the_drift_is_inside_the_grace
 
 /// `MILE-166`: a declared last-audit field replaces the locator's last change
 /// as where the grace window counts from.
-fn audit_repo(name: &str, locator_date: Option<&str>, audited: Option<&str>) -> PathBuf {
+fn audit_repo(name: &str, locator_date: Option<&str>, audited: Option<&str>) -> common::TempDir {
     let dir = repo(
         name,
         "{level: error, drift_grace_days: 7, drift_audit_field: Audited}",
@@ -378,9 +380,15 @@ fn audit_repo(name: &str, locator_date: Option<&str>, audited: Option<&str>) -> 
     dir
 }
 
+/// The date this test process's fixtures are built on: read once, so every use agrees.
 fn today() -> String {
-    let out = Command::new("date").args(["-u", "+%F"]).output().unwrap();
-    String::from_utf8(out.stdout).unwrap().trim().to_string()
+    static TODAY: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    TODAY
+        .get_or_init(|| {
+            let out = Command::new("date").args(["-u", "+%F"]).output().unwrap();
+            String::from_utf8(out.stdout).unwrap().trim().to_string()
+        })
+        .clone()
 }
 
 fn drift_reported(parsed: &serde_json::Value) -> bool {
@@ -430,4 +438,222 @@ fn a_malformed_last_audit_is_reported_and_falls_back_to_the_files_last_change() 
     );
     // The fresh locator change is still held back by the file's date.
     assert!(!drift_reported(&parsed), "{parsed}");
+}
+
+// ---- Drift inside drift_grace_days is disclosed, never a finding ----
+
+fn grace_notice(parsed: &serde_json::Value) -> Option<&serde_json::Value> {
+    parsed["notices"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .find(|n| n["subject"] == "embodiment-drift-in-grace")
+}
+
+#[test]
+fn drift_held_back_by_the_grace_window_is_disclosed_with_count_and_earliest_date_observed_failing()
+{
+    // The locator changed on 2026-03-10 and the window is 28 days: it leaves
+    // the window on 2026-04-07.
+    let dir = drifted_repo(
+        "grace-notice",
+        "{level: error, drift_grace_days: 28}",
+        Some("2026-03-10T12:00:00"),
+    );
+    let out = run_urzua(&dir, &["--as-of", "2026-03-12", "check", "docs/"]);
+    let parsed = json(&out);
+    assert_eq!(out.status.code(), Some(0), "{parsed}");
+    assert_eq!(
+        consistency_messages(&parsed),
+        Vec::<String>::new(),
+        "{parsed}"
+    );
+    let notice = grace_notice(&parsed).unwrap_or_else(|| panic!("no notice: {parsed}"));
+    assert_eq!(notice["severity"], "info", "{notice}");
+    assert_eq!(notice["detail"]["count"], "1", "{notice}");
+    assert_eq!(notice["detail"]["earliest"], "2026-04-07", "{notice}");
+    assert_eq!(notice["detail"]["drift_grace_days"], "28", "{notice}");
+    assert_eq!(
+        notice["detail"]["records"],
+        serde_json::json!([RECORD_PATH]),
+        "{notice}"
+    );
+}
+
+#[test]
+fn the_grace_notice_date_is_where_the_window_ends_and_follows_as_of() {
+    let dir = drifted_repo(
+        "grace-asof",
+        "{level: error, drift_grace_days: 28}",
+        Some("2026-03-10T12:00:00"),
+    );
+    for as_of in ["2026-03-10", "2026-04-06"] {
+        let parsed = json(&run_urzua(&dir, &["--as-of", as_of, "check", "docs/"]));
+        let notice = grace_notice(&parsed).unwrap_or_else(|| panic!("{as_of}: {parsed}"));
+        assert_eq!(notice["detail"]["earliest"], "2026-04-07", "{notice}");
+    }
+    // Past the window the drift is a finding, and the notice is gone.
+    let parsed = json(&run_urzua(
+        &dir,
+        &["--as-of", "2026-04-08", "check", "docs/"],
+    ));
+    assert!(grace_notice(&parsed).is_none(), "{parsed}");
+    assert!(!consistency_messages(&parsed).is_empty(), "{parsed}");
+}
+
+#[test]
+fn a_later_audit_date_moves_the_grace_notice_date() {
+    // The file changed long ago; the audit on 2026-03-20 holds it for 7 days.
+    let dir = audit_repo(
+        "grace-audit",
+        Some("2021-01-01T00:00:00"),
+        Some("2026-03-20"),
+    );
+    let parsed = json(&run_urzua(
+        &dir,
+        &["--as-of", "2026-03-21", "check", "docs/"],
+    ));
+    let notice = grace_notice(&parsed).unwrap_or_else(|| panic!("{parsed}"));
+    assert_eq!(notice["detail"]["earliest"], "2026-03-27", "{notice}");
+}
+
+#[test]
+fn with_no_grace_window_there_is_no_grace_notice() {
+    let dir = drifted_repo("grace-none", "error", Some("2026-03-10T12:00:00"));
+    let parsed = json(&run_urzua(
+        &dir,
+        &["--as-of", "2026-03-12", "check", "docs/"],
+    ));
+    assert!(grace_notice(&parsed).is_none(), "{parsed}");
+}
+
+#[test]
+fn a_grace_window_with_no_held_back_drift_has_no_notice() {
+    let dir = repo("grace-clean", "{level: error, drift_grace_days: 28}");
+    std::fs::write(dir.join("src/a.rs"), V1).unwrap();
+    std::fs::write(dir.join(RECORD_PATH), record("code:src/a.rs")).unwrap();
+    commit_all(&dir, Some(OLD));
+    let parsed = json(&run_urzua(
+        &dir,
+        &["--as-of", "2026-03-12", "check", "docs/"],
+    ));
+    assert!(grace_notice(&parsed).is_none(), "{parsed}");
+}
+
+#[test]
+fn the_grace_notice_caps_the_record_list_and_keeps_the_total() {
+    let dir = repo("grace-cap", "{level: error, drift_grace_days: 28}");
+    std::fs::write(dir.join("src/a.rs"), V1).unwrap();
+    for i in 0..25 {
+        std::fs::write(
+            dir.join(format!("docs/adr/ADR-{}-n.md", i + 1)),
+            record("code:src/a.rs"),
+        )
+        .unwrap();
+    }
+    commit_all(&dir, Some(OLD));
+    std::fs::write(dir.join("src/a.rs"), V2).unwrap();
+    commit_all(&dir, Some("2026-03-10T12:00:00"));
+    let parsed = json(&run_urzua(
+        &dir,
+        &["--as-of", "2026-03-12", "check", "docs/"],
+    ));
+    let notice = grace_notice(&parsed).unwrap_or_else(|| panic!("{parsed}"));
+    assert_eq!(notice["detail"]["count"], "25", "{notice}");
+    assert_eq!(notice["detail"]["records"].as_array().unwrap().len(), 20);
+}
+
+/// A repository with a second record type that declares no `Embodiment`
+/// field, like a milestone: its records cite a file too, but the rule never
+/// judges them.
+fn grace_repo_with_two_types(name: &str, consistency: &str) -> common::TempDir {
+    let dir = repo(name, consistency);
+    let mut cfg = config(consistency);
+    cfg.push_str(
+        "  mile:\n    dir: \"docs/mile\"\n    required_fields: []\n    known_fields: [\"Realized-by\"]\n",
+    );
+    std::fs::write(dir.join(".urzua/config.yaml"), cfg).unwrap();
+    std::fs::create_dir_all(dir.join("docs/mile")).unwrap();
+    std::fs::write(dir.join("src/a.rs"), V1).unwrap();
+    dir
+}
+
+fn mile_record() -> String {
+    "---\nRealized-by: 'code:src/a.rs'\n---\n# MILE-1: Held\n".to_string()
+}
+
+fn drift_in_window(dir: &Path) -> serde_json::Value {
+    commit_all(dir, Some(OLD));
+    std::fs::write(dir.join("src/a.rs"), V2).unwrap();
+    commit_all(dir, Some("2026-03-10T12:00:00"));
+    json(&run_urzua(
+        dir,
+        &["--as-of", "2026-03-12", "check", "docs/"],
+    ))
+}
+
+#[test]
+fn a_held_back_record_of_a_type_without_embodiment_is_not_counted_observed_failing() {
+    let dir = grace_repo_with_two_types("grace-notype", "{level: error, drift_grace_days: 28}");
+    std::fs::write(dir.join("docs/mile/MILE-1-held.md"), mile_record()).unwrap();
+    std::fs::write(dir.join(RECORD_PATH), record("code:src/a.rs")).unwrap();
+    let parsed = drift_in_window(&dir);
+    let notice = grace_notice(&parsed).unwrap_or_else(|| panic!("{parsed}"));
+    assert_eq!(notice["detail"]["count"], "1", "{notice}");
+    assert_eq!(
+        notice["detail"]["records"],
+        serde_json::json!([RECORD_PATH]),
+        "{notice}"
+    );
+}
+
+#[test]
+fn with_only_records_the_rule_never_judges_there_is_no_notice() {
+    let dir = grace_repo_with_two_types("grace-onlymile", "{level: error, drift_grace_days: 28}");
+    std::fs::write(dir.join("docs/mile/MILE-1-held.md"), mile_record()).unwrap();
+    let parsed = drift_in_window(&dir);
+    assert!(grace_notice(&parsed).is_none(), "{parsed}");
+}
+
+#[test]
+fn a_sticky_or_already_drifted_record_is_not_counted_observed_failing() {
+    let dir = grace_repo_with_two_types(
+        "grace-sticky",
+        "{level: error, drift_grace_days: 28, sticky_states: [Deprecated]}",
+    );
+    std::fs::write(
+        dir.join(RECORD_PATH),
+        record_stating("Deprecated", "code:src/a.rs"),
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("docs/adr/ADR-2-stated.md"),
+        record_stating("Drift detected", "code:src/a.rs"),
+    )
+    .unwrap();
+    let parsed = drift_in_window(&dir);
+    assert!(grace_notice(&parsed).is_none(), "{parsed}");
+}
+
+#[test]
+fn an_eligible_disagreeing_record_is_counted_beside_ones_that_are_not() {
+    let dir = grace_repo_with_two_types(
+        "grace-mixed",
+        "{level: error, drift_grace_days: 28, sticky_states: [Deprecated]}",
+    );
+    std::fs::write(dir.join("docs/mile/MILE-1-held.md"), mile_record()).unwrap();
+    std::fs::write(
+        dir.join(RECORD_PATH),
+        record_stating("Deprecated", "code:src/a.rs"),
+    )
+    .unwrap();
+    std::fs::write(dir.join("docs/adr/ADR-2-live.md"), record("code:src/a.rs")).unwrap();
+    let parsed = drift_in_window(&dir);
+    let notice = grace_notice(&parsed).unwrap_or_else(|| panic!("{parsed}"));
+    assert_eq!(notice["detail"]["count"], "1", "{notice}");
+    assert_eq!(
+        notice["detail"]["records"],
+        serde_json::json!(["docs/adr/ADR-2-live.md"]),
+        "{notice}"
+    );
 }

@@ -1,0 +1,9 @@
+fixtures:
+  - path: .urzua/config.yaml
+    irregularity: the config the corpus is validated under; declares embodiment.claim-expired with a 30-day milestone period and a 36500-day adr period; not a record.
+  - path: src/a.rs
+    irregularity: none -- the source file the claims cite; not a record.
+  - path: docs/milestones/MILE-1-expired-claim.md
+    irregularity: Status Done and Last-audited 2020-01-01, so its claim is far older than the 30-day period.
+  - path: docs/adr/ADR-1-long-period.md
+    irregularity: none -- Accepted with Last-audited 2020-01-01 under a 36500-day period, so its claim has not expired.

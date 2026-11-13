@@ -12,5 +12,8 @@ pub mod index;
 pub mod init;
 pub mod migrate;
 pub mod new;
+mod new_refs;
 pub mod refs;
+pub mod reverify;
+pub mod roadmap;
 pub mod rules;

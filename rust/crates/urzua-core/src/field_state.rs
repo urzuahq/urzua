@@ -33,7 +33,7 @@ pub fn classify(value: Option<&str>) -> FieldState {
 
 /// [`classify`], judging "pending" by the type's declared vocabulary when it
 /// declares one (BUG-65): whole values only, replacing the compiled-in
-/// `contains("pending")` match. A type declaring none keeps that match, so an
+/// whole-word `pending` match. A type declaring none keeps that match, so an
 /// undeclared type behaves exactly as before.
 pub fn classify_with(
     value: Option<&str>,
@@ -55,7 +55,7 @@ pub fn classify_with(
 
     let pending = match declared.and_then(|d| d.is_pending_value(trimmed)) {
         Some(declared_verdict) => declared_verdict,
-        None => lower.contains("pending") || lower == "todo",
+        None => has_pending_word(&lower) || lower == "todo",
     };
     if pending {
         return FieldState::Pending;
@@ -65,6 +65,21 @@ pub fn classify_with(
     // (e.g. `Supersedes / Superseded-by: —` on a record nothing supersedes)
     // -- a deliberate value, not an omission. Treated as Present.
     FieldState::Present
+}
+
+/// The compiled-in vocabulary read against the WHOLE trimmed value, case
+/// insensitively: `TBD`, `TODO`, `name` and the other placeholder tokens are a
+/// Placeholder, and `pending` alone is Pending. A sentence that merely contains
+/// one of them ("pending the upstream fix") is `None`: that is a real value.
+pub fn whole_value_default_state(value: &str) -> Option<FieldState> {
+    let lower = value.trim().to_ascii_lowercase();
+    if PLACEHOLDER_TOKENS.contains(&lower.as_str()) {
+        Some(FieldState::Placeholder)
+    } else if lower == "pending" {
+        Some(FieldState::Pending)
+    } else {
+        None
+    }
 }
 
 /// [`classify_with`] for a type whose placeholder vocabulary is its template
@@ -92,6 +107,22 @@ pub fn classify_against_template(
         return FieldState::Pending;
     }
     FieldState::Present
+}
+
+/// The compiled-in pending reading: `pending` as a whole word (not inside
+/// `spending`), in a token that is not a path. A token with a `/` is a path
+/// such as `docs/pending-settlement/x.md`, which names a place and declares no
+/// unfinished work. Words are delimited by anything that is not a letter or a
+/// digit, so `Pending review`, `(pending)` and `Pending-ADR-5` still match.
+fn has_pending_word(lower: &str) -> bool {
+    lower
+        .split_whitespace()
+        .filter(|token| !token.contains('/'))
+        .any(|token| {
+            token
+                .split(|c: char| !c.is_alphanumeric())
+                .any(|word| word == "pending")
+        })
 }
 
 /// Matches unedited placeholder references like `RFC-NNNN` or `ADR-NNNN`,
@@ -126,6 +157,26 @@ mod tests {
     #[test]
     fn explicit_pending_marker_is_pending_not_placeholder() {
         assert_eq!(classify(Some("Pending review")), FieldState::Pending);
+    }
+
+    #[test]
+    fn pending_is_a_whole_word_not_a_substring_or_a_path_segment() {
+        for value in [
+            "docs/spending/report.md",
+            "docs/pending-settlement/x.md",
+            "Suspending the service",
+            "spending",
+        ] {
+            assert_eq!(classify(Some(value)), FieldState::Present, "{value}");
+        }
+        for value in [
+            "pending",
+            "(pending)",
+            "Pending-ADR-5",
+            "still pending review",
+        ] {
+            assert_eq!(classify(Some(value)), FieldState::Pending, "{value}");
+        }
     }
 
     #[test]

@@ -2,7 +2,7 @@
 Stable-Id: 01M2WG82N3NNCD0QBCPWH6QZEB
 Status: Fixed
 Found-in: "Round 7 of the 0.4.0 review"
-Regression-test: "rust/crates/urzua-cli/src/commands/init.rs::one_prefix_less_type_does_not_disarm_the_types_that_have_a_prefix"
+Realized-by: test:rust/crates/urzua-cli/src/commands/init.rs#one_prefix_less_type_does_not_disarm_the_types_that_have_a_prefix@sha256:9bdb25786c56d9045adda796bc6fadd07cb37c42b437c3fe1193852056b039e5
 ---
 # 70 — init disables the identity rules for every type when any one type lacks a prefix
 
@@ -39,3 +39,5 @@ unfixed code because its fixture omitted `header_shape`.
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/init.rs#one_prefix_less_type_does_not_disarm_the_types_that_have_a_prefix` (lines 963-989) 144327feeb35 -> 9bdb25786c56. Reason: the pinned test span's only change is the added `exclude_files: vec![]` fixture field; the behaviour this record relies on is unchanged **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |

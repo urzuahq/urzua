@@ -94,7 +94,7 @@ impl CompiledIdentity {
     /// Reads a file name (with or without `.md`). A name the pattern does not
     /// match, or whose `number` is not all ASCII digits, has no number.
     pub fn identify(&self, file_name: &str) -> DeclaredIdentity {
-        let stem = file_name.strip_suffix(".md").unwrap_or(file_name);
+        let stem = crate::record::strip_md_extension(file_name).unwrap_or(file_name);
         let Some(caps) = self.regex.captures(stem) else {
             return DeclaredIdentity::default();
         };
@@ -294,14 +294,41 @@ impl RawRequiredSection {
         if name.is_empty() {
             return Err("a required section's `name` must not be blank".into());
         }
-        let shape = match self.shape.as_deref() {
+        let shape = self.resolve_shape(&name)?;
+        let aliases = resolve_aliases(self.aliases.unwrap_or_default(), &name)?;
+        let level = match &self.level {
+            None => 2,
+            Some(v) => v.as_u64().filter(|n| (2..=6).contains(n)).ok_or_else(|| {
+                format!("section '{name}': `level` must be an integer from 2 (`##`) to 6")
+            })? as u8,
+        };
+        let under = resolve_under(self.under, level, &name)?;
+        let preamble = self.preamble.unwrap_or(false);
+        if preamble && !matches!(shape, Some(SectionShape::YStatement { marker: Some(_) })) {
+            return Err(format!(
+                "section '{name}': `preamble` needs shape `y-statement` with a `marker`, which is how the block is found outside a section"
+            ));
+        }
+        Ok(RequiredSection {
+            name,
+            level,
+            under,
+            shape,
+            aliases,
+            preamble,
+        })
+    }
+
+    /// The declared `shape` with the `marker` or `min_rows` that belongs to it.
+    fn resolve_shape(&self, name: &str) -> Result<Option<SectionShape>, String> {
+        match self.shape.as_deref() {
             None => {
                 if self.marker.is_some() || self.min_rows.is_some() {
                     return Err(format!(
                         "section '{name}' sets `marker` or `min_rows` without a `shape`"
                     ));
                 }
-                None
+                Ok(None)
             }
             Some("y-statement") => {
                 if self.min_rows.is_some() {
@@ -309,14 +336,14 @@ impl RawRequiredSection {
                         "section '{name}': `min_rows` belongs to shape `table-min-rows`"
                     ));
                 }
-                let marker = match self.marker {
+                let marker = match &self.marker {
                     Some(m) if m.trim().is_empty() => {
                         return Err(format!("section '{name}': `marker` must not be blank"))
                     }
                     Some(m) => Some(m.trim().to_string()),
                     None => None,
                 };
-                Some(SectionShape::YStatement { marker })
+                Ok(Some(SectionShape::YStatement { marker }))
             }
             Some("table-min-rows") => {
                 if self.marker.is_some() {
@@ -334,64 +361,44 @@ impl RawRequiredSection {
                             "section '{name}': shape `table-min-rows` needs `min_rows`, an integer of at least 1"
                         )
                     })?;
-                Some(SectionShape::TableMinRows {
+                Ok(Some(SectionShape::TableMinRows {
                     min_rows: min_rows as usize,
-                })
+                }))
             }
-            Some(other) => {
-                return Err(format!(
-                    "section '{name}': unknown shape '{other}'; valid shapes are y-statement, table-min-rows"
-                ))
-            }
-        };
-        let aliases: Vec<String> = self
-            .aliases
-            .unwrap_or_default()
-            .into_iter()
-            .map(|a| a.trim().to_string())
-            .collect();
-        if aliases.iter().any(String::is_empty) {
-            return Err(format!("section '{name}': an alias must not be blank"));
+            Some(other) => Err(format!(
+                "section '{name}': unknown shape '{other}'; valid shapes are y-statement, table-min-rows"
+            )),
         }
-        for (i, alias) in aliases.iter().enumerate() {
-            if *alias == name || aliases[..i].contains(alias) {
-                return Err(format!(
-                    "section '{name}': alias '{alias}' repeats a heading it already names"
-                ));
-            }
-        }
-        let level = match &self.level {
-            None => 2,
-            Some(v) => v.as_u64().filter(|n| (2..=6).contains(n)).ok_or_else(|| {
-                format!("section '{name}': `level` must be an integer from 2 (`##`) to 6")
-            })? as u8,
-        };
-        let under = match self.under {
-            None => None,
-            Some(u) if u.trim().is_empty() => {
-                return Err(format!("section '{name}': `under` must not be blank"))
-            }
-            Some(_) if level < 3 => {
-                return Err(format!(
-                    "section '{name}': `under` names the section one level up, so it needs a `level` of 3 or more"
-                ))
-            }
-            Some(u) => Some(u.trim().to_string()),
-        };
-        let preamble = self.preamble.unwrap_or(false);
-        if preamble && !matches!(shape, Some(SectionShape::YStatement { marker: Some(_) })) {
+    }
+}
+
+/// The trimmed aliases, none blank and none repeating the name or another alias.
+fn resolve_aliases(raw: Vec<String>, name: &str) -> Result<Vec<String>, String> {
+    let aliases: Vec<String> = raw.into_iter().map(|a| a.trim().to_string()).collect();
+    if aliases.iter().any(String::is_empty) {
+        return Err(format!("section '{name}': an alias must not be blank"));
+    }
+    for (i, alias) in aliases.iter().enumerate() {
+        if *alias == name || aliases[..i].contains(alias) {
             return Err(format!(
-                "section '{name}': `preamble` needs shape `y-statement` with a `marker`, which is how the block is found outside a section"
+                "section '{name}': alias '{alias}' repeats a heading it already names"
             ));
         }
-        Ok(RequiredSection {
-            name,
-            level,
-            under,
-            shape,
-            aliases,
-            preamble,
-        })
+    }
+    Ok(aliases)
+}
+
+/// The trimmed `under` heading, which only a section of level 3 or more can name.
+fn resolve_under(under: Option<String>, level: u8, name: &str) -> Result<Option<String>, String> {
+    match under {
+        None => Ok(None),
+        Some(u) if u.trim().is_empty() => {
+            Err(format!("section '{name}': `under` must not be blank"))
+        }
+        Some(_) if level < 3 => Err(format!(
+            "section '{name}': `under` names the section one level up, so it needs a `level` of 3 or more"
+        )),
+        Some(u) => Ok(Some(u.trim().to_string())),
     }
 }
 

@@ -1,4 +1,5 @@
 ---
+Stable-Id: 01M6R3NK4Y0MVWXB8NYEYPE38A
 Status: Accepted
 Date: 2026-08-11
 Accepted-on: 2026-09-05
@@ -179,3 +180,9 @@ directions, and it is cheap to fuzz.
 
 - RFC-1 §1a — declared profiles, which this RFC makes binding.
 - `docs/specs/SPEC-1-cli.md` — the no-silent-no-op rule this RFC applies at field granularity.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-05 | Revision log added, 2026-11-05. | **structural** |

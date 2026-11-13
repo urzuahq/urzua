@@ -1,4 +1,5 @@
 ---
+Stable-Id: 01M6R3NK43F2639Z6H9FD5RQZE
 Status: Accepted
 Embodiment: Not started
 Date: 2026-09-04
@@ -56,3 +57,9 @@ written for the old format fails loudly with a version it does not recognise rat
 best-effort read, which is what this decision exists to guarantee.
 
 Nothing here is reversed. Only the file extension and the parser change.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-05 | Revision log added, 2026-11-05. | **structural** |

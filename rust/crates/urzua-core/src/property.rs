@@ -209,9 +209,19 @@ mod tests {
 
             let config = Config {
                 schema_version: 2,
+                roadmap: Default::default(),
                 relation_pairs: Vec::new(),
                 fail_on: Default::default(),
                 embodiment: Default::default(),
+                locator_resolvers: Default::default(),
+                upgraded_from: None,
+                override_log: None,
+                block_on: None,
+                attestation: Default::default(),
+                new: Default::default(),
+                discovery: Default::default(),
+                harness: None,
+                authority: None,
                 rules: std::collections::BTreeMap::new(),
                 record_types: [(
                     "note".to_string(),
@@ -233,6 +243,9 @@ mod tests {
                         relation_fields: None,
                         companion_fields: None,
                         revision_log: None,
+                        role: None,
+                        effective_requires: None,
+                        permanent: None,
                     },
                 )]
                 .into_iter()
@@ -248,6 +261,7 @@ mod tests {
                 type_prefix: "NOTE".to_string(),
                 header: crate::header::parse(&body),
                 identity: None,
+                items: None,
             };
 
             // The parser must recover the key before the rule can be held to
@@ -315,6 +329,7 @@ mod tests {
             type_prefix: "NOTE".to_string(),
             header: crate::header::parse(body),
             identity: None,
+            items: None,
         };
         let records = [record];
         let record_index = rules::build_normalized_index(&records);
@@ -336,6 +351,16 @@ mod tests {
             schema_version: 2,
             fail_on: Default::default(),
             embodiment: Default::default(),
+            locator_resolvers: Default::default(),
+            roadmap: Default::default(),
+            upgraded_from: None,
+            override_log: None,
+            block_on: None,
+            attestation: Default::default(),
+            new: Default::default(),
+            discovery: Default::default(),
+            harness: None,
+            authority: None,
             relation_pairs: vec![crate::config::RelationPair {
                 name: "follow".to_string(),
                 forward: "Follows".to_string(),
@@ -358,7 +383,7 @@ mod tests {
                     sections: None,
                     statuses: Some(
                         yaml_serde::from_str(
-                            "{values: [Open, Done], success: [Done], delivery: {delivered_tiers: [Implemented], unevidenced_tiers: [\"Not started\"], not_done: [Open], set_status: Done}, require: [{when: [Done], fields: [Derives-from]}], forbid: [{when: [Open], fields: [Blocked-on]}]}",
+                            "{values: [Open, Done], success: [Done], progress: [Open], delivery: {delivered_tiers: [Implemented], unevidenced_tiers: [\"Not started\"], not_done: [Open], set_status: Done}, require: [{when: [Done], fields: [Derives-from]}], forbid: [{when: [Open], fields: [Blocked-on]}]}",
                         )
                         .unwrap(),
                     ),
@@ -371,7 +396,21 @@ mod tests {
                     spec: None,
                     relation_fields: None,
                     companion_fields: None,
-                    revision_log: None,
+                    // A type that does not require a log leaves a record without
+                    // one eligible and unexamined (BUG-50); one that does judges it.
+                    revision_log: Some(crate::config::RevisionLogDecl {
+                        marker: None,
+                        heading: None,
+                        required: Some(false),
+                        version_bump: None,
+                        classes: None,
+                        class_column: None,
+                        date_column: None,
+                        tool_class: None,
+                    }),
+                    role: None,
+                    effective_requires: None,
+                    permanent: None,
                 },
             )]
             .into_iter()
@@ -432,7 +471,9 @@ mod tests {
             ),
             (
                 "status.delivery-agreement",
-                rules::status_delivery_agreement(&records, &config, &Default::default()),
+                rules::LocatorEnv::without_files(&config, |env| {
+                    rules::status_delivery_agreement(&records, &config, &Default::default(), env)
+                }),
             ),
             (
                 "identity.collision",
@@ -443,7 +484,7 @@ mod tests {
             ),
             (
                 "pointer.resolution",
-                rules::pointer_resolution(&records, &config, &record_index),
+                rules::pointer_resolution(&records, &config, &record_index, &Default::default()),
             ),
             (
                 "pointer.target-status",
@@ -455,11 +496,21 @@ mod tests {
             ),
             (
                 "relation.supersession-reciprocity",
-                rules::supersession_reciprocity(&records, &config, &record_index),
+                rules::supersession_reciprocity(
+                    &records,
+                    &config,
+                    &record_index,
+                    &Default::default(),
+                ),
             ),
             (
                 "relation.pair-reciprocity",
-                rules::relation_pair_reciprocity(&records, &config, &record_index),
+                rules::relation_pair_reciprocity(
+                    &records,
+                    &config,
+                    &record_index,
+                    &Default::default(),
+                ),
             ),
             (
                 "relation.cross-type-disallowed",
@@ -471,7 +522,24 @@ mod tests {
             ),
             (
                 "sequence.unresolved-blocker",
-                rules::sequence_unresolved_blocker(&records, &config, &record_index),
+                rules::sequence_unresolved_blocker(
+                    &records,
+                    &config,
+                    &record_index,
+                    &Default::default(),
+                ),
+            ),
+            (
+                "sequence.status-agreement",
+                rules::LocatorEnv::without_files(&config, |env| {
+                    rules::sequence_status_agreement(
+                        &records,
+                        &config,
+                        &record_index,
+                        &Default::default(),
+                        env,
+                    )
+                }),
             ),
             (
                 "embodiment.consistency",
@@ -486,11 +554,18 @@ mod tests {
             ),
             (
                 "embodiment.locator-exists",
-                rules::embodiment_locator_exists(&records, &config, &|_| true),
+                rules::embodiment_locator_exists(
+                    &records,
+                    &config,
+                    &[],
+                    &|_| true,
+                    &crate::locator::no_file_text,
+                    &|_| false,
+                ),
             ),
             (
                 "embodiment.locator-promotion-candidate",
-                rules::embodiment_locator_promotion_candidate(&records, &config),
+                rules::embodiment_locator_promotion_candidate(&records, &config, None),
             ),
         ];
 
@@ -551,9 +626,19 @@ mod tests {
 
             let config = Config {
                 schema_version: 2,
+                roadmap: Default::default(),
                 relation_pairs: Vec::new(),
                 fail_on: Default::default(),
                 embodiment: Default::default(),
+                locator_resolvers: Default::default(),
+                upgraded_from: None,
+                override_log: None,
+                block_on: None,
+                attestation: Default::default(),
+                new: Default::default(),
+                discovery: Default::default(),
+                harness: None,
+                authority: None,
                 rules: std::collections::BTreeMap::new(),
                 record_types: [(
                     "note".to_string(),
@@ -575,6 +660,9 @@ mod tests {
                         relation_fields: None,
                         companion_fields: None,
                         revision_log: None,
+                        role: None,
+                        effective_requires: None,
+                        permanent: None,
                     },
                 )]
                 .into_iter()

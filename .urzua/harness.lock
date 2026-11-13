@@ -1,0 +1,50 @@
+{
+  "schema": 1,
+  "bundle_version": "0.3.0",
+  "adapters": [
+    "claude-code"
+  ],
+  "files": {
+    ".claude/commands/adr.md": "sha256:d1910ceeda678a8ebd1f3566c9c77202a2c058c122ca003e2794effb7c8b4f06",
+    ".claude/commands/amend.md": "sha256:42d7a14788d5e790224cd7c94fc94055bf52d8fe016b480c5683c889736c7f2e",
+    ".claude/commands/bug.md": "sha256:ed7c505e45cb03e9a693326ba4d566d4f50381a5880f68196fbcd4311101f3ff",
+    ".claude/commands/condition.md": "sha256:f8aaac2dc435015549385db4142b3910a210b9cb00a604006b794e6e462c6033",
+    ".claude/commands/done.md": "sha256:e607ac3ef6e1144febf0314e1818edc4540141014b5a45cf148a66ab89c3c592",
+    ".claude/commands/milestone.md": "sha256:2161bb31386a73e1c5550878e98578721160aeb5efd0881b49c07fd96ec9d129",
+    ".claude/commands/repin.md": "sha256:6371aa2831adb7a491ad46467abf987bdd28e1523906c8b4e8700cdae24c006b",
+    ".claude/commands/reverify.md": "sha256:5fd282809f8aea750c3700b443d4a16535fd93e179234a62832570b391aabb5d",
+    ".claude/commands/rfc.md": "sha256:d8b3308af758e3e4e7835d8bae793811c585aad0fb64f312c0f2f1a087f83fca",
+    ".claude/commands/spec.md": "sha256:3b7fcb49f0893a3b6388c75406ac5f8d1be5ccb5ca2dc9c59fc3dee08079a96c",
+    ".claude/commands/waiver.md": "sha256:188690a392b5a9734644b848814b5c569d436dcd6dbdd8e68087c8d13304b287",
+    ".claude/hooks/urzua-claude-code.py": "sha256:af3f6edb3139b4e2fb750a782351271b219ed82ec336954c95525671b6d53e05",
+    ".claude/hooks/urzua-record.sh": "sha256:6b6e8133b8d92377ca30e48f80357319b26afdac6cc71e79b442b161b6a7c3de"
+  },
+  "entries": [
+    {
+      "file": ".claude/settings.json",
+      "event": "PostToolUse",
+      "matcher": "Bash",
+      "handler": "post-command",
+      "hash": "sha256:200b11d5204eb3aee502cb72365a6760f701ab46587d86e269df5a2513e1f6c2"
+    },
+    {
+      "file": ".claude/settings.json",
+      "event": "PreToolUse",
+      "matcher": "Write|Edit|MultiEdit|NotebookEdit|mcp__.*",
+      "handler": "edit",
+      "hash": "sha256:638174b34c28549284847be544334b6a421e7756ed8af2b90a4e6a5f14b89272"
+    },
+    {
+      "file": ".claude/settings.json",
+      "event": "SessionStart",
+      "handler": "session-start",
+      "hash": "sha256:bb715663b9e24e8431ddd76d1818dcf8d354565e4a76be8093b758197899b607"
+    }
+  ],
+  "blocks": [
+    {
+      "file": "AGENTS.md",
+      "hash": "sha256:9169156c827d7b5e5f2a330a496e7181b6a8f4ff3452ea0c49725b84c48e7f82"
+    }
+  ]
+}

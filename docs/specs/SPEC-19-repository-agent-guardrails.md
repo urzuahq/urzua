@@ -2,7 +2,7 @@
 Stable-Id: 01M20SH9CXA18HFPABZJQY795D
 Status: Accepted
 Date: 2026-09-08
-Version: '0.10'
+Version: '0.28'
 Author: beauwilliams
 Subject: 'Repository agent guardrails -- mechanisms that constrain or guide an AI agent working in this repo; today, `AGENTS.md` and the drafting commands in `.claude/commands/`.'
 Implements: MILE-36
@@ -85,6 +85,148 @@ the kind of gap this project's own history keeps finding elsewhere (a decision l
 spec describing its mechanism getting updated in the same pass — see `MILE-90`'s own `Why` for the
 same pattern applied to a different feature area).
 
+## The installable harness bundle (`ADR-89`, `MILE-198`)
+
+The mechanisms above are this repository's own. `urzua harness` ships the same kind of mechanism to a
+repository that adopts urzua, as one versioned bundle embedded in the binary, with the guardrail logic in
+the engine and an adapter per agent that only translates. The contract is `SPEC-24`; the configuration is
+`SPEC-3` ("The agent harness").
+
+- **Commands.** `urzua harness install [--adapter NAME] [--dry-run]` writes the adapter's files, merges
+  its hook entries into the agent's project settings file, writes the marked block into
+  `harness.instructions_file` and writes `.urzua/harness.lock`. `status` compares the lock with the files,
+  the merged entries, the block and the binary (missing, modified, out-of-date) and exits 1 on any drift,
+  so a CI step can run it; it is a separate step and not part of `urzua check`. `update` rewrites an item
+  whose hash still matches the lock and reports, without overwriting, one a person changed unless
+  `--force`. `uninstall` removes what matches the lock, takes only urzua's hook entries and the marked
+  block out of the shared files, reports and leaves what a person changed, and deletes the lock last.
+  `adapters` lists the adapter directories of the bundle. An install that finds a conflicting file or
+  entry writes nothing and exits 2; its items then read `would-create`, `would-merge` and `would-write`
+  as `--dry-run` does, and the advice is to move or delete the file and install again. A settings entry
+  whose command names a script with `record-edit` in its name, the hand-copied
+  first-generation editor hook and its adapter, is named in a warning by `install` and by `doctor`
+  (`harness-legacy-hook`), because every record edit would run both hooks, raising a block and logging
+  an override twice.
+- **Shared files are merged, never replaced.** The settings merge adds the bundle's entries, keyed by
+  event, matcher and handler, and leaves every other key and entry as written; a second install changes
+  nothing. A file that is not valid JSON, or that holds an entry with a key of ours that a person edited,
+  is refused (`not-run`, exit 2) and the entry named. A settings file that is not in the two-space JSON
+  form is re-indented when written, and the install says so; its keys and entries are unchanged. The local
+  settings file and the user-level settings are neither read nor written, and `status` says so.
+- **The cores.** `urzua harness run edit` judges a proposed edit to a record as `ADR-69` and `ADR-78`
+  describe (every enabled rule that can judge one record, `block_on`, the named override and `override_log`)
+  and replaces the `jq`, `bash` and `python3` chain: no binary, no `jq` and an unreadable payload are
+  verdicts the engine or the translator states. `urzua harness run session-start` reports, at the start of a
+  session, a binary that is not on `PATH`, a bundle older or newer than the binary, a translator
+  interpreter that is not on `PATH`, an unset project-directory variable the adapter expects, a hook entry
+  that is not wired or is not the one the install wrote, an installed file (the translator) that is gone or
+  differs from the lock, a settings key that switches every hook off (`disableAllHooks`) and a git hook that
+  is not wired (`urzua doctor`, `MILE-179`).
+- **The post-command check.** `urzua harness run post-command`, wired by the adapter as a `PostToolUse` hook on
+  `Bash` and on only when `harness.guardrails.post-command` is named (`ADR-78` amendment, `MILE-202`), runs
+  `check` on the records `git status` shows as changed after any Bash command, untracked ones included, and
+  reports the unwaived findings to the agent as context. It reads no command, stages nothing, never blocks and
+  always exits 0; pre-commit and CI remain the hard gate. With `acceptance` enabled it also reports, as an error of
+  its own, a changed record whose status is one the `authority` table gates and that `HEAD` did not hold (a
+  Bash-made acceptance), and, with `protected-paths` enabled, a changed, created or deleted path under a
+  protected-paths gate (a Bash-made write to `.claude` or `.urzua/config.yaml`), as a report only. A command that commits its own
+  change is covered too: the commit the last check saw is kept in `.urzua/cache/post-command-head` (seeded at session
+  start) and the files changed since it are examined with the working tree's, a record compared with that commit
+  rather than `HEAD`. A record failing at `HEAD` is listed as pre-existing,
+  a record whose content hash was already reported is not checked again, a deleted record is not judged, and a
+  `git` that is absent, a tree git does not know, a configuration that does not load or a `check` that cannot
+  run is stated as NOT judged. The request, verdict and memory are in `SPEC-24`. This repository enables it in
+  `.urzua/config.yaml` and has the bundle installed.
+- **An unset project-directory variable is a stated verdict.** The adapter's command finds the translator
+  from `CLAUDE_PROJECT_DIR`, else from the nearest real git working tree at or above the current directory
+  that holds `.urzua/config.yaml` and the translator (stepping outward past a nested repository that holds
+  neither, so a Bash `cd` into a `git init` below the project still finds it; never the outermost
+  configuration, which a file written above the project could supply), the command checks the translator's sha256, which
+  `harness install` and `update` write into it, and runs the bytes it checked (a mismatch takes the path of a
+  missing translator), and the translator takes the project directory from the request's `cwd` and from where
+  it is installed, so the command no longer becomes `python3 -I "/scripts/hooks/..."` and exits 2, which
+  blocks every edit with no reason. When `python3` or the translator is missing, the editor hook's command
+  reads `.urzua/config.yaml` as text and refuses the edit where `acceptance` or `protected-paths` is enabled
+  and not set to `on_unjudged: allow`; otherwise it states that the edit was not judged.
+- **Vendor neutrality.** The engine source names no agent vendor. A test scans every `src/` directory for
+  vendor names; the bundle directory, where an adapter names its vendor by design, is outside `src/`.
+- **Commands (`MILE-199`).** The install generates `.claude/commands/<type>.md` for every record type the
+  configuration declares from one generic template (the type name and directory are the only things filled
+  in; no command names a field, status or section), and installs `/amend`, `/repin`, `/reverify` and `/done` and the
+  helper `.claude/hooks/urzua-record.sh` they call (through `bash`, because the install does not set an executable bit). `/amend` only adds: it refuses any change to the Decision
+  text, a removed list item or blank line included, and requires an added `## Amendment (date)` section and
+  revision-log row. `/repin` refuses an empty reason, lists the stale pins, runs
+  `urzua fix --rebaseline --apply --actor agent` and prints the `Re-pin:` line for the pull request body.
+  `/reverify` (`ADR-97`) refuses an empty reason, lists the `urzua reverify` review, runs
+  `urzua reverify --apply --actor agent` and prints the `Pinned:` (when it wrote a first pin) and `Re-verified:`
+  lines for the pull request body; it holds no schema knowledge and a changed pin is still `/repin`'s.
+  `/done` runs `urzua fix --apply --actor agent` and never writes a state itself (`ADR-70`, amendment of
+  2026-11-05); it stops when the engine computes nothing, and `fix` refuses a state an `authority` gate names.
+  A type named like a lifecycle command is refused at install, and `urzua harness status` reports a command
+  not yet installed as missing; `update` writes it. This repository runs entirely on the installed bundle
+  (`MILE-204`): every command in `.claude/commands/` is generated, including `/adr`, `/rfc` and `/milestone`,
+  and `urzua harness status` reports no drift. The guidance those three used to carry by hand lives where
+  the engine already reads type-specific text: in the body of the type's template under `.urzua/templates/`
+  (the `Decision` section of an ADR says a still-open direction is an RFC, the `Summary` of an RFC says a
+  settled choice is an ADR, the `What` and `Done means` sections of a milestone say what a milestone is and
+  how its criteria are written), so the generated text stays free of schema knowledge (`ADR-70`).
+- **Nothing hand-wired remains.** `scripts/hooks/*` and `scripts/draft-record.sh` are deleted; the tests that
+  pinned their verdicts (`record_edit_hook_integration.rs`, `block_on_integration.rs`) run the same planted
+  cases against `urzua harness run edit` and the installed translator. The agent-instructions block states
+  what an agent must not do and is advisory, only the verdicts bind.
+
+## Who may accept a record: the acceptance guardrail (`ADR-89` section 4, `MILE-200`)
+
+`authority` in `.urzua/config.yaml` (`SPEC-3`, "Who may accept a record") is one table read in two places,
+and this section claims only what each place does.
+
+- **Locally, the edit tools are refused.** With `harness.guardrails.acceptance` and `protected-paths`
+  enabled, `urzua harness run edit` denies an agent's Write, Edit, MultiEdit or NotebookEdit, or file-writing MCP tool call, that moves an ADR or RFC to
+  `Accepted`, `Rejected` or `Superseded` (an ADR also `Retired`), or that writes `.claude`, `.git-hooks`, `.github/workflows`,
+  `.urzua/config.yaml` or `.urzua/templates` (the templates shape every new record). Paths match case-insensitively with Unicode case folding (`Straße` and `STRASSE` are one name; names are not Unicode-normalised), always, on every
+  filesystem, so `.Claude/settings.json` is the protected file on a case-insensitive one; an edit through a symlink is judged as
+  the file it resolves to (a link whose target does not exist yet is the target it would create), and on Unix an edit through a hard link is judged as the protected path or gated record it shares an inode with (elsewhere by its own name); and an edit is judged against the session's own repository and every governed repository (a real git working tree with `.urzua/config.yaml`) that holds the file, inner or outer, a deny from any winning and a repository the session did not start in able only to add restrictions, so an edit made from a `cwd` outside it, or from a nested repository with no configuration, is
+  still judged, and an outer `.git` and configuration an agent writes above the project gate nothing; with `harness.outside_writes: shared` the file of a linked worktree of the session's repository (one that shares its `git-common-dir`) is also judged by its path in that worktree against the session's gates, and with `deny` an agent's write outside the session's repository is refused except under `harness.allow_paths` (`SPEC-3`) The edit tools are also refused for the files the harness keeps (`.urzua/cache`, `.urzua/harness.lock`, the override log, `.git/hooks`, `.git/config`). The deny cannot be overridden: the override of `ADR-78` is a name in an environment
+  variable the agent controls, so it is not accepted for this verdict, and the output says so. A person
+  edits outside the agent harness and is not affected; that is also the escape hatch when a denying
+  guardrail cannot judge (a broken `authority` table, a missing binary), and `urzua doctor` and the verdict
+  say so. An edit the adapter could not hand to the engine (an unreadable payload, an edit whose text the
+  translator cannot place, an engine that cannot be run) is refused the same way when `acceptance` or
+  `protected-paths` is on with `on_unjudged: deny`, and only then; where the configuration allows, it is allowed with a
+  stated notice. An edit whose text the translator cannot place is refused only when its file is a protected path or
+  a gated record; for any other file it is allowed with the notice, because the edit tool fails by itself. The Claude Code adapter hands the engine a NotebookEdit as the notebook after the edit, and any MCP tool (`mcp__*`) as the writes it names: every string that can name a file is read, at any depth and in any list (`from`, `source`, `uri`, `files[]`, a `file://` URI), and an object with one path field and a content field is a write of that content; a path of a call that looks like an edit, a move or a delete, or whose notebook cannot be read, is an edit that was not judged and `on_unjudged` applies only when its file is a protected path or a gated record (a path used as a dictionary key, and a `file:` URL in any case, are read; a call is judged gates first and refused at the first block; a call with more than 512 distinct strings or more than 8 files checked as records is an edit that was not judged, never one cut short; the hook's `timeout` is 120 seconds; a tool named for reading is left alone unless the call names an output or carries content, and so is a call with no string that names a file; a path string is trimmed, cut at a NUL and normalised before its length is tested). This repository declares both gates and has the Claude Code bundle installed, so the refusal is
+  wired into an agent session here.
+- **In CI, the evidence is authorship.** `diff.decider-required` (`SPEC-2`), fed an `--actors` file the gate
+  action (`.github/actions/urzua-gate`, input `actors: "true"`) writes from the GitHub API, requires the pull
+  request's author, the default `pr-author` evidence, to be in the `maintainers` group for every gated move
+  and path. With a single maintainer it proves authorship only: it cannot tell an agent acting under the
+  maintainer's token from the maintainer. A local run has no file and reports `info`, so the maintainer,
+  working by hand, can still accept a record and commit it.
+- **Accepted risk.** The maintainer decided on 2026-11-05: "We just need to clearly document this for now
+  and accept the risk", and narrowed it on 2026-11-06 (`ADR-89`). What still gets past the guardrail: (1) a
+  Bash command that writes the status (`sed -i`, `python -c`, `cp`, `tee`, a heredoc) or a protected path,
+  which the post-command check reports and cannot stop. The report covers a gated status move, a changed
+  protected path including a gitignored one (a content hash of every file under a protected path is kept in
+  `.urzua/cache/protected-hashes.json`, seeded at session start) and a commit the same command made, and it
+  reports a change once: a repeat of a change already reported is silent, by design (a new session forgets what an earlier one was told); a status gate removed or narrowed, or `acceptance` switched off, in the same command as the move is judged against the baseline's gates too, so the move is still reported; it also lists a record hidden with `git update-index --assume-unchanged` or `--skip-worktree`; (2) `git commit
+  --no-verify`; (3) a pull request that changes its own workflow, since the gate runs from the head commit's
+  workflow, which only `CODEOWNERS` and branch protection (the host's settings) could stop; (4) an agent acting
+  as the maintainer, since CI cannot tell them apart; (5) the limits of the editor hook's reading: a hard link
+  is resolved on Unix only, names are not Unicode-normalised, an MCP call that names no string a path can be
+  read from is not seen as an edit (and a server that resolves a relative path against its own directory is
+  judged against the session's), a change made before the session's baseline was taken is not reported, the
+  agent's user-level and local settings files are neither protected nor read (a hook or `disableAllHooks`
+  set only there is not seen), a link swapped between the judgement and the write is not seen, and an MCP tool that applies a patch or runs a shell command is not judged and not reported; (6) a Bash
+  command can write what the edit tools cannot: `.urzua/cache`, the lock, the override log, `.git/hooks`
+  and `.git/config`, and that is not reported; (7) without `python3` or the translator, the editor hook's
+  command reads the configuration as text, a configuration that scan misreads is read as not closed, and an
+  invalid or empty `.urzua/config.yaml` lets every edit through with a message; (8) a repository the session
+  did not start in can add restrictions and never remove them; (9) the `AGENTS.md` instructions block is not a
+  protected path; (10) a waiver record is not gated; a commit is seen only on the checked-out branch. The required status check, branch
+  protection and `CODEOWNERS` are the host's: `urzua doctor` says so and does not verify them. A distinct
+  agent identity with `CODEOWNERS` on the protected paths is a future option and is not configured.
+  `AGENTS.md` and the bundle's instructions block carry the same statement.
+
 ## What's deliberately not built
 
 - **Making `AGENTS.md` itself a governed record type** — it would need a home directory, a header,
@@ -135,3 +277,21 @@ same pattern applied to a different feature area).
 > | 2026-11-04 | `AGENTS.md`'s "The review loop" no longer says an agent never merges with no standing exception: with the maintainer's authorization for the session, an agent may squash-merge (or enable squash auto-merge on) a PR once CI is green on the current head and an agent review found nothing blocking; force-push stays forbidden, and without that authorization the human merges as before. **Why:** Maintainer decision, 2026-11-04. | **substantive** |
 > | 2026-11-04 | `AGENTS.md`'s "Use the tool on itself" gains the rule that an agent offers `/rfc`, `/adr` or `/milestone` when it notices a proposal, a made decision or decided unbuilt work, and drafts records through those commands. The commands in `.claude/commands/` are a second guardrail mechanism, governed by `ADR-70`: they scaffold through `urzua new`, hold no schema knowledge, and end in `urzua check`. **Why:** `MILE-177`; hand-written records were rejected by `check` for headers `urzua new` would have produced (`MILE-103`). | **substantive** |
 > | 2026-11-04 | `AGENTS.md`'s Status rule now says who sets it: the PR that fully delivers a milestone sets its `Realized-by` and `Status: Done` in that PR (`status.delivery-agreement` fails when they disagree), while an ADR's or RFC's `Status` stays the maintainer's; `Version` `0.8` -> `0.9`. **Why:** maintainer decision of 2026-11-04, `MILE-183`: about thirty built milestones still read `Planned` because agents were told never to move a `Status`. | **substantive** |
+> | 2026-11-05 | `AGENTS.md`'s "The review loop" now names the REST check-runs endpoint (`gh api repos/{owner}/{repo}/commits/<sha>/check-runs`) for polling CI instead of `gh pr checks`; `Version` `0.10` -> `0.11`. **Why:** `gh pr checks` uses GraphQL, which agent sandboxes can block. | **substantive** |
+> | 2026-11-05 | Bumped to `0.12`. `AGENTS.md` catches up with the rules decided since it was last edited: seven record types with `condition` (`SPEC-23`); `Realized-by` as the one evidence field and the retired `Regression-test` (`ADR-84`); permanent waivers with a `Category` (`ADR-86`); the `info` level (`ADR-87`); the editor hook, `block_on`, the override log and never overriding it yourself (`ADR-78`); re-pins with an honest reason listed in the PR body (`SPEC-8`); amending an Accepted decision through a dated `## Amendment` section; and `make ci` runs `make records`, not `urzua check docs/`. **Why:** a review of the agent harness found the file silent on these, so an agent hitting a hook block or a re-pin had no instruction. | **substantive** |
+> | 2026-11-06 | Bumped to `0.13`. Documents the installable harness bundle: `urzua harness install`, `status`, `update`, `uninstall` and `adapters`, the settings-merge and instructions-block rules, the `run edit` and `run session-start` cores, the stated verdict for an unset project-directory variable, and the vendor-neutral engine; this repository still runs `scripts/hooks` until `MILE-204`. **Why:** `MILE-198`, decided in `ADR-89`. | **substantive** |
+> | 2026-11-06 | Bumped to `0.14`. Documents the post-command check: after any Bash command the harness runs `check` on the records git shows as changed (untracked included) and reports, never blocks; this repository enables it and has the Claude Code bundle installed. The editor hook is wired once, through the installed bundle; `scripts/hooks` stays on disk, unwired, until `MILE-204` deletes it, because both wired at once would block twice and write each override twice. **Why:** `MILE-202`, decided in the `ADR-78` amendment and `ADR-89`. | **substantive** |
+> | 2026-11-06 | Bumped to `0.15`. Documents the acceptance and protected-path guardrails (`MILE-200`): the local refusal of an agent's edit-tool move to a gated status or write to a protected path (final, not liftable by the override), `diff.decider-required` fed by the gate action's actors file as authorship evidence only, and the "Accepted risk" statement (the Bash, shell-edited guardrail, self-modifying workflow and shared-token routes, accepted by the maintainer on 2026-11-05). The post-command check also reports a Bash-made move to a gated status, judged against `HEAD`. **Why:** `ADR-89` section 4, accepted by the maintainer. | **substantive** |
+> | 2026-11-06 | Bumped to `0.16`. Documents the generated drafting command for every record type, `/amend`, `/repin` and `/done` and the helper they call (`MILE-199`): what each refuses, that `/done` sets a state only through `urzua fix --apply` and `fix` refuses a state an `authority` gate names, and that this repository commits the commands for the types it lacked while `/adr`, `/rfc` and `/milestone` stay hand-written until `MILE-204`. **Why:** `ADR-89` section 1, `ADR-70` amendment of 2026-11-05. | **substantive** |
+> | 2026-11-06 | Bumped to `0.17`. This repository runs on the installed bundle: `/adr`, `/rfc` and `/milestone` are generated (their type-specific guidance moved into the type templates), `scripts/hooks` and `scripts/draft-record.sh` are deleted, the protected-path list no longer names `scripts/hooks`, and the commands run the helper through `bash` (a file the install writes carries no executable bit, so the direct call was denied). **Why:** `MILE-204`, `ADR-89` section 6. | **substantive** |
+> | 2026-11-06 | Bumped to `0.18`. The post-command check also reports a changed protected path (report only) and covers a commit made inside the command, comparing with the commit the last check saw; the edit gates match paths ASCII case-insensitively, judge a symlink edit as its target, find the repository from the file edited when `cwd` is outside it, and `.urzua/templates` is a protected path here; an adapter failure is refused where `acceptance` or `protected-paths` is on with `on_unjudged: deny`. **Why:** the second-pass review of `MILE-198` to `MILE-204` found the shell route to the guardrails silent, a commit hiding the change, and four ways an edit went unjudged although the configuration said deny. The drafting helper `urzua-record.sh` reads `URZUA_BIN` (as the translator does) and still accepts `URZUA`, and the bundle's instructions say the post-command check reports a shell edit of a guardrail. | **substantive** |
+> | 2026-11-06 | Bumped to `0.19`. An edit the translator cannot place is refused only on a protected path or a gated record; any other file is allowed with a notice (`SPEC-24`). **Why:** review of pull request 378: the refusal overreached onto ungated files. | **substantive** |
+> | 2026-11-06 | Bumped to `0.20`. `harness install` reports a refused install honestly (every item `would-create`, `would-merge` or `would-write`, nothing `created`, `merged` or `written`) and no longer advises `update --force`, which needs an install; `install` and `doctor` (`harness-legacy-hook`) warn on a settings entry whose command names a hand-copied first-generation editor hook (a script with `record-edit` in its name). **Why:** Phase 0 hardening from a second adopter switchover -- a conflict reported success states for nothing written, and the old and new editor hooks both stayed wired. | **substantive** |
+> | 2026-11-06 | Bumped to `0.21`. The editor hook also covers NotebookEdit and any MCP tool whose input carries a file path and content (an MCP call it cannot read is refused under `on_unjudged: deny` only on a protected path or a gated record); gate matching uses Unicode case folding and resolves a hard link to the protected or gated file it shares an inode with (Unix); the post-command check reports a change to a gitignored protected file by content hash. The accepted-risk list is rewritten to what remains, and says a change is reported once. **Why:** the maintainer's decision of 2026-11-06 to close the guardrail gaps left by pull request 378 in Phase 0, under `ADR-89`. | **substantive** |
+> | 2026-11-07 | Bumped to `0.22`. The third review of the harness (`ADR-89` amendment of 2026-11-07): the settings command finds the project from `CLAUDE_PROJECT_DIR` or the outermost configuration, not the nearest git repository, and refuses an edit under `on_unjudged: deny` when it cannot run the translator; an edit is judged by the outermost governed repository with symlinks followed to the end, a dangling link included; MCP calls are read for every path-like string; the edit tools are refused for `.urzua/cache`, the lock, the override log and the git hooks; session-start compares the installed files, hook entries and `disableAllHooks` with the lock; the post-command check lists a record hidden with `--assume-unchanged`; the accepted-risk statement gains the Bash write to the harness's own files, the unreadable configuration in the shell fallback and the nested repository with its own configuration. **Why:** the third review found the wrapper failing open outside the project root, a dangling link and a nested repository escaping the gates, and several silent routes. | **substantive** |
+> | 2026-11-08 | Bumped to `0.23`. Adds the `/reverify` command and the `reverify` verb of the helper (`ADR-97` section 4, `MILE-129`): it refuses an empty reason, lists the review, passes `--actor agent` and prints the `Pinned:` and `Re-verified:` lines for the pull request body. **Why:** `ADR-97` lists the command beside `/repin`; the engine PR built `urzua reverify` without it. | **substantive** |
+> | 2026-11-08 | Bumped to `0.24`. The fourth review of the harness (`ADR-89` amendment of 2026-11-08): an edit is judged against the session's own repository and every governed repository that holds the file, a deny from any winning, and a `.git` counts only when git accepts it; every hook command embeds the translator's sha256 and does not run a translator that differs; a read-named MCP tool is judged when the call names an output or carries content; MCP paths are trimmed, NUL-cut and normalised before the length test; the accepted-risk statement is made exact (commits on the checked-out branch, MCP shell and patch tools, invalid YAML, the unprotected instructions block, ungated waivers); `AGENTS.md`'s accepted-risk list says the same. **Why:** the fourth review found an outer repository minted by two unjudged writes replacing the session's gates, and the translator being its own reporter. | **substantive** |
+> | 2026-11-08 | Bumped to `0.25`. With `CLAUDE_PROJECT_DIR` unset the settings command resolves the nearest real git working tree holding the configuration and the translator instead of the outermost configuration; `body`, `data`, `payload` and `value` are content keys for MCP calls (`ADR-89` amendment of 2026-11-08, corrected after review). **Why:** the independent review of pull request 438 found a configuration written above the project taking the wrapper. | **substantive** |
+> | 2026-11-09 | Bumped to `0.26`. `urzua harness run edit` also judges a write into a linked worktree of the session's repository against the session's gates when `harness.outside_writes` is `shared`, and refuses a write outside the repository except under `allow_paths` when it is `deny`; `urzua doctor` warns when a guardrail is on and the key is undeclared. **Why:** `ADR-89` amendment of 2026-11-09 (outside writes), accepted by the maintainer: a linked worktree at a commit without gates was an unjudged place to write. | **substantive** |
+> | 2026-11-09 | Bumped to `0.27`. The fifth review of the harness (`SPEC-24` `0.24`): the post-command check judges a move against the baseline's status gates and `acceptance` flag as well as the edited configuration's, a new session forgets what an earlier one was told, and the MCP reading gains dictionary keys and `file:` URLs in any case, is bounded by refusal instead of silent truncation, judges gates first and sets a 120 second hook timeout. **Why:** bug fixes against what `ADR-89` promises. | **substantive** |
+> | 2026-11-09 | Bumped to `0.28`. The editor hook judges an MCP path that starts with `~` or `$HOME` as the home directory it names and a path nested under a content key such as `payload` or `data`; the acceptance gate treats `.MD` and `.Md` as the record extension `.md` (a case-insensitive filesystem makes them the same file); a write into a linked worktree is compared with that worktree's copy of the record (`SPEC-24` `0.27`). **Why:** the sixth review of the harness and the adopter dry run found each spelling allowed unjudged. | **substantive** |

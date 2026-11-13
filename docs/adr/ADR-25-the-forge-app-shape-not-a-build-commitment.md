@@ -1,4 +1,5 @@
 ---
+Stable-Id: 01M6R3NK4EKB28QJCG9KDSD12V
 Status: Accepted
 Embodiment: Not started
 Date: 2026-09-06
@@ -54,3 +55,9 @@ creates code, a dependency, or a running service — it constrains what gets bui
 - RFC-14 — the proposal this decides.
 - RFC-3 §5 — the collection-needs-a-destination argument this shape answers.
 - RFC-2 §2 — the identity tiering an authenticated forge account would improve on.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-05 | Revision log added, 2026-11-05. | **structural** |

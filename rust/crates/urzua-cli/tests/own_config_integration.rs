@@ -1,6 +1,8 @@
 //! This repository's own `.urzua/config.yaml`, exercised end to end: the
 //! declarations it ships are what these tests run, not a fixture's.
-//! BUG-123 closes here; BUG-57 and BUG-65 are covered end to end.
+//! BUG-123 closes here; BUG-65 and the ADR-84 bug evidence are covered end to end.
+
+mod common;
 
 use std::path::Path;
 use std::process::Command;
@@ -8,6 +10,22 @@ use std::process::Command;
 fn own_config() -> String {
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../.urzua/config.yaml");
     std::fs::read_to_string(path).expect("repository config readable")
+}
+
+/// MILE-80: the repository's config declares a level for every rule the build
+/// ships, including the ones it declares `off`, so none is merely absent.
+#[test]
+fn own_config_declares_a_level_for_every_shipped_rule() {
+    let config = urzua_core::config::parse(&own_config()).expect("repository config parses");
+    let undeclared: Vec<&str> = urzua_core::rules::ALL_RULES
+        .iter()
+        .copied()
+        .filter(|id| !config.rules.contains_key(*id))
+        .collect();
+    assert!(
+        undeclared.is_empty(),
+        "rules with no declared level in .urzua/config.yaml: {undeclared:?}"
+    );
 }
 
 fn git(dir: &Path, args: &[&str]) {
@@ -20,9 +38,8 @@ fn git(dir: &Path, args: &[&str]) {
 }
 
 /// A fresh git repo holding the repository's own config and `files`.
-fn repo(name: &str, files: &[(&str, &str)]) -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join(format!("urzua-own-config-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+fn repo(name: &str, files: &[(&str, &str)]) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-own-config-{name}"));
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     for ty_dir in ["adr", "rfc", "specs", "bugs", "milestones", "waiver"] {
         std::fs::create_dir_all(dir.join("docs").join(ty_dir)).unwrap();
@@ -42,7 +59,7 @@ fn repo(name: &str, files: &[(&str, &str)]) -> std::path::PathBuf {
 }
 
 fn urzua(dir: &Path, args: &[&str]) -> std::process::Output {
-    Command::new(env!("CARGO_BIN_EXE_urzua"))
+    common::urzua()
         .args(args)
         .current_dir(dir)
         .output()
@@ -101,9 +118,51 @@ fn new_opens_a_spec_title_with_its_declared_prefix_and_other_types_with_the_bare
     );
 }
 
-fn bug(status: &str, regression_test: &str) -> String {
+/// MILE-74, observed failing: `urzua new spec` wrote `Version` and `Subject`
+/// blank, so the record it made failed `check` before anyone touched it. The spec
+/// type now declares the field `new` fills with the title and the version a
+/// record starts at, and the scaffold passes `check` as written.
+#[test]
+fn a_spec_scaffolded_by_new_passes_check_without_an_edit_observed_failing() {
+    let template = std::fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../.urzua/templates/spec.md"),
+    )
+    .expect("the spec template is readable");
+    let dir = repo("spec-scaffold", &[(".urzua/templates/spec.md", &template)]);
+    let out = urzua(&dir, &["new", "spec", "A fresh record", "--by", "tester"]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let written = std::fs::read_dir(dir.join("docs/specs"))
+        .unwrap()
+        .filter_map(Result::ok)
+        .map(|e| e.path())
+        .find(|p| p.to_string_lossy().contains("a-fresh-record"))
+        .expect("a spec file");
+    let content = std::fs::read_to_string(&written).unwrap();
+    assert!(content.contains("\nSubject: A fresh record\n"), "{content}");
+    assert!(content.contains("\nVersion: '0.1'\n"), "{content}");
+
+    let out = urzua(&dir, &["check", "docs/"]);
+    let report: serde_json::Value = serde_json::from_slice(&out.stdout).expect("JSON on stdout");
+    let own: Vec<String> = report["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|f| f["file"].as_str().unwrap().contains("a-fresh-record"))
+        .map(|f| format!("{} {}", f["rule"], f["message"]))
+        .collect();
+    assert!(
+        own.is_empty(),
+        "the scaffold must pass check as written: {own:?}"
+    );
+}
+
+fn bug(status: &str, found_in: &str, extra: &str) -> String {
     format!(
-        "---\nStable-Id: 01M6JS58VTV16JK13MJWQZTPG7\nStatus: {status}\nFound-in: a review\nRegression-test: {regression_test}\n---\n# 1 — A bug\n\n## What was wrong\n\nx\n"
+        "---\nStable-Id: 01M6JS58VTV16JK13MJWQZTPG7\nStatus: {status}\nFound-in: {found_in}\n{extra}---\n# 1 — A bug\n\n## What was wrong\n\nx\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Filed. | **structural** |\n"
     )
 }
 
@@ -119,50 +178,43 @@ fn finding_rules(dir: &Path) -> Vec<String> {
         .collect()
 }
 
-/// BUG-57: a `Fixed` bug whose `Regression-test` says no test exists is a
-/// finding; an `Open` one, and a `Fixed` one naming a test, are not. The
-/// terminal status is declared (`statuses.require`), not inferred, and "not yet
-/// written" is in the type's declared pending vocabulary (BUG-65).
+/// `ADR-84`: a bug's `Status` follows its `Realized-by`. An `Open` bug whose
+/// evidence names a test is a finding `urzua fix` repairs; a `Fixed` one with a
+/// test is not, and neither is an `Open` one with none. A `Fixed` bug with no
+/// evidence at all is reported too: a done record with no evidence is a finding
+/// (a bug that legitimately has none is waived). A bug carrying the retired
+/// `Regression-test` field is reported as an unknown field.
 #[test]
-fn a_fixed_bug_declaring_no_regression_test_is_a_finding_and_an_open_one_is_not() {
-    for placeholder in [
-        "not yet written -- a planted case",
-        "'Not yet written'",
-        "pending",
-    ] {
-        let dir = repo(
-            "fixed-placeholder",
-            &[("docs/bugs/BUG-1-a-bug.md", &bug("Fixed", placeholder))],
-        );
+fn a_bug_open_with_test_evidence_is_a_finding_and_the_other_shapes_are_not() {
+    let files = |status: &str, extra: &str| {
+        repo(
+            "bug-evidence",
+            &[
+                ("docs/bugs/BUG-1-a-bug.md", &bug(status, "a review", extra)),
+                ("rust/t.rs", "#[test]\nfn a_real_test() {}\n"),
+            ],
+        )
+    };
+    let by_scope = "Realized-by: test:rust/t.rs\n";
+    let open = files("Open", by_scope);
+    assert_eq!(
+        finding_rules(&open),
+        vec!["status.delivery-agreement".to_string()]
+    );
+    for (status, extra) in [("Fixed", by_scope), ("Open", "")] {
+        let dir = files(status, extra);
         let rules = finding_rules(&dir);
-        assert!(
-            rules.contains(&"status.required-field-missing".to_string()),
-            "{placeholder}: {rules:?}"
-        );
+        assert!(rules.is_empty(), "{status} {extra:?}: {rules:?}");
     }
-    let open = repo(
-        "open-placeholder",
-        &[(
-            "docs/bugs/BUG-1-a-bug.md",
-            &bug("Open", "not yet written -- planted"),
-        )],
+    let unevidenced = files("Fixed", "");
+    assert_eq!(
+        finding_rules(&unevidenced),
+        vec!["status.delivery-agreement".to_string()]
     );
+    let retired = files("Fixed", "Regression-test: rust/t.rs::a_real_test\n");
     assert!(
-        finding_rules(&open).is_empty(),
-        "{:?}",
-        finding_rules(&open)
-    );
-    let real = repo(
-        "fixed-real",
-        &[(
-            "docs/bugs/BUG-1-a-bug.md",
-            &bug("Fixed", "rust/crates/x/tests/y.rs::a_real_test"),
-        )],
-    );
-    assert!(
-        finding_rules(&real).is_empty(),
-        "{:?}",
-        finding_rules(&real)
+        !finding_rules(&retired).is_empty(),
+        "the retired field is no longer a known field of the bug type"
     );
 }
 
@@ -174,12 +226,117 @@ fn the_declared_pending_vocabulary_reads_whole_values_only() {
         "mentions-pending",
         &[(
             "docs/bugs/BUG-1-a-bug.md",
-            &bug(
-                "Fixed",
-                "'rust/crates/x/tests/y.rs::a_pending_value_is_real'",
-            ),
+            &bug("Open", "'a pending review of the release'", ""),
         )],
     );
     let rules = finding_rules(&dir);
     assert!(rules.is_empty(), "{rules:?}");
+    let whole = repo(
+        "whole-pending",
+        &[("docs/bugs/BUG-1-a-bug.md", &bug("Open", "pending", ""))],
+    );
+    assert!(
+        finding_rules(&whole).contains(&"field.pending".to_string()),
+        "{:?}",
+        finding_rules(&whole)
+    );
+}
+
+/// ADR-74 / MILE-185: this repository's rust resolver addresses the struct
+/// fields ADR-39, ADR-43 and ADR-44 pin, by name, so a new option elsewhere in
+/// `RecordTypeConfig` cannot stale them.
+#[test]
+fn the_own_rust_resolver_addresses_each_pinned_record_type_config_field() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    for field in [
+        "required_fields",
+        "known_fields",
+        "spec",
+        "pointer_fields",
+        "narrative_fields",
+    ] {
+        let out = urzua(
+            &root,
+            &[
+                "explain",
+                &format!("rust/crates/urzua-core/src/config.rs#RecordTypeConfig::{field}"),
+            ],
+        );
+        let parsed: serde_json::Value = serde_json::from_slice(&out.stdout)
+            .unwrap_or_else(|e| panic!("{field}: not JSON ({e}): {out:?}"));
+        let text = parsed["scope"]["text"]
+            .as_str()
+            .unwrap_or_else(|| panic!("{field}: {parsed}"));
+        let last = text.lines().last().unwrap();
+        assert!(
+            last.trim_start().starts_with(&format!("pub {field}:")),
+            "{field}: the span ends at the declaration: {text}"
+        );
+        assert!(
+            !text.contains("pub fn"),
+            "{field}: the span is one field, not a neighbour: {text}"
+        );
+    }
+}
+
+/// MILE-206, ADR-92: this repository governs the records it has written and not
+/// yet staged. A draft planted in `docs/` is examined by a plain `check` and is
+/// added under `--base`.
+#[test]
+fn the_own_config_includes_untracked_records_and_a_draft_is_examined_and_added() {
+    let dir = repo("untracked", &[]);
+    std::fs::write(
+        dir.join("docs/bugs/BUG-1-a-draft.md"),
+        "---\nStatus: Open\n---\n# 1 - A draft\n",
+    )
+    .unwrap();
+    let out = urzua(&dir, &["check"]);
+    let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(v["scope"]["include_untracked"], true, "{v}");
+    assert_eq!(v["scope"]["untracked_included"], 1, "{v}");
+    assert_eq!(v["files_examined"], 1, "{v}");
+
+    let out = urzua(&dir, &["check", "--base", "HEAD"]);
+    let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    let changed: Vec<&str> = v["scope"]["changed_paths"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p.as_str().unwrap())
+        .collect();
+    assert_eq!(changed, vec!["docs/bugs/BUG-1-a-draft.md"], "{v}");
+}
+
+/// MILE-193: the waiver template names `Justified-by`, so a waiver filed with
+/// `urzua new` carries the field a `cite: required` category needs. Observed
+/// failing before the template line was added: the scaffold stopped at
+/// `Category`.
+#[test]
+fn new_waiver_scaffolds_justified_by_from_the_repositorys_own_template() {
+    let dir = repo("waiver-template", &[]);
+    let template =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../.urzua/templates/waiver.md");
+    std::fs::create_dir_all(dir.join(".urzua/templates")).unwrap();
+    std::fs::copy(template, dir.join(".urzua/templates/waiver.md")).unwrap();
+    let out = urzua(&dir, &["new", "waiver", "A fresh record", "--by", "tester"]);
+    assert!(
+        out.status.success(),
+        "{} {}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let written = std::fs::read_dir(dir.join("docs/waiver"))
+        .unwrap()
+        .filter_map(Result::ok)
+        .map(|e| e.path())
+        .find(|p| p.to_string_lossy().contains("a-fresh-record"))
+        .expect("a waiver was written");
+    let text = std::fs::read_to_string(written).unwrap();
+    let header: Vec<&str> = text.lines().skip(1).take_while(|l| *l != "---").collect();
+    for field in ["Category", "Justified-by"] {
+        assert!(
+            header.iter().any(|l| l.starts_with(&format!("{field}:"))),
+            "the header names {field}: {header:?}"
+        );
+    }
 }

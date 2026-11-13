@@ -5,6 +5,8 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/urzuahq/urzua?utm_source=oss&utm_medium=github&utm_campaign=urzuahq%2Furzua&labelColor=171717&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews)](https://coderabbit.ai)
 
+The verifiable specification layer for agent-authored change: it checks the records a change traces back to and orders work from their declared dependencies. It never judges the change.
+
 **Your agent just wrote a record of a decision it made. Is it structured data, or prose that happens to have a `Status:` line at the top?**
 
 Urzua is a machine-native engine for structured records: decision logs, specs, incident reviews, a project's own backlog, and any record type with a lifecycle and relationships to other records. Every command returns a `status` and a list of typed `findings`: `"status": "findings-present"` is a value an agent branches on, `findings[]` is a list it loops over and filters by `severity`. Nothing needs interpreting first, and there's no guessing whether "3 issues" means stop or continue.
@@ -124,6 +126,8 @@ Every applied write touches only the one field's line, byte-for-byte preserving 
 
 A pinned locator (`code:src/a.rs@sha256:...`) whose file changed is cleared the same way, by review: `urzua fix --rebaseline` lists each stale pin with its recorded and current hash, and `urzua fix --rebaseline --apply --ids <record> --by <who> --reason "<why it still holds>"` re-pins it and logs who attested and why.
 
+A claim can also expire. A repository that declares `embodiment.claim-expired` gives each record type, status and evidence tier a period; a claim older than its period is a finding, and `urzua reverify --ids <record>` lists what renewing it would re-check, locator by locator. `urzua reverify --apply --ids <record> --by <who> --reason "<what you checked>"` re-hashes the evidence, refuses a pin that changed (that is `fix --rebaseline`), pins `code:` and `test:` locators that have no pin, dates the claim, and logs who renewed it and why. See `SPEC-8` and `SPEC-3`.
+
 ## Run the gate in CI
 
 This repository ships a composite action that installs a pinned release (checksum and build provenance verified), checks the checkout has the history drift reads, runs `urzua check` and, on a pull request, `urzua check --base`, and reports the findings as inline annotations and one pull request comment that is updated in place:
@@ -160,16 +164,18 @@ cd /path/to/your-repo
 
 A record type is whatever `.urzua/config.yaml` says it is. Urzua ships no hardcoded notion of "an ADR" or "an RFC."
 
-```toml
-[record_types.adr]
-dir = "docs/adr"
-required_fields = ["Status", "Date", "Author", "Deciders"]
-header_shape = "yaml-frontmatter" # or "none" for a type with no header
+```yaml
+schema_version: 2
+record_types:
+  adr:
+    dir: docs/adr
+    required_fields: [Status, Date, Author, Deciders]
+    header_shape: yaml-frontmatter # or "none" for a type with no header
 
-[record_types.incident-review]     # any record type your org actually uses
-dir = "docs/postmortems"
-required_fields = ["Status", "Severity", "Owner"]
-header_shape = "yaml-frontmatter"
+  incident-review: # any record type your org actually uses
+    dir: docs/postmortems
+    required_fields: [Status, Severity, Owner]
+    header_shape: yaml-frontmatter
 ```
 
 The header shape is declared, not guessed: YAML frontmatter, or `none` for a type whose metadata lives in prose. A record that does not match fails loud (`no header-shaped region found`, naming a removed blockquote or bold-list form when that is what it is written in), never a silent match on the wrong lines.
@@ -223,9 +229,10 @@ The chain above is one path through this repo's own graph, documented here becau
 | `fix` | Detect mode (Embodiment, Tier 1) and apply mode, both real |
 | `migrate ids` | Real: backfills a collision-free stable ID ([ULID](docs/adr/ADR-21-ulid-as-the-stable-id-encoding.md)) into every record lacking one |
 | `migrate schema --report` | Real: previews which records lack a real value for a proposed new required field, before it's ever added to config |
+| `migrate config` | Real: rewrites a config from the previous `schema_version` to the current one, in place, reporting every key it added, changed, dropped, renamed or moved ([ADR-77](docs/adr/ADR-77-config-schema-versions-have-a-declared-support-window-and-a-migration-path.md)) |
 | `doctor` | Real: reports on the tool's own configuration health, not record content |
 | `new <type> [title]` | Real: fills a checked-in template (or synthesizes YAML frontmatter if none exists) with a fresh stable ID, never asking for a number ([ADR-27](docs/adr/ADR-27-urzua-new-fills-the-template-in-not-the-decision.md)) |
-| `audit` | Real: supersession reciprocity and dangling cross-references, read-only ([ADR-30](docs/adr/ADR-30-urzua-audit-reuses-checks-rule-functions.md)) |
+| `audit` | Deprecated alias of `check` over the configured rules, with a deprecation notice; removed in the next release ([ADR-79](docs/adr/ADR-79-audit-folds-into-check-and-the-command-surface-keeps-one-read-only-validator.md)). `check --rules <id>,...` selects declared rules |
 | `migrate schema --assist-waivers`/`--apply`, `export`, `import` | Not implemented yet: exit 2 with "not implemented yet" |
 
 See [`CHANGELOG.md`](CHANGELOG.md) for what shipped when, and [`docs/rfc/`](docs/rfc/) / [`docs/adr/`](docs/adr/) for what's designed but not yet built, including the fuller claim-graph model (AND/OR composites, cross-record-shared claims) this release's Embodiment tracking deliberately ships a narrower slice of first.
@@ -233,7 +240,7 @@ See [`CHANGELOG.md`](CHANGELOG.md) for what shipped when, and [`docs/rfc/`](docs
 ## Where this is going
 
 Destination: **the checkable specification layer for agent-authored change.** The engine governs
-the record a change traces back to. It never reads the change.
+the record a change traces back to. It never judges the change.
 
 | | Diff-level review | Urzua |
 |---|---|---|
@@ -252,7 +259,7 @@ code moves underneath it. The first half is the
 framing; the second half is this engine.
 
 [RFC-27](docs/rfc/RFC-27-urzua-s-position-in-agentic-change-management-one-engine-one-philosophy.md)
-(`Draft`) is that position as a record, including the boundary test separating engine scope from a
+(`Accepted`) is that position as a record, including the boundary test separating engine scope from a
 deferred ecosystem of tools built *around* the engine. The engine stays complete with none of that
 ecosystem built.
 

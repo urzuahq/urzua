@@ -1,0 +1,11 @@
+id: a-dependency-on-a-record-that-does-not-exist-is-reported
+corpus: corpus-m
+invocation: [check]
+expect_exit: 1
+# MILE-4 depends on MILE-90. The value names no record in the corpus, so the
+# ordering it declares cannot be computed, and the rule says which record
+# and which target.
+expect_findings:
+  - {rule: sequence.unresolved-blocker, severity: error, file: docs/milestones/MILE-4-names-nothing.md, message_contains: MILE-90}
+expect_no_findings:
+  - {rule: sequence.unresolved-blocker, file: docs/milestones/MILE-1-loop-a.md}

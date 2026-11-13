@@ -2,11 +2,13 @@
 //! The gate overrides every finding's severity with the rule level unless the
 //! rule declared a level for that finding's own field.
 
+mod common;
+
 use std::path::Path;
 use std::process::Command;
 
 fn run_check(dir: &Path) -> (i32, serde_json::Value) {
-    let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
+    let out = common::urzua()
         .args(["check", "docs/"])
         .current_dir(dir)
         .output()
@@ -16,11 +18,8 @@ fn run_check(dir: &Path) -> (i32, serde_json::Value) {
     (out.status.code().unwrap_or(-1), v)
 }
 
-fn fixture(name: &str, options: &str, record: &str) -> std::path::PathBuf {
-    let dir =
-        std::env::temp_dir().join(format!("urzua-field-levels-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).unwrap();
+fn fixture(name: &str, options: &str, record: &str) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-field-levels-{name}"));
     std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     assert!(Command::new("git")

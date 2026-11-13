@@ -1,6 +1,8 @@
 //! CLI-golden integration tests for `urzua new`: build a real, isolated
 //! git-repo fixture and run the actual compiled binary against it.
 
+mod common;
+
 use std::path::Path;
 use std::process::Command;
 
@@ -13,10 +15,8 @@ fn git(dir: &Path, args: &[&str]) {
     assert!(status.success(), "git {args:?} failed");
 }
 
-fn fixture_repo(name: &str) -> std::path::PathBuf {
-    let dir =
-        std::env::temp_dir().join(format!("urzua-cli-new-test-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+fn fixture_repo(name: &str) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-cli-new-test-{name}"));
     std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
     std::fs::create_dir_all(dir.join(".urzua/templates")).unwrap();
     git(&dir, &["init", "-q"]);
@@ -31,7 +31,7 @@ fn commit_all(dir: &Path) {
 }
 
 fn run_urzua(dir: &Path, args: &[&str]) -> std::process::Output {
-    Command::new(env!("CARGO_BIN_EXE_urzua"))
+    common::urzua()
         .args(args)
         .current_dir(dir)
         .output()
@@ -85,16 +85,37 @@ fn new_emits_yaml_frontmatter_when_configured_even_with_a_blockquote_template_pr
     // template's sections.
     assert!(content.contains("## Context"));
     assert!(content.contains("## Decision"));
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 const BUG_CONFIG: &str = "schema_version: 2\nrules: {header.required-fields: error}\n\nrecord_types:\n  bug:\n    dir: \"docs/bug\"\n    required_fields: [\"Status\"]\n    header_shape: \"yaml-frontmatter\"\n";
 
-/// MILE-89: a number already used on another local branch must be skipped,
-/// with the claiming branch named on stderr.
+/// The first record of a type: its directory does not exist yet, and `new`
+/// creates it instead of failing.
 #[test]
-fn new_skips_a_number_claimed_on_another_branch_and_names_it() {
+fn new_creates_the_type_directory_for_its_first_record() {
+    let dir = fixture_repo("first-record");
+    std::fs::write(dir.join(".urzua/config.yaml"), BUG_CONFIG).unwrap();
+    commit_all(&dir);
+    assert!(!dir.join("docs/bug").exists());
+
+    let output = run_urzua(&dir, &["new", "bug", "First one"]);
+    assert!(
+        output.status.success(),
+        "stdout: {} stderr: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let rel = report["path"].as_str().unwrap();
+    assert!(rel.starts_with("docs/bug/"), "{rel}");
+    assert!(dir.join(rel).is_file());
+}
+
+/// MILE-89: a number already used on another local branch must be skipped, and
+/// the report says so in its `skipped` list (`ADR-93`, Amendment of 2026-11-07).
+/// Nothing is written to stderr: `ADR-46` decision 8.
+#[test]
+fn new_skips_a_number_claimed_on_another_branch_and_reports_it_in_json() {
     let dir = fixture_repo("claimed-elsewhere");
     std::fs::create_dir_all(dir.join("docs/bug")).unwrap();
     std::fs::write(dir.join(".urzua/config.yaml"), BUG_CONFIG).unwrap();
@@ -119,18 +140,44 @@ fn new_skips_a_number_claimed_on_another_branch_and_names_it() {
     assert!(output.status.success(), "stderr: {stderr}");
     let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(report["display_number"], 3, "stderr: {stderr}");
-    assert!(stderr.contains("other-pr"), "stderr: {stderr}");
+    assert_eq!(
+        report["skipped"],
+        serde_json::json!([{"number": 2, "reason": "local"}]),
+        "{report}"
+    );
+    // The detail of which ref held it stays in `pull_refs`.
+    assert_eq!(
+        report["pull_refs"]["skipped_numbers"][0]["held_by"][0], "other-pr",
+        "{report}"
+    );
+    assert_eq!(
+        stderr, "",
+        "a skipped number is reported in JSON, not on stderr"
+    );
+}
 
-    std::fs::remove_dir_all(&dir).ok();
+/// `skipped` is always present, so a run that skipped nothing says so.
+#[test]
+fn new_reports_an_empty_skipped_list_when_nothing_was_skipped() {
+    let dir = fixture_repo("nothing-skipped");
+    std::fs::create_dir_all(dir.join("docs/bug")).unwrap();
+    std::fs::write(dir.join(".urzua/config.yaml"), BUG_CONFIG).unwrap();
+    commit_all(&dir);
+
+    let output = run_urzua(&dir, &["new", "bug", "Fresh", "--by", "t"]);
+    assert!(output.status.success());
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(report["skipped"], serde_json::json!([]), "{report}");
+    assert_eq!(String::from_utf8_lossy(&output.stderr), "");
 }
 
 /// When git cannot read refs (here: a `.git` directory that is not a real
 /// repository, which `find_repo_root` still accepts), numbering falls back to
-/// the working tree and says so rather than silently skipping the check.
+/// the working tree and says so in a warning notice rather than silently
+/// skipping the check (`ADR-46` decision 8: not on stderr).
 #[test]
 fn new_falls_back_to_the_working_tree_and_says_so_when_git_cannot_read_refs() {
-    let dir = std::env::temp_dir().join(format!("urzua-cli-new-nogit-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+    let dir = common::TempDir::new("urzua-cli-new-nogit");
     std::fs::create_dir_all(dir.join("docs/bug")).unwrap();
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     std::fs::create_dir_all(dir.join(".git")).unwrap();
@@ -146,8 +193,19 @@ fn new_falls_back_to_the_working_tree_and_says_so_when_git_cannot_read_refs() {
     assert!(output.status.success(), "stderr: {stderr}");
     let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(report["display_number"], 2);
-    assert!(stderr.contains("working tree only"), "stderr: {stderr}");
-    std::fs::remove_dir_all(&dir).ok();
+    let notice = report["notices"]
+        .as_array()
+        .and_then(|n| n.iter().find(|n| n["subject"] == "new.numbering"))
+        .unwrap_or_else(|| panic!("no new.numbering notice: {report}"));
+    assert_eq!(notice["severity"], "warning", "{report}");
+    assert!(
+        notice["message"]
+            .as_str()
+            .unwrap()
+            .contains("working tree only"),
+        "{report}"
+    );
+    assert!(!stderr.contains("working tree only"), "stderr: {stderr}");
 }
 
 /// A title that slugifies to nothing (empty, whitespace, or only non-ASCII)
@@ -177,15 +235,13 @@ fn new_refuses_a_title_with_no_slug_and_writes_nothing() {
     let output = run_urzua(&dir, &["new", "adr", "Real title", "--by", "me"]);
     assert_eq!(output.status.code(), Some(0), "{output:?}");
     assert!(dir.join("docs/adr/ADR-1-real-title.md").exists());
-
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 const PADDED_RULES: &str = "{header.required-fields: error, field.quality: error, filename.identity-pattern: error, filename.title-consistency: error, header.field-set-consistency: error}";
 
 /// A type with a four-digit padded identity pattern, a declared status
 /// vocabulary and a closed field set (`known_fields`).
-fn padded_repo(name: &str, known_fields: &str, pattern: &str) -> std::path::PathBuf {
+fn padded_repo(name: &str, known_fields: &str, pattern: &str) -> common::TempDir {
     let dir = fixture_repo(name);
     std::fs::write(
         dir.join(".urzua/config.yaml"),
@@ -241,7 +297,6 @@ fn new_over_a_padded_identity_pattern_passes_check_with_no_edit_observed_failing
         "the H1 id is padded exactly as the file name is: {content}"
     );
     check_is_clean(&dir);
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 /// `ADR-21`: every record type gets a `Stable-Id`. A closed field set that does
@@ -264,7 +319,6 @@ fn new_always_writes_a_stable_id_and_warns_when_the_closed_field_set_omits_it_ob
             && n["message"].as_str().unwrap().contains("known_fields")),
         "{report}"
     );
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 /// A pattern `new` cannot produce a conforming name for is refused before
@@ -284,7 +338,6 @@ fn new_refuses_when_the_declared_pattern_cannot_name_the_file() {
         .map(|e| e.unwrap().file_name())
         .collect();
     assert_eq!(names.len(), 1, "{names:?}");
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 /// Numbering reads the declared pattern too, so a corpus the default grammar
@@ -300,7 +353,6 @@ fn new_numbers_from_the_declared_pattern() {
     commit_all(&dir);
     let report = new_report(&dir, "Next");
     assert_eq!(report["path"], "docs/adr/ADR-0013-next.md");
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 /// `BUG-188`: a type's template names header fields the type declares but does
@@ -325,7 +377,6 @@ fn new_keeps_the_templates_declared_non_required_header_fields_observed_failing(
     assert!(!content.contains("Mood"), "{content}");
     assert!(content.contains("## Context"), "{content}");
     check_is_clean(&dir);
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 /// MILE-176: the fields `new` fills with the date and the author are the ones
@@ -350,6 +401,34 @@ fn new_fills_differently_named_date_and_author_fields_from_the_declaration() {
     assert!(!content.contains("Created: null"), "{content}");
     assert!(!content.contains("Owner: null"), "{content}");
     assert!(content.contains("Owner:"), "{content}");
+}
+
+/// MILE-74: a type may declare the field `new` fills with the title and the
+/// version a record starts at; both are written, and a type declaring neither
+/// still starts them blank.
+#[test]
+fn new_fills_the_declared_title_and_starting_version_fields_observed_failing() {
+    let dir = fixture_repo("title-version");
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\", \"Version\", \"Subject\", \"Gist\"]\n    header_shape: \"yaml-frontmatter\"\n    relation_fields:\n      title: \"Subject\"\n    revision_log:\n      version_bump: {field: \"Version\", classes: [\"substantive\"], initial: \"0.1\"}\n",
+    )
+    .unwrap();
+    commit_all(&dir);
+    let output = run_urzua(&dir, &["new", "adr", "Named subject", "--by", "somebody"]);
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let v: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let content = std::fs::read_to_string(dir.join(v["path"].as_str().unwrap())).unwrap();
+    assert!(content.contains("\nSubject: Named subject\n"), "{content}");
+    assert!(content.contains("\nVersion: '0.1'\n"), "{content}");
+    assert!(
+        content.contains("\nGist: null\n"),
+        "an undeclared field stays blank: {content}"
+    );
 }
 
 /// MILE-130: a type declaring `extra_dirs` is one numbering namespace, so

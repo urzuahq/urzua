@@ -1,23 +1,26 @@
 use super::*;
 
-pub fn header_required_fields(
+/// Record-scoped findings -- an unparsed header, a duplicated key -- are
+/// about the record, not about any one slot, so they are emitted once per
+/// record. Decision 1's rule against reporting on a candidate you did not
+/// examine governs *per-slot* findings; a record-scoped finding explaining
+/// why its slots are unreadable is the opposite of a contradiction.
+fn record_scoped_header_findings(
     records: &[Record],
     config: &Config,
-) -> (RuleExecution, Vec<Finding>) {
-    let required_by_type = required_fields_by_type(config);
-    let required_by_type = &required_by_type;
+    required_by_type: &HashMap<String, Vec<String>>,
+    findings: &mut Vec<Finding>,
+) {
     const RULE_ID: &str = RULE_HEADER_REQUIRED_FIELDS;
-    let mut findings = Vec::new();
-
-    // Record-scoped findings -- an unparsed header, a duplicated key -- are
-    // about the record, not about any one slot, so they are emitted once per
-    // record. Decision 1's rule against reporting on a candidate you did not
-    // examine governs *per-slot* findings; a record-scoped finding explaining
-    // why its slots are unreadable is the opposite of a contradiction.
     for record in records {
         let Some(required) = required_by_type.get(&record.record_type) else {
             continue;
         };
+        // A type that declares no required fields has no slot in this rule's
+        // population, so it is not judged here (ADR-55).
+        if required.is_empty() {
+            continue;
+        }
         // A `none`-shaped type has nowhere for a header to be (`ADR-50`): a
         // missing region here is the declared truth, not a defect to report.
         if config
@@ -33,36 +36,39 @@ pub fn header_required_fields(
                 Some(e) => format!(" -- {e}"),
                 None => String::new(),
             };
-            findings.push(Finding {
-                rule: RULE_ID.to_string(),
-                severity: FindingSeverity::Error,
-                file: record.path.clone(),
-                line: None,
- waived: None,
- declared_severity: None,
- suggested_action: None,
- action_source: ActionSource::new("header-region-missing"),
-                message: format!(
+            findings.push(Finding::new(
+                RULE_ID,
+                FindingSeverity::Error,
+                record.path.clone(),
+                ActionSource::new("header-region-missing"),
+                format!(
                     "no header-shaped region found -- required fields {required:?} cannot be checked{detail}"
                 ),
-            });
+            ));
             continue;
         }
 
         for dup in record.header.duplicate_keys() {
-            findings.push(Finding {
-                rule: RULE_ID.to_string(),
-                severity: FindingSeverity::Error,
-                file: record.path.clone(),
-                line: None,
- waived: None,
- declared_severity: None,
- suggested_action: None,
- action_source: ActionSource::new("duplicate-key").field(dup.as_str()),
-                message: format!("header key '{dup}' appears more than once -- ambiguous which value is operative"),
-            });
+            findings.push(Finding::new(
+                RULE_ID,
+                FindingSeverity::Error,
+                record.path.clone(),
+                ActionSource::new("duplicate-key").field(dup.as_str()),
+                format!("header key '{dup}' appears more than once -- ambiguous which value is operative"),
+            ));
         }
     }
+}
+
+pub fn header_required_fields(
+    records: &[Record],
+    config: &Config,
+) -> (RuleExecution, Vec<Finding>) {
+    let required_by_type = required_fields_by_type(config);
+    let required_by_type = &required_by_type;
+    const RULE_ID: &str = RULE_HEADER_REQUIRED_FIELDS;
+    let mut findings = Vec::new();
+    record_scoped_header_findings(records, config, required_by_type, &mut findings);
 
     // The population is the declared slot: one `(record, required field)` pair
     // per field the record's type declares.
@@ -81,32 +87,23 @@ pub fn header_required_fields(
                 return Outcome::Unreadable;
             }
             if record.header.get(field.as_str()).is_none() {
-                findings.push(Finding {
-                    rule: RULE_ID.to_string(),
-                    severity: FindingSeverity::Error,
-                    file: record.path.clone(),
-                    line: None,
-                    waived: None,
-                    declared_severity: None,
-                    suggested_action: None,
-                    action_source: ActionSource::new("field-missing").field(field.as_str()),
-                    message: format!(
+                findings.push(Finding::new(
+                    RULE_ID,
+                    FindingSeverity::Error,
+                    record.path.clone(),
+                    ActionSource::new("field-missing").field(field.as_str()),
+                    format!(
                         "missing required header field '{field}' for record type '{}'",
                         record.record_type
                     ),
-                });
+                ));
             }
             Outcome::Examined
         },
     );
 
     (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records,
-        },
+        RuleExecution::ran(RULE_ID, population, examined_records),
         findings,
     )
 }
@@ -145,10 +142,12 @@ pub fn near_miss<'a>(
         .min()
 }
 
-/// `MILE-141`: a header key beginning `x-` in any case. Matched on the
-/// first two bytes only, so a multi-byte key never panics on a char boundary.
-fn is_extension_key(key: &str) -> bool {
-    key.get(..2).is_some_and(|p| p.eq_ignore_ascii_case("x-"))
+/// `MILE-141`: a header key beginning `prefix` in any case. Matched on the
+/// prefix's byte length only, so a multi-byte key never panics on a char
+/// boundary.
+fn is_extension_key(key: &str, prefix: &str) -> bool {
+    key.get(..prefix.len())
+        .is_some_and(|p| p.eq_ignore_ascii_case(prefix))
 }
 
 pub fn header_field_set_consistency(
@@ -161,11 +160,13 @@ pub fn header_field_set_consistency(
     let mut findings = Vec::new();
     // Off unless declared (`MILE-141`): without the option an `x-` key is an
     // undeclared key like any other, so existing corpora see no change.
-    let allow_extension_prefix = config
-        .rules
-        .get(RULE_ID)
+    let setting = config.rules.get(RULE_ID);
+    let allow_extension_prefix = setting
         .and_then(|s| s.allow_extension_prefix)
         .unwrap_or(false);
+    // A type that declares its own prefix uses it in place of `x-`; a type that
+    // does not falls back to the rule-level option exactly as before.
+    let type_prefixes = setting.and_then(|s| s.extension_prefixes.as_ref());
 
     // Eligible: records of a type declaring `known_fields`. An unparsed header
     // stays eligible and unexamined (BUG-78) rather than vanishing.
@@ -192,31 +193,41 @@ pub fn header_field_set_consistency(
                 return Outcome::Unreadable;
             }
 
+            let prefix = match type_prefixes.and_then(|m| m.get(&record.record_type)) {
+                Some(own) => Some(own.as_str()),
+                None => allow_extension_prefix.then_some("x-"),
+            };
             for field in &record.header.fields {
-                if allow_extension_prefix && is_extension_key(field.key.as_str()) {
+                if prefix.is_some_and(|p| is_extension_key(field.key.as_str(), p)) {
                     continue;
                 }
                 if !field_is_declared(&field.key, allowed) {
-                    findings.push(Finding {
-                    rule: RULE_ID.to_string(),
-                    severity: FindingSeverity::Warning,
-                    file: record.path.clone(),
-                    line: Some(field.line),
-                    waived: None,
-                    declared_severity: None,
-                    suggested_action: None,
-                    action_source: ActionSource::new("undeclared-field").field(field.key.as_str()),
-                    message: match near_miss(&field.key, allowed) {
-                        Some(declared) => format!(
-                            "field '{}' is not declared for record type '{}' -- the type declares '{declared}', which differs only in case",
-                            field.key, record.record_type
-                        ),
-                        None => format!(
-                            "field '{}' is not declared (required_fields or known_fields) for record type '{}'",
-                            field.key, record.record_type
-                        ),
-                    },
-                });
+                    // A key that differs from a declared one only in case is a
+                    // rename, never a removal: removing it would delete the value.
+                    let near = near_miss(&field.key, allowed);
+                    let source = match near {
+                        Some(declared) => ActionSource::new("undeclared-field-case")
+                            .field(field.key.as_str())
+                            .text(declared.as_str()),
+                        None => ActionSource::new("undeclared-field").field(field.key.as_str()),
+                    };
+                    findings.push(Finding::new(
+                        RULE_ID,
+                        FindingSeverity::Warning,
+                        record.path.clone(),
+                        source,
+                        match near {
+                            Some(declared) => format!(
+                                "field '{}' is not declared for record type '{}' -- the type declares '{declared}', which differs only in case; rename it",
+                                field.key, record.record_type
+                            ),
+                            None => format!(
+                                "field '{}' is not declared (required_fields or known_fields) for record type '{}'",
+                                field.key, record.record_type
+                            ),
+                        },
+                    )
+                    .at(field.line));
                 }
             }
             Outcome::Examined
@@ -224,12 +235,7 @@ pub fn header_field_set_consistency(
     );
 
     (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records,
-        },
+        RuleExecution::ran(RULE_ID, population, examined_records),
         findings,
     )
 }
@@ -276,31 +282,23 @@ pub fn header_field_case_mismatch(
             else {
                 return Outcome::Absent;
             };
-            findings.push(Finding {
-                rule: RULE_ID.to_string(),
-                severity: FindingSeverity::Error,
-                file: record.path.clone(),
-                line: Some(found.line),
-                waived: None,
-                declared_severity: None,
-                suggested_action: None,
-                action_source: ActionSource::new("field-case-mismatch").field(found.key.as_str()).text(field.as_str()),
-                message: format!(
+            findings.push(Finding::new(
+                RULE_ID,
+                FindingSeverity::Error,
+                record.path.clone(),
+                ActionSource::new("field-case-mismatch").field(found.key.as_str()).text(field.as_str()),
+                format!(
                     "declared field '{field}' found as '{}' -- field names compare exactly (ADR-57); rename it",
                     found.key
                 ),
-            });
+            )
+            .at(found.line));
             Outcome::Examined
         },
     );
 
     (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records,
-        },
+        RuleExecution::ran(RULE_ID, population, examined_records),
         findings,
     )
 }
@@ -360,31 +358,23 @@ pub fn header_case_variant_key(
                     .map(|(key, line)| format!("'{key}' (line {line})"))
                     .collect::<Vec<_>>()
                     .join(", ");
-                findings.push(Finding {
-                    rule: RULE_ID.to_string(),
-                    severity: FindingSeverity::Error,
-                    file: record.path.clone(),
-                    line: Some(spellings[0].1),
-                    waived: None,
-                    declared_severity: None,
-                    suggested_action: None,
-                    action_source: ActionSource::new("case-variant-key").field(spellings[0].0),
-                    message: format!(
+                findings.push(Finding::new(
+                    RULE_ID,
+                    FindingSeverity::Error,
+                    record.path.clone(),
+                    ActionSource::new("case-variant-key").field(spellings[0].0),
+                    format!(
                         "header writes keys differing only by case: {named} -- field names compare exactly (ADR-57), so these are different fields; this reports the difference, not which spelling is right"
                     ),
-                });
+                )
+                .at(spellings[0].1));
             }
             Outcome::Examined
         },
     );
 
     (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records,
-        },
+        RuleExecution::ran(RULE_ID, population, examined_records),
         findings,
     )
 }
@@ -411,6 +401,28 @@ mod tests {
             (1, 0),
             "the record is in the population and the rule never saw its fields"
         );
+    }
+
+    #[test]
+    fn a_case_only_near_miss_suggests_a_rename_never_a_removal_observed_failing() {
+        let (r, _) = yaml_record("docs/adr/ADR-1-x.md", "---\nstatus: Open\n---\n# 1 — X\n");
+        let config = config_for_known(vec![("adr", vec!["Status"])]);
+        let (_, findings) = header_field_set_consistency(&[r], &config);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        let src = &findings[0].action_source;
+        assert_eq!(src.variant, "undeclared-field-case");
+        assert_eq!(src.target.field.as_deref(), Some("status"));
+        assert!(matches!(&src.value, Some(crate::report::ActionValue::Text(t)) if t == "Status"));
+    }
+
+    #[test]
+    fn a_headerless_record_of_a_type_declaring_no_required_fields_is_not_judged_observed_failing() {
+        let a = record("docs/a/A-1-x.md", "a", "---\nStatus: Open\n---\n");
+        let b = record("docs/b/B-1-y.md", "b", "No header here.\n");
+        let config = config_for_required(vec![("a", vec!["Status"]), ("b", vec![])]);
+        let (exec, findings) = header_required_fields(&[a, b], &config);
+        assert_eq!(examined(&exec), 1);
+        assert!(findings.is_empty(), "{findings:?}");
     }
 
     #[test]
@@ -784,6 +796,7 @@ mod tests {
                 parse_error: None,
             },
             identity: None,
+            items: None,
         }
     }
 
@@ -956,5 +969,47 @@ mod tests {
             assert_eq!(findings.len(), 1, "allow={allow:?}: {findings:?}");
             assert!(findings[0].message.contains("'x-Local'"), "{findings:?}");
         }
+    }
+
+    /// `MILE-141` item 3: a per-type prefix. `adr` declares `ext-`, `spec` is
+    /// left on the rule-level default.
+    fn per_type_config(rule_level: Option<bool>) -> Config {
+        let option = match rule_level {
+            Some(v) => format!("    allow_extension_prefix: {v}\n"),
+            None => String::new(),
+        };
+        let yaml = format!(
+            "schema_version: 2\nrules:\n  header.field-set-consistency:\n    level: warn\n{option}    extension_prefixes:\n      adr: \"ext-\"\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n    known_fields: [\"Status\"]\n  spec:\n    dir: \"docs/specs\"\n    required_fields: []\n    known_fields: [\"Status\"]\n"
+        );
+        crate::config::parse(&yaml).expect("the fixture config loads")
+    }
+
+    #[test]
+    fn a_type_with_a_custom_prefix_admits_that_prefix_and_not_x() {
+        let r = record(
+            "docs/adr/0001-x.md",
+            "adr",
+            "---\nStatus: Accepted\next-Owner: a\nEXT-Team: b\nx-Local: c\nSponsor: d\n---\n",
+        );
+        let (exec, findings) = header_field_set_consistency(&[r], &per_type_config(None));
+        assert_eq!(examined(&exec), 1);
+        let msgs: Vec<_> = findings.iter().map(|f| f.message.clone()).collect();
+        assert_eq!(findings.len(), 2, "{msgs:?}");
+        assert!(msgs.iter().any(|m| m.contains("'x-Local'")), "{msgs:?}");
+        assert!(msgs.iter().any(|m| m.contains("'Sponsor'")), "{msgs:?}");
+    }
+
+    #[test]
+    fn a_type_left_on_the_default_keeps_the_rule_level_behaviour() {
+        let body = "---\nStatus: Accepted\next-Owner: a\nx-Local: c\n---\n";
+        // Rule-level option off: the undeclared type exempts nothing.
+        let r = record("docs/specs/SPEC-1-x.md", "spec", body);
+        let (_, off) = header_field_set_consistency(&[r], &per_type_config(None));
+        assert_eq!(off.len(), 2, "{off:?}");
+        // Rule-level option on: `x-` passes, `ext-` (another type's prefix) does not.
+        let r = record("docs/specs/SPEC-1-x.md", "spec", body);
+        let (_, on) = header_field_set_consistency(&[r], &per_type_config(Some(true)));
+        assert_eq!(on.len(), 1, "{on:?}");
+        assert!(on[0].message.contains("'ext-Owner'"), "{on:?}");
     }
 }

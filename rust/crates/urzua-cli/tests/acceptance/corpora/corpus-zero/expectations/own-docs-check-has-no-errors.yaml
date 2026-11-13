@@ -1,12 +1,12 @@
 id: own-docs-check-has-no-errors
 corpus: "@repo"
-invocation: [check, docs/]
+invocation: [--as-of, "2026-11-09", check, docs/]
 expect_exit: 0
 expect_json:
   - {at: /blocking, equals: false}
   - {at: /files_examined, gt: 0}
   - {at: /records_read_by_any_rule, gt: 0}
 expect_no_findings:
-  - {severity: error}
+  - {severity: error, unwaived: true}
 expect_rules_ran:
   - header.required-fields

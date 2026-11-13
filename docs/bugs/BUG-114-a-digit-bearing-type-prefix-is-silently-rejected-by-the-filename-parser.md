@@ -2,7 +2,7 @@
 Stable-Id: 01M34QAPNDG4YZVQDZVQKVMSZY
 Status: Fixed
 Found-in: "A /code-review v0.3.0...main pass, reviewing everything landed for the 0.4.0 release"
-Regression-test: "a_hyphenated_type_prefix_parses_observed_failing, new_record.rs"
+Realized-by: test:rust/crates/urzua-core/src/new_record.rs#a_hyphenated_type_prefix_parses_observed_failing@sha256:6c70397f7b9475d1a181aa9eb1064ce83842f96ecd3017c58ca0fdae478b57a5
 ---
 # 114 — a digit-bearing type prefix is silently rejected by the filename parser
 
@@ -37,3 +37,5 @@ alphanumeric prefix can never be confused with the number segment.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-23 | Filed and fixed in one pass. **Why:** found by a full-release code review; the existing hyphenated-prefix test already covered the right shape, extended with a digit-bearing case. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/new_record.rs#a_hyphenated_type_prefix_parses_observed_failing` (lines 532-561) 7fb83ce76730 -> 6c70397f7b94. Reason: Read the diff of each pinned span since the old pin and the claim still holds. new_record.rs#a_hyphenated_type_prefix_parses_observed_failing: the calls to next_display_number now unwrap its Result (it reports an exhausted number instead of overflowing), the expected numbers are unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |

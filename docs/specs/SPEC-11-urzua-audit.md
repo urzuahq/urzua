@@ -1,9 +1,12 @@
 ---
-Version: '0.3'
+Stable-Id: 01M6R3NK5C6BXVCRM0Y2JS1DT5
+Version: '0.13'
 Date: 2026-09-07
-Status: Accepted
+Status: Shipped
+Embodiment: Verified
+Realized-by: code:rust/crates/urzua-cli/src/commands/audit.rs@sha256:7f54effa99c27c74c39869d05b39f69b13b2c030c24d2bd56db72fde59e86817, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs@sha256:44fea1626a547a6d9226f09c5e9cd116aad2dfe384a082aaeb8eec2c74f22af5, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:a60c9c61b94c5707e0aa4e96713a843556cd50bce97e01c514826d61ca0aac08
 Author: beauwilliams
-Subject: '`urzua audit` -- cross-record reconciliation: supersession reciprocity and dangling references.'
+Subject: '`urzua audit` -- a deprecated alias of `urzua check` over the configured rules, with no rule set of its own.'
 Implements: ADR-30
 Parent: SPEC-1
 ---
@@ -11,55 +14,54 @@ Parent: SPEC-1
 
 ## Purpose
 
-Cross-record reconciliation, kept distinct from `check`'s per-record validation: supersession
-reciprocity (if A supersedes B, B must point back) and dangling cross-references. Read-only, always
-— a bulk cross-reference rewrite is a real data-loss risk without a review step this command doesn't
-have (the same incident SPEC-2's original `--fix`-deferral cites).
+`urzua audit` was cross-record reconciliation kept apart from `check`: supersession reciprocity and
+dangling cross-references. It ran two rule functions `check` already runs, over the same corpus,
+producing the same report and exit codes (`RFC-38`). `ADR-53` made every rule a declared, opt-in
+policy, so a rule set hardcoded inside the tool overrides the adopter's declaration; that ownership was
+the root of `BUG-42`, `BUG-84` and `BUG-99`.
 
-## What it runs
+`ADR-79` folds it into `check`. Today `audit` is a **deprecated alias** and owns no rule set. It is
+removed the release after.
 
-`audit` calls the exact same `rules::pointer_resolution` and `rules::supersession_reciprocity`
-functions `check` calls — restricted to just those two — rather than re-deriving the same logic
-under a different name. `relation.supersession-reciprocity` is not `audit`-exclusive: `check` runs
-it too (see SPEC-2), and `audit`'s value is narrowing to only cross-record concerns, not owning
-supersession reciprocity outright.
+## What it does
 
-Supersession reciprocity is **status-aware**: a claim only binds once the claiming record is itself
-in a terminal-accepted state — a `Draft` ADR claiming to supersede an `Accepted` one doesn't yet
-require the older record to point back.
+`urzua audit` runs `check`'s engine over the rules the repository's configuration declares and enables,
+with no rule selection of its own, so its report **is** `check`'s: the same `status`, `findings`,
+`rules_executed`, `rules_selected` (`null`), `notices` and exit codes (`SPEC-2`). It cannot disagree with
+`check`, and it cannot exit 2 on a configuration `check` accepts. A corpus whose configuration declares
+neither of the two rules `audit` used to run, such as the one `init` writes for a corpus with no type
+prefix (`BUG-99`), is judged by whatever it does declare.
 
-## Output
+It takes no arguments beyond the global `--config`. A consumer migrating to `urzua check` changes the
+invocation and nothing in the shape of what comes back; for the narrower report `audit` used to give,
+`urzua check --rules pointer.resolution,relation.supersession-reciprocity` (a rule the configuration
+does not declare is an error there, exit 2, rather than a silent empty run).
 
-Assembled into the same `CheckReport` shape `check` already emits (ADR-23's one-report-shape
-contract) — no second shape invented for the same kind of data. `rules_executed` correctly shows two
-entries where `check` shows ten, reflecting narrower scope rather than a fabricated "ran everything"
-claim. Waivers apply identically to `check` (ADR-11/SPEC-10): a waived finding stays listed, only
-excluded from the blocking exit code.
+## The deprecation notice
 
-## Reuse, not reimplementation
-
-A future third caller of either rule function costs nothing — the function is the single source of
-truth, callable from as many command entry points as need it. If `audit` and `check` ever need
-genuinely different reciprocity semantics (e.g. `audit` scoping to a subset of paths the way `check`
-does), that is a real divergence to design deliberately, not something ruled out by sharing the
-function today, since both take `&[Record]` and neither cares where its caller runs from.
+Every report carries one `Notice` with `subject: "audit"` and severity `warning` naming the replacement,
+`urzua check`. A `Notice` never moves the exit code (`ADR-46`), so no adopter's build breaks on the
+warning. The only difference between an `audit` report and the `check` report is that notice.
 
 ## What's deliberately not built
 
-- **Writing.** Not deferred pending infrastructure (unlike `fix`, SPEC-8) — permanently out of
-  scope. The reciprocity checker must never write; a bulk rewrite is the exact incident this
-  project's own practice cites as the reason repair needed a revision log before it could exist at
-  all (`fix`, not `audit`, is where that repair path lives, gated hard).
-- **Path scoping** (`audit docs/adr/` narrowing which records are cross-checked) — `check` has this
-  (BUG-1's fix); `audit` doesn't yet, since nothing has needed it.
+- **Writing.** Permanently out of scope. The reciprocity checker must never write; repair is `fix`
+  (`SPEC-8`), gated hard.
+- **A rule set, a path scope or a flag of its own.** Anything `audit` could be asked for is a `check`
+  invocation.
+- **Removal.** The release after the deprecation release removes the command, with a clear message for a
+  caller that still invokes it. Re-adding it afterwards would cost a deprecation cycle of its own
+  (`ADR-79`).
 
 ## References
 
-- ADR-30 — the decision this spec details: reuse, not a second implementation.
-- SPEC-1 — `audit`'s scope, fully specified before ADR-30 decided the mechanism.
-- SPEC-2 — `check`, which shares `relation.supersession-reciprocity` with `audit`.
-- ADR-18/19 — the decision that moved Embodiment out of `audit` and into `check`/`fix`, leaving
-  `audit` with only these two rules.
+- ADR-79 — the decision: fold `audit` into `check`, and keep one read-only validator.
+- RFC-38 — the proposal (sections 1 to 3 are built here).
+- ADR-30 — the earlier decision that `audit` reuse `check`'s rule functions, which this supersedes in
+  effect: it no longer calls them itself.
+- ADR-53 — every rule is a declared policy.
+- BUG-42, BUG-84, BUG-99 — the bugs rooted in `audit` owning a rule set.
+- SPEC-2 — `check`, including `--rules` and `rules_selected`.
 
 > **Revision log**
 >
@@ -68,3 +70,19 @@ function today, since both take `&[Record]` and neither cares where its caller r
 > | 2026-09-07 | Initial spec, giving `audit` its own complete build document rather than leaving it as an ADR describing only the *how*, with the *what* living separately in SPEC-1. **Why:** MILE-77 found this and `new`/`explain`/`graph`/`migrate` documented only as ADRs while comparable-complexity areas (`check`, `init`) had specs. | **structural** |
 > | 2026-09-08 | Bumped to `0.2`. **Why:** MILE-74 decided `Author` is a required `spec` field, matching the accountability argument already applied to `adr`/`rfc` (MILE-78) -- backfilled with the real handle, not a placeholder. | **substantive** |
 > | 2026-09-09 | Added the new required `Subject` field (`MILE-91`): a one-line summary of what this spec covers, readable without opening `Purpose`. | **structural** |
+> | 2026-11-05 | Bumped to `0.4`. Added `Realized-by` naming the implementing code and the tests that exercise this spec: `audit_reports_a_one_directional_supersession_and_passes_a_reciprocated_one`. **Why:** the maintainer approved moving this spec to `Shipped`, which requires `Embodiment` and `Realized-by`; the tests run this repository's own `.urzua/config.yaml`. | **structural** |
+> | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-cli/src/commands/audit.rs, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs, test:rust/crates/urzua-cli/tests/check_integration.rs` -- stated `Not started` disagreed with the computed value `Verified`. | **structural** |
+> | 2026-11-05 | Status changed from Accepted to Shipped and bumped to `0.5`. **Why:** maintainer decision of 2026-11-05 to ship the specs whose implementation is verified; `Embodiment: Verified` with `Realized-by` naming the implementing code and tests. | **structural** |
+> | 2026-11-05 | Bumped to `0.6`. Rewritten: `audit` is a deprecated alias of `check` over the configured rules with no rule set of its own, adding one deprecation `Notice`; removed the release after. **Why:** `MILE-190`, `ADR-79`. | **substantive** |
+> | 2026-11-08 | Pinned (attested by beauwilliams, identity: gh-verified, actor: agent): 3 locators pinned, 3 file-level, 0 scoped. Evidence: rust/crates/urzua-cli/src/commands/audit.rs@sha256:80228f66e936, rust/crates/urzua-cli/tests/record_types_own_config_integration.rs@sha256:7caa23975490, rust/crates/urzua-cli/tests/check_integration.rs@sha256:f893cb99b833 Reason: Pinned the files as they are now after checking each against the record it evidences: declaration.rs and config.yaml still declare pointer_fields and narrative_fields per type (MILE-90), config.yaml still requires Subject on specs with checks.yml gating it (MILE-91), document_model.rs, both section.rs files, schema_version.rs and config.yaml still read the declared identity, fields and sections (MILE-98), .git-hooks/pre-push, the Makefile and checks.yml still run urzua check (MILE-99), waiver.rs, rules/waiver.rs and waiver_stale_integration.rs still implement the waiver type SPEC-10 describes, audit.rs and the own-config and check integration tests still implement SPEC-11, new.rs, new_record.rs and new_integration.rs still implement SPEC-12, explain.rs, both graph.rs files and the own-config test still implement SPEC-13, both migrate.rs files and check_integration.rs still implement SPEC-14, and doctor.rs and its tests still implement SPEC-15. **Why:** a claim is renewed only over pinned code and test evidence. | **structural** |
+> | 2026-11-08 | Bumped to `0.7`. The `code:` and `test:` locators of `Realized-by` are now hash-pinned by `urzua reverify --pin-only` (the `Pinned` row above) and, where the record stated `Drift detected`, its `Embodiment` was recomputed (the tool-authored row above); no behaviour this spec describes changes. **Why:** `MILE-129`, `ADR-97` section 10: a claim is renewed only over pinned code and test evidence, so the corpus is pinned once before expiry is enabled. | **structural** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/record_types_own_config_integration.rs` 7caa23975490 -> 44fea1626a54. Reason: Read the diff of each pinned file since the old pin and the claim still holds. record_types_own_config_integration.rs: the milestone fixture's Done means is now a list item instead of a prose sentence (the repository config checks Done means as items), and the helper that swaps in items replaces that item; no assertion changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-08 | Bumped to `0.8`. The pin this spec's `Realized-by` holds on `record_types_own_config_integration.rs` was re-baselined (the `Re-baselined` row above); no behaviour this spec describes changed. **Why:** a revision-log entry that adds a structural change needs a `Version` bump (`revision-log.version-bump-required`). | **structural** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/check_integration.rs` f893cb99b833 -> 8538aedb7492. Reason: the tests in check_integration.rs now name real tracked files; the behaviour this record relies on is unchanged **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-08 | Bumped to `0.9`. The `Realized-by` pin on `check_integration.rs` was re-baselined (the `Re-baselined` row above) after its tests were changed to name real tracked files; no behaviour this spec describes changes. | **structural** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/check_integration.rs` 8538aedb7492 -> 5ab61b95fd58. Reason: check_integration.rs: the only change is in pre_commit_hook_stops_a_planted_bad_header_with_the_real_binary, which now symlinks the urzua binary into the fixture instead of copying it (a copy raced a forking test thread and failed with ETXTBSY under load); the test's setup, planted defect and assertions are otherwise unchanged **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/audit.rs` 80228f66e936 -> 7f54effa99c2. Reason: Read the diff of each re-pinned file against main. cli/src/commands/audit.rs: Notice struct literals gained detail: None or use Notice::new; no behaviour change. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-08 | Bumped to `0.11`. The pins this spec's `Realized-by` holds on files this change touched were re-baselined (the `Re-baselined` row above); no behaviour this spec describes changed. | **structural** |
+> | 2026-11-09 | Bumped to `0.12`. Re-pin rows in this revision log were reworded to name who re-verified, matching the tool's wording since 2026-11-09; hashes, reasons and dates are unchanged. **Why:** Maintainer decision, 2026-11-09. | **structural** |
+> | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/check_integration.rs` 5ab61b95fd58 -> a60c9c61b94c. Reason: Read the diff of each pinned file since the previous pin. rust/crates/urzua-cli/tests/check_integration.rs: adds one regression test that a claim file with an upper-case .MD extension under claim_paths is read; nothing else changed. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-09 | Bumped to `0.13`. Evidence pins re-baselined for this change; the specification text is unchanged. **Why:** a revision-log entry that adds a structural change bumps `Version`. | **structural** |

@@ -51,12 +51,56 @@ impl ActionDecl {
 pub struct VariantAction {
     pub variant: &'static str,
     pub action: ActionDecl,
+    /// The lowest severity a finding of this variant can have, whatever the
+    /// repository's setting for the rule says (`ADR-96`: a floor).
+    pub severity_floor: Option<FindingSeverity>,
+    /// Whether a `WAIVER` record can excuse a finding of this variant. `false`
+    /// means no rule-level waiver matches it, and the rule's `permanent`
+    /// categories are not consulted for it (`ADR-96`).
+    pub waivable: bool,
 }
 
 impl VariantAction {
     pub const fn new(variant: &'static str, action: ActionDecl) -> Self {
-        VariantAction { variant, action }
+        VariantAction {
+            variant,
+            action,
+            severity_floor: None,
+            waivable: true,
+        }
     }
+
+    /// The variant's severity is at least `severity`, whatever the rule's
+    /// declared level.
+    pub const fn floored(mut self, severity: FindingSeverity) -> Self {
+        self.severity_floor = Some(severity);
+        self
+    }
+
+    /// No rule-level waiver matches a finding of this variant.
+    pub const fn unwaivable(mut self) -> Self {
+        self.waivable = false;
+        self
+    }
+}
+
+/// The declaration of the variant a finding is, when its rule's table entry
+/// has one.
+pub fn variant_declaration(finding: &Finding) -> Option<&'static VariantAction> {
+    let variant = finding.action_source.variant;
+    if variant.is_empty() {
+        return None;
+    }
+    rule_def(&finding.rule)?
+        .actions
+        .iter()
+        .find(|a| a.variant == variant)
+}
+
+/// Whether a rule-level waiver can match `finding`: `false` only for a variant
+/// its table entry declares `unwaivable`.
+pub fn finding_is_waivable(finding: &Finding) -> bool {
+    variant_declaration(finding).is_none_or(|v| v.waivable)
 }
 
 /// The `target` keys a kind requires (`ADR-73`'s table). `file` is filled from
@@ -233,8 +277,9 @@ mod tests {
         }
     }
 
-    /// The source of every rule module, test modules cut off: what a rule can
-    /// construct, which is the set of variants the table must cover.
+    /// The source of every rule module, test modules cut off (an item that is
+    /// only `#[cfg(test)]`, not a module, stays): what a rule can construct,
+    /// which is the set of variants the table must cover.
     fn rule_sources() -> Vec<(String, String)> {
         let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/rules");
         let mut out = Vec::new();
@@ -246,7 +291,7 @@ mod tests {
             }
             let text = std::fs::read_to_string(&path).unwrap();
             let live = text
-                .split("#[cfg(test)]")
+                .split("\n#[cfg(test)]\nmod ")
                 .next()
                 .unwrap_or_default()
                 .to_string();
@@ -290,17 +335,108 @@ mod tests {
         assert!(dead.is_empty(), "declared but never constructed: {dead:?}");
     }
 
+    /// The top-level arguments of every `Finding::new(` call in `live`, each
+    /// trimmed. A scanner, not a parser: it balances brackets and skips string
+    /// literals and line comments, which is all a rule module's calls need.
+    fn finding_new_calls(live: &str) -> Vec<Vec<String>> {
+        const CALL: &str = "Finding::new(";
+        let mut calls = Vec::new();
+        let mut from = 0;
+        while let Some(at) = live[from..].find(CALL) {
+            let start = from + at + CALL.len();
+            let bytes = live.as_bytes();
+            let (mut depth, mut i, mut arg_start) = (1usize, start, start);
+            let mut args = Vec::new();
+            while depth > 0 {
+                match bytes[i] {
+                    b'"' => {
+                        i += 1;
+                        while bytes[i] != b'"' {
+                            i += if bytes[i] == b'\\' { 2 } else { 1 };
+                        }
+                    }
+                    b'/' if bytes[i + 1] == b'/' => {
+                        while bytes[i] != b'\n' {
+                            i += 1;
+                        }
+                    }
+                    b'(' | b'[' | b'{' => depth += 1,
+                    b')' | b']' | b'}' => {
+                        depth -= 1;
+                        if depth == 0 {
+                            args.push(live[arg_start..i].trim().to_string());
+                        }
+                    }
+                    b',' if depth == 1 => {
+                        args.push(live[arg_start..i].trim().to_string());
+                        arg_start = i + 1;
+                    }
+                    _ => {}
+                }
+                i += 1;
+            }
+            // A trailing comma leaves an empty last argument.
+            if args.last().is_some_and(String::is_empty) {
+                args.pop();
+            }
+            calls.push(args);
+            from = i;
+        }
+        calls
+    }
+
+    /// Whether a `Finding::new` argument is an action source: built in place
+    /// (`ActionSource::new(` anywhere in the expression), a call to a helper
+    /// named `*_source`, a parameter declared as an `ActionSource`, or a local
+    /// bound to one a few lines above.
+    fn names_an_action_source(live: &str, arg: &str) -> bool {
+        if arg.contains("ActionSource::new(") {
+            return true;
+        }
+        let code: String = arg
+            .lines()
+            .filter(|line| !line.trim_start().starts_with("//"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let head: String = code
+            .trim()
+            .chars()
+            .take_while(|c| c.is_alphanumeric() || *c == '_')
+            .collect();
+        let bound_here = live.find(&format!("let {head} = ")).is_some_and(|at| {
+            let rest = &live[at..];
+            rest[..rest.len().min(400)].contains("ActionSource::new(")
+        });
+        !head.is_empty()
+            && (head.ends_with("_source") && code.trim()[head.len()..].starts_with('(')
+                || live.contains(&format!("{head}: ActionSource"))
+                || bound_here)
+    }
+
+    /// A finding is built either by a struct literal, which must carry an
+    /// `action_source` field, or by `Finding::new(rule, severity, file,
+    /// action_source, message)`, whose fourth argument must be one. Both
+    /// kinds are counted together, so a finding built either way without an
+    /// action source is caught.
     #[test]
     fn every_finding_a_rule_constructs_names_a_variant() {
         for (file, live) in rule_sources() {
-            let constructed = live.matches("Finding {").count()
+            let literals = live.matches("Finding {").count()
                 - live.matches("-> Finding {").count()
                 - live.matches("pub struct Finding {").count();
-            let sourced = live.matches("action_source: ").count()
+            let calls = finding_new_calls(&live);
+            let constructed = literals + calls.len();
+            let literal_sourced = live.matches("action_source: ").count()
                 + live.matches("                action_source,").count()
-                - live.matches("action_source: ActionSource,").count();
+                - live.matches("action_source: ActionSource,").count()
+                - live.matches("action_source: ActionSource)").count();
+            let call_sourced = calls
+                .iter()
+                .filter(|args| args.len() == 5 && names_an_action_source(&live, &args[3]))
+                .count();
             assert_eq!(
-                constructed, sourced,
+                constructed,
+                literal_sourced + call_sourced,
                 "{file}: a Finding is built without an action_source"
             );
             assert!(

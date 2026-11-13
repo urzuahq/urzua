@@ -2,7 +2,7 @@
 Stable-Id: 01M2405K7X2B0QKCB68M4NTZ85
 Status: Fixed
 Found-in: 'noticed live while fixing graph.rs''s own tests for PR #12 (ADR-36''s legacy-filename removal) -- a test had to use an unpadded `RFC-1` reference instead of a hand-typed `RFC-0001` to pass, which only makes sense if `graph()` treats the two as different identifiers'
-Regression-test: 'rust/crates/urzua-core/src/graph.rs :: graph_resolves_a_padded_reference_against_an_unpadded_filename_observed_failing'
+Realized-by: test:rust/crates/urzua-core/src/graph.rs#graph_resolves_a_padded_reference_against_an_unpadded_filename_observed_failing@sha256:8ff076b9b8b248d0cf1beffcaa867378972a47347936c294c820dbfc5902ce1c
 ---
 # 11 — `urzua graph` reports false dangling edges due to missing ID normalization
 
@@ -56,3 +56,4 @@ true for what fields it reads but not for how it matches them.
 > |---|---|---|
 > | 2026-09-09 | Initial bug record, `Status: Open`. Not yet fixed -- whether to normalize inline in `graph()` or extract a shared index-building helper both `pointer_resolution` and `graph()` call is not yet decided. | **structural** |
 > | 2026-09-09 | Fixed as part of MILE-90/ADR-44: `graph()` now calls `build_normalized_index`, the same shared, normalized index-building helper `pointer_resolution`/`narrative_field_stale` use -- the fix scope this record left undecided was resolved in favor of the shared helper, since MILE-90 was already touching all three functions' index-building code for an unrelated reason. `Status: Fixed`. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

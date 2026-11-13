@@ -1,4 +1,5 @@
 ---
+Stable-Id: 01M6R3NK5218VXSMBKK0YJSPR1
 Status: Accepted
 Date: 2026-08-18
 Accepted-on: 2026-09-06
@@ -138,3 +139,9 @@ is real and something concrete asks for history, escalation, or cross-repo reads
 
 - RFC-3 §5 — collection rather than in-repo storage, and why a protected branch forces it.
 - RFC-2 §2 — attestation identity tiering, which an authenticated account improves on.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-05 | Revision log added, 2026-11-05. | **structural** |

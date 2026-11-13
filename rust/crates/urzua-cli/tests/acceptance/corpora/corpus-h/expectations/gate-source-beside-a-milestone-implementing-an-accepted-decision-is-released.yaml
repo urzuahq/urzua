@@ -1,0 +1,13 @@
+id: gate-source-beside-a-milestone-implementing-an-accepted-decision-is-released
+corpus: corpus-h
+# A record that is not itself a decision releases the gate through its link
+# field: the milestone's Implements names ADR-0001, which is Accepted.
+commits:
+  - write:
+      src/lib.rs: "fn a() { 3; }\n"
+      records/milestones/MILE-0004-linked.md: "---\nStatus: Planned\nImplements: ADR-0001\n---\n# MILE-0004 — Linked\n"
+invocation: [--config, .urzua/gate.yaml, check, --base, base]
+expect_exit: 0
+expect_rules_ran: [diff.source-requires-record]
+expect_no_findings:
+  - {rule: diff.source-requires-record}

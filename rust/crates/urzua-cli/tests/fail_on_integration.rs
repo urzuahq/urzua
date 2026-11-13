@@ -1,6 +1,8 @@
 //! `fail_on` (config) and `--fail-on` (flag): the exit code's threshold. The
 //! JSON on stdout never changes; only the exit code does. Real binary.
 
+mod common;
+
 use std::path::Path;
 use std::process::Command;
 
@@ -8,7 +10,7 @@ const WARN_ONLY: &str = "---\nDeciders: Ana\nReviewers:\n---\n# ADR-1: First\n";
 const CLEAN: &str = "---\nDeciders: Ana\nReviewers: Bo\n---\n# ADR-1: First\n";
 
 fn run_check(dir: &Path, extra: &[&str]) -> (i32, String) {
-    let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
+    let out = common::urzua()
         .arg("check")
         .args(extra)
         .arg("docs/")
@@ -21,9 +23,8 @@ fn run_check(dir: &Path, extra: &[&str]) -> (i32, String) {
     )
 }
 
-fn fixture(name: &str, top_level: &str, record: &str) -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join(format!("urzua-fail-on-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+fn fixture(name: &str, top_level: &str, record: &str) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-fail-on-{name}"));
     std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     assert!(Command::new("git")

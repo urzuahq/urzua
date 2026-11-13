@@ -1,5 +1,6 @@
 ---
 default: major
+closes: [BUG-97]
 ---
 
 **Breaking: header field names are compared exactly against a type's declared fields.** They were

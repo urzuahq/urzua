@@ -2,7 +2,7 @@
 Stable-Id: 01M2YZW0R9Y0XB36KZR8EFDKAM
 Status: Fixed
 Found-in: "Noticing PR #72 had retitled itself from `prepare release 0.4.0` to `0.4.1` while 0.4.0 had never been tagged"
-Regression-test: '`.github/scripts/release-invariants.test.sh`, the case ''a release-prep bump ahead of its tag, with fragments pending (BUG-92)'', run by `make release-invariants` and CI'
+Realized-by: test:.github/scripts/release-invariants.test.sh@sha256:8fc2b5758338aef9953492f6d1977d9799c662f05589bf1d9064e6e5129b1381
 ---
 # 92 — A release-prep version bump and changelog section reached main through a bugfix branch
 
@@ -65,3 +65,5 @@ computation.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | `Regression-test` filled in: the real value. `Status` is untouched. **Why:** `field.pending` now reads a `Regression-test` placeholder on a `Fixed` bug as a real gap (`MILE-169`), and the `Regression-test` field named a test that was not yet written; it now names the planted-violation case of the release-invariants guard. | **structural** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |
+> | 2026-11-08 | Pinned (attested by beauwilliams, identity: gh-verified, actor: agent): 1 locators pinned, 1 file-level, 0 scoped. Evidence: .github/scripts/release-invariants.test.sh@sha256:8fc2b5758338 Reason: Pinned the files as they are now after checking each against the record it evidences: claim.rs and claim_field.rs still read a changeset's declared closes field as a claim (BUG-66), release-invariants.test.sh still plants a release-prep version bump and an unmatched level and asserts the guards fail, and checks.yml now runs it on the unattended path (BUG-92, BUG-93, BUG-96), new.rs and new_record.rs still take the configured header shape over a template (MILE-1), filename.rs still compares the filename's type prefix and padded number with the H1 (MILE-10), config.yaml still declares config.scope-matches-nothing and checks.yml runs the gate (MILE-106, MILE-110), and header.rs, narrative.rs, pointer.rs, field.rs, fix.rs, the Makefile and checks.yml still read the declared relation field names with relation_field_literals.rs failing on a restated literal (MILE-107, MILE-109). **Why:** a claim is renewed only over pinned code and test evidence. | **structural** |

@@ -84,28 +84,19 @@ pub fn date_field_valid(records: &[Record], config: &Config) -> (RuleExecution, 
                 return Outcome::Absent;
             }
             if let Some(problem) = date_problem(value.trim()) {
-                findings.push(Finding {
-                    rule: RULE_ID.to_string(),
-                    severity: FindingSeverity::Error,
-                    file: record.path.clone(),
-                    line: None,
-                    waived: None,
-                    declared_severity: None,
-                    suggested_action: None,
-                    action_source: ActionSource::new("date-invalid").field(field.as_str()),
-                    message: format!("{field} '{}' {problem}", value.trim()),
-                });
+                findings.push(Finding::new(
+                    RULE_ID,
+                    FindingSeverity::Error,
+                    record.path.clone(),
+                    ActionSource::new("date-invalid").field(field.as_str()),
+                    format!("{field} '{}' {problem}", value.trim()),
+                ));
             }
             Outcome::Examined
         },
     );
     (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records,
-        },
+        RuleExecution::ran(RULE_ID, population, examined_records),
         findings,
     )
 }
@@ -161,31 +152,22 @@ pub fn date_field_order(records: &[Record], config: &Config) -> (RuleExecution, 
             }
             // `YYYY-MM-DD` orders lexically once both are real dates.
             if dates[0] > dates[1] {
-                findings.push(Finding {
-                    rule: RULE_ID.to_string(),
-                    severity: FindingSeverity::Error,
-                    file: record.path.clone(),
-                    line: None,
-                    waived: None,
-                    declared_severity: None,
-                    suggested_action: None,
-                    action_source: ActionSource::new("date-order").field(later.as_str()),
-                    message: format!(
+                findings.push(Finding::new(
+                    RULE_ID,
+                    FindingSeverity::Error,
+                    record.path.clone(),
+                    ActionSource::new("date-order").field(later.as_str()),
+                    format!(
                         "{earlier} '{}' is later than {later} '{}', but {earlier} must not be later than {later}",
                         dates[0], dates[1]
                     ),
-                });
+                ));
             }
             Outcome::Examined
         },
     );
     (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records,
-        },
+        RuleExecution::ran(RULE_ID, population, examined_records),
         findings,
     )
 }
@@ -350,6 +332,17 @@ mod tests {
         }
         assert!(bad(ORDER).is_none());
         assert!(bad("  date.field-order: off\n").is_none());
+    }
+
+    #[test]
+    fn a_date_fields_entry_naming_no_declared_field_is_refused_observed_failing() {
+        let load = |entry: &str| {
+            let yaml = format!("schema_version: 2\nrecord_types:\n  adr:\n    dir: docs/adr\n    required_fields: [Status]\n    known_fields: [Date]\nrules:\n  date.field-valid:\n    level: error\n    date_fields: [{entry}]\n");
+            crate::config::parse(&yaml).err().map(|e| e.to_string())
+        };
+        assert!(load("Date").is_none());
+        assert!(load("Typo").unwrap().contains("date_fields"));
+        assert!(load("Date, \"\"").unwrap().contains("blank"));
     }
 
     #[test]

@@ -2,7 +2,7 @@
 Stable-Id: 01M2YN6ASM6ZQT4VW090K39Q4P
 Status: Fixed
 Found-in: "Round 8 of the 0.4.0 review"
-Regression-test: "rust/crates/urzua-cli/tests/check_integration.rs::two_records_claiming_one_identifier_are_reported"
+Realized-by: test:rust/crates/urzua-cli/tests/check_integration.rs#two_records_claiming_one_identifier_are_reported@sha256:119a57ee4c15564fd8be66c37b4bebd15ecff035bffc1092b24f8b7e2cfe0af2
 ---
 # 79 — Two records sharing an identifier collapse in the reference index and the verdict depends on filename order
 
@@ -44,3 +44,4 @@ Nothing compares the index's length against the number of records that produced 
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

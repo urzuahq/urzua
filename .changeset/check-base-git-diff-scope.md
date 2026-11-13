@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: []
 ---
 
 Adds `urzua check --base <ref>`: report findings, and `files_examined`, for the records that changed

@@ -1,4 +1,5 @@
 ---
+Stable-Id: 01M6R3NK54A6XCFCYN132D6XWK
 Status: Draft
 Date: 2026-09-07
 Author: beauwilliams
@@ -155,3 +156,9 @@ and shape checks entirely — a record in a decisionless status is examined by n
 - SPEC-2 — "required sections per profile," named and unbuilt until this RFC.
 - ADR-27 — `urzua new`'s template-vs-synthesis logic, and the header_shape/template-priority bug
   found while designing this RFC (§ Open questions).
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-05 | Revision log added, 2026-11-05. | **structural** |

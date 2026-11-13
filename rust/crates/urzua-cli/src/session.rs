@@ -10,7 +10,7 @@ use std::process::ExitCode;
 
 use urzua_core::config::Config;
 use urzua_core::record::Record;
-use urzua_core::report::CouldNotRun;
+use urzua_core::report::{CouldNotRun, Failure};
 use urzua_io::DiscoveredFiles;
 
 use crate::discovery::{default_config_path, find_repo_root, load_config, load_records};
@@ -26,7 +26,7 @@ pub(crate) struct Workspace {
 impl Workspace {
     /// `root_hint` locates the repository (the first path wins; none means the
     /// current directory). `config_path` defaults to the repository's own.
-    pub fn open(root_hint: &[PathBuf], config_path: Option<PathBuf>) -> Result<Self, String> {
+    pub fn open(root_hint: &[PathBuf], config_path: Option<PathBuf>) -> Result<Self, Failure> {
         let repo_root = find_repo_root(root_hint)?;
         let config_path = config_path.unwrap_or_else(|| default_config_path(&repo_root));
         let config = load_config(&config_path)?;
@@ -49,7 +49,7 @@ pub(crate) struct Session {
 }
 
 impl Session {
-    pub fn open(config_path: Option<PathBuf>) -> Result<Self, String> {
+    pub fn open(config_path: Option<PathBuf>) -> Result<Self, Failure> {
         Self::open_with(&[], config_path, |_, _, _| Ok(()))
     }
 
@@ -60,7 +60,7 @@ impl Session {
         root_hint: &[PathBuf],
         config_path: Option<PathBuf>,
         adjust: impl FnOnce(&Path, &Config, &mut DiscoveredFiles) -> Result<(), String>,
-    ) -> Result<Self, String> {
+    ) -> Result<Self, Failure> {
         Self::load(Workspace::open(root_hint, config_path)?, adjust)
     }
 
@@ -69,15 +69,36 @@ impl Session {
     pub fn load(
         workspace: Workspace,
         adjust: impl FnOnce(&Path, &Config, &mut DiscoveredFiles) -> Result<(), String>,
-    ) -> Result<Self, String> {
+    ) -> Result<Self, Failure> {
         let Workspace {
             repo_root,
             config_path,
             config,
         } = workspace;
         let mut discovered =
-            urzua_io::discover_tracked_files(&repo_root).map_err(|e| e.to_string())?;
+            crate::discovery::discover_files(&repo_root, &config).map_err(|e| e.to_string())?;
         adjust(&repo_root, &config, &mut discovered)?;
+        // A tracked record missing from the working tree is a removed record,
+        // not a reason to refuse the whole run: it is the ordinary mid-rename
+        // state. It is remembered so `check` can name it (BUG-82's concern is
+        // a record vanishing in silence, which a notice answers).
+        let missing: Vec<PathBuf> = discovered
+            .paths
+            .iter()
+            .filter(|p| {
+                crate::discovery::is_governed(&config, p)
+                    && !discovered.staged_deletions.contains(*p)
+                    && matches!(
+                        std::fs::symlink_metadata(repo_root.join(p)),
+                        Err(e) if e.kind() == std::io::ErrorKind::NotFound
+                    )
+            })
+            .cloned()
+            .collect();
+        for p in missing {
+            discovered.staged_deletions.insert(p.clone());
+            discovered.unstaged_deletions.insert(p);
+        }
         let (records, full_text) = load_records(
             &repo_root,
             &discovered.paths,
@@ -96,7 +117,7 @@ impl Session {
 }
 
 /// Emits a command's result, or the could-not-run report for its error.
-pub(crate) fn emit_or_not_run(result: Result<ExitCode, String>) -> ExitCode {
+pub(crate) fn emit_or_not_run(result: Result<ExitCode, Failure>) -> ExitCode {
     match result {
         Ok(code) => code,
         Err(e) => emit(&CouldNotRun::from(e)),

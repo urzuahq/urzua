@@ -1,7 +1,8 @@
 ---
+Stable-Id: 01M6R3NK4FPE25JR2HC916Z5EB
 Status: Accepted
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-core/src/new_record.rs@sha256:15511d30876e2e78f2617941c6f37f1ee5d962489a58e178e9a96cfe982d6102, code:rust/crates/urzua-cli/src/commands/new.rs@sha256:1e4723c81adcaf65d6b3c61d7714a09b5b07dbafed80986922d35f00156ba384, test:rust/crates/urzua-core/src/new_record.rs@sha256:15511d30876e2e78f2617941c6f37f1ee5d962489a58e178e9a96cfe982d6102
+Realized-by: code:rust/crates/urzua-core/src/new_record.rs@sha256:0f9f2d4f6a94e3adeaf4d8e8a15d7615084315c4b2d5cf752488379baf349ce1, code:rust/crates/urzua-cli/src/commands/new.rs@sha256:7abffc2519d4afca971621f8f4ed85ee88231a2faeab539683bd98f5b6191ec1, test:rust/crates/urzua-core/src/new_record.rs@sha256:0f9f2d4f6a94e3adeaf4d8e8a15d7615084315c4b2d5cf752488379baf349ce1
 Date: 2026-09-06
 Accepted-on: 2026-09-06
 Author: beauwilliams
@@ -77,6 +78,21 @@ template and leaves `Status`, `Deciders` and `Embodiment` to the author is uncha
   never fetched is still invisible. The declared `identity` pattern also decides the width of the
   number in the file name and the H1, and `Stable-Id` is always written (`MILE-151`, `BUG-188`).
 
+## Amendment (2026-11-05): numbering spans every directory the type declares
+
+*Status of this amendment: accepted 2026-11-05 by the maintainer (drafted 2026-11-05 at the maintainer's request). The Decision text above is unchanged.*
+
+The 2026-11-04 amendment's Numbering bullet, and the Decision before it, say `new` numbers from "the
+type's directory". Since `MILE-130` (#259), a record type may declare `extra_dirs` beside `dir`, and
+every listed directory is one identity namespace. `new` therefore writes the record into `dir` but
+numbers past the highest id found in **any** of the type's directories, and skips a number claimed in
+any of them on another local or remote-tracking ref (`new.rs` `all_dirs()`). An `extra_dirs` entry
+that does not exist holds no ids: `new` numbers without it and says so on stderr, and
+`type.dir-matches-nothing` reports it.
+
+The decision is unchanged: `urzua new` fills in the template and leaves `Status`, `Deciders` and
+`Embodiment` to the author. A type that declares no `extra_dirs` numbers exactly as before.
+
 ## References
 
 - SPEC-1 — `new`'s one-line contract this ADR fills in the mechanism for.
@@ -93,3 +109,11 @@ template and leaves `Status`, `Deciders` and `Embodiment` to the author is uncha
 > | 2026-11-04 | Pinned `rust/crates/urzua-core/src/new_record.rs`, `rust/crates/urzua-cli/src/commands/new.rs` by content hash after re-verifying it against the Decision (attested by beauwilliams). **Why:** Re-verified: urzua new still fills the template and leaves the decision to the author; changes since are the declared identity pattern, padded H1, an always-written Stable-Id and the removal of the blockquote shapes. The Decision text on those shapes and author tiering is stale and is left for an amendment. | **structural** |
 > | 2026-11-04 | Amendment added: the blockquote and bold-list refusal no longer applies (`MILE-85`), `Author` resolves `gh api user` first (`ADR-31`), and numbering skips numbers claimed on other refs and follows the declared identity pattern (`MILE-89`, `MILE-151`, `BUG-188`). **Why:** drift review of 2026-11-04, approved by beauwilliams; proposed, pending maintainer acceptance. The Decision is unchanged. | **substantive** |
 > | 2026-11-04 | Amendment of 2026-11-04 accepted. **Why:** Maintainer decision, 2026-11-04; the Decision text is unchanged. | **substantive** |
+> | 2026-11-05 | Amendment added: numbering spans every directory the type declares (`extra_dirs`, `MILE-130`); proposed, pending maintainer acceptance. **Why:** the drift check found `new.rs` numbering across `all_dirs()` while the text said "the type's directory" (#306). | **substantive** |
+> | 2026-11-05 | Amendment of 2026-11-05 accepted. **Why:** Maintainer decision, 2026-11-05. | **substantive** |
+> | 2026-11-05 | Re-baselined (attested by beauwilliams): re-pinned `rust/crates/urzua-core/src/new_record.rs` 15511d30876e -> 850e21078331, `rust/crates/urzua-cli/src/commands/new.rs` 1e4723c81adc -> c1190b45b353. Reason: new.rs now numbers across every directory the type declares (MILE-130, extra_dirs), which the accepted 2026-11-05 amendment records; new_record.rs only gained template_header_values for BUG-22 placeholder detection, additive and not on the numbering or fill path. The decision and its amendments hold **Why:** the pinned evidence changed and the attesting actor re-verified that the claim still holds. | **structural** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/new_record.rs` 850e21078331 -> 21f5012c2b5f, `rust/crates/urzua-cli/src/commands/new.rs` c1190b45b353 -> 5b61c497ff7e. Reason: Read the diff of each pinned span since the old pin and the claim still holds. urzua-core/src/new_record.rs: next_display_number and the number assignment now return a Result and refuse an exhausted number instead of overflowing, new records may fill a declared title field and initial version, and a required Stable-Id is no longer overwritten with null, template filling is otherwise as before; commands/new.rs: gained the opt-in open-pull-request check (ADR-93): it fetches the pull request head refs, takes the numbering lock and reports a pull-refs block, template filling is unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/new.rs` 5b61c497ff7e -> 491185f4e11d. Reason: split new::run into lookup_record_type, scan_pull_requests, number_record, build_filename, render_record and write_new_file (new.rs); behaviour unchanged, outputs byte-identical **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/new.rs` 491185f4e11d -> 98d7b5cb1f70. Reason: Read the diff of each re-pinned file against main. cli/commands/new.rs: Notice literals use Notice::new or gain detail: None; no behaviour change. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/new.rs` 98d7b5cb1f70 -> 7abffc2519d4. Reason: Read the diff of each pinned file since the old pin and the claim still holds. new.rs: the local git_output helper is gone and the for-each-ref read calls urzua_io::git::stdout_in, which words a failure the same way ('could not run git: ..', 'git <cmd> failed: ..'); nothing else changed; behaviour unchanged, outputs byte-identical. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/new_record.rs` 21f5012c2b5f -> 0f9f2d4f6a94. Reason: Read the diff of each pinned file since the previous pin. rust/crates/urzua-core/src/new_record.rs: parse_record_filename reads the extension through strip_md_extension (any case), with a unit test; nothing else changed. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |

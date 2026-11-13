@@ -2,7 +2,9 @@
 //! review, re-pins the chosen records with an attributed revision row.
 //! Real git-repo fixtures, real binary; all output is JSON.
 
-use std::path::{Path, PathBuf};
+mod common;
+
+use std::path::Path;
 use std::process::Command;
 
 fn git(dir: &Path, args: &[&str]) {
@@ -20,8 +22,33 @@ fn commit_all(dir: &Path) {
 }
 
 fn run_urzua(dir: &Path, args: &[&str]) -> std::process::Output {
-    Command::new(env!("CARGO_BIN_EXE_urzua"))
+    common::urzua()
         .args(args)
+        .current_dir(dir)
+        .output()
+        .expect("urzua binary should run")
+}
+
+/// Runs urzua with a `gh` on PATH that behaves as given, so the identity tier
+/// that reads the authenticated login does not depend on the machine's own
+/// `gh`. `None` is a `gh` that fails (not logged in).
+fn run_urzua_with_gh(dir: &Path, args: &[&str], login: Option<&str>) -> std::process::Output {
+    use std::os::unix::fs::PermissionsExt;
+    let stub = common::TempDir::new("urzua-rebase-stub-gh");
+    let body = match login {
+        Some(l) => format!("#!/bin/sh\necho '{l}'\n"),
+        None => "#!/bin/sh\nexit 1\n".to_string(),
+    };
+    std::fs::write(stub.join("gh"), body).unwrap();
+    std::fs::set_permissions(stub.join("gh"), std::fs::Permissions::from_mode(0o755)).unwrap();
+    let path = format!(
+        "{}:{}",
+        stub.display(),
+        std::env::var("PATH").unwrap_or_default()
+    );
+    common::urzua()
+        .args(args)
+        .env("PATH", path)
         .current_dir(dir)
         .output()
         .expect("urzua binary should run")
@@ -68,9 +95,8 @@ fn record(n: u32) -> String {
 }
 
 /// Two records pin `src/a.rs`; the file then changes.
-fn fixture(name: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("urzua-rebase-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+fn fixture(name: &str) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-rebase-{name}"));
     std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
     std::fs::create_dir_all(dir.join("src")).unwrap();
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
@@ -108,7 +134,7 @@ fn detect_lists_each_stale_pin_with_both_hashes_and_writes_nothing_observed_fail
 fn apply_re_pins_only_the_chosen_record_with_who_and_why_then_is_a_no_op_observed_failing() {
     let dir = fixture("apply");
     let b_before = std::fs::read_to_string(dir.join(B)).unwrap();
-    let out = run_urzua(
+    let out = run_urzua_with_gh(
         &dir,
         &[
             "fix",
@@ -121,6 +147,7 @@ fn apply_re_pins_only_the_chosen_record_with_who_and_why_then_is_a_no_op_observe
             "--reason",
             "Read the diff; the claim holds.",
         ],
+        None,
     );
     let parsed = json(&out);
     assert_eq!(parsed["status"], "applied", "{parsed} {out:?}");
@@ -129,8 +156,27 @@ fn apply_re_pins_only_the_chosen_record_with_who_and_why_then_is_a_no_op_observe
         "Realized-by: 'spec:docs/s.md, code:src/a.rs@sha256:{}, test:t.rs'",
         sha256(V2)
     )));
-    assert!(a.contains("attested by"), "{a}");
-    assert!(a.contains("Read the diff; the claim holds."), "{a}");
+    // Exactly one new row, three cells, naming who attested and why.
+    let rows: Vec<&str> = a.lines().filter(|l| l.contains("Re-baselined")).collect();
+    assert_eq!(rows.len(), 1, "{a}");
+    assert!(
+        rows[0].starts_with("> | 20") && rows[0].ends_with("| **structural** |"),
+        "{}",
+        rows[0]
+    );
+    assert_eq!(rows[0].matches('|').count(), 4, "{}", rows[0]);
+    assert!(
+        rows[0].contains(
+            "Re-baselined (attested by ana, identity: asserted, actor: unspecified): re-pinned"
+        ),
+        "{}",
+        rows[0]
+    );
+    assert!(
+        rows[0].contains("Reason: Read the diff; the claim holds."),
+        "{}",
+        rows[0]
+    );
     assert_eq!(std::fs::read_to_string(dir.join(B)).unwrap(), b_before);
 
     // The re-pinned record clears; the other one is still listed.
@@ -224,4 +270,152 @@ fn rebaseline_cannot_be_combined_with_stdin_path() {
     let dir = fixture("stdin");
     let out = run_urzua(&dir, &["fix", "--rebaseline", "--stdin-path", A]);
     assert_eq!(out.status.code(), Some(2));
+}
+
+#[test]
+fn an_authenticated_gh_login_is_recorded_over_by_and_the_override_is_disclosed() {
+    let dir = fixture("gh-wins");
+    let out = run_urzua_with_gh(
+        &dir,
+        &[
+            "fix",
+            "--rebaseline",
+            "--apply",
+            "--ids",
+            A,
+            "--by",
+            "ana",
+            "--reason",
+            "r",
+        ],
+        Some("gh-login"),
+    );
+    let parsed = json(&out);
+    assert_eq!(parsed["status"], "applied", "{parsed}");
+    let a = std::fs::read_to_string(dir.join(A)).unwrap();
+    assert!(
+        a.contains("(attested by gh-login, identity: gh-verified, actor: unspecified)"),
+        "{a}"
+    );
+    assert!(!a.contains("attested by ana"), "{a}");
+    assert!(
+        parsed["notices"]
+            .to_string()
+            .contains("differs from the authenticated gh login"),
+        "{parsed}"
+    );
+}
+
+#[test]
+fn an_identity_that_would_break_the_revision_row_is_refused_and_writes_nothing() {
+    for by in ["ana | bob", "ana\nbob"] {
+        let dir = fixture("by-pipe");
+        let before = std::fs::read_to_string(dir.join(A)).unwrap();
+        let out = run_urzua_with_gh(
+            &dir,
+            &[
+                "fix",
+                "--rebaseline",
+                "--apply",
+                "--ids",
+                A,
+                "--by",
+                by,
+                "--reason",
+                "r",
+            ],
+            None,
+        );
+        assert_eq!(out.status.code(), Some(2), "{by:?}: {out:?}");
+        let parsed = json(&out);
+        assert_eq!(parsed["status"], "not-run", "{parsed}");
+        assert!(
+            parsed["error"].as_str().unwrap().contains("--by"),
+            "{parsed}"
+        );
+        assert_eq!(std::fs::read_to_string(dir.join(A)).unwrap(), before);
+    }
+}
+
+#[test]
+fn a_git_user_name_with_a_pipe_is_refused_for_the_row_too() {
+    let dir = fixture("name-pipe");
+    git(&dir, &["config", "user.name", "ana | bob"]);
+    let before = std::fs::read_to_string(dir.join(A)).unwrap();
+    let out = run_urzua_with_gh(
+        &dir,
+        &[
+            "fix",
+            "--rebaseline",
+            "--apply",
+            "--ids",
+            A,
+            "--reason",
+            "r",
+        ],
+        None,
+    );
+    let parsed = json(&out);
+    assert_eq!(parsed["status"], "not-run", "{parsed}");
+    assert_eq!(std::fs::read_to_string(dir.join(A)).unwrap(), before);
+}
+
+#[test]
+fn rebaseline_detect_honours_ids_and_names_an_unknown_one_observed_failing() {
+    let dir = fixture("detect-ids");
+    let v = json(&run_urzua(&dir, &["fix", "--rebaseline", "--ids", B]));
+    let rb = v["rebaselines"].as_array().unwrap();
+    assert_eq!(rb.len(), 1, "{v}");
+    assert_eq!(rb[0]["record"], B, "{v}");
+
+    let out = run_urzua(
+        &dir,
+        &["fix", "--rebaseline", "--ids", "docs/adr/ADR-9-nope.md"],
+    );
+    let v = json(&out);
+    assert_eq!(v["status"], "partial-failure", "{v}");
+    assert_eq!(out.status.code(), Some(1), "{v}");
+    assert!(v["failed"][0]["error"].as_str().unwrap().contains("ADR-9"));
+    assert!(
+        v["rebaselines"].as_array().is_none_or(|r| r.is_empty()),
+        "{v}"
+    );
+}
+
+#[test]
+fn rebaseline_without_apply_rejects_force_by_and_actor_observed_failing() {
+    let dir = fixture("detect-flags");
+    for args in [
+        vec!["fix", "--rebaseline", "--force"],
+        vec!["fix", "--rebaseline", "--by", "ana"],
+        vec!["fix", "--rebaseline", "--actor", "agent"],
+    ] {
+        let out = run_urzua(&dir, &args);
+        assert_eq!(out.status.code(), Some(2), "{args:?}: {out:?}");
+    }
+}
+
+#[test]
+fn a_carriage_return_in_the_reason_is_refused_like_a_newline() {
+    let dir = fixture("reason-cr");
+    let before = std::fs::read_to_string(dir.join(A)).unwrap();
+    for reason in ["line one\rline two", "line one\nline two"] {
+        let out = run_urzua(
+            &dir,
+            &[
+                "fix",
+                "--rebaseline",
+                "--apply",
+                "--ids",
+                A,
+                "--by",
+                "ana",
+                "--reason",
+                reason,
+            ],
+        );
+        assert_eq!(out.status.code(), Some(2), "{reason:?}: {out:?}");
+        assert!(json(&out).to_string().contains("one line"), "{reason:?}");
+    }
+    assert_eq!(std::fs::read_to_string(dir.join(A)).unwrap(), before);
 }

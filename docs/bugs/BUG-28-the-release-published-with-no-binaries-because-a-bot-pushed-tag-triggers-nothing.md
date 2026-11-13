@@ -2,8 +2,7 @@
 Stable-Id: 01M2M7H44YC7BG9X06VNK35K6N
 Status: Fixed
 Found-in: 'testing the ADR-0045 release flow end to end for the first time -- v0.2.0 published with a correct changelog and zero attached archives, while v0.1.0 has three'
-Regression-test: 'the upload job now asserts the release carries three archives and fails the publish if it does not -- the assertion is the test, and it runs on every release rather than once'
-Realized-by: code:.github/workflows/publish-release.yml
+Realized-by: code:.github/workflows/publish-release.yml@sha256:530bdeeececf77737d4d162e8aba4c8685bcc73834140675ed8565e3a04aef25
 ---
 # 28 — The release published with no binaries, because a bot-pushed tag triggers nothing
 
@@ -77,8 +76,14 @@ to retro-attach archives to it is a separate call, not made here.
 - BUG-0027 — the same "reported success, did nothing" shape one layer earlier in the same pipeline.
 - SPEC-0020 — the CI/CD feature area; its workflow inventory no longer lists `release.yml`.
 
+## Regression test
+
+the upload job now asserts the release carries three archives and fails the publish if it does not -- the assertion is the test, and it runs on every release rather than once
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-16 | Filed and fixed in the same change. **Why:** found by running the ADR-0045 flow end to end for the first time -- every part worked in isolation and the coupling between two of them was false, which is exactly the class a parts-level test cannot reach. The assertion added to the upload job is the durable half: it converts "we believe binaries ship" into something that fails loudly when they do not. | **substantive** |
+> | 2026-11-05 | `Regression-test` retired (ADR-84); it named no test, so `Realized-by` is unchanged and the original text is kept under Regression test. **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |
+> | 2026-11-08 | Pinned (attested by beauwilliams, identity: gh-verified, actor: agent): 1 locators pinned, 1 file-level, 0 scoped. Evidence: .github/workflows/publish-release.yml@sha256:530bdeeececf Reason: Pinned the files as they are now after checking each against the record it evidences: publish-release.yml still builds and uploads the archives itself (BUG-28), new_record.rs still renders only the configured YAML header and new_integration.rs still holds the test that a blockquote template does not override it (BUG-3), waiver.rs is_active still parses Expires as a date (BUG-31), prepare-release.yml still hands knope's nothing-to-release exit to release-guard.sh instead of failing (BUG-33), ci.yml's changeset job still reads the label live (BUG-34), knope.toml still releases from changesets only (BUG-35), main.rs and check_integration.rs still emit doctor as JSON (BUG-4), release-guard.test.sh still plants an unmatched-package fragment and asserts a nonzero exit (BUG-48), field_state.rs still carries the retired placeholder tokens (BUG-5), and generate-rule-table.py and the Makefile rule-table-check target still compare SPEC-2's rule table with the shipped rule set (BUG-52). BUG-29 and BUG-30 are not in this batch because the filename.title-consistency code they cite moved out of rules.rs. **Why:** a claim is renewed only over pinned code and test evidence. | **structural** |

@@ -11,8 +11,19 @@ use std::path::PathBuf;
 /// different question -- "is this evidence of a numbering convention" -- for
 /// `init`'s adopt-mode heuristic and `new`'s numbering, neither of which this
 /// answers.
+///
+/// The extension is matched without regard to case: on a case-insensitive
+/// filesystem (the macOS default) `X.MD` is the file `X.md`, so a record that
+/// the extension's case could hide would slip past the acceptance gate.
 pub fn is_governed_record_filename(file_name: &str) -> bool {
-    !file_name.starts_with('_') && file_name.ends_with(".md")
+    !file_name.starts_with('_') && strip_md_extension(file_name).is_some()
+}
+
+/// `file_name` without a trailing `.md`, whatever the case of the extension.
+pub fn strip_md_extension(file_name: &str) -> Option<&str> {
+    let split = file_name.len().checked_sub(3)?;
+    let ext = file_name.get(split..)?;
+    ext.eq_ignore_ascii_case(".md").then(|| &file_name[..split])
 }
 
 #[derive(Debug, Clone)]
@@ -31,6 +42,11 @@ pub struct Record {
     /// (RFC-33 layer 1, MILE-98). `None` when the type declares none, in
     /// which case `record_id` reads the `TYPE-N-slug.md` convention as always.
     pub identity: Option<DeclaredIdentity>,
+    /// The parsed Done-means items (`ADR-96`), attached by the caller for a
+    /// record whose type declares `statuses.delivery.items` (the core opens no
+    /// file, so it cannot read the section itself). `None` otherwise: an
+    /// undeclared type behaves exactly as before.
+    pub items: Option<crate::done_items::DoneItems>,
 }
 
 impl Record {
@@ -66,6 +82,7 @@ impl Record {
             type_prefix,
             header: header::parse_with_shape(content, shape),
             identity: None,
+            items: None,
         }
     }
 
@@ -104,6 +121,7 @@ impl Record {
             type_prefix,
             header,
             identity,
+            items: None,
         }
     }
 }
@@ -111,6 +129,27 @@ impl Record {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_md_extension_is_matched_in_any_case() {
+        for name in ["ADR-1-a.md", "ADR-1-a.MD", "ADR-1-a.Md", "ADR-1-a.mD"] {
+            assert!(is_governed_record_filename(name), "{name}");
+            assert_eq!(strip_md_extension(name), Some("ADR-1-a"), "{name}");
+        }
+        for name in [
+            "ADR-1-a.txt",
+            "ADR-1-a",
+            "_t.MD",
+            ".md",
+            "md",
+            "a.mdx",
+            "\u{e9}.md",
+        ] {
+            let want = name == ".md" || name == "\u{e9}.md";
+            assert_eq!(is_governed_record_filename(name), want, "{name}");
+        }
+        assert_eq!(strip_md_extension("\u{e9}m"), None);
+    }
 
     /// BUG-108: `discovery.rs` and `rules.rs` duplicated this predicate;
     /// both call the same function.

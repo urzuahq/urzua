@@ -20,7 +20,8 @@ use super::*;
 /// header field in which one record lists, as comma-separated exact ids, the
 /// ids it names without citing as a reference: a citation of such an id in
 /// that record only is set aside the same way (`external_ids` first), a
-/// declared id the record never cites and a malformed entry are findings, and
+/// declared id the record never cites and a malformed entry are findings,
+/// reported with their own population by [`citation_non_reference`], and
 /// [`non_reference_notices`] tells which declared ids now match a real record.
 /// The header region is not read (the pointer and
 /// narrative rules own it) and fenced code blocks are skipped; an inline code
@@ -54,8 +55,6 @@ pub fn citation_resolution(
         .unwrap_or(false);
 
     let declarations = read_declarations(records, config, &prefixes);
-    // Declared entries (by record path and position) some citation matched.
-    let mut cited_entries: HashSet<(PathBuf, usize)> = HashSet::new();
 
     struct Citation<'a> {
         record: &'a Record,
@@ -67,24 +66,7 @@ pub fn citation_resolution(
         let Some(text) = full_text.get(&record.path) else {
             continue;
         };
-        let skipped = if skip_revision_log {
-            let lines: Vec<(usize, &str)> =
-                text.lines().enumerate().map(|(i, l)| (i + 1, l)).collect();
-            skipped_table_lines(&lines, &config.revision_log_id(&record.record_type))
-        } else {
-            HashSet::new()
-        };
-        for (line, token) in cited_prose_identifiers(text, record.header.region, &prefixes) {
-            if skipped.contains(&line) {
-                continue;
-            }
-            if let Some(d) = declarations.get(&record.path) {
-                for (i, (_, id)) in d.ids.iter().enumerate() {
-                    if id.matches(&token) {
-                        cited_entries.insert((record.path.clone(), i));
-                    }
-                }
-            }
+        for (line, token) in record_citations(record, text, config, &prefixes, skip_revision_log) {
             candidates.push(Citation {
                 record,
                 line,
@@ -114,71 +96,197 @@ pub fn citation_resolution(
                 return Outcome::Absent;
             }
             if !index.contains_key(&crate::values::RecordId::new(&c.token)) {
-                findings.push(Finding {
-                    rule: RULE_ID.to_string(),
-                    severity: FindingSeverity::Error,
-                    file: c.record.path.clone(),
-                    line: Some(c.line),
-                    waived: None,
-                    declared_severity: None,
-                    suggested_action: None,
-                    action_source: ActionSource::new("citation-unresolved"),
-                    message: format!("{} is cited in prose but resolves to no record", c.token),
-                });
+                findings.push(
+                    Finding::new(
+                        RULE_ID,
+                        FindingSeverity::Error,
+                        c.record.path.clone(),
+                        ActionSource::new("citation-unresolved"),
+                        format!("{} is cited in prose but resolves to no record", c.token),
+                    )
+                    .at(c.line),
+                );
             }
             Outcome::Examined
         },
     );
 
+    (
+        RuleExecution::ran(RULE_ID, population, examined_records),
+        findings,
+    )
+}
+
+/// The decision ids cited in one record's prose, as `(line, token)`: the header
+/// region and fenced code are not read, nor the revision-log lines when
+/// `skip_revision_log` is set. Shared by the citation census and the check of
+/// what a record declares it names.
+fn record_citations(
+    record: &Record,
+    text: &str,
+    config: &Config,
+    prefixes: &[String],
+    skip_revision_log: bool,
+) -> Vec<(usize, String)> {
+    let skipped = if skip_revision_log {
+        let lines: Vec<(usize, &str)> = text.lines().enumerate().map(|(i, l)| (i + 1, l)).collect();
+        skipped_table_lines(&lines, &config.revision_log_id(&record.record_type))
+    } else {
+        HashSet::new()
+    };
+    cited_prose_identifiers(text, record.header.region, prefixes)
+        .into_iter()
+        .filter(|(line, _)| !skipped.contains(line))
+        .collect()
+}
+
+// ADR-75 clause 3: a declared entry is judged in a population of its own.
+/// The `non_reference_field` check, reported as its own population (`MILE-186`,
+/// `ADR-75` clause 3): unit field entry, one candidate per entry a record
+/// declares, valid or malformed. A declared id the record never cites in prose
+/// and a malformed entry are findings of `citation.resolution`, counted here and
+/// not in the citation population. `None` when the option is unset, so a
+/// repository that does not use it sees no second population; with the option
+/// set and no record declaring anything, the population is empty (zero
+/// eligible), distinguishable from a run that was never made.
+pub fn citation_non_reference(
+    records: &[Record],
+    config: &Config,
+    full_text: &HashMap<PathBuf, String>,
+) -> Option<(RuleExecution, Vec<Finding>)> {
+    const RULE_ID: &str = RULE_CITATION_RESOLUTION;
     let field = config
         .rules
         .get(RULE_ID)
-        .and_then(|s| s.non_reference_field.as_deref())
-        .unwrap_or_default();
-    let mut paths: Vec<&PathBuf> = declarations.keys().collect();
-    paths.sort();
-    for path in paths {
-        let d = &declarations[path];
-        let mut report = |message: String, source: ActionSource| {
-            findings.push(Finding {
-                rule: RULE_ID.to_string(),
-                severity: FindingSeverity::Error,
-                file: path.clone(),
-                line: Some(d.line),
-                waived: None,
-                declared_severity: None,
-                suggested_action: None,
-                action_source: source,
-                message,
-            });
+        .and_then(|s| s.non_reference_field.as_deref())?;
+    let prefixes = declared_prefixes(config);
+    let skip_revision_log = config
+        .rules
+        .get(RULE_ID)
+        .and_then(|s| s.skip_revision_log)
+        .unwrap_or(false);
+    let declarations = read_declarations(records, config, &prefixes);
+    let (candidates, cited) = declared_candidates(
+        records,
+        &declarations,
+        full_text,
+        config,
+        &prefixes,
+        skip_revision_log,
+    );
+
+    let mut findings = Vec::new();
+    let (population, examined_records) = census_records(
+        PopulationUnit::FieldEntry,
+        candidates,
+        |c| c.record.path.clone(),
+        |c| {
+            judge_declared_entry(c, field, &cited, &mut findings);
+            Outcome::Examined
+        },
+    );
+
+    Some((
+        RuleExecution::ran(RULE_ID, population, examined_records),
+        findings,
+    ))
+}
+
+/// One entry of a record's `non_reference_field`: a valid id (as written, and
+/// parsed) or a malformed entry with its reason.
+enum DeclaredEntry<'a> {
+    Valid(&'a str, &'a ExternalId),
+    Malformed(&'a str, &'a str),
+}
+
+struct DeclaredCandidate<'a> {
+    record: &'a Record,
+    declaration: &'a NonReferenceDeclaration,
+    entry: DeclaredEntry<'a>,
+}
+
+/// One candidate per declared entry, and the ids each declaring record cites
+/// in prose, by path.
+fn declared_candidates<'a>(
+    records: &'a [Record],
+    declarations: &'a HashMap<PathBuf, NonReferenceDeclaration>,
+    full_text: &HashMap<PathBuf, String>,
+    config: &Config,
+    prefixes: &[String],
+    skip_revision_log: bool,
+) -> (
+    Vec<DeclaredCandidate<'a>>,
+    HashMap<&'a PathBuf, Vec<String>>,
+) {
+    let mut candidates: Vec<DeclaredCandidate> = Vec::new();
+    let mut cited: HashMap<&PathBuf, Vec<String>> = HashMap::new();
+    for record in records {
+        let Some(d) = declarations.get(&record.path) else {
+            continue;
         };
+        let tokens = full_text
+            .get(&record.path)
+            .map(|text| record_citations(record, text, config, prefixes, skip_revision_log))
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(_, token)| token)
+            .collect();
+        cited.insert(&record.path, tokens);
         for (entry, reason) in &d.malformed {
-            report(
-                format!("{field} entry '{entry}' {reason}"),
-                ActionSource::new("non-reference-malformed").field(field),
-            );
+            candidates.push(DeclaredCandidate {
+                record,
+                declaration: d,
+                entry: DeclaredEntry::Malformed(entry, reason),
+            });
         }
-        for (i, (entry, _)) in d.ids.iter().enumerate() {
-            if !cited_entries.contains(&(path.clone(), i)) {
+        for (entry, id) in &d.ids {
+            candidates.push(DeclaredCandidate {
+                record,
+                declaration: d,
+                entry: DeclaredEntry::Valid(entry, id),
+            });
+        }
+    }
+    (candidates, cited)
+}
+
+/// Judges one declared entry: a malformed entry, or a valid id the record
+/// never cites in prose, is a finding.
+fn judge_declared_entry(
+    c: &DeclaredCandidate<'_>,
+    field: &str,
+    cited: &HashMap<&PathBuf, Vec<String>>,
+    findings: &mut Vec<Finding>,
+) {
+    let mut report = |message: String, source: ActionSource| {
+        findings.push(
+            Finding::new(
+                RULE_CITATION_RESOLUTION,
+                FindingSeverity::Error,
+                c.record.path.clone(),
+                source,
+                message,
+            )
+            .at(c.declaration.line),
+        );
+    };
+    match &c.entry {
+        DeclaredEntry::Malformed(entry, reason) => report(
+            format!("{field} entry '{entry}' {reason}"),
+            ActionSource::new("non-reference-malformed").field(field),
+        ),
+        DeclaredEntry::Valid(entry, id) => {
+            // Cited by `external_ids` or not, a citation of the id counts.
+            if !cited[&c.record.path].iter().any(|t| id.matches(t)) {
                 report(
                     format!("{field} declares {entry}, which this record never cites in prose"),
                     ActionSource::new("non-reference-uncited")
                         .field(field)
-                        .text(entry.as_str()),
+                        .text(*entry),
                 );
             }
         }
     }
-
-    (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records,
-        },
-        findings,
-    )
 }
 
 /// One record's `non_reference_field` declaration (`ADR-75`).
@@ -280,6 +388,7 @@ pub fn non_reference_notices(
             parts.len(),
             parts.join("; ")
         ),
+        detail: None,
     }]
 }
 
@@ -360,28 +469,22 @@ pub fn citation_path_exists(
         |c| c.record.path.clone(),
         |c| {
             if !present(&c.path) {
-                findings.push(Finding {
-                    rule: RULE_ID.to_string(),
-                    severity: FindingSeverity::Error,
-                    file: c.record.path.clone(),
-                    line: Some(c.line),
-                    waived: None,
-                    declared_severity: None,
-                    suggested_action: None,
-                    action_source: ActionSource::new("path-missing").section(c.section.as_str()),
-                    message: format!("cites `{}`, which is not in the working tree", c.raw),
-                });
+                findings.push(
+                    Finding::new(
+                        RULE_ID,
+                        FindingSeverity::Error,
+                        c.record.path.clone(),
+                        ActionSource::new("path-missing").section(c.section.as_str()),
+                        format!("cites `{}`, which is not in the working tree", c.raw),
+                    )
+                    .at(c.line),
+                );
             }
             Outcome::Examined
         },
     );
     (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records,
-        },
+        RuleExecution::ran(RULE_ID, population, examined_records),
         findings,
     )
 }
@@ -404,52 +507,95 @@ pub fn citation_issue_exists(
     full_text: &HashMap<PathBuf, String>,
     snapshot: &Result<crate::refs_snapshot::RefsSnapshot, String>,
 ) -> (RuleExecution, Vec<Finding>) {
-    use crate::config::RefForm;
     const RULE_ID: &str = RULE_CITATION_ISSUE_EXISTS;
     let setting = config.rules.get(RULE_ID);
-    let sections: Vec<String> = setting
-        .and_then(|s| s.reference_sections.clone())
-        .unwrap_or_default();
-    let skip_revision_log = setting.and_then(|s| s.skip_revision_log).unwrap_or(false);
     let Some(refs) = setting.and_then(|s| s.issue_refs.as_ref()) else {
-        return (
-            RuleExecution {
-                rule: RULE_ID.to_string(),
-                population: None,
-                status: RuleStatus::NotApplicable,
-                examined_records: Vec::new(),
-            },
-            Vec::new(),
-        );
+        return not_applicable(RULE_ID);
     };
-    let (number_form, url_form) = (
-        refs.forms.contains(&RefForm::Number),
-        refs.forms.contains(&RefForm::Url),
+    let scan = IssueScan::new(
+        refs,
+        setting
+            .and_then(|s| s.reference_sections.clone())
+            .unwrap_or_default(),
+        setting.and_then(|s| s.skip_revision_log).unwrap_or(false),
     );
-    let number_re = regex::Regex::new(r"(?:^|[^\w/&#.\-])(#)(\d+)\b").expect("static pattern");
-    let url_re = regex::Regex::new(&format!(
-        r"(?i)https?://(?:www\.)?github\.com/{}/(?:issues|pull)/(\d+)\b",
-        regex::escape(&refs.repository)
-    ))
-    .expect("escaped pattern");
+    let candidates = scan.cited_issues(records, config, full_text);
 
-    struct Cited<'a> {
-        record: &'a Record,
-        line: usize,
-        raw: String,
-        number: u64,
-        /// The header field it was read from; `None` for a reference section.
-        field: Option<String>,
-        /// The reference section it was read from; `None` for a header field.
-        section: Option<String>,
+    let mut findings = Vec::new();
+    if let Err(reason) = snapshot {
+        findings.push(snapshot_unusable_finding(&refs.snapshot, reason));
     }
-    let mut candidates: Vec<Cited> = Vec::new();
-    // Citations in one piece of text: (offset, raw, number), in text order.
-    let scan = |content: &str| -> Vec<(usize, String, u64)> {
+    let (population, examined_records) = census_records(
+        PopulationUnit::Citation,
+        candidates,
+        |c| c.record.path.clone(),
+        |c| {
+            let Ok(snapshot) = snapshot else {
+                return Outcome::Absent;
+            };
+            if !snapshot.contains(c.number) {
+                findings.push(missing_issue_finding(c, snapshot));
+            }
+            Outcome::Examined
+        },
+    );
+    (
+        RuleExecution::ran(RULE_ID, population, examined_records),
+        findings,
+    )
+}
+
+/// One issue or pull request number cited in a record.
+struct CitedIssue<'a> {
+    record: &'a Record,
+    line: usize,
+    raw: String,
+    number: u64,
+    /// The header field it was read from; `None` for a reference section.
+    field: Option<String>,
+    /// The reference section it was read from; `None` for a header field.
+    section: Option<String>,
+}
+
+/// What `citation.issue-exists` reads, and the patterns that find a citation.
+struct IssueScan {
+    number_form: bool,
+    url_form: bool,
+    number_re: regex::Regex,
+    url_re: regex::Regex,
+    sections: Vec<String>,
+    skip_revision_log: bool,
+    header_fields: Vec<String>,
+}
+
+impl IssueScan {
+    fn new(
+        refs: &crate::config::IssueRefs,
+        sections: Vec<String>,
+        skip_revision_log: bool,
+    ) -> Self {
+        use crate::config::RefForm;
+        IssueScan {
+            number_form: refs.forms.contains(&RefForm::Number),
+            url_form: refs.forms.contains(&RefForm::Url),
+            number_re: regex::Regex::new(r"(?:^|[^\w/&#.\-])(#)(\d+)\b").expect("static pattern"),
+            url_re: regex::Regex::new(&format!(
+                r"(?i)https?://(?:www\.)?github\.com/{}/(?:issues|pull)/(\d+)\b",
+                regex::escape(&refs.repository)
+            ))
+            .expect("escaped pattern"),
+            sections,
+            skip_revision_log,
+            header_fields: refs.fields.clone().unwrap_or_default(),
+        }
+    }
+
+    /// Citations in one piece of text: (offset, raw, number), in text order.
+    fn scan(&self, content: &str) -> Vec<(usize, String, u64)> {
         let masked = mask_code_spans(content);
         let mut found: Vec<(usize, String, u64)> = Vec::new();
-        if number_form {
-            for caps in number_re.captures_iter(&masked) {
+        if self.number_form {
+            for caps in self.number_re.captures_iter(&masked) {
                 let hash = caps.get(1).expect("group 1");
                 // `[text](#123)` is an anchor link, not a citation.
                 if masked[..hash.start()].ends_with("](") {
@@ -461,8 +607,8 @@ pub fn citation_issue_exists(
                 }
             }
         }
-        if url_form {
-            for caps in url_re.captures_iter(&masked) {
+        if self.url_form {
+            for caps in self.url_re.captures_iter(&masked) {
                 let whole = caps.get(0).expect("group 0");
                 if let Ok(n) = caps[1].parse::<u64>() {
                     found.push((whole.start(), whole.as_str().to_string(), n));
@@ -471,11 +617,29 @@ pub fn citation_issue_exists(
         }
         found.sort_by_key(|(at, _, _)| *at);
         found
-    };
-    let header_fields: &[String] = refs.fields.as_deref().unwrap_or_default();
-    for record in records {
-        // Declared header fields (`issue_refs.fields`), on the field's own line.
-        for name in header_fields {
+    }
+
+    /// Every citation, record by record: declared header fields
+    /// (`issue_refs.fields`) on the field's own line, then the reference sections.
+    fn cited_issues<'a>(
+        &self,
+        records: &'a [Record],
+        config: &Config,
+        full_text: &HashMap<PathBuf, String>,
+    ) -> Vec<CitedIssue<'a>> {
+        let mut candidates: Vec<CitedIssue> = Vec::new();
+        for record in records {
+            self.header_citations(record, &mut candidates);
+            let Some(text) = full_text.get(&record.path) else {
+                continue;
+            };
+            self.section_citations(record, text, config, &mut candidates);
+        }
+        candidates
+    }
+
+    fn header_citations<'a>(&self, record: &'a Record, out: &mut Vec<CitedIssue<'a>>) {
+        for name in &self.header_fields {
             let Some(field) = record
                 .header
                 .fields
@@ -484,8 +648,8 @@ pub fn citation_issue_exists(
             else {
                 continue;
             };
-            for (_, raw, number) in scan(&field.value) {
-                candidates.push(Cited {
+            for (_, raw, number) in self.scan(&field.value) {
+                out.push(CitedIssue {
                     record,
                     line: field.line,
                     raw,
@@ -495,15 +659,21 @@ pub fn citation_issue_exists(
                 });
             }
         }
-        let Some(text) = full_text.get(&record.path) else {
-            continue;
-        };
+    }
+
+    fn section_citations<'a>(
+        &self,
+        record: &'a Record,
+        text: &str,
+        config: &Config,
+        out: &mut Vec<CitedIssue<'a>>,
+    ) {
         for section in super::section::record_sections(record, text)
             .iter()
-            .filter(|s| sections.iter().any(|name| name == &s.heading))
+            .filter(|s| self.sections.iter().any(|name| name == &s.heading))
         {
             let lines = super::section::prose_lines(section);
-            let skipped = if skip_revision_log {
+            let skipped = if self.skip_revision_log {
                 skipped_table_lines(&lines, &config.revision_log_id(&record.record_type))
             } else {
                 HashSet::new()
@@ -512,8 +682,8 @@ pub fn citation_issue_exists(
                 if skipped.contains(&line) {
                     continue;
                 }
-                for (_, raw, number) in scan(content) {
-                    candidates.push(Cited {
+                for (_, raw, number) in self.scan(content) {
+                    out.push(CitedIssue {
                         record,
                         line,
                         raw,
@@ -525,69 +695,45 @@ pub fn citation_issue_exists(
             }
         }
     }
+}
 
-    let mut findings = Vec::new();
-    if let Err(reason) = snapshot {
-        findings.push(Finding {
-            rule: RULE_ID.to_string(),
-            severity: FindingSeverity::Error,
-            file: PathBuf::from(&refs.snapshot),
-            line: None,
-            waived: None,
-            declared_severity: None,
-            suggested_action: None,
-            action_source: ActionSource::new("snapshot-unusable"),
-            message: format!(
-                "the snapshot of issue and pull request numbers could not be used, so no citation was checked: {reason}; run `urzua refs refresh`"
-            ),
-        });
-    }
-    let (population, examined_records) = census_records(
-        PopulationUnit::Citation,
-        candidates,
-        |c| c.record.path.clone(),
-        |c| {
-            let Ok(snapshot) = snapshot else {
-                return Outcome::Absent;
-            };
-            if !snapshot.contains(c.number) {
-                findings.push(Finding {
-                    rule: RULE_ID.to_string(),
-                    severity: FindingSeverity::Error,
-                    file: c.record.path.clone(),
-                    line: Some(c.line),
-                    waived: None,
-                    declared_severity: None,
-                    suggested_action: None,
-                    action_source: match (&c.field, &c.section) {
-                        (Some(field), _) => ActionSource::new("issue-missing-in-field").field(field.as_str()),
-                        (None, section) => ActionSource::new("issue-missing-in-section")
-                            .section(section.clone().unwrap_or_default()),
-                    },
-                    message: format!(
-                        "cites {}{}, which is not an issue or pull request of {} in the snapshot generated {}; if it was opened since, run `urzua refs refresh`",
-                        c.raw,
-                        c.field
-                            .as_ref()
-                            .map(|f| format!(" in the {f} field"))
-                            .unwrap_or_default(),
-                        snapshot.repository,
-                        snapshot.generated_at
-                    ),
-                });
-            }
-            Outcome::Examined
-        },
-    );
-    (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records,
-        },
-        findings,
+fn snapshot_unusable_finding(snapshot_path: &str, reason: &str) -> Finding {
+    Finding::new(
+        RULE_CITATION_ISSUE_EXISTS,
+        FindingSeverity::Error,
+        PathBuf::from(snapshot_path),
+        ActionSource::new("snapshot-unusable"),
+        format!(
+            "the snapshot of issue and pull request numbers could not be used, so no citation was checked: {reason}; run `urzua refs refresh`"
+        ),
     )
+}
+
+fn missing_issue_finding(
+    c: &CitedIssue<'_>,
+    snapshot: &crate::refs_snapshot::RefsSnapshot,
+) -> Finding {
+    Finding::new(
+        RULE_CITATION_ISSUE_EXISTS,
+        FindingSeverity::Error,
+        c.record.path.clone(),
+        match (&c.field, &c.section) {
+            (Some(field), _) => ActionSource::new("issue-missing-in-field").field(field.as_str()),
+            (None, section) => ActionSource::new("issue-missing-in-section")
+                .section(section.clone().unwrap_or_default()),
+        },
+        format!(
+            "cites {}{}, which is not an issue or pull request of {} in the snapshot generated {}; if it was opened since, run `urzua refs refresh`",
+            c.raw,
+            c.field
+                .as_ref()
+                .map(|f| format!(" in the {f} field"))
+                .unwrap_or_default(),
+            snapshot.repository,
+            snapshot.generated_at
+        ),
+    )
+    .at(c.line)
 }
 
 /// `line` with each inline code span, delimiters included, replaced by spaces
@@ -1177,9 +1323,47 @@ mod tests {
             .collect();
         let config = nonref_config(extra);
         let (index, _) = build_index_reporting_collisions(&records);
-        let (exec, findings) = citation_resolution(&records, &config, &full_text, &index);
+        let (exec, mut findings) = citation_resolution(&records, &config, &full_text, &index);
+        // The declaration's findings belong to the field-entry execution.
+        let (_, declared) = citation_non_reference(&records, &config, &full_text).unwrap();
+        findings.extend(declared);
         let notices = non_reference_notices(&records, &config, &index);
         (exec, findings, notices)
+    }
+
+    fn entries_execution(docs: &[(&str, &str)], extra: &str) -> RuleExecution {
+        let records: Vec<Record> = docs.iter().map(|(p, c)| record(p, "adr", c)).collect();
+        let full_text: HashMap<PathBuf, String> = docs
+            .iter()
+            .map(|(p, c)| (PathBuf::from(p), c.to_string()))
+            .collect();
+        citation_non_reference(&records, &nonref_config(extra), &full_text)
+            .unwrap()
+            .0
+    }
+
+    #[test]
+    fn each_declared_entry_is_one_field_entry_candidate_observed_failing() {
+        let doc = declaring("ADR-72, ADR-73, nope", "Only ADR-72 is written here.");
+        let exec = entries_execution(&[(DECLARER, &doc)], "");
+        let p = exec.population.unwrap();
+        assert_eq!(p.unit(), PopulationUnit::FieldEntry);
+        // Valid, uncited and malformed entries are all examined; none is out of scope.
+        assert_eq!((p.eligible(), p.examined(), p.out_of_scope()), (3, 3, 0));
+        assert_eq!(exec.examined_records, vec![PathBuf::from(DECLARER)]);
+        // The citation population is unchanged and excludes the declaration findings.
+        let (_, findings, _) = run_nonref(&[(DECLARER, &doc)], "");
+        assert_eq!(findings.len(), 2, "{findings:?}");
+    }
+
+    #[test]
+    fn no_declarations_is_zero_eligible_entries_and_an_unset_option_is_no_population() {
+        let other = "---\nStatus: Accepted\n---\n# 2 — Y\n\nSee ADR-1.\n";
+        let p = entries_execution(&[(OTHER, other)], "").population.unwrap();
+        assert_eq!((p.unit(), p.eligible()), (PopulationUnit::FieldEntry, 0));
+        let records = vec![record(OTHER, "adr", other)];
+        let config = config_with_types(vec![("adr", type_config(None))]);
+        assert!(citation_non_reference(&records, &config, &HashMap::new()).is_none());
     }
 
     fn declaring(ids: &str, body: &str) -> String {
@@ -1247,7 +1431,12 @@ mod tests {
             .collect();
         let config = nonref_config("skip_revision_log: true\n");
         let (index, _) = build_index_reporting_collisions(&records);
-        let (_, findings) = citation_resolution(&records, &config, &full_text, &index);
+        let (_, mut findings) = citation_resolution(&records, &config, &full_text, &index);
+        findings.extend(
+            citation_non_reference(&records, &config, &full_text)
+                .unwrap()
+                .1,
+        );
         assert_eq!(findings.len(), 1, "{findings:?}");
         assert!(findings[0].message.contains("never cites"));
     }

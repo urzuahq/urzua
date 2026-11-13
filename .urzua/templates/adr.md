@@ -1,12 +1,12 @@
 # NNNN — Title
 
+> Stable-Id: assigned by `urzua new`; never written by hand
 > Status: Proposed | Accepted | Rejected | Superseded | Retired
 > Embodiment: Not started | Specified | Implemented | Verified | Drift detected | Inactive
 > Date: YYYY-MM-DD
 > Author: name
 > Deciders: name(s)
 > Supersedes / Superseded-by: —
-> Derives-from: RFC-NNNN (optional)
 
 ## Context
 
@@ -23,7 +23,7 @@ is evidence-backed rather than asserted.
 
 ## Decision
 
-The choice, in a Y-statement: *In the context of X, facing Y, we decided Z, to achieve W, accepting
+The choice, already made (a direction still open for comment is an RFC, not an ADR), in a Y-statement: *In the context of X, facing Y, we decided Z, to achieve W, accepting
 the downside V.*
 
 ## Reversibility
@@ -39,3 +39,8 @@ the institutional knowledge lives.
 ## References
 
 Related ADRs, RFCs, research findings.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|

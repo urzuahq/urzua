@@ -20,8 +20,9 @@ pub fn identity_collision(
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_IDENTITY_COLLISION;
 
-    // A record whose filename yields no identifier is eligible and unexamined:
-    // it was handed to the rule, and the rule has no identity to collide.
+    // A record whose filename yields no identifier is outside this rule's
+    // population: it has no identity to collide, and `filename.identity-pattern`
+    // is the rule that reports the missing identifier.
     let (population, examined_records) = census_records(
         PopulationUnit::Record,
         records.iter().collect(),
@@ -43,31 +44,22 @@ pub fn identity_collision(
             .collect();
         paths.sort();
         for record in claimants.iter() {
-            findings.push(Finding {
-                rule: RULE_ID.to_string(),
-                severity: FindingSeverity::Error,
-                file: record.path.clone(),
-                line: None,
-                waived: None,
-                declared_severity: None,
-                suggested_action: None,
-                action_source: ActionSource::new("identifier-collision"),
-                message: format!(
+            findings.push(Finding::new(
+                RULE_ID,
+                FindingSeverity::Error,
+                record.path.clone(),
+                ActionSource::new("identifier-collision"),
+                format!(
                     "identifier {id} is claimed by {} records ({}) -- a reference to it resolves to only one of them",
                     claimants.len(),
                     paths.join(", ")
                 ),
-            });
+            ));
         }
     }
 
     (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records,
-        },
+        RuleExecution::ran(RULE_ID, population, examined_records),
         findings,
     )
 }
@@ -131,6 +123,7 @@ pub fn identity_collision_notices(collisions: &[IdentifierCollision<'_>]) -> Vec
                     "{id} resolves to more than one record ({}) -- any rule resolving a reference to it may examine an arbitrary one of them, not necessarily the one a reference meant",
                     paths.join(", ")
                 ),
+                detail: None,
             }
         })
         .collect()
@@ -162,7 +155,7 @@ mod tests {
         )]);
         let records = [target, source];
         let index = build_normalized_index(&records);
-        let (_, findings) = pointer_resolution(&records, &config, &index);
+        let (_, findings) = pointer_resolution(&records, &config, &index, &Default::default());
         // Resolution succeeding reports nothing (MILE-80). a_dangling_parent_pointer_is_an_error
         // is the control that keeps this from passing on a rule that never fires.
         assert!(findings.is_empty(), "{findings:?}");
@@ -188,7 +181,7 @@ mod tests {
         )]);
         let records = [target, source];
         let index = build_normalized_index(&records);
-        let (_, findings) = pointer_resolution(&records, &config, &index);
+        let (_, findings) = pointer_resolution(&records, &config, &index, &Default::default());
         // Resolution succeeding reports nothing (MILE-80). a_dangling_parent_pointer_is_an_error
         // is the control that keeps this from passing on a rule that never fires.
         assert!(findings.is_empty(), "{findings:?}");
@@ -213,7 +206,7 @@ mod tests {
         )]);
         let records = [legacy_style, source];
         let index = build_normalized_index(&records);
-        let (_, findings) = pointer_resolution(&records, &config, &index);
+        let (_, findings) = pointer_resolution(&records, &config, &index, &Default::default());
         assert_eq!(findings.len(), 1, "unexpected findings: {findings:?}");
         assert_eq!(findings[0].severity, FindingSeverity::Error);
     }
@@ -241,7 +234,7 @@ mod tests {
         )]);
         let records = [milestone, source];
         let index = build_normalized_index(&records);
-        let (_, findings) = pointer_resolution(&records, &config, &index);
+        let (_, findings) = pointer_resolution(&records, &config, &index, &Default::default());
         assert!(findings.is_empty(), "{findings:?}");
     }
 

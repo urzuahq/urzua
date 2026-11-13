@@ -3,6 +3,8 @@
 //! it is built while its `Status` says it is not, and a success `Status` with no
 //! evidence, are both reported; `fix` writes only the first.
 
+mod common;
+
 use std::path::Path;
 use std::process::Command;
 
@@ -16,7 +18,7 @@ fn git(dir: &Path, args: &[&str]) {
 }
 
 fn run_urzua(dir: &Path, args: &[&str]) -> std::process::Output {
-    Command::new(env!("CARGO_BIN_EXE_urzua"))
+    common::urzua()
         .args(args)
         .current_dir(dir)
         .output()
@@ -54,9 +56,8 @@ fn milestone(status: &str, realized_by: Option<&str>) -> String {
     )
 }
 
-fn repo(name: &str, config: &str) -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join(format!("urzua-delivery-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+fn repo(name: &str, config: &str) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-delivery-{name}"));
     for d in ["docs/milestones", "src", "tests", ".urzua"] {
         std::fs::create_dir_all(dir.join(d)).unwrap();
     }
@@ -137,7 +138,6 @@ fn both_directions_are_reported_and_the_rest_are_clean() {
         .find(|r| r["rule"] == "status.delivery-agreement")
         .unwrap();
     assert_eq!(rule["population"]["examined"], 8, "{rule}");
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -154,7 +154,6 @@ fn a_source_back_pointer_is_delivery_evidence_for_a_record_with_no_realized_by()
         ["MILE-1", "MILE-2", "MILE-4", "MILE-6"],
         "{report}"
     );
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -174,7 +173,6 @@ fn fix_proposes_the_success_status_for_delivered_records_and_never_downgrades() 
         notices.contains("MILE-4-") && notices.contains("no delivery evidence"),
         "{report}"
     );
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -206,7 +204,6 @@ fn fix_apply_writes_the_status_and_a_structural_revision_row() {
         ["MILE-4"],
         "{again}"
     );
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -235,7 +232,6 @@ fn a_delivery_declaration_naming_a_status_outside_the_type_is_refused_at_load() 
         let text = String::from_utf8_lossy(&out.stdout).to_string()
             + &String::from_utf8_lossy(&out.stderr);
         assert!(text.contains(what), "{what}: {text}");
-        std::fs::remove_dir_all(&dir).ok();
     }
 }
 
@@ -251,5 +247,83 @@ fn the_rule_enabled_on_a_corpus_with_no_declaration_examines_nothing_and_says_so
         .find(|r| r["rule"] == "status.delivery-agreement")
         .unwrap();
     assert_eq!(rule["population"]["examined"], 0, "{rule}");
+}
+
+#[test]
+fn a_type_can_switch_a_source_back_pointer_off_as_delivery_evidence_observed_failing() {
+    let rules = "  embodiment.back-pointer-resolution:\n    level: error\n    back_pointer_paths: [\"src\"]\n";
+    let off = format!("{DELIVERY}        back_pointer_evidence: false\n");
+    let dir = repo("backptr-off", &config(&off, rules));
+    std::fs::write(dir.join("src/b.rs"), "// Implements: MILE-2\nfn b() {}\n").unwrap();
+    git(&dir, &["add", "-A"]);
+    git(&dir, &["commit", "-q", "-m", "pointer"]);
+    let report = parsed(&run_urzua(&dir, &["check"]));
+    let found = findings(&report, "status.delivery-agreement");
+    // MILE-2 is cited only by a back-pointer: with the option off it is not delivered.
+    assert_eq!(names(&found), ["MILE-1", "MILE-4", "MILE-6"], "{report}");
+    // Realized-by evidence still counts, and fix proposes only those.
+    let fixed = parsed(&run_urzua(&dir, &["fix"]));
+    assert_eq!(fixed["repairs"].as_array().unwrap().len(), 2, "{fixed}");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn the_back_pointer_option_defaults_to_counting_and_accepts_true() {
+    let rules = "  embodiment.back-pointer-resolution:\n    level: error\n    back_pointer_paths: [\"src\"]\n";
+    let on = format!("{DELIVERY}        back_pointer_evidence: true\n");
+    let dir = repo("backptr-on", &config(&on, rules));
+    std::fs::write(dir.join("src/b.rs"), "// Implements: MILE-2\nfn b() {}\n").unwrap();
+    git(&dir, &["add", "-A"]);
+    git(&dir, &["commit", "-q", "-m", "pointer"]);
+    let report = parsed(&run_urzua(&dir, &["check"]));
+    assert_eq!(
+        names(&findings(&report, "status.delivery-agreement")),
+        ["MILE-1", "MILE-2", "MILE-4", "MILE-6"],
+        "{report}"
+    );
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn a_test_locator_list_in_realized_by_is_delivery_evidence_with_a_run_command_action() {
+    let dir = repo("waiver", &config(DELIVERY, ""));
+    std::fs::write(
+        dir.join("docs/milestones/MILE-9-x.md"),
+        milestone("InProgress", Some("test:tests/a.rs#t, test:src/a.rs#a")),
+    )
+    .unwrap();
+    git(&dir, &["add", "-A"]);
+    git(&dir, &["commit", "-q", "-m", "nine"]);
+    let report = parsed(&run_urzua(&dir, &["check"]));
+    let found = findings(&report, "status.delivery-agreement");
+    assert!(names(&found).contains(&"MILE-9".to_string()), "{report}");
+    let nine = found
+        .iter()
+        .find(|f| f["file"].as_str().unwrap().contains("MILE-9-"))
+        .unwrap();
+    assert!(nine["message"].as_str().unwrap().contains("Realized-by"));
+    assert_eq!(nine["suggested_action"]["kind"], "run-command", "{nine}");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn a_type_declaring_no_unevidenced_tiers_never_reports_a_success_status_without_evidence_observed_failing(
+) {
+    let none = DELIVERY.replace(
+        "unevidenced_tiers: [\"Not started\"]",
+        "unevidenced_tiers: []",
+    );
+    let dir = repo("no-unevidenced", &config(&none, ""));
+    let out = run_urzua(&dir, &["check"]);
+    let report = parsed(&out);
+    // MILE-4 is Done with no evidence: the opposite direction is declared off.
+    assert_eq!(
+        names(&findings(&report, "status.delivery-agreement")),
+        ["MILE-1", "MILE-6"],
+        "{report}"
+    );
+    let fixed = parsed(&run_urzua(&dir, &["fix"]));
+    let notices = serde_json::to_string(&fixed["notices"]).unwrap();
+    assert!(!notices.contains("no delivery evidence"), "{fixed}");
     std::fs::remove_dir_all(&dir).ok();
 }

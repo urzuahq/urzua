@@ -2,7 +2,7 @@
 Stable-Id: 01M6D2KGWV874476JXN1CXNN8F
 Status: Fixed
 Found-in: "A /code-review v0.3.0...main pass, round 29"
-Regression-test: "fix_apply_ids_that_match_no_repair_is_a_failure_naming_the_selector (rust/crates/urzua-cli/tests/check_integration.rs)"
+Realized-by: test:rust/crates/urzua-cli/tests/check_integration.rs#fix_apply_ids_that_match_no_repair_is_a_failure_naming_the_selector@sha256:52a772aa2a3d24a96718088addb737fa8716bd95d18dff6f4f968794cf15ad16
 ---
 # 166 — fix --apply --ids with an entry that matches no repair returns ok and writes nothing
 
@@ -45,3 +45,5 @@ a SPEC-8 decision, not made here. Until then `--ids ADR-1` fails loudly instead 
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-02 | Filed and fixed in the same change. **Why:** found by a full-release code review and reproduced with the release binary on a disposable fixture; the regression test was observed failing before the fix and passing after. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/check_integration.rs#fix_apply_ids_that_match_no_repair_is_a_failure_naming_the_selector` (lines 3405-3438) 33a9da9c617d -> 52a772aa2a3d. Reason: Read the diff of each pinned span since the old pin and the claim still holds. check_integration.rs#fix_apply_ids_that_match_no_repair_is_a_failure_naming_the_selector: the test body only dropped its manual remove_dir_all of the fixture directory (a TempDir guard removes it on drop), every fixture and assertion is unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |

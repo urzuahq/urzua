@@ -1,4 +1,5 @@
 ---
+Stable-Id: 01M6R3NK57QWCNWZVF91BRHJ13
 Status: Accepted
 Date: 2026-07-30
 Accepted-on: 2026-09-05
@@ -89,3 +90,9 @@ question above — flagged as needing its own follow-up RFC, not solved here.
 - RFC-1 — the core schema/profile model this revision-log mechanism attaches to.
 - RFC-5 — Embodiment's `Drift detected` state, referenced above as a candidate trigger for "Spec
   drifted enough to need a new ADR."
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-05 | Revision log added, 2026-11-05. | **structural** |

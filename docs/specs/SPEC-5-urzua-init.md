@@ -1,9 +1,10 @@
 ---
-Version: '0.9'
+Stable-Id: 01M6R3NK5PKKQRJF9WFZJA105B
+Version: '0.24'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/commands/init.rs, test:rust/crates/urzua-cli/tests/init_integration.rs
+Realized-by: code:rust/crates/urzua-cli/src/commands/init.rs@sha256:1cb2edb3e555be440a8fbb4a6186e68fce238d8f65bfef1f8aa3a1954b25b13b, test:rust/crates/urzua-cli/tests/init_integration.rs, test:rust/crates/urzua-cli/tests/init_adopt_integration.rs
 Author: beauwilliams
 Subject: '`urzua init` -- the adopt-existing-corpus path and `.urzua/` layout.'
 Implements: RFC-1
@@ -69,16 +70,31 @@ live, and no rule needs to know it exists.
 disk rather than taking a `--types` selection. Type selection, built-in profiles, and non-interactive
 setup for a repository with no records yet are `MILE-114`'s scope, not this spec's current subject.
 
+`--config <file>` names the file `init` writes (and the one it refuses to overwrite); without it the file is `.urzua/config.yaml`. A default location is checked to resolve inside the repository, so a symlinked `.urzua` pointing outside is refused rather than written through.
+
+`init` also proposes a directory whose files are not numbered records when at least two of its markdown files carry a header and they are at least half of the directory's markdown files (a flat spec directory named by slug), with no `prefix`, and says so in an `init-scan` notice. A proposed directory none of whose files has a header is named in an `init-scan` warning notice, since it may hold pages rather than records; it is not proposed (a type with nothing to read is noise), and the notice says to declare it by hand if it is a record directory. A hidden directory (any path component starting with a dot, such as `.changeset`) is never proposed or mentioned, a leading dot being neither a legal type name nor a legal prefix. An unnumbered directory needs, beyond the header test above, at least two headed files carrying a `status` field (any letter case); a directory of headed pages without one (front matter holding only `title`) is named in a notice and not proposed. A type name is lower-case ASCII letters and digits in hyphen-separated segments with no all-digit segment, so its upper-cased default prefix always loads; a directory whose records share a prefix an earlier directory already holds is not proposed and is named in a notice. The rendered config is parsed before anything is written, and one that does not load is refused.
+
 ## Proposed header shape
 
 `init` proposes `header_shape: yaml-frontmatter` for every type, the only shape with a reader (the
 `blockquote` and `bold-list` shapes were removed, `MILE-85`). For each proposed type it parses the
 existing records with the real header parser and counts those whose header is YAML frontmatter at the
 very start of the record; a record written in a removed form, or with no readable header, is counted
-in a `header-shape` notice that names the form (`2 in the removed bold-list form`), because `check`
-reports each such record as unreadable until its header is rewritten as YAML frontmatter. A type whose
-records are all frontmatter gets no notice. A type with no records is proposed `yaml-frontmatter`.
-Each `proposed` entry reports the chosen `header_shape`.
+in a `header-shape` notice that names the form (`2 in the removed bold-list form`), which no rule reads
+until its header is rewritten as YAML frontmatter. The proposed config declares no `required_fields`, so
+`check` does not mention such a record; the notice says so and names the fix, declaring a field every
+record carries (`required_fields: [Status]`) on the type, after which `header.required-fields` reports
+each one. A type whose records are all frontmatter gets no notice. A type with no records is proposed
+`yaml-frontmatter`.
+Each `proposed` entry reports the chosen `header_shape`. When a proposed directory holds a `README.md`
+directly, which is never a record, the type is written with `exclude_files: [README.md]` and its `proposed`
+entry lists `exclude_files`; a directory with no README writes no `exclude_files`.
+
+## Proposed harness key
+
+`init` also proposes `harness: {outside_writes: shared}`. It enables no guardrail; it makes a guardrail the
+adopter turns on later also judge the files of a linked worktree of the repository (`ADR-89` amendment of
+2026-11-09, outside writes; `SPEC-3`).
 
 ## Proposed rules
 
@@ -86,20 +102,27 @@ Each `proposed` entry reports the chosen `header_shape`.
 just adopted: a rule that needs options it cannot supply, a rule that needs declared `relation_pairs`,
 a rule that resolves identity on a corpus where no type has a prefix, and a rule that reads a per-type
 declaration `init` does not write. The last group is not a fixed list: it is every rule whose entry in the
-rule table carries a `reads_declaration` (`required_fields`, `known_fields`, `pointer_fields` or
-`revision_log.version_bump`), so a rule added later with a `reads_declaration` is withheld without
-touching `init`. Today that is `field.quality`, `field.pending`, `header.field-set-consistency`,
-`header.pointer-field-clean` and `revision-log.version-bump-required`. `init` writes `required_fields: []`
-and infers no `known_fields`, `pointer_fields` or version-bump declaration (`ADR-33`). A
-`rule-applicability` notice (severity `info`) lists the withheld rules, grouped by declaration, so the
-adopter knows what to declare on a record type before enabling the rule.
+rule table carries a `reads_declaration` (`required_fields`, `known_fields`, `pointer_fields`,
+`revision_log.version_bump`, `statuses.blocked` or `statuses.progress`, or `statuses.delivery.items`), so a
+rule added later with a `reads_declaration` is withheld without touching `init`. `init` writes
+`required_fields: []` and infers none of those declarations (`ADR-33`). A `rule-applicability` notice
+(severity `info`) lists the withheld rules, grouped by declaration, so the adopter knows what to declare on
+a record type before enabling the rule.
+
+`init` also writes `authority: {decider_table: base}`: no deciders and no gates, which no corpus can supply,
+only the choice that who may decide is read from a pull request's base revision (`SPEC-3`, `ADR-89`
+amendment of 2026-11-09), so the table the adopter writes next is not one a pull request can edit for itself.
 
 ## Safety
 
 - **Never clobber.** An existing `.urzua/config.yaml` is not overwritten. `init` reports what exists
-  and exits 2.
-- **Idempotent, via the never-clobber refusal above.** A re-run against an initialized repository
-  exits 2 and changes nothing.
+  and exits 2. `init --dry-run` still runs, shows what adopt would propose today with a notice that
+  a config exists, and writes nothing.
+- **Idempotent, via the never-clobber refusal above.** A re-run (without `--dry-run`) against an
+  initialized repository exits 2 and changes nothing.
+- **The config is written whole or not at all** (a temporary file renamed into place), so a full disk
+  or a killed process leaves no truncated `.urzua/config.yaml`, which a re-run would refuse to
+  overwrite.
 - **`--dry-run` prints the plan and writes nothing**, and is the documented way to see what adopt
   inferred before committing to it.
 
@@ -139,7 +162,10 @@ classifies every record-shaped file it finds by directory; nothing is reported a
 1. `--dry-run` output matches what a real run then does, byte for byte.
 2. Adopt moves no files, and a `git status` after it shows only `.urzua/`; `init` does not touch `.gitignore`.
 
-Both criteria are enforced by `init_integration.rs` (`a_dry_run_matches_the_real_run_byte_for_byte`, `init_changes_only_the_urzua_directory_and_leaves_gitignore_alone`); the withheld-rule mechanism is enforced there by `init_withholds_every_rule_that_reads_a_declaration`. Criterion 2 is the one to hold. The moment `init` moves a file it becomes a migration, and a
+Criterion 1 is enforced by `init_adopt_integration.rs` (`init_dry_run_proposes_the_config_the_real_run_writes`),
+criterion 2 by `init_integration.rs` (`init_changes_only_the_urzua_directory_and_leaves_gitignore_alone`), and
+the withheld-rule mechanism by the same file (`init_withholds_every_rule_that_reads_a_declaration`).
+Criterion 2 is the one to hold. The moment `init` moves a file it becomes a migration, and a
 migration without a reverse-reference scan is the documented data-loss shape.
 
 A `urzua init --types adr,rfc,spec` run producing a checkable config with unclassified files reported
@@ -178,5 +204,28 @@ adopt should infer rules or only structure, and multi-corpus-per-repo).
 > | 2026-11-04 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-cli/src/commands/init.rs, test:rust/crates/urzua-cli/tests/check_integration.rs` -- stated `Verified` disagreed with the computed value. | **structural** |
 > | 2026-11-04 | Bumped to `0.7`. `init` proposes only `yaml-frontmatter` and reports, in a `header-shape` notice, the existing records written in a removed `blockquote` or `bold-list` form; it no longer infers a shape from the corpus and no longer declares `header.deprecated-shape`. **Why:** `MILE-85` removed those shapes. | **substantive** |
 > | 2026-11-04 | Bumped to `0.8`. Added `## Proposed rules`: `init` does not propose a rule that reads a per-type declaration it leaves empty (`field.quality`, `field.pending`, `header.field-set-consistency`, `header.pointer-field-clean`) and names each in a `rule-applicability` notice with the declaration to write. **Why:** `BUG-73`; the four rules ran over zero records on every adopted corpus. | **substantive** |
-> | 2026-11-05 | Bumped to `0.9`. **Why:** a re-read against the code found three divergences. `## Proposed rules` listed four withheld rules but `init` withholds five (it also withholds `revision-log.version-bump-required`, `BUG-51`), so it now states the mechanism (`reads_declaration` in the rule table) and the current members rather than a fixed list. Success criterion 2 claimed a `git status` shows `.gitignore`; `init` never touches it, so the claim is corrected. `Realized-by` cited `check_integration.rs` at file level; it now cites the focused `init_integration.rs`, which enforces the dry-run equivalence, the files-touched claim and the withheld-rule mechanism. | **substantive** |
-> | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-cli/src/commands/init.rs, test:rust/crates/urzua-cli/tests/init_integration.rs` -- stated `Drift detected` disagreed with the computed value `Verified`. | **structural** |
+> | 2026-11-05 | Bumped to `0.9`. `init` writes the config through a temporary file and a rename. **Why:** review of the CLI found every record and config write truncated the file before writing it. | **substantive** |
+> | 2026-11-05 | Bumped to `0.10`. `init` proposes a header-bearing directory of unnumbered files and flags a proposed directory with no header in any file, in `init-scan` notices. **Why:** Phase 0 hardening from an adopter switchover -- the spec directory was missed and two directories of pages were proposed without comment. | **substantive** |
+> | 2026-11-06 | Bumped to `0.11`. `init` never proposes a hidden directory or a directory none of whose files has a header, proposes an unnumbered directory only when at least two of its headed files carry a `status` field, legalises every type name, drops a type whose prefix an earlier one holds, refuses to write a config that does not load, and `--dry-run` runs when a config already exists. **Why:** Phase 0 hardening from a second adopter switchover -- `init` wrote a config naming a `.changeset` type that could not load, and proposed 39 types. | **substantive** |
+> | 2026-11-07 | Bumped to `0.12`. `init` writes the file named by the global `--config`, and checks the default location resolves inside the repository. **Why:** a Phase 0 hardening review found `--config X init` reported `written: true` for a file it never created, writing `.urzua/config.yaml` instead. | **substantive** |
+> | 2026-11-08 | Pinned (attested by beauwilliams, identity: gh-verified, actor: agent): 2 locators pinned, 2 file-level, 0 scoped. Evidence: rust/crates/urzua-cli/src/commands/init.rs@sha256:efe3f3739082, rust/crates/urzua-cli/tests/check_integration.rs@sha256:f893cb99b833 Reason: Pinned the files as they are now after checking each against the record it evidences: init.rs and check_integration.rs still implement and test urzua init adopt mode (SPEC-5), status_model.rs, the own-config test and status_delivery_integration.rs still implement the milestone type and its delivery status (SPEC-6), both fix.rs files and the paths, rebaseline and drift integration tests still implement urzua fix (SPEC-8), and config.yaml and the own-config tests still declare the bug type (SPEC-9). **Why:** a claim is renewed only over pinned code and test evidence. | **structural** |
+> | 2026-11-08 | Tool-authored (by beauwilliams, identity: gh-verified, actor: agent): recomputed `Embodiment` from `Realized-by: code:rust/crates/urzua-cli/src/commands/init.rs@sha256:efe3f3739082148a47756ba8d8a4b6e8dc7d85f66edb3748c63e7a7e5f01c96c, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:f893cb99b8337c1172d3c4825859e00a0344dd4c35e6f013d802e509b1688ecb` -- stated `Drift detected` disagreed with the computed value `Verified`. | **structural** |
+> | 2026-11-08 | Bumped to `0.13`. The `code:` and `test:` locators of `Realized-by` are now hash-pinned by `urzua reverify --pin-only` (the `Pinned` row above) and, where the record stated `Drift detected`, its `Embodiment` was recomputed (the tool-authored row above); no behaviour this spec describes changes. **Why:** `MILE-129`, `ADR-97` section 10: a claim is renewed only over pinned code and test evidence, so the corpus is pinned once before expiry is enabled. | **structural** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/init.rs` efe3f3739082 -> 08dfadd3cae6. Reason: Read the diff of each pinned file since the old pin and the claim still holds. init.rs: only the doc comment on run changed, to say the config a dry run proposes is byte-identical to the file the real run writes and that the reports differ in dry_run, written and the echoed config_yaml; no code changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-08 | Bumped to `0.14`. The pins this spec's `Realized-by` holds on files changed in this change were re-baselined (the `Re-baselined` row above); no behaviour this spec describes changed. **Why:** a revision-log entry that adds a structural change needs a `Version` bump (`revision-log.version-bump-required`). | **structural** |
+> | 2026-11-08 | Bumped to `0.15`. The `header-shape` notice states what `check` does (silent while `required_fields` is empty) and the config that makes it report, instead of promising a report that never came; `init` writes `exclude_files: [README.md]` for a proposed directory that holds a README. The written config for a corpus with no README, and every existing config, are unchanged. **Why:** the round-4 adopter review (S3, N1): the warning was not true, and every adopted corpus drew `filename.identity-pattern` warnings asking to rename its README. | **substantive** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/init.rs` 08dfadd3cae6 -> 5f376bdd1b6d, `rust/crates/urzua-cli/tests/check_integration.rs` f893cb99b833 -> 8538aedb7492. Reason: the tests in check_integration.rs now name real tracked files; the behaviour this record relies on is unchanged; init.rs now words the header-shape notice truthfully (check reports unreadable headers only when required_fields declares them), excludes README.md for a directory holding one, and carries the merged doc-comment edit from main; the behaviour this record relies on is unchanged **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/check_integration.rs` 8538aedb7492 -> 5ab61b95fd58. Reason: check_integration.rs: the only change is in pre_commit_hook_stops_a_planted_bad_header_with_the_real_binary, which now symlinks the urzua binary into the fixture instead of copying it (a copy raced a forking test thread and failed with ETXTBSY under load); the test's setup, planted defect and assertions are otherwise unchanged **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/init.rs` 5f376bdd1b6d -> 6c671b5f6ed7. Reason: split init::run into propose_record_types and write_config, and render_config_yaml into proposed_types_mapping and proposed_rules_mapping (init.rs); behaviour unchanged, outputs byte-identical **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/init.rs` 6c671b5f6ed7 -> eab52da49062. Reason: Read the diff of each re-pinned file against main. cli/commands/init.rs: Notice literals use Notice::new or gain detail: None; no behaviour change. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-08 | Bumped to `0.18`. The pins this spec's `Realized-by` holds on files this change touched were re-baselined (the `Re-baselined` row above); no behaviour this spec describes changed. | **structural** |
+> | 2026-11-09 | Bumped to `0.19`. Adds `## Proposed harness key`: the proposed config declares `harness.outside_writes: shared`. **Why:** `ADR-89` amendment of 2026-11-09 (outside writes), accepted by the maintainer: a linked worktree at a commit without gates was an unjudged place to write. | **substantive** |
+> | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/init.rs` eab52da49062 -> 1520764ba016. Reason: init.rs: read the diff since the previous pin; render_config_yaml adds a top-level harness mapping {outside_writes: shared} to the proposed config (6 added lines, no other change to the file). This record's claim about init is unaffected; SPEC-5 0.19 documents the new key. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-09 | Bumped to `0.20`. The proposed configuration carries `authority: {decider_table: base}`, with no deciders or gates. **Why:** `ADR-89` amendment of 2026-11-09 (decider table), accepted by the maintainer. | **substantive** |
+> | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/init.rs` 1520764ba016 -> ee569c2dd2ff. Reason: Read the diff of each pinned file since the old pin and the claim still holds. init.rs: render_config_yaml adds an authority mapping holding only decider_table: base to the proposed configuration; nothing else in the pinned file changed. Behaviour unchanged for a repository that does not declare decider_table. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-09 | Bumped to `0.21`. Re-pin rows in this revision log were reworded to name who re-verified, matching the tool's wording since 2026-11-09; hashes, reasons and dates are unchanged. **Why:** Maintainer decision, 2026-11-09. | **structural** |
+> | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/init.rs` ee569c2dd2ff -> 1cb2edb3e555. Reason: Read the diff of init.rs: the authority block `urzua init` writes gains `waivable: never`; nothing else changed. The pinned evidence still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-09 | Bumped to `0.22`. Evidence pins on `.urzua/config.yaml` were re-pinned (row above) after the config's authority section gained `waivable: never`; the specification's content is unchanged. **Why:** `ADR-89` amendment of 2026-11-09 (gate waivers). | **substantive** |
+> | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/check_integration.rs` 5ab61b95fd58 -> a60c9c61b94c. Reason: Read the diff of each pinned file since the previous pin. rust/crates/urzua-cli/tests/check_integration.rs: adds one regression test that a claim file with an upper-case .MD extension under claim_paths is read; nothing else changed. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-09 | Bumped to `0.23`. Evidence pins re-baselined for this change; the specification text is unchanged. **Why:** a revision-log entry that adds a structural change bumps `Version`. | **structural** |
+> | 2026-11-13 | Bumped to `0.24`. `## Proposed rules` states the withheld-rule mechanism (`reads_declaration` in the rule table) and no longer a fixed list of four, which had fallen behind the table; success criterion 2 no longer claims `.gitignore` appears in `git status`, because `init` never touches it. `Realized-by` cites `init_integration.rs` and `init_adopt_integration.rs`, which enforce both criteria and the mechanism, instead of `check_integration.rs`. **Why:** a re-read against the code found these divergences. | **substantive** |

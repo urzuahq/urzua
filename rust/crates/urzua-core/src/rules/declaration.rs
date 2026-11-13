@@ -17,19 +17,15 @@ pub fn config_pointer_declaration_missing(
             if declares_either
                 && (type_config.pointer_fields.is_none() || type_config.narrative_fields.is_none())
             {
-                findings.push(Finding {
-                    rule: RULE_CONFIG_POINTER_DECLARATION_MISSING.to_string(),
-                    severity: FindingSeverity::Error,
-                    file: config_path.to_path_buf(),
-                    line: None,
-                    waived: None,
-                    declared_severity: None,
-                    suggested_action: None,
-                    action_source: ActionSource::new("pointer-declaration-missing").key_path(["record_types", type_name, if type_config.pointer_fields.is_none() { "pointer_fields" } else { "narrative_fields" }]).list(Vec::<String>::new()),
-                    message: format!(
+                findings.push(Finding::new(
+                    RULE_CONFIG_POINTER_DECLARATION_MISSING,
+                    FindingSeverity::Error,
+                    config_path.to_path_buf(),
+                    ActionSource::new("pointer-declaration-missing").key_path(["record_types", type_name, if type_config.pointer_fields.is_none() { "pointer_fields" } else { "narrative_fields" }]).list(Vec::<String>::new()),
+                    format!(
                         "record type '{type_name}' declares only one of pointer_fields/narrative_fields -- declare both explicitly, even as `[]`, since omitting one is not the same as declaring zero fields of that kind"
                     ),
-                });
+                ));
             }
         },
     )
@@ -56,22 +52,49 @@ pub fn config_known_fields_declaration_missing(
             // `config.header-none-has-no-required-fields` already applies to
             // `required_fields` itself.
             if !type_config.has_no_header() && type_config.known_fields.is_none() {
-                findings.push(Finding {
-                    rule: RULE_CONFIG_KNOWN_FIELDS_DECLARATION_MISSING.to_string(),
-                    severity: FindingSeverity::Error,
-                    file: config_path.to_path_buf(),
-                    line: None,
-                    waived: None,
-                    declared_severity: None,
-                    suggested_action: None,
-                    action_source: ActionSource::new("known-fields-declaration-missing").key_path(["record_types", type_name, "known_fields"]),
-                    message: format!(
+                findings.push(Finding::new(
+                    RULE_CONFIG_KNOWN_FIELDS_DECLARATION_MISSING,
+                    FindingSeverity::Error,
+                    config_path.to_path_buf(),
+                    ActionSource::new("known-fields-declaration-missing").key_path(["record_types", type_name, "known_fields"]),
+                    format!(
                         "record type '{type_name}' does not declare known_fields -- declare it explicitly, even as `[]`, to make this type's field-set governance a conscious choice rather than an unchecked default"
                     ),
-                });
+                ));
             }
         },
     )
+}
+
+/// What a record type's `known_fields` should become once `field` joins it,
+/// as the suggested action's source. With `known_fields` declared, `field` is
+/// appended to it. With none declared, appending would create a one-item list,
+/// which switches `header.field-set-consistency` on for the type and flags every
+/// other optional field its records use; the suggestion instead sets the full
+/// set: every field the type's records use beyond `required_fields`, plus
+/// `field` (SPEC-3, `known_fields`).
+pub(super) fn known_fields_source(
+    variant: &'static str,
+    set_variant: &'static str,
+    type_name: &str,
+    type_config: &crate::config::RecordTypeConfig,
+    records: &[Record],
+    field: &str,
+) -> ActionSource {
+    let key_path = ["record_types", type_name, "known_fields"];
+    if type_config.known_fields.is_some() {
+        return ActionSource::new(variant).key_path(key_path).text(field);
+    }
+    let required = type_config.declared_fields();
+    let mut full: std::collections::BTreeSet<String> = records
+        .iter()
+        .filter(|r| r.record_type == type_name)
+        .flat_map(|r| r.header.fields.iter())
+        .filter(|f| !required.contains(&f.key))
+        .map(|f| f.key.as_str().to_string())
+        .collect();
+    full.insert(field.to_string());
+    ActionSource::new(set_variant).key_path(key_path).list(full)
 }
 
 /// A declared alias not present in a type's own `required_fields`/
@@ -80,25 +103,17 @@ pub fn config_known_fields_declaration_missing(
 /// `config.relation-field-not-known`).
 fn undeclared_alias_finding(
     rule_id: &str,
-    variant: &'static str,
+    source: ActionSource,
     config_path: &std::path::Path,
-    type_name: &str,
-    field: &str,
     message: String,
 ) -> Finding {
-    Finding {
-        rule: rule_id.to_string(),
-        severity: FindingSeverity::Error,
-        file: config_path.to_path_buf(),
-        line: None,
-        waived: None,
-        declared_severity: None,
-        suggested_action: None,
-        action_source: ActionSource::new(variant)
-            .key_path(["record_types", type_name, "known_fields"])
-            .text(field),
+    Finding::new(
+        rule_id.to_string(),
+        FindingSeverity::Error,
+        config_path.to_path_buf(),
+        source,
         message,
-    }
+    )
 }
 
 /// Rule (MILE-0090/ADR-0044): every field named in a type's `pointer_fields`
@@ -109,6 +124,7 @@ fn undeclared_alias_finding(
 pub fn config_pointer_field_not_known(
     config: &Config,
     config_path: &std::path::Path,
+    records: &[Record],
 ) -> (RuleExecution, Vec<Finding>) {
     schema_inventory_rule(
         config,
@@ -128,10 +144,15 @@ pub fn config_pointer_field_not_known(
                 if !declared.contains(field.as_str()) {
                     findings.push(undeclared_alias_finding(
                         RULE_CONFIG_POINTER_FIELD_NOT_KNOWN,
-                        "pointer-field-not-known",
+                        known_fields_source(
+                            "pointer-field-not-known",
+                            "pointer-field-not-known-declare-set",
+                            type_name,
+                            type_config,
+                            records,
+                            field,
+                        ),
                         config_path,
-                        type_name,
-                        field,
                         format!(
                             "record type '{type_name}' declares '{field}' as a pointer/narrative field, but it isn't in required_fields or known_fields"
                         ),
@@ -150,6 +171,7 @@ pub fn config_pointer_field_not_known(
 pub fn config_relation_field_not_known(
     config: &Config,
     config_path: &std::path::Path,
+    records: &[Record],
 ) -> (RuleExecution, Vec<Finding>) {
     schema_inventory_rule(
         config,
@@ -163,10 +185,15 @@ pub fn config_relation_field_not_known(
                 if !declared.contains(field) {
                     findings.push(undeclared_alias_finding(
                         RULE_CONFIG_RELATION_FIELD_NOT_KNOWN,
-                        "relation-field-not-known",
+                        known_fields_source(
+                            "relation-field-not-known",
+                            "relation-field-not-known-declare-set",
+                            type_name,
+                            type_config,
+                            records,
+                            field,
+                        ),
                         config_path,
-                        type_name,
-                        field,
                         format!(
                             "record type '{type_name}' declares '{field}' for relation_fields.{key}, but it isn't in required_fields or known_fields"
                         ),
@@ -197,19 +224,15 @@ pub fn config_pointer_narrative_overlap(
             let declared_pointers: HashSet<&String> = pointer_fields.iter().collect();
             for field in narrative_fields {
                 if declared_pointers.contains(field) {
-                    findings.push(Finding {
-                        rule: RULE_CONFIG_POINTER_NARRATIVE_OVERLAP.to_string(),
-                        severity: FindingSeverity::Error,
-                        file: config_path.to_path_buf(),
-                        line: None,
-                        waived: None,
-                        declared_severity: None,
-                        suggested_action: None,
-                        action_source: ActionSource::new("pointer-narrative-overlap").key_path(["record_types", type_name, "narrative_fields"]).text(field.as_str()),
-                        message: format!(
+                    findings.push(Finding::new(
+                        RULE_CONFIG_POINTER_NARRATIVE_OVERLAP,
+                        FindingSeverity::Error,
+                        config_path.to_path_buf(),
+                        ActionSource::new("pointer-narrative-overlap").key_path(["record_types", type_name, "narrative_fields"]).text(field.as_str()),
+                        format!(
                             "record type '{type_name}' declares '{field}' in both pointer_fields and narrative_fields -- a field must be exactly one kind"
                         ),
-                    });
+                    ));
                 }
             }
         },
@@ -246,19 +269,15 @@ pub fn config_header_none_has_no_required_fields(
                                  field: &str,
                                  detail: String| {
                 if declared {
-                    findings.push(Finding {
-                            rule: RULE_CONFIG_HEADER_NONE_HAS_NO_REQUIRED_FIELDS.to_string(),
-                            severity: FindingSeverity::Error,
-                            file: config_path.to_path_buf(),
-                            line: None,
-                            waived: None,
-                            declared_severity: None,
-                            suggested_action: None,
-                            action_source: ActionSource::new("header-none-field").key_path(["record_types", type_name, field]),
-                            message: format!(
+                    findings.push(Finding::new(
+                        RULE_CONFIG_HEADER_NONE_HAS_NO_REQUIRED_FIELDS,
+                        FindingSeverity::Error,
+                        config_path.to_path_buf(),
+                        ActionSource::new("header-none-field").key_path(["record_types", type_name, field]),
+                        format!(
                                 "record type '{type_name}' declares header_shape: none but {field} {detail} -- a type with no header has nowhere for a field to be"
                             ),
-                        });
+                    ));
                 }
             };
 
@@ -568,8 +587,11 @@ mod tests {
                 Some(&[]),
             ),
         )]);
-        let (exec, findings) =
-            config_pointer_field_not_known(&config, std::path::Path::new(".urzua/config.yaml"));
+        let (exec, findings) = config_pointer_field_not_known(
+            &config,
+            std::path::Path::new(".urzua/config.yaml"),
+            &[],
+        );
         assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1, "{findings:?}");
         assert!(findings[0].message.contains("Derives-From"));
@@ -588,8 +610,11 @@ mod tests {
                 ..type_config_pointer(&["Date"], None, None, None)
             },
         )]);
-        let (exec, findings) =
-            config_relation_field_not_known(&config, std::path::Path::new(".urzua/config.yaml"));
+        let (exec, findings) = config_relation_field_not_known(
+            &config,
+            std::path::Path::new(".urzua/config.yaml"),
+            &[],
+        );
         assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1, "{findings:?}");
         assert!(findings[0].message.contains("State"));
@@ -609,8 +634,11 @@ mod tests {
                 ..type_config_pointer(&["Status"], None, None, None)
             },
         )]);
-        let (_, findings) =
-            config_relation_field_not_known(&config, std::path::Path::new(".urzua/config.yaml"));
+        let (_, findings) = config_relation_field_not_known(
+            &config,
+            std::path::Path::new(".urzua/config.yaml"),
+            &[],
+        );
         assert_eq!(findings.len(), 2, "{findings:?}");
         assert!(findings[0].message.contains("relation_fields.date"));
         assert!(findings[0].message.contains("Created"));
@@ -631,8 +659,11 @@ mod tests {
                 ..type_config_pointer(&["Created", "Owner"], None, None, None)
             },
         )]);
-        let (_, findings) =
-            config_relation_field_not_known(&config, std::path::Path::new(".urzua/config.yaml"));
+        let (_, findings) = config_relation_field_not_known(
+            &config,
+            std::path::Path::new(".urzua/config.yaml"),
+            &[],
+        );
         assert!(findings.is_empty(), "{findings:?}");
     }
 
@@ -649,8 +680,11 @@ mod tests {
                 ..type_config_pointer(&["State"], None, None, None)
             },
         )]);
-        let (exec, findings) =
-            config_relation_field_not_known(&config, std::path::Path::new(".urzua/config.yaml"));
+        let (exec, findings) = config_relation_field_not_known(
+            &config,
+            std::path::Path::new(".urzua/config.yaml"),
+            &[],
+        );
         assert_eq!(examined(&exec), 1);
         assert!(findings.is_empty(), "{findings:?}");
     }
@@ -661,8 +695,11 @@ mod tests {
             "rfc",
             type_config_pointer(&["Status"], None, None, None),
         )]);
-        let (exec, findings) =
-            config_relation_field_not_known(&config, std::path::Path::new(".urzua/config.yaml"));
+        let (exec, findings) = config_relation_field_not_known(
+            &config,
+            std::path::Path::new(".urzua/config.yaml"),
+            &[],
+        );
         assert_eq!(examined(&exec), 1);
         assert!(findings.is_empty());
     }
@@ -693,8 +730,11 @@ mod tests {
             "spec",
             type_config_pointer(&["Status"], None, Some(&["Feeds-into"]), Some(&[])),
         )]);
-        let (exec, findings) =
-            config_pointer_field_not_known(&config, std::path::Path::new(".urzua/config.yaml"));
+        let (exec, findings) = config_pointer_field_not_known(
+            &config,
+            std::path::Path::new(".urzua/config.yaml"),
+            &[],
+        );
         assert_eq!(examined(&exec), 1);
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("Feeds-into"));
@@ -711,8 +751,11 @@ mod tests {
                 Some(&[]),
             ),
         )]);
-        let (exec, findings) =
-            config_pointer_field_not_known(&config, std::path::Path::new(".urzua/config.yaml"));
+        let (exec, findings) = config_pointer_field_not_known(
+            &config,
+            std::path::Path::new(".urzua/config.yaml"),
+            &[],
+        );
         assert_eq!(examined(&exec), 1);
         assert!(findings.is_empty());
     }

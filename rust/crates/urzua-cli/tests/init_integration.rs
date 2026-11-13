@@ -1,83 +1,58 @@
-//! `urzua init` (SPEC-5): the success criteria and the withheld-rule mechanism.
+//! `urzua init` (SPEC-5): the files-touched criterion and the withheld-rule
+//! mechanism. The dry-run equivalence criterion is held by
+//! `init_adopt_integration.rs`.
 
-use std::path::{Path, PathBuf};
-use std::process::Command;
+mod common;
 
-fn git(dir: &Path, args: &[&str]) -> String {
-    let out = Command::new("git")
-        .args(args)
-        .current_dir(dir)
-        .output()
-        .expect("git should run");
-    assert!(out.status.success(), "git {args:?} failed");
-    String::from_utf8_lossy(&out.stdout).to_string()
-}
+use std::path::Path;
 
-fn adopt_repo(name: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("urzua-init-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
-    git(&dir, &["init", "-q"]);
-    git(&dir, &["config", "user.email", "test@example.com"]);
-    git(&dir, &["config", "user.name", "test"]);
+fn adopt_repo(name: &str) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-init-{name}"));
+    std::fs::create_dir_all(dir.path().join("docs/adr")).unwrap();
+    common::git(&dir, &["init", "-q"]);
+    common::git(&dir, &["config", "user.email", "test@example.com"]);
+    common::git(&dir, &["config", "user.name", "test"]);
     std::fs::write(
-        dir.join("docs/adr/ADR-0001-x.md"),
+        dir.path().join("docs/adr/ADR-0001-x.md"),
         "---\nStatus: Accepted\n---\n# 1 — X\n",
     )
     .unwrap();
-    std::fs::write(dir.join(".gitignore"), "target/\n").unwrap();
-    git(&dir, &["add", "-A"]);
-    git(&dir, &["commit", "-q", "-m", "fixture"]);
+    std::fs::write(dir.path().join(".gitignore"), "target/\n").unwrap();
+    common::git(&dir, &["add", "-A"]);
+    common::git(&dir, &["commit", "-q", "-m", "fixture"]);
     dir
 }
 
-fn init(dir: &Path, args: &[&str]) -> (Option<i32>, String) {
-    let out = Command::new(env!("CARGO_BIN_EXE_urzua"))
+fn init(dir: &Path) -> String {
+    let out = common::urzua()
         .arg("init")
-        .args(args)
         .current_dir(dir)
         .output()
         .expect("urzua binary should run");
-    (
-        out.status.code(),
-        String::from_utf8_lossy(&out.stdout).to_string(),
-    )
+    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+    assert_eq!(out.status.code(), Some(0), "{stdout}");
+    stdout
 }
 
-/// SPEC-5 criterion 1.
-#[test]
-fn a_dry_run_matches_the_real_run_byte_for_byte() {
-    let dir = adopt_repo("dry-vs-real");
-    let (code, stdout) = init(&dir, &["--dry-run"]);
-    assert_eq!(code, Some(0), "{stdout}");
-    let preview = serde_json::from_str::<serde_json::Value>(&stdout).unwrap()["config_yaml"]
-        .as_str()
-        .expect("a dry run carries config_yaml")
-        .to_string();
-    assert!(!dir.join(".urzua/config.yaml").exists());
-
-    let (code, stdout) = init(&dir, &[]);
-    assert_eq!(code, Some(0), "{stdout}");
-    let written = std::fs::read_to_string(dir.join(".urzua/config.yaml")).unwrap();
-    assert_eq!(preview, written);
-    std::fs::remove_dir_all(&dir).ok();
+fn porcelain(dir: &Path) -> String {
+    let out = std::process::Command::new("git")
+        .args(["status", "--porcelain", "-uall"])
+        .current_dir(dir)
+        .output()
+        .expect("git should run");
+    String::from_utf8_lossy(&out.stdout).trim().to_string()
 }
 
 /// SPEC-5 criterion 2: only `.urzua/` appears, `.gitignore` is untouched.
 #[test]
 fn init_changes_only_the_urzua_directory_and_leaves_gitignore_alone() {
     let dir = adopt_repo("files-touched");
-    let (code, stdout) = init(&dir, &[]);
-    assert_eq!(code, Some(0), "{stdout}");
+    init(dir.path());
+    assert_eq!(porcelain(dir.path()), "?? .urzua/config.yaml");
     assert_eq!(
-        git(&dir, &["status", "--porcelain", "-uall"]).trim(),
-        "?? .urzua/config.yaml"
-    );
-    assert_eq!(
-        std::fs::read_to_string(dir.join(".gitignore")).unwrap(),
+        std::fs::read_to_string(dir.path().join(".gitignore")).unwrap(),
         "target/\n"
     );
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 /// SPEC-5 "Proposed rules": every rule whose table entry has a
@@ -86,9 +61,8 @@ fn init_changes_only_the_urzua_directory_and_leaves_gitignore_alone() {
 #[test]
 fn init_withholds_every_rule_that_reads_a_declaration() {
     let dir = adopt_repo("withholds");
-    let (code, stdout) = init(&dir, &[]);
-    assert_eq!(code, Some(0), "{stdout}");
-    let config = std::fs::read_to_string(dir.join(".urzua/config.yaml")).unwrap();
+    let stdout = init(dir.path());
+    let config = std::fs::read_to_string(dir.path().join(".urzua/config.yaml")).unwrap();
     let mut seen = 0;
     for def in urzua_core::rules::RULE_TABLE {
         let Some(declaration) = def.reads_declaration else {
@@ -107,10 +81,8 @@ fn init_withholds_every_rule_that_reads_a_declaration() {
             declaration.key()
         );
     }
-    assert!(stdout.contains("revision-log.version-bump-required"));
     assert!(
         seen >= 5,
-        "expected at least five declaration-reading rules"
+        "expected at least five declaration-reading rules, saw {seen}"
     );
-    std::fs::remove_dir_all(&dir).ok();
 }

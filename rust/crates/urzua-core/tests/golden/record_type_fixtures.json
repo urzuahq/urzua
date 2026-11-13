@@ -1,0 +1,125 @@
+{
+  "config_for_known": {
+    "record_types": {
+      "adr": {
+        "dir": "docs/x",
+        "header_shape": "yaml-frontmatter",
+        "known_fields": [
+          "Status"
+        ],
+        "narrative_fields": null,
+        "pointer_fields": null,
+        "prefix": null,
+        "relation_fields": null,
+        "required_fields": [],
+        "spec": null
+      }
+    },
+    "rules": {},
+    "schema_version": 2
+  },
+  "config_for_required": {
+    "record_types": {
+      "adr": {
+        "dir": "docs/x",
+        "header_shape": "yaml-frontmatter",
+        "known_fields": null,
+        "narrative_fields": null,
+        "pointer_fields": null,
+        "prefix": null,
+        "relation_fields": null,
+        "required_fields": [
+          "Status",
+          "Date"
+        ],
+        "spec": null
+      }
+    },
+    "rules": {},
+    "schema_version": 2
+  },
+  "embodiment_config": {
+    "record_types": {
+      "adr": {
+        "dir": "docs/x",
+        "header_shape": "yaml-frontmatter",
+        "known_fields": [
+          "Embodiment",
+          "Realized-by"
+        ],
+        "narrative_fields": null,
+        "pointer_fields": null,
+        "prefix": null,
+        "relation_fields": null,
+        "required_fields": [],
+        "spec": null
+      }
+    },
+    "rules": {},
+    "schema_version": 2
+  },
+  "type_config(None)": {
+    "dir": "docs/x",
+    "header_shape": "yaml-frontmatter",
+    "known_fields": null,
+    "narrative_fields": null,
+    "pointer_fields": null,
+    "prefix": null,
+    "relation_fields": null,
+    "required_fields": [],
+    "spec": null
+  },
+  "type_config(Some)": {
+    "dir": "docs/x",
+    "header_shape": "yaml-frontmatter",
+    "known_fields": null,
+    "narrative_fields": null,
+    "pointer_fields": null,
+    "prefix": null,
+    "relation_fields": null,
+    "required_fields": [],
+    "spec": "SPEC-1"
+  },
+  "type_config_pointer": {
+    "dir": "docs/x",
+    "header_shape": "yaml-frontmatter",
+    "known_fields": [
+      "Status",
+      "Parent"
+    ],
+    "narrative_fields": [
+      "Ref"
+    ],
+    "pointer_fields": [
+      "Parent"
+    ],
+    "prefix": null,
+    "relation_fields": null,
+    "required_fields": [
+      "Status"
+    ],
+    "spec": null
+  },
+  "type_config_with_shape(None)": {
+    "dir": "docs/x",
+    "header_shape": "none",
+    "known_fields": null,
+    "narrative_fields": null,
+    "pointer_fields": null,
+    "prefix": null,
+    "relation_fields": null,
+    "required_fields": [],
+    "spec": null
+  },
+  "type_config_with_shape(YamlFrontmatter)": {
+    "dir": "docs/x",
+    "header_shape": "yaml-frontmatter",
+    "known_fields": null,
+    "narrative_fields": null,
+    "pointer_fields": null,
+    "prefix": null,
+    "relation_fields": null,
+    "required_fields": [],
+    "spec": null
+  }
+}

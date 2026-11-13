@@ -2,7 +2,6 @@
 Stable-Id: 01M286MP5PYPBAS2BZ4PXEJ00C
 Status: Fixed
 Found-in: 'adding notices to SPEC-2''s example JSON block for ADR-46 -- the block was already wrong in three other, unrelated ways before this change touched it'
-Regression-test: 'none -- a documentation correction, not a rule/behavior defect. No mechanical check verifies a spec''s example JSON against the real shipped shape (see Fix below for why that is not built here).'
 ---
 # 21 — SPEC-2 documents an illustrative shape that doesn't match what `check` ships
 
@@ -54,9 +53,14 @@ immediate defect (a wrong, stale illustration) without that larger investment.
 - ADR-7 -- accepted `snake_case` field names over RFC-3's illustrative `camelCase`.
 - ADR-26/ADR-46 -- removed the stderr rendering this section's prose still describes.
 
+## Regression test
+
+none -- a documentation correction, not a rule/behavior defect. No mechanical check verifies a spec's example JSON against the real shipped shape (see Fix below for why that is not built here).
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-11 | Initial bug record, `Status: Open`. Not yet fixed -- whether the right fix is rewriting the block to the real shape, or a mechanical check that a spec's documented JSON matches its source type, is not yet decided. | **structural** |
 > | 2026-09-23 | Fixed by rewriting the block to the real shape (the first option), decided against building the mechanical check (the second) as its own, larger investment. Found a fourth inaccuracy along the way: `suggestedAction` never existed on `Finding` at all. `Status: Fixed`. | **substantive** |
+> | 2026-11-05 | `Regression-test` retired (ADR-84); it named no test, so `Realized-by` is unchanged and the original text is kept under Regression test. **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

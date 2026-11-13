@@ -66,19 +66,15 @@ pub fn pointer_target_status(
                         return;
                     };
                     if not_in.iter().any(|s| s == status) {
-                        findings.push(Finding {
-                            rule: RULE_ID.to_string(),
-                            severity: FindingSeverity::Warning,
-                            file: record.path.clone(),
-                            line: None,
-                            waived: None,
-                            declared_severity: None,
-                            suggested_action: None,
-                            action_source: ActionSource::new("pointer-target-status").field(field_name.as_str()),
-                            message: format!(
+                        findings.push(Finding::new(
+                            RULE_ID,
+                            FindingSeverity::Warning,
+                            record.path.clone(),
+                            ActionSource::new("pointer-target-status").field(field_name.as_str()),
+                            format!(
                                 "{field_name}: {reference} resolves, but its {target_status_field} is {status}"
                             ),
-                        });
+                        ));
                     }
                 },
             );
@@ -90,12 +86,7 @@ pub fn pointer_target_status(
     );
 
     (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records,
-        },
+        RuleExecution::ran(RULE_ID, population, examined_records),
         findings,
     )
 }
@@ -104,6 +95,7 @@ pub fn pointer_resolution(
     records: &[Record],
     config: &Config,
     index: &RecordIndex,
+    untracked: &UntrackedRecords,
 ) -> (RuleExecution, Vec<Finding>) {
     let pointer_fields_by_type = pointer_fields_by_type(config);
     let pointer_fields_by_type = &pointer_fields_by_type;
@@ -133,32 +125,27 @@ pub fn pointer_resolution(
                 if index.contains_key(&crate::values::RecordId::new(&reference)) {
                     continue;
                 }
-                findings.push(Finding {
-                    rule: RULE_ID.to_string(),
-                    severity: FindingSeverity::Error,
-                    file: record.path.clone(),
-                    line: None,
-                    waived: None,
-                    declared_severity: None,
-                    suggested_action: None,
-                    action_source: ActionSource::new("pointer-unresolved")
-                        .field(field_name.as_str()),
-                    message: format!(
-                        "{field_name}: {reference} does not resolve to any discovered record"
-                    ),
-                });
+                let (variant, message) = unresolved_reference(
+                    field_name,
+                    &reference,
+                    untracked,
+                    ("pointer-unresolved", "pointer-untracked"),
+                    "",
+                );
+                findings.push(Finding::new(
+                    RULE_ID,
+                    FindingSeverity::Error,
+                    record.path.clone(),
+                    ActionSource::new(variant).field(field_name.as_str()),
+                    message,
+                ));
             }
             Outcome::Examined
         },
     );
 
     (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records,
-        },
+        RuleExecution::ran(RULE_ID, population, examined_records),
         findings,
     )
 }
@@ -218,19 +205,15 @@ pub fn header_pointer_field_clean(
                 let is_clean_reference =
                     is_record_reference(entry) || crate::values::is_no_value_sentinel(entry);
                 if !is_clean_reference {
-                    findings.push(Finding {
-                        rule: RULE_ID.to_string(),
-                        severity: FindingSeverity::Warning,
-                        file: record.path.clone(),
-                        line: None,
-                        waived: None,
-                        declared_severity: None,
-                        suggested_action: None,
-                        action_source: ActionSource::new("pointer-field-not-clean").field(field_name.as_str()),
-                        message: format!(
+                    findings.push(Finding::new(
+                        RULE_ID,
+                        FindingSeverity::Warning,
+                        record.path.clone(),
+                        ActionSource::new("pointer-field-not-clean").field(field_name.as_str()),
+                        format!(
                             "{field_name} entry {entry:?} isn't a clean reference -- pointer fields should hold only comma-separated reference IDs (e.g. \"RFC-1\", not \"RFC-1 (Accepted)\"); pointer.resolution already reports a resolved target's live Status"
                         ),
-                    });
+                    ));
                 }
             }
             Outcome::Examined
@@ -238,12 +221,7 @@ pub fn header_pointer_field_clean(
     );
 
     (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records,
-        },
+        RuleExecution::ran(RULE_ID, population, examined_records),
         findings,
     )
 }
@@ -327,6 +305,51 @@ mod tests {
     }
 
     #[test]
+    fn a_reference_to_an_untracked_file_on_disk_is_its_own_variant_observed_failing() {
+        // `BUG-13`: a record drafted beside the one citing it, not yet `git add`ed,
+        // read exactly like a typo. The CLI supplies the on-disk fact; core stays pure.
+        let source = record(
+            "docs/specs/SPEC-1-x.md",
+            "spec",
+            "---\nImplements: RFC-9, RFC-8\n---\n",
+        );
+        let config = config_with_types(vec![(
+            "spec",
+            type_config_pointer(&[], None, Some(&["Implements"]), Some(&[])),
+        )]);
+        let records = [source];
+        let index = build_normalized_index(&records);
+        let untracked: UntrackedRecords = [(
+            crate::values::RecordId::new("RFC-9"),
+            PathBuf::from("docs/rfc/RFC-9-draft.md"),
+        )]
+        .into();
+        let (_, findings) = pointer_resolution(&records, &config, &index, &untracked);
+        assert_eq!(findings.len(), 2, "{findings:?}");
+        let untracked_finding = findings
+            .iter()
+            .find(|f| f.message.contains("RFC-9"))
+            .unwrap();
+        assert_eq!(untracked_finding.action_source.variant, "pointer-untracked");
+        assert!(
+            untracked_finding
+                .message
+                .contains("docs/rfc/RFC-9-draft.md")
+                && untracked_finding.message.contains("not tracked by git"),
+            "{}",
+            untracked_finding.message
+        );
+        let missing = findings
+            .iter()
+            .find(|f| f.message.contains("RFC-8"))
+            .unwrap();
+        assert_eq!(missing.action_source.variant, "pointer-unresolved");
+        assert!(missing
+            .message
+            .ends_with("does not resolve to any discovered record"));
+    }
+
+    #[test]
     fn a_non_resolving_pointer_is_an_error() {
         let source = record(
             "docs/specs/SPEC-1-x.md",
@@ -339,9 +362,43 @@ mod tests {
         )]);
         let records = [source];
         let index = build_normalized_index(&records);
-        let (_, findings) = pointer_resolution(&records, &config, &index);
+        let (_, findings) = pointer_resolution(&records, &config, &index, &Default::default());
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].severity, FindingSeverity::Error);
+    }
+
+    /// BUG-8: `pointer.resolution` and `header.pointer-field-clean` read only
+    /// a hardcoded field list, so a pointer field a repository declared under
+    /// another name was never resolved or checked for prose. Both read the
+    /// declared `pointer_fields`, so `Feeds-into` is judged like `Implements`.
+    #[test]
+    fn a_declared_pointer_field_with_a_custom_name_is_resolved_and_checked_clean_observed_failing()
+    {
+        let dangling = record(
+            "docs/specs/SPEC-1-x.md",
+            "spec",
+            "---\nFeeds-into: SPEC-9999\n---\n",
+        );
+        let prose = record(
+            "docs/specs/SPEC-2-x.md",
+            "spec",
+            "---\nFeeds-into: SPEC-1 (the first one).\n---\n",
+        );
+        let config = config_with_types(vec![(
+            "spec",
+            type_config_pointer(&[], None, Some(&["Feeds-into"]), Some(&[])),
+        )]);
+        let records = [dangling, prose];
+        let index = build_normalized_index(&records);
+        let (_, resolution) = pointer_resolution(&records, &config, &index, &Default::default());
+        assert_eq!(resolution.len(), 1, "{resolution:?}");
+        assert!(resolution[0].message.contains("Feeds-into: SPEC-9999"));
+        let (_, clean) = header_pointer_field_clean(&records, &config);
+        assert_eq!(clean.len(), 1, "{clean:?}");
+        assert!(
+            clean[0].file.to_string_lossy().contains("SPEC-2"),
+            "{clean:?}"
+        );
     }
 
     #[test]
@@ -365,7 +422,7 @@ mod tests {
         )]);
         let records = [parent, child];
         let index = build_normalized_index(&records);
-        let (_, findings) = pointer_resolution(&records, &config, &index);
+        let (_, findings) = pointer_resolution(&records, &config, &index, &Default::default());
         assert!(findings.is_empty(), "{findings:?}");
     }
 
@@ -382,7 +439,7 @@ mod tests {
         )]);
         let records = [child];
         let index = build_normalized_index(&records);
-        let (_, findings) = pointer_resolution(&records, &config, &index);
+        let (_, findings) = pointer_resolution(&records, &config, &index, &Default::default());
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].severity, FindingSeverity::Error);
         assert!(findings[0].message.contains("Parent: SPEC-9999"));
@@ -438,6 +495,37 @@ mod tests {
         )]);
         let (_, findings) = header_pointer_field_clean(&[r], &config);
         assert_eq!(findings.len(), 1);
+    }
+
+    /// BUG-72: an empty prefix passed the uppercase test vacuously, so a bare
+    /// hyphen-number token was read as a reference. `header.pointer-field-clean`
+    /// called a pointer field holding `-1` clean and `pointer.resolution`
+    /// reported it as a reference that resolves to nothing.
+    #[test]
+    fn a_bare_hyphen_number_token_is_not_a_reference_observed_failing() {
+        use crate::rules::shared::{extract_references, scan_references};
+        assert!(extract_references("-1").is_empty());
+        assert!(scan_references("see -1 and -22 for why").is_empty());
+
+        let source = record(
+            "docs/specs/SPEC-1-x.md",
+            "spec",
+            "---\nImplements: -1\n---\n",
+        );
+        let config = config_with_types(vec![(
+            "spec",
+            type_config_pointer(&[], None, Some(&["Implements"]), Some(&[])),
+        )]);
+        let (_, clean) = header_pointer_field_clean(std::slice::from_ref(&source), &config);
+        assert_eq!(clean.len(), 1, "`-1` is not a clean reference: {clean:?}");
+
+        let records = [source];
+        let index = build_normalized_index(&records);
+        let (_, resolution) = pointer_resolution(&records, &config, &index, &Default::default());
+        assert!(
+            resolution.is_empty(),
+            "`-1` was never a reference to resolve: {resolution:?}"
+        );
     }
 
     #[test]

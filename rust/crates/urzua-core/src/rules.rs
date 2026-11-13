@@ -20,9 +20,13 @@ mod boundary;
 mod catalog;
 mod citation;
 mod claim;
+mod claim_expiry;
+mod claim_field;
 mod companion;
 mod dates;
+mod decider;
 mod declaration;
+mod delivery_items;
 mod diff_gate;
 mod embodiment;
 mod field;
@@ -30,12 +34,17 @@ mod filename;
 mod header;
 mod identity;
 mod index;
+mod locator_mechanism;
 mod narrative;
+mod open_pr;
 mod options;
+mod override_log;
 mod pointer;
 mod relation;
 mod revision_log;
+mod roadmap;
 mod runner;
+mod schema_version;
 mod section;
 mod sequence;
 mod shared;
@@ -50,9 +59,13 @@ pub use boundary::*;
 pub use catalog::*;
 pub use citation::*;
 pub use claim::*;
+pub use claim_expiry::*;
+pub use claim_field::*;
 pub use companion::*;
 pub use dates::*;
+pub use decider::*;
 pub use declaration::*;
+pub use delivery_items::*;
 pub use diff_gate::*;
 pub use embodiment::*;
 pub use field::*;
@@ -60,12 +73,17 @@ pub use filename::*;
 pub use header::*;
 pub use identity::*;
 pub use index::*;
+pub use locator_mechanism::*;
 pub use narrative::*;
+pub use open_pr::*;
 pub use options::*;
+pub use override_log::*;
 pub use pointer::*;
 pub use relation::*;
 pub use revision_log::*;
+pub use roadmap::*;
 pub use runner::*;
+pub use schema_version::*;
 pub use section::*;
 pub use sequence::*;
 pub use shared::*;
@@ -222,6 +240,48 @@ mod tests {
             narrative_fields: narrative_fields.map(|f| f.iter().map(|s| s.to_string()).collect()),
             ..type_config(None)
         }
+    }
+
+    /// `MILE-175`: the fixtures build their configurations through `Default`,
+    /// naming only the fields a test varies. Every rule test starts from them,
+    /// so they must keep building the same configurations: this serialises each
+    /// fixture and compares it with `tests/golden/record_type_fixtures.json`. A
+    /// field added to `RecordTypeConfig` with a non-neutral `Default` changes
+    /// every fixture and fails here, instead of silently changing what a few
+    /// hundred tests assert. Regenerate on purpose with `URZUA_UPDATE_GOLDEN=1`.
+    #[test]
+    fn the_fixtures_build_the_configurations_they_always_built() {
+        use crate::header::HeaderShape;
+        let built = serde_json::json!({
+            "type_config(None)": type_config(None),
+            "type_config(Some)": type_config(Some("SPEC-1")),
+            "type_config_with_shape(None)": type_config_with_shape(HeaderShape::None),
+            "type_config_with_shape(YamlFrontmatter)":
+                type_config_with_shape(HeaderShape::YamlFrontmatter),
+            "type_config_pointer": type_config_pointer(
+                &["Status"],
+                Some(&["Status", "Parent"]),
+                Some(&["Parent"]),
+                Some(&["Ref"]),
+            ),
+            "config_for_required": config_for_required(vec![("adr", vec!["Status", "Date"])]),
+            "config_for_known": config_for_known(vec![("adr", vec!["Status"])]),
+            "embodiment_config": embodiment_config(),
+        });
+        let actual = serde_json::to_string_pretty(&built).unwrap() + "\n";
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/golden/record_type_fixtures.json"
+        );
+        if std::env::var_os("URZUA_UPDATE_GOLDEN").is_some() {
+            std::fs::create_dir_all(std::path::Path::new(path).parent().unwrap()).unwrap();
+            std::fs::write(path, &actual).unwrap();
+        }
+        let expected = std::fs::read_to_string(path).unwrap();
+        assert!(
+            expected == actual,
+            "the fixtures changed from {path}\n--- expected\n{expected}\n--- actual\n{actual}"
+        );
     }
 
     pub(crate) fn exec_with(

@@ -2,7 +2,7 @@
 Stable-Id: 01M2YN6BHEFWJE09P5FTE8YGKT
 Status: Fixed
 Found-in: "Round 8 of the 0.4.0 review"
-Regression-test: "rust/crates/urzua-cli/tests/check_integration.rs::a_claim_paths_root_symlinked_to_a_real_directory_is_usable"
+Realized-by: test:rust/crates/urzua-cli/tests/check_integration.rs#a_claim_paths_root_symlinked_to_a_real_directory_is_usable@sha256:52e7ff3490a133afbf5dc94f845f74552e4a4d1f9f0010659427ce3ece113a7c
 ---
 # 80 — A claim_paths root that is a symlink to a real directory aborts the run
 
@@ -45,3 +45,4 @@ correctly and was not tested.
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

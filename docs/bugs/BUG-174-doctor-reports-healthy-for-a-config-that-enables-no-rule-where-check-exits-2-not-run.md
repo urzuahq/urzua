@@ -2,7 +2,7 @@
 Stable-Id: 01M6D5VKCXX89AM4E8HTJVFAKA
 Status: Fixed
 Found-in: "A /code-review pass, round 30"
-Regression-test: "check_integration::doctor_errors_when_no_rule_is_enabled"
+Realized-by: test:rust/crates/urzua-cli/tests/check_integration.rs#doctor_errors_when_no_rule_is_enabled@sha256:55ff07249fcf04268bd95ac62fb14956c513ee697238ba22bbe53cc815831372
 ---
 # 174 — doctor reports healthy for a config that enables no rule where check exits 2 not-run
 
@@ -32,3 +32,5 @@ New `rules-enabled` doctor check, `error` when no rule has a level other than `o
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-02 | Filed and fixed. **Why:** found by a round 30 review and reproduced against a disposable fixture. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/check_integration.rs#doctor_errors_when_no_rule_is_enabled` (lines 212-229) 7988a4173c13 -> 55ff07249fcf. Reason: Read the diff of each pinned span since the old pin and the claim still holds. check_integration.rs#doctor_errors_when_no_rule_is_enabled: the test body only dropped its manual remove_dir_all of the fixture directory (a TempDir guard removes it on drop), every fixture and assertion is unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |

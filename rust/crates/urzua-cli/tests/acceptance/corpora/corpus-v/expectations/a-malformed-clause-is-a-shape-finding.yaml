@@ -1,0 +1,15 @@
+id: a-malformed-clause-is-a-shape-finding
+corpus: corpus-v
+invocation: [check]
+expect_exit: 1
+expect_findings:
+  - rule: status.done-items-shape
+    severity: error
+    file: docs/milestones/MILE-4-malformed-clauses.md
+    message_contains: item 1
+    suggested_action: {kind: edit-section, target: {section: Done means}}
+  - rule: status.done-items-shape
+    file: docs/milestones/MILE-4-malformed-clauses.md
+    message_contains: checkbox
+expect_no_findings:
+  - {rule: status.done-items-shape, file: docs/milestones/MILE-2-every-item-resolved.md}

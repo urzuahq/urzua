@@ -1,4 +1,5 @@
 ---
+Stable-Id: 01M6R3NK4SADPP04D6VBY96PM4
 Status: Accepted
 Embodiment: Implemented
 Date: 2026-09-04

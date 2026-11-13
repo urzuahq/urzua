@@ -1,0 +1,23 @@
+name: install knope
+description: >-
+  Installs the pinned knope release, verified against its SHA-256, and puts it
+  on PATH. The one place the knope version and checksum are written: the
+  prepare-release, publish-release and checks workflows all use this action, and
+  .github/scripts/knope-pin.test.sh fails when any workflow carries its own copy
+  of the pin. A knope upgrade is a change to this file alone, and
+  .github/scripts/knope-closes-compat.test.sh then re-runs against the new
+  version.
+
+runs:
+  using: composite
+  steps:
+    - name: install knope 0.23.0 (pinned, checksummed)
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p "$RUNNER_TEMP/knope" && cd "$RUNNER_TEMP/knope"
+        curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 -o knope.tgz "https://github.com/knope-dev/knope/releases/download/knope/v0.23.0/knope-x86_64-unknown-linux-musl.tgz"
+        echo "76a970a5e237344abc14be3de37ed50c021b659a9b66b3f54afc77e6d48ac501  knope.tgz" | sha256sum -c -
+        tar -xzf knope.tgz
+        echo "$PWD/knope-x86_64-unknown-linux-musl" >> "$GITHUB_PATH"
+        "$PWD/knope-x86_64-unknown-linux-musl/knope" --version

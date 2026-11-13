@@ -1,0 +1,474 @@
+{
+  "status": "ok",
+  "record_count": 13,
+  "types": [
+    {
+      "type": "adr",
+      "dir": "docs/adr",
+      "records": 3
+    },
+    {
+      "type": "fact",
+      "dir": "docs/facts",
+      "records": 2
+    },
+    {
+      "type": "milestone",
+      "dir": "docs/milestones",
+      "records": 3
+    },
+    {
+      "type": "task",
+      "dir": "docs/tasks",
+      "records": 4
+    },
+    {
+      "type": "waiver",
+      "dir": "docs/waiver",
+      "records": 1
+    }
+  ],
+  "records": [
+    {
+      "type": "adr",
+      "path": "docs/adr/ADR-1-a.md",
+      "id": "ADR-1",
+      "stable_id": null,
+      "header_readable": true,
+      "header": [
+        {
+          "name": "Status",
+          "value": "Accepted",
+          "line": 2
+        },
+        {
+          "name": "Author",
+          "value": "a",
+          "line": 3
+        },
+        {
+          "name": "Embodiment",
+          "value": "Implemented",
+          "line": 4
+        },
+        {
+          "name": "Realized-by",
+          "value": "code:src/a.rs",
+          "line": 5
+        }
+      ],
+      "raw_text": "---\nStatus: Accepted\nAuthor: a\nEmbodiment: Implemented\nRealized-by: code:src/a.rs\n---\n# ADR-1: A\n\nA second commit touches this record.\n",
+      "sections": null,
+      "preamble": null
+    },
+    {
+      "type": "adr",
+      "path": "docs/adr/ADR-2-b.md",
+      "id": "ADR-2",
+      "stable_id": null,
+      "header_readable": true,
+      "header": [
+        {
+          "name": "Status",
+          "value": "Accepted",
+          "line": 2
+        }
+      ],
+      "raw_text": "---\nStatus: Accepted\n---\n# ADR-2: B\n",
+      "sections": null,
+      "preamble": null
+    },
+    {
+      "type": "adr",
+      "path": "docs/adr/ADR-3-c.md",
+      "id": "ADR-3",
+      "stable_id": null,
+      "header_readable": true,
+      "header": [
+        {
+          "name": "Status",
+          "value": "Draft",
+          "line": 2
+        },
+        {
+          "name": "Author",
+          "value": "c",
+          "line": 3
+        },
+        {
+          "name": "Depends-on",
+          "value": "ADR-9",
+          "line": 4
+        }
+      ],
+      "raw_text": "---\nStatus: Draft\nAuthor: c\nDepends-on: ADR-9\n---\n# ADR-3: C\n",
+      "sections": null,
+      "preamble": null
+    },
+    {
+      "type": "fact",
+      "path": "docs/facts/FACT-1-a.md",
+      "id": "FACT-1",
+      "stable_id": null,
+      "header_readable": true,
+      "header": [
+        {
+          "name": "Status",
+          "value": "Open",
+          "line": 2
+        }
+      ],
+      "raw_text": "---\nStatus: Open\n---\n# a\n",
+      "sections": null,
+      "preamble": null
+    },
+    {
+      "type": "fact",
+      "path": "docs/facts/FACT-2-b.md",
+      "id": "FACT-2",
+      "stable_id": null,
+      "header_readable": true,
+      "header": [
+        {
+          "name": "Status",
+          "value": "Met",
+          "line": 2
+        }
+      ],
+      "raw_text": "---\nStatus: Met\n---\n# b\n",
+      "sections": null,
+      "preamble": null
+    },
+    {
+      "type": "milestone",
+      "path": "docs/milestones/MILE-1-a.md",
+      "id": "MILE-1",
+      "stable_id": null,
+      "header_readable": true,
+      "header": [
+        {
+          "name": "Status",
+          "value": "Done",
+          "line": 2
+        }
+      ],
+      "raw_text": "---\nStatus: Done\n---\n# 1 — A\n",
+      "sections": null,
+      "preamble": null
+    },
+    {
+      "type": "milestone",
+      "path": "docs/milestones/MILE-2-b.md",
+      "id": "MILE-2",
+      "stable_id": null,
+      "header_readable": true,
+      "header": [
+        {
+          "name": "Status",
+          "value": "Planned",
+          "line": 2
+        },
+        {
+          "name": "Realized-by",
+          "value": "test:tests/t.rs",
+          "line": 3
+        }
+      ],
+      "raw_text": "---\nStatus: Planned\nRealized-by: test:tests/t.rs\n---\n# 2 — B\n",
+      "sections": null,
+      "preamble": null
+    },
+    {
+      "type": "milestone",
+      "path": "docs/milestones/MILE-3-c.md",
+      "id": "MILE-3",
+      "stable_id": null,
+      "header_readable": true,
+      "header": [
+        {
+          "name": "Status",
+          "value": "InProgress",
+          "line": 2
+        },
+        {
+          "name": "Depends-on",
+          "value": "FACT-1, MILE-2",
+          "line": 3
+        }
+      ],
+      "raw_text": "---\nStatus: InProgress\nDepends-on: FACT-1, MILE-2\n---\n# 3 — C\n",
+      "sections": null,
+      "preamble": null
+    },
+    {
+      "type": "task",
+      "path": "docs/tasks/TASK-1-a.md",
+      "id": "TASK-1",
+      "stable_id": null,
+      "header_readable": true,
+      "header": [
+        {
+          "name": "Status",
+          "value": "Planned",
+          "line": 2
+        }
+      ],
+      "raw_text": "---\nStatus: Planned\n---\n# a\n",
+      "sections": null,
+      "preamble": null
+    },
+    {
+      "type": "task",
+      "path": "docs/tasks/TASK-2-b.md",
+      "id": "TASK-2",
+      "stable_id": null,
+      "header_readable": true,
+      "header": [
+        {
+          "name": "Status",
+          "value": "Done",
+          "line": 2
+        },
+        {
+          "name": "Depends-on",
+          "value": "TASK-1",
+          "line": 3
+        }
+      ],
+      "raw_text": "---\nStatus: Done\nDepends-on: TASK-1\n---\n# b\n",
+      "sections": null,
+      "preamble": null
+    },
+    {
+      "type": "task",
+      "path": "docs/tasks/TASK-3-c.md",
+      "id": "TASK-3",
+      "stable_id": null,
+      "header_readable": true,
+      "header": [
+        {
+          "name": "Status",
+          "value": "Planned",
+          "line": 2
+        },
+        {
+          "name": "Depends-on",
+          "value": "FACT-1",
+          "line": 3
+        }
+      ],
+      "raw_text": "---\nStatus: Planned\nDepends-on: FACT-1\n---\n# c\n",
+      "sections": null,
+      "preamble": null
+    },
+    {
+      "type": "task",
+      "path": "docs/tasks/TASK-4-d.md",
+      "id": "TASK-4",
+      "stable_id": null,
+      "header_readable": true,
+      "header": [
+        {
+          "name": "Status",
+          "value": "Planned",
+          "line": 2
+        },
+        {
+          "name": "Depends-on",
+          "value": "FACT-2",
+          "line": 3
+        }
+      ],
+      "raw_text": "---\nStatus: Planned\nDepends-on: FACT-2\n---\n# d\n",
+      "sections": null,
+      "preamble": null
+    },
+    {
+      "type": "waiver",
+      "path": "docs/waiver/WAIVER-1-x.md",
+      "id": "WAIVER-1",
+      "stable_id": null,
+      "header_readable": true,
+      "header": [
+        {
+          "name": "Rule",
+          "value": "header.required-fields",
+          "line": 2
+        },
+        {
+          "name": "Scope",
+          "value": "docs/adr/ADR-2-b.md",
+          "line": 3
+        },
+        {
+          "name": "Reason",
+          "value": "the fixture needs one waived finding",
+          "line": 4
+        }
+      ],
+      "raw_text": "---\nRule: header.required-fields\nScope: docs/adr/ADR-2-b.md\nReason: the fixture needs one waived finding\n---\n# 1\n",
+      "sections": null,
+      "preamble": null
+    }
+  ],
+  "roadmap": {
+    "schema": 1,
+    "pairs": [
+      "sequencing"
+    ],
+    "waves": [
+      [
+        "ADR-1",
+        "ADR-2",
+        "ADR-3",
+        "FACT-1",
+        "MILE-2",
+        "TASK-1",
+        "TASK-4"
+      ],
+      [
+        "MILE-3",
+        "TASK-3"
+      ]
+    ],
+    "ready": [
+      "ADR-1",
+      "ADR-2",
+      "ADR-3",
+      "FACT-1",
+      "MILE-2",
+      "TASK-1",
+      "TASK-4"
+    ],
+    "critical_path": [
+      "FACT-1",
+      "MILE-3"
+    ],
+    "records": {
+      "ADR-1": {
+        "type": "adr",
+        "status": "Accepted",
+        "wave": 0,
+        "ready": true,
+        "blocked": false,
+        "blocked_by": [],
+        "blocks": []
+      },
+      "ADR-2": {
+        "type": "adr",
+        "status": "Accepted",
+        "wave": 0,
+        "ready": true,
+        "blocked": false,
+        "blocked_by": [],
+        "blocks": []
+      },
+      "ADR-3": {
+        "type": "adr",
+        "status": "Draft",
+        "wave": 0,
+        "ready": true,
+        "blocked": false,
+        "blocked_by": [],
+        "blocks": []
+      },
+      "FACT-1": {
+        "type": "fact",
+        "status": "Open",
+        "wave": 0,
+        "ready": true,
+        "blocked": false,
+        "blocked_by": [],
+        "blocks": [
+          "MILE-3",
+          "TASK-3"
+        ]
+      },
+      "MILE-2": {
+        "type": "milestone",
+        "status": "Planned",
+        "wave": 0,
+        "ready": true,
+        "blocked": false,
+        "blocked_by": [],
+        "blocks": [
+          "MILE-3"
+        ]
+      },
+      "MILE-3": {
+        "type": "milestone",
+        "status": "InProgress",
+        "wave": 1,
+        "ready": false,
+        "blocked": true,
+        "blocked_by": [
+          "FACT-1",
+          "MILE-2"
+        ],
+        "blocks": []
+      },
+      "TASK-1": {
+        "type": "task",
+        "status": "Planned",
+        "wave": 0,
+        "ready": true,
+        "blocked": false,
+        "blocked_by": [],
+        "blocks": []
+      },
+      "TASK-3": {
+        "type": "task",
+        "status": "Planned",
+        "wave": 1,
+        "ready": false,
+        "blocked": true,
+        "blocked_by": [
+          "FACT-1"
+        ],
+        "blocks": []
+      },
+      "TASK-4": {
+        "type": "task",
+        "status": "Planned",
+        "wave": 0,
+        "ready": true,
+        "blocked": false,
+        "blocked_by": [],
+        "blocks": []
+      }
+    },
+    "groups": [],
+    "needs_replan": [],
+    "cycles": [],
+    "notes": [
+      {
+        "kind": "unresolved-claim",
+        "record": "ADR-3",
+        "pair": "sequencing",
+        "field": "Depends-on",
+        "message": "ADR-3: Depends-on 'ADR-9' names no record, so it orders nothing"
+      },
+      {
+        "kind": "no-status-vocabulary",
+        "record": "ADR-1",
+        "pair": null,
+        "field": "Status",
+        "message": "ADR-1: type 'adr' declares no status vocabulary, so it is read as open"
+      },
+      {
+        "kind": "no-status-vocabulary",
+        "record": "ADR-2",
+        "pair": null,
+        "field": "Status",
+        "message": "ADR-2: type 'adr' declares no status vocabulary, so it is read as open"
+      },
+      {
+        "kind": "no-status-vocabulary",
+        "record": "ADR-3",
+        "pair": null,
+        "field": "Status",
+        "message": "ADR-3: type 'adr' declares no status vocabulary, so it is read as open"
+      }
+    ]
+  }
+}

@@ -1,7 +1,9 @@
 //! MILE-15: `urzua fix` writes `Drift detected` (ADR-32's named follow-up).
 //! Real git-repo fixtures, real binary; all output is JSON.
 
-use std::path::{Path, PathBuf};
+mod common;
+
+use std::path::Path;
 use std::process::Command;
 
 fn git(dir: &Path, args: &[&str]) {
@@ -19,7 +21,7 @@ fn commit_all(dir: &Path) {
 }
 
 fn run_urzua(dir: &Path, args: &[&str]) -> std::process::Output {
-    Command::new(env!("CARGO_BIN_EXE_urzua"))
+    common::urzua()
         .args(args)
         .current_dir(dir)
         .output()
@@ -42,9 +44,8 @@ fn record_with(embodiment: &str) -> String {
 
 /// A repo whose cited locator changed in a commit after the `Realized-by`
 /// line was last touched -- the shape ADR-32 calls drift.
-fn drifted_fixture(name: &str, embodiment: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("urzua-fix-drift-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+fn drifted_fixture(name: &str, embodiment: &str) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-fix-drift-{name}"));
     std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
     std::fs::create_dir_all(dir.join("src")).unwrap();
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
@@ -81,7 +82,6 @@ fn detect_reports_drift_detected_as_the_computed_value() {
     assert_eq!(repairs.len(), 1, "{v}");
     assert_eq!(repairs[0]["current_value"], "Implemented", "{v}");
     assert_eq!(repairs[0]["computed_value"], "Drift detected", "{v}");
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -93,8 +93,9 @@ fn apply_writes_drift_detected_and_a_revision_log_row() {
     let after = std::fs::read_to_string(dir.join(RECORD_PATH)).unwrap();
     assert!(after.contains("\nEmbodiment: Drift detected\n"), "{after}");
     assert!(!after.contains("Embodiment: Implemented"), "{after}");
-    assert!(after.contains("Tool-authored (by "), "{after}");
-    std::fs::remove_dir_all(&dir).ok();
+    // The actor is the `--by` given: a `gh` login on the machine must not
+    // replace it, so the test reads the same everywhere.
+    assert!(after.contains("Tool-authored (by me"), "{after}");
 }
 
 #[test]
@@ -116,7 +117,6 @@ fn apply_is_idempotent_and_check_agrees_afterwards() {
             .any(|f| f["rule"] == "embodiment.consistency"),
         "{check}"
     );
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -125,7 +125,6 @@ fn a_locator_unchanged_since_the_realized_by_line_is_not_drift() {
     reverify(&dir);
     let v = json(&run_urzua(&dir, &["fix"]));
     assert_eq!(v["status"], "ok", "{v}");
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]
@@ -135,5 +134,4 @@ fn a_stale_drift_detected_is_recomputed_once_the_line_is_reverified() {
     let v = json(&run_urzua(&dir, &["fix"]));
     assert_eq!(v["repairs"][0]["current_value"], "Drift detected", "{v}");
     assert_eq!(v["repairs"][0]["computed_value"], "Implemented", "{v}");
-    std::fs::remove_dir_all(&dir).ok();
 }

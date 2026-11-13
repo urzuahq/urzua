@@ -2,7 +2,7 @@
 Stable-Id: 01M6D5VJX3CC14QH9FKNHYZZBZ
 Status: Fixed
 Found-in: "A /code-review pass, round 30"
-Regression-test: "config::tests::an_unsafe_prefix_is_refused_at_load, two_types_sharing_a_prefix_are_refused_at_load, an_empty_or_root_dir_is_refused_at_load; check_integration doctor_reports_an_invalid_record_type_prefix_or_dir"
+Realized-by: test:rust/crates/urzua-core/src/config.rs#an_unsafe_prefix_is_refused_at_load@sha256:11e979ef89bbfd33e400c33bcb40db97e5ca39fbcada323c6857727e2ce1c82a, test:rust/crates/urzua-core/src/config.rs#two_types_sharing_a_prefix_are_refused_at_load@sha256:06513e713838feb6655d9493f8e0b0908621ad46f393707de06536a147f03b29, test:rust/crates/urzua-core/src/config.rs#an_empty_or_root_dir_is_refused_at_load@sha256:0700ce3b71e6a72be766c0428e196fdcc64aa4f77e61e267fea09dd1f4fa9cce, test:rust/crates/urzua-cli/tests/check_integration.rs#doctor_reports_an_invalid_record_type_prefix_or_dir@sha256:0cf80deb45aac8cd65dde8413b0f55e9df06f475715d63a72ba8add516c29bf8
 ---
 # 173 — record-type prefix and dir are accepted unvalidated at config load so new writes unrecognizable or colliding records and an empty dir examines nothing
 
@@ -44,3 +44,5 @@ Doctor reports these as `config-parses` errors (exit 1).
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-02 | Filed and fixed. **Why:** found by a round 30 review and reproduced against a disposable fixture. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 4 `test:` locators and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/check_integration.rs#doctor_reports_an_invalid_record_type_prefix_or_dir` (lines 365-392) 848cc9708286 -> 0cf80deb45aa. Reason: Read the diff of each pinned span since the old pin and the claim still holds. check_integration.rs#doctor_reports_an_invalid_record_type_prefix_or_dir: the test body only dropped its manual remove_dir_all of the fixture directory (a TempDir guard removes it on drop), every fixture and assertion is unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |

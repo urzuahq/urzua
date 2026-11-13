@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: [MILE-170]
 ---
 
 Finishes the corpus acceptance harness (`MILE-170`, `SPEC-4` 0.6): cases can make further commits, pass

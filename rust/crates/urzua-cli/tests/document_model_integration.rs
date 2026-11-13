@@ -3,6 +3,8 @@
 //! (bare zero-padded filenames, bare `Date:` lines) with a hand-written
 //! config and no code specific to that corpus.
 
+mod common;
+
 use std::path::Path;
 use std::process::Command;
 
@@ -15,12 +17,8 @@ fn git(dir: &Path, args: &[&str]) {
     assert!(status.success(), "git {args:?} failed");
 }
 
-fn fixture_repo(name: &str, config: &str, files: &[(&str, &str)]) -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join(format!(
-        "urzua-cli-docmodel-test-{name}-{}",
-        std::process::id()
-    ));
-    let _ = std::fs::remove_dir_all(&dir);
+fn fixture_repo(name: &str, config: &str, files: &[(&str, &str)]) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-cli-docmodel-test-{name}"));
     std::fs::create_dir_all(dir.join("doc/adr")).unwrap();
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     git(&dir, &["init", "-q"]);
@@ -36,7 +34,7 @@ fn fixture_repo(name: &str, config: &str, files: &[(&str, &str)]) -> std::path::
 }
 
 fn run(dir: &Path, args: &[&str]) -> std::process::Output {
-    Command::new(env!("CARGO_BIN_EXE_urzua"))
+    common::urzua()
         .args(args)
         .current_dir(dir)
         .output()

@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: [BUG-137]
 ---
 
 `urzua migrate schema --report` reported every record of a `header_shape: none` type as `Unreadable`

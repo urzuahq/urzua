@@ -8,11 +8,36 @@
 use std::path::PathBuf;
 use std::process::ExitCode;
 
+// Implements: ADR-87 (a finding at `info` is reported and counted, never blocking)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum FindingSeverity {
     Error,
     Warning,
+    /// A finding at `level: info` (`ADR-87`): reported and counted, never
+    /// trips `fail_on` and never sets `blocking`.
+    Info,
+}
+
+impl FindingSeverity {
+    /// This severity, raised to `floor` when it is lower.
+    pub fn at_least(self, floor: FindingSeverity) -> FindingSeverity {
+        match (floor, self) {
+            (FindingSeverity::Error, _) => FindingSeverity::Error,
+            (FindingSeverity::Warning, FindingSeverity::Info) => FindingSeverity::Warning,
+            _ => self,
+        }
+    }
+
+    /// Strictness, for choosing the higher of two: `Info` below `Warning`
+    /// below `Error`.
+    pub fn rank(self) -> u8 {
+        match self {
+            FindingSeverity::Info => 0,
+            FindingSeverity::Warning => 1,
+            FindingSeverity::Error => 2,
+        }
+    }
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -44,6 +69,57 @@ pub struct Finding {
     /// serialized.
     #[serde(skip)]
     pub action_source: ActionSource,
+}
+
+impl Finding {
+    /// A finding with no line, no covering waiver, no declared field
+    /// severity and no resolved action: what a rule knows when it reports.
+    /// `action_source` is required so that no finding is built without
+    /// naming its variant (`ADR-73`); the rule table resolves
+    /// `suggested_action` from it later.
+    pub fn new(
+        rule: impl Into<String>,
+        severity: FindingSeverity,
+        file: impl Into<PathBuf>,
+        action_source: ActionSource,
+        message: impl Into<String>,
+    ) -> Self {
+        Finding {
+            rule: rule.into(),
+            severity,
+            file: file.into(),
+            line: None,
+            message: message.into(),
+            waived: None,
+            declared_severity: None,
+            suggested_action: None,
+            action_source,
+        }
+    }
+
+    /// The finding sits on this line of its file.
+    pub fn at(mut self, line: usize) -> Self {
+        self.line = Some(line);
+        self
+    }
+
+    /// The finding sits on this line when one is known.
+    pub fn at_opt(mut self, line: Option<usize>) -> Self {
+        self.line = line;
+        self
+    }
+
+    /// The severity the finding's own field was declared at (`MILE-140`).
+    pub fn declared(mut self, severity: FindingSeverity) -> Self {
+        self.declared_severity = Some(severity);
+        self
+    }
+
+    /// `declared`, when the rule declared one.
+    pub fn declared_opt(mut self, severity: Option<FindingSeverity>) -> Self {
+        self.declared_severity = severity;
+        self
+    }
 }
 
 /// The closed vocabulary of `suggested_action.kind` (`ADR-73`). Closed per
@@ -258,6 +334,42 @@ pub struct RuleExecution {
     pub examined_records: Vec<PathBuf>,
 }
 
+impl RuleExecution {
+    /// A rule that ran, over this population, reaching a verdict about
+    /// these records.
+    pub fn ran(
+        rule: impl Into<String>,
+        population: Population,
+        examined_records: Vec<PathBuf>,
+    ) -> Self {
+        RuleExecution {
+            rule: rule.into(),
+            population: Some(population),
+            status: RuleStatus::Ran,
+            examined_records,
+        }
+    }
+
+    /// A rule that did not apply: it was handed nothing it could judge.
+    pub fn not_applicable(rule: impl Into<String>) -> Self {
+        Self::unrun(rule, RuleStatus::NotApplicable)
+    }
+
+    /// A rule the repository did not turn on (`ADR-7`).
+    pub fn not_enabled(rule: impl Into<String>) -> Self {
+        Self::unrun(rule, RuleStatus::NotEnabled)
+    }
+
+    fn unrun(rule: impl Into<String>, status: RuleStatus) -> Self {
+        RuleExecution {
+            rule: rule.into(),
+            population: None,
+            status,
+            examined_records: Vec::new(),
+        }
+    }
+}
+
 /// The number of distinct records some rule reached a verdict about.
 ///
 /// A union, never a sum: `field.quality` contributing 1041 slots contributes
@@ -327,6 +439,18 @@ pub enum PopulationUnit {
     File,
     /// One path in the changed set of a `--base` run.
     ChangedPath,
+    /// One fetched pull-request head ref under `refs/urzua/pr` (`ADR-93`): zero
+    /// means nothing was fetched, which a clean run must not be mistaken for.
+    PullRef,
+    /// One entry of a declared header field's list (`MILE-186`, `ADR-75`
+    /// clause 3): an id a record names without citing it as a reference. The
+    /// entry exists because the record declares it, so an uncited or malformed
+    /// one is still counted.
+    FieldEntry,
+    /// The configuration file itself, for a rule that judges how it was read.
+    ConfigFile,
+    /// One entry of a committed log a rule reads (`override.unreviewed`).
+    Entry,
 }
 
 /// What a rule decided about one candidate it was handed.
@@ -362,6 +486,13 @@ pub enum Outcome {
     /// and the reason a configurable engine needs this distinction at all --
     /// a linter with compiled-in rules cannot reach it.
     OutOfScope,
+    /// The rule declares `scope: changed` (`ADR-90`) and the candidate's record
+    /// is not in the diff's changed set (or there is no diff): the slot is
+    /// there, the rule chose not to judge it. Counted apart from `OutOfScope`
+    /// so `config.scope-matches-nothing`, which reads a configuration that
+    /// reaches nothing, does not warn about a rule that was told to wait for a
+    /// diff.
+    DeferredByScope,
 }
 
 /// Run `body` over a population and report what it judged.
@@ -379,15 +510,22 @@ pub fn census<T>(
     let mut examined = 0;
     let mut out_of_scope = 0;
     let mut unreadable = 0;
+    let mut deferred_by_scope = 0;
     for candidate in &candidates {
         match body(candidate) {
             Outcome::Examined => examined += 1,
             Outcome::OutOfScope => out_of_scope += 1,
             Outcome::Unreadable => unreadable += 1,
+            Outcome::DeferredByScope => deferred_by_scope += 1,
             Outcome::Absent => {}
         }
     }
-    Population::detailed(unit, eligible, examined, out_of_scope, unreadable)
+    Population::build(
+        unit,
+        eligible,
+        examined,
+        (out_of_scope, unreadable, deferred_by_scope),
+    )
 }
 
 /// `census`, also reporting *which* records were judged.
@@ -453,6 +591,27 @@ pub struct Population {
     /// on a *different*, independently opt-in rule also being enabled to
     /// surface it (`ADR-53`, `BUG-125`, `ADR-63`).
     unreadable: usize,
+    /// Candidates a rule that declares `scope: changed` (`ADR-90`) left
+    /// unjudged because their record is not in the diff's changed set, or
+    /// because there is no diff. Eligible and not examined, like every other
+    /// unexamined candidate, but with its own cause: nothing about the
+    /// configuration or the corpus is wrong. Serialized only when non-zero, so
+    /// a rule that does not declare the option reports exactly what it did
+    /// before; a consumer that does not know the field ignores it
+    /// (`config.scope-matches-nothing` does not read it).
+    #[serde(skip_serializing_if = "is_zero")]
+    deferred_by_scope: usize,
+    /// Lines a declared `ignore_marker` excused from a back-pointer rule
+    /// (`ADR-80` amendment): a count of lines inside the examined candidates,
+    /// not a kind of candidate. Serialized only when non-zero, so a
+    /// configuration that declares no marker reports exactly what it did
+    /// before.
+    #[serde(skip_serializing_if = "is_zero")]
+    excused_lines: usize,
+}
+
+fn is_zero(n: &usize) -> bool {
+    *n == 0
 }
 
 impl Population {
@@ -483,6 +642,23 @@ impl Population {
         self.unreadable
     }
 
+    /// How many candidates a `scope: changed` rule did not judge because their
+    /// record is not in the diff's changed set (`ADR-90`).
+    pub fn deferred_by_scope(&self) -> usize {
+        self.deferred_by_scope
+    }
+
+    /// How many lines a declared `ignore_marker` excused (`ADR-80` amendment).
+    pub fn excused_lines(&self) -> usize {
+        self.excused_lines
+    }
+
+    /// This population with the lines a declared `ignore_marker` excused.
+    pub fn with_excused_lines(mut self, excused_lines: usize) -> Self {
+        self.excused_lines = excused_lines;
+        self
+    }
+
     pub fn of(unit: PopulationUnit, eligible: usize, examined: usize) -> Self {
         Population::detailed(unit, eligible, examined, 0, 0)
     }
@@ -494,6 +670,15 @@ impl Population {
         examined: usize,
         out_of_scope: usize,
         unreadable: usize,
+    ) -> Self {
+        Population::build(unit, eligible, examined, (out_of_scope, unreadable, 0))
+    }
+
+    fn build(
+        unit: PopulationUnit,
+        eligible: usize,
+        examined: usize,
+        (out_of_scope, unreadable, deferred_by_scope): (usize, usize, usize),
     ) -> Self {
         // A real `assert!`, not `debug_assert!` (`BUG-113`): this runs once
         // per rule per invocation, not a hot-path cost worth trading away,
@@ -514,6 +699,8 @@ impl Population {
             examined,
             out_of_scope,
             unreadable,
+            deferred_by_scope,
+            excused_lines: 0,
         }
     }
 }
@@ -555,6 +742,9 @@ pub enum ScopeSource {
     /// Only the records changed against a base ref (`MILE-123`); the ref is
     /// reported in [`ScopeInfo::base`].
     GitDiff,
+    /// One record's proposed content read from stdin (`check --stdin-path`,
+    /// `MILE-191`); the record need not exist on disk.
+    Stdin,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -565,6 +755,12 @@ pub struct ScopeInfo {
     /// (SPEC-2).
     pub base: Option<String>,
     pub record_types: Vec<String>,
+    /// Whether the configuration set `discovery.include_untracked` (`ADR-92`).
+    /// Always present, so a consumer can tell the two corpora apart.
+    pub include_untracked: bool,
+    /// How many untracked records that option added to the run's files; `0`
+    /// with the option off. Always present.
+    pub untracked_included: usize,
     /// What a `git-diff` run examined and why; absent on every other source.
     #[serde(flatten)]
     pub diff: Option<DiffScope>,
@@ -587,9 +783,29 @@ pub struct DiffScope {
     pub whole_corpus_reason: Option<String>,
 }
 
+/// The date every comparison in a run was made against, and where it came
+/// from (`ADR-97`, amendment of 2026-11-08). Present in every report of a
+/// command that compares dates.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct AsOf {
+    /// `YYYY-MM-DD`, UTC.
+    pub date: String,
+    pub source: AsOfSourceKind,
+}
+
+/// `flag` when `--as-of` named the date, `clock` when the machine's UTC date
+/// was read.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum AsOfSourceKind {
+    Flag,
+    Clock,
+}
+
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct CheckReport {
     pub status: ReportStatus,
+    pub as_of: AsOf,
     pub files_examined: usize,
     /// How many records some rule actually reached a verdict about
     /// ([`records_read_by_any_rule`]). `files_examined` says what was read off
@@ -599,6 +815,12 @@ pub struct CheckReport {
     /// (`ADR-53`) -- but no reader takes `0` here for a clean corpus.
     pub records_read_by_any_rule: usize,
     pub rules_executed: Vec<RuleExecution>,
+    /// The rule ids `--rules` restricted the run to, in the order given and
+    /// without repeats; `null` on a run that was not restricted (`ADR-79`). A
+    /// rule outside the selection is omitted from `rules_executed`, never
+    /// listed as `not-enabled`, which would say the repository declined a
+    /// policy it declared.
+    pub rules_selected: Option<Vec<String>>,
     pub scope: ScopeInfo,
     pub blocking: bool,
     pub findings: Vec<Finding>,
@@ -653,6 +875,36 @@ pub struct Notice {
     pub severity: NoticeSeverity,
     pub subject: String,
     pub message: String,
+    /// Structured fields a reader can branch on without parsing `message`
+    /// (for example the offending `key` and its `nearest` valid key). Omitted
+    /// from the output when a notice carries none. Each value is a string or,
+    /// where the field is a set, a list of strings.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detail: Option<std::collections::BTreeMap<String, DetailValue>>,
+}
+
+/// One value in a notice's `detail`: a string, or a list of strings.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(untagged)]
+pub enum DetailValue {
+    Text(String),
+    List(Vec<String>),
+}
+
+impl Notice {
+    /// A notice with no structured `detail`.
+    pub fn new(
+        severity: NoticeSeverity,
+        subject: impl Into<String>,
+        message: impl Into<String>,
+    ) -> Notice {
+        Notice {
+            severity,
+            subject: subject.into(),
+            message: message.into(),
+            detail: None,
+        }
+    }
 }
 
 /// Every command's report implements this (ADR-0046): `urzua-cli`'s
@@ -684,17 +936,65 @@ impl Report for CheckReport {
 pub struct CouldNotRun {
     pub status: ReportStatus,
     pub error: String,
+    /// Present when the config's `schema_version` is outside the window this
+    /// build reads (`ADR-77`): the same facts `error` states, as data an agent
+    /// can branch on.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub schema_version_error: Option<crate::schema_version::SchemaVersionError>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub notices: Vec<Notice>,
 }
 
 impl CouldNotRun {
-    pub fn from(error: impl Into<String>) -> Self {
+    pub fn from(error: impl Into<Failure>) -> Self {
+        let Failure {
+            message,
+            schema_version,
+        } = error.into();
         CouldNotRun {
             status: ReportStatus::NotRun,
-            error: error.into(),
+            error: message,
+            schema_version_error: schema_version.map(|boxed| *boxed),
             notices: Vec::new(),
         }
+    }
+}
+
+/// Why a command could not run: a message, and the structured form of the
+/// cause when it has one. Every `String` error converts into it, so a command
+/// that only has a sentence is unchanged; the config loader is the one source
+/// of the structured part (`ADR-77`).
+#[derive(Debug, Clone)]
+pub struct Failure {
+    pub message: String,
+    /// Boxed so a `Result<_, Failure>` stays small on the success path.
+    pub schema_version: Option<Box<crate::schema_version::SchemaVersionError>>,
+}
+
+impl std::fmt::Display for Failure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.message)
+    }
+}
+
+impl From<String> for Failure {
+    fn from(message: String) -> Self {
+        Failure {
+            message,
+            schema_version: None,
+        }
+    }
+}
+
+impl From<&str> for Failure {
+    fn from(message: &str) -> Self {
+        Failure::from(message.to_string())
+    }
+}
+
+impl From<Failure> for String {
+    fn from(failure: Failure) -> Self {
+        failure.message
     }
 }
 
@@ -715,8 +1015,51 @@ pub struct ExplainReport {
     pub status: ReportStatus,
     pub path: String,
     pub governing_records: Vec<crate::graph::GoverningRecord>,
+    /// The resolved span of `path#scope` and its pin, when the argument names
+    /// a scope (`ADR-74` point 7): the authoring route for a scoped pin.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scope: Option<ScopeExplanation>,
+    /// The files a directory or glob argument covers and the pin over them
+    /// (`BUG-176`), when the config accepts that kind of locator.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub coverage: Option<CoverageExplanation>,
+    /// The records read to answer, as `check` reports a rule's population
+    /// (`BUG-169`): an empty answer from an unread corpus is not the same as
+    /// an empty answer from a read one.
+    pub population: Population,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub notices: Vec<Notice>,
+}
+
+/// What `urzua explain <directory-or-glob>` resolved (`BUG-176`).
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct CoverageExplanation {
+    /// `directory` or `glob`.
+    pub kind: String,
+    /// The tracked files the locator covers, sorted: what the pin hashes.
+    pub files: Vec<String>,
+    /// The hash over the sorted (path, file content hash) list.
+    pub sha256: String,
+    /// The locator to paste into `Realized-by`; absent when the config does not
+    /// let this kind carry a pin (`pinnable`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pin: Option<String>,
+}
+
+/// What `urzua explain <path>#<scope>` resolved.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ScopeExplanation {
+    pub scope: String,
+    /// The resolver that found the symbol; absent for a line range.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resolver: Option<String>,
+    pub start: usize,
+    pub end: usize,
+    /// The pinned bytes: the span's lines, normalised as hashed.
+    pub text: String,
+    pub sha256: String,
+    /// The locator to paste into `Realized-by`.
+    pub pin: String,
 }
 
 impl Report for ExplainReport {
@@ -734,11 +1077,33 @@ impl Report for ExplainReport {
 pub struct GraphReport {
     pub status: ReportStatus,
     pub edges: Vec<crate::graph::GraphEdge>,
+    /// See [`ExplainReport::population`].
+    pub population: Population,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub notices: Vec<Notice>,
 }
 
 impl Report for GraphReport {
+    fn notices(&self) -> &[Notice] {
+        &self.notices
+    }
+    fn exit_code(&self) -> ExitCode {
+        ExitCode::from(0)
+    }
+}
+
+/// `urzua roadmap`'s report (`ADR-82`): the computed order of work, read-only
+/// like `GraphReport`. The roadmap's own notes carry what could not be read;
+/// the exit code is 0 whenever it could be computed.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct RoadmapReport {
+    pub status: ReportStatus,
+    pub roadmap: crate::rules::Roadmap,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub notices: Vec<Notice>,
+}
+
+impl Report for RoadmapReport {
     fn notices(&self) -> &[Notice] {
         &self.notices
     }
@@ -816,6 +1181,10 @@ pub struct ExportReport {
     pub record_count: usize,
     pub types: Vec<ExportTypeCount>,
     pub records: Vec<ExportedRecord>,
+    /// The computed roadmap (`ADR-82`), present only when `roadmap.pairs` is
+    /// declared: a repository that has not opted in sees no new key.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub roadmap: Option<crate::rules::Roadmap>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub notices: Vec<Notice>,
 }
@@ -838,8 +1207,49 @@ pub struct NewReport {
     /// `null` when the type's closed field set does not declare `Stable-Id`, so
     /// none was written (`BUG-182`).
     pub stable_id: Option<String>,
+    /// What the numbering consulted beyond the working tree (`ADR-93` clause 6).
+    pub pull_refs: PullRefsReport,
+    /// Every number numbering passed over and why, one entry per number and
+    /// reason (`ADR-93`, Amendment of 2026-11-07). Always present; empty when
+    /// nothing was skipped.
+    pub skipped: Vec<SkippedReason>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub notices: Vec<Notice>,
+}
+
+/// One reason a number was skipped: `open-pr <ref>` (held by a ref under
+/// `refs/urzua/pr`), `worktree <path>` (held in a sibling worktree) or `local`
+/// (held by a local branch or remote-tracking ref).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct SkippedReason {
+    pub number: u32,
+    pub reason: String,
+}
+
+/// The pull-request refs and sibling worktrees `urzua new` consulted
+/// (`ADR-93` clause 6, `SPEC-12`). Always present, so a run that did not fetch
+/// says why instead of being silent.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct PullRefsReport {
+    /// Whether this run fetched pull-request head refs.
+    pub fetched: bool,
+    /// Why it did not: `disabled` (`new.check_open_prs` is off), `offline` (the
+    /// remote is missing or the fetch failed) or `timeout`; `null` when it did.
+    pub reason: Option<String>,
+    /// The remote fetched from; `null` when the option is off.
+    pub remote: Option<String>,
+    /// How many refs under `refs/urzua/pr` were read, fetched now or earlier.
+    pub refs: usize,
+    /// How many other worktrees of this repository were read.
+    pub worktrees_scanned: usize,
+    /// The numbers numbering skipped, with the refs or worktrees holding each.
+    pub skipped_numbers: Vec<SkippedNumber>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct SkippedNumber {
+    pub number: u32,
+    pub held_by: Vec<String>,
 }
 
 impl Report for NewReport {
@@ -857,15 +1267,38 @@ impl Report for NewReport {
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct FixReport {
     pub status: FixStatus,
+    pub as_of: AsOf,
     pub population: Population,
     pub repairs: Vec<crate::fix::Repair>,
     /// Stale evidence pins, listed (or, after `--apply`, re-pinned) by
     /// `urzua fix --rebaseline` (`MILE-181`); absent otherwise.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub rebaselines: Vec<crate::fix::Rebaseline>,
+    /// Scoped pins that do not resolve and so cannot be re-pinned, each with
+    /// its reason (`ADR-74`); absent when every pin resolves.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub failed_pins: Vec<crate::fix::FailedPin>,
     pub failed: Vec<FixFailure>,
+    /// Who the written rows name and on what footing (`ADR-89` section 5);
+    /// absent when nothing was applied.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub identity: Option<AttestationReport>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub notices: Vec<Notice>,
+}
+
+/// The identity `fix --apply` wrote under (`ADR-89` section 5).
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct AttestationReport {
+    pub name: String,
+    pub source: crate::fix::IdentitySource,
+    pub actor: crate::fix::ActorKind,
+    /// The `--by` a verified `gh` login replaced, when they differ.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub replaced_by: Option<String>,
+    /// The login `gh` verified, beside an `asserted` name.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub verified_login: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
@@ -1081,6 +1514,49 @@ mod tests {
         );
     }
 
+    /// `ADR-90`: a candidate a `scope: changed` rule did not judge has its own
+    /// counter, apart from `out_of_scope` (which `config.scope-matches-nothing`
+    /// reads) and from `Absent`.
+    #[test]
+    fn a_deferred_candidate_is_counted_apart_from_out_of_scope_and_absent() {
+        let outcomes = [
+            Outcome::Examined,
+            Outcome::DeferredByScope,
+            Outcome::DeferredByScope,
+            Outcome::Absent,
+            Outcome::OutOfScope,
+            Outcome::Unreadable,
+        ];
+        let p = census(PopulationUnit::Field, outcomes.to_vec(), |o| *o);
+        assert_eq!(
+            (
+                p.eligible(),
+                p.examined(),
+                p.out_of_scope(),
+                p.unreadable(),
+                p.deferred_by_scope()
+            ),
+            (6, 1, 1, 1, 2)
+        );
+    }
+
+    /// Additive on the wire: absent when zero, so a rule that does not declare
+    /// the option reports byte for byte what it did before.
+    #[test]
+    fn deferred_by_scope_is_serialized_only_when_it_is_non_zero() {
+        let none = census(PopulationUnit::Field, vec![Outcome::Examined], |o| *o);
+        let json = serde_json::to_value(none).unwrap();
+        assert!(json.get("deferred_by_scope").is_none(), "{json}");
+        assert_eq!(json["out_of_scope"], 0, "out_of_scope stays always-present");
+        let some = census(PopulationUnit::Field, vec![Outcome::DeferredByScope], |o| {
+            *o
+        });
+        let json = serde_json::to_value(some).unwrap();
+        assert_eq!(json["deferred_by_scope"], 1, "{json}");
+        assert_eq!(json["eligible"], 1);
+        assert_eq!(json["examined"], 0);
+    }
+
     #[test]
     fn a_rule_that_did_not_run_contributes_no_records() {
         let executed = vec![RuleExecution {
@@ -1121,6 +1597,7 @@ mod tests {
             severity: NoticeSeverity::Warning,
             subject: "test".to_string(),
             message: "a non-fatal observation".to_string(),
+            detail: None,
         }
     }
 
@@ -1130,14 +1607,21 @@ mod tests {
     #[test]
     fn notices_never_move_a_successful_exit_code() {
         let report = CheckReport {
+            as_of: AsOf {
+                date: "2026-11-08".to_string(),
+                source: AsOfSourceKind::Clock,
+            },
             status: ReportStatus::Ok,
             files_examined: 1,
             records_read_by_any_rule: 0,
             rules_executed: vec![],
+            rules_selected: None,
             scope: ScopeInfo {
                 source: ScopeSource::TrackedSweep,
                 base: None,
                 record_types: vec![],
+                include_untracked: false,
+                untracked_included: 0,
                 diff: None,
             },
             blocking: false,
@@ -1150,14 +1634,21 @@ mod tests {
 
     fn report_with_warning(fail_on: crate::config::FailOn, waived: Option<&str>) -> CheckReport {
         CheckReport {
+            as_of: AsOf {
+                date: "2026-11-08".to_string(),
+                source: AsOfSourceKind::Clock,
+            },
             status: ReportStatus::FindingsPresent,
             files_examined: 1,
             records_read_by_any_rule: 1,
             rules_executed: vec![],
+            rules_selected: None,
             scope: ScopeInfo {
                 source: ScopeSource::TrackedSweep,
                 base: None,
                 record_types: vec![],
+                include_untracked: false,
+                untracked_included: 0,
                 diff: None,
             },
             blocking: false,
@@ -1301,6 +1792,17 @@ mod tests {
         assert_eq!(CheckReport::exit_code(&default), 0);
         let strict = report_with_warning(FailOn::Warning, None);
         assert_eq!(CheckReport::exit_code(&strict), 1);
+    }
+
+    #[test]
+    fn an_info_finding_never_trips_fail_on_and_serializes_as_info() {
+        use crate::config::FailOn;
+        for fail_on in [FailOn::Error, FailOn::Warning] {
+            let mut r = report_with_warning(fail_on, None);
+            r.findings[0].severity = FindingSeverity::Info;
+            assert_eq!(CheckReport::exit_code(&r), 0, "{fail_on:?}");
+        }
+        assert_eq!(serde_json::to_value(FindingSeverity::Info).unwrap(), "info");
     }
 
     #[test]

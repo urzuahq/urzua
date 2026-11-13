@@ -52,28 +52,19 @@ pub fn type_record_outside_declared_dir(
 
     unowned.sort();
     for path in unowned {
-        findings.push(Finding {
-            rule: RULE_ID.to_string(),
-            severity: FindingSeverity::Warning,
-            file: path.clone(),
-            line: None,
-            message: "sits below a declared record type's dir but not directly in it, so no type \
+        findings.push(Finding::new(
+            RULE_ID,
+            FindingSeverity::Warning,
+            path.clone(),
+            ActionSource::new("record-outside-declared-dir"),
+            "sits below a declared record type's dir but not directly in it, so no type \
                       owns it and no rule examines it"
                 .to_string(),
-            waived: None,
-            declared_severity: None,
-            suggested_action: None,
-            action_source: ActionSource::new("record-outside-declared-dir"),
-        });
+        ));
     }
 
     (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records: Vec::new(),
-        },
+        RuleExecution::ran(RULE_ID, population, Vec::new()),
         findings,
     )
 }
@@ -109,29 +100,63 @@ pub fn type_dir_matches_nothing(
     dir_exists: &dyn Fn(&str) -> bool,
     tracked: &[std::path::PathBuf],
 ) -> (RuleExecution, Vec<Finding>) {
-    const RULE_ID: &str = RULE_TYPE_DIR_MATCHES_NOTHING;
     let mut findings = Vec::new();
 
     let names = config.sorted_type_names();
+    let check = TypeDirCheck {
+        config,
+        config_path,
+        matched,
+        dir_exists,
+        tracked,
+    };
 
     let population = census(PopulationUnit::RecordType, names, |name| {
-        let type_config = &config.record_types[*name];
+        check.exclusions_matching_nothing(name, &mut findings);
+        check.missing_extra_dirs(name, &mut findings);
+        check.missing_dir(name, &mut findings);
+        Outcome::Examined
+    });
+
+    (
+        RuleExecution::ran(RULE_TYPE_DIR_MATCHES_NOTHING, population, Vec::new()),
+        findings,
+    )
+}
+
+/// What `type.dir-matches-nothing` is handed by the caller.
+struct TypeDirCheck<'a> {
+    config: &'a Config,
+    config_path: &'a std::path::Path,
+    matched: &'a HashMap<String, usize>,
+    dir_exists: &'a dyn Fn(&str) -> bool,
+    tracked: &'a [std::path::PathBuf],
+}
+
+impl TypeDirCheck<'_> {
+    fn finding(&self, action: ActionSource, message: String) -> Finding {
+        Finding::new(
+            RULE_TYPE_DIR_MATCHES_NOTHING,
+            FindingSeverity::Warning,
+            self.config_path.to_path_buf(),
+            action,
+            message,
+        )
+    }
+
+    /// An `exclude_files` entry that names no tracked file directly in the dir.
+    fn exclusions_matching_nothing(&self, name: &str, findings: &mut Vec<Finding>) {
+        let type_config = &self.config.record_types[name];
         for entry in &type_config.exclude_files {
-            let present = tracked.iter().any(|p| {
+            let present = self.tracked.iter().any(|p| {
                 type_config.owns_dir(p.parent())
                     && p.file_name().is_some_and(|n| n == entry.as_str())
             });
             if !present {
-                findings.push(Finding {
-                    rule: RULE_ID.to_string(),
-                    severity: FindingSeverity::Warning,
-                    file: config_path.to_path_buf(),
-                    line: None,
-                    waived: None,
-                    declared_severity: None,
-                    suggested_action: None,
-                    action_source: ActionSource::new("exclude-files-matches-nothing").key_path(["record_types", name, "exclude_files"]),
-                    message: format!(
+                findings.push(self.finding(
+                    ActionSource::new("exclude-files-matches-nothing")
+                        .key_path(["record_types", name, "exclude_files"]),
+                    format!(
                         "record type '{name}' declares exclude_files entry '{entry}', but no such file is \
                          directly in {} -- the exclusion does nothing; remove it or correct the name",
                         type_config
@@ -140,71 +165,50 @@ pub fn type_dir_matches_nothing(
                             .collect::<Vec<_>>()
                             .join(" or ")
                     ),
-                });
+                ));
             }
         }
-        // A declared extra directory that is not there is a declaration that
-        // silently does nothing, even when `dir` still holds records
-        // (`MILE-130`).
-        for dir in &type_config.extra_dirs {
-            if !dir_exists(dir) {
-                findings.push(Finding {
-                    rule: RULE_ID.to_string(),
-                    severity: FindingSeverity::Warning,
-                    file: config_path.to_path_buf(),
-                    line: None,
-                    waived: None,
-                    declared_severity: None,
-                    suggested_action: None,
-                    action_source: ActionSource::new("extra-dir-missing").key_path(["record_types", name, "extra_dirs"]),
-                    message: format!(
+    }
+
+    /// A declared extra directory that is not there is a declaration that
+    /// silently does nothing, even when `dir` still holds records
+    /// (`MILE-130`).
+    fn missing_extra_dirs(&self, name: &str, findings: &mut Vec<Finding>) {
+        for dir in &self.config.record_types[name].extra_dirs {
+            if !(self.dir_exists)(dir) {
+                findings.push(self.finding(
+                    ActionSource::new("extra-dir-missing")
+                        .key_path(["record_types", name, "extra_dirs"]),
+                    format!(
                         "record type '{name}' declares extra_dirs entry '{dir}', which does not exist -- \
                          its records are not examined and its ids are not counted in the type's namespace"
                     ),
-                });
+                ));
             }
         }
-        if matched.get(*name).copied().unwrap_or(0) == 0 {
-            let dir = &config.record_types[*name].dir;
-            // A directory that exists and is empty is a type declared and not
-            // yet used, which is a legitimate state -- some types are expected
-            // to hold nothing most of the time. An *absent* directory is the
-            // misdeclaration this rule exists for. Git does not track empty
-            // directories, so declaring a type means committing a placeholder
-            // alongside it.
-            if !dir_exists(dir) {
-                findings.push(Finding {
-                    rule: RULE_ID.to_string(),
-                    severity: FindingSeverity::Warning,
-                    file: config_path.to_path_buf(),
-                    line: None,
-                    waived: None,
-                    declared_severity: None,
-                    suggested_action: None,
-                    action_source: ActionSource::new("dir-missing").key_path([
-                        "record_types",
-                        name,
-                        "dir",
-                    ]),
-                    message: format!(
-                        "record type '{name}' declares dir '{dir}', which does not exist -- \
-                         every rule for this type examines nothing"
-                    ),
-                });
-            }
-        }
-        Outcome::Examined
-    });
+    }
 
-    (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records: Vec::new(),
-        },
-        findings,
-    )
+    fn missing_dir(&self, name: &str, findings: &mut Vec<Finding>) {
+        if self.matched.get(name).copied().unwrap_or(0) != 0 {
+            return;
+        }
+        let dir = &self.config.record_types[name].dir;
+        // A directory that exists and is empty is a type declared and not
+        // yet used, which is a legitimate state -- some types are expected
+        // to hold nothing most of the time. An *absent* directory is the
+        // misdeclaration this rule exists for. Git does not track empty
+        // directories, so declaring a type means committing a placeholder
+        // alongside it.
+        if !(self.dir_exists)(dir) {
+            findings.push(self.finding(
+                ActionSource::new("dir-missing").key_path(["record_types", name, "dir"]),
+                format!(
+                    "record type '{name}' declares dir '{dir}', which does not exist -- \
+                     every rule for this type examines nothing"
+                ),
+            ));
+        }
+    }
 }
 
 /// A config-schema inventory rule: examines `Config::record_types` itself,
@@ -226,12 +230,7 @@ pub(super) fn schema_inventory_rule(
         Outcome::Examined
     });
     (
-        RuleExecution {
-            rule: rule_id.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records: Vec::new(),
-        },
+        RuleExecution::ran(rule_id.to_string(), population, Vec::new()),
         findings,
     )
 }
@@ -245,19 +244,15 @@ pub fn type_no_declared_spec(
         RULE_TYPE_NO_DECLARED_SPEC,
         |type_name, type_config, findings| {
             if type_config.spec.is_none() {
-                findings.push(Finding {
-                    rule: RULE_TYPE_NO_DECLARED_SPEC.to_string(),
-                    severity: FindingSeverity::Warning,
-                    file: config_path.to_path_buf(),
-                    line: None,
-                    waived: None,
-                    declared_severity: None,
-                    suggested_action: None,
-                    action_source: ActionSource::new("no-declared-spec"),
-                    message: format!(
+                findings.push(Finding::new(
+                    RULE_TYPE_NO_DECLARED_SPEC,
+                    FindingSeverity::Warning,
+                    config_path.to_path_buf(),
+                    ActionSource::new("no-declared-spec"),
+                    format!(
                         "record type '{type_name}' has no declared spec -- add `spec = \"SPEC-N\"` once one exists, or leave undeclared if ADR-41's editorial judgment says one isn't warranted"
                     ),
-                });
+                ));
             }
         },
     )
@@ -298,17 +293,12 @@ pub fn config_scope_matches_nothing(
         if population.out_of_scope() == 0 {
             return Outcome::Examined;
         }
-        findings.push(Finding {
-            rule: RULE_ID.to_string(),
-            severity: FindingSeverity::Warning,
-            file: config_path.to_path_buf(),
-            line: None,
-            waived: None,
-            declared_severity: None,
-            suggested_action: None,
-            action_source: ActionSource::new("scope-matches-nothing")
-                .key_path(["rules", exec.rule.as_str()]),
-            message: format!(
+        findings.push(Finding::new(
+            RULE_ID,
+            FindingSeverity::Warning,
+            config_path.to_path_buf(),
+            ActionSource::new("scope-matches-nothing").key_path(["rules", exec.rule.as_str()]),
+            format!(
                 "'{}' was handed {} candidate(s) the configuration does not reach -- \
                  {} of {} are outside what this repository declared, so the rule cannot \
                  apply to them however the records are edited",
@@ -317,17 +307,12 @@ pub fn config_scope_matches_nothing(
                 population.out_of_scope(),
                 population.eligible()
             ),
-        });
+        ));
         Outcome::Examined
     });
 
     (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records: Vec::new(),
-        },
+        RuleExecution::ran(RULE_ID, population, Vec::new()),
         findings,
     )
 }
@@ -347,9 +332,19 @@ mod tests {
         record_types.insert("milestone".to_string(), type_config(None));
         let config = Config {
             schema_version: 2,
+            roadmap: Default::default(),
             relation_pairs: Vec::new(),
             fail_on: Default::default(),
             embodiment: Default::default(),
+            locator_resolvers: Default::default(),
+            upgraded_from: None,
+            override_log: None,
+            block_on: None,
+            attestation: Default::default(),
+            new: Default::default(),
+            discovery: Default::default(),
+            harness: None,
+            authority: None,
             rules: std::collections::BTreeMap::new(),
             record_types,
         };
@@ -367,9 +362,19 @@ mod tests {
         record_types.insert("milestone".to_string(), type_config(Some("SPEC-6")));
         let config = Config {
             schema_version: 2,
+            roadmap: Default::default(),
             relation_pairs: Vec::new(),
             fail_on: Default::default(),
             embodiment: Default::default(),
+            locator_resolvers: Default::default(),
+            upgraded_from: None,
+            override_log: None,
+            block_on: None,
+            attestation: Default::default(),
+            new: Default::default(),
+            discovery: Default::default(),
+            harness: None,
+            authority: None,
             rules: std::collections::BTreeMap::new(),
             record_types,
         };

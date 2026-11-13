@@ -1,5 +1,11 @@
 use super::*;
 
+/// A rule that was handed nothing it could judge: reported
+/// `not-applicable`, with no finding.
+pub(super) fn not_applicable(rule: &str) -> (RuleExecution, Vec<Finding>) {
+    (RuleExecution::not_applicable(rule), Vec::new())
+}
+
 /// `census_records` for every rule that reads a record's header: the one place
 /// a `header_shape: none` type (`ADR-50`) is classified `OutOfScope`
 /// (`MILE-119`). Such a type has nowhere for a header to be, so its
@@ -36,6 +42,44 @@ pub(super) fn scoped_census_records<'a, T>(
             body(candidate)
         },
     )
+}
+
+/// A rule's `scope: changed` applied to one run (`ADR-90`): the records the
+/// rule judges are the ones the diff adds or changes, and none when there is no
+/// diff. Built by [`changed_only`] only for a rule that declares the option, so
+/// a rule that does not has no value of this type and cannot defer anything.
+/// The set is the diff's *changed* paths, never its dependents: a nudge is not
+/// a defect a change caused in a record it did not touch.
+pub struct ChangedOnly {
+    changed: Option<HashSet<PathBuf>>,
+}
+
+impl ChangedOnly {
+    /// Whether `record` is left unjudged: it is not in the changed set, or
+    /// there is no diff at all.
+    pub fn defers(&self, record: &Record) -> bool {
+        self.changed
+            .as_ref()
+            .is_none_or(|changed| !changed.contains(&record.path))
+    }
+}
+
+/// `scope: changed` for `rule`, when the repository declared it. `changed_paths`
+/// is the run's changed set (`None` without `--base`; the one proposed record
+/// for `--stdin-path`).
+pub fn changed_only(
+    config: &Config,
+    rule: &str,
+    changed_paths: Option<&[PathBuf]>,
+) -> Option<ChangedOnly> {
+    config
+        .rules
+        .get(rule)
+        .filter(|s| s.level != crate::config::RuleLevel::Off)
+        .and_then(|s| s.scope)
+        .map(|crate::config::RuleScope::Changed| ChangedOnly {
+            changed: changed_paths.map(|p| p.iter().cloned().collect()),
+        })
 }
 
 /// One `(record, field)` candidate per field a record's type declares in
@@ -217,6 +261,22 @@ pub(super) fn fields_with_capability(
         }
     }
     result
+}
+
+/// What pairs a deleted record with the one it was renamed or moved to: its
+/// `Stable-Id` (trimmed) and its record id (normalised), `None` when either is
+/// missing or blank. A rename keeps both; a record that only copies a
+/// `Stable-Id` under another id, or has no id, does not pair. The single
+/// definition the diff scope and the harness both pair by.
+pub fn rename_identity(record: &Record) -> Option<(String, String)> {
+    let sid = record.header.get_reserved("Stable-Id")?.trim();
+    let id = record_id(record)?;
+    (!sid.is_empty()).then(|| {
+        (
+            sid.to_string(),
+            crate::values::RecordId::new(&id).as_str().to_string(),
+        )
+    })
 }
 
 /// A record's own identifier, derived from its filename: `TYPE-NNNN-slug.md`,
@@ -542,11 +602,45 @@ pub(super) fn declared_field_severity(
     rule: &str,
     field: &str,
 ) -> Option<FindingSeverity> {
-    use crate::config::RuleLevel;
-    match config.rules.get(rule)?.field_levels.as_ref()?.get(field)? {
-        RuleLevel::Error => Some(FindingSeverity::Error),
-        RuleLevel::Warn => Some(FindingSeverity::Warning),
-        // Refused at load; unreachable for a loaded config.
-        RuleLevel::Off => None,
+    // `off` is refused at load, so a loaded config never maps it to `None`.
+    config
+        .rules
+        .get(rule)?
+        .field_levels
+        .as_ref()?
+        .get(field)?
+        .severity()
+}
+
+/// Record files that exist on disk in a record type's directory but that git
+/// does not track, by identifier (`BUG-13`). Discovery reads only tracked and
+/// staged files (`ADR-6`), so a reference to one of these resolves to nothing;
+/// the file is real, though, and the repair differs from a typo's. The caller
+/// supplies it because the rule layer touches no filesystem and no git.
+pub type UntrackedRecords = HashMap<crate::values::RecordId, PathBuf>;
+
+/// The variant and message for a reference that resolves to no discovered
+/// record (`BUG-13`): `untracked_variant` when the caller found a file for it
+/// on disk that git does not track, `missing_variant` when nothing exists.
+/// `suffix` ends the message in the rule's own words.
+pub(super) fn unresolved_reference(
+    field: &str,
+    reference: &str,
+    untracked: &UntrackedRecords,
+    (missing_variant, untracked_variant): (&'static str, &'static str),
+    suffix: &str,
+) -> (&'static str, String) {
+    match untracked.get(&crate::values::RecordId::new(reference)) {
+        Some(path) => (
+            untracked_variant,
+            format!(
+                "{field}: {reference} resolves to {}, which exists on disk but is not tracked by git, so discovery does not see it{suffix}",
+                path.display()
+            ),
+        ),
+        None => (
+            missing_variant,
+            format!("{field}: {reference} does not resolve to any discovered record{suffix}"),
+        ),
     }
 }

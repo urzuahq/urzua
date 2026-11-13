@@ -1,5 +1,6 @@
 ---
 default: patch
+closes: []
 ---
 
 `config.relation-field-not-known` also reports a `relation_fields.date` or `relation_fields.author`

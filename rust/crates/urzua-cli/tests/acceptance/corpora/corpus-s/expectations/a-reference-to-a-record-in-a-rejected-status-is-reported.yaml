@@ -1,0 +1,9 @@
+id: a-reference-to-a-record-in-a-rejected-status-is-reported
+corpus: corpus-s
+invocation: [check]
+# ADR-3 implements ADR-1, which is Superseded, a status the rule declares unacceptable for a pointer target.
+expect_exit: 1
+expect_findings:
+  - {rule: pointer.target-status, severity: error, file: docs/adr/ADR-3-leans-on-old.md, message_contains: "Superseded"}
+expect_no_findings:
+  - {rule: pointer.target-status, file: docs/adr/ADR-4-cites-a-note.md}

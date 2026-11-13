@@ -1,0 +1,9 @@
+schema_version: 2
+override_log: .urzua/override-log.md
+rules:
+  header.required-fields: error
+  override.unreviewed: warn
+record_types:
+  adr:
+    dir: docs/adr
+    required_fields: []

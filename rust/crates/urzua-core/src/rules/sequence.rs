@@ -1,15 +1,22 @@
 use super::relation::{pair_carried_by, pair_slot_claims, pair_slots};
 use super::*;
+use crate::status_model::StatusDecl;
 use std::collections::{BTreeMap, BTreeSet};
 
-/// Rule (`RFC-48`, `MILE-27`): a cycle in an `acyclic` relation pair. The
-/// graph has one edge per resolved claim, drawn in the direction its field
-/// declares: `A.forward = B` is `A -> B`, and `A.inverse = B` is `B -> A`, so
-/// a record that writes only the inverse side still takes part. A claim that
-/// resolves to no record, or to a type the pair does not carry, is no edge
-/// (`sequence.unresolved-blocker` reports the first). Every record on a cycle
-/// is reported with a shortest cycle through it, so a diff-scoped run that
-/// examines only one of them still sees the finding.
+/// Rule (`RFC-48`, `MILE-27`, `MILE-192`, `ADR-82`): a cycle in an `acyclic`
+/// relation pair. The graph has one edge per resolved claim, drawn in the
+/// direction its field declares: `A.forward = B` is `A -> B`, and
+/// `A.inverse = B` is `B -> A`, so a record that writes only the inverse side
+/// still takes part. A claim that resolves to no record, or to a type the pair
+/// does not carry, is no edge (`sequence.unresolved-blocker` reports the
+/// first). Every record on a cycle is reported with a shortest cycle through
+/// it, so a diff-scoped run that examines only one of them still sees the
+/// finding.
+///
+/// The pairs `roadmap.pairs` names are read as one graph (`merged_graph`, the
+/// graph `urzua roadmap` reads), so a loop that uses an edge of each of two
+/// pairs is found and says which pairs it crosses. Any other acyclic pair is
+/// read on its own, as every pair is when `roadmap.pairs` is absent.
 pub fn sequence_cycle(
     records: &[Record],
     config: &Config,
@@ -18,58 +25,12 @@ pub fn sequence_cycle(
     const RULE_ID: &str = RULE_SEQUENCE_CYCLE;
     let mut findings = Vec::new();
     let slots = pair_slots(records, config, |p| p.acyclic);
+    let declared = &config.roadmap.pairs;
+    let graphs = sequence_graphs(&slots, index).graphs;
+    let grouped = grouped_graphs(&graphs, declared);
+    let on_cycle = cycle_reports(&grouped, &graphs, declared, config);
 
-    // One graph per pair, built from every readable claim.
-    type Graph = BTreeMap<crate::values::RecordId, BTreeSet<crate::values::RecordId>>;
-    let mut graphs: BTreeMap<&str, Graph> = BTreeMap::new();
-    for slot in &slots {
-        let Ok(references) = pair_slot_claims(slot) else {
-            continue;
-        };
-        let Some(own) = record_id(slot.record) else {
-            continue;
-        };
-        let own = crate::values::RecordId::new(&own);
-        let graph = graphs.entry(slot.pair.name.as_str()).or_default();
-        graph.entry(own.clone()).or_default();
-        for reference in references {
-            let target = crate::values::RecordId::new(&reference);
-            let Some(record) = index.get(&target) else {
-                continue;
-            };
-            if record.header.is_unreadable() || !pair_carried_by(slot.pair, &record.record_type) {
-                continue;
-            }
-            graph.entry(target.clone()).or_default();
-            let (from, to) = if slot.forward {
-                (own.clone(), target)
-            } else {
-                (target, own.clone())
-            };
-            graph.entry(from).or_default().insert(to);
-        }
-    }
-
-    // The records on a cycle, per pair, each with its cycle path.
-    let mut on_cycle: BTreeMap<(&str, crate::values::RecordId), String> = BTreeMap::new();
-    for (pair, graph) in &graphs {
-        for component in strongly_connected(graph) {
-            let looped = component.len() > 1
-                || graph
-                    .get(&component[0])
-                    .is_some_and(|next| next.contains(&component[0]));
-            if !looped {
-                continue;
-            }
-            for member in &component {
-                if let Some(path) = shortest_cycle(graph, member) {
-                    on_cycle.insert((pair, member.clone()), path);
-                }
-            }
-        }
-    }
-
-    let mut reported: BTreeSet<(&str, crate::values::RecordId)> = BTreeSet::new();
+    let mut reported: BTreeSet<(Option<&str>, crate::values::RecordId)> = BTreeSet::new();
     let (population, examined_records) = scoped_census_records(
         config,
         PopulationUnit::Field,
@@ -79,23 +40,19 @@ pub fn sequence_cycle(
             // A record can sit on a cycle that only other records wrote, so
             // the report does not wait for a claim of its own.
             if let Some(id) = record_id(slot.record) {
-                let key = (slot.pair.name.as_str(), crate::values::RecordId::new(&id));
-                if let Some(path) = on_cycle.get(&key) {
+                let key = (
+                    group_of(declared, slot.pair.name.as_str()),
+                    crate::values::RecordId::new(&id),
+                );
+                if let Some(report) = on_cycle.get(&key) {
                     if reported.insert(key) {
-                        findings.push(Finding {
-                            rule: RULE_ID.to_string(),
-                            severity: FindingSeverity::Error,
-                            file: slot.record.path.clone(),
-                            line: None,
-                            waived: None,
-                            declared_severity: None,
-                            suggested_action: None,
-                            action_source: ActionSource::new("sequence-cycle"),
-                            message: format!(
-                                "{id} is on a cycle in acyclic pair '{}' ({} -> {}): {path}",
-                                slot.pair.name, slot.pair.forward, slot.pair.inverse
-                            ),
-                        });
+                        findings.push(Finding::new(
+                            RULE_ID,
+                            FindingSeverity::Error,
+                            slot.record.path.clone(),
+                            ActionSource::new(report.variant),
+                            format!("{id} {}", report.message),
+                        ));
                     }
                 }
             }
@@ -107,14 +64,250 @@ pub fn sequence_cycle(
     );
 
     (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records,
-        },
+        RuleExecution::ran(RULE_ID, population, examined_records),
         findings,
     )
+}
+
+/// `None` is the merged roadmap graph; `Some(name)` a pair read alone.
+fn group_of<'n>(declared: &[String], name: &'n str) -> Option<&'n str> {
+    (!declared.iter().any(|p| p == name)).then_some(name)
+}
+
+/// The graphs `sequence.cycle` reads: the pairs `roadmap.pairs` names merged
+/// into one, every other pair on its own.
+fn grouped_graphs<'a>(
+    graphs: &BTreeMap<&'a str, SequenceGraph>,
+    declared: &[String],
+) -> BTreeMap<Option<&'a str>, SequenceGraph> {
+    let mut grouped: BTreeMap<Option<&str>, SequenceGraph> = BTreeMap::new();
+    for (pair, graph) in graphs {
+        match group_of(declared, pair) {
+            Some(name) => {
+                grouped.insert(Some(name), graph.clone());
+            }
+            None => merge_into(grouped.entry(None).or_default(), graph),
+        }
+    }
+    grouped
+}
+
+/// The records on a cycle, per group, each with the rest of its message.
+fn cycle_reports<'a>(
+    grouped: &BTreeMap<Option<&'a str>, SequenceGraph>,
+    graphs: &BTreeMap<&str, SequenceGraph>,
+    declared: &[String],
+    config: &Config,
+) -> BTreeMap<(Option<&'a str>, crate::values::RecordId), CycleReport> {
+    let mut on_cycle: BTreeMap<(Option<&str>, crate::values::RecordId), CycleReport> =
+        BTreeMap::new();
+    for (group, graph) in grouped {
+        for component in strongly_connected(graph) {
+            let looped = component.len() > 1
+                || graph
+                    .get(&component[0])
+                    .is_some_and(|next| next.contains(&component[0]));
+            if !looped {
+                continue;
+            }
+            for member in &component {
+                let Some(path) = shortest_cycle(graph, member) else {
+                    continue;
+                };
+                let text = path
+                    .iter()
+                    .map(|id| id.as_str())
+                    .collect::<Vec<_>>()
+                    .join(" -> ");
+                let report = match group {
+                    Some(name) => {
+                        let (forward, inverse) = config
+                            .relation_pairs
+                            .iter()
+                            .find(|p| p.name == *name)
+                            .map(|p| (p.forward.as_str(), p.inverse.as_str()))
+                            .unwrap_or_default();
+                        CycleReport {
+                            variant: "sequence-cycle",
+                            message: format!(
+                                "is on a cycle in acyclic pair '{name}' ({forward} -> {inverse}): {text}"
+                            ),
+                        }
+                    }
+                    None => cycle_over_roadmap_pairs(graphs, declared, &path, &text),
+                };
+                on_cycle.insert((*group, member.clone()), report);
+            }
+        }
+    }
+    on_cycle
+}
+
+struct CycleReport {
+    variant: &'static str,
+    message: String,
+}
+
+/// The report for a cycle in the merged roadmap graph. A loop whose edges all
+/// belong to one declared pair reads as a one-pair loop always did; one that
+/// needs edges of more than one pair names every pair it uses and takes the
+/// cross-pair action variant.
+fn cycle_over_roadmap_pairs(
+    graphs: &BTreeMap<&str, SequenceGraph>,
+    declared: &[String],
+    path: &[crate::values::RecordId],
+    text: &str,
+) -> CycleReport {
+    type Edge<'a> = (&'a crate::values::RecordId, &'a crate::values::RecordId);
+    let edges: Vec<Edge> = path.windows(2).map(|w| (&w[0], &w[1])).collect();
+    let has_edge = |pair: &str, (from, to): Edge| {
+        graphs
+            .get(pair)
+            .and_then(|g| g.get(from))
+            .is_some_and(|next| next.contains(to))
+    };
+    if let Some(single) = declared
+        .iter()
+        .find(|pair| edges.iter().all(|e| has_edge(pair, *e)))
+    {
+        return CycleReport {
+            variant: "sequence-cycle",
+            message: format!("is on a cycle in acyclic pair '{single}': {text}"),
+        };
+    }
+    let quoted: Vec<String> = declared
+        .iter()
+        .filter(|pair| edges.iter().any(|e| has_edge(pair, *e)))
+        .map(|pair| format!("'{pair}'"))
+        .collect();
+    CycleReport {
+        variant: "sequence-cycle-cross-pair",
+        message: format!(
+            "is on a cycle that crosses acyclic pairs {} (roadmap.pairs), each acyclic on its own: {text}",
+            quoted.join(" and ")
+        ),
+    }
+}
+
+/// Adds every edge of `from` to `into`. `X -> {Y}` reads "X depends on Y".
+pub(super) fn merge_into(into: &mut SequenceGraph, from: &SequenceGraph) {
+    for (node, targets) in from {
+        into.entry(node.clone()).or_default();
+        for target in targets {
+            into.entry(target.clone()).or_default();
+            into.get_mut(node)
+                .expect("just inserted")
+                .insert(target.clone());
+        }
+    }
+}
+
+/// The one graph over several pairs' graphs, which `urzua roadmap` reads and
+/// `sequence.cycle` reads for the pairs `roadmap.pairs` names.
+pub(super) fn merged_graph<'g>(
+    graphs: impl IntoIterator<Item = &'g SequenceGraph>,
+) -> SequenceGraph {
+    let mut merged = SequenceGraph::new();
+    for graph in graphs {
+        merge_into(&mut merged, graph);
+    }
+    merged
+}
+
+pub(super) type SequenceGraph =
+    BTreeMap<crate::values::RecordId, BTreeSet<crate::values::RecordId>>;
+
+/// The sequencing graph of every pair in the given slots. An edge `X -> Y`
+/// reads "X depends on Y": `A.forward = B` is `A -> B` and `A.inverse = B` is
+/// `B -> A`, so a record that writes only the inverse side still takes part. A
+/// claim that resolves to no record, or to a type the pair does not carry, is
+/// no edge (`sequence.unresolved-blocker` reports the first), and neither is a
+/// claim on a record whose header cannot be read (`ADR-76`). What a rule that
+/// derives a value from the graph must not guess at is disclosed:
+/// `unreadable_dependencies` (the dependent of such a claim),
+/// `unresolved_claimants` (a record whose own dependency field names something
+/// that is not a resolvable record, so fixing the reference may add an edge)
+/// and `unreadable_writers` (a record whose header cannot be read but whose
+/// type declares a pair's inverse side, so it may be a dependency of a record
+/// that cannot be seen).
+pub(super) struct SequenceGraphs<'a> {
+    pub graphs: BTreeMap<&'a str, SequenceGraph>,
+    pub unreadable_dependencies: BTreeSet<crate::values::RecordId>,
+    pub unresolved_claimants: BTreeSet<crate::values::RecordId>,
+    pub unreadable_writers: bool,
+}
+
+pub(super) fn sequence_graphs<'a>(
+    slots: &[super::relation::PairSlot<'a>],
+    index: &RecordIndex,
+) -> SequenceGraphs<'a> {
+    let mut graphs: BTreeMap<&'a str, SequenceGraph> = BTreeMap::new();
+    let mut unreadable_dependencies = BTreeSet::new();
+    let mut unresolved_claimants = BTreeSet::new();
+    let mut unreadable_writers = false;
+    for slot in slots {
+        let references = match pair_slot_claims(slot) {
+            Ok(references) => references,
+            Err(Outcome::Unreadable) => {
+                if !slot.forward {
+                    unreadable_writers = true;
+                }
+                continue;
+            }
+            Err(_) => continue,
+        };
+        let Some(own) = record_id(slot.record) else {
+            continue;
+        };
+        let own = crate::values::RecordId::new(&own);
+        let graph = graphs.entry(slot.pair.name.as_str()).or_default();
+        graph.entry(own.clone()).or_default();
+        // A forward value that is not a record reference at all is prose.
+        if slot.forward
+            && references.is_empty()
+            && slot
+                .record
+                .header
+                .get(slot.own_field())
+                .is_some_and(|v| !crate::values::is_no_value_sentinel(v) && !v.trim().is_empty())
+        {
+            unresolved_claimants.insert(own.clone());
+        }
+        for reference in references {
+            let target = crate::values::RecordId::new(&reference);
+            let Some(record) = index.get(&target) else {
+                if slot.forward {
+                    unresolved_claimants.insert(own.clone());
+                }
+                continue;
+            };
+            if !pair_carried_by(slot.pair, &record.record_type) {
+                if slot.forward {
+                    unresolved_claimants.insert(own.clone());
+                }
+                continue;
+            }
+            if record.header.is_unreadable() {
+                if slot.forward {
+                    unreadable_dependencies.insert(own.clone());
+                }
+                continue;
+            }
+            graph.entry(target.clone()).or_default();
+            let (from, to) = if slot.forward {
+                (own.clone(), target)
+            } else {
+                (target, own.clone())
+            };
+            graph.entry(from).or_default().insert(to);
+        }
+    }
+    SequenceGraphs {
+        graphs,
+        unreadable_dependencies,
+        unresolved_claimants,
+        unreadable_writers,
+    }
 }
 
 /// Rule (`RFC-48`, `MILE-27`): a value in either field of an `acyclic` pair
@@ -127,6 +320,7 @@ pub fn sequence_unresolved_blocker(
     records: &[Record],
     config: &Config,
     index: &RecordIndex,
+    untracked: &UntrackedRecords,
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_SEQUENCE_UNRESOLVED_BLOCKER;
     let mut findings = Vec::new();
@@ -159,17 +353,13 @@ pub fn sequence_unresolved_blocker(
             let resolution_reported = is_pointer && enabled(RULE_POINTER_RESOLUTION);
             let prose_reported = is_pointer && enabled(RULE_HEADER_POINTER_FIELD_CLEAN);
             let mut push = |variant: &'static str, message: String| {
-                findings.push(Finding {
-                    rule: RULE_ID.to_string(),
-                    severity: FindingSeverity::Error,
-                    file: slot.record.path.clone(),
-                    line: None,
-                    waived: None,
-                    declared_severity: None,
-                    suggested_action: None,
-                    action_source: ActionSource::new(variant).field(field),
+                findings.push(Finding::new(
+                    RULE_ID,
+                    FindingSeverity::Error,
+                    slot.record.path.clone(),
+                    ActionSource::new(variant).field(field),
                     message,
-                });
+                ));
             };
             let value = slot.record.header.get(field).unwrap_or("");
             // An entry is a reference only when the whole trimmed entry is one
@@ -180,13 +370,14 @@ pub fn sequence_unresolved_blocker(
                     if !resolution_reported
                         && !index.contains_key(&crate::values::RecordId::new(entry))
                     {
-                        push(
-                            "blocker-unresolved",
-                            format!(
-                            "{field}: {entry} does not resolve to any discovered record (pair '{}')",
-                            slot.pair.name
-                        ),
+                        let (variant, message) = unresolved_reference(
+                            field,
+                            entry,
+                            untracked,
+                            ("blocker-unresolved", "blocker-untracked"),
+                            &format!(" (pair '{}')", slot.pair.name),
                         );
+                        push(variant, message);
                     }
                 } else if !prose_reported {
                     push(
@@ -203,19 +394,14 @@ pub fn sequence_unresolved_blocker(
     );
 
     (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records,
-        },
+        RuleExecution::ran(RULE_ID, population, examined_records),
         findings,
     )
 }
 
 /// Tarjan's algorithm, iterative so a long chain cannot exhaust the stack.
 /// Components and their members come out in `RecordId` order.
-fn strongly_connected<N: Ord + Clone>(graph: &BTreeMap<N, BTreeSet<N>>) -> Vec<Vec<N>> {
+pub(super) fn strongly_connected<N: Ord + Clone>(graph: &BTreeMap<N, BTreeSet<N>>) -> Vec<Vec<N>> {
     let nodes: Vec<&N> = graph.keys().collect();
     let position: BTreeMap<&N, usize> = nodes.iter().enumerate().map(|(i, n)| (*n, i)).collect();
     let edges: Vec<Vec<usize>> = nodes
@@ -278,30 +464,27 @@ fn strongly_connected<N: Ord + Clone>(graph: &BTreeMap<N, BTreeSet<N>>) -> Vec<V
     components
 }
 
-/// A shortest cycle through `start`, rendered `A -> B -> A`; ties break on
-/// `RecordId` order, so the text is the same on every run.
+/// A shortest cycle through `start`, as the ids `A, B, A`; ties break on
+/// `RecordId` order, so the path is the same on every run.
 fn shortest_cycle(
-    graph: &BTreeMap<crate::values::RecordId, BTreeSet<crate::values::RecordId>>,
+    graph: &SequenceGraph,
     start: &crate::values::RecordId,
-) -> Option<String> {
+) -> Option<Vec<crate::values::RecordId>> {
     let mut previous: BTreeMap<&crate::values::RecordId, &crate::values::RecordId> =
         BTreeMap::new();
     let mut queue = std::collections::VecDeque::from([start]);
     while let Some(node) = queue.pop_front() {
         for next in graph.get(node)? {
             if next == start {
-                let mut path = vec![start.as_str()];
                 let mut at = node;
-                let mut reversed = vec![at.as_str()];
+                let mut reversed = vec![at.clone()];
                 while at != start {
                     at = previous[at];
-                    reversed.push(at.as_str());
+                    reversed.push(at.clone());
                 }
                 reversed.reverse();
-                path.clear();
-                path.extend(reversed);
-                path.push(start.as_str());
-                return Some(path.join(" -> "));
+                reversed.push(start.clone());
+                return Some(reversed);
             }
             if !previous.contains_key(next) {
                 previous.insert(next, node);
@@ -310,6 +493,223 @@ fn shortest_cycle(
         }
     }
     None
+}
+
+/// Rule (`RFC-48`, `MILE-144`, `ADR-64`, `ADR-83`): a record's written `Status`
+/// is held to the derived `blocked` value. A record is blocked when any of its
+/// dependencies, over the pairs `roadmap.pairs` declares (the pairs the
+/// roadmap reads, so the two cannot disagree), is not in a status its own type
+/// declares `success`. A dependency whose type declares no `success`, or whose
+/// `Status` is absent, is not in a declared success status and so blocks, and
+/// so does one in a `failure` status. A written `Blocks` counts, since the
+/// edges are the ones `sequence.cycle` checks.
+///
+/// Two disagreements are reported, both on the dependent: a blocked record that
+/// states a `progress` status, `Done` included when the type lists it, and a
+/// status the type declares in `blocked` while nothing blocks it. A status that
+/// does not claim progress, `Planned` for instance, is right for a blocked
+/// record. Only a type declaring `blocked` or `progress` is examined. A blocked
+/// value that cannot be computed is not guessed: a record in a blocked or a
+/// progress status that would be reported unblocked is counted unreadable when
+/// it names a dependency that does not resolve or whose header cannot be read,
+/// or when a record that may write an inverse claim has an unreadable header.
+/// This holds for a type declaring only `progress` as for one that also writes
+/// `blocked` (`ADR-83`).
+///
+/// One blocked record is not reported (`ADR-83`, amendment of 2026-11-07): a
+/// record whose `partial_status` comes from the dependency cap of `ADR-96`,
+/// that is, whose Done means items all resolve and which only an unfinished
+/// dependency holds back. It has not made progress out of order; its items were
+/// proven ahead of the dependency. It gets an info finding saying so, naming the
+/// dependency. A record genuinely in that status with an unresolved item is
+/// still reported.
+pub fn sequence_status_agreement(
+    records: &[Record],
+    config: &Config,
+    index: &RecordIndex,
+    back_pointed: &BackPointerEvidence,
+    env: &LocatorEnv<'_>,
+) -> (RuleExecution, Vec<Finding>) {
+    let mut findings = Vec::new();
+    let declared = statuses_by_type(config);
+    let slots = pair_slots(records, config, |p| config.roadmap.pairs.contains(&p.name));
+    let graphs = sequence_graphs(&slots, index);
+
+    let candidates: Vec<&Record> = records
+        .iter()
+        .filter(|r| {
+            declared
+                .get(&r.record_type)
+                .is_some_and(|d| !d.blocked.is_empty() || !d.progress.is_empty())
+        })
+        .collect();
+
+    let agreement = StatusAgreement {
+        config,
+        declared: &declared,
+        index,
+        back_pointed,
+        env,
+        graphs: &graphs,
+    };
+    let (population, examined_records) = scoped_census_records(
+        config,
+        PopulationUnit::Record,
+        candidates,
+        |record| *record,
+        |record| agreement.judge(record, &mut findings),
+    );
+
+    (
+        RuleExecution::ran(RULE_SEQUENCE_STATUS_AGREEMENT, population, examined_records),
+        findings,
+    )
+}
+
+/// What `sequence.status-agreement` judges each record against.
+struct StatusAgreement<'a> {
+    config: &'a Config,
+    declared: &'a HashMap<String, StatusDecl>,
+    index: &'a RecordIndex<'a>,
+    back_pointed: &'a BackPointerEvidence,
+    env: &'a LocatorEnv<'a>,
+    graphs: &'a SequenceGraphs<'a>,
+}
+
+/// One `sequence.status-agreement` error on `record`.
+fn status_agreement_finding(record: &Record, source: ActionSource, message: String) -> Finding {
+    Finding::new(
+        RULE_SEQUENCE_STATUS_AGREEMENT,
+        FindingSeverity::Error,
+        record.path.clone(),
+        source,
+        message,
+    )
+}
+
+impl StatusAgreement<'_> {
+    fn judge(&self, record: &Record, findings: &mut Vec<Finding>) -> Outcome {
+        let decl = &self.declared[&record.record_type];
+        let Some(id) = record_id(record) else {
+            return Outcome::OutOfScope;
+        };
+        let id = crate::values::RecordId::new(&id);
+        let status_field = relation_field_name(
+            self.config,
+            &record.record_type,
+            crate::config::RelationRole::Status,
+        );
+        let status = match declared_value(record, status_field) {
+            Ok(v) if !v.trim().is_empty() => v.trim(),
+            Ok(_) => return Outcome::Absent,
+            Err(outcome) => return outcome,
+        };
+        let open = super::delivery_items::open_dependencies(
+            &id,
+            &self.graphs.graphs,
+            self.index,
+            self.declared,
+            self.config,
+        );
+        if !open.is_empty() {
+            if decl.is_progress_status(status) {
+                return self.judge_blocked(record, &id, status, &open, findings);
+            }
+            return Outcome::Examined;
+        }
+        // "Nothing blocks it" is only known when every claim was read,
+        // and it is the answer both for a written blocked status (is it
+        // contradicted?) and for a progress status (is it contradicted
+        // by a blocker?), so a type declaring only `progress` is guarded
+        // too (`ADR-83`).
+        let judged = decl.is_blocked_status(status) || decl.is_progress_status(status);
+        if judged
+            && (self.graphs.unreadable_dependencies.contains(&id)
+                || self.graphs.unresolved_claimants.contains(&id)
+                || self.graphs.unreadable_writers)
+        {
+            return Outcome::Unreadable;
+        }
+        if decl.is_blocked_status(status) {
+            findings.push(status_agreement_finding(
+                record,
+                ActionSource::new("status-blocked-unblocked").field(status_field),
+                format!(
+                    "{status_field} is '{status}' but nothing blocks {id}: it has no dependency outside a success status; state the status it is in"
+                ),
+            ));
+        }
+        Outcome::Examined
+    }
+
+    /// A blocked record in a status that claims progress: an info finding when
+    /// the status comes from the dependency cap, an error otherwise.
+    fn judge_blocked(
+        &self,
+        record: &Record,
+        id: &crate::values::RecordId,
+        status: &str,
+        open: &[String],
+        findings: &mut Vec<Finding>,
+    ) -> Outcome {
+        let decl = &self.declared[&record.record_type];
+        let status_field = relation_field_name(
+            self.config,
+            &record.record_type,
+            crate::config::RelationRole::Status,
+        );
+        // A status that comes from the dependency cap is not out of
+        // order: say so, and report nothing else for the record.
+        let one_blocked = HashMap::from([(record.path.clone(), open.to_vec())]);
+        let ctx = DeliveryContext {
+            back_pointed: self.back_pointed,
+            env: self.env,
+            blocked: &one_blocked,
+        };
+        let capped = judge_delivery(record, self.config, decl, &ctx)
+            .ok()
+            .and_then(|judged| judged.items)
+            .filter(|items| !items.capped_by.is_empty())
+            .filter(|_| {
+                decl.delivery
+                    .as_ref()
+                    .and_then(|d| d.items.as_ref())
+                    .is_some_and(|i| i.partial_status == status)
+            });
+        if let Some(items) = capped {
+            findings.push(Finding::new(
+                RULE_SEQUENCE_STATUS_AGREEMENT,
+                FindingSeverity::Info,
+                record.path.clone(),
+                ActionSource::new("status-blocked-capped"),
+                format!(
+                    "{id} is {status_field} '{status}', not out of order: all items proven ahead of dependency {}, which caps the status",
+                    items.capped_by.join(", ")
+                ),
+            )
+            .declared(FindingSeverity::Info));
+            return Outcome::Examined;
+        }
+        let mut source = ActionSource::new("status-blocked-derived").field(status_field);
+        // The computed answer, only when one status is declared for it
+        // and the lifecycle lets this record move there: a finished
+        // record's transitions do not lead back to a waiting state.
+        if let [only] = decl.blocked.as_slice() {
+            if !decl.is_success(status) && (!decl.has_transitions() || decl.allows(status, only)) {
+                source = source.text(only.clone());
+            }
+        }
+        findings.push(status_agreement_finding(
+            record,
+            source,
+            format!(
+                "{id} is blocked by {} but {status_field} is '{status}', which claims progress; state a status that does not claim progress ({})",
+                open.join(", "),
+                decl.progress.join(", ")
+            ),
+        ));
+        Outcome::Examined
+    }
 }
 
 #[cfg(test)]
@@ -367,7 +767,7 @@ mod tests {
 
     fn unresolved(records: &[Record], config: &Config) -> (RuleExecution, Vec<Finding>) {
         let index = build_normalized_index(records);
-        sequence_unresolved_blocker(records, config, &index)
+        sequence_unresolved_blocker(records, config, &index, &Default::default())
     }
 
     #[test]
@@ -466,6 +866,31 @@ mod tests {
         assert_eq!(findings[0].rule, RULE_SEQUENCE_UNRESOLVED_BLOCKER);
         assert!(findings[0].message.contains("MILE-99"), "{findings:?}");
         assert_eq!(examined(&exec), 1);
+    }
+
+    #[test]
+    fn a_blocker_on_an_untracked_file_on_disk_is_its_own_variant_observed_failing() {
+        let config = seq_config(&["milestone"]);
+        let records = [mile(1, "Depends-on: MILE-2, MILE-99")];
+        let index = build_normalized_index(&records);
+        let untracked: UntrackedRecords = [(
+            crate::values::RecordId::new("MILE-2"),
+            PathBuf::from("docs/milestones/MILE-2-x.md"),
+        )]
+        .into();
+        let (_, findings) = sequence_unresolved_blocker(&records, &config, &index, &untracked);
+        let variant = |id: &str| {
+            findings
+                .iter()
+                .find(|f| f.message.contains(id))
+                .map(|f| f.action_source.variant)
+        };
+        assert_eq!(variant("MILE-2"), Some("blocker-untracked"), "{findings:?}");
+        assert_eq!(
+            variant("MILE-99"),
+            Some("blocker-unresolved"),
+            "{findings:?}"
+        );
     }
 
     #[test]

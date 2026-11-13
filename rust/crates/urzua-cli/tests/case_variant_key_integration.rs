@@ -2,6 +2,8 @@
 //! isolated git fixture. The rule is opt-in, so one test proves it does not
 //! run unless declared, and the others prove what it examined and reported.
 
+mod common;
+
 use std::path::Path;
 use std::process::Command;
 
@@ -14,10 +16,8 @@ fn git(dir: &Path, args: &[&str]) {
     assert!(status.success(), "git {args:?} failed");
 }
 
-fn fixture(name: &str, rules: &str, records: &[(&str, &str)]) -> std::path::PathBuf {
-    let dir =
-        std::env::temp_dir().join(format!("urzua-case-variant-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+fn fixture(name: &str, rules: &str, records: &[(&str, &str)]) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-case-variant-{name}"));
     std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     git(&dir, &["init", "-q"]);
@@ -39,7 +39,7 @@ fn fixture(name: &str, rules: &str, records: &[(&str, &str)]) -> std::path::Path
 }
 
 fn check(dir: &Path) -> (i32, serde_json::Value) {
-    let output = Command::new(env!("CARGO_BIN_EXE_urzua"))
+    let output = common::urzua()
         .args(["check", "docs/"])
         .current_dir(dir)
         .output()

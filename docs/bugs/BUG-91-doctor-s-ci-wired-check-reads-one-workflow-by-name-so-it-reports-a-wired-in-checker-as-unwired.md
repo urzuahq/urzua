@@ -2,7 +2,7 @@
 Stable-Id: 01M2YYV1MPC935EX3YT93N4JHT
 Status: Fixed
 Found-in: "Measuring whether `doctor` was worth wiring into CI, while planning the population work"
-Regression-test: "rust/crates/urzua-cli/tests/check_integration.rs::ci_wired_finds_the_invocation_in_any_workflow_not_just_ci_yml"
+Realized-by: test:rust/crates/urzua-cli/tests/check_integration.rs#ci_wired_finds_the_invocation_in_any_workflow_not_just_ci_yml@sha256:77e8117a378c2069342a919b65f3aeb418f559bdfcb26794ea5b94feae8007ce
 ---
 # 91 — doctor's ci-wired check reads one workflow by name so it reports a wired-in checker as unwired
 
@@ -61,3 +61,4 @@ Corrected to name `field.quality` and `field.pending` only.
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

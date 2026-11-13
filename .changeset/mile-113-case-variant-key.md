@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: []
 ---
 
 New opt-in rule `header.case-variant-key`: reports a record whose header writes two keys differing only

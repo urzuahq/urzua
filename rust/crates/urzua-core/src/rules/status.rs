@@ -84,28 +84,22 @@ fn run_status_rule(
                 let action_field = field
                     .clone()
                     .unwrap_or_else(|| judged.status_field.to_string());
-                findings.push(Finding {
-                    rule: rule_id.to_string(),
-                    severity: declared_severity.unwrap_or(FindingSeverity::Error),
-                    file: record.path.clone(),
-                    line: None,
-                    waived: None,
-                    declared_severity,
-                    suggested_action: None,
-                    action_source: ActionSource::new(variant).field(action_field),
-                    message,
-                });
+                findings.push(
+                    Finding::new(
+                        rule_id.to_string(),
+                        declared_severity.unwrap_or(FindingSeverity::Error),
+                        record.path.clone(),
+                        ActionSource::new(variant).field(action_field),
+                        message,
+                    )
+                    .declared_opt(declared_severity),
+                );
             }
             Outcome::Examined
         },
     );
     (
-        RuleExecution {
-            rule: rule_id.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records,
-        },
+        RuleExecution::ran(rule_id.to_string(), population, examined_records),
         findings,
     )
 }
@@ -117,11 +111,15 @@ pub struct DeliveryJudgement {
     pub status_field: String,
     pub status: String,
     /// The tier computed from the record's evidence (drift is not read: it says
-    /// the evidence is stale, not that nothing was delivered).
+    /// the evidence is stale, not that nothing was delivered). For a type that
+    /// declares `delivery.items` it is the lowest tier among the resolved items.
     pub tier: String,
     /// What the evidence was, in words a repair row can cite.
     pub evidence: String,
     pub disagreement: Option<DeliveryDisagreement>,
+    /// The per-item judgement, for a type that declares `delivery.items`
+    /// (`ADR-96`).
+    pub items: Option<ItemsJudgement>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -132,6 +130,28 @@ pub enum DeliveryDisagreement {
     /// A success status with evidence that says nothing was delivered. No
     /// single correct value exists: the repair is adding evidence.
     SuccessWithoutEvidence,
+    /// Some items resolve while the status is a not-done status short of
+    /// `partial_status` (`ADR-96`). `blocked` records that the record is
+    /// derived-blocked, where `fix` writes nothing.
+    PartialButNotStarted {
+        partial_status: String,
+        blocked: bool,
+    },
+    /// A `success` status while an item is unresolved (`ADR-96`): a guaranteed
+    /// error. `reopen_to` is the status an edit would reopen the record to.
+    DoneWithUnresolvedItems {
+        unresolved: Vec<UnresolvedItem>,
+        reopen_to: String,
+    },
+}
+
+/// What a judgement reads beyond the record: the back-pointers that cite it,
+/// the working tree its item locators resolve in, and the records that are
+/// derived-blocked (`ADR-96` section 7).
+pub struct DeliveryContext<'a> {
+    pub back_pointed: &'a BackPointerEvidence,
+    pub env: &'a LocatorEnv<'a>,
+    pub blocked: &'a HashMap<PathBuf, Vec<String>>,
 }
 
 /// Judges one record of a type that declares `statuses.delivery`. `Err` is the
@@ -141,25 +161,180 @@ pub fn judge_delivery(
     record: &Record,
     config: &Config,
     decl: &StatusDecl,
-    back_pointed: &BackPointerEvidence,
+    ctx: &DeliveryContext<'_>,
 ) -> Result<DeliveryJudgement, Outcome> {
-    use crate::config::RelationRole::{EmbodimentLocator, Status};
+    use crate::config::RelationRole::Status;
     let delivery = decl.delivery.as_ref().ok_or(Outcome::Absent)?;
     let status_field = relation_field_name(config, &record.record_type, Status);
-    let locator_field = relation_field_name(config, &record.record_type, EmbodimentLocator);
     let status = match declared_value(record, status_field) {
         Ok(v) if !v.trim().is_empty() => v.trim(),
         Ok(_) => return Err(Outcome::Absent),
         Err(outcome) => return Err(outcome),
     };
+    let input = DeliveryInput {
+        record,
+        config,
+        decl,
+        delivery,
+        ctx,
+        status_field,
+        status,
+    };
+    // A type that declares `delivery.items` is judged from the items alone: a
+    // record-level locator never makes a milestone delivered (`ADR-96`
+    // section 5).
+    if delivery.items.is_some() {
+        return Ok(judge_delivery_items(&input));
+    }
+    judge_delivery_evidence(&input)
+}
+
+/// What one delivery judgement reads.
+struct DeliveryInput<'a> {
+    record: &'a Record,
+    config: &'a Config,
+    decl: &'a StatusDecl,
+    delivery: &'a crate::status_model::DeliveryDecl,
+    ctx: &'a DeliveryContext<'a>,
+    status_field: &'a str,
+    status: &'a str,
+}
+
+fn in_list(list: &[String], v: &str) -> bool {
+    list.iter().any(|e| e == v)
+}
+
+/// A type that declares `delivery.items`, judged from its Done means items.
+fn judge_delivery_items(input: &DeliveryInput<'_>) -> DeliveryJudgement {
+    let DeliveryInput {
+        record,
+        config,
+        delivery,
+        ctx,
+        status_field,
+        status,
+        ..
+    } = *input;
+    let empty = crate::done_items::DoneItems::default();
+    let mut judged = judge_items(
+        record,
+        record.items.as_ref().unwrap_or(&empty),
+        config,
+        delivery,
+        ctx.env,
+    );
+    let open = ctx.blocked.get(&record.path);
+    let blocked = open.is_some();
+    // Dependencies cap the status (`ADR-96`, amendment of 2026-11-07): the
+    // computed status is the lower of the item result and the dependency
+    // result, so items that all resolve beside an unfinished dependency are
+    // partial work, not delivered. It lowers `Delivered` only, and only
+    // where items and dependencies are both declared (`blocked` is empty
+    // without a sequencing pair).
+    if let Some(open) = open {
+        if judged.standing == Standing::Delivered {
+            judged.standing = Standing::Partial;
+            judged.capped_by = open.clone();
+        }
+    }
+    let disagreement = items_disagreement(input, &judged, blocked);
+    DeliveryJudgement {
+        status_field: status_field.to_string(),
+        status: status.to_string(),
+        tier: judged.tier.clone(),
+        evidence: format!(
+            "the {} items ({})",
+            delivery
+                .items
+                .as_ref()
+                .expect("checked by the caller")
+                .section,
+            judged.counts()
+        ),
+        disagreement,
+        items: Some(judged),
+    }
+}
+
+/// How the status stands against the judged items (`ADR-96`).
+fn items_disagreement(
+    input: &DeliveryInput<'_>,
+    judged: &ItemsJudgement,
+    blocked: bool,
+) -> Option<DeliveryDisagreement> {
+    let DeliveryInput {
+        decl,
+        delivery,
+        status,
+        ..
+    } = *input;
+    let items_decl = delivery.items.as_ref().expect("checked by the caller");
+    let unresolved = !judged.unresolved.is_empty();
+    if in_list(&decl.success, status) && unresolved {
+        let to_partial = judged.resolved_delivered >= 1
+            && !(blocked && decl.is_progress_status(&items_decl.partial_status));
+        let reopen_to = if to_partial {
+            items_decl.partial_status.clone()
+        } else {
+            first_non_progress_status(decl)
+                .unwrap_or(&items_decl.partial_status)
+                .to_string()
+        };
+        Some(DeliveryDisagreement::DoneWithUnresolvedItems {
+            unresolved: judged.unresolved.clone(),
+            reopen_to,
+        })
+    } else if in_list(&delivery.not_done, status) && judged.standing == Standing::Delivered {
+        Some(DeliveryDisagreement::DeliveredButNotDone {
+            set_status: delivery.set_status.clone(),
+        })
+    } else if in_list(&delivery.not_done, status)
+        && status != items_decl.partial_status
+        && judged.standing == Standing::Partial
+    {
+        Some(DeliveryDisagreement::PartialButNotStarted {
+            partial_status: items_decl.partial_status.clone(),
+            // `fix` holds back only a status the derived blocked value
+            // would refuse for the record. `sequence.status-agreement`
+            // accepts `partial_status` on a capped record (every item
+            // resolves, only a dependency is open), so a capped record is
+            // not held back; one with unresolved items is.
+            blocked: blocked
+                && judged.capped_by.is_empty()
+                && decl.is_progress_status(&items_decl.partial_status),
+        })
+    } else if in_list(&decl.success, status) && in_list(&delivery.unevidenced_tiers, &judged.tier) {
+        Some(DeliveryDisagreement::SuccessWithoutEvidence)
+    } else {
+        None
+    }
+}
+
+/// A type judged from its evidence field and the back-pointers that cite it.
+fn judge_delivery_evidence(input: &DeliveryInput<'_>) -> Result<DeliveryJudgement, Outcome> {
+    use crate::config::RelationRole::EmbodimentLocator;
+    let DeliveryInput {
+        record,
+        config,
+        decl,
+        delivery,
+        ctx,
+        status_field,
+        status,
+    } = *input;
+    let locator_field = relation_field_name(config, &record.record_type, EmbodimentLocator);
     // A record with no evidence field is the common case, not an absence.
     let realized_by = match declared_value(record, locator_field) {
         Ok(v) => Some(v),
         Err(Outcome::Absent) => None,
         Err(outcome) => return Err(outcome),
     };
-    let cited_by_code = back_pointed.code.contains(&record.path);
-    let cited_by_test = back_pointed.test.contains(&record.path);
+    // `back_pointer_evidence: false` (`ADR-84`) holds the type to its declared
+    // evidence field: a back-pointer that cites the record is then not read.
+    let cited_by_code =
+        delivery.back_pointer_evidence && ctx.back_pointed.code.contains(&record.path);
+    let cited_by_test =
+        delivery.back_pointer_evidence && ctx.back_pointed.test.contains(&record.path);
     let tier = compute_embodiment(
         &config.embodiment,
         &realized_by.map(parse_realized_by).unwrap_or_default(),
@@ -173,7 +348,6 @@ pub fn judge_delivery(
         cited_by_code,
         cited_by_test,
     );
-    let in_list = |list: &[String], v: &str| list.iter().any(|e| e == v);
     let disagreement =
         if in_list(&delivery.not_done, status) && in_list(&delivery.delivered_tiers, tier) {
             Some(DeliveryDisagreement::DeliveredButNotDone {
@@ -190,6 +364,7 @@ pub fn judge_delivery(
         tier: tier.to_string(),
         evidence,
         disagreement,
+        items: None,
     })
 }
 
@@ -198,12 +373,17 @@ pub fn judge_delivery(
 /// declared not done, and a success status whose evidence computes to a
 /// declared unevidenced tier. The mapping is the type's `statuses.delivery`;
 /// the rule hardcodes no status or type. A type declaring none is not examined.
+///
+/// A type that declares `delivery.items` (`ADR-96`) is judged from its Done
+/// means items, and gains three disagreements: a `success` status while an item
+/// is unresolved (`DoneWithUnresolvedItems`, a guaranteed error), partial work
+/// under a status short of `partial_status`, and the others as before.
 pub fn status_delivery_agreement(
     records: &[Record],
     config: &Config,
     back_pointed: &BackPointerEvidence,
+    env: &LocatorEnv<'_>,
 ) -> (RuleExecution, Vec<Finding>) {
-    const RULE_ID: &str = RULE_STATUS_DELIVERY_AGREEMENT;
     let declared = statuses_by_type(config);
     let candidates: Vec<&Record> = records
         .iter()
@@ -213,6 +393,17 @@ pub fn status_delivery_agreement(
                 .is_some_and(|d| d.delivery.is_some())
         })
         .collect();
+    let any_items = candidates.iter().any(|r| r.items.is_some());
+    let blocked = if any_items {
+        derived_blocked_records(records, config)
+    } else {
+        HashMap::new()
+    };
+    let ctx = DeliveryContext {
+        back_pointed,
+        env,
+        blocked: &blocked,
+    };
     let mut findings = Vec::new();
     let (population, examined_records) = scoped_census_records(
         config,
@@ -220,65 +411,156 @@ pub fn status_delivery_agreement(
         candidates,
         |record| *record,
         |record| {
-            let judged = match judge_delivery(
-                record,
-                config,
-                &declared[&record.record_type],
-                back_pointed,
-            ) {
+            let decl = &declared[&record.record_type];
+            let judged = match judge_delivery(record, config, decl, &ctx) {
                 Ok(j) => j,
                 Err(outcome) => return outcome,
             };
-            let (message, action_source) = match &judged.disagreement {
-                None => return Outcome::Examined,
-                // `urzua fix --apply` writes this repair (`SPEC-8`), so the
-                // command is offered.
-                Some(DeliveryDisagreement::DeliveredButNotDone { set_status }) => (
-                    format!(
-                        "{} is '{}', but the evidence computes to '{}', from {}: the work reads as delivered; set {} to '{set_status}' (`urzua fix --apply` does)",
-                        judged.status_field, judged.status, judged.tier, judged.evidence, judged.status_field
-                    ),
-                    ActionSource::new("delivery-not-done").argv([
-                        "urzua",
-                        "fix",
-                        "--apply",
-                        "--ids",
-                        &record.path.display().to_string(),
-                    ]),
-                ),
-                // No single correct value exists and `fix` writes nothing for it,
-                // so no command is offered.
-                Some(DeliveryDisagreement::SuccessWithoutEvidence) => (
-                    format!(
-                        "{} is '{}', but the evidence computes to '{}', from {}: add the evidence that delivered it",
-                        judged.status_field, judged.status, judged.tier, judged.evidence
-                    ),
-                    ActionSource::new("delivery-without-evidence"),
-                ),
-            };
-            findings.push(Finding {
-                rule: RULE_ID.to_string(),
-                severity: FindingSeverity::Error,
-                file: record.path.clone(),
-                line: None,
-                waived: None,
-                declared_severity: None,
-                suggested_action: None,
-                action_source,
-                message,
-            });
+            findings.extend(delivery_finding(record, config, decl, &judged));
             Outcome::Examined
         },
     );
     (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records,
-        },
+        RuleExecution::ran(RULE_STATUS_DELIVERY_AGREEMENT, population, examined_records),
         findings,
     )
+}
+
+/// The finding for a judgement that disagrees; `None` when it agrees.
+fn delivery_finding(
+    record: &Record,
+    config: &Config,
+    decl: &StatusDecl,
+    judged: &DeliveryJudgement,
+) -> Option<Finding> {
+    let mut line = None;
+    let (message, source) = match judged.disagreement.as_ref()? {
+        // `urzua fix --apply` writes this repair (`SPEC-8`), so the
+        // command is offered.
+        DeliveryDisagreement::DeliveredButNotDone { set_status } => (
+            format!(
+                "{} is '{}', but the evidence computes to '{}', from {}: the work reads as delivered; set {} to '{set_status}' (`urzua fix --apply` does)",
+                judged.status_field, judged.status, judged.tier, judged.evidence, judged.status_field
+            ),
+            ActionSource::new("delivery-not-done").argv([
+                "urzua",
+                "fix",
+                "--apply",
+                "--ids",
+                &record.path.display().to_string(),
+            ]),
+        ),
+        // No single correct value exists and `fix` writes nothing for it,
+        // so no command is offered.
+        DeliveryDisagreement::SuccessWithoutEvidence => (
+            format!(
+                "{} is '{}', but the evidence computes to '{}', from {}: add the evidence that delivered it",
+                judged.status_field, judged.status, judged.tier, judged.evidence
+            ),
+            ActionSource::new("delivery-without-evidence"),
+        ),
+        DeliveryDisagreement::PartialButNotStarted { partial_status, blocked: false } => (
+            format!(
+                "{} is '{}', but {} resolve, from {}: the work has begun{}; set {} to '{partial_status}' (`urzua fix --apply` does)",
+                judged.status_field, judged.status, judged.evidence_counts(), judged.evidence, judged.cap_note(partial_status), judged.status_field
+            ),
+            ActionSource::new("delivery-partial-not-started").argv([
+                "urzua",
+                "fix",
+                "--apply",
+                "--ids",
+                &record.path.display().to_string(),
+            ]),
+        ),
+        // A derived-blocked record is not written a `progress` status
+        // (`sequence.status-agreement` would refuse it): the finding
+        // stays and says so.
+        DeliveryDisagreement::PartialButNotStarted { partial_status, blocked: true } => (
+            format!(
+                "{} is '{}', but {} resolve, from {}: evidence has landed ahead of a dependency that is still open, so `urzua fix` does not write '{partial_status}' (it would contradict the derived blocked value); finish the open dependency",
+                judged.status_field, judged.status, judged.evidence_counts(), judged.evidence
+            ),
+            ActionSource::new("delivery-partial-blocked"),
+        ),
+        DeliveryDisagreement::DoneWithUnresolvedItems { unresolved, reopen_to } => {
+            line = unresolved.first().map(|u| u.line);
+            unresolved_items_report(record, config, decl, judged, unresolved, reopen_to)
+        }
+    };
+    Some(
+        Finding::new(
+            RULE_STATUS_DELIVERY_AGREEMENT,
+            FindingSeverity::Error,
+            record.path.clone(),
+            source,
+            message,
+        )
+        .at_opt(line),
+    )
+}
+
+/// The message and action for a `success` status with unresolved Done means
+/// items (`ADR-96`).
+fn unresolved_items_report(
+    record: &Record,
+    config: &Config,
+    decl: &StatusDecl,
+    judged: &DeliveryJudgement,
+    unresolved: &[UnresolvedItem],
+    reopen_to: &str,
+) -> (String, ActionSource) {
+    let id = record_id(record).unwrap_or_else(|| record.path.display().to_string());
+    let line = unresolved.first().map(|u| u.line);
+    let clauses: Vec<String> = unresolved
+        .iter()
+        .map(|u| {
+            format!(
+                "{id} is {} but {} item {} \"{}\" is unresolved: {}",
+                judged.status,
+                items_section(config, &record.record_type),
+                u.n,
+                u.text,
+                u.cause
+            )
+        })
+        .collect();
+    // Two actions are declared (`ADR-96`) and a finding carries one
+    // (`ADR-73`): the reopen when the lifecycle lets the record move
+    // there, else the edit that adds the evidence.
+    let reopen_allowed = !decl.has_transitions() || decl.allows(&judged.status, reopen_to);
+    let source = if reopen_allowed {
+        ActionSource::new("done-with-unresolved-items")
+            .field(judged.status_field.clone())
+            .text(reopen_to.to_string())
+    } else {
+        ActionSource::new("done-with-unresolved-items-evidence")
+            .section(items_section(config, &record.record_type))
+            .line(line.unwrap_or_default())
+    };
+    (clauses.join("; "), source)
+}
+
+impl DeliveryJudgement {
+    /// For a record whose items all resolve but whose dependency is unfinished,
+    /// the clause naming the dependency that caps the status at `capped_at`;
+    /// else empty (`ADR-96`, amendment of 2026-11-07).
+    pub fn cap_note(&self, capped_at: &str) -> String {
+        match self.items.as_ref().map(|i| i.capped_by.as_slice()) {
+            Some(open) if !open.is_empty() => format!(
+                " (every item resolves, but {} is unfinished, which caps the status at '{capped_at}')",
+                open.join(", ")
+            ),
+            _ => String::new(),
+        }
+    }
+
+    /// "3 of 5 items" for an item judgement, else the evidence tier.
+    fn evidence_counts(&self) -> String {
+        match &self.items {
+            Some(i) => format!("{} of {} items", i.resolved, i.total()),
+            None => self.tier.clone(),
+        }
+    }
 }
 
 /// A record's `Status` outside the values its type declares.
@@ -390,31 +672,25 @@ pub fn status_transition_allowed(
                 }
             };
             if let Some(message) = message {
-                findings.push(Finding {
-                    rule: RULE_ID.to_string(),
-                    severity: FindingSeverity::Error,
-                    file: record.path.clone(),
-                    line: None,
-                    waived: None,
-                    declared_severity: None,
-                    suggested_action: None,
-                    action_source: ActionSource::new("transition-not-allowed").field(status_field),
+                findings.push(Finding::new(
+                    RULE_ID,
+                    FindingSeverity::Error,
+                    record.path.clone(),
+                    ActionSource::new("transition-not-allowed").field(status_field),
                     message,
-                });
+                ));
             }
             Outcome::Examined
         },
     );
     (
         RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
             status: if committed.is_some() {
                 RuleStatus::Ran
             } else {
                 RuleStatus::NotApplicable
             },
-            examined_records,
+            ..RuleExecution::ran(RULE_ID, population, examined_records)
         },
         findings,
     )
@@ -440,32 +716,23 @@ pub fn status_unreachable(
                 return Outcome::Absent;
             }
             for status in decl.unreachable() {
-                findings.push(Finding {
-                    rule: RULE_ID.to_string(),
-                    severity: FindingSeverity::Warning,
-                    file: config_path.to_path_buf(),
-                    line: None,
-                    waived: None,
-                    declared_severity: None,
-                    suggested_action: None,
-                    action_source: ActionSource::new("status-unreachable")
+                findings.push(Finding::new(
+                    RULE_ID,
+                    FindingSeverity::Warning,
+                    config_path.to_path_buf(),
+                    ActionSource::new("status-unreachable")
                         .key_path(["record_types", type_name, "statuses", "transitions"]),
-                    message: format!(
+                    format!(
                         "record type '{type_name}' declares status '{status}' but no path of its transitions reaches it from initial ({})",
                         decl.initial.join(", ")
                     ),
-                });
+                ));
             }
             Outcome::Examined
         },
     );
     (
-        RuleExecution {
-            rule: RULE_ID.to_string(),
-            population: Some(population),
-            status: RuleStatus::Ran,
-            examined_records: Vec::new(),
-        },
+        RuleExecution::ran(RULE_ID, population, Vec::new()),
         findings,
     )
 }

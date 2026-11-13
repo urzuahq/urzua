@@ -1,0 +1,10 @@
+id: a-narrative-pointer-to-a-fixed-record-is-reported
+corpus: corpus-u
+invocation: [check]
+# MILE-1 is blocked on BUG-1, which is Fixed: a signal to re-examine. MILE-2 is
+# blocked on a bug that is still Open and draws nothing.
+expect_exit: 0
+expect_findings:
+  - {rule: narrative-field.stale, severity: warning, file: docs/milestone/MILE-1-blocked-on-fixed.md, message_contains: Fixed}
+expect_no_findings:
+  - {rule: narrative-field.stale, file: docs/milestone/MILE-2-blocked-on-open.md}

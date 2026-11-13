@@ -15,6 +15,7 @@
 //!       failure: [WontFix]        # terminal failure
 //!       implementable: [Open]     # code may cite it (optional)
 //!       claim_retained: []        # may keep an Implemented claim (optional)
+//!       blocked: []               # written statuses that mean "waiting" (optional)
 //!       pending: [pending, "not yet written", {pattern: "^\\(pending"}]
 //!       require: [{when: [Fixed], fields: [Regression-test]}]
 //!       forbid:  [{when: [Open], fields: [Fixed-in]}]
@@ -48,6 +49,21 @@ pub struct StatusDecl {
     /// Could later be derived from transitions (MILE-144).
     #[serde(default)]
     pub claim_retained: Vec<String>,
+    /// Non-terminal statuses a person writes to say the record is waiting on a
+    /// dependency (`MILE-144`, `RFC-48`). With a sequencing relation declared,
+    /// `sequence.status-agreement` holds them to the derived `blocked` value: a
+    /// record is blocked when any `Depends-on` target is not in its own type's
+    /// `success`. A type declaring none is not examined by that rule.
+    #[serde(default)]
+    pub blocked: Vec<String>,
+    /// Statuses that claim the work has advanced, and so contradict being
+    /// derived-blocked (`MILE-144`, `ADR-83`). May include a `success` status
+    /// (a record cannot finish before its dependencies do); it never lists a
+    /// `failure` or `blocked` status. A status outside the list, `Planned` for
+    /// instance, is correct for a blocked record. A type declaring neither this
+    /// nor `blocked` is not examined by `sequence.status-agreement`.
+    #[serde(default)]
+    pub progress: Vec<String>,
     /// Whole field values that mean "not done yet", replacing the compiled-in
     /// substring match for this type (BUG-65). Omitted keeps that match.
     #[serde(default)]
@@ -81,13 +97,40 @@ pub struct DeliveryDecl {
     /// drift ignored) that say the work exists.
     pub delivered_tiers: Vec<String>,
     /// Computed tiers that say nothing was delivered. A success status with one
-    /// of these is a status with no evidence.
+    /// of these is a status with no evidence. May be empty: the type then never
+    /// reports a success status for lack of evidence (`ADR-84`).
     pub unevidenced_tiers: Vec<String>,
     /// Statuses that say the work is not done. Delivered evidence under one of
     /// them is a disagreement.
     pub not_done: Vec<String>,
     /// The `success` status `urzua fix` writes when the evidence says delivered.
     pub set_status: String,
+    /// Whether a source or test back-pointer that cites the record counts as
+    /// delivery evidence beside the evidence field (`ADR-84`). Omitted keeps
+    /// today's behaviour: it counts. `false` holds the type to its declared
+    /// evidence field alone.
+    #[serde(default = "back_pointer_evidence_default")]
+    pub back_pointer_evidence: bool,
+    /// Opt-in per-item evidence (`ADR-96`, `MILE-214`): the Done-means section
+    /// becomes a list whose items each name their evidence, and the status is
+    /// computed from the items. Omitted keeps today's behaviour byte for byte.
+    #[serde(default)]
+    pub items: Option<crate::done_items::ItemsDecl>,
+}
+
+impl DeliveryDecl {
+    /// The tiers at which an item's own locators resolve it: the declared
+    /// `items.resolving_tiers`, else `delivered_tiers`.
+    pub fn resolving_tiers(&self) -> &[String] {
+        self.items
+            .as_ref()
+            .and_then(|i| i.resolving_tiers.as_deref())
+            .unwrap_or(&self.delivered_tiers)
+    }
+}
+
+fn back_pointer_evidence_default() -> bool {
+    true
 }
 
 /// One entry of `statuses.pending` (`MILE-162`): a whole value, or a pattern
@@ -130,16 +173,28 @@ impl<'de> Deserialize<'de> for PendingEntry {
 }
 
 impl PendingEntry {
-    fn matches(&self, value: &str) -> bool {
+    pub(crate) fn matches(&self, value: &str) -> bool {
         match self {
             PendingEntry::Value(v) => v.trim().eq_ignore_ascii_case(value),
             // Validated at load, so a pattern that does not compile here (a
             // hand-built declaration) simply matches nothing.
-            PendingEntry::Pattern(p) => regex::Regex::new(&p.pattern)
-                .map(|re| re.is_match(value))
-                .unwrap_or(false),
+            PendingEntry::Pattern(p) => compiled(&p.pattern).is_some_and(|re| re.is_match(value)),
         }
     }
+}
+
+/// A pending pattern, compiled once per process. A pending value is asked of
+/// every field of every record by several rules, so compiling per call was a
+/// third of a single-record `check --stdin-path` run (`MILE-191`).
+fn compiled(pattern: &str) -> Option<std::sync::Arc<regex::Regex>> {
+    use std::collections::HashMap;
+    use std::sync::{Arc, Mutex, OnceLock};
+    static CACHE: OnceLock<Mutex<HashMap<String, Option<Arc<regex::Regex>>>>> = OnceLock::new();
+    let mut cache = CACHE.get_or_init(Default::default).lock().ok()?;
+    cache
+        .entry(pattern.to_string())
+        .or_insert_with(|| regex::Regex::new(pattern).ok().map(Arc::new))
+        .clone()
 }
 
 /// Fields tied to the statuses in `when`.
@@ -170,6 +225,21 @@ impl StatusDecl {
         let pending = self.pending.as_ref()?;
         let value = value.trim();
         Some(pending.iter().any(|p| p.matches(value)))
+    }
+
+    /// Whether a written status says the record is waiting (`blocked`).
+    pub fn is_blocked_status(&self, status: &str) -> bool {
+        self.blocked.iter().any(|v| v == status)
+    }
+
+    /// Whether a written status claims the work has advanced (`progress`).
+    pub fn is_progress_status(&self, status: &str) -> bool {
+        self.progress.iter().any(|v| v == status)
+    }
+
+    /// Whether `status` finishes the work: the type's `success` list.
+    pub fn is_success(&self, status: &str) -> bool {
+        self.success.iter().any(|v| v == status)
     }
 
     /// Whether the type declares a lifecycle graph (`ADR-72`).
@@ -316,6 +386,8 @@ fn validate_one(
     check_list("failure", &d.failure, true)?;
     check_list("implementable", &d.implementable, true)?;
     check_list("claim_retained", &d.claim_retained, true)?;
+    check_list("blocked", &d.blocked, true)?;
+    check_list("progress", &d.progress, true)?;
     if let Some(p) = &d.pending {
         check_pending(p)?;
     }
@@ -324,6 +396,8 @@ fn validate_one(
         ("failure", &d.failure),
         ("implementable", &d.implementable),
         ("claim_retained", &d.claim_retained),
+        ("blocked", &d.blocked),
+        ("progress", &d.progress),
     ] {
         if let Some(v) = list.iter().find(|v| !d.declares(v)) {
             return Err(format!("`{what}` names '{v}', which is not in `values`"));
@@ -331,6 +405,23 @@ fn validate_one(
     }
     if let Some(v) = d.success.iter().find(|v| d.failure.contains(v)) {
         return Err(format!("'{v}' is in both `success` and `failure`"));
+    }
+    // A blocked status is a waiting state: a terminal one is finished, and
+    // `sequence.status-agreement` would contradict itself over it.
+    if let Some(v) = d.blocked.iter().find(|v| d.is_terminal(v)) {
+        return Err(format!(
+            "'{v}' is in `blocked` and is also terminal (`success` or `failure`); a blocked status is a waiting state"
+        ));
+    }
+    // A progress status says the work advanced; a failed record has not, and a
+    // waiting status cannot also be one (`ADR-83`).
+    if let Some(v) = d.progress.iter().find(|v| d.failure.contains(v)) {
+        return Err(format!("'{v}' is in both `progress` and `failure`"));
+    }
+    if let Some(v) = d.progress.iter().find(|v| d.blocked.contains(v)) {
+        return Err(format!(
+            "'{v}' is in both `progress` and `blocked`; a record cannot both claim progress and be waiting"
+        ));
     }
     validate_transitions(d)?;
     if let Some(delivery) = &d.delivery {
@@ -428,10 +519,14 @@ fn validate_delivery(
 ) -> Result<(), String> {
     let tiers: Vec<&str> = embodiment.evidence_states().collect();
     check_list("delivery.delivered_tiers", &delivery.delivered_tiers, false)?;
+    // Empty declares the type never reports a success status for lack of
+    // evidence (`ADR-84`): a type whose evidence is legitimately absent for
+    // some done records (a documentation or performance change) opts out of
+    // that direction and keeps the other.
     check_list(
         "delivery.unevidenced_tiers",
         &delivery.unevidenced_tiers,
-        false,
+        true,
     )?;
     check_list("delivery.not_done", &delivery.not_done, false)?;
     for (what, list) in [
@@ -483,6 +578,226 @@ fn validate_delivery(
             ));
         }
     }
+    if let Some(items) = &delivery.items {
+        validate_items(rt, d, delivery, items, embodiment)?;
+        if let Some(pending) = &items.pending {
+            check_pending(pending).map_err(|e| format!("`delivery.items.pending`: {e}"))?;
+        }
+        check_delivered_tiers_resolve(delivery, "delivery.items")?;
+    }
+    Ok(())
+}
+
+/// `statuses.delivery.items` is refused at load when it would be inert or
+/// ambiguous (`ADR-96` section 4, `BUG-44`): every error names the key.
+/// An item resolves only at a `resolving_tiers` tier, so a delivered tier
+/// outside that list is a tier no item could ever reach.
+fn check_delivered_tiers_resolve(delivery: &DeliveryDecl, key: &str) -> Result<(), String> {
+    match delivery
+        .delivered_tiers
+        .iter()
+        .find(|t| !delivery.resolving_tiers().contains(t))
+    {
+        Some(t) => Err(format!(
+            "type `delivery.delivered_tiers` names '{t}', which is not in `{key}.resolving_tiers` ({}): no item could resolve at it",
+            delivery.resolving_tiers().join(", ")
+        )),
+        None => Ok(()),
+    }
+}
+
+fn validate_items(
+    rt: &RecordTypeConfig,
+    d: &StatusDecl,
+    delivery: &DeliveryDecl,
+    items: &crate::done_items::ItemsDecl,
+    embodiment: &EmbodimentDecl,
+) -> Result<(), String> {
+    let key = "delivery.items";
+    if items.section.trim().is_empty() {
+        return Err(format!("`{key}.section` is blank"));
+    }
+    let required: Vec<String> = crate::document_model::declared_model("", rt)
+        .ok()
+        .flatten()
+        .and_then(|m| m.sections)
+        .map(|s| s.required.into_iter().map(|r| r.name).collect())
+        .unwrap_or_default();
+    if !required.contains(&items.section) {
+        return Err(format!(
+            "`{key}.section` names '{}', which the type does not require: declare it under `sections.required` (required: {})",
+            items.section,
+            if required.is_empty() { "none".to_string() } else { required.join(", ") }
+        ));
+    }
+    validate_item_markers(items)?;
+    if !d.declares(&items.partial_status) {
+        return Err(format!(
+            "`{key}.partial_status` names '{}', which is not in `values`",
+            items.partial_status
+        ));
+    }
+    if !delivery.not_done.contains(&items.partial_status) {
+        return Err(format!(
+            "`{key}.partial_status` names '{}', which is not in `delivery.not_done`",
+            items.partial_status
+        ));
+    }
+    if d.has_transitions() {
+        if let Some(from) = delivery
+            .not_done
+            .iter()
+            .find(|s| **s != items.partial_status && !d.allows(s, &items.partial_status))
+        {
+            return Err(format!(
+                "`{key}.partial_status` names '{}', which `transitions` does not allow from '{from}': `fix` could not repair a record at '{from}' to it",
+                items.partial_status
+            ));
+        }
+    }
+    if let Some(tiers) = &items.resolving_tiers {
+        check_list(&format!("{key}.resolving_tiers"), tiers, false)?;
+        let known: Vec<&str> = embodiment.tiers.iter().map(|t| t.state.as_str()).collect();
+        if let Some(t) = tiers.iter().find(|t| !known.contains(&t.as_str())) {
+            return Err(format!(
+                "`{key}.resolving_tiers` names '{t}', which is not a declared embodiment tier (one of: {})",
+                known.join(", ")
+            ));
+        }
+    }
+    if let Some(kind) = &items.kind {
+        validate_kind(rt, delivery, kind, embodiment)?;
+    }
+    validate_waiver_categories(items)
+}
+
+/// The clause markers: none blank, and none a prefix of the other, so a clause
+/// can be told apart.
+fn validate_item_markers(items: &crate::done_items::ItemsDecl) -> Result<(), String> {
+    let key = "delivery.items";
+    for (what, value) in [
+        ("clause_separator", &items.clause_separator),
+        ("evidence_marker", &items.evidence_marker),
+        ("waiver_marker", &items.waiver_marker),
+    ] {
+        if value.trim().is_empty() {
+            return Err(format!("`{key}.{what}` is blank"));
+        }
+    }
+    if items.evidence_marker == items.waiver_marker {
+        return Err(format!(
+            "`{key}.evidence_marker` and `{key}.waiver_marker` are both '{}'",
+            items.evidence_marker
+        ));
+    }
+    if items.evidence_marker.starts_with(&items.waiver_marker)
+        || items.waiver_marker.starts_with(&items.evidence_marker)
+    {
+        return Err(format!(
+            "`{key}`: one of the markers '{}' and '{}' is a prefix of the other, so a clause could not be told apart",
+            items.evidence_marker, items.waiver_marker
+        ));
+    }
+    Ok(())
+}
+
+/// The waiver categories: named plainly, listed once, and a category that
+/// expires also cites its target.
+fn validate_waiver_categories(items: &crate::done_items::ItemsDecl) -> Result<(), String> {
+    let key = "delivery.items";
+    let mut seen = std::collections::BTreeSet::new();
+    for c in &items.waiver_categories {
+        if c.name.trim().is_empty() {
+            return Err(format!("`{key}.waiver_categories` has a blank name"));
+        }
+        if c.name
+            .contains(|ch: char| ch.is_whitespace() || "(),".contains(ch))
+        {
+            return Err(format!(
+                "`{key}.waiver_categories` name '{}' holds whitespace, a parenthesis or a comma, which the waiver clause cannot carry",
+                c.name
+            ));
+        }
+        if !seen.insert(c.name.as_str()) {
+            return Err(format!(
+                "`{key}.waiver_categories` lists '{}' twice",
+                c.name
+            ));
+        }
+        if c.expires_required() && !c.cite_required() {
+            return Err(format!(
+                "`{key}.waiver_categories` '{}' requires an expiry but no cite: a deferral needs a target (`cite: required`)",
+                c.name
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// `statuses.delivery.items.kind` is refused at load when it would be inert or
+/// contradictory (`ADR-96`, amendment of 2026-11-07, `BUG-44`): a field the type
+/// does not carry, a kind no record can be told from another, and a delivered
+/// tier no item can reach each read as a kind that silently never applies.
+fn validate_kind(
+    rt: &RecordTypeConfig,
+    delivery: &DeliveryDecl,
+    kind: &crate::done_items::KindDecl,
+    embodiment: &EmbodimentDecl,
+) -> Result<(), String> {
+    let key = "delivery.items.kind";
+    if kind.field.trim().is_empty() {
+        return Err(format!("`{key}.field` is blank"));
+    }
+    if let Some(known) = rt.known_fields.as_ref().map(|_| rt.declared_fields()) {
+        if !known.contains(&crate::values::FieldName::new(&kind.field)) {
+            return Err(format!(
+                "`{key}.field` names '{}', which the type does not declare: add it to `required_fields` or `known_fields`",
+                kind.field
+            ));
+        }
+    }
+    if kind.kinds.is_empty() {
+        return Err(format!("`{key}.kinds` is empty; name at least one kind"));
+    }
+    let known: Vec<&str> = embodiment.tiers.iter().map(|t| t.state.as_str()).collect();
+    let mut seen = std::collections::BTreeSet::new();
+    for entry in &kind.kinds {
+        if entry.name.trim().is_empty() {
+            return Err(format!("`{key}.kinds` has a blank name"));
+        }
+        if !seen.insert(entry.name.as_str()) {
+            return Err(format!("`{key}.kinds` lists '{}' twice", entry.name));
+        }
+        let Some(tiers) = &entry.delivered_tiers else {
+            continue;
+        };
+        check_list(
+            &format!("{key}.kinds.{}.delivered_tiers", entry.name),
+            tiers,
+            false,
+        )?;
+        for t in tiers {
+            if !known.contains(&t.as_str()) {
+                return Err(format!(
+                    "`{key}.kinds.{}.delivered_tiers` names '{t}', which is not a declared embodiment tier (one of: {})",
+                    entry.name,
+                    known.join(", ")
+                ));
+            }
+            if !delivery.resolving_tiers().contains(t) {
+                return Err(format!(
+                    "`{key}.kinds.{}.delivered_tiers` names '{t}', which is not in `resolving_tiers`: no item could resolve at it",
+                    entry.name
+                ));
+            }
+            if delivery.unevidenced_tiers.contains(t) {
+                return Err(format!(
+                    "`{key}.kinds.{}.delivered_tiers` names '{t}', which is in `delivery.unevidenced_tiers`",
+                    entry.name
+                ));
+            }
+        }
+    }
     Ok(())
 }
 
@@ -508,6 +823,33 @@ pub(crate) fn validate(
         out.insert(name.clone(), decl);
     }
     Ok(out)
+}
+
+/// A type that declares `delivery.items` needs `status.delivery-agreement`
+/// on: the guaranteed `DoneWithUnresolvedItems` finding is that rule's, so with
+/// it off the declaration would compute a status nothing holds the record to
+/// (`ADR-96` section 4, `BUG-44`).
+pub(crate) fn validate_items_rule(
+    types: &BTreeMap<String, RecordTypeConfig>,
+    decls: &BTreeMap<String, StatusDecl>,
+    rules: &BTreeMap<String, crate::config::RuleSetting>,
+) -> Result<(), ConfigError> {
+    let rule = crate::rules::RULE_STATUS_DELIVERY_AGREEMENT;
+    let on = rules
+        .get(rule)
+        .is_some_and(|s| s.level != crate::config::RuleLevel::Off);
+    for (name, decl) in decls {
+        let declares = decl.delivery.as_ref().is_some_and(|d| d.items.is_some());
+        if declares && !on && types.contains_key(name) {
+            return Err(invalid(
+                name,
+                format!(
+                    "`delivery.items` is declared, but `{rule}` is off or absent: its `DoneWithUnresolvedItems` finding is what holds a status to the items, so turn the rule on"
+                ),
+            ));
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -581,6 +923,49 @@ mod tests {
         let d = c.record_types["bug"].status_decl().unwrap();
         assert_eq!(d.implementable, vec!["Planned", "InProgress"]);
         assert!(!d.is_terminal("InProgress"));
+    }
+
+    #[test]
+    fn blocked_loads_and_is_validated() {
+        let c = parse(&cfg("      values: [Planned, Blocked, Done]\n      success: [Done]\n      blocked: [Blocked]\n")).unwrap();
+        let d = c.record_types["bug"].status_decl().unwrap();
+        assert_eq!(d.blocked, vec!["Blocked"]);
+        assert!(d.is_blocked_status("Blocked") && !d.is_blocked_status("Planned"));
+        assert!(d.is_success("Done") && !d.is_success("Blocked"));
+        assert!(err("      values: [Open]\n      blocked: [Gone]\n").contains("blocked"));
+        assert!(
+            err("      values: [Open, Blocked]\n      blocked: [Blocked, Blocked]\n")
+                .contains("twice")
+        );
+        assert!(
+            err("      values: [Open, Done]\n      success: [Done]\n      blocked: [Done]\n")
+                .contains("waiting state")
+        );
+        assert!(err(
+            "      values: [Open, Dropped]\n      failure: [Dropped]\n      blocked: [Dropped]\n"
+        )
+        .contains("waiting state"));
+    }
+
+    #[test]
+    fn progress_loads_and_is_validated() {
+        let c = parse(&cfg("      values: [Planned, InProgress, Done, Dropped]\n      success: [Done]\n      failure: [Dropped]\n      progress: [InProgress, Done]\n")).unwrap();
+        let d = c.record_types["bug"].status_decl().unwrap();
+        assert!(d.is_progress_status("InProgress") && d.is_progress_status("Done"));
+        assert!(!d.is_progress_status("Planned"));
+        assert!(err("      values: [Open]\n      progress: [Gone]\n").contains("progress"));
+        assert!(
+            err("      values: [Open, Doing]\n      progress: [Doing, Doing]\n").contains("twice")
+        );
+        assert!(err(
+            "      values: [Open, Dropped]\n      failure: [Dropped]\n      progress: [Dropped]\n"
+        )
+        .contains("both `progress` and `failure`"));
+        // A written waiting status cannot also claim progress.
+        assert!(err(
+            "      values: [Open, Blocked]\n      blocked: [Blocked]\n      progress: [Blocked]\n"
+        )
+        .contains("both `progress` and `blocked`"));
     }
 
     #[test]

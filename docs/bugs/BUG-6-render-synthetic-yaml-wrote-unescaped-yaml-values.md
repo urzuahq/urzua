@@ -2,7 +2,7 @@
 Stable-Id: 01M1ZK63KBP2T4QK7HVET3M1KJ
 Status: Fixed
 Found-in: found during ADR-33's yaml-frontmatter migration work, before writing the actual conversion tool -- reviewing render_synthetic_yaml's own output shape ahead of reusing its escaping logic
-Regression-test: urzua-core::new_record::tests::render_synthetic_yaml_escapes_a_value_with_an_embedded_colon, render_synthetic_yaml_round_trips_a_numeric_looking_string
+Realized-by: test:rust/crates/urzua-core/src/new_record.rs#render_synthetic_yaml_escapes_a_value_with_an_embedded_colon@sha256:ae49b0810382bf0438cb971cf5455534159646f42f2a8ca784c6056b7ce1275b, test:rust/crates/urzua-core/src/new_record.rs#render_synthetic_yaml_round_trips_a_numeric_looking_string@sha256:2260e991b1883bccfb880ab6689728a8547e09baccce94a7938885802f0e63d6
 ---
 # 6 — render_synthetic_yaml wrote unescaped YAML values
 
@@ -54,3 +54,5 @@ filled with their real value when `required_fields` names them; `Stable-Id` alon
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-08 | Initial bug record, `Status: Fixed`. | **structural** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 2 `test:` locators and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |
+> | 2026-11-07 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/new_record.rs#render_synthetic_yaml_escapes_a_value_with_an_embedded_colon` (lines 704-733) 15315798b5a0 -> ae49b0810382, `rust/crates/urzua-core/src/new_record.rs#render_synthetic_yaml_round_trips_a_numeric_looking_string` (lines 735-759) beb7ebeb72b1 -> 2260e991b188. Reason: The two pinned tests build NewRecordParams literals, which gained the fields title_field and initial_version (both None here) for the declared title and starting version of urzua new (MILE-74). Their inputs and assertions are unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |

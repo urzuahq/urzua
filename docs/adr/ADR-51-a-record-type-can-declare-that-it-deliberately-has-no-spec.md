@@ -2,7 +2,6 @@
 Stable-Id: 01M2PCCCM8EJDJH9GCN2J8T257
 Status: Rejected
 Embodiment: Not started
-Realized-by: —
 Date: 2026-09-16
 Author: beauwilliams
 Deciders: beauwilliams
@@ -106,6 +105,7 @@ visible and loud, not silent. No data format change.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-16 | Initial decision. **Why:** the deciding evidence turned out to be in the code, not the corpus -- `config.rs`'s own doc comment already promises "a type can permanently have none declared" and nothing implements it, while the `header_layout` it cites as the same principle behaves oppositely. | **structural** |
+> | 2026-11-07 | Removed the placeholder `Realized-by: —` line: the field is optional and `embodiment.locator-exists` now reports text that is not a `spec:`, `code:` or `test:` entry. Nothing is realized-by yet. | **structural** |
 
 ## Why this was rejected (2026-09-16)
 

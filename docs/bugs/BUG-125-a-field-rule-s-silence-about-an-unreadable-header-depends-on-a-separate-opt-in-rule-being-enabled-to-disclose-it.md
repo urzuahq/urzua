@@ -2,7 +2,7 @@
 Stable-Id: 01M36CDVC74HV4JF98QN78ZR5Q
 Status: Fixed
 Found-in: "Investigating RFC-45's scope; the user asked whether Absent/Unreadable being silently folded together was itself a design problem"
-Regression-test: "field_quality_discloses_unreadable_on_its_own_observed_failing, rules.rs"
+Realized-by: test:rust/crates/urzua-core/src/rules/field.rs#field_quality_discloses_unreadable_on_its_own_observed_failing@sha256:91b3445e70ac58fa9a6a3124b5e58bda7b41655cc14097f06b5fa115454f9128
 ---
 # 125 — a field rule's silence about an unreadable header depends on a separate opt-in rule being enabled to disclose it
 
@@ -81,3 +81,4 @@ count, alongside `eligible`/`examined`/`out_of_scope`. Fixed once, in `report.rs
 > | 2026-09-23 | Filed. **Why:** the user asked whether silently folding `Absent`/`Unreadable` together was itself a design problem; investigating surfaced a live, reproducible instance of `ADR-55`'s core defect class reachable through an ordinary single-rule config, not a hypothetical. | **substantive** |
 > | 2026-09-23 | Fixed via `RFC-45`/`ADR-63`: `unreadable` disclosed by `census`/`census_records` structurally. Verified against the exact scratch reproduction above, and verified programmatically that every header-reading rule routes through the fixed machinery. | **substantive** |
 > | 2026-09-23 | Amended same day: a `/code-review` pass on the PR shipping this fix (round 21) found `header.pointer-field-clean` still missing the per-body `Unreadable` guard `field.quality` has -- routing through the fixed `census_records` was not, by itself, enough to catch a rule whose own closure never says `Unreadable`. Fixed with the same guard, verified observed-failing then passing. A follow-up sweep of every `record.header.get(...)` call site in `rules.rs`, checking the guard's actual presence rather than only whether the enclosing function calls `census`/`census_records`, found one further instance in `supersession_reciprocity`'s own candidate check; fixed the same way, same verification. **Why:** the earlier "verified programmatically, zero exceptions" claim checked only that every rule *calls* `census`/`census_records`, not that every rule's own `Outcome` classification is correct -- a narrower guarantee than the prose implied. Restated above rather than left standing. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

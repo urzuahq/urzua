@@ -2,7 +2,6 @@
 Stable-Id: 01M265K0MXRD14NFK6WWXHJNTZ
 Status: Fixed
 Found-in: 'hit manually at least three times this session (PRs #21, #23, and the knope-opened #24) before being understood as a general defect rather than a one-off flake: applying `no-changeset` to an already-open PR left the `changeset required` check reporting `fail`, requiring an unrelated empty commit each time to force a fresh evaluation'
-Regression-test: 'no automated test -- GitHub Actions trigger-type behavior isn''t something this repo''s own test suite can exercise; verified by hand that `pull_request:` with no `types:` defaults to `[opened, synchronize, reopened]` (GitHub''s own documented default), which does not include `labeled`/`unlabeled`'
 ---
 # 15 — ci.yml's changeset gate evaluates a stale pre-label event payload since labeled isn't a trigger type
 
@@ -38,8 +37,13 @@ with a manual nudge.
 - PRs #21, #23, #24 -- each hit this and required a manual empty-commit workaround before the root
   cause was understood.
 
+## Regression test
+
+no automated test -- GitHub Actions trigger-type behavior isn't something this repo's own test suite can exercise; verified by hand that `pull_request:` with no `types:` defaults to `[opened, synchronize, reopened]` (GitHub's own documented default), which does not include `labeled`/`unlabeled`
+
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-10 | Found (after recurring silently across three separate PRs this session) and fixed same-day. `ci.yml`'s `pull_request:` trigger now explicitly lists `labeled`/`unlabeled` alongside the previously-implicit default three types, so a label change alone re-evaluates the gate without needing an unrelated commit. `Status: Fixed`. | **substantive** |
+> | 2026-11-05 | `Regression-test` retired (ADR-84); it named no test, so `Realized-by` is unchanged and the original text is kept under Regression test. **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

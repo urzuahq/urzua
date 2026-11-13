@@ -11,15 +11,117 @@ on:
         description: The ref to check out. Defaults to the triggering ref.
         required: false
         type: string
+      comment:
+        description: >-
+          "false" keeps the gate from posting its pull request comment. The
+          caller still has to grant `pull-requests: write`, which this
+          workflow's job asks for.
+        required: false
+        type: string
+        default: "true"
 
 permissions:
   contents: read
 
 jobs:
-  rust:
-    name: rust (fmt, clippy, test, build)
+  # The checks are split into jobs that run side by side, so the slowest one,
+  # not their sum, sets the wall-clock time (ADR-98). `result` is the one job a
+  # caller should depend on: the nested job names are not stable, `result` is.
+
+  # Everything that does not need a build of the tests or of the release binary.
+  lint:
+    name: lint (fmt, clippy, deny, release scripts)
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    env:
+      # Line tables are enough for a panic backtrace; full debug info only
+      # makes the build and the cache bigger.
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
+    defaults:
+      run:
+        working-directory: rust
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ inputs.ref }}
+          # The release invariants compare the manifest version with the newest
+          # tag, so this needs history and tags.
+          fetch-depth: 0
+      - name: install the pinned toolchain (rustup auto-detects rust-toolchain.toml)
+        run: |
+          rustup show
+          rustup component add rustfmt clippy
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: rust
+          shared-key: lint
+          # Pull requests restore main's cache and never write one, so a branch
+          # cannot evict it.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: cargo fmt --check
+        run: cargo fmt --all -- --check
+      - name: cargo clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      # Supply-chain and unused-dependency gates (MILE-176). Pinned prebuilt
+      # binaries with a checksum, so CI does not compile them on every run.
+      - name: install cargo-deny and cargo-machete (pinned, checksummed)
+        working-directory: .
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/tools" && cd "$RUNNER_TEMP/tools"
+          curl -sSLf --retry 5 --retry-all-errors --retry-delay 5 -o deny.tgz https://github.com/EmbarkStudios/cargo-deny/releases/download/0.19.4/cargo-deny-0.19.4-x86_64-unknown-linux-musl.tar.gz
+          curl -sSLf --retry 5 --retry-all-errors --retry-delay 5 -o machete.tgz https://github.com/bnjbvr/cargo-machete/releases/download/v0.9.1/cargo-machete-v0.9.1-x86_64-unknown-linux-musl.tar.gz
+          echo "3bd58b784e83715b86ddbc9deac591890372ec77fda5741bb0826970b958506f  deny.tgz" | sha256sum -c -
+          echo "640b0814480b401e4e72201e52a13e1311b8eb8d7c27faa08bbe9886f252f26d  machete.tgz" | sha256sum -c -
+          tar -xzf deny.tgz --strip-components=1 --wildcards '*/cargo-deny'
+          tar -xzf machete.tgz --strip-components=1 --wildcards '*/cargo-machete'
+          echo "$PWD" >> "$GITHUB_PATH"
+      - name: cargo machete (unused dependencies)
+        run: cargo machete
+      - name: cargo deny (advisories, bans, licenses, sources)
+        run: cargo deny check
+      # The release tool must tolerate the structured claim field a changeset
+      # fragment carries (`closes`). The pin and checksum are written once, in
+      # .github/actions/install-knope, which the two release workflows use too;
+      # the pin test fails when a workflow carries its own copy, and the compat
+      # test reads the version from the action and fails if the installed one
+      # differs, so a knope upgrade re-runs it.
+      - uses: ./.github/actions/install-knope
+      - name: knope is pinned in one place
+        working-directory: .
+        run: .github/scripts/knope-pin.test.sh
+      - name: nextest is pinned in one place
+        working-directory: .
+        run: .github/scripts/nextest-pin.test.sh
+      - name: knope tolerates the closes key (ADR-85)
+        working-directory: .
+        run: .github/scripts/knope-closes-compat.test.sh
+      # Guards that previously ran only under `make ci`, so a broken release
+      # guard passed CI, and publish-release's pre-tag gate skipped the release
+      # invariants.
+      - name: release guard planted-violation cases
+        working-directory: .
+        run: .github/scripts/release-guard.test.sh
+      - name: release invariants planted-violation cases
+        working-directory: .
+        run: .github/scripts/release-invariants.test.sh
+      - name: release invariants on this ref
+        working-directory: .
+        run: |
+          .github/scripts/release-invariants.sh \
+            .changeset rust/Cargo.toml "$(git tag --sort=-v:refname | head -1)"
+      - name: the aggregate gate fails closed (planted-violation cases)
+        working-directory: .
+        run: .github/scripts/ci-gate.test.sh
+
+  # The release build and the checks that read the binary it produces.
+  build:
+    name: build (release, rule table, records gate)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: read
       # The gate's one updating comment on a pull request. A caller must grant
@@ -39,49 +141,217 @@ jobs:
           # to detect anything, not an error, so this is load-bearing.
           fetch-depth: 0
       - name: install the pinned toolchain (rustup auto-detects rust-toolchain.toml)
-        run: |
-          rustup show
-          rustup component add rustfmt clippy
+        run: rustup show
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: rust
-      - name: cargo fmt --check
-        run: cargo fmt --all -- --check
-      - name: cargo clippy
-        run: cargo clippy --workspace --all-targets --locked -- -D warnings
-      # Supply-chain and unused-dependency gates (MILE-176). Pinned prebuilt
-      # binaries with a checksum, so CI does not compile them on every run.
-      - name: install cargo-deny and cargo-machete (pinned, checksummed)
-        working-directory: .
-        run: |
-          set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/tools" && cd "$RUNNER_TEMP/tools"
-          curl -sSLfo deny.tgz https://github.com/EmbarkStudios/cargo-deny/releases/download/0.19.4/cargo-deny-0.19.4-x86_64-unknown-linux-musl.tar.gz
-          curl -sSLfo machete.tgz https://github.com/bnjbvr/cargo-machete/releases/download/v0.9.1/cargo-machete-v0.9.1-x86_64-unknown-linux-musl.tar.gz
-          echo "3bd58b784e83715b86ddbc9deac591890372ec77fda5741bb0826970b958506f  deny.tgz" | sha256sum -c -
-          echo "640b0814480b401e4e72201e52a13e1311b8eb8d7c27faa08bbe9886f252f26d  machete.tgz" | sha256sum -c -
-          tar -xzf deny.tgz --strip-components=1 --wildcards '*/cargo-deny'
-          tar -xzf machete.tgz --strip-components=1 --wildcards '*/cargo-machete'
-          echo "$PWD" >> "$GITHUB_PATH"
-      - name: cargo machete (unused dependencies)
-        run: cargo machete
-      - name: cargo deny (advisories, bans, licenses, sources)
-        run: cargo deny check
+          shared-key: release
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: cargo build --release
         run: cargo build --workspace --release --locked
-      - name: cargo test
-        run: cargo test --workspace --locked
+      - name: SPEC-2 rule table is current
+        working-directory: .
+        run: make rule-table-check
       # The records gate is the reusable unit other repositories adopt
       # (MILE-180), run here against the binary just built: `urzua check`, and
       # on a pull request `urzua check --base` against the PR base, reported as
       # annotations and one updating comment. The unit also verifies that the
       # history it needs is present (fetch-depth: 0 above), so a shallow
       # checkout fails with a reason instead of reading clean (ADR-71).
-      # base-ref is empty outside pull requests (publish-release calls this
-      # workflow on a tag), where only the whole-tree check runs.
+      # base-ref is empty on a push and on a tag (publish-release calls this
+      # workflow with a ref), where only the whole-tree check runs. On a pull
+      # request it is the base branch; in a merge queue it is the branch the
+      # queued commit will land on (the event carries it as a full ref), so
+      # the diff rules run for the commit that is about to merge, not only
+      # for the pull request that was reviewed.
+      # identity.open-pr-collision (ADR-93) compares an added record with the
+      # pull-request head refs `urzua new` fetches; `check` never fetches, so the
+      # gate does, with plain git, into the same private namespace.
+      - name: fetch pull request refs (identity.open-pr-collision)
+        working-directory: .
+        run: git fetch --no-tags --quiet origin '+refs/pull/*/head:refs/urzua/pr/origin/*'
+      # The branch the gate diffs against. Expressions have no string replace,
+      # so the merge queue's full ref is trimmed here, with both values passed
+      # through the environment.
+      - name: resolve the base branch for the diff rules
+        id: base
+        working-directory: .
+        env:
+          PR_BASE: ${{ github.base_ref }}
+          QUEUE_BASE: ${{ github.event.merge_group.base_ref }}
+        run: echo "ref=${PR_BASE:-${QUEUE_BASE#refs/heads/}}" >> "$GITHUB_OUTPUT"
       - name: urzua gate (SPEC-0002 Phase A exit criterion -- self-hosting)
         uses: ./.github/actions/urzua-gate
         with:
           binary: rust/target/release/urzua
-          base-ref: ${{ github.base_ref }}
+          base-ref: ${{ steps.base.outputs.ref }}
           pr-number: ${{ github.event.pull_request.number }}
+          comment: ${{ inputs.comment }}
+          # The authority table (ADR-89 section 4): the pull request's author and
+          # current approvers, for diff.decider-required.
+          actors: "true"
+      # No stale evidence pin may reach the main line. `fix --rebaseline` without
+      # --apply only reads: it writes nothing. The step passes only when the
+      # JSON report says `status: ok`; any other status, a missing key, empty or
+      # unparseable output fails it, and the stale paths (`rebaselines`) and the
+      # pins that cannot be re-pinned (`failed_pins`) are named.
+      - name: no stale evidence pins (fix --rebaseline, report only)
+        working-directory: .
+        shell: bash -eo pipefail {0}
+        run: |
+          report="$(mktemp)"
+          rust/target/release/urzua fix --rebaseline > "$report" || true
+          if ! jq -e '.status == "ok"' "$report" > /dev/null; then
+            echo "::error::stale or unreadable evidence pins: re-pin each record with a per-file reason" >&2
+            echo "Stale pins (record  locator):" >&2
+            jq -r '(.rebaselines // [])[] | .record as $r | .pins[] | "\($r)  \(.locator)"' "$report" >&2 || true
+            echo "Pins that cannot be re-pinned (record  locator  reason):" >&2
+            jq -r '(.failed_pins // [])[] | "\(.record)  \(.locator)  \(.reason)"' "$report" >&2 || true
+            echo "Report status: $(jq -r '.status // "none"' "$report" 2>/dev/null || echo unreadable)" >&2
+            echo "Re-pin with: urzua fix --rebaseline --apply --ids <record> --by <you> --reason '<what changed in the pinned code>' (see .claude/commands/repin.md). Read the diff of each pinned file first; list every re-pin and its reason in the PR body." >&2
+            exit 1
+          fi
+          echo "no stale evidence pins"
+      # The installed agent-harness bundle (hooks, commands, lock) has not drifted from
+      # what `urzua harness install` generates: a deleted hook entry or an edited
+      # translator fails here, not only in a cargo test.
+      - name: urzua harness status (no drift)
+        working-directory: .
+        run: rust/target/release/urzua harness status
+
+  # The test suite, sharded: cargo-nextest deals the tests out round-robin by
+  # `--partition count:i/n`, and every shard runs under the leak guard. The
+  # shard count is a number to raise when a shard nears the timeout; no other
+  # file names it.
+  test:
+    name: test (shard ${{ matrix.shard }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    strategy:
+      # A red shard must not hide another's failure; `result` still fails on any.
+      fail-fast: false
+      matrix:
+        shard: ["1/3", "2/3", "3/3"]
+    env:
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ inputs.ref }}
+          # Tests read the repository's own history (embodiment drift, blame).
+          fetch-depth: 0
+      - name: install the pinned toolchain (rustup auto-detects rust-toolchain.toml)
+        run: rustup show
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: rust
+          shared-key: test
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - uses: ./.github/actions/install-nextest
+      - name: cargo nextest, shard ${{ matrix.shard }} (and no leaked fixture directories)
+        run: |
+          .github/scripts/test-no-leak.test.sh
+          .github/scripts/ci-tests.sh nextest '${{ matrix.shard }}'
+      # nextest does not run doctests; one shard does.
+      - name: doctests
+        if: matrix.shard == '1/3'
+        run: .github/scripts/ci-tests.sh doctest
+
+  # The corpus acceptance runner is one custom-harness process, so nextest
+  # cannot partition it; it has its own i/n switch. A shard cannot judge the
+  # suite-wide coverage gate, so each uploads its proof and `acceptance-gate`
+  # judges the union.
+  acceptance:
+    name: acceptance (shard ${{ matrix.shard }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ["1/4", "2/4", "3/4", "4/4"]
+    env:
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+      - name: install the pinned toolchain (rustup auto-detects rust-toolchain.toml)
+        run: rustup show
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: rust
+          shared-key: test
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: acceptance, shard ${{ matrix.shard }}
+        run: .github/scripts/ci-tests.sh acceptance '${{ matrix.shard }}' "$RUNNER_TEMP/acceptance.proven"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: acceptance-proven-${{ strategy.job-index }}
+          path: ${{ runner.temp }}/acceptance.proven
+          if-no-files-found: error
+          retention-days: 1
+          # A re-run of the whole workflow uploads under the same name again.
+          overwrite: true
+
+  acceptance-gate:
+    name: acceptance coverage gate (all shards)
+    needs: acceptance
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    env:
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+      - name: install the pinned toolchain (rustup auto-detects rust-toolchain.toml)
+        run: rustup show
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: rust
+          shared-key: test
+          save-if: "false"
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: acceptance-proven-*
+          path: ${{ runner.temp }}/proven
+      - name: judge the coverage gate over every shard (a missing shard fails)
+        run: |
+          mkdir -p "$RUNNER_TEMP/flat"
+          find "$RUNNER_TEMP/proven" -name '*.proven' | while read -r f; do
+            cp "$f" "$RUNNER_TEMP/flat/$(basename "$(dirname "$f")").proven"
+          done
+          .github/scripts/ci-tests.sh acceptance-merge "$RUNNER_TEMP/flat"
+
+  # The one job a caller depends on. It needs every job above, runs even when
+  # one failed, and fails unless every one succeeded: a failure, a cancellation
+  # and a skip (a shard that never started) are all red.
+  result:
+    name: rust (fmt, clippy, test, build)
+    needs: [lint, build, test, acceptance, acceptance-gate]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ inputs.ref }}
+          sparse-checkout: .github/scripts
+      - name: every check job succeeded
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: .github/scripts/ci-gate.sh

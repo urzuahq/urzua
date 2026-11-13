@@ -75,5 +75,34 @@ pub fn validate_snapshot(snapshot: RefsSnapshot, repository: &str) -> Result<Ref
             snapshot.repository
         ));
     }
+    for (name, list) in [("issues", &snapshot.issues), ("pulls", &snapshot.pulls)] {
+        if list.windows(2).any(|w| w[0] >= w[1]) {
+            return Err(format!(
+                "lists '{name}' out of order or with a repeated number; they must be strictly ascending (run `urzua refs refresh` to rewrite it)"
+            ));
+        }
+    }
     Ok(snapshot)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn raw(issues: Vec<u64>) -> RefsSnapshot {
+        RefsSnapshot {
+            schema_version: SNAPSHOT_SCHEMA_VERSION,
+            repository: "o/r".into(),
+            generated_at: "2026-01-01".into(),
+            issues,
+            pulls: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn an_unsorted_or_repeating_list_is_rejected() {
+        assert!(validate_snapshot(raw(vec![5, 3]), "o/r").is_err());
+        assert!(validate_snapshot(raw(vec![3, 3]), "o/r").is_err());
+        assert!(validate_snapshot(raw(vec![3, 5]), "o/r").is_ok());
+    }
 }

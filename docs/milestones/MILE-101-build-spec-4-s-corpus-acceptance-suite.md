@@ -1,9 +1,10 @@
 ---
-Status: Planned
+Status: InProgress
 Stable-Id: 01M2VN4DCGV5PNZ3FWSZG4WQEJ
 Phase: '1'
 Track: schema-governance
 Implements: SPEC-4
+Depends-on: MILE-170
 Blocked-on: —
 ---
 # 101 — Build `SPEC-4`'s corpus acceptance suite
@@ -51,7 +52,11 @@ so the format has never met a real case. Expect the spec to change on contact --
 
 ## Done means
 
-Every fixture corpus under `urzua-cli/tests/acceptance/corpora/` has a `manifest.yaml` recording each irregularity it was built to exhibit, every irregularity the manifests list has a case file pairing the corpus, a config, an invocation and an expected result, and `tests/acceptance.rs` runs all of them in `cargo test --workspace`; a case whose expectation is removed fails the run, bug-reproduction coverage is complete for the bugs `SPEC-4` names, and the harness half (mutation proof, coverage report) delivered by `MILE-170` is not repeated here.
+- Every fixture corpus under `urzua-cli/tests/acceptance/corpora/` has a `manifest.yaml` recording each irregularity it was built to exhibit. — evidence: test:rust/crates/urzua-cli/tests/acceptance.rs#check_manifest@sha256:a17a8a8c99e59fd9abcc194f8f0a211335ee294be7ffaade27cbffeba89b273d
+- Every irregularity the manifests list has a case file pairing the corpus, a config, an invocation and an expected result.
+- `tests/acceptance.rs` runs all of them in `cargo test --workspace`. — evidence: test:rust/crates/urzua-cli/tests/acceptance.rs#main@sha256:4e26f4ef2c8bb82b6a8d434b185670f7c15f0db5c3a8fa696918002355e159d9, code:rust/crates/urzua-cli/Cargo.toml
+- A case whose expectation is removed fails the run.
+- Bug-reproduction coverage is complete for the bugs `SPEC-4` names, and the harness half (mutation proof, coverage report) delivered by `MILE-170` is not repeated here.
 
 > **Revision log**
 >
@@ -64,3 +69,7 @@ Every fixture corpus under `urzua-cli/tests/acceptance/corpora/` has a `manifest
 > | 2026-11-04 | `MILE-170` delivered the harness half (mutation proof, coverage report, property, "Nth record type" case, `corpus-d` to `corpus-f`); this milestone's bug-reproduction coverage is unchanged. `Status` and `Phase` unchanged. **Why:** keeps the split recorded on both sides. | **structural** |
 > | 2026-11-04 | Evidence so far, no `Realized-by` yet. **Why:** the runner (`acceptance.rs`) and two corpora with manifests exist (merged in #146) and a property slice (`property.rs`, #97); the full suite `SPEC-4` specifies, every irregularity per manifest, is not. `Status` stays Planned. | **substantive** |
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |
+> | 2026-11-05 | `Depends-on: MILE-170` added. **Why:** the What says the harness half moved to `MILE-170` and Done means relies on it (Done). Proposed for maintainer review; `Status` unchanged. | **structural** |
+> | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |
+> | 2026-11-07 | Tool-authored (by beauwilliams, identity: gh-verified, actor: unspecified): recomputed `Status` from `the Done means items (2 of 5 items resolved) computes to Verified` -- stated `Planned` disagreed with the computed value `InProgress`. | **structural** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/acceptance.rs#main` (lines 820-1011) eed76a4aa5bf -> 4e26f4ef2c8b. Reason: Read the diff of each pinned file since the pin taken earlier in this branch (the changes main landed in ADR-98's sharded CI and the milestone Kind amendment) and the claim still holds. acceptance.rs#main: main now routes the merge run (judging the coverage gate over every shard's proof file) before the case run, and the case run is unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |

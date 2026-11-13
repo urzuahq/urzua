@@ -1,5 +1,6 @@
 ---
 default: minor
+closes: []
 ---
 
 `urzua doctor` reports whether the `pre-commit` and `pre-push` git hooks are wired. Each layer

@@ -1,4 +1,5 @@
 ---
+Stable-Id: 01M6R3NK4N802KPY89V2AW9X8N
 Status: Accepted
 Embodiment: Not started
 Date: 2026-09-07
@@ -14,8 +15,8 @@ Derives-from: RFC-1, RFC-4
 
 This project has accumulated a real backlog — decided-but-unbuilt work (RFC-17's section-parser,
 ADR-33's header-shape conversion), explicitly deferred work (RFC-5's full claim graph, `fix`
-Tier 2/3, AgDR export), undecided Draft RFCs, and ~30 features/findings from research
-with no routing to any public record at all — with no durable, checkable place to track any of it.
+Tier 2/3, AgDR export), undecided Draft RFCs, and ~30 candidate features and findings
+with no routing to any public record at all. There was no durable, checkable place to track any of it.
 It exists only in conversation history and an unstructured roadmap document.
 
 The obvious question this project already answered once, for `waiver` (ADR-11): does tracking
@@ -113,3 +114,10 @@ unchanged.
   an ordering mechanism.
 - RFC-4 — the layering model whose generic relationship mechanism this exercises.
 - RFC-6 — the revision-log model reused for milestone history.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-05 | Revision log added, 2026-11-05. | **structural** |
+> | 2026-11-09 | Removed an appeal to research a reader cannot open; the argument now rests on the backlog the Context describes; the Decision is unchanged. | **structural** |

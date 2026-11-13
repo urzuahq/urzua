@@ -5,7 +5,7 @@ Accepted-on: 2026-11-04
 Date: 2026-11-04
 Author: beauwilliams
 Deciders: beauwilliams
-Embodiment: null
+Embodiment: Implemented
 Supersedes / Superseded-by: null
 Derives-from: RFC-5, ADR-67
 ---
@@ -287,6 +287,70 @@ scoped locator at file level, the state the corpus is in today.
 5. Anchor order: bound (path, scope, anchor; hex 7 to 64); what a commit anchor verifies stays `MILE-84`'s.
 6. A `#` in a file name: accepted, with the rule of point 1 and no escape syntax.
 
+## Amendment (2026-11-05): a resolver's `member` may be a list, and a container may be a struct
+
+*Status of this amendment: accepted by the maintainer on 2026-11-05 (drafted at the maintainer's request, before `#319` merges). `Status` stays `Accepted` and the Decision text above is unchanged.*
+
+Point 5 (read together with this amendment) describes a resolver's `member` as one start pattern and one end kind, and its example
+container matches an inherent `impl`. Point 10 makes the resolver grammar part of the contract.
+Pinning one field of a struct (`config.rs#RecordTypeConfig::spec`) needs two things the text does not
+state, so this amendment records them before they are built (`#319`, `MILE-185`). Both are additive.
+Everything in points 1 to 4 and 6 to 9 is unchanged: the locator grammar, `Locator`, the hashed bytes,
+the drift rule and the reasons `embodiment.locator-exists` reports. The scope slot, `Type::member`
+and the `semicolon` and `indent` end kinds keep their meaning. No end kind is added.
+
+**1. `member` is one entry or a list of entries.** Each entry has its own `start` pattern (with the
+`{symbol}` placeholder) and its own `end` from the closed set of point 5. A resolver that writes one
+mapping is read as a list of one. A list lets one resolver address items that end differently: a Rust
+method ends `brace_balanced`, a struct field `indent`. Every entry's `start` must contain `{symbol}`,
+and a member entry needs a `container` or `trait_container` to be found in, as for a single `member`
+today. Validation stays at config load (`ADR-64` clause 5): a malformed pattern or a missing
+placeholder in any one entry is a load error naming the resolver, never skipped.
+
+**2. Matches are counted across entries as well as across spans.** The rule of point 5, step 3
+("counted across all spans together") becomes: the lines that match any entry's `start`, and are direct
+children of any of the container's spans, are counted together. None is "member not found", more than
+one is **ambiguous** and reported with the line of each candidate, and exactly one is the resolved item,
+ended by the end kind of the entry that matched it, with `leading` applied as before. A line that two
+entries both match is two candidates, so it is ambiguous. The order of entries never decides a result:
+a pattern earlier in the list does not win. A field and a method of one name, `Type::known` in a struct
+with a `known` field and a `known()` method, are therefore reported ambiguous, in the same spirit as a
+method repeated across two `impl` blocks.
+
+**3. A container is whatever its regex matches, and a struct or type declaration is a container.** The
+engine does not know that a language has structs. `container.start` is a declared pattern with a
+`{symbol}` placeholder, as point 5 already says, and nothing in the engine limits it to `impl` blocks.
+A resolver may declare a pattern that matches `struct Type {` as well as `impl Type {`; with `spans:
+all` both are candidate spans of `Type`, and the member entries are tried inside every one. The direct
+child rule is unchanged: a member is a line directly inside a span's braces (or at its indent), so a
+line deeper inside another member is not a candidate. This repository's `rust` resolver is the first to
+declare it; another language's resolver would declare its own pattern in the same way. The engine gains
+no list of keywords, no language name and no notion of what a field is.
+
+**4. A field is a member with the `indent` end kind.** A resolver can declare a member entry that matches
+`name: Type,` with `end: indent`, so `path#Type::field` pins one field, together with the `leading` lines
+above it (doc comments, attributes). The span ends at the last non-blank line indented deeper than the
+field's first line. The known limit of `indent`, stated in point 5 as blindness to odd layouts, applies
+and is named here because fields hit it: a field whose type spans several lines ends **before** its
+closing line when that line is level with the field. For `b: Vec<` / `u8,` / `>,` the pinned span is
+the first two lines, and an edit to the closing `>,` alone is not drift. A reviewer who needs the whole field pins a line range, or the type. A struct declared on one line (`struct A { a: u8 }`) has no field on its own line, so its fields are not addressable as members; pin the struct.
+Because point 7 shows the resolved span at authoring and re-baselining, the reviewer sees where the
+span ends.
+
+**5. Why this stays general-purpose and opt-in.** A repository that declares `member` as one mapping
+and a container that matches only what it matched before resolves every scope exactly as it did, with
+the same hashes, so no existing pin goes stale and no config needs a change; a repository that never
+declares a resolver sees no change at all. Adding a second entry or a struct-matching container is a
+resolver edit, which point 10 already treats as part of the contract: it changes what a scope can
+resolve to, and any resolver edit that changes the bytes under an existing pin is a corpus-wide
+re-baseline. Adding an entry can also turn an existing `Type::name` ambiguous (a field now shares the
+name of a method), which is loud and reported, never silent. The behaviour is generic: the patterns, the
+end kinds and the counting rule serve any language whose items nest, and none of them names Rust.
+
+**6. What is not decided.** One container level only: `A::b::c` stays unsupported. The `A::<Trait>::b` syntax and the
+`trait_container` pattern are unchanged, but the member entries of point 1 also apply inside the span a
+`trait_container` finds, so `A::<Trait>::b` may resolve to a field or a method by the same counting rule. Exact key names and test vectors are `SPEC-3`'s.
+
 ## References
 
 - `ADR-67`: file-level pins, the grace window and the claim age; this ADR extends its pin syntax.
@@ -304,3 +368,6 @@ scoped locator at file level, the state the corpus is in today.
 > |---|---|---|
 > | 2026-11-04 | Drafted as Proposed, then amended after independent review and two re-checks: full locator grammar and parse order, hashed bytes specified, one authoring route, no file-based grace for a scoped pin, unpinned scopes reported, append-only end kinds, and member resolution for Rust (several container spans, direct-child depth, trait impls, a `semicolon` end kind). | **substantive** |
 > | 2026-11-04 | Status changed from Proposed to Accepted, with methods in the first build. **Why:** Maintainer decision, 2026-11-04, conditional on review; the final re-check left one blocker (member span and depth), now resolved. | **substantive** |
+> | 2026-11-04 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `no Realized-by field; cited by source back-pointers` -- stated `` disagreed with the computed value `Implemented`. | **structural** |
+> | 2026-11-05 | Amendment added: a resolver's `member` may be a list of entries, each with its own `start` and `end`; matches are counted across entries as well as spans, and a line two entries match is ambiguous; a container may match a struct or type declaration, so a field is addressable (`indent` end kind, known limit stated). **Why:** `#319` (`MILE-185`) extends point 5's grammar and the independent review asked for a recorded decision; proposed, pending maintainer acceptance. `Status` stays `Accepted` and the Decision text is unchanged. | **substantive** |
+> | 2026-11-05 | Amendment accepted. Folded in the review's wording points: `trait_container` spans also take the member entries, a one-line struct's fields are not addressable, and point 5 is read with the amendment. **Why:** Maintainer decision, 2026-11-05. | **substantive** |

@@ -1,4 +1,5 @@
 ---
+Stable-Id: 01M6R3NK4R7JRZ66YBFW4VS4P1
 Status: Accepted
 Embodiment: Verified
 Date: 2026-09-04

@@ -73,3 +73,9 @@ configured type -- zero `urzua-core` changes, matching `milestone`/`bug`/`waiver
 - RFC-23/ADR-44 -- the now-Accepted config-declared pointer/narrative-field mechanism this RFC's own
   Open Questions weigh against: whether `blocker`-the-type is still needed once `Blocked-on` can be a
   plain `narrative_field`.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-05 | Revision log added, 2026-11-05. | **structural** |

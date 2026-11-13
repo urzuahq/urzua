@@ -1,4 +1,5 @@
 ---
+Stable-Id: 01M6R3NK44W4AKQNVPDB0AT0RX
 Status: Accepted
 Embodiment: Not started
 Date: 2026-09-05
@@ -77,3 +78,9 @@ disappoint if something about the release shape needs to change before public la
 - SPEC-1 — the cross-compilation and `rust/`-not-root requirements this ADR satisfies.
 - `.github/workflows/prepare-release.yml`, `.github/workflows/publish-release.yml`, `rust/release.toml` — the implementation (the single `release.yml` workflow this first named no longer exists; the two workflows replaced it).
 - `.github/workflows/ci.yml`'s `ci` job — the release-gating check this ADR depends on by name.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-05 | Revision log added, 2026-11-05. | **structural** |

@@ -2,7 +2,7 @@
 Stable-Id: 01M2WCN8AQY9N8P4TWZER0GC9D
 Status: Fixed
 Found-in: "Round 6 of the 0.4.0 release review"
-Regression-test: "rust/crates/urzua-cli/tests/check_integration.rs::a_record_below_a_declared_dir_but_not_in_it_is_reported_not_dropped"
+Realized-by: test:rust/crates/urzua-cli/tests/check_integration.rs#a_record_below_a_declared_dir_but_not_in_it_is_reported_not_dropped@sha256:b258764e76cfdb6f76336b4ccfa4130f4f8505f30007448376218b6bbbaf40c6
 ---
 # 62 — A record in a subdirectory of a declared type dir is owned by no type and nothing says so
 
@@ -40,3 +40,5 @@ dropped.
 >
 > | Date | Change | Class |
 > |---|---|---|
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/check_integration.rs#a_record_below_a_declared_dir_but_not_in_it_is_reported_not_dropped` (lines 1594-1633) dec09145ed2a -> b258764e76cf. Reason: Read the diff of each pinned span since the old pin and the claim still holds. check_integration.rs#a_record_below_a_declared_dir_but_not_in_it_is_reported_not_dropped: the output assertions now read the JSON field with json_field instead of substring-matching the printed text, with the same expected values. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |

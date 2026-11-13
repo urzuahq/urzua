@@ -1,7 +1,10 @@
 ---
-Version: '0.9'
+Stable-Id: 01M6R3NK5GHR70MNKQTXHQJGJB
+Version: '0.22'
 Date: 2026-09-08
-Status: Accepted
+Status: Shipped
+Embodiment: Verified
+Realized-by: code:.urzua/config.yaml@sha256:21e9ab57a37acf5df4921e86bca7127e7e3881e648115b370e7357339549054d, test:rust/crates/urzua-cli/tests/spec_shipped_integration.rs@sha256:b03ddbc2eacaccee634b27b070f66f6a730197313c3b114a882becc342acb7a8
 Author: beauwilliams
 Subject: 'The `spec` record type -- schema, required fields (including this one, `Subject`), and lifecycle.'
 Parent: —
@@ -26,11 +29,35 @@ record_types:
     dir: "docs/specs"
     required_fields: ["Status", "Date", "Version", "Author", "Subject"]
     header_shape: "yaml-frontmatter"
-    known_fields: ["Stable-Id", "Embodiment", "Derives-from", "Implements", "Parent"]
+    relation_fields: {date: "Date", author: "Author", title: "Subject"}
+    known_fields: ["Stable-Id", "Embodiment", "Realized-by", "Derives-from", "Implements", "Parent", "Last-audited"]
+    statuses:
+      values: ["Draft", "Accepted", "Shipped"]
+      success: ["Accepted", "Shipped"]
+      implementable: ["Accepted", "Shipped"]
+      initial: ["Draft"]
+      transitions:
+        Draft: ["Accepted"]
+        Accepted: ["Shipped"]
+      require:
+        - {when: ["Shipped"], fields: ["Embodiment", "Realized-by"]}
+    sections:
+      from: headings
+      required:
+        - {name: Purpose}
+    revision_log:
+      marker: "**Revision log**"
+      required: true
+      version_bump: {field: "Version", classes: ["substantive", "structural"], initial: "0.1"}
     spec: "SPEC-18"
     pointer_fields: ["Derives-from", "Implements", "Parent"]
     narrative_fields: []
 ```
+
+`Status` is mechanically validated against `statuses`: `status.undeclared-value` reports a value outside
+the three, and `status.transition-allowed` reports a move the graph does not allow (on a `--base` run,
+against the merge base's copy). The lifecycle is one-way: a spec is filed `Draft`, becomes `Accepted`, then
+`Shipped`, and no move goes back or skips a step. `sections` requires a `Purpose` on every spec.
 
 | Field | Values | Notes |
 |---|---|---|
@@ -40,7 +67,8 @@ record_types:
 | `Author` | a real identity, no `@` prefix | Resolved automatically by `urzua new`, same as `adr`/`rfc` (MILE-74's accountability decision, MILE-78's precedent). Required as of version `0.2` — backfilled onto every pre-existing spec that lacked it. Written without a decorative `@` prefix (BUG-18, SPEC-16); note MILE-78's backfill predates that and used the now-retired `'@handle'` form, corrected corpus-wide by BUG-18. |
 | `Subject` | one line, free text | What feature, record type, schema, or practice the spec is actually about — readable at a glance without opening `Purpose`. No cross-reference or backlink semantics; not resolved by any rule. Required (`MILE-91`), backfilled onto every pre-existing spec. |
 | `Stable-Id` | a ULID, optional | Assigned unconditionally by `urzua new spec` (ADR-21: every type gets one), first exercised by `SPEC-19` — no earlier spec was ever created through the tool. |
-| `Embodiment` / `Realized-by` | optional; required once `Status` is `Shipped` | `SPEC-1`'s own field, kept as a project-wide optional convention rather than treated as its historical baggage (MILE-74) — any spec may use it, none but `SPEC-1` currently do. |
+| `Embodiment` / `Realized-by` | optional; required once `Status` is `Shipped` | `SPEC-1`'s own field, kept as a project-wide convention rather than treated as its historical baggage (MILE-74). Declared together (`companion_fields`), `Embodiment` is computed from the `Realized-by` locators and checked by `embodiment.consistency`; `statuses.require` makes both mandatory at `Shipped`. |
+| `Last-audited` | `YYYY-MM-DD`, optional | The day the spec's evidence was last audited. `embodiment.consistency` counts its drift grace window from this date instead of from the cited file's last change (`drift_audit_field`, `MILE-166`), since a spec's file changes for reasons unrelated to its evidence. With `embodiment.claim-expired` (`SPEC-3`, `ADR-97`) it is also the date the claim was last re-verified, counted from by the claim's expiry, and written only by `urzua reverify` (`SPEC-8`); one date, two readers, and a repository may name a different field for each. A date in the future is malformed. The `adr`, `milestone` and `bug` types declare it the same way when a repository opts in. No spec here carries it yet. |
 | `Derives-from` / `Implements` | comma-separated, optional | A spec's real lineage (which ADR/RFC/bug it realizes or derives from) lives here. Declared as two of this type's `pointer_fields` entries (MILE-90/ADR-44) — clean, comma-separated references only, format-enforced by `header.pointer-field-clean`. |
 | `Parent` | a single spec ID, or `—`, optional | **Not** a default root pointer — a genuine narrowing/split-off relationship to a broader spec whose own prose documents the split (e.g. `SPEC-2`–`5`/`8`/`11`–`15` really were split out of `SPEC-1`, per its own child-spec table). A spec whose real lineage is already expressed by `Implements`/`Derives-from` uses `—`, not `SPEC-1` by default (`BUG-10`, `MILE-91`) — declared as this type's third `pointer_fields` entry; `pointer.resolution` still validates a non-`—` value resolves, but resolving is not the same as being correct, and nothing mechanically checks that. |
 
@@ -90,3 +118,25 @@ any other class, a new spec, or an unchanged log is not reported.
 > | 2026-09-17 | Config moves from `.urzua/config.toml` to `.urzua/config.yaml` (`ADR-52`, shipped in the same change). The described mechanism changes, not just its rendering. | **substantive** |
 > | 2026-11-04 | Bumped to `0.8`. Added `Shipped` to the `Status` values after `Accepted`, with `Embodiment` and `Realized-by` required of a `Shipped` spec. **Why:** `MILE-7`, maintainer decision of 2026-11-04: a spec whose status says the work shipped has to carry its evidence, and `required_fields` could only demand it of every spec or none. Declared in `.urzua/config.yaml` (`statuses` and `statuses.require`); no engine change. | **substantive** |
 > | 2026-11-04 | Bumped to `0.9`. Stated that the `Version` bump with every substantive or structural entry is now checked on a `--base` run, by `revision-log.version-bump-required` with `revision_log.version_bump` declared on this type. **Why:** `BUG-51`, maintainer decision of 2026-11-04: only the entry half of the rule was enforced. | **substantive** |
+> | 2026-11-05 | Bumped to `0.10`. Realized-by names the implementing code and tests, ready for `Shipped` (`MILE-7`). **Why:** the maintainer approved moving this spec to `Shipped`, which requires `Embodiment` and `Realized-by`. | **structural** |
+> | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `Realized-by: code:.urzua/config.yaml, test:rust/crates/urzua-cli/tests/spec_shipped_integration.rs` -- stated `Not started` disagreed with the computed value `Verified`. | **structural** |
+> | 2026-11-05 | Bumped to `0.11`. Status changed from Accepted to Shipped. **Why:** Maintainer decision, 2026-11-05: its Realized-by evidence computes Verified and an independent review judged it sound. | **substantive** |
+> | 2026-11-05 | Bumped to `0.12`. The schema excerpt now shows the type as configured: `Realized-by` and `Last-audited` among the known fields, the `statuses` declaration (`initial`, the one-way `Draft` to `Accepted` to `Shipped` `transitions`, and `require` of `Embodiment` and `Realized-by` at `Shipped`), the required `Purpose` section and the `version_bump` declaration. A `Last-audited` row is added and the `Embodiment` / `Realized-by` row no longer says none but `SPEC-1` use them. **Why:** the excerpt predated `Shipped` and the lifecycle, so it did not show that the order cannot be reversed or what a `Shipped` spec must carry. | **substantive** |
+> | 2026-11-07 | Bumped to `0.13`. The schema excerpt declares `relation_fields.title: Subject` and `version_bump.initial: "0.1"`, so `urzua new spec` writes the title as the `Subject` and `0.1` as the `Version` and the scaffold passes `check` as written. **Why:** `MILE-74` -- a scaffolded spec failed `field.quality` on a blank `Version` and `Subject`. | **substantive** |
+> | 2026-11-07 | Bumped to `0.14`. The `Last-audited` row says it is also the anchor of a claim's expiry (`embodiment.claim-expired`), written only by `urzua reverify`, and that the `adr`, `milestone` and `bug` types declare it the same way on opt-in. **Why:** `MILE-129`, the build of `ADR-97`; `ADR-97` section 2. | **substantive** |
+> | 2026-11-08 | Pinned (attested by beauwilliams, identity: gh-verified, actor: agent): 2 locators pinned, 2 file-level, 0 scoped. Evidence: .urzua/config.yaml@sha256:151830e5926d, rust/crates/urzua-cli/tests/spec_shipped_integration.rs@sha256:b03ddbc2eaca Reason: Pinned the files as they are now after checking each against the record it evidences: config.yaml and the own-config test still declare the adr, rfc, spec and condition types that SPEC-16, SPEC-17, SPEC-18 and SPEC-23 describe, with spec_shipped_integration.rs, rules/roadmap.rs, condition_type_integration.rs and work_types_integration.rs behind them, check.rs, rules.rs, check_integration.rs and fail_on_integration.rs still implement urzua check (SPEC-2), the workflows, the install-knope action and the release and gate test scripts still make up the pipeline SPEC-20 describes, the Makefile and checks.yml still dispatch the repository layout of SPEC-21, the harness modules, the bundled hook script and the harness integration tests still implement the request, verdict and adapter layout of SPEC-24, config.rs and the own-config and field-levels tests still implement SPEC-3, and acceptance.rs and acceptance_property.rs still implement SPEC-4. **Why:** a claim is renewed only over pinned code and test evidence. | **structural** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` 151830e5926d -> 0b59c6dfc8b9. Reason: Read the diff of each pinned file since the pin taken earlier in this branch (the changes main landed in ADR-98's sharded CI and the milestone Kind amendment) and the claim still holds. config.yaml: config.yaml gained Kind among the milestone type's known fields and a kind declaration (build and decision) under statuses.delivery.items (ADR-96 amendment of 2026-11-07), and every other declaration the record relies on is unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-08 | Bumped to `0.15`. The pins on this spec's `Realized-by` locators were re-baselined against the files as they are after the sharded CI and the milestone `Kind` amendment landed on main (the `Re-baselined` row above); no behaviour this spec describes changes. **Why:** `MILE-129`, `ADR-97`: every stale pin is re-pinned with its real delta before expiry is enabled. | **structural** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` 0b59c6dfc8b9 -> 0a00038a6388. Reason: Read the diff of each pinned file since the old pin and the claim still holds. config.yaml: this change declares status.done-items-shape (error), status.waived-item-stale (warn) and embodiment.claim-renewal-unattested (warn) and declares relation.cross-type-disallowed, section.shape and diff.source-and-records-mixed as off; every other declaration is unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-08 | Bumped to `0.16`. The pins this spec's `Realized-by` holds on files changed in this change were re-baselined (the `Re-baselined` row above); no behaviour this spec describes changed. **Why:** a revision-log entry that adds a structural change needs a `Version` bump (`revision-log.version-bump-required`). | **structural** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` 0a00038a6388 -> 3d51c2fac8b7. Reason: Read the diff of each pinned file since the old pin and the claim still holds. config.yaml: only the comment above the three rules declared off changed, to say they report `not-enabled` exactly as an undeclared rule does; no declaration changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` 3d51c2fac8b7 -> 653bb0f54ca6. Reason: Read the diff of each pinned file since the old pin and the claim still holds. config.yaml: the only change is a new optional pending list (two placeholder patterns) under record_types::milestone statuses.delivery.items; nothing else in the file changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` 653bb0f54ca6 -> 594d115541e3. Reason: config.yaml: read the diff since the previous pin; the only change is one added line, outside_writes: shared, under the harness key (this repository declares the new harness.outside_writes option, ADR-89 amendment of 2026-11-09). No record type, rule, status, relation or other declaration this record relies on changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-09 | Bumped to `0.18`. The pin this spec's `Realized-by` holds on `.urzua/config.yaml` was re-baselined (the `Re-baselined` row above); no behaviour this spec describes changed. | **structural** |
+> | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` 594d115541e3 -> 2f0e023ed5a5. Reason: Read the diff of each pinned file or span since the old pin against what this record evidences. .urzua/config.yaml: embodiment.claim-expired gains `drift: {code: block, test: block, spec: acknowledge}` and its explanatory comment; nothing else in the file changed. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-09 | Bumped to `0.19`. The pin this spec's `Realized-by` holds on `.urzua/config.yaml` was re-baselined (the `Re-baselined` row above) after the config gained the `drift` declaration under `embodiment.claim-expired`; no behaviour this spec describes changed. | **structural** |
+> | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` 2f0e023ed5a5 -> cbb1c67c40a0. Reason: Read the diff of each pinned file since the old pin and the claim still holds. config.yaml: read the diff since the old pin; the only change is the added key authority.decider_table: base with its two-line comment (this repository declares the new decider_table option, ADR-89 amendment of 2026-11-09). No record type, rule, status, relation or other declaration this record relies on changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-09 | Bumped to `0.20`. The pins this spec's `Realized-by` holds on `.urzua/config.yaml` were re-baselined (the `Re-baselined` row above) after the config gained `authority.decider_table: base`; no behaviour this spec describes changed. **Why:** the version-bump rule requires a bump beside a structural revision row. | **structural** |
+> | 2026-11-09 | Bumped to `0.21`. Re-pin rows in this revision log were reworded to name who re-verified, matching the tool's wording since 2026-11-09; hashes, reasons and dates are unchanged. **Why:** Maintainer decision, 2026-11-09. | **structural** |
+> | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` cbb1c67c40a0 -> 21e9ab57a37a. Reason: Read the diff of .urzua/config.yaml: the authority section gains `waivable: never` and a two-line comment; no other key changed. The pinned evidence still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-09 | Bumped to `0.22`. Evidence pins on `.urzua/config.yaml` were re-pinned (row above) after the config's authority section gained `waivable: never`; the specification's content is unchanged. **Why:** `ADR-89` amendment of 2026-11-09 (gate waivers). | **substantive** |

@@ -5,12 +5,12 @@
 //! change introduces in an unchanged record: delete a target and its
 //! referrer, untouched, is left pointing at nothing.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
-use urzua_core::config::{Config, RelationRole};
+use urzua_core::config::{Config, RecordTypeConfig, RelationRole};
 use urzua_core::record::Record;
-use urzua_core::report::DiffScope;
+use urzua_core::report::{DiffScope, Notice, NoticeSeverity};
 use urzua_core::rules::{self, CommittedStatus};
 
 /// The examined set and the account of how it was reached.
@@ -33,10 +33,9 @@ fn display(paths: impl IntoIterator<Item = impl AsRef<Path>>) -> Vec<String> {
 fn cited_locators(config: &Config, record: &Record) -> Vec<String> {
     let field =
         rules::relation_field_name(config, &record.record_type, RelationRole::EmbodimentLocator);
-    record
-        .header
-        .get(field)
-        .map(rules::realized_by_locator_paths)
+    // `Realized-by` plus the Done-means item clauses (`ADR-96`).
+    rules::evidence_text(record, field)
+        .map(|value| rules::realized_by_locator_paths(&value))
         .unwrap_or_default()
 }
 
@@ -92,14 +91,17 @@ fn touched_waiver_scopes(
     records: &[Record],
     changes: &urzua_io::GitChanges,
 ) -> Result<Vec<String>, String> {
-    let mut waivers = urzua_core::waiver::load_waivers(
+    let suppression_type = urzua_core::waiver::SuppressionType::from_config(config);
+    let type_name = suppression_type.name.as_str();
+    let mut waivers = urzua_core::waiver::load_suppressions(
         &records
             .iter()
             .filter(|r| changes.changed.contains(&r.path))
             .cloned()
             .collect::<Vec<_>>(),
+        &suppression_type,
     );
-    if let Some(type_config) = config.record_types.get("waiver") {
+    if let Some(type_config) = config.record_types.get(type_name) {
         for path in &changes.changed {
             let Some(file_name) = path.file_name().and_then(|n| n.to_str()) else {
                 continue;
@@ -117,31 +119,224 @@ fn touched_waiver_scopes(
             };
             let record = Record::parse_with_shape_and_prefix(
                 path.clone(),
-                "waiver".to_string(),
+                type_name.to_string(),
                 &content,
                 type_config.header_shape,
                 type_config
                     .prefix
                     .clone()
-                    .unwrap_or_else(|| "WAIVER".to_string()),
+                    .unwrap_or_else(|| type_name.to_ascii_uppercase()),
             );
-            waivers.extend(urzua_core::waiver::load_waivers(&[record]));
+            waivers.extend(urzua_core::waiver::load_suppressions(
+                &[record],
+                &suppression_type,
+            ));
         }
     }
     Ok(waivers.into_iter().map(|w| w.scope).collect())
 }
 
+/// A record's pairing identity ([`rules::rename_identity`]).
+type Identity = (String, String);
+
+/// A deleted record's path, pairing identity and `Status` (`None` where the
+/// base copy has no readable one).
+type DeletedCopy = (PathBuf, Option<Identity>, Option<String>);
+
+/// The statuses of the deleted base copies, by pairing identity.
+type DeletedByIdentity = HashMap<Identity, Vec<Option<String>>>;
+
+/// The base copies of the records the diff deleted, by `Stable-Id`, for one
+/// record type (`BUG-191`). The diff reports a rename as a deletion plus an
+/// addition, and the `Stable-Id` is the identity that survives it: a record
+/// added at a new path whose `Stable-Id` a deleted record carried, and whose
+/// record id (type and number) is the same, is that record renamed: the map is
+/// keyed by [`rules::rename_identity`], so a new record that merely copies a
+/// deleted one's `Stable-Id` under another id is not a rename. The `Status` is
+/// `None` where the base copy has no readable one. A deleted path the base
+/// cannot be read at is skipped with a warning notice, as the record it names
+/// is then just new.
+fn deleted_by_stable_id(
+    repo_root: &Path,
+    config: &Config,
+    type_name: &str,
+    status_field: &str,
+    changes: &urzua_io::GitChanges,
+    notices: &mut Vec<Notice>,
+) -> DeletedByIdentity {
+    let mut out = DeletedByIdentity::new();
+    for (_, identity, status) in deleted_copies(
+        repo_root,
+        config,
+        None,
+        type_name,
+        status_field,
+        changes,
+        notices,
+    ) {
+        if let Some(identity) = identity {
+            out.entry(identity).or_default().push(status);
+        }
+    }
+    out
+}
+
+/// Every record of one type the diff deleted, as the base held it: its path,
+/// its pairing identity (if any) and its status, in path order. A deleted
+/// file is a record of the type when the type's declaration (`dir`,
+/// `exclude_files`) says so in the head's `config` or, when `base_types` is
+/// given, in the base revision's: a pull request cannot take a record out of
+/// the type's reach by editing the declaration in the same change. The base's
+/// declaration is tried first, and parses the base copy. A base copy that
+/// cannot be read is left out and noted, as `committed_statuses` notes one.
+fn deleted_copies(
+    repo_root: &Path,
+    config: &Config,
+    base_types: Option<&BTreeMap<String, RecordTypeConfig>>,
+    type_name: &str,
+    status_field: &str,
+    changes: &urzua_io::GitChanges,
+    notices: &mut Vec<Notice>,
+) -> Vec<DeletedCopy> {
+    let mut out = Vec::new();
+    let declared: Vec<&RecordTypeConfig> = base_types
+        .and_then(|t| t.get(type_name))
+        .into_iter()
+        .chain(config.record_types.get(type_name))
+        .collect();
+    if declared.is_empty() {
+        return out;
+    }
+    let mut deleted: Vec<&PathBuf> = changes.deleted.iter().collect();
+    deleted.sort();
+    for path in deleted {
+        let Some(file_name) = path.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        if !urzua_core::record::is_governed_record_filename(file_name) {
+            continue;
+        }
+        let Some(type_config) = declared
+            .iter()
+            .find(|t| t.owns_dir(path.parent()) && !t.excludes(file_name))
+        else {
+            continue;
+        };
+        let content = match urzua_io::read_at_commit(repo_root, &changes.merge_base, path) {
+            Ok(content) => content,
+            Err(e) => {
+                notices.push(Notice {
+                    severity: NoticeSeverity::Warning,
+                    subject: rules::RULE_DIFF_DECIDER_REQUIRED.to_string(),
+                    message: format!(
+                        "{}: could not read the merge base's copy of a deleted record, so its deletion is not judged: {e}",
+                        path.display()
+                    ),
+                    detail: None,
+                });
+                continue;
+            }
+        };
+        let prefix = type_config
+            .prefix
+            .clone()
+            .unwrap_or_else(|| type_name.to_ascii_uppercase());
+        let old = match crate::discovery::resolved_model(type_name, type_config) {
+            Ok(model) => Record::parse_with_model(
+                path.clone(),
+                type_name.to_string(),
+                &content,
+                type_config.header_shape,
+                prefix,
+                &model,
+            ),
+            Err(_) => Record::parse_with_shape_and_prefix(
+                path.clone(),
+                type_name.to_string(),
+                &content,
+                type_config.header_shape,
+                prefix,
+            ),
+        };
+        let status =
+            urzua_core::authority::gate_status(&old.header, status_field).map(str::to_string);
+        out.push((path.clone(), rules::rename_identity(&old), status));
+    }
+    out
+}
+
+/// The records the diff deletes that are not a rename, for the record types in
+/// `gated` (the types an authority status gate names), with the `Status` each
+/// held at the base (`ADR-89` amendment of 2026-11-10, deletions). A deleted
+/// record whose `Stable-Id` and record id both still exist on a head record of
+/// its type is that record renamed or moved, not removed, and is left out; one
+/// with no `Stable-Id` cannot pair and is deleted. `base_types` is the base
+/// revision's record types, given under `authority.decider_table: base` or
+/// `both`: a file is a record of a gated type when either revision's
+/// declaration owns it.
+pub(crate) fn deleted_gated_records(
+    repo_root: &Path,
+    config: &Config,
+    base_types: Option<&BTreeMap<String, RecordTypeConfig>>,
+    records: &[Record],
+    changes: &urzua_io::GitChanges,
+    gated: &std::collections::BTreeSet<&str>,
+    notices: &mut Vec<Notice>,
+) -> Vec<rules::DeletedRecord> {
+    let mut out = Vec::new();
+    if changes.deleted.is_empty() {
+        return out;
+    }
+    for type_name in gated {
+        let field = rules::relation_field_name(config, type_name, RelationRole::Status);
+        let heads: HashSet<Identity> = records
+            .iter()
+            .filter(|r| r.record_type == *type_name)
+            .filter_map(rules::rename_identity)
+            .collect();
+        for (path, identity, status) in deleted_copies(
+            repo_root, config, base_types, type_name, field, changes, notices,
+        ) {
+            let renamed = identity.is_some_and(|i| heads.contains(&i));
+            if !renamed {
+                out.push(rules::DeletedRecord {
+                    path,
+                    record_type: type_name.to_string(),
+                    status,
+                });
+            }
+        }
+    }
+    out.sort_by(|a, b| a.path.cmp(&b.path));
+    out
+}
+
 /// Each changed record's `Status` at the merge base, for the types that declare
-/// `transitions` (`ADR-72`). A path the base does not have reads as new; the
-/// diff reports a rename as a deletion plus an addition, so a renamed record
-/// reads as new too.
+/// `transitions` (`ADR-72`) and the types in `also` (the types an `authority`
+/// status gate names, `MILE-200`, which `diff.decider-required` reads). A path the base does not have is looked up by
+/// `Stable-Id` among the records the diff deleted, because the diff reports a
+/// rename as a deletion plus an addition (`BUG-191`): a renamed record is
+/// judged against the status it had before. The pairing needs the same record
+/// id too (a slug rename keeps its number): a record that copies a deleted
+/// one's `Stable-Id` under another id, or has no id, is new, so a head cannot
+/// pick which base record it is judged against. One with no match, or no
+/// `Stable-Id`, reads as new; one matching several deleted records is
+/// unreadable, since which of them it was cannot be told. A base copy that
+/// exists but cannot be read (not UTF-8, a missing object) is unreadable too,
+/// with a notice carrying the error: only a path the base lacks reads as new,
+/// since treating a read error as new would skip the transition check.
 pub(crate) fn committed_statuses(
     repo_root: &Path,
     config: &Config,
     records: &[Record],
     changes: &urzua_io::GitChanges,
+    also: &std::collections::BTreeSet<&str>,
+    notices: &mut Vec<Notice>,
 ) -> HashMap<PathBuf, CommittedStatus> {
     let mut out = HashMap::new();
+    // The deleted records' Stable-Ids, read once per type and only when a
+    // changed record has no copy at its own path.
+    let mut renamed_from: HashMap<String, DeletedByIdentity> = HashMap::new();
     for record in records {
         if !changes.changed.contains(&record.path) {
             continue;
@@ -152,13 +347,52 @@ pub(crate) fn committed_statuses(
         if !type_config
             .status_decl()
             .is_some_and(|d| d.has_transitions())
+            && !also.contains(record.record_type.as_str())
         {
             continue;
         }
-        let committed = match urzua_io::read_at_commit(repo_root, &changes.merge_base, &record.path)
-        {
-            Err(_) => CommittedStatus::New,
-            Ok(content) => {
+        let committed = match urzua_io::read_at_commit_if_present(
+            repo_root,
+            &changes.merge_base,
+            &record.path,
+        ) {
+            Err(e) => {
+                notices.push(Notice {
+                    severity: NoticeSeverity::Warning,
+                    subject: rules::RULE_STATUS_TRANSITION_ALLOWED.to_string(),
+                    message: format!(
+                        "{}: could not read the merge base's copy, so its Status move is not judged: {e}",
+                        record.path.display()
+                    ),
+                    detail: None,
+                });
+                CommittedStatus::Unreadable
+            }
+            Ok(None) => {
+                let field =
+                    rules::relation_field_name(config, &record.record_type, RelationRole::Status);
+                let deleted = renamed_from
+                    .entry(record.record_type.clone())
+                    .or_insert_with(|| {
+                        deleted_by_stable_id(
+                            repo_root,
+                            config,
+                            &record.record_type,
+                            field,
+                            changes,
+                            notices,
+                        )
+                    });
+                let matches: &[Option<String>] = rules::rename_identity(record)
+                    .and_then(|identity| deleted.get(&identity))
+                    .map_or(&[], Vec::as_slice);
+                match matches {
+                    [] => CommittedStatus::New,
+                    [Some(status)] => CommittedStatus::Status(status.clone()),
+                    _ => CommittedStatus::Unreadable,
+                }
+            }
+            Ok(Some(content)) => {
                 let old = Record::parse_with_shape_and_prefix(
                     record.path.clone(),
                     record.record_type.clone(),
@@ -171,15 +405,63 @@ pub(crate) fn committed_statuses(
                 );
                 let field =
                     rules::relation_field_name(config, &record.record_type, RelationRole::Status);
-                match old.header.get(field).map(str::trim) {
-                    Some(v) if !v.is_empty() => CommittedStatus::Status(v.to_string()),
-                    _ => CommittedStatus::Unreadable,
+                match urzua_core::authority::gate_status(&old.header, field) {
+                    Some(v) => CommittedStatus::Status(v.to_string()),
+                    None => CommittedStatus::Unreadable,
                 }
             }
         };
         out.insert(record.path.clone(), committed);
     }
     out
+}
+
+/// The config file's path as the diff names it, when the diff changed it.
+///
+/// Both spellings are tried: a config that is a tracked symlink changes at the
+/// link's own path when retargeted, while its canonical path is the unchanged
+/// target; editing the target changes the canonical path instead.
+fn changed_config_path(
+    repo_root: &Path,
+    config_path: &Path,
+    changes: &urzua_io::GitChanges,
+) -> Option<PathBuf> {
+    let mut config_rels: Vec<PathBuf> = Vec::new();
+    if let Ok(rel) = config_path.strip_prefix(repo_root) {
+        config_rels.push(rel.to_path_buf());
+    }
+    if let (Ok(c), Ok(r)) = (config_path.canonicalize(), repo_root.canonicalize()) {
+        if let Ok(rel) = c.strip_prefix(r) {
+            config_rels.push(rel.to_path_buf());
+        }
+    }
+    config_rels
+        .into_iter()
+        .find(|rel| changes.changed.contains(rel))
+}
+
+/// Whether any cited locator covers a changed path.
+fn cites_changed_path(locators: &[String], changes: &urzua_io::GitChanges) -> bool {
+    locators.iter().any(|locator| {
+        // An empty locator is a path prefix of everything.
+        if locator.is_empty() {
+            return false;
+        }
+        if rules::is_path_glob(locator) {
+            // A glob locator covers files, not a path prefix: match it
+            // with the matcher locator resolution uses. A glob that does
+            // not compile cannot be matched, and locator resolution
+            // reports it on the record.
+            return rules::path_glob_regex(locator).is_ok_and(|re| {
+                changes
+                    .changed
+                    .iter()
+                    .any(|c| re.is_match(&c.to_string_lossy()))
+            });
+        }
+        let path = Path::new(locator);
+        changes.changed.iter().any(|c| c.starts_with(path))
+    })
 }
 
 pub(crate) fn examine(
@@ -191,22 +473,7 @@ pub(crate) fn examine(
 ) -> Result<DiffExamination, String> {
     let changed_paths = display(&changes.changed);
 
-    // Both spellings: a config that is a tracked symlink changes at the link's
-    // own path when retargeted, while its canonical path is the unchanged
-    // target; editing the target changes the canonical path instead.
-    let mut config_rels: Vec<PathBuf> = Vec::new();
-    if let Ok(rel) = config_path.strip_prefix(repo_root) {
-        config_rels.push(rel.to_path_buf());
-    }
-    if let (Ok(c), Ok(r)) = (config_path.canonicalize(), repo_root.canonicalize()) {
-        if let Ok(rel) = c.strip_prefix(r) {
-            config_rels.push(rel.to_path_buf());
-        }
-    }
-    if let Some(rel) = config_rels
-        .into_iter()
-        .find(|rel| changes.changed.contains(rel))
-    {
+    if let Some(rel) = changed_config_path(repo_root, config_path, changes) {
         return Ok(DiffExamination {
             examined: records.iter().map(|r| r.path.clone()).collect(),
             scope: DiffScope {
@@ -263,14 +530,7 @@ pub(crate) fn examine(
         let shares_an_id = rules::record_id(record)
             .is_some_and(|id| ids.contains(urzua_core::values::RecordId::new(&id).as_str()));
         let locators = cited_locators(config, record);
-        let evidence_changed = locators.iter().any(|locator| {
-            // An empty locator is a path prefix of everything.
-            if locator.is_empty() {
-                return false;
-            }
-            let path = Path::new(locator);
-            changes.changed.iter().any(|c| c.starts_with(path))
-        });
+        let evidence_changed = cites_changed_path(&locators, changes);
         let shares_a_locator = locators
             .iter()
             .any(|l| !l.is_empty() && changed_locators.contains(l));
@@ -293,4 +553,49 @@ pub(crate) fn examine(
             whole_corpus_reason: None,
         },
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A deleted record whose base copy cannot be read is left out and noted,
+    /// as `committed_statuses` notes a changed record's.
+    #[test]
+    fn an_unreadable_deleted_base_copy_is_skipped_with_a_warning() {
+        let repo = std::env::temp_dir().join(format!("urzua-diff-scope-{}", std::process::id()));
+        std::fs::create_dir_all(&repo).unwrap();
+        let git = std::process::Command::new("git")
+            .args(["init", "-q"])
+            .current_dir(&repo)
+            .status()
+            .unwrap();
+        assert!(git.success());
+        let config = urzua_core::config::parse(
+            "schema_version: 2\nrecord_types:\n  adr:\n    dir: docs/adr\n",
+        )
+        .unwrap();
+        let path = PathBuf::from("docs/adr/ADR-1-a.md");
+        let changes = urzua_io::GitChanges {
+            merge_base: "0000000000000000000000000000000000000000".to_string(),
+            changed: [path.clone()].into(),
+            deleted: [path.clone()].into(),
+            added: Default::default(),
+        };
+        let mut notices = Vec::new();
+        let copies = deleted_copies(
+            &repo,
+            &config,
+            None,
+            "adr",
+            "Status",
+            &changes,
+            &mut notices,
+        );
+        assert!(copies.is_empty());
+        assert_eq!(notices.len(), 1, "{notices:?}");
+        assert!(matches!(notices[0].severity, NoticeSeverity::Warning));
+        assert!(notices[0].message.contains("ADR-1-a.md"), "{notices:?}");
+        let _ = std::fs::remove_dir_all(&repo);
+    }
 }

@@ -2,7 +2,7 @@
 Stable-Id: 01M33QPB6WTPP7DJEJR1DVRBHP
 Status: Fixed
 Found-in: "A /code-review v0.3.0...main pass, reviewing everything landed for the 0.4.0 release"
-Regression-test: "a_claim_against_a_case_differently_written_status_key_is_not_judged_observed_failing, rules.rs"
+Realized-by: test:rust/crates/urzua-core/src/rules/claim.rs#a_claim_against_a_case_differently_written_status_key_is_not_judged_observed_failing@sha256:89e27873c757cc603f414c9fe35639ea020130a2afd9a4c988f265729f4a5a83
 ---
 # 100 — claim status agreement fails open on a case differently written Status key
 
@@ -59,3 +59,5 @@ dropped silently in the embodiment rules (`BUG-101`).
 > |---|---|---|
 > | 2026-09-22 | Filed, with a reproduction and a diagnosis of the shared root cause with `BUG-101`. **Why:** found by a full-release code review. | **substantive** |
 > | 2026-09-22 | `Status: Open` → `Fixed`, by `ADR-58`'s decision on `RFC-40`. **Why:** the shared contract closed both this bug and `BUG-101` in one pass, so both were fixed together rather than staying blocked separately. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |
+> | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/rules/claim.rs#a_claim_against_a_case_differently_written_status_key_is_not_judged_observed_failing` (lines 469-489) f1f2582d4f05 -> 89e27873c757. Reason: Read the diff of each pinned span since the old pin and the claim still holds. claim.rs#a_claim_against_a_case_differently_written_status_key_is_not_judged_observed_failing: claim_status_agreement is now called with the verb_only options value (the verb_claims option), expectations unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |

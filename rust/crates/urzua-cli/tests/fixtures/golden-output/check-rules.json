@@ -1,0 +1,61 @@
+{
+  "args": [
+    "check",
+    "--rules",
+    "header.required-fields"
+  ],
+  "exit": 1,
+  "stdout": {
+    "as_of": {
+      "date": "<TODAY>",
+      "source": "clock"
+    },
+    "blocking": true,
+    "files_examined": 4,
+    "findings": [
+      {
+        "file": "docs/adr/ADR-2-second.md",
+        "line": null,
+        "message": "missing required header field 'Embodiment' for record type 'adr'",
+        "rule": "header.required-fields",
+        "severity": "error",
+        "suggested_action": {
+          "kind": "edit-field",
+          "op": "set",
+          "target": {
+            "field": "Embodiment",
+            "file": "docs/adr/ADR-2-second.md"
+          }
+        }
+      }
+    ],
+    "records_read_by_any_rule": 3,
+    "rules_executed": [
+      {
+        "population": {
+          "eligible": 7,
+          "examined": 6,
+          "out_of_scope": 1,
+          "unit": "field",
+          "unreadable": 0
+        },
+        "rule": "header.required-fields",
+        "status": "ran"
+      }
+    ],
+    "rules_selected": [
+      "header.required-fields"
+    ],
+    "scope": {
+      "base": null,
+      "include_untracked": false,
+      "record_types": [
+        "adr",
+        "note"
+      ],
+      "source": "tracked-sweep",
+      "untracked_included": 0
+    },
+    "status": "findings-present"
+  }
+}

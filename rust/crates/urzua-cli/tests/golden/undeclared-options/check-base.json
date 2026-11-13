@@ -1,0 +1,111 @@
+{
+  "status": "findings-present",
+  "files_examined": 1,
+  "records_read_by_any_rule": 1,
+  "rules_executed": [
+    {
+      "rule": "header.required-fields",
+      "population": {
+        "unit": "field",
+        "eligible": 18,
+        "examined": 18,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "pointer.resolution",
+      "population": {
+        "unit": "field",
+        "eligible": 24,
+        "examined": 5,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "sequence.cycle",
+      "population": {
+        "unit": "field",
+        "eligible": 24,
+        "examined": 5,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "sequence.status-agreement",
+      "population": {
+        "unit": "record",
+        "eligible": 7,
+        "examined": 7,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "embodiment.locator-exists",
+      "population": {
+        "unit": "field",
+        "eligible": 6,
+        "examined": 2,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "status.delivery-agreement",
+      "population": {
+        "unit": "record",
+        "eligible": 3,
+        "examined": 3,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "embodiment.locator-on-back-pointer-path",
+      "population": {
+        "unit": "field",
+        "eligible": 6,
+        "examined": 2,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    }
+  ],
+  "rules_selected": null,
+  "scope": {
+    "source": "git-diff",
+    "base": "HEAD~1",
+    "record_types": [
+      "adr",
+      "fact",
+      "milestone",
+      "task",
+      "waiver"
+    ],
+    "changed_paths": [
+      "docs/adr/ADR-1-a.md"
+    ],
+    "dependents": [],
+    "whole_corpus_reason": null
+  },
+  "blocking": false,
+  "findings": [
+    {
+      "rule": "embodiment.locator-on-back-pointer-path",
+      "severity": "warning",
+      "file": "docs/adr/ADR-1-a.md",
+      "line": null,
+      "message": "Realized-by names 'src/a.rs' (code:), a file under back_pointer_paths: a `Implements: ADR-1` comment in that file is read automatically and counts as the same tier, so it cannot go stale away from the code; add the comment first, then drop this locator from Realized-by; keep the locator only where a comment cannot be written"
+    }
+  ]
+}

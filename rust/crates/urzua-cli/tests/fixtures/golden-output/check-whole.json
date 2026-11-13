@@ -1,0 +1,161 @@
+{
+  "args": [
+    "check"
+  ],
+  "exit": 1,
+  "stdout": {
+    "as_of": {
+      "date": "<TODAY>",
+      "source": "clock"
+    },
+    "blocking": true,
+    "files_examined": 4,
+    "findings": [
+      {
+        "file": "docs/adr/ADR-2-second.md",
+        "line": null,
+        "message": "missing required header field 'Embodiment' for record type 'adr'",
+        "rule": "header.required-fields",
+        "severity": "error",
+        "suggested_action": {
+          "kind": "edit-field",
+          "op": "set",
+          "target": {
+            "field": "Embodiment",
+            "file": "docs/adr/ADR-2-second.md"
+          }
+        }
+      },
+      {
+        "file": "docs/adr/ADR-3-third.md",
+        "line": null,
+        "message": "Parent: ADR-99 does not resolve to any discovered record",
+        "rule": "pointer.resolution",
+        "severity": "error",
+        "suggested_action": {
+          "kind": "edit-field",
+          "op": "set",
+          "target": {
+            "field": "Parent",
+            "file": "docs/adr/ADR-3-third.md"
+          }
+        }
+      },
+      {
+        "file": "docs/adr/ADR-3-third.md",
+        "line": null,
+        "message": "stated Embodiment 'Verified' disagrees with 'Implemented', computed from Realized-by",
+        "rule": "embodiment.consistency",
+        "severity": "error",
+        "suggested_action": {
+          "kind": "run-command",
+          "target": {
+            "argv": [
+              "urzua",
+              "fix",
+              "--apply",
+              "--ids",
+              "docs/adr/ADR-3-third.md"
+            ]
+          }
+        }
+      },
+      {
+        "file": "docs/adr/ADR-2-second.md",
+        "line": 3,
+        "message": "field 'Bogus' is not declared (required_fields or known_fields) for record type 'adr'",
+        "rule": "header.field-set-consistency",
+        "severity": "warning",
+        "suggested_action": {
+          "kind": "edit-field",
+          "op": "remove",
+          "target": {
+            "field": "Bogus",
+            "file": "docs/adr/ADR-2-second.md"
+          }
+        }
+      }
+    ],
+    "records_read_by_any_rule": 4,
+    "rules_executed": [
+      {
+        "population": {
+          "eligible": 7,
+          "examined": 6,
+          "out_of_scope": 1,
+          "unit": "field",
+          "unreadable": 0
+        },
+        "rule": "header.required-fields",
+        "status": "ran"
+      },
+      {
+        "population": {
+          "eligible": 3,
+          "examined": 1,
+          "out_of_scope": 0,
+          "unit": "field",
+          "unreadable": 0
+        },
+        "rule": "pointer.resolution",
+        "status": "ran"
+      },
+      {
+        "population": {
+          "eligible": 4,
+          "examined": 4,
+          "out_of_scope": 0,
+          "unit": "record",
+          "unreadable": 0
+        },
+        "rule": "filename.title-consistency",
+        "status": "ran"
+      },
+      {
+        "population": {
+          "eligible": 3,
+          "examined": 0,
+          "out_of_scope": 0,
+          "unit": "field",
+          "unreadable": 0
+        },
+        "rule": "relation.supersession-reciprocity",
+        "status": "ran"
+      },
+      {
+        "population": {
+          "eligible": 3,
+          "examined": 2,
+          "out_of_scope": 0,
+          "unit": "field",
+          "unreadable": 0
+        },
+        "rule": "embodiment.consistency",
+        "status": "ran"
+      },
+      {
+        "population": {
+          "eligible": 3,
+          "examined": 3,
+          "out_of_scope": 0,
+          "unit": "record",
+          "unreadable": 0
+        },
+        "rule": "header.field-set-consistency",
+        "status": "ran"
+      }
+    ],
+    "rules_selected": null,
+    "scope": {
+      "base": null,
+      "include_untracked": false,
+      "record_types": [
+        "adr",
+        "note"
+      ],
+      "source": "tracked-sweep",
+      "untracked_included": 0
+    },
+    "status": "findings-present"
+  }
+}

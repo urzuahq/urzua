@@ -2,7 +2,7 @@
 Stable-Id: 01M34QAQV2AY57C4HGXYT7X5G9
 Status: Fixed
 Found-in: "A /code-review v0.3.0...main pass, reviewing everything landed for the 0.4.0 release"
-Regression-test: "a_symlink_resolving_to_the_prefix_root_itself_is_deduped_not_rejected, check_integration.rs"
+Realized-by: test:rust/crates/urzua-cli/tests/check_integration.rs#a_symlink_resolving_to_the_prefix_root_itself_is_deduped_not_rejected@sha256:93db1bfdbb0a32a6e160c578aab274a70c446e830a62bfb8c023a068cef5870a
 ---
 # 117 — a symlink resolving to the prefix root itself is rejected as an ancestor
 
@@ -33,3 +33,4 @@ self-referential link falls through to the ordinary `visited` dedup instead of e
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-09-23 | Filed and fixed in one pass. **Why:** found by a full-release code review; a planted-violation test observed failing against the reflexive `starts_with` check before the fix. | **substantive** |
+> | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |

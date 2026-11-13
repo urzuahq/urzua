@@ -1,0 +1,10 @@
+id: an-embodiment-stated-before-the-record-is-accepted-is-reported
+corpus: corpus-t
+invocation: [check]
+# ADR-3 is Proposed and states Embodiment: Implemented. The type declares Accepted as
+# its success status, so the claim of a built decision comes before the decision.
+expect_exit: 1
+expect_findings:
+  - {rule: embodiment.requires-accepted-status, severity: error, file: docs/adr/ADR-3-built-before-accepted.md, message_contains: "cannot be stated while Status is 'Proposed'"}
+expect_no_findings:
+  - {rule: embodiment.requires-accepted-status, file: docs/adr/ADR-1-real-locator.md}

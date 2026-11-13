@@ -24,6 +24,26 @@ pub struct ProposedRecordType {
     /// The header shape proposed for the type: always `yaml-frontmatter`, the
     /// only shape with a reader (MILE-85).
     pub header_shape: HeaderShape,
+    /// Bare file names in the directory that are not records and are written
+    /// to the type's `exclude_files`: a `README.md` is not a record, and
+    /// without the exclusion every identity rule asks for it to be renamed.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub exclude_files: Vec<String>,
+}
+
+/// The one non-record file `init` excludes by name. `exclude_files` takes bare,
+/// exact file names, so only this spelling is matched.
+const EXCLUDED_README: &str = "README.md";
+
+/// `["README.md"]` when the tracked set holds one directly in `dir`.
+fn excluded_files_in(discovered: &[PathBuf], dir: &Path) -> Vec<String> {
+    discovered
+        .iter()
+        .any(|rel| {
+            rel.parent() == Some(dir) && rel.file_name().is_some_and(|n| n == EXCLUDED_README)
+        })
+        .then(|| vec![EXCLUDED_README.to_string()])
+        .unwrap_or_default()
 }
 
 /// Propose one record type per directory holding record-shaped files. Adopt
@@ -43,6 +63,11 @@ pub fn detect_record_types(discovered: &[PathBuf]) -> Vec<ProposedRecordType> {
         let Some(parent) = rel_path.parent() else {
             continue;
         };
+        // A hidden directory (`.changeset`, `.github`) holds tool state, never
+        // a record type, and a leading dot is not a legal type name or prefix.
+        if is_hidden_path(rel_path) {
+            continue;
+        }
         // A record at the repository root has no directory that identifies its
         // type, and proposing "" would claim every file in the repository.
         if parent.as_os_str().is_empty() {
@@ -79,10 +104,12 @@ pub fn detect_record_types(discovered: &[PathBuf]) -> Vec<ProposedRecordType> {
             // `docs/adr`). A duplicated type name is a config that cannot load,
             // so qualify it rather than emit one.
             let name = if names.get(&base).copied().unwrap_or(0) > 1 {
-                dir.components()
-                    .map(|c| c.as_os_str().to_string_lossy().to_string())
-                    .collect::<Vec<_>>()
-                    .join("-")
+                legal_type_name(
+                    &dir.components()
+                        .map(|c| c.as_os_str().to_string_lossy().to_string())
+                        .collect::<Vec<_>>()
+                        .join("-"),
+                )
             } else {
                 base
             };
@@ -94,12 +121,14 @@ pub fn detect_record_types(discovered: &[PathBuf]) -> Vec<ProposedRecordType> {
                 Some(first) if seen.iter().all(|p| p == first) => first.clone(),
                 _ => None,
             };
+            let exclude_files = excluded_files_in(discovered, &dir);
             ProposedRecordType {
                 name,
                 dir: dir.to_string_lossy().to_string(),
                 record_count,
                 prefix,
                 header_shape: HeaderShape::YamlFrontmatter,
+                exclude_files,
             }
         })
         .collect()
@@ -172,17 +201,165 @@ pub fn infer_header_shapes(
         .filter(|(n, _)| *n > 0)
         .map(|(n, what)| format!("{n} {what}"))
         .collect();
-        notices.push(Notice {
-            severity: NoticeSeverity::Warning,
-            subject: NOTICE_HEADER_SHAPE.to_string(),
-            message: format!(
-                "yaml-frontmatter is proposed for {}, the only header shape urzua reads; {yaml} record(s) parse under it and {} will be reported as unreadable by `check` until their headers are rewritten as YAML frontmatter",
+        notices.push(Notice::new(NoticeSeverity::Warning, NOTICE_HEADER_SHAPE.to_string(), format!(
+                "yaml-frontmatter is proposed for {}, the only header shape urzua reads; {yaml} record(s) parse under it and {} are not read by any rule until their headers are rewritten as YAML frontmatter; the proposed config declares no `required_fields`, so `check` is silent about them: add `required_fields: [Status]` (or another field every record carries) to this type and `header.required-fields` reports each unreadable record",
                 rt.dir,
                 unread.join(", ")
-            ),
-        });
+            )));
     }
     notices
+}
+
+/// Notice subject for what adopt's directory scan found worth a second look.
+pub(crate) const NOTICE_INIT_SCAN: &str = "init-scan";
+
+fn has_header(content: &str) -> bool {
+    !matches!(read_header(content), HeaderReading::Unreadable)
+}
+
+fn nested_either_way(a: &Path, b: &Path) -> bool {
+    a.starts_with(b) || b.starts_with(a)
+}
+
+/// Split off each proposed type none of whose record-shaped files carries a
+/// header. Such a directory holds numbered pages (site content, requirement
+/// documents) far more often than records, and a type with nothing to read is
+/// noise in the config, so it is not proposed; the notice names it so the
+/// adopter can declare it by hand. Reads only.
+pub fn drop_headerless(
+    repo_root: &Path,
+    discovered: &[PathBuf],
+    proposed: Vec<ProposedRecordType>,
+) -> (Vec<ProposedRecordType>, Vec<Notice>) {
+    let (kept, dropped): (Vec<_>, Vec<_>) = proposed.into_iter().partition(|rt| {
+        discovered.iter().any(|rel| {
+            rel.parent() == Some(Path::new(&rt.dir))
+                && rel
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .is_some_and(is_record_shaped)
+                && std::fs::read_to_string(repo_root.join(rel))
+                    .is_ok_and(|content| has_header(&content))
+        })
+    });
+    if dropped.is_empty() {
+        return (kept, Vec::new());
+    }
+    let listed: Vec<String> = dropped
+        .iter()
+        .map(|rt| format!("{} ({} file(s))", rt.dir, rt.record_count))
+        .collect();
+    let notice = Notice::new(NoticeSeverity::Warning, NOTICE_INIT_SCAN.to_string(), format!(
+            "not proposed, because no file in these directories has a header, so they hold pages rather than records: {}; declare a record type by hand if one of them is a record directory",
+            listed.join(", ")
+        ));
+    (kept, vec![notice])
+}
+
+fn is_hidden_path(rel: &Path) -> bool {
+    rel.components()
+        .any(|c| c.as_os_str().to_string_lossy().starts_with('.'))
+}
+
+/// A header field that reads as a lifecycle state, the one thing numbered
+/// file names would otherwise have told us makes a file a record.
+fn has_status_like_field(content: &str) -> bool {
+    header::parse_with_shape(content, HeaderShape::YamlFrontmatter)
+        .fields
+        .iter()
+        .any(|f| f.key.as_str().eq_ignore_ascii_case("status"))
+}
+
+/// Propose directories whose files are not numbered records but do carry
+/// headers (a flat spec directory named by slug, for example). A directory
+/// qualifies when at least two of its markdown files have a header and those
+/// are at least half of the directory's markdown files. A directory nested in,
+/// or containing, an already proposed one is skipped: discovery matches by path
+/// prefix, so the outer type would already cover it. Headers alone are not
+/// enough (every docs-site page has front matter): at least two headed files
+/// must carry a status-like field. The directories that had headers but no
+/// status are returned second, so the notice can name them.
+pub fn detect_unnumbered_record_types(
+    repo_root: &Path,
+    discovered: &[PathBuf],
+    proposed: &[ProposedRecordType],
+) -> (Vec<ProposedRecordType>, Vec<String>) {
+    // (markdown files, with a header, with a status-like field)
+    let mut dirs: std::collections::BTreeMap<PathBuf, (usize, usize, usize)> =
+        std::collections::BTreeMap::new();
+    for rel in discovered {
+        let Some(file_name) = rel.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        let lower = file_name.to_ascii_lowercase();
+        if !lower.ends_with(".md")
+            || file_name.starts_with('_')
+            || lower == "readme.md"
+            || lower == "index.md"
+            || is_record_shaped(file_name)
+        {
+            continue;
+        }
+        let Some(parent) = rel.parent().filter(|p| !p.as_os_str().is_empty()) else {
+            continue;
+        };
+        if is_hidden_path(rel) {
+            continue;
+        }
+        if proposed
+            .iter()
+            .any(|rt| nested_either_way(parent, Path::new(&rt.dir)))
+        {
+            continue;
+        }
+        let entry = dirs.entry(parent.to_path_buf()).or_insert((0, 0, 0));
+        entry.0 += 1;
+        if let Ok(content) = std::fs::read_to_string(repo_root.join(rel)) {
+            if has_header(&content) {
+                entry.1 += 1;
+            }
+            if has_status_like_field(&content) {
+                entry.2 += 1;
+            }
+        }
+    }
+    let mut taken: std::collections::BTreeSet<String> =
+        proposed.iter().map(|rt| rt.name.clone()).collect();
+    let mut out = Vec::new();
+    let mut headers_only = Vec::new();
+    for (dir, (total, headed, with_status)) in dirs {
+        if headed < 2 || headed * 2 < total {
+            continue;
+        }
+        if with_status < 2 {
+            headers_only.push(dir.to_string_lossy().to_string());
+            continue;
+        }
+        let base = proposed_name(&dir);
+        let name = if taken.contains(&base) {
+            legal_type_name(
+                &dir.components()
+                    .map(|c| c.as_os_str().to_string_lossy().to_string())
+                    .collect::<Vec<_>>()
+                    .join("-"),
+            )
+        } else {
+            base
+        };
+        if !taken.insert(name.clone()) {
+            continue;
+        }
+        let exclude_files = excluded_files_in(discovered, &dir);
+        out.push(ProposedRecordType {
+            name,
+            dir: dir.to_string_lossy().to_string(),
+            record_count: total,
+            prefix: None,
+            header_shape: HeaderShape::YamlFrontmatter,
+            exclude_files,
+        });
+    }
+    (out, headers_only)
 }
 
 fn proposed_name(dir: &Path) -> String {
@@ -190,7 +367,68 @@ fn proposed_name(dir: &Path) -> String {
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_default();
-    singular_type_name(&last)
+    legal_type_name(&singular_type_name(&last))
+}
+
+/// A type name whose upper-cased form is a legal default prefix: lower-case
+/// ASCII letters and digits in hyphen-separated segments, none all digits.
+/// Whatever the directory is called, the config written for it must load.
+fn legal_type_name(raw: &str) -> String {
+    let mut segments: Vec<String> = Vec::new();
+    for seg in raw
+        .to_ascii_lowercase()
+        .split(|c: char| !c.is_ascii_alphanumeric())
+        .filter(|s| !s.is_empty())
+    {
+        segments.push(if seg.chars().all(|c| c.is_ascii_digit()) {
+            format!("n{seg}")
+        } else {
+            seg.to_string()
+        });
+    }
+    if segments.is_empty() {
+        "records".to_string()
+    } else {
+        segments.join("-")
+    }
+}
+
+/// The prefix a type would load with: the declared one, else its upper-cased
+/// name.
+fn effective_prefix(rt: &ProposedRecordType) -> String {
+    rt.prefix
+        .clone()
+        .unwrap_or_else(|| rt.name.to_ascii_uppercase())
+}
+
+/// Two types may not share a prefix, so a later directory whose prefix an
+/// earlier one holds is not proposed (the config would not load). Named in a
+/// notice, never dropped silently.
+fn drop_prefix_clashes(
+    proposed: Vec<ProposedRecordType>,
+) -> (Vec<ProposedRecordType>, Vec<Notice>) {
+    let mut taken: std::collections::BTreeMap<String, String> = std::collections::BTreeMap::new();
+    let mut kept = Vec::new();
+    let mut clashes = Vec::new();
+    for rt in proposed {
+        let prefix = effective_prefix(&rt);
+        match taken.get(&prefix) {
+            Some(owner) => clashes.push(format!("{} (prefix {prefix}, held by {owner})", rt.dir)),
+            None => {
+                taken.insert(prefix, rt.dir.clone());
+                kept.push(rt);
+            }
+        }
+    }
+    let notices = if clashes.is_empty() {
+        Vec::new()
+    } else {
+        vec![Notice::new(NoticeSeverity::Warning, NOTICE_INIT_SCAN.to_string(), format!(
+                "not proposed, because two record types may not share a prefix: {}; declare it by hand with a prefix of its own",
+                clashes.join(", ")
+            ))]
+    };
+    (kept, notices)
 }
 
 /// A leading underscore is a template, never a record. Everything else defers
@@ -232,14 +470,10 @@ fn withheld_rule_notices() -> Vec<Notice> {
             format!("{} (declare `{}`)", rules.join(", "), declaration.key())
         })
         .collect();
-    vec![Notice {
-        severity: NoticeSeverity::Info,
-        subject: NOTICE_RULE_APPLICABILITY.to_string(),
-        message: format!(
+    vec![Notice::new(NoticeSeverity::Info, NOTICE_RULE_APPLICABILITY.to_string(), format!(
             "not proposed, because each reads a per-type declaration init does not infer and would examine no record until it exists: {}; declare it on a record type, then enable the rule",
             clauses.join("; ")
-        ),
-    }]
+        ))]
 }
 
 /// Built through the real serializer rather than string-concatenated, so a
@@ -247,6 +481,48 @@ fn withheld_rule_notices() -> Vec<Notice> {
 /// (BUG-36). The `Mapping` is ordered by `proposed`, so repeated runs over the
 /// same corpus produce byte-identical output.
 pub fn render_config_yaml(proposed: &[ProposedRecordType]) -> String {
+    use yaml_serde::{Mapping, Value};
+
+    let types = proposed_types_mapping(proposed);
+    let rules = proposed_rules_mapping(proposed);
+
+    let mut root = Mapping::new();
+    root.insert(
+        Value::from("schema_version"),
+        Value::from(urzua_core::config::CURRENT_SCHEMA_VERSION),
+    );
+    root.insert(Value::from("record_types"), Value::Mapping(types));
+    root.insert(Value::from("rules"), Value::Mapping(rules));
+    // Who may decide is read from the base revision, so a pull request cannot
+    // widen its own approvers (`ADR-89` amendment of 2026-11-09). The deciders
+    // and gates are the adopter's to write: no corpus supplies them.
+    let mut authority = Mapping::new();
+    authority.insert(Value::from("decider_table"), Value::from("base"));
+    // A waiver record cannot silence the decider rule (`ADR-89` amendment of
+    // 2026-11-09, gate waivers): a gated change is cleared by a decider.
+    authority.insert(Value::from("waivable"), Value::from("never"));
+    root.insert(Value::from("authority"), Value::Mapping(authority));
+    // Proposed so a guardrail an adopter enables later also judges the files of
+    // a linked worktree of this repository (ADR-89 amendment of 2026-11-09);
+    // alone it enables nothing.
+    let mut harness = Mapping::new();
+    harness.insert(Value::from("outside_writes"), Value::from("shared"));
+    root.insert(Value::from("harness"), Value::Mapping(harness));
+
+    // `.unwrap()`, not a swallowed default: `root` is built entirely from
+    // plain strings/sequences/mappings, so serialization failing here would
+    // be a bug in this function, not a config an adopter's input could
+    // trigger. A silent empty body would write a config with no
+    // `record_types`/`rules` and still report `written: true` -- exactly
+    // the disclosure failure (`ADR-55`) this project otherwise closes by
+    // panicking loudly (matching `emit()`'s own `serde_json::to_string_pretty(..).unwrap()`),
+    // which the panic hook turns into structured JSON rather than raw stderr.
+    let body = yaml_serde::to_string(&Value::Mapping(root)).unwrap();
+    format!("# Generated by `urzua init` (adopt mode). Nothing was moved.\n\n{body}")
+}
+
+/// The `record_types` mapping, in the order of `proposed`.
+fn proposed_types_mapping(proposed: &[ProposedRecordType]) -> yaml_serde::Mapping {
     use yaml_serde::{Mapping, Value};
 
     let mut types = Mapping::new();
@@ -270,8 +546,25 @@ pub fn render_config_yaml(proposed: &[ProposedRecordType]) -> String {
         if let Some(prefix) = &rt.prefix {
             entry.insert(Value::from("prefix"), Value::from(prefix.as_str()));
         }
+        if !rt.exclude_files.is_empty() {
+            entry.insert(
+                Value::from("exclude_files"),
+                Value::Sequence(
+                    rt.exclude_files
+                        .iter()
+                        .map(|f| Value::from(f.as_str()))
+                        .collect(),
+                ),
+            );
+        }
         types.insert(Value::from(rt.name.as_str()), Value::Mapping(entry));
     }
+    types
+}
+
+/// The `rules` mapping: every rule adopt mode can propose, at `warn`.
+fn proposed_rules_mapping(proposed: &[ProposedRecordType]) -> yaml_serde::Mapping {
+    use yaml_serde::{Mapping, Value};
 
     // Proposed at `warn`: an adopted corpus should be told what is irregular
     // without being blocked on it, and promoting a rule is the adopter's call.
@@ -285,6 +578,15 @@ pub fn render_config_yaml(proposed: &[ProposedRecordType]) -> String {
         // Pairs are declared, never inferred: enabling these with none
         // declared is a load error, so adopt mode cannot propose them.
         if urzua_core::rules::rule_def(id).is_some_and(|d| d.requires_relation_pairs) {
+            continue;
+        }
+        // The override log is declared, never inferred (`MILE-188`).
+        if urzua_core::rules::rule_def(id).is_some_and(|d| d.requires_override_log) {
+            continue;
+        }
+        // The authority table names logins and gates, which no corpus can supply
+        // (`MILE-200`).
+        if urzua_core::rules::rule_def(id).is_some_and(|d| d.requires_authority) {
             continue;
         }
         // A rule that reads a per-type declaration `init` leaves empty would
@@ -312,24 +614,7 @@ pub fn render_config_yaml(proposed: &[ProposedRecordType]) -> String {
         rules.insert(Value::from(*id), Value::from("warn"));
     }
 
-    let mut root = Mapping::new();
-    root.insert(
-        Value::from("schema_version"),
-        Value::from(urzua_core::config::CURRENT_SCHEMA_VERSION),
-    );
-    root.insert(Value::from("record_types"), Value::Mapping(types));
-    root.insert(Value::from("rules"), Value::Mapping(rules));
-
-    // `.unwrap()`, not a swallowed default: `root` is built entirely from
-    // plain strings/sequences/mappings, so serialization failing here would
-    // be a bug in this function, not a config an adopter's input could
-    // trigger. A silent empty body would write a config with no
-    // `record_types`/`rules` and still report `written: true` -- exactly
-    // the disclosure failure (`ADR-55`) this project otherwise closes by
-    // panicking loudly (matching `emit()`'s own `serde_json::to_string_pretty(..).unwrap()`),
-    // which the panic hook turns into structured JSON rather than raw stderr.
-    let body = yaml_serde::to_string(&Value::Mapping(root)).unwrap();
-    format!("# Generated by `urzua init` (adopt mode). Nothing was moved.\n\n{body}")
+    rules
 }
 
 /// `urzua init`'s report (SPEC-5).
@@ -355,35 +640,42 @@ impl Report for InitReport {
     }
 }
 
-/// Never clobbers an existing config; `--dry-run` produces byte-identical
-/// output to the real run, differing only in whether the file is actually
-/// written.
-pub fn run(dry_run: bool) -> ExitCode {
-    let repo_root = match find_repo_root(&[PathBuf::from(".")]) {
-        Ok(root) => root,
-        Err(e) => return emit(&CouldNotRun::from(e)),
-    };
-
-    let config_path = crate::discovery::default_config_path(&repo_root);
-    if config_path.exists() {
-        return emit(&CouldNotRun::from(format!(
-            "{} already exists -- refusing to overwrite. Edit it directly, or remove it to re-run adopt.",
-            config_path.display()
-        )));
+/// Scans the tracked files for record directories and proposes a record type
+/// for each, with the notices the scan produced. An `Err` is a proposal adopt
+/// cannot write.
+fn propose_record_types(
+    repo_root: &std::path::Path,
+    discovered: &[PathBuf],
+    config_path: &std::path::Path,
+    config_exists: bool,
+) -> Result<(Vec<ProposedRecordType>, Vec<Notice>), String> {
+    let (mut proposed, mut notices) =
+        drop_headerless(repo_root, discovered, detect_record_types(discovered));
+    if config_exists {
+        notices.push(Notice::new(NoticeSeverity::Info, NOTICE_INIT_SCAN.to_string(), format!(
+                "{} already exists; this dry run shows what adopt would propose and nothing was written",
+                config_path.display()
+            )));
     }
-
-    let discovered = match urzua_io::discover_tracked_files(&repo_root) {
-        Ok(d) => d,
-        Err(e) => return emit(&CouldNotRun::from(e.to_string())),
-    };
-
-    let mut proposed = detect_record_types(&discovered.paths);
-    if proposed.is_empty() {
-        return emit(&CouldNotRun::from(
-            "no record-shaped files found in the tracked set -- nothing to adopt",
-        ));
+    let (unnumbered, headers_only) =
+        detect_unnumbered_record_types(repo_root, discovered, &proposed);
+    if !headers_only.is_empty() {
+        notices.push(Notice::new(NoticeSeverity::Info, NOTICE_INIT_SCAN.to_string(), format!(
+                "not proposed, because their files carry headers but no status field, so they look like pages rather than records: {}; declare a record type by hand if one of them is a record directory",
+                headers_only.join(", ")
+            )));
     }
-
+    if !unnumbered.is_empty() {
+        notices.push(Notice::new(NoticeSeverity::Info, NOTICE_INIT_SCAN.to_string(), format!(
+                "proposed from headers alone, because their file names carry no record number: {}; check that each is a record directory",
+                unnumbered
+                    .iter()
+                    .map(|rt| rt.dir.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )));
+        proposed.extend(unnumbered);
+    }
     // Disambiguation (above, on base name only) can still collide: a
     // disambiguated name can match an unrelated directory that already
     // proposes it (BUG-132). `render_config_yaml`'s `Mapping::insert` would
@@ -394,35 +686,106 @@ pub fn run(dry_run: bool) -> ExitCode {
         std::collections::BTreeMap::new();
     for rt in &proposed {
         if let Some(other_dir) = names_to_dirs.insert(rt.name.as_str(), rt.dir.as_str()) {
-            return emit(&CouldNotRun::from(format!(
+            return Err(format!(
                 "{} and {other_dir} both propose the record type name '{}' after disambiguation -- adopt cannot generate a config that would silently drop one. Reorganize one of these directories, or write .urzua/config.yaml by hand for now.",
                 rt.dir, rt.name
-            )));
+            ));
         }
     }
+
+    let (proposed, clash_notices) = drop_prefix_clashes(proposed);
+    notices.extend(clash_notices);
+    if proposed.is_empty() {
+        let scanned = notices
+            .iter()
+            .map(|n| n.message.as_str())
+            .collect::<Vec<_>>()
+            .join("; ");
+        return Err(format!(
+            "no record directory found in the tracked set -- nothing to adopt{}{scanned}",
+            if scanned.is_empty() { "" } else { ": " }
+        ));
+    }
+    Ok((proposed, notices))
+}
+
+/// Writes the adopted config, creating its directory. Only the default
+/// location is confined to the repository.
+fn write_config(
+    repo_root: &std::path::Path,
+    config_path: &std::path::Path,
+    explicit_config: bool,
+    rendered: &str,
+) -> Result<(), String> {
+    if !explicit_config {
+        urzua_io::confine_to_root(repo_root, config_path)?;
+    }
+    if let Some(parent) = config_path.parent().filter(|p| !p.as_os_str().is_empty()) {
+        if let Err(e) = std::fs::create_dir_all(parent) {
+            return Err(format!("could not create {}: {e}", parent.display()));
+        }
+    }
+    if let Err(e) = urzua_io::write_atomic(config_path, rendered) {
+        return Err(format!("could not write {}: {e}", config_path.display()));
+    }
+    Ok(())
+}
+
+/// Never clobbers an existing config; `--dry-run` proposes the config the
+/// real run writes (its `config_yaml` is byte-identical to the written file)
+/// and differs in the report's `dry_run` and `written` fields, and in the real
+/// run omitting `config_yaml` rather than echoing the file back.
+pub fn run(config: Option<PathBuf>, dry_run: bool) -> ExitCode {
+    let repo_root = match find_repo_root(&[PathBuf::from(".")]) {
+        Ok(root) => root,
+        Err(e) => return emit(&CouldNotRun::from(e)),
+    };
+
+    // `--config X` names the file to write (SPEC-5); only the default location
+    // is derived from the repository, so only it is confined to it.
+    let explicit_config = config.is_some();
+    let config_path = config.unwrap_or_else(|| crate::discovery::default_config_path(&repo_root));
+    let config_exists = config_path.exists();
+    // `--dry-run` writes nothing, so an existing config is no reason to refuse
+    // it: it shows what adopt would propose today.
+    if config_exists && !dry_run {
+        return emit(&CouldNotRun::from(format!(
+            "{} already exists -- refusing to overwrite. Edit it directly, or remove it to re-run adopt.",
+            config_path.display()
+        )));
+    }
+
+    let discovered = match urzua_io::discover_tracked_files(&repo_root, None) {
+        Ok(d) => d,
+        Err(e) => return emit(&CouldNotRun::from(e.to_string())),
+    };
+
+    let (mut proposed, mut notices) =
+        match propose_record_types(&repo_root, &discovered.paths, &config_path, config_exists) {
+            Ok(pair) => pair,
+            Err(why) => return emit(&CouldNotRun::from(why)),
+        };
 
     let relative_config_path = config_path
         .strip_prefix(&repo_root)
         .unwrap_or(&config_path)
         .to_path_buf();
 
-    // `audit`'s entire rule set (`pointer.resolution`,
-    // `relation.supersession-reciprocity`) is identity-dependent, so a
-    // corpus with no type prefix leaves it with nothing enabled and
-    // `urzua audit` exits 2 immediately after this command (`BUG-99`).
-    // Correct, not a bug in `audit`'s exit-code policy (`BUG-77`) -- but the
-    // adopter's documented first two commands should not surprise them.
-    let mut notices = infer_header_shapes(&repo_root, &discovered.paths, &mut proposed);
+    notices.extend(infer_header_shapes(
+        &repo_root,
+        &discovered.paths,
+        &mut proposed,
+    ));
     notices.extend(withheld_rule_notices());
-    if proposed.iter().all(|rt| rt.prefix.is_none()) {
-        notices.push(Notice {
-            severity: NoticeSeverity::Warning,
-            subject: NOTICE_RULE_APPLICABILITY.to_string(),
-            message: "no proposed type carries a filename prefix, so audit's rule set (pointer.resolution, relation.supersession-reciprocity) is entirely identity-dependent and none of it is declared here -- `urzua audit` will report not-run (exit 2) until at least one type adopts a prefix (see ADR-36)".to_string(),
-        });
-    }
 
     let rendered = render_config_yaml(&proposed);
+    // Whatever was proposed, the file written must load: a config `init` calls
+    // ready that `check` then refuses is the worst outcome adopt can have.
+    if let Err(e) = urzua_core::config::parse(&rendered) {
+        return emit(&CouldNotRun::from(format!(
+            "adopt generated a config that does not load ({e}); this is a bug in `urzua init`, nothing was written"
+        )));
+    }
 
     if dry_run {
         return emit(&InitReport {
@@ -436,14 +799,8 @@ pub fn run(dry_run: bool) -> ExitCode {
         });
     }
 
-    if let Err(e) = std::fs::create_dir_all(config_path.parent().unwrap()) {
-        return emit(&CouldNotRun::from(format!("could not create .urzua/: {e}")));
-    }
-    if let Err(e) = std::fs::write(&config_path, &rendered) {
-        return emit(&CouldNotRun::from(format!(
-            "could not write {}: {e}",
-            config_path.display()
-        )));
+    if let Err(why) = write_config(&repo_root, &config_path, explicit_config, &rendered) {
+        return emit(&CouldNotRun::from(why));
     }
 
     emit(&InitReport {
@@ -525,6 +882,7 @@ mod tests {
             record_count: 1,
             prefix: None,
             header_shape: HeaderShape::YamlFrontmatter,
+            exclude_files: vec![],
         }]);
         let parsed = urzua_core::config::parse(&rendered)
             .expect("init must never emit a config it cannot read back");
@@ -582,6 +940,7 @@ mod tests {
             record_count: 1,
             prefix: None,
             header_shape: HeaderShape::YamlFrontmatter,
+            exclude_files: vec![],
         }]);
         assert!(!rendered.contains("claim.status-agreement"), "{rendered}");
         assert!(!rendered.contains("pointer.target-status"), "{rendered}");
@@ -600,6 +959,7 @@ mod tests {
                 record_count: 1,
                 prefix: None,
                 header_shape: HeaderShape::YamlFrontmatter,
+                exclude_files: vec![],
             })
             .collect();
         assert_eq!(render_config_yaml(&proposed), render_config_yaml(&proposed));
@@ -613,6 +973,7 @@ mod tests {
             record_count: 2,
             prefix: Some("ADR".to_string()),
             header_shape: HeaderShape::YamlFrontmatter,
+            exclude_files: vec![],
         }];
         let yaml = render_config_yaml(&proposed);
         assert!(
@@ -631,6 +992,7 @@ mod tests {
                 record_count: 2,
                 prefix: Some("ADR".to_string()),
                 header_shape: HeaderShape::YamlFrontmatter,
+                exclude_files: vec![],
             },
             ProposedRecordType {
                 name: "note".to_string(),
@@ -638,6 +1000,7 @@ mod tests {
                 record_count: 1,
                 prefix: None,
                 header_shape: HeaderShape::YamlFrontmatter,
+                exclude_files: vec![],
             },
         ];
         let yaml = render_config_yaml(&proposed);
@@ -656,6 +1019,7 @@ mod tests {
             record_count: 9,
             prefix: None,
             header_shape: HeaderShape::YamlFrontmatter,
+            exclude_files: vec![],
         }];
         let yaml = render_config_yaml(&proposed);
         assert!(
@@ -693,6 +1057,7 @@ mod tests {
             record_count: 3,
             prefix: Some("ADR".to_string()),
             header_shape: HeaderShape::YamlFrontmatter,
+            exclude_files: vec![],
         }];
         let yaml = render_config_yaml(&proposed);
         for rule in [
