@@ -1229,6 +1229,10 @@ pub struct WaiveReport {
     pub drafts: Vec<WaiveDraft>,
     pub skipped: Vec<crate::waive::Skipped>,
     pub unmatched_filters: Vec<crate::waive::UnmatchedFilter>,
+    /// Why an `--apply` stopped before writing every draft (`status` is then
+    /// `not-run`); `drafts[].written` says which were written.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
 }
 
 /// One waiver the command drafts (or wrote), for one rule in one file.
@@ -1236,7 +1240,8 @@ pub struct WaiveReport {
 pub struct WaiveDraft {
     /// The record's path: the number it would take now, in a dry run.
     pub path: PathBuf,
-    /// `null` in a dry run: the id is minted when the record is written.
+    /// `null` in a dry run: the id is minted when the record is written, and
+    /// stays `null` for a draft that was not written.
     pub stable_id: Option<String>,
     pub rule: String,
     pub scope: String,
@@ -1254,8 +1259,13 @@ impl Report for WaiveReport {
     fn notices(&self) -> &[Notice] {
         &[]
     }
+    /// 0 when it ran, 2 when a write error stopped an `--apply`.
     fn exit_code(&self) -> ExitCode {
-        ExitCode::from(0)
+        ExitCode::from(if self.status == ReportStatus::NotRun {
+            2
+        } else {
+            0
+        })
     }
 }
 
