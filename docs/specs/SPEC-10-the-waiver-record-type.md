@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5BCRKD027XA81J0Q8Q
-Version: '0.20'
+Version: '0.21'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -106,7 +106,7 @@ unchanged.
 
 `urzua waive --from-report` (`SPEC-25`, `ADR-91`) drafts waivers for the current findings: one per rule and
 file, with `Rule` and `Scope` copied from the findings, a `Reason` holding the pending value, and
-`Expires`, `Category` and `Justified-by` left blank. The pending value is the first whole-value entry of the
+no `Expires` key and `Category` and `Justified-by` left blank (`--apply` writes the drafts). The pending value is the first whole-value entry of the
 type's `statuses.pending` (a waiver has no `Status`, so the type may declare `pending` alone, without
 `values`, `SPEC-3`), else `Pending`. A draft is not in effect: its `Reason` is pending, so its finding is reported
 again and `waiver.matches-nothing` reports the draft. The command refuses to run where a draft would take
@@ -181,3 +181,4 @@ record is edited later.
 > | 2026-11-09 | Bumped to `0.19`. Re-pin rows in this revision log were reworded to name who re-verified, matching the tool's wording since 2026-11-09; hashes, reasons and dates are unchanged. **Why:** Maintainer decision, 2026-11-09. | **structural** |
 > | 2026-11-13 | Bumped to `0.20`. Adds the `Drafts` section: the waiver `urzua waive --from-report` drafts and the refusals that keep a draft ineffective (`SPEC-25`). **Why:** `MILE-205`, `ADR-91` point 5. | **substantive** |
 > | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/waiver.rs` b8d83e370c42 -> 748f534e72aa. Reason: Read the diff of each re-pinned file against main. waiver.rs: added SuppressionType::field_state, and load_suppressions now calls it; the classification it holds is the code that was inline in load_suppressions, moved unchanged, so which waivers take effect is unchanged. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-13 | Bumped to `0.21`. The `Drafts` section says a draft has no `Expires` key, and that `--apply` writes the drafts. **Why:** `MILE-205`, the `--apply` change. | **structural** |
