@@ -1,9 +1,9 @@
 ---
-Version: '0.6'
+Version: '0.7'
 Date: 2026-09-19
 Status: Accepted
 Embodiment: Verified
-Realized-by: code:Makefile@sha256:ccc04e61c2e32aad9ccd10166a12df24d31e8ccb1b24233f01c566d7058f382a, test:.github/workflows/checks.yml@sha256:ad6ab57882dfac0d3a819e549bccd9ba6f81abafe0699d09d26f828a5714398b
+Realized-by: code:Makefile@sha256:ccc04e61c2e32aad9ccd10166a12df24d31e8ccb1b24233f01c566d7058f382a
 Author: beauwilliams
 Stable-Id: 01M2VNAMK7V28A67T84JZ5NZPP
 Subject: 'What each top-level directory holds, and the rules the root obeys -- the living counterpart to ADR-4''s decision to organize by language.'
@@ -31,11 +31,12 @@ inventory attached to it, which is what this spec now holds.
 |---|---|
 | `rust/` | Cargo workspace: the `urzua` CLI and its crates (`urzua-cli`, `urzua-core`, `urzua-io`, `urzua-id`, `urzua-agdr`). |
 | `docs/` | Governance records -- ADRs, RFCs, specs, bugs, milestones, waivers. Language-agnostic by nature; the record format is the contract every language directory implements against. |
-| `scripts/` | Repository tooling belonging to no language directory. Currently `generate-dashboard.py` (`ADR-37`). |
+| `scripts/` | Repository tooling belonging to no language directory. Currently `generate-dashboard.py` (`ADR-37`) and `generate-rule-table.py`. |
 | `ts/` | TypeScript/Node: agent-harness integrations, editor plugins, dashboard. **Reserved; holds a README only.** |
 | `platform/` | Deployment targets and infrastructure, per environment. **Reserved; holds a README only.** |
 | `.urzua/` | This repository's own `config.yaml` and record templates -- the tool's configuration of itself. |
-| `.github/` | Workflows, `release-paths` (`ADR-49`), and the release guard script (`BUG-48`). |
+| `.github/` | Workflows, `actions/` (composite actions, among them the `urzua-gate` gate), `ISSUE_TEMPLATE/`, `PULL_REQUEST_TEMPLATE.md`, `release-paths` (`ADR-49`), and `scripts/` (the CI and release guard scripts, `BUG-48`). |
+| `.claude/` | Claude Code settings, the record-edit hook scripts under `hooks/`, and the slash commands under `commands/` for drafting and maintaining records. |
 | `.changeset/` | Pending release fragments (`ADR-29`), consumed by `knope` at release time. |
 | `.git-hooks/` | The pre-commit and pre-push hooks installed by `make hooks-install`. |
 
@@ -60,7 +61,10 @@ the speculative reservation this spec exists to stop accumulating.
 1. This table matches `ls -A` at the repository root -- `-A`, because half the entries it
    lists are dot-directories that plain `ls` hides, which is how the first version of this table
    shipped omitting three of them. A directory present and unlisted, or listed and
-   absent, is a finding against this spec.
+   absent, is a finding against this spec. A test enforces it: `layout_table_integration.rs`
+   compares the top-level entries of the table and of the root-files line with the entries git sees at the
+   repository root (tracked or untracked, gitignored entries excepted) and fails on any entry in one
+   and not the other.
 2. `ADR-4` is not edited to track layout changes. It records why the layout is language-first; this
    spec records what the layout is.
 
@@ -90,3 +94,4 @@ the speculative reservation this spec exists to stop accumulating.
 > | 2026-11-09 | Bumped to `0.5`. Re-pin rows in this revision log were reworded to name who re-verified, matching the tool's wording since 2026-11-09; hashes, reasons and dates are unchanged. **Why:** Maintainer decision, 2026-11-09. | **structural** |
 > | 2026-11-10 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.github/workflows/checks.yml` a201f4e57f5f -> ad6ab57882df. Reason: checks.yml gained one additive, report-only step in the build job (no stale evidence pins: runs fix --rebaseline without --apply and fails unless the report status is ok); no existing step changed, so the claim still holds **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-10 | Bumped to `0.6`. The re-baseline row above records a structural change, which requires a version bump; the Decision and the pinned claim are unchanged. **Why:** the new stale-pin guard step changed the pinned `checks.yml`, so this record was re-pinned in the same pull request. | **structural** |
+> | 2026-11-13 | Bumped to `0.7`. Layout table amended to match the tree: added `.claude/`; the `scripts/` row names `generate-rule-table.py`; the `.github/` row lists `actions/`, `ISSUE_TEMPLATE/`, `PULL_REQUEST_TEMPLATE.md` and `scripts/`. Success criterion 1 is now enforced by `layout_table_integration.rs`, and its `Verifies: SPEC-21` back-pointer replaces the workflow file in `Realized-by`; the test compares against the entries git sees (tracked or untracked, gitignored excepted), so a developer's ignored `.DS_Store` or `.idea/` does not fail it. **Why:** a re-read found the table behind the repository again; the criterion existed but nothing ran it. | **substantive** |

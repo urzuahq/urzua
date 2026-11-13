@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5PKKQRJF9WFZJA105B
-Version: '0.23'
+Version: '0.24'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/commands/init.rs@sha256:1cb2edb3e555be440a8fbb4a6186e68fce238d8f65bfef1f8aa3a1954b25b13b, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:a60c9c61b94c5707e0aa4e96713a843556cd50bce97e01c514826d61ca0aac08
+Realized-by: code:rust/crates/urzua-cli/src/commands/init.rs@sha256:1cb2edb3e555be440a8fbb4a6186e68fce238d8f65bfef1f8aa3a1954b25b13b, test:rust/crates/urzua-cli/tests/init_adopt_integration.rs
 Author: beauwilliams
 Subject: '`urzua init` -- the adopt-existing-corpus path and `.urzua/` layout.'
 Implements: RFC-1
@@ -47,7 +47,7 @@ the root, the corpus, and a cache directory is how each ends up governed by a di
 ```
 
 (`.gitignore` gaining `.urzua/cache/` is not yet built either -- `init` does not touch `.gitignore`
-today.)
+today, and criterion 2 below holds it to that.)
 
 `init` writes only `.urzua/config.yaml` today. `templates/` and `cache/` are part of `.urzua/`'s
 settled shape -- `new` already reads a template from `templates/<type>.md` when a repository hand-
@@ -101,11 +101,13 @@ adopter turns on later also judge the files of a linked worktree of the reposito
 `init` proposes each shipped rule at `warn`, except a rule that cannot examine anything on the corpus it
 just adopted: a rule that needs options it cannot supply, a rule that needs declared `relation_pairs`,
 a rule that resolves identity on a corpus where no type has a prefix, and a rule that reads a per-type
-declaration `init` does not write. `init` writes `required_fields: []` and infers no `known_fields` or
-`pointer_fields` (`ADR-33`), so `field.quality`, `field.pending`, `header.field-set-consistency` and
-`header.pointer-field-clean` are not proposed. A `rule-applicability` notice (severity `info`) lists them
-with the declaration each reads, so the adopter knows what to declare on a record type before enabling
-the rule. Each rule's declaration is the `reads_declaration` of its entry in the rule table.
+declaration `init` does not write. The last group is not a fixed list: it is every rule whose entry in the
+rule table carries a `reads_declaration` (`required_fields`, `known_fields`, `pointer_fields`,
+`revision_log.version_bump`, `statuses.blocked` or `statuses.progress`, or `statuses.delivery.items`), so a
+rule added later with a `reads_declaration` is withheld without touching `init`. `init` writes
+`required_fields: []` and infers none of those declarations (`ADR-33`). A `rule-applicability` notice
+(severity `info`) lists the withheld rules, grouped by declaration, so the adopter knows what to declare on
+a record type before enabling the rule.
 
 `init` also writes `authority: {decider_table: base}`: no deciders and no gates, which no corpus can supply,
 only the choice that who may decide is read from a pull request's base revision (`SPEC-3`, `ADR-89`
@@ -158,8 +160,11 @@ classifies every record-shaped file it finds by directory; nothing is reported a
 ## Success criteria
 
 1. `--dry-run` output matches what a real run then does, byte for byte.
-2. Adopt moves no files, and a `git status` after it shows only `.urzua/` and `.gitignore`.
+2. Adopt moves no files, and a `git status` after it shows only `.urzua/`; `init` does not touch `.gitignore`.
 
+Criterion 1 is enforced by `init_adopt_integration.rs` (`init_dry_run_proposes_the_config_the_real_run_writes`),
+criterion 2 by `init_integration.rs` (`init_changes_only_the_urzua_directory_and_leaves_gitignore_alone`), and
+the withheld-rule mechanism by the same file (`init_withholds_every_rule_that_reads_a_declaration`).
 Criterion 2 is the one to hold. The moment `init` moves a file it becomes a migration, and a
 migration without a reverse-reference scan is the documented data-loss shape.
 
@@ -223,3 +228,4 @@ adopt should infer rules or only structure, and multi-corpus-per-repo).
 > | 2026-11-09 | Bumped to `0.22`. Evidence pins on `.urzua/config.yaml` were re-pinned (row above) after the config's authority section gained `waivable: never`; the specification's content is unchanged. **Why:** `ADR-89` amendment of 2026-11-09 (gate waivers). | **substantive** |
 > | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/check_integration.rs` 5ab61b95fd58 -> a60c9c61b94c. Reason: Read the diff of each pinned file since the previous pin. rust/crates/urzua-cli/tests/check_integration.rs: adds one regression test that a claim file with an upper-case .MD extension under claim_paths is read; nothing else changed. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-09 | Bumped to `0.23`. Evidence pins re-baselined for this change; the specification text is unchanged. **Why:** a revision-log entry that adds a structural change bumps `Version`. | **structural** |
+> | 2026-11-13 | Bumped to `0.24`. `## Proposed rules` states the withheld-rule mechanism (`reads_declaration` in the rule table) and no longer a fixed list of four, which had fallen behind the table; success criterion 2 no longer claims `.gitignore` appears in `git status`, because `init` never touches it. `Realized-by` cites `init_adopt_integration.rs` instead of `check_integration.rs`, and `init_integration.rs` carries a `Verifies: SPEC-5` back-pointer; together they enforce both criteria and the mechanism. **Why:** a re-read against the code found these divergences. | **substantive** |
