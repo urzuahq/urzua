@@ -667,8 +667,7 @@ fn actors_cannot_be_combined_with_stdin_path() {
 // ------------------------------------------ this repository's own table
 
 fn own_config() -> String {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../.urzua/config.yaml");
-    std::fs::read_to_string(path).expect("repository config readable")
+    common::own_config_for_fixture()
 }
 
 #[test]

@@ -47,7 +47,11 @@ fn repo(name: &str, files: &[(&str, &str)]) -> common::TempDir {
     git(&dir, &["init", "-q"]);
     git(&dir, &["config", "user.email", "test@example.com"]);
     git(&dir, &["config", "user.name", "test"]);
-    std::fs::write(dir.join(".urzua/config.yaml"), own_config()).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        common::strip_drift_baseline(&own_config()),
+    )
+    .unwrap();
     for (path, content) in files {
         let full = dir.join(path);
         std::fs::create_dir_all(full.parent().unwrap()).unwrap();
@@ -339,4 +343,21 @@ fn new_waiver_scaffolds_justified_by_from_the_repositorys_own_template() {
             "the header names {field}: {header:?}"
         );
     }
+}
+
+/// MILE-49: this repository declares `drift_baseline` on `embodiment.consistency`
+/// and the ref resolves to a commit in its own history, so every `check` of the
+/// repository exercises the option.
+#[test]
+fn own_config_declares_a_drift_baseline_that_resolves_in_this_repository() {
+    let config = urzua_core::config::parse(&own_config()).expect("repository config parses");
+    let baseline = config.rules["embodiment.consistency"]
+        .drift_baseline
+        .as_ref()
+        .expect("embodiment.consistency declares drift_baseline");
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let commit = urzua_io::resolve_commit(&root, &baseline.git_ref).unwrap_or_else(|e| {
+        panic!("the baseline ref must resolve (fetch tags and full history): {e}")
+    });
+    assert_eq!(commit.len(), 40, "{commit}");
 }

@@ -175,6 +175,45 @@ listed in `skipped` with the reason that the drafts resolve it. The engine names
 finding the drafts resolve is skipped the same way, and each one is reported, never dropped silently.
 `MILE-205` builds it.
 
+## Amendment (2026-11-13): a drift baseline is a git ref, and a git ref is not a second suppression list
+
+*Status of this amendment: decided by the maintainer on 2026-11-13; wording pending maintainer review. `Status` stays `Accepted` and the Decision text above is unchanged.*
+
+Point 1 says there is no baseline file and no second suppression mechanism. `MILE-49` asks for a drift baseline:
+a way for a corpus adopting urzua to tell drift that was already there from drift introduced since, so `check`
+can gate on the second without the first. Read against point 1 the two look opposed. The maintainer decided on
+2026-11-13 that they are not, and chose a git ref in configuration (`embodiment.consistency`'s `drift_baseline:
+{ref}`, `SPEC-3`) over a declared list of records. This amendment records why the ref is not what point 1 rejects.
+
+1. **It holds no list.** What point 1 and `ADR-11` refuse is a committed list of today's findings that `check`
+   ignores: unreviewable, and growing as the corpus does. A ref names one point in history. Which records are
+   pre-existing is computed on every run from the corpus and git (a drifted locator last changed at or before the
+   ref), so nothing in the configuration enumerates a record or a finding, and nothing can fall out of step with
+   the corpus or be edited to hide a new one.
+2. **It expires itself.** A list entry outlives its cause until a person deletes it. A ref's effect shrinks as
+   records are re-verified and re-pinned, because a record whose locators are re-attributed to later commits is
+   no longer pre-existing. When nothing is held out, a whole-corpus `check` says so in an info notice, the nudge to
+   delete the option. Advancing the ref forgets older drift on purpose; deleting it ends the baseline.
+3. **It generalises `--base`, which already works this way.** `check --base <ref>` (`MILE-123`) reports only on the
+   records changed since the merge base and their dependents, so a pull request is gated on what it touched and
+   not on a backlog. That is a baseline whose ref moves with each branch. `drift_baseline` is the same idea with
+   the ref fixed in configuration, for the whole-repository run that `--base` does not cover and for the day an
+   adopter first runs `check`. It adds no machinery for the question of what is old: the cited file's history
+   already answers it, which is how drift is computed.
+4. **Suppression stays the waiver.** The baseline suppresses nothing in the waiver's sense. It does not hide a
+   finding of any rule: it states which drift predates a point, the held-out records are listed in an info
+   notice and the report's `baseline` object on every run, and a finding that is not drift is untouched. A waiver
+   remains the only way to silence a finding, and its `Reason` and `Expires` are not replaced by a ref. A record
+   with a locator changed after the ref is reported in full, even when an earlier change had already drifted it.
+5. **It cannot fail open.** A ref that does not resolve stops the run (exit 2) instead of reading as no
+   pre-existing drift, which would put the whole backlog back on the gate.
+
+What this does not decide: the baseline's scope is drift of `Realized-by` locators under `embodiment.consistency`
+alone, and no other rule gains one. A baseline for any other rule's findings is still the waiver, drafted by
+`urzua waive --from-report`. Drift is attributed to the commit that last changed the cited file, so a file edited
+since the ref counts as introduced for every record citing it, which is stricter than blaming only the changed
+lines.
+
 ## Reversibility
 
 Easy for the command, which is additive and writes only ordinary waiver records; removing it leaves every
@@ -229,3 +268,4 @@ the report fields and the choice of `Pending` as the fallback value, which a rep
 > | 2026-11-05 | Records-only amendment after review (PR #364). Relaxing `statuses` needs both `status_model.rs:35` and `:368`, and the readers of `values` (`config.rs:1597` and others) are named. The command refuses when a repository declares no `permanent` and does not require `Expires` (point 9). Recorded as decided: fall back to `Pending`, plain `--path`, info findings skipped, one waiver per rule and file. `ADR-73` cited as compatible. **Why:** independent review found the serde failure and an accidental-permanent-waiver gap. Status stays Proposed. | **substantive** |
 > | 2026-11-06 | Status changed from Proposed to Accepted. **Why:** Maintainer decision, 2026-11-06. | **substantive** |
 > | 2026-11-08 | Amended: point 3 skips, and lists in `skipped`, a finding that writing the drafts would itself resolve, judged on the tree with the drafts in memory. **Why:** Maintainer decision, 2026-11-08, after an adoption dry run showed a draft for a finding that exists only because no waiver record does yet. | **substantive** |
+> | 2026-11-13 | Amended: a drift baseline declared as a git ref in configuration is not the baseline file of point 1 (no list, expires itself, generalises `--base`). The Decision text is unchanged; `Status` stays `Accepted`. Decided by the maintainer on 2026-11-13; wording pending maintainer review. **Why:** `MILE-49` asks for a drift baseline, and point 1 rejects a baseline file; the maintainer chose the ref form. | **substantive** |

@@ -357,6 +357,18 @@ impl Config {
     }
 }
 
+/// The `drift_baseline` declaration of `embodiment.consistency` (`MILE-49`): the
+/// git ref the corpus's pre-existing drift is counted at. A structured value, not
+/// a bare string, so a later key (an expiry, say) does not change its shape.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DriftBaseline {
+    /// A branch, tag or commit; resolved at the start of a `check` run, and a
+    /// ref that does not resolve to a commit stops the run.
+    #[serde(rename = "ref")]
+    pub git_ref: String,
+}
+
 /// What a repository declared about one rule. Written either as a bare level
 /// (`field.quality: error`) or as a table when a rule takes options.
 ///
@@ -533,6 +545,12 @@ pub struct RuleSetting {
     /// meaningful to `embodiment.consistency`, and only with `drift_grace_days`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub drift_audit_field: Option<String>,
+    /// A git ref whose drift is pre-existing (`MILE-49`, `ADR-91` amendment of
+    /// 2026-11-13): drift of a locator last changed at or before it is reported
+    /// as an info notice and does not gate; drift introduced since it does. Only
+    /// meaningful to `embodiment.consistency`; omitted means no baseline.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub drift_baseline: Option<DriftBaseline>,
     /// Days after which an `Embodiment` claim last verified longer ago than
     /// this draws a warning (`MILE-129`). Only meaningful to
     /// `embodiment.consistency`; omitted means no age limit.
@@ -1637,6 +1655,8 @@ pub enum ConfigError {
     },
     #[error("rule '{rule}' option 'drift_audit_field' {reason}")]
     InvalidDriftAuditField { rule: String, reason: String },
+    #[error("rule '{rule}' option 'drift_baseline' {reason}")]
+    InvalidDriftBaseline { rule: String, reason: String },
     #[error("rule '{rule}' option '{option}' {reason}")]
     InvalidClaimExpiry {
         rule: String,
@@ -3051,6 +3071,7 @@ fn validate_rule_settings(config: &Config) -> Result<(), ConfigError> {
         check_rule_pinnable_kinds(name, setting)?;
         check_rule_sticky_states(name, setting, config)?;
         check_rule_drift_audit_field(name, setting, config)?;
+        check_rule_drift_baseline(name, setting)?;
         check_rule_expiry_options(name, setting, config)?;
         if setting.level == RuleLevel::Off {
             continue;
@@ -3347,6 +3368,32 @@ fn check_rule_sticky_states(
     Ok(())
 }
 
+/// `drift_baseline` names a ref (`MILE-49`): a blank one, or one git would read as
+/// an option, is refused here; whether it resolves is judged when a run starts,
+/// because the config cannot see the repository.
+fn check_rule_drift_baseline(name: &str, setting: &RuleSetting) -> Result<(), ConfigError> {
+    let Some(baseline) = setting.drift_baseline.as_ref() else {
+        return Ok(());
+    };
+    let git_ref = baseline.git_ref.trim();
+    let reason = if git_ref.is_empty() {
+        Some("names a blank ref: give a branch, tag or commit".to_string())
+    } else if git_ref.starts_with('-') || git_ref.chars().any(char::is_whitespace) {
+        Some(format!(
+            "names '{git_ref}', which is not a ref: it starts with '-' or holds whitespace"
+        ))
+    } else {
+        None
+    };
+    match reason {
+        Some(reason) => Err(ConfigError::InvalidDriftBaseline {
+            rule: name.to_string(),
+            reason,
+        }),
+        None => Ok(()),
+    }
+}
+
 /// `drift_audit_field` needs a window and a declared field.
 fn check_rule_drift_audit_field(
     name: &str,
@@ -3400,6 +3447,7 @@ fn check_rule_expiry_options(
         ("drift_grace_days", setting.drift_grace_days.is_some()),
         ("drift_audit_field", setting.drift_audit_field.is_some()),
         ("claim_max_age_days", setting.claim_max_age_days.is_some()),
+        ("drift_baseline", setting.drift_baseline.is_some()),
     ] {
         if present && !crate::rules::rule_accepts_option(name, option) {
             return Err(ConfigError::OptionNotApplicable {
@@ -4819,6 +4867,43 @@ rules:
             "{base}  embodiment.consistency:\n    level: warn\n    sticky_states: [\" \"]\n"
         ));
         assert!(blank.is_err(), "a blank entry is not a declaration");
+    }
+
+    #[test]
+    fn drift_baseline_is_a_ref_object_of_consistency_alone() {
+        let base = "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\nrules:\n";
+        let ok = parse(&format!(
+            "{base}  embodiment.consistency:\n    level: warn\n    drift_baseline: {{ref: v0.3.0}}\n"
+        ))
+        .unwrap();
+        assert_eq!(
+            ok.rules["embodiment.consistency"]
+                .drift_baseline
+                .as_ref()
+                .map(|b| b.git_ref.as_str()),
+            Some("v0.3.0")
+        );
+        for bad in [
+            "{ref: \"\"}",
+            "{ref: --all}",
+            "{ref: \"a b\"}",
+            "v0.3.0",
+            "{ref: a, until: b}",
+        ] {
+            let err = parse(&format!(
+                "{base}  embodiment.consistency:\n    level: warn\n    drift_baseline: {bad}\n"
+            ));
+            assert!(err.is_err(), "{bad} must be refused");
+        }
+        let elsewhere = parse(&format!(
+            "{base}  field.quality:\n    level: error\n    drift_baseline: {{ref: v1}}\n"
+        ))
+        .unwrap_err()
+        .to_string();
+        assert!(
+            elsewhere.contains("does not take the option 'drift_baseline'"),
+            "{elsewhere}"
+        );
     }
 
     #[test]
@@ -6739,6 +6824,7 @@ mod option_table_tests {
         "drift_grace_days",
         "drift_audit_field",
         "claim_max_age_days",
+        "drift_baseline",
         "anchor_field",
         "require_pin",
         "max_batch",

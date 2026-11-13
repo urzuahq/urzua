@@ -23,8 +23,11 @@ fn repo(name: &str, files: &[(&str, &str)]) -> common::TempDir {
     git(&dir, &["init", "-q"]);
     git(&dir, &["config", "user.email", "test@example.com"]);
     git(&dir, &["config", "user.name", "test"]);
-    let cfg = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../.urzua/config.yaml");
-    std::fs::copy(cfg, dir.join(".urzua/config.yaml")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        common::own_config_for_fixture(),
+    )
+    .unwrap();
     for (path, content) in files {
         let full = dir.join(path);
         std::fs::create_dir_all(full.parent().unwrap()).unwrap();

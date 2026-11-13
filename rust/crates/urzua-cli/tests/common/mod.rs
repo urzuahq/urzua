@@ -217,3 +217,21 @@ pub fn commit_all(dir: &Path, days_ago: u32) {
         .unwrap();
     assert!(status.success());
 }
+
+/// This repository's own `.urzua/config.yaml` for a throwaway fixture repository.
+/// Its `drift_baseline` names a ref (`MILE-49`) that only this repository's
+/// history holds, and a ref that resolves to no commit stops `check`, so a fixture
+/// that runs `check` under the repository's declarations drops that one option.
+pub fn own_config_for_fixture() -> String {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../.urzua/config.yaml");
+    strip_drift_baseline(&std::fs::read_to_string(path).expect("repository config readable"))
+}
+
+/// `config` without its `drift_baseline` declaration lines.
+pub fn strip_drift_baseline(config: &str) -> String {
+    config
+        .lines()
+        .filter(|l| !l.trim_start().starts_with("drift_baseline:"))
+        .map(|l| format!("{l}\n"))
+        .collect()
+}

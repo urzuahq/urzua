@@ -736,6 +736,13 @@ rules:
     # can declare the day its evidence was last audited and the window counts
     # from that instead of from the cited file's last change (MILE-166).
     drift_audit_field: "Last-audited"
+    # Drift whose cited files were last changed at or before the 0.3.0 release is
+    # pre-existing and does not gate; drift introduced since does (MILE-49, ADR-91
+    # amendment of 2026-11-13). A git ref, not a list: it holds no record, and
+    # moving it forward or deleting it retires it. Nothing in this corpus predates it
+    # today, so a whole-repo `check` says the baseline is unused; it stays declared
+    # so the option is exercised here by every run, and goes when the nudge says so.
+    drift_baseline: {ref: v0.3.0}
     # States a human sets that no evidence can compute (MILE-148): a record
     # stating one is not reported as drift, and `urzua fix` leaves it alone.
     sticky_states: ["Deprecated", "Inactive"]

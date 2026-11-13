@@ -533,6 +533,20 @@ pub(crate) struct DriftedRecords {
     /// to judge their locator against (`ADR-92` clause 7). Not drift, and not
     /// "no drift": disclosed by [`no_history_notice`].
     pub(crate) no_history: HashSet<PathBuf>,
+    /// For each record with drifted or held-back locators, the commit that last
+    /// changed each (`None` when git could not say): what a `drift_baseline`
+    /// attributes the drift to (`MILE-49`).
+    pub(crate) causes: HashMap<PathBuf, Vec<DriftCause>>,
+}
+
+/// What one drifted or held-back locator is attributed to.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct DriftCause {
+    /// The commit that last touched the cited file (the newest of a directory
+    /// or glob's files).
+    pub(crate) commit: Option<String>,
+    /// Drifted outside every grace window, so it is reported unless baselined.
+    pub(crate) confirmed: bool,
 }
 
 /// Notice subject for git trouble in the drift computation (`MILE-159`).
@@ -809,6 +823,7 @@ struct DriftJudge<'a> {
     fresh_until: HashMap<PathBuf, i64>,
     locators: HashMap<PathBuf, Vec<urzua_core::reverify::LocatorDrift>>,
     no_history: HashSet<PathBuf>,
+    causes: HashMap<PathBuf, Vec<DriftCause>>,
     problems: Vec<String>,
 }
 
@@ -845,6 +860,7 @@ impl<'a> DriftJudge<'a> {
             fresh_until: HashMap::new(),
             locators: HashMap::new(),
             no_history: HashSet::new(),
+            causes: HashMap::new(),
             problems: Vec::new(),
         }
     }
@@ -1006,6 +1022,17 @@ impl<'a> DriftJudge<'a> {
                 // renewal's drift policy is per category (`ADR-97` amendment).
                 let verdict =
                     self.judge_locator(&parsed, &entry.category, &reference_commit, audit_time);
+                if verdict != Judged::Next {
+                    let covered = self.covered_files(&parsed).map(|(_, files)| files);
+                    let commit = self.last_commit(&PathBuf::from(&parsed.path), covered.as_deref());
+                    self.causes
+                        .entry(record.path.clone())
+                        .or_default()
+                        .push(DriftCause {
+                            commit,
+                            confirmed: verdict == Judged::Drifted,
+                        });
+                }
                 self.note(record, &entry.category, &parsed, verdict);
             }
         }
@@ -1265,6 +1292,7 @@ pub(crate) fn compute_drifted_records_at(
         mut fresh_until,
         locators,
         no_history,
+        causes,
         problems,
         ..
     } = judge;
@@ -1282,6 +1310,70 @@ pub(crate) fn compute_drifted_records_at(
         git_problems: problems,
         shallow,
         no_history,
+        causes,
+    }
+}
+
+/// The records a `drift_baseline` split (`MILE-49`).
+pub(crate) struct BaselineSplit {
+    /// Every drifted locator was last changed at or before the baseline.
+    pub(crate) pre_existing: Vec<PathBuf>,
+    /// Some drifted locator was changed after it, or git could not say.
+    pub(crate) introduced: Vec<PathBuf>,
+}
+
+/// Holds out of `drift.drifted` the records whose drift is pre-existing: each
+/// drifted locator's file was last changed in a commit that is the baseline
+/// commit or one of its ancestors. A held-out record moves to `drift.fresh`, the
+/// set that computes to its tier and also accepts a stated drift state, so a
+/// baselined record agrees with either and no finding is made. Drift is
+/// attributed to the commit that last changed the cited file: a file changed
+/// since the baseline is introduced drift, even where an earlier change had
+/// already drifted it, and a commit git cannot place is introduced too, never
+/// pre-existing (`MILE-49`, `ADR-91` amendment of 2026-11-13).
+pub(crate) fn apply_drift_baseline(
+    drift: &mut DriftedRecords,
+    repo_root: &Path,
+    baseline_commit: &str,
+) -> BaselineSplit {
+    let mut at_or_before: HashMap<String, bool> = HashMap::new();
+    let mut paths: Vec<PathBuf> = drift.drifted.iter().cloned().collect();
+    paths.sort();
+    let (mut pre_existing, mut introduced) = (Vec::new(), Vec::new());
+    for path in paths {
+        let confirmed: Vec<Option<String>> = drift
+            .causes
+            .get(&path)
+            .map(|c| {
+                c.iter()
+                    .filter(|c| c.confirmed)
+                    .map(|c| c.commit.clone())
+                    .collect()
+            })
+            .unwrap_or_default();
+        let old = !confirmed.is_empty()
+            && confirmed.iter().all(|commit| {
+                let Some(commit) = commit else { return false };
+                *at_or_before.entry(commit.clone()).or_insert_with(|| {
+                    commit == baseline_commit
+                        || urzua_io::commit_strictly_before(repo_root, commit, baseline_commit)
+                            .unwrap_or_else(|e| {
+                                note_problem(&mut drift.git_problems, e);
+                                false
+                            })
+                })
+            });
+        if old {
+            drift.drifted.remove(&path);
+            drift.fresh.insert(path.clone());
+            pre_existing.push(path);
+        } else {
+            introduced.push(path);
+        }
+    }
+    BaselineSplit {
+        pre_existing,
+        introduced,
     }
 }
 

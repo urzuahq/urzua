@@ -499,6 +499,7 @@ fn execute(config_path: Option<PathBuf>, args: CheckArgs) -> Result<CheckReport,
     )?;
     let session = &opened.session;
     let selection = validate_selection(&session.config, &requested_rules)?;
+    let baseline_commit = resolve_drift_baseline(session, selection.as_deref())?;
     let scope = narrow(
         session,
         opened.requested_scopes,
@@ -506,6 +507,23 @@ fn execute(config_path: Option<PathBuf>, args: CheckArgs) -> Result<CheckReport,
         opened.prospective,
     )?;
     let (mut context, mut notices) = load_context(session, &scope, selection.as_deref())?;
+    let baseline = baseline_commit.map(|(git_ref, commit)| {
+        let known_problems = context.drift.git_problems.len();
+        let split =
+            crate::discovery::apply_drift_baseline(&mut context.drift, &session.repo_root, &commit);
+        // A git failure met while attributing drift is disclosed like any other.
+        notices.extend(crate::discovery::drift_notices(
+            false,
+            &context.drift.git_problems[known_problems..],
+        ));
+        notices.extend(baseline_notices(
+            &git_ref,
+            &commit,
+            &split,
+            scope.whole_corpus(),
+        ));
+        baseline_info(git_ref, commit, &split)
+    });
     notices.extend(untracked_notices(session, &scope, &context.drift));
     notices.extend(crate::discovery::grace_notice(
         &context.drift,
@@ -565,11 +583,120 @@ fn execute(config_path: Option<PathBuf>, args: CheckArgs) -> Result<CheckReport,
         rules_executed: executions,
         rules_selected: selection,
         scope: scope_info(session, scope, base),
+        baseline,
         blocking,
         findings,
         notices,
         // The flag wins over the configuration; either only moves the exit code.
         fail_on: fail_on.unwrap_or(context.fail_on),
+    })
+}
+
+/// Notice subject for the drift a `drift_baseline` holds out of the gate.
+const NOTICE_DRIFT_BASELINED: &str = "embodiment-drift-baselined";
+
+/// Notice subject for a baseline that holds out nothing.
+const NOTICE_DRIFT_BASELINE_UNUSED: &str = "embodiment-drift-baseline-unused";
+
+/// The records a notice or the report names; the count says the rest.
+const BASELINE_RECORDS_SHOWN: usize = 20;
+
+/// The ref and commit of `embodiment.consistency`'s `drift_baseline`, when the
+/// rule is on, declares one and the run reaches it. A ref that names no commit
+/// stops the run (`MILE-49`): a baseline that cannot be read must never read as
+/// "no pre-existing drift", which would put the whole backlog back on the gate.
+fn resolve_drift_baseline(
+    session: &Session,
+    selection: Option<&[String]>,
+) -> Result<Option<(String, String)>, Failure> {
+    let Some(setting) = enabled_setting(&session.config, rules::RULE_EMBODIMENT_CONSISTENCY) else {
+        return Ok(None);
+    };
+    let Some(baseline) = setting.drift_baseline.as_ref() else {
+        return Ok(None);
+    };
+    if !selection_wants(selection, &[rules::RULE_EMBODIMENT_CONSISTENCY]) {
+        return Ok(None);
+    }
+    let git_ref = baseline.git_ref.trim().to_string();
+    match urzua_io::resolve_commit(&session.repo_root, &git_ref) {
+        Ok(commit) => Ok(Some((git_ref, commit))),
+        Err(e) => Err(format!(
+            "{}.drift_baseline.ref: {e}; fix the ref or remove drift_baseline (a shallow clone may lack the commit: fetch full history)",
+            rules::RULE_EMBODIMENT_CONSISTENCY
+        )
+        .into()),
+    }
+}
+
+fn baseline_info(
+    git_ref: String,
+    commit: String,
+    split: &crate::discovery::BaselineSplit,
+) -> urzua_core::report::BaselineInfo {
+    urzua_core::report::BaselineInfo {
+        git_ref,
+        commit,
+        pre_existing: split.pre_existing.len(),
+        pre_existing_records: split
+            .pre_existing
+            .iter()
+            .take(BASELINE_RECORDS_SHOWN)
+            .map(|p| p.display().to_string())
+            .collect(),
+        introduced: split.introduced.len(),
+    }
+}
+
+/// The info notice for pre-existing drift held out of the gate, or, when none
+/// is held out on a whole-corpus run, the nudge to remove the baseline. A scoped
+/// run proves nothing about the rest of the corpus, so it gives no nudge.
+fn baseline_notices(
+    git_ref: &str,
+    commit: &str,
+    split: &crate::discovery::BaselineSplit,
+    whole_corpus: bool,
+) -> Option<Notice> {
+    let n = split.pre_existing.len();
+    let mut detail = std::collections::BTreeMap::new();
+    detail.insert("ref".to_string(), DetailValue::Text(git_ref.to_string()));
+    detail.insert("commit".to_string(), DetailValue::Text(commit.to_string()));
+    if n == 0 {
+        if !whole_corpus {
+            return None;
+        }
+        return Some(Notice {
+            severity: NoticeSeverity::Info,
+            subject: NOTICE_DRIFT_BASELINE_UNUSED.to_string(),
+            message: format!(
+                "drift_baseline '{git_ref}' holds out no drift: no record's drift predates it, so the baseline can be removed from {}",
+                rules::RULE_EMBODIMENT_CONSISTENCY
+            ),
+            detail: Some(detail),
+        });
+    }
+    detail.insert("count".to_string(), DetailValue::Text(n.to_string()));
+    detail.insert(
+        "records".to_string(),
+        DetailValue::List(
+            split
+                .pre_existing
+                .iter()
+                .take(BASELINE_RECORDS_SHOWN)
+                .map(|p| p.display().to_string())
+                .collect(),
+        ),
+    );
+    Some(Notice {
+        severity: NoticeSeverity::Info,
+        subject: NOTICE_DRIFT_BASELINED.to_string(),
+        message: format!(
+            "{n} record{} drifted before drift_baseline '{git_ref}' ({}) and {} not reported as drift; drift introduced since it is",
+            if n == 1 { "" } else { "s" },
+            &commit[..commit.len().min(12)],
+            if n == 1 { "is" } else { "are" },
+        ),
+        detail: Some(detail),
     })
 }
 

@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.138'
+Version: '0.139'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:6daa34e96997ef2790c6e8987bde7412d7214784deb8870c891f0946d90ac03a, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:92a2b9ceca89133f30987a013734da66b9332c4e937a87e72e53571596e18093, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:3c8aa671582772499ab7345cdbfb5a4dc2c50462882851fb20f853992acfd57c
@@ -1664,6 +1664,36 @@ rules:
 Both options belong to `embodiment.consistency` alone; on any other rule they are the usual
 option-on-a-rule-that-does-not-take-it load error.
 
+### Drift baseline: `drift_baseline` (`MILE-49`)
+
+A corpus adopting urzua on existing code can show drift nobody caused today. `drift_baseline` names a git ref,
+and drift that predates it stops gating while drift introduced since it still does. It is opt-in and belongs to
+`embodiment.consistency`; a configuration that does not declare it behaves as before.
+
+```yaml
+rules:
+  embodiment.consistency:
+    level: warn
+    drift_baseline: {ref: v0.3.0}   # a branch, tag or commit
+```
+
+- `ref` (required, one key): a git ref. A blank ref, one that starts with `-`, one that holds whitespace, an unknown
+  key beside it, or the value written as a bare string is a load error. Whether the ref resolves is judged when
+  `check` runs, because a configuration cannot see the repository: a ref that names no commit stops the run (exit
+  2) and names the option and the ref. It is never read as "no pre-existing drift", which would put the whole
+  backlog back on the gate. A shallow clone that lacks the commit fails the same way.
+- A record is pre-existing when every locator that drifted is attributed to the baseline commit or an ancestor of
+  it: the commit that last changed the cited file (for a directory or glob, the newest of its files). A pinned
+  locator is attributed the same way. A file changed after the baseline makes the record's drift introduced even
+  where an earlier change had already drifted it, and a commit git cannot place counts as introduced.
+- A pre-existing record agrees with its computed tier or with a stated drift state, so it draws no finding and does
+  not gate under any `fail_on`. It is listed in the `embodiment-drift-baselined` info notice and counted in the
+  report's `baseline` object (`SPEC-2`).
+- The option holds no list of records or findings, so there is nothing to keep in step with the corpus: the
+  baseline retires itself as records are re-verified, advancing the ref moves it, and deleting the option removes it.
+  A whole-corpus run in which it holds nothing out says so in `embodiment-drift-baseline-unused`.
+- `urzua fix` and `urzua reverify` read no baseline; `--base` composes with it.
+
 ### Claim expiry: `embodiment.claim-expired` (`ADR-97`, `MILE-129`)
 
 `embodiment.claim-expired` expires a claim after a period declared per record type, status and
@@ -2440,3 +2470,4 @@ proves this configuration produces the three findings.
 > | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` d62499673ea9 -> 6daa34e96997. Reason: Read the diff of each pinned file since the previous pin. rust/crates/urzua-core/src/config.rs: generic_marker_problem also refuses an ignore_marker that is the tail of a declared id head followed by digits (DR-1, R-12), with test cases; nothing else changed. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-09 | Bumped to `0.137`. The merge-base copy of a renamed record is matched by `Stable-Id` and the same record id, so a renumber reads as new. **Why:** `ADR-89` amendment (rename pairing). | **substantive** |
 > | 2026-11-13 | Bumped to `0.138`. A type may declare `statuses: {pending: [...]}` without `values`; a declaration of neither is refused at load, and a type declaring `values` loads as before. The readers of `values` handle the empty list: `status.undeclared-value` and `authority.gates` say the type declares no values, and `urzua new` leaves the status blank. **Why:** `MILE-205` items 1-3, so a waiver type can hold a pending `Reason` without inventing a status vocabulary (`ADR-91`). | **substantive** |
+> | 2026-11-13 | Bumped to `0.139`. Documents the opt-in `drift_baseline: {ref}` option of `embodiment.consistency`: its shape, what a pre-existing record is, the unresolvable-ref error, and that it holds no list. **Why:** `MILE-49`, decided by the `ADR-91` amendment of 2026-11-13. | **substantive** |
