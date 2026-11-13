@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5F9GRPBMYF7DMG289H
-Version: '0.20'
+Version: '0.21'
 Date: 2026-09-08
 Status: Shipped
 Embodiment: Verified
@@ -149,3 +149,4 @@ the original Decision text never touched. This session amended `ADR-33`, `ADR-34
 > | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` cbb1c67c40a0 -> 21e9ab57a37a. Reason: Read the diff of .urzua/config.yaml: the authority section gains `waivable: never` and a two-line comment; no other key changed. The pinned evidence still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-09 | Bumped to `0.20`. Evidence pins on `.urzua/config.yaml` were re-pinned (row above) after the config's authority section gained `waivable: never`; the specification's content is unchanged. **Why:** `ADR-89` amendment of 2026-11-09 (gate waivers). | **substantive** |
 > | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` 21e9ab57a37a -> 21e10efc68fb. Reason: Read the diff of each re-pinned file against main and the claim still holds. config.yaml: the rules table gains one entry, code.dangling-bug-reference (level error, back_pointer_paths rust and scripts, extensions rs sh py, external_ids RFC-822 and RFC-4122, ignore_marker citation-fixture) with its comment; no other declaration changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-13 | Bumped to `0.21`. Evidence pins re-baselined for this change (the `Re-baselined` row above); the specification text is unchanged. **Why:** a revision-log entry that adds a structural change bumps `Version`. | **structural** |

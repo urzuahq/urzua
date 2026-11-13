@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5C6BXVCRM0Y2JS1DT5
-Version: '0.13'
+Version: '0.14'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -87,3 +87,4 @@ warning. The only difference between an `audit` report and the `check` report is
 > | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/check_integration.rs` 5ab61b95fd58 -> a60c9c61b94c. Reason: Read the diff of each pinned file since the previous pin. rust/crates/urzua-cli/tests/check_integration.rs: adds one regression test that a claim file with an upper-case .MD extension under claim_paths is read; nothing else changed. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-09 | Bumped to `0.13`. Evidence pins re-baselined for this change; the specification text is unchanged. **Why:** a revision-log entry that adds a structural change bumps `Version`. | **structural** |
 > | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/check_integration.rs` a60c9c61b94c -> bc2e870defc6. Reason: Read the diff of each re-pinned file against main and the claim still holds. check_integration.rs: the ADR-0001 waiver fixture's H1 gains the citation-fixture marker text and every_header_reading_rule_reports_a_header_none_type_as_out_of_scope declares the new rule's required options; no assertion changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-13 | Bumped to `0.14`. Evidence pins re-baselined for this change (the `Re-baselined` row above); the specification text is unchanged. **Why:** a revision-log entry that adds a structural change bumps `Version`. | **structural** |

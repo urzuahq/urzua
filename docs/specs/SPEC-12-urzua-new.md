@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5C0WX34AQKF79DQDS5
-Version: '0.27'
+Version: '0.28'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -230,3 +230,4 @@ output is unchanged.
 > | 2026-11-13 | Bumped to `0.27`. `ScaffoldSpec` gains optional `Reason` and `Expires` values, caller-supplied header pairs, a first revision-log row and an extra body, for `waive --from-report` (`SPEC-25`); `new` builds it with `ScaffoldSpec::plain` and its output is unchanged. **Why:** `MILE-205`, plan PR3. | **structural** |
 > | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/new.rs` b465b2c40766 -> ade841f31f8d, `rust/crates/urzua-core/src/new_record.rs` 258765bfb791 -> 40f0fce95cd0. Reason: Read the diff of each re-pinned file against main. new.rs: five items (lookup_record_type, Numbered and its three fields, number_record, build_filename, disabled_pull_report) became pub(crate) for waive, and render_record builds the spec with ScaffoldSpec::plain; no behaviour changed and new's tests pass unchanged; new_record.rs: ScaffoldSpec gained optional Reason, Expires, header-pair, log-row and extra-body fields and a ScaffoldSpec::plain constructor; scaffold_record applies them only when set, and render_synthetic_yaml now delegates to a private render_yaml_with with no supplied values, so the output for urzua new is unchanged; added with_first_log_row and three unit tests (identity padding, supplied values, nothing supplied). The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/new_record.rs` 40f0fce95cd0 -> 2a4e3ea9069f. Reason: Read the diff of each re-pinned file against main and the claim still holds. new_record.rs: one doc comment names PREFIX-999 where it named ADR-999; no code changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-13 | Bumped to `0.28`. Evidence pins re-baselined for this change (the `Re-baselined` row above); the specification text is unchanged. **Why:** a revision-log entry that adds a structural change bumps `Version`. | **structural** |
