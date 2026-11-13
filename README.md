@@ -158,6 +158,13 @@ cd /path/to/your-repo
 /path/to/urzua/rust/target/release/urzua check docs/    # validates against it
 ```
 
+No records yet? Pick the types from built-in profiles instead (written out into the config, with a
+starter template each; on a terminal, plain `init` asks):
+
+```sh
+/path/to/urzua/rust/target/release/urzua init --types adr,rfc,spec --dir docs
+```
+
 `init` reads your existing directories and header conventions and proposes a config. It never renumbers, never rewrites, never moves a file. Nothing about your corpus changes until you accept what it found. Confirm this yourself rather than trust it: `make ci` in this repo runs the same `urzua check docs/` against Urzua's own corpus, and [`ci.yml`](.github/workflows/ci.yml) runs it on every push and pull request.
 
 ## The schema is declared, not assumed

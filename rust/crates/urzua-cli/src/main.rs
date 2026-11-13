@@ -227,9 +227,20 @@ enum Command {
     /// what's already there. Never clobbers, always idempotent, `--dry-run`
     /// prints the config the real run would write. Stable-ID backfill is a separate
     /// step: `migrate ids`.
+    ///
+    /// With no records yet, `--types adr,rfc,spec,prd` selects built-in profiles
+    /// (written out as visible config, with a starter template each) instead of
+    /// adopting; `--dir` sets the layout root (default `docs`). On a terminal in a
+    /// repository with no record directory, `init` asks which types to govern.
     Init {
         #[arg(long)]
         dry_run: bool,
+        /// Record types to govern from built-in profiles: adr, rfc, spec, prd.
+        #[arg(long, value_delimiter = ',')]
+        types: Vec<String>,
+        /// Layout root for `--types`: each type lives in `<dir>/<type>`.
+        #[arg(long)]
+        dir: Option<PathBuf>,
     },
 
     /// Install and run the agent harness bundle: hook entries, a translator for
@@ -542,7 +553,7 @@ fn main() -> ExitCode {
         Command::Migrate { target } => dispatch_migrate(cli.config, target),
         Command::Export { format } => dispatch_export(cli.config, format),
         Command::Import { .. } => not_implemented("import"),
-        Command::Init { dry_run } => commands::init::run(cli.config, dry_run),
+        init @ Command::Init { .. } => dispatch_init(cli.config, init),
         Command::Harness { target } => dispatch_harness(cli.config, target),
         Command::Doctor => commands::doctor::run(cli.config),
         Command::Rules => commands::rules::run(),
@@ -615,6 +626,25 @@ fn dispatch_export(config: Option<PathBuf>, format: ExportFormat) -> ExitCode {
         ExportFormat::Json => commands::export::run(config),
         ExportFormat::Agdr => not_implemented("export"),
     }
+}
+
+fn dispatch_init(config: Option<PathBuf>, init: Command) -> ExitCode {
+    let Command::Init {
+        dry_run,
+        types,
+        dir,
+    } = init
+    else {
+        unreachable!("dispatch_init is called only for the Init command")
+    };
+    commands::init::run(
+        config,
+        commands::init::InitArgs {
+            dry_run,
+            types,
+            dir,
+        },
+    )
 }
 
 fn dispatch_migrate(config: Option<PathBuf>, target: MigrateTarget) -> ExitCode {

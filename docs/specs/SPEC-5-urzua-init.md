@@ -1,12 +1,12 @@
 ---
 Stable-Id: 01M6R3NK5PKKQRJF9WFZJA105B
-Version: '0.24'
+Version: '0.25'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/commands/init.rs@sha256:1cb2edb3e555be440a8fbb4a6186e68fce238d8f65bfef1f8aa3a1954b25b13b, test:rust/crates/urzua-cli/tests/init_adopt_integration.rs
+Realized-by: code:rust/crates/urzua-cli/src/commands/init.rs@sha256:92b8fdb24b1b2a4ffcc43faf1a8c72489233b2df39b01da6d31b8ead81c65af2, test:rust/crates/urzua-cli/tests/init_adopt_integration.rs@sha256:aa1cfba9b1e4e110a9540f53641e428669d89d5d4684d22045f4506519e7a77d, code:rust/crates/urzua-cli/src/commands/init_greenfield.rs@sha256:bbf43c454ad071eead41247c35c6409fdacc3945db5bd7191cb64f5887fcab0c, test:rust/crates/urzua-cli/tests/init_greenfield_integration.rs@sha256:58439be4259159319d7b35e1aed0f6c7a3d7f8d3a613cf25d6e0bc42705c7b89
 Author: beauwilliams
-Subject: '`urzua init` -- the adopt-existing-corpus path and `.urzua/` layout.'
+Subject: '`urzua init` -- the adopt-existing-corpus path, greenfield type selection with built-in profiles, and the `.urzua/` layout.'
 Implements: RFC-1
 Parent: SPEC-1
 ---
@@ -15,9 +15,10 @@ Parent: SPEC-1
 ## Purpose
 
 `init` is where a repository acquires a governed corpus, and it is the first sixty seconds of the
-product. Today that means adopt: it infers which record types already exist from the tree and
-produces the configuration every other command reads. Choosing record types for a repository that has
-none yet is `MILE-114`'s scope.
+product. It has two modes. Adopt infers which record types already exist from the tree and produces
+the configuration every other command reads. Greenfield, for a repository with no records yet,
+chooses the types to govern from a menu of built-in profiles (`--types`, or a prompt on a terminal)
+and writes the profile's rules out as that same configuration.
 
 Adopt is also where the multi-document-type position becomes visible for an existing corpus. Nearly
 every tool in the landscape is ADR-only; RFC-1's core+profile model spans types by design, and adopt
@@ -40,8 +41,8 @@ the root, the corpus, and a cache directory is how each ends up governed by a di
 ```
 .urzua/
   config.yaml           tracked — the one config; written by init (shipped)
-  templates/            tracked — a hand-authored starting point per type, read by `new` (SPEC-12)
-    adr.md                if present; init does not generate one
+  templates/            tracked — a starting point per type, read by `new` (SPEC-12)
+    adr.md                written by greenfield init for each selected type, or hand-authored
     rfc.md
   cache/                intended gitignored — derived, never authoritative; not yet used by any command
 ```
@@ -49,10 +50,11 @@ the root, the corpus, and a cache directory is how each ends up governed by a di
 (`.gitignore` gaining `.urzua/cache/` is not yet built either -- `init` does not touch `.gitignore`
 today, and criterion 2 below holds it to that.)
 
-`init` writes only `.urzua/config.yaml` today. `templates/` and `cache/` are part of `.urzua/`'s
-settled shape -- `new` already reads a template from `templates/<type>.md` when a repository hand-
-authors one (`SPEC-12`) -- but nothing in the write path generates either, and `MILE-114`'s greenfield
-mode is the natural place for `init` to start writing starter templates once it exists.
+Adopt writes only `.urzua/config.yaml`. Greenfield writes `.urzua/config.yaml` and one
+`.urzua/templates/<type>.md` per selected type, never over a template that already exists. `cache/` is
+part of `.urzua/`'s settled shape but nothing in the write path generates it. Neither mode creates the
+record directories: `new` creates a type's directory when it writes the first record, and an empty
+directory is not tracked by git.
 
 **Why templates leave the corpus.** This is the load-bearing reason, and it comes from this
 repository. `docs/adr/_template.md` and `docs/rfc/_template.md` are git-tracked, sit inside the
@@ -66,13 +68,68 @@ boundaries and RFC-13 rejects for numbering gaps. Keeping templates out of the c
 question instead of suppressing it: the template is not a record, so it does not live where records
 live, and no rule needs to know it exists.
 
-`init` takes only `--dry-run` and the global `--config`; adopt infers types from what's already on
-disk rather than taking a `--types` selection. Type selection, built-in profiles, and non-interactive
-setup for a repository with no records yet are `MILE-114`'s scope, not this spec's current subject.
-
 `--config <file>` names the file `init` writes (and the one it refuses to overwrite); without it the file is `.urzua/config.yaml`. A default location is checked to resolve inside the repository, so a symlinked `.urzua` pointing outside is refused rather than written through.
 
 `init` also proposes a directory whose files are not numbered records when at least two of its markdown files carry a header and they are at least half of the directory's markdown files (a flat spec directory named by slug), with no `prefix`, and says so in an `init-scan` notice. A proposed directory none of whose files has a header is named in an `init-scan` warning notice, since it may hold pages rather than records; it is not proposed (a type with nothing to read is noise), and the notice says to declare it by hand if it is a record directory. A hidden directory (any path component starting with a dot, such as `.changeset`) is never proposed or mentioned, a leading dot being neither a legal type name nor a legal prefix. An unnumbered directory needs, beyond the header test above, at least two headed files carrying a `status` field (any letter case); a directory of headed pages without one (front matter holding only `title`) is named in a notice and not proposed. A type name is lower-case ASCII letters and digits in hyphen-separated segments with no all-digit segment, so its upper-cased default prefix always loads; a directory whose records share a prefix an earlier directory already holds is not proposed and is named in a notice. The rendered config is parsed before anything is written, and one that does not load is refused.
+
+## Type selection (greenfield)
+
+```
+urzua init                          # on a terminal, in a repository with no record directory: a menu
+urzua init --types adr,rfc,spec     # non-interactive
+urzua init --types adr --dir docs   # layout root
+```
+
+`--types` takes a comma-separated list of built-in profile names and selects greenfield mode whatever
+the repository holds; `--dir` is the layout root, default `docs`, and each type lives in `<dir>/<type>`
+(a relative path inside the repository, with no `..` and no hidden component). Without `--types`, `init`
+runs adopt; only when adopt finds no record directory, the config does not exist and standard input is a
+terminal does it show the menu on standard error and read the selection from standard input (numbers or
+names). With no terminal it refuses exactly as adopt does, so a script never blocks on a prompt. `--dir`
+without `--types`, when adopt would run, is refused rather than ignored. An unknown type name, a name
+listed twice and an empty list are refused by name, with the available profiles, and nothing is written.
+
+A profile is a **starting point that is written out, not a hidden default.** `init` materializes the
+profile into `config.yaml` as an ordinary `record_types` entry (`dir`, `prefix`, `required_fields`,
+`known_fields: []`, `header_shape`, `relation_fields`, `statuses`, and for `spec` a `revision_log` with
+its version bump), and nothing in the config names a profile. A user who disagrees with a required
+field edits a visible line. The `rules` section proposes every rule adopt proposes, at `warn`, and also
+those that read `required_fields` or `known_fields` (`field.quality`, `field.pending`,
+`header.field-set-consistency`), which the profile now declares; the rest are withheld with the same
+`rule-applicability` notice as adopt. The `authority` and `harness` keys are the same as adopt's.
+
+The built-in profiles:
+
+| Profile | Required fields | Statuses (first is the one `new` writes) | Lifecycle |
+|---|---|---|---|
+| `adr` | `Status`, `Date`, `Author`, `Deciders`, `Stable-Id` | `Proposed`, `Accepted`, `Rejected`, `Superseded` | `Proposed` to `Accepted` or `Rejected`; `Accepted` to `Superseded` |
+| `rfc` | `Status`, `Date`, `Author`, `Stable-Id` | `Draft`, `Discussion`, `Accepted`, `Rejected`, `Superseded` | `Draft` and `Discussion` to each other, `Accepted` or `Rejected`; `Accepted` to `Superseded`; `Rejected` to `Draft` |
+| `spec` | `Status`, `Date`, `Version`, `Author`, `Subject`, `Stable-Id` | `Draft`, `Accepted`, `Shipped` | `Draft` to `Accepted` to `Shipped` |
+| `prd` | `Status`, `Date`, `Author`, `Owner`, `Stable-Id` | `Draft`, `Review`, `Approved`, `Rejected`, `Superseded` | `Draft` to `Review`; `Review` to `Draft`, `Approved` or `Rejected`; `Approved` to `Superseded` |
+
+The role each type is accountable to is a required field: `Deciders` on an `adr`, `Owner` on a `prd`,
+`Author` elsewhere. Every profile requires `Stable-Id`, which `new` always assigns (`ADR-21`). The
+`prd` profile is provisional: it answers `RFC-1`'s open question of whether a PRD fits the core+profile
+model by shipping a profile of the same shape, and it is revisited if that RFC decides otherwise.
+
+Each selected type gets a starter template, `.urzua/templates/<type>.md`, whose header names the
+profile's fields and whose body is the type's section scaffold. `new` reads it (`SPEC-12`). A template
+that exists is kept as it is and reported `kept`.
+
+Greenfield writes the templates first and the config last, whole or not at all, so a config that
+exists is complete. The rendered config is parsed before anything is written. `--dry-run` prints the
+plan and writes nothing, and its `config_yaml` is byte-identical to the file a real run writes.
+
+**Re-running.** A run whose `--types` and `--dir` would write exactly the config that exists is a no-op
+that exits 0 with `written: false` (missing templates are still written). Any other run against an
+existing config is refused, exit 2, as in adopt.
+
+**Unclassified files.** A record-shaped, non-hidden file outside every selected type's directory is
+named by path in an `init-scan` warning notice, never an error: nothing governs it until a type is
+declared for its directory. Adopt reports the one kind of record-shaped file it cannot classify by
+path: a file at the repository root, which has no directory to name a type, in an `init-scan` info
+notice. (A directory adopt declines to propose is already named in its own notice, and a hidden
+directory is never mentioned.) Neither mode changes its exit code for these.
 
 ## Proposed header shape
 
@@ -126,9 +183,6 @@ amendment of 2026-11-09), so the table the adopter writes next is not one a pull
 - **`--dry-run` prints the plan and writes nothing**, and is the documented way to see what adopt
   inferred before committing to it.
 
-Reporting a record-shaped file adopt could not classify, by path, rather than silently excluding it
-is `MILE-114`'s scope: today adopt reports only what it did classify.
-
 ## Output (shipped)
 
 The real, shipped shape (`InitReport`/ADR-46):
@@ -143,6 +197,10 @@ The real, shipped shape (`InitReport`/ADR-46):
 }
 ```
 
+Greenfield mode adds `templates`, a list of `{type, path, state}` where `state` is `written`, `kept` or
+`would-write`; it is absent in adopt. A greenfield `proposed` entry carries its profile's `prefix`, and
+its `record_count` counts the record-shaped files already in its directory.
+
 `config_yaml` (the full rendered config) is present only when `dry_run: true` -- there's nothing
 else to read the preview from, since nothing was written. A real write omits it, matching `new`'s own
 established convention (SPEC-12): the caller reads the file at `config_path` if it needs the content.
@@ -151,11 +209,11 @@ established convention (SPEC-12): the caller reads the file at `config_path` if 
 
 | Code | When |
 |---|---|
-| 0 | proposal computed (dry-run) or config written |
-| 2 | refused via `CouldNotRun` -- existing config, no record-shaped files found, unwritable path |
+| 0 | proposal computed (dry-run), config written, or a greenfield re-run that would write the config that exists |
+| 2 | refused via `CouldNotRun` -- existing config (a greenfield re-run that differs), no record-shaped files found, unknown or repeated `--types` name, a `--dir` that is not a relative path inside the repository, `--dir` without `--types` in adopt, unwritable path |
 
-Exit `1` ("adopt completed with unclassified files") is `MILE-114`'s scope, not built -- adopt today
-classifies every record-shaped file it finds by directory; nothing is reported as unclassified.
+There is no exit `1`: a file `init` could not classify is a notice and the exit stays `0` (maintainer
+decision, 2026-11-13).
 
 ## Success criteria
 
@@ -168,24 +226,40 @@ the withheld-rule mechanism by the same file (`init_withholds_every_rule_that_re
 Criterion 2 is the one to hold. The moment `init` moves a file it becomes a migration, and a
 migration without a reverse-reference scan is the documented data-loss shape.
 
-A `urzua init --types adr,rfc,spec` run producing a checkable config with unclassified files reported
-rather than errored, and a no-op re-run exiting 0 rather than 2, are `MILE-114`'s success criteria, not
-this spec's current subject.
+3. A `urzua init --types adr,rfc,spec` run produces a config `check` accepts, with record-shaped files
+   outside the selected directories reported rather than errored.
+4. A greenfield re-run that would write the config that exists exits 0 and changes nothing.
+
+Criteria 3 and 4 are enforced by `init_greenfield_integration.rs`
+(`the_written_config_passes_check_and_new_writes_a_stable_id_for_every_type`,
+`record_shaped_files_outside_the_selected_types_are_reported_not_errored` and
+`a_rerun_with_the_same_selection_is_a_no_op_and_a_different_one_is_refused`).
 
 ## Open questions
 
-None currently open for the adopt path this spec describes. `MILE-114` carries the open questions
-that depend on greenfield mode existing first (CI/hooks wiring, the display-number scheme, whether
-adopt should infer rules or only structure, and multi-corpus-per-repo).
+None open. The four questions `MILE-114` carried are decided or recorded:
+
+- **CI and hook wiring.** Opt-in, never default: `init` writes nothing outside `.urzua/`. A `--with-ci`
+  flag is the shape it would take and is not built.
+- **The display-number scheme.** Not chosen by `init`. `ADR-3` separates the stable identifier from the
+  display number, and `new` numbers each type's records sequentially from its existing filenames; the
+  prefix a greenfield profile writes is the type name upper-cased.
+- **Whether adopt infers rules or only structure.** Structure only (`ADR-33`): adopt writes
+  `required_fields: []` and infers no statuses; greenfield is the way to start from rules.
+- **One `.urzua/` per repository, for a monorepo.** One, at the repository root: independent corpora
+  are separate types, each with its own `dir`. A `.urzua/` per subtree is not built. `RFC-11` section 6,
+  on scope, does not answer this and stays open.
 
 ## References
 
 - SPEC-2 — `check`, the consumer of what this writes.
 - SPEC-3 — configuration; amended by this spec to live at `.urzua/config.yaml`.
-- RFC-1 — core+profile, which `MILE-114`'s type selection will instantiate.
+- RFC-1 — core+profile, which type selection instantiates.
 - RFC-11 — why an ignore list is the wrong answer to the template problem.
 - MILE-114 — greenfield mode, `--types`/`--dir`, built-in profiles, and unclassified-file reporting,
-  relocated from this spec's own Draft sections (`BUG-26`).
+  relocated from this spec's own Draft sections (`BUG-26`) and built.
+- ADR-3 — stable identifiers, separate from display numbers.
+- ADR-21 — every type gets a `Stable-Id`, which every built-in profile requires.
 
 > **Revision log**
 >
@@ -229,3 +303,8 @@ adopt should infer rules or only structure, and multi-corpus-per-repo).
 > | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/check_integration.rs` 5ab61b95fd58 -> a60c9c61b94c. Reason: Read the diff of each pinned file since the previous pin. rust/crates/urzua-cli/tests/check_integration.rs: adds one regression test that a claim file with an upper-case .MD extension under claim_paths is read; nothing else changed. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-09 | Bumped to `0.23`. Evidence pins re-baselined for this change; the specification text is unchanged. **Why:** a revision-log entry that adds a structural change bumps `Version`. | **structural** |
 > | 2026-11-13 | Bumped to `0.24`. `## Proposed rules` states the withheld-rule mechanism (`reads_declaration` in the rule table) and no longer a fixed list of four, which had fallen behind the table; success criterion 2 no longer claims `.gitignore` appears in `git status`, because `init` never touches it. `Realized-by` cites `init_adopt_integration.rs` instead of `check_integration.rs`, and `init_integration.rs` carries a `Verifies: SPEC-5` back-pointer; together they enforce both criteria and the mechanism. **Why:** a re-read against the code found these divergences. | **substantive** |
+> | 2026-11-13 | Bumped to `0.25`. Added `## Type selection (greenfield)`: `--types` and `--dir`, the built-in `adr`, `rfc`, `spec` and `prd` profiles written out into `config.yaml`, starter templates, the interactive menu, the greenfield re-run, and the report of record-shaped files no type governs; adopt reports a record at the repository root in an `init-scan` notice; the output gains `templates`; the four open questions are decided or recorded. **Why:** `MILE-114`. | **substantive** |
+> | 2026-11-13 | Maintainer decision, 2026-11-13: the profile contents above are accepted as proposed, each with its lifecycle transitions and with `Stable-Id` required in every profile; `prd` ships as provisional, answering `RFC-1`'s PRD question; starter templates are written by default; a file `init` could not classify is a notice and never changes the exit code, so adopt keeps its behaviour. | **substantive** |
+> | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/init.rs` 1cb2edb3e555 -> 92b8fdb24b1b. Reason: Read the diff of each pinned file since the old pin and the claim still holds. init.rs: adopt also names a record at the repository root in an init-scan notice, and the config assembly and writer are now shared with the new greenfield mode in init_greenfield.rs (run takes an InitArgs); SPEC-5 was rewritten in this change to describe greenfield mode, its profiles and the decided open questions, and still describes adopt. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-13 | Pinned (attested by beauwilliams, identity: gh-verified, actor: agent): 3 locators pinned, 3 file-level, 0 scoped. Evidence: rust/crates/urzua-cli/tests/init_adopt_integration.rs@sha256:aa1cfba9b1e4, rust/crates/urzua-cli/src/commands/init_greenfield.rs@sha256:bbf43c454ad0, rust/crates/urzua-cli/tests/init_greenfield_integration.rs@sha256:b64108a3c965 Reason: Pinned the new locators as they are now after checking each against the record it evidences: init_greenfield.rs and init_greenfield_integration.rs are the greenfield mode this change adds and the tests that exercise it, and each test or function named in a Done means item asserts the behaviour the item states. **Why:** a claim is renewed only over pinned code and test evidence. | **structural** |
+> | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/init_greenfield_integration.rs` b64108a3c965 -> 58439be42591. Reason: Read the diff of the pinned file since the pin and the claim still holds. init_greenfield_integration.rs: the terminal-menu test was restructured so its test locator resolves (a bare block and a brace literal removed) with the same assertions; no behaviour tested changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |

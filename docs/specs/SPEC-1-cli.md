@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5AJB7EBVDWVSMCSYZQ
-Version: '0.36'
+Version: '0.37'
 Date: 2026-07-29
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/main.rs#Command@sha256:3476a956db42d6ad4e5fffb773edf176a5fecffad335dc42243a5afbca366224, code:rust/crates/urzua-cli/src/main.rs#emit@sha256:29d071bbb8232c8cd5678d8c5d104830ec9b083471d1575ab768050e59704a71, test:rust/crates/urzua-cli/tests/check_integration.rs#help_exits_0_with_plain_text_not_json@sha256:b188b2cc76395b745caae8e5012ca7a91f5d0e52f9a68aabe377b0cd9fc81c3e, test:rust/crates/urzua-cli/tests/check_integration.rs#a_bad_flag_emits_json_not_a_panic@sha256:eb8bfb4d74748038835831064ab072943e8c32648f99c1202940cb169993747a, test:rust/crates/urzua-cli/tests/check_integration.rs#check_exits_0_on_a_clean_corpus@sha256:585cb12f3f55fb534592e1802d0448163e7aa3fa06e5a91709bc32ab641fecb9, test:rust/crates/urzua-cli/tests/check_integration.rs#check_exits_1_on_a_missing_required_field@sha256:95b88e795e9a4ffb4fe1983f76bf57a3a3191dfc5c579f4ff207381a3ff0c307, test:rust/crates/urzua-cli/tests/check_integration.rs#check_exits_2_when_no_config_exists@sha256:ebf81ea1fb85124a9510dd6f7e0f737e8fd55d4532b0907a23eaa7f46152a5b5, test:rust/crates/urzua-cli/tests/export_integration.rs@sha256:05e83d2904484c2059524a4e60ad40d6141e6025dae569de536528f765954689
+Realized-by: code:rust/crates/urzua-cli/src/main.rs#Command@sha256:aa50282fdb7284df8505025fc495dcad0a9d7b0cd5d81ac5c547a3e935690264, code:rust/crates/urzua-cli/src/main.rs#emit@sha256:29d071bbb8232c8cd5678d8c5d104830ec9b083471d1575ab768050e59704a71, test:rust/crates/urzua-cli/tests/check_integration.rs#help_exits_0_with_plain_text_not_json@sha256:b188b2cc76395b745caae8e5012ca7a91f5d0e52f9a68aabe377b0cd9fc81c3e, test:rust/crates/urzua-cli/tests/check_integration.rs#a_bad_flag_emits_json_not_a_panic@sha256:eb8bfb4d74748038835831064ab072943e8c32648f99c1202940cb169993747a, test:rust/crates/urzua-cli/tests/check_integration.rs#check_exits_0_on_a_clean_corpus@sha256:585cb12f3f55fb534592e1802d0448163e7aa3fa06e5a91709bc32ab641fecb9, test:rust/crates/urzua-cli/tests/check_integration.rs#check_exits_1_on_a_missing_required_field@sha256:95b88e795e9a4ffb4fe1983f76bf57a3a3191dfc5c579f4ff207381a3ff0c307, test:rust/crates/urzua-cli/tests/check_integration.rs#check_exits_2_when_no_config_exists@sha256:ebf81ea1fb85124a9510dd6f7e0f737e8fd55d4532b0907a23eaa7f46152a5b5, test:rust/crates/urzua-cli/tests/export_integration.rs@sha256:05e83d2904484c2059524a4e60ad40d6141e6025dae569de536528f765954689
 Author: beauwilliams
 Subject: 'The `urzua` CLI: its command surface, output contract, and the cross-cutting rules every command obeys -- the parent of the per-command and per-type specs split out from it.'
 Implements: ADR-1, ADR-2, ADR-3
@@ -87,11 +87,12 @@ Phase 1 is done when, and only when:
 ## Commands
 
 ### `urzua init`
-**Specified in full by SPEC-5** (still `Draft`: only adopt mode, with `--dry-run`, is built).
-Adopts an existing corpus in place without moving files, inferring record types from what's already
-on disk and writing `.urzua/config.yaml`. Type *selection* (`--types`/`--dir`, built-in profiles)
-and template creation are SPEC-5's target design, not current behavior. Absent from this spec's
-original command surface — the gap surfaced when the bootstrap plan needed it.
+**Specified in full by SPEC-5.** Adopts an existing corpus in place without moving files, inferring
+record types from what's already on disk and writing `.urzua/config.yaml`. For a repository with no
+records, `--types adr,rfc,spec,prd` (with `--dir` for the layout root) selects built-in profiles that
+are written out into the config, with a starter template per type; on a terminal, `init` asks which
+types to govern. Absent from this spec's original command surface — the gap surfaced when the
+bootstrap plan needed it.
 
 ### `urzua new <type> [title]`
 **Specified in full by SPEC-12.** Creates a record from the configured template with a stable ID
@@ -379,3 +380,5 @@ None. Every question this spec carried has been answered or routed:
 > | 2026-11-08 | Bumped to `0.34`. The CLI gains the global `--as-of YYYY-MM-DD` evaluation date and a top-level `as_of` on the reports of `check`, `audit`, `fix` and `reverify`, with its refusals; no pinned symbol of this spec changed. **Why:** maintainer decision of 2026-11-08 (the second `ADR-97` amendment of that date): a verdict must be reproducible and upcoming expiries previewable. | **substantive** |
 > | 2026-11-09 | Bumped to `0.35`. Note on the log: The version numbers of earlier `Bumped to` rows are not strictly increasing, and history is not rewritten: the order of the rows is the order the changes landed, and the current `Version` header is authoritative. Rows affected: `0.15` appears twice (the `Accepted` to `Shipped` row and the later `urzua audit` row), and the `0.15` `audit` row comes after `0.17`. **Why:** a review found the out-of-order and repeated numbers and a reader could be misled about which row introduced which version. | **structural** |
 > | 2026-11-09 | Bumped to `0.36`. Re-pin rows in this revision log were reworded to name who re-verified, matching the tool's wording since 2026-11-09; hashes, reasons and dates are unchanged. **Why:** Maintainer decision, 2026-11-09. | **structural** |
+> | 2026-11-13 | Bumped to `0.37`. `## Commands` describes `urzua init` as it now ships: adopt, and greenfield type selection with `--types`, `--dir`, built-in profiles and starter templates (`SPEC-5`, `MILE-114`), replacing the sentence that called them target design. **Why:** `MILE-114` built them. | **substantive** |
+> | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/main.rs#Command` (lines 114-369) 3476a956db42 -> aa50282fdb72. Reason: Read the diff of each pinned file since the old pin and the claim still holds. main.rs: the Init command gained the --types and --dir options and now passes them to init::run as an InitArgs, with their help text; SPEC-1's init section was updated in this change to describe greenfield mode and its options. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
