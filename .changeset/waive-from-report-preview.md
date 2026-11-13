@@ -9,4 +9,4 @@ file for the findings that are unwaived and at or above `fail_on`, each with a p
 the drafts, the findings it skipped with the reason (an existing waiver, an expired one, a finding the
 drafts themselves resolve), and any `--rule` or `--path` filter that matched nothing. It refuses
 (exit 2) when a draft could take effect: the waiver type must require `Reason`, and must either declare
-`permanent` or require `Expires`. This release only previews and writes no file.
+`permanent` or require `Expires`.

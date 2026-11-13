@@ -331,17 +331,19 @@ pub fn render_synthetic_yaml(
     required_fields: &[String],
     template_fields: &[String],
 ) -> String {
-    render_yaml_with(params, required_fields, template_fields, &[])
+    render_yaml_with(params, required_fields, template_fields, &[], &[])
 }
 
 /// [`render_synthetic_yaml`] with header values the caller supplies: each
 /// `(field, value)` replaces the field's blank value, or adds the field after
-/// the others when the header has none (`urzua waive --from-report`).
+/// the others when the header has none; each `omitted` field is left out of the
+/// header altogether (`urzua waive --from-report`).
 fn render_yaml_with(
     params: &NewRecordParams,
     required_fields: &[String],
     template_fields: &[String],
     supplied: &[(&str, &str)],
+    omitted: &[&str],
 ) -> String {
     use yaml_serde::Value;
 
@@ -388,6 +390,9 @@ fn render_yaml_with(
         }
     }
 
+    for field in omitted {
+        mapping.shift_remove(Value::String((*field).to_string()));
+    }
     for (field, value) in supplied {
         mapping.insert(
             Value::String((*field).to_string()),
@@ -428,6 +433,8 @@ pub struct ScaffoldSpec<'a> {
     /// Further `(field, value)` header pairs the caller supplies, written after
     /// the type's own fields or over their blank value.
     pub header_fields: &'a [(&'a str, &'a str)],
+    /// Fields left out of the header altogether, not written blank.
+    pub omit_fields: &'a [&'a str],
     /// Text appended after the template's body.
     pub extra_body: Option<&'a str>,
     /// The narrative of a first revision-log row, written under the log's own
@@ -463,6 +470,7 @@ impl<'a> ScaffoldSpec<'a> {
             reason: None,
             expires: None,
             header_fields: &[],
+            omit_fields: &[],
             extra_body: None,
             log_row: None,
         }
@@ -514,6 +522,7 @@ pub fn scaffold_record(spec: &ScaffoldSpec, template: Option<&str>) -> String {
         &type_config.required_fields,
         &template_fields,
         &supplied,
+        spec.omit_fields,
     );
     if let Some(body) = template.and_then(template_body) {
         out.push('\n');
@@ -1184,6 +1193,7 @@ mod tests {
             reason: None,
             expires: None,
             header_fields: &[],
+            omit_fields: &[],
             extra_body: None,
             log_row: None,
         };
@@ -1296,6 +1306,28 @@ mod tests {
         );
         let log_at = out.find("**Revision log**").unwrap();
         assert!(log_at < out.find("## Findings").unwrap(), "{out}");
+    }
+
+    #[test]
+    fn an_omitted_field_is_not_written_at_all() {
+        let type_config = waiver_type();
+        let spec = ScaffoldSpec {
+            omit_fields: &["Expires"],
+            ..ScaffoldSpec::plain(
+                &type_config,
+                None,
+                "WAIVER",
+                "WAIVER-3-t.md",
+                3,
+                "T",
+                "01ID",
+                "a",
+                "2026-11-13",
+            )
+        };
+        let out = scaffold_record(&spec, Some(WAIVER_TEMPLATE));
+        assert!(!out.contains("Expires"), "{out}");
+        assert!(out.contains("Owner: null\n"), "{out}");
     }
 
     #[test]
