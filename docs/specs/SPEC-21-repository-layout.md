@@ -29,7 +29,7 @@ inventory attached to it, which is what this spec now holds.
 
 | Path | Contents |
 |---|---|
-| `rust/` | Cargo workspace: the `urzua` CLI and its crates (`urzua-cli`, `urzua-core`, `urzua-io`, `urzua-id`, `urzua-agdr`). |
+| `rust/` | Cargo workspace: the `urzua` CLI and its crates (`urzua-cli`, `urzua-core`, `urzua-io`, `urzua-id`, `urzua-agdr`, `urzua-mcp`). |
 | `docs/` | Governance records -- ADRs, RFCs, specs, bugs, milestones, waivers. Language-agnostic by nature; the record format is the contract every language directory implements against. |
 | `scripts/` | Repository tooling belonging to no language directory. Currently `generate-dashboard.py` (`ADR-37`) and `generate-rule-table.py`. |
 | `ts/` | TypeScript/Node: agent-harness integrations, editor plugins, dashboard. **Reserved; holds a README only.** |

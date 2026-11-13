@@ -5,7 +5,7 @@
 //! One draft per rule and file. A draft suppresses nothing until a person
 //! writes the reason and the date, so no finding is hidden by the tool.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 use crate::config::FailOn;
@@ -126,8 +126,15 @@ pub enum SkipReason {
     /// The rule declares the finding's variant unwaivable, so a waiver can
     /// never cover it.
     Unwaivable,
-    /// Writing the drafts resolves the finding (`ADR-91`, amendment of 2026-11-08).
+    /// Writing the drafts resolves the finding (`ADR-91`, amendment of 2026-11-08),
+    /// judged again on the drafts that remain.
     ResolvedByDrafts,
+    /// The finding disappears only if its own draft exists and nothing else is
+    /// drafted, so no draft is written and the finding remains.
+    ResolvedByOwnDraft,
+    /// The finding is in a waiver record, a draft's own pending `Reason` for
+    /// one: drafting waivers for waivers would never end.
+    WaiverRecord,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
@@ -214,7 +221,7 @@ fn path_matches(file: &std::path::Path, filter: &std::path::Path) -> bool {
 pub fn plan(
     findings: &[Finding],
     fail_on: FailOn,
-    waivers: &[Suppression],
+    (waivers, waiver_records): (&[Suppression], &HashSet<PathBuf>),
     today: &str,
     filters: &Filters,
 ) -> Plan {
@@ -229,7 +236,7 @@ pub fn plan(
     let mut groups: Vec<Group> = Vec::new();
     let mut skipped: Vec<Skipped> = Vec::new();
     for f in pool.iter().filter(|f| in_filters(f, filters)) {
-        match skip_reason(f, waivers, today) {
+        match skip_reason(f, (waivers, waiver_records), today) {
             Some((reason, waiver)) => {
                 let entry = Skipped {
                     rule: f.rule.clone(),
@@ -293,7 +300,7 @@ fn unmatched_filters(pool: &[&Finding], filters: &Filters) -> Vec<UnmatchedFilte
 /// Why `f` is not drafted, with the existing waiver when one is named.
 fn skip_reason(
     f: &Finding,
-    waivers: &[Suppression],
+    (waivers, waiver_records): (&[Suppression], &HashSet<PathBuf>),
     today: &str,
 ) -> Option<(SkipReason, Option<String>)> {
     if f.rule == crate::rules::RULE_WAIVER_MATCHES_NOTHING {
@@ -301,6 +308,9 @@ fn skip_reason(
     }
     if f.file.as_os_str().is_empty() {
         return Some((SkipReason::NoFile, None));
+    }
+    if waiver_records.contains(&f.file) {
+        return Some((SkipReason::WaiverRecord, None));
     }
     let scope = f.file.to_string_lossy();
     if let Some(w) = waivers
@@ -320,41 +330,83 @@ fn skip_reason(
     None
 }
 
-/// Removes from `groups` the findings that `after` (the report on the tree with
-/// the drafts in memory) no longer holds. A finding the drafts resolve is not
-/// drafted; each group that lost one is reported in `skipped`, never dropped in
-/// silence (`ADR-91`, amendment of 2026-11-08). A group left empty is removed.
-pub fn drop_resolved(groups: Vec<Group>, after: &[Finding]) -> (Vec<Group>, Vec<Skipped>) {
+/// What `drop_resolved` made of the groups.
+#[derive(Debug)]
+pub struct Dropped {
+    /// The groups with only the findings that `after` still holds.
+    pub kept: Vec<Group>,
+    /// The findings `after` no longer holds, grouped as they were.
+    pub resolved: Vec<Group>,
+}
+
+/// Splits `groups` by whether `after` (the report on the tree with drafts in
+/// memory) still holds each finding. A finding the drafts resolve is not
+/// drafted (`ADR-91`, amendment of 2026-11-08). Matching is by rule, file,
+/// line and message, each `after` finding used once.
+pub fn drop_resolved(groups: Vec<Group>, after: &[Finding]) -> Dropped {
     type Key = (String, PathBuf, Option<usize>, String);
     let key = |f: &Finding| -> Key { (f.rule.clone(), f.file.clone(), f.line, f.message.clone()) };
     let mut remaining: HashMap<Key, usize> = HashMap::new();
     for f in after {
         *remaining.entry(key(f)).or_default() += 1;
     }
-    let mut kept = Vec::new();
-    let mut skipped = Vec::new();
-    for mut g in groups {
-        let before = g.findings.len();
-        g.findings.retain(|f| match remaining.get_mut(&key(f)) {
-            Some(n) if *n > 0 => {
-                *n -= 1;
-                true
-            }
-            _ => false,
-        });
-        if g.findings.len() < before {
-            skipped.push(Skipped {
-                rule: g.rule.clone(),
-                file: Some(g.scope.clone()),
-                reason: SkipReason::ResolvedByDrafts,
-                waiver: None,
-            });
+    let mut out = Dropped {
+        kept: Vec::new(),
+        resolved: Vec::new(),
+    };
+    for g in groups {
+        let (present, gone): (Vec<Finding>, Vec<Finding>) =
+            g.findings
+                .into_iter()
+                .partition(|f| match remaining.get_mut(&key(f)) {
+                    Some(n) if *n > 0 => {
+                        *n -= 1;
+                        true
+                    }
+                    _ => false,
+                });
+        let part = |findings: Vec<Finding>| Group {
+            rule: g.rule.clone(),
+            scope: g.scope.clone(),
+            findings,
+        };
+        if !gone.is_empty() {
+            out.resolved.push(part(gone));
         }
-        if !g.findings.is_empty() {
-            kept.push(g);
+        if !present.is_empty() {
+            out.kept.push(part(present));
         }
     }
-    (kept, skipped)
+    out
+}
+
+/// One `skipped` entry per group, with `reason`, never dropped in silence.
+pub fn skipped_groups(groups: &[Group], reason: SkipReason) -> Vec<Skipped> {
+    groups
+        .iter()
+        .map(|g| Skipped {
+            rule: g.rule.clone(),
+            file: Some(g.scope.clone()),
+            reason,
+            waiver: None,
+        })
+        .collect()
+}
+
+/// `kept` with `more` folded in: findings join the group of the same rule and
+/// file, and a new group takes its place in file then rule order.
+pub fn merge_groups(mut kept: Vec<Group>, more: Vec<Group>) -> Vec<Group> {
+    for g in more {
+        match kept
+            .iter_mut()
+            .find(|k| k.rule == g.rule && k.scope == g.scope)
+        {
+            Some(k) => k.findings.extend(g.findings),
+            None => kept.push(g),
+        }
+    }
+    kept.sort_by(|a, b| (&a.scope, &a.rule).cmp(&(&b.scope, &b.rule)));
+    kept
 }
 
 #[cfg(test)]
@@ -392,7 +444,13 @@ mod tests {
     }
 
     fn plan_of(findings: &[Finding], waivers: &[Suppression], filters: &Filters) -> Plan {
-        plan(findings, FailOn::Warning, waivers, "2026-11-13", filters)
+        plan(
+            findings,
+            FailOn::Warning,
+            (waivers, &HashSet::new()),
+            "2026-11-13",
+            filters,
+        )
     }
 
     fn st_with(pending: Option<Vec<PendingEntry>>) -> SuppressionType {
@@ -445,7 +503,7 @@ mod tests {
         let warn = plan(
             &findings,
             FailOn::Warning,
-            &[],
+            (&[], &HashSet::new()),
             "2026-11-13",
             &Filters::default(),
         );
@@ -453,7 +511,7 @@ mod tests {
         let err = plan(
             &findings,
             FailOn::Error,
-            &[],
+            (&[], &HashSet::new()),
             "2026-11-13",
             &Filters::default(),
         );
@@ -583,7 +641,7 @@ mod tests {
     }
 
     #[test]
-    fn findings_the_drafts_resolve_are_dropped_and_reported() {
+    fn findings_the_drafts_resolve_are_split_off_group_by_group() {
         let p = plan_of(
             &[
                 error("gone", "a.md"),
@@ -595,20 +653,18 @@ mod tests {
         );
         // After the drafts exist only `kept` in `b.md` remains of the three.
         let after = [error("kept", "b.md")];
-        let (kept, skipped) = drop_resolved(p.groups, &after);
-        assert_eq!(kept.len(), 1);
-        assert_eq!(kept[0].scope, "b.md");
-        let reasons: Vec<(&str, Option<&str>, SkipReason)> = skipped
+        let d = drop_resolved(p.groups, &after);
+        assert_eq!(d.kept.len(), 1);
+        assert_eq!(d.kept[0].scope, "b.md");
+        let gone: Vec<(&str, &str)> = d
+            .resolved
             .iter()
-            .map(|s| (s.rule.as_str(), s.file.as_deref(), s.reason))
+            .map(|g| (g.rule.as_str(), g.scope.as_str()))
             .collect();
-        assert_eq!(
-            reasons,
-            [
-                ("gone", Some("a.md"), SkipReason::ResolvedByDrafts),
-                ("kept", Some("a.md"), SkipReason::ResolvedByDrafts)
-            ]
-        );
+        assert_eq!(gone, [("gone", "a.md"), ("kept", "a.md")]);
+        let skipped = skipped_groups(&d.resolved, SkipReason::ResolvedByDrafts);
+        assert_eq!(skipped.len(), 2);
+        assert_eq!(skipped[0].file.as_deref(), Some("a.md"));
     }
 
     #[test]
@@ -618,10 +674,39 @@ mod tests {
         let mut two = error("r", "a.md");
         two.message = "second".into();
         let p = plan_of(&[one, two.clone()], &[], &Filters::default());
-        let (kept, skipped) = drop_resolved(p.groups, &[two]);
-        assert_eq!(kept[0].findings.len(), 1);
-        assert_eq!(kept[0].findings[0].message, "second");
-        assert_eq!(skipped.len(), 1);
+        let d = drop_resolved(p.groups, &[two]);
+        assert_eq!(d.kept[0].findings.len(), 1);
+        assert_eq!(d.kept[0].findings[0].message, "second");
+        assert_eq!(d.resolved[0].findings[0].message, "first");
+    }
+
+    #[test]
+    fn merged_groups_join_by_rule_and_file_and_stay_in_order() {
+        let g = |rule: &str, scope: &str| Group {
+            rule: rule.into(),
+            scope: scope.into(),
+            findings: vec![error(rule, scope)],
+        };
+        let merged = merge_groups(vec![g("b", "z.md")], vec![g("a", "a.md"), g("b", "z.md")]);
+        let got: Vec<(&str, usize)> = merged
+            .iter()
+            .map(|g| (g.scope.as_str(), g.findings.len()))
+            .collect();
+        assert_eq!(got, [("a.md", 1), ("z.md", 2)]);
+    }
+
+    #[test]
+    fn a_finding_inside_a_waiver_record_is_skipped_so_drafts_are_not_drafted_for() {
+        let records: HashSet<PathBuf> = [PathBuf::from("docs/waiver/WAIVER-1-x.md")].into();
+        let p = plan(
+            &[error("field.pending", "docs/waiver/WAIVER-1-x.md")],
+            FailOn::Warning,
+            (&[], &records),
+            "2026-11-13",
+            &Filters::default(),
+        );
+        assert!(p.groups.is_empty());
+        assert_eq!(p.skipped[0].reason, SkipReason::WaiverRecord);
     }
 
     #[test]

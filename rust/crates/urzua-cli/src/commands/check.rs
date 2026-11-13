@@ -859,6 +859,9 @@ fn open_session(
 /// Puts records that exist only in memory into the session, as `propose` does
 /// for one, without narrowing what the run reports on.
 fn add_records(session: &mut Session, added: Vec<(PathBuf, String)>) -> Result<(), String> {
+    if added.is_empty() {
+        return Ok(());
+    }
     for (rel, content) in added {
         let record = crate::discovery::parse_prospective_record(&session.config, &rel, &content)?;
         session.records.retain(|r| r.path != rel);

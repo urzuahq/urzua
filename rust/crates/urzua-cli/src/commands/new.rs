@@ -306,7 +306,7 @@ fn push_closing_notices(
 /// so the lock is not held across the network; the lock is held from here to the
 /// file write, and the directories are read under it. An `Err` is a lock that
 /// timed out.
-fn scan_pull_requests(
+pub(crate) fn scan_pull_requests(
     repo_root: &std::path::Path,
     opts: &NewDecl,
     pull: &mut PullRefsReport,
@@ -466,7 +466,7 @@ fn render_record(inputs: &NewRecordInputs) -> String {
 
 /// Writes the record, refusing a path that leaves the repository and never
 /// overwriting an existing file.
-fn write_new_file(
+pub(crate) fn write_new_file(
     repo_root: &std::path::Path,
     dir: &std::path::Path,
     file_path: &std::path::Path,

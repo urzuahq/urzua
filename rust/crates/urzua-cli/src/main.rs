@@ -127,23 +127,10 @@ enum Command {
 
     /// Draft one pending waiver per rule and file for the current findings.
     ///
-    /// Runs `check` in process and previews the waivers it would write; nothing is
-    /// written yet. A draft carries a pending Reason and no Expires, so it suppresses
+    /// Runs `check` in process and previews the waivers it would write; `--apply`
+    /// writes them. A draft carries a pending Reason and no Expires, so it suppresses
     /// nothing until a person fills it in. Exit 0 when it ran, 2 when it could not.
-    Waive {
-        /// Draft from the current findings (the only source today).
-        #[arg(long, required = true)]
-        from_report: bool,
-        /// Only findings of these rules (comma-separated or repeated).
-        #[arg(long, value_delimiter = ',')]
-        rule: Vec<String>,
-        /// Only findings in this file or under this directory (repeatable; a path, not a glob).
-        #[arg(long)]
-        path: Vec<PathBuf>,
-        /// Author named in each draft's revision log; defaults to the git identity.
-        #[arg(long)]
-        by: Option<String>,
-    },
+    Waive(commands::waive::WaiveArgs),
 
     /// Validate records. Non-zero exit on error.
     ///
@@ -206,6 +193,18 @@ enum Command {
     /// `Derives-from`/`Supersedes` edge, as data (ADR-0024).
     Graph,
 
+    /// Serve the corpus to an agent over the Model Context Protocol, read-only (`SPEC-26`).
+    ///
+    /// Speaks newline-delimited JSON-RPC on stdin and stdout until stdin closes; stdout
+    /// carries protocol frames and nothing else. Tools: `urzua_check` and
+    /// `urzua_list_records`. No tool writes. Register it in your agent's MCP
+    /// configuration with `command: urzua`, `args: [mcp]`; `harness install` does not.
+    Mcp {
+        /// The repository to serve. Defaults to the repository holding the current directory.
+        #[arg(long)]
+        root: Option<PathBuf>,
+    },
+
     /// The order of work, computed from the records: waves, the ready set, the
     /// critical path, what each record blocks and a grouping (ADR-82).
     ///
@@ -247,9 +246,20 @@ enum Command {
     /// what's already there. Never clobbers, always idempotent, `--dry-run`
     /// prints the config the real run would write. Stable-ID backfill is a separate
     /// step: `migrate ids`.
+    ///
+    /// With no records yet, `--types adr,rfc,spec,prd` selects built-in profiles
+    /// (written out as visible config, with a starter template each) instead of
+    /// adopting; `--dir` sets the layout root (default `docs`). On a terminal in a
+    /// repository with no record directory, `init` asks which types to govern.
     Init {
         #[arg(long)]
         dry_run: bool,
+        /// Record types to govern from built-in profiles: adr, rfc, spec, prd.
+        #[arg(long, value_delimiter = ',')]
+        types: Vec<String>,
+        /// Layout root for `--types`: each type lives in `<dir>/<type>`.
+        #[arg(long)]
+        dir: Option<PathBuf>,
     },
 
     /// Install and run the agent harness bundle: hook entries, a translator for
@@ -453,6 +463,17 @@ enum MigrateTarget {
         apply: bool,
     },
 
+    /// Rename every record file whose name does not match its type's declared
+    /// filename convention (`identity.pattern`, else `TYPE-NNNN-slug.md`) and
+    /// rewrite the citations of the renamed paths. The number and slug are kept,
+    /// so a record's `Stable-Id` and id do not change. Reports every rename, every
+    /// rewritten citation, and every citation in a file it does not edit. Dry-run
+    /// by default.
+    Filenames {
+        #[arg(long)]
+        apply: bool,
+    },
+
     /// Rewrite the config from the previous schema version to the current one,
     /// in place, keeping its comments. Reports every key it added, changed,
     /// renamed, moved or dropped, and reports nothing to do when the config is
@@ -553,17 +574,18 @@ fn main() -> ExitCode {
         Command::Explain { path, rule } => commands::explain::run(cli.config, path, rule),
         Command::Graph => commands::graph::run(cli.config),
         Command::Roadmap => commands::roadmap::run(cli.config),
+        Command::Mcp { root } => commands::mcp::run(cli.config, root),
         Command::New {
             record_type,
             title,
             by,
         } => commands::new::run(cli.config, record_type, title, by),
-        Command::Waive { rule, path, by, .. } => commands::waive::run(cli.config, rule, path, by),
+        Command::Waive(args) => commands::waive::run(cli.config, args),
         Command::Audit => commands::audit::run(cli.config),
         Command::Migrate { target } => dispatch_migrate(cli.config, target),
         Command::Export { format } => dispatch_export(cli.config, format),
         Command::Import { .. } => not_implemented("import"),
-        Command::Init { dry_run } => commands::init::run(cli.config, dry_run),
+        init @ Command::Init { .. } => dispatch_init(cli.config, init),
         Command::Harness { target } => dispatch_harness(cli.config, target),
         Command::Doctor => commands::doctor::run(cli.config),
         Command::Rules => commands::rules::run(),
@@ -638,9 +660,29 @@ fn dispatch_export(config: Option<PathBuf>, format: ExportFormat) -> ExitCode {
     }
 }
 
+fn dispatch_init(config: Option<PathBuf>, init: Command) -> ExitCode {
+    let Command::Init {
+        dry_run,
+        types,
+        dir,
+    } = init
+    else {
+        unreachable!("dispatch_init is called only for the Init command")
+    };
+    commands::init::run(
+        config,
+        commands::init::InitArgs {
+            dry_run,
+            types,
+            dir,
+        },
+    )
+}
+
 fn dispatch_migrate(config: Option<PathBuf>, target: MigrateTarget) -> ExitCode {
     match target {
         MigrateTarget::Ids { apply } => commands::migrate::run_ids(config, apply),
+        MigrateTarget::Filenames { apply } => commands::migrate_filenames::run(config, apply),
         MigrateTarget::Config => commands::migrate::run_config(config),
         MigrateTarget::Schema {
             report: true,
@@ -694,9 +736,10 @@ fn fix_evaluation_date(cli: &Cli) -> Result<(), String> {
         Command::Audit => ("audit", false),
         Command::Fix { apply, .. } => ("fix", *apply),
         Command::Reverify { apply, .. } => ("reverify", *apply),
+        Command::Waive(args) => ("waive", args.apply),
         other => {
             return Err(format!(
-                "--as-of is not accepted by `urzua {}`: it compares no dates against an evaluation date (it applies to check, audit, fix and reverify)",
+                "--as-of is not accepted by `urzua {}`: it compares no dates against an evaluation date (it applies to check, audit, fix, reverify and waive)",
                 command_name(other)
             ))
         }
@@ -712,11 +755,12 @@ fn fix_evaluation_date(cli: &Cli) -> Result<(), String> {
 fn command_name(command: &Command) -> &'static str {
     match command {
         Command::New { .. } => "new",
-        Command::Waive { .. } => "waive",
+        Command::Waive(_) => "waive",
         Command::Check { .. } => "check",
         Command::Explain { .. } => "explain",
         Command::Graph => "graph",
         Command::Roadmap => "roadmap",
+        Command::Mcp { .. } => "mcp",
         Command::Audit => "audit",
         Command::Migrate { .. } => "migrate",
         Command::Export { .. } => "export",

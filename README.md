@@ -160,6 +160,13 @@ cd /path/to/your-repo
 /path/to/urzua/rust/target/release/urzua check docs/    # validates against it
 ```
 
+No records yet? Pick the types from built-in profiles instead (written out into the config, with a
+starter template each; on a terminal, plain `init` asks):
+
+```sh
+/path/to/urzua/rust/target/release/urzua init --types adr,rfc,spec --dir docs
+```
+
 `init` reads your existing directories and header conventions and proposes a config. It never renumbers, never rewrites, never moves a file. Nothing about your corpus changes until you accept what it found. Confirm this yourself rather than trust it: `make ci` in this repo runs the same `urzua check docs/` against Urzua's own corpus, and [`ci.yml`](.github/workflows/ci.yml) runs it on every push and pull request.
 
 ## The schema is declared, not assumed
@@ -230,6 +237,7 @@ The chain above is one path through this repo's own graph, documented here becau
 | `init` | Adopt mode only: proposes config from an existing corpus, never moves files |
 | `fix` | Detect mode (Embodiment, Tier 1) and apply mode, both real |
 | `migrate ids` | Real: backfills a collision-free stable ID ([ULID](docs/adr/ADR-21-ulid-as-the-stable-id-encoding.md)) into every record lacking one |
+| `migrate filenames` | Real: renames record files to the filename convention the type declares and rewrites citations of the renamed paths; dry-run unless `--apply` |
 | `migrate schema --report` | Real: previews which records lack a real value for a proposed new required field, before it's ever added to config |
 | `migrate config` | Real: rewrites a config from the previous `schema_version` to the current one, in place, reporting every key it added, changed, dropped, renamed or moved ([ADR-77](docs/adr/ADR-77-config-schema-versions-have-a-declared-support-window-and-a-migration-path.md)) |
 | `doctor` | Real: reports on the tool's own configuration health, not record content |
@@ -282,7 +290,8 @@ ecosystem built.
 | [RFC-12](docs/rfc/RFC-12-the-decision-before-implementation-gate.md) | Code back-pointing at a record that isn't accepted cannot merge. Refuses the merge, never the edit: implementing while a decision is pending is often what reveals the decision was wrong. | MILE-14 |
 | [RFC-9](docs/rfc/RFC-9-agentic-repair-tier.md) | A second repair tier for the prose the mechanical tier permanently can't fix. The agent never writes; every hunk is mechanically re-verified before a human sees it. | MILE-13 |
 
-Agent-facing surface, also unbuilt: a read-only MCP server (MILE-29, scope undecided in MILE-47), a
+Agent-facing surface: `urzua mcp` is a read-only MCP server over stdio (`ADR-99`, `SPEC-26`); `urzua_check`
+and `urzua_list_records` are built and three more tools follow (MILE-29). Also unbuilt: a
 guarded edit command on `fix --apply`'s write path (MILE-79), and a `next_action` on every command's
 output (MILE-72, MILE-44).
 

@@ -17,6 +17,7 @@ urzua-core = { path = "crates/urzua-core" }
 urzua-io = { path = "crates/urzua-io" }
 urzua-id = { path = "crates/urzua-id" }
 urzua-agdr = { path = "crates/urzua-agdr" }
+urzua-mcp = { path = "crates/urzua-mcp" }
 
 anyhow = "1"
 thiserror = "2"
