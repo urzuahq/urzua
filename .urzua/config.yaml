@@ -146,6 +146,9 @@ record_types:
     sections:
       from: headings
       depth: 2
+      unique_headings: true
+      no_skipped_levels: true
+      order: {from: template}
       required:
         - {name: Context}
         - {name: Decision}
@@ -207,6 +210,9 @@ record_types:
     sections:
       from: headings
       depth: 2
+      unique_headings: true
+      no_skipped_levels: true
+      order: {from: template}
       required:
         - {name: Summary}
         - {name: Motivation}
@@ -278,6 +284,10 @@ record_types:
     narrative_fields: []
     sections:
       from: headings
+      depth: 2
+      unique_headings: true
+      no_skipped_levels: true
+      order: {from: template}
       required:
         - {name: Purpose}
   milestone:
@@ -376,6 +386,10 @@ record_types:
     # Rejected ADR is: it will never be done, so it has no criteria to meet.
     sections:
       from: headings
+      depth: 2
+      unique_headings: true
+      no_skipped_levels: true
+      order: {from: template}
       required:
         - {name: "Done means"}
       exempt_statuses: ["WontDo"]
@@ -445,6 +459,10 @@ record_types:
     # which records use one (MILE-165).
     sections:
       from: headings
+      depth: 2
+      unique_headings: true
+      no_skipped_levels: true
+      order: {from: template}
       required:
         - {name: "What was wrong", aliases: ["What is wrong", "What was suspected", "What"]}
     spec: "SPEC-9"
@@ -541,6 +559,10 @@ record_types:
         - {when: ["Open"], fields: ["Met-by"]}
     sections:
       from: headings
+      depth: 2
+      unique_headings: true
+      no_skipped_levels: true
+      order: {from: template}
       required:
         - {name: Signal}
     spec: "SPEC-23"
@@ -681,6 +703,9 @@ rules:
   # Reports this file when it is read through a schema upgrade (ADR-77, MILE-34).
   config.schema-version-outdated: warn
   section.required: error
+  section.duplicate: error
+  section.level-skipped: error
+  section.order: error
   config.pointer-narrative-overlap: error
   pointer.resolution: error
   # A required field whose value is identical to its type's template text is

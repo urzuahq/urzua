@@ -25,6 +25,18 @@ fn repo(name: &str, files: &[(&str, &str)]) -> common::TempDir {
     git(&dir, &["config", "user.name", "test"]);
     let cfg = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../.urzua/config.yaml");
     std::fs::copy(cfg, dir.join(".urzua/config.yaml")).unwrap();
+    // The own config declares `sections.order: {from: template}`, which reads
+    // each type's template, so the fixture carries them.
+    let templates = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../.urzua/templates");
+    std::fs::create_dir_all(dir.join(".urzua/templates")).unwrap();
+    for entry in std::fs::read_dir(templates).unwrap() {
+        let entry = entry.unwrap();
+        std::fs::copy(
+            entry.path(),
+            dir.join(".urzua/templates").join(entry.file_name()),
+        )
+        .unwrap();
+    }
     for (path, content) in files {
         let full = dir.join(path);
         std::fs::create_dir_all(full.parent().unwrap()).unwrap();
