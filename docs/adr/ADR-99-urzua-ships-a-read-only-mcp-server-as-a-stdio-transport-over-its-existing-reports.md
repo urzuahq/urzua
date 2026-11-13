@@ -77,7 +77,7 @@ track one protocol revision ourselves:*
 7. **Registration is a documented snippet.** `urzua harness install` writes no MCP configuration. Registering the server is a
    person's act in a user-owned file.
 
-The tools are `urzua_check`, `urzua_list_records`, `urzua_show_record`, `urzua_findings_for_path` and `urzua_graph`, every one
+The tools are `urzua_check`, `urzua_list_records`, `urzua_show_record`, `urzua_get_findings_for_path` and `urzua_get_graph`, every one
 advertised `readOnlyHint: true`. Their names carry a read word and no write word, so the harness's name-based reading of an MCP
 call leaves them alone; that naming is load-bearing and a test pins it.
 

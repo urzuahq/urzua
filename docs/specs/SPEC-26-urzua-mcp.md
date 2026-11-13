@@ -57,8 +57,8 @@ schema does not name is `-32602`, never ignored. Names carry a read word and no 
 | `urzua_check` | `{paths?: [string], base?: string, rules?: [string]}` | `CheckReport` |
 | `urzua_list_records` | `{type?: string, status?: [string]}` | `ExportReport` with each record's `raw_text`, `sections` and `preamble` left out: `types`, `record_count` and `records[]` (id, type, path, header fields). `types[].records` and `record_count` count the records listed, not the corpus. |
 | `urzua_show_record` | `{id: string}` | one `ExportedRecord` (header, `sections`, `raw_text`) and the `GraphEdge`s that touch it, supersession included |
-| `urzua_findings_for_path` | `{path: string}` | `ExplainReport` |
-| `urzua_graph` | `{}` | `GraphReport` |
+| `urzua_get_findings_for_path` | `{path: string}` | `ExplainReport` |
+| `urzua_get_graph` | `{}` | `GraphReport` |
 
 `urzua_check` runs `check` in process over the corpus. It has no equivalent of `--stdin-path`, `--actors`, `fix` or any
 `--apply`. `urzua_list_records` filters by the record type when `type` is given and by the header's status value when `status`
@@ -67,7 +67,7 @@ that matches nothing is a notice in the result (`list-records.type`, `list-recor
 `{type: "adr", status: ["Rejected", "Superseded"]}` in a corpus that declares those statuses. `urzua_show_record` returns the
 record's sections as written; the reasons for a decision are the prose of its sections and are not parsed (`ADR-64`).
 
-Built today: `urzua_check` and `urzua_list_records`. `urzua_show_record`, `urzua_findings_for_path` and `urzua_graph` follow
+Built today: `urzua_check` and `urzua_list_records`. `urzua_show_record`, `urzua_get_findings_for_path` and `urzua_get_graph` follow
 and are not served yet. `tools/list` lists exactly the tools built. `urzua_check` refuses a `paths` entry that is absolute or
 contains `..` (`-32602`): the tools read the repository, not the disk around it.
 

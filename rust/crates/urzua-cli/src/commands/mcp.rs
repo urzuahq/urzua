@@ -71,7 +71,7 @@ const TOOLS: &[ToolSpec] = &[
         }],
     },
     ToolSpec {
-        name: "urzua_findings_for_path",
+        name: "urzua_get_findings_for_path",
         description: "Which records govern a path: every record whose evidence names it, with the path's scope and coverage. This is urzua explain for a path.",
         params: &[Param {
             name: "path",
@@ -81,7 +81,7 @@ const TOOLS: &[ToolSpec] = &[
         }],
     },
     ToolSpec {
-        name: "urzua_graph",
+        name: "urzua_get_graph",
         description: "The full record-relationship graph: every Implements, Derives-from and Supersedes edge, with its kind and whether its target exists.",
         params: &[],
     },
@@ -142,8 +142,8 @@ impl Host for Server {
             "urzua_check" => self.check(args),
             "urzua_list_records" => Ok(self.list_records(args)),
             "urzua_show_record" => Ok(self.show_record(args)),
-            "urzua_findings_for_path" => self.findings_for_path(args),
-            "urzua_graph" => Ok(outcome(graph::build(self.config.clone()))),
+            "urzua_get_findings_for_path" => self.findings_for_path(args),
+            "urzua_get_graph" => Ok(outcome(graph::build(self.config.clone()))),
             other => Err(format!("unknown tool: {other}")),
         }
     }

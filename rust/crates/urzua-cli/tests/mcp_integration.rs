@@ -215,8 +215,8 @@ fn initialize_and_tools_list_advertise_exactly_the_read_only_tools_built() {
             "urzua_check",
             "urzua_list_records",
             "urzua_show_record",
-            "urzua_findings_for_path",
-            "urzua_graph"
+            "urzua_get_findings_for_path",
+            "urzua_get_graph"
         ]
     );
     for tool in tools {
@@ -226,7 +226,7 @@ fn initialize_and_tools_list_advertise_exactly_the_read_only_tools_built() {
 }
 
 #[test]
-fn tool_names_carry_no_write_word() {
+fn tool_names_carry_a_read_word_and_no_write_word() {
     // The harness reads an MCP call as a write by the words in its tool name
     // (SPEC-19); the names are load-bearing, so a write word here is a bug.
     let dir = fixture("names");
@@ -238,14 +238,25 @@ fn tool_names_carry_no_write_word() {
         "write", "create", "set", "update", "move", "delete", "remove", "apply", "fix", "edit",
         "patch", "install",
     ];
+    // The hook leaves a tool alone only when its name carries one of these (and no
+    // write word); a tool without one is judged as an edit when it is given a path.
+    let read_words = [
+        "read", "get", "list", "search", "find", "stat", "view", "show", "cat", "fetch", "query",
+        "describe", "info", "tree", "diff", "status", "log", "count", "check", "lookup", "inspect",
+    ];
     for tool in replies[0]["result"]["tools"].as_array().unwrap() {
         let name = tool["name"].as_str().unwrap();
-        for word in name.split('_') {
+        let words: Vec<&str> = name.split('_').collect();
+        for word in &words {
             assert!(
-                !write_words.contains(&word),
+                !write_words.contains(word),
                 "tool `{name}` has the write word `{word}`"
             );
         }
+        assert!(
+            words.iter().any(|w| read_words.contains(w)),
+            "tool `{name}` has no read word, so the editor hook would judge it as an edit"
+        );
     }
 }
 
@@ -760,7 +771,11 @@ fn show_record_of_an_unknown_id_is_an_error_result_not_an_empty_record() {
 #[test]
 fn findings_for_path_returns_the_records_that_govern_it() {
     let dir = explain_fixture("explain");
-    let reply = call_one(&dir, "urzua_findings_for_path", json!({"path": "src/a.rs"}));
+    let reply = call_one(
+        &dir,
+        "urzua_get_findings_for_path",
+        json!({"path": "src/a.rs"}),
+    );
     let report = &reply["result"]["structuredContent"];
     assert_eq!(reply["result"]["isError"], false, "{reply}");
     assert_eq!(report["path"], "src/a.rs");
@@ -772,19 +787,23 @@ fn findings_for_path_returns_the_records_that_govern_it() {
         .unwrap();
     let cli: Value = serde_json::from_slice(&cli.stdout).unwrap();
     assert_eq!(report["governing_records"], cli["governing_records"]);
-    let ungoverned = call_one(&dir, "urzua_findings_for_path", json!({"path": "src/b.rs"}));
+    let ungoverned = call_one(
+        &dir,
+        "urzua_get_findings_for_path",
+        json!({"path": "src/b.rs"}),
+    );
     assert_eq!(
         ungoverned["result"]["structuredContent"]["governing_records"],
         json!([])
     );
-    let escaping = call_one(&dir, "urzua_findings_for_path", json!({"path": "../x"}));
+    let escaping = call_one(&dir, "urzua_get_findings_for_path", json!({"path": "../x"}));
     assert_eq!(escaping["error"]["code"], -32602);
 }
 
 #[test]
 fn graph_returns_the_cli_graph_report() {
     let dir = fixture("graph");
-    let reply = call_one(&dir, "urzua_graph", json!({}));
+    let reply = call_one(&dir, "urzua_get_graph", json!({}));
     let report = &reply["result"]["structuredContent"];
     assert_eq!(reply["result"]["isError"], false);
     let cli = common::urzua()
@@ -796,6 +815,6 @@ fn graph_returns_the_cli_graph_report() {
     assert_eq!(report["edges"], cli["edges"]);
     assert_eq!(report["population"], cli["population"]);
     assert!(!report["edges"].as_array().unwrap().is_empty());
-    let extra = call_one(&dir, "urzua_graph", json!({"id": "ADR-1"}));
+    let extra = call_one(&dir, "urzua_get_graph", json!({"id": "ADR-1"}));
     assert_eq!(extra["error"]["code"], -32602);
 }
