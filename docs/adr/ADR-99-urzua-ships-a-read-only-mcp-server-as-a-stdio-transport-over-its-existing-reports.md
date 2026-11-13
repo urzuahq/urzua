@@ -1,11 +1,10 @@
 ---
 Stable-Id: 01M7A8QFEVHGZ559S89JSYR8TA
-Status: Accepted
-Accepted-on: 2026-11-13
+Status: Proposed
 Date: 2026-11-13
 Author: beauwilliams
 Deciders: beauwilliams
-Embodiment: Verified
+Embodiment: null
 Supersedes / Superseded-by: null
 ---
 # 99 — urzua ships a read-only MCP server as a stdio transport over its existing reports
@@ -66,8 +65,9 @@ track one protocol revision ourselves:*
    is known to the server; rejected and superseded decisions are the query `status: ["Rejected", "Superseded"]` (`ADR-61`).
 3. **stdio only.** Newline-delimited JSON-RPC 2.0 on stdin and stdout, one pinned protocol revision named in the spec. Stdout
    carries protocol frames and nothing else; notices go to stderr as JSON. Streamable HTTP is a recorded non-goal.
-4. **A `urzua mcp` subcommand**, specified in `SPEC-26`. The root is resolved as the harness settings command resolves it
-   (`ADR-89`), so a server started from another directory does not read its own.
+4. **A `urzua mcp` subcommand**, specified in `SPEC-26`. The root is `--root`, else the repository holding the directory the
+   server was started in, as for every command; the engine reads no agent-vendor environment variable (`ADR-89`). A client that
+   starts servers elsewhere passes `--root`.
 5. **Hand-written minimal JSON-RPC in a new `urzua-mcp` crate.** The crate holds framing and dispatch over `Read` and `Write`
    and touches no filesystem; the report-producing calls are injected by `urzua-cli`. Zero new dependencies; no change to
    `deny.toml` or to the purity allowlist of `urzua-core`. Adopting an SDK later needs its own ADR amending `ADR-1` and a
@@ -119,5 +119,4 @@ costs a dependency review, because the tools sit behind the dispatch layer.
 >
 > | Date | Change | Class |
 > |---|---|---|
-> | 2026-11-13 | Filed as Accepted: accepted by the maintainer on 2026-11-13. **Why:** the maintainer's decision of 2026-11-13, taking the recommendation on each of the seven choices (engine transport, generic status filter, stdio only, `urzua mcp`, hand-written JSON-RPC crate, report JSON as the result, registration by snippet) and choosing an ADR with no separate RFC; it closes `MILE-47`. | **substantive** |
-> | 2026-11-13 | Tool-authored (by beauwilliams, identity: gh-verified, actor: agent): recomputed `Embodiment` from `no Realized-by field; cited by test back-pointers` -- stated no value disagreed with the computed value `Verified`. | **structural** |
+> | 2026-11-13 | Filed as Proposed; the decisions were accepted by the maintainer on 2026-11-13. **Why:** the maintainer's decision of 2026-11-13, taking the recommendation on each of the seven choices (engine transport, generic status filter, stdio only, `urzua mcp`, hand-written JSON-RPC crate, report JSON as the result, registration by snippet) and choosing an ADR with no separate RFC; it closes `MILE-47`. The status stays Proposed here because `status.transition-allowed` refuses a new ADR that starts at Accepted (`ADR-72`); it moves to Accepted in a follow-up change the maintainer approves, which `diff.decider-required` also asks for. | **substantive** |

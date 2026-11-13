@@ -25,8 +25,9 @@ urzua mcp [--root DIR] [--config FILE]
 
 - The process serves until stdin closes, then exits `0`. It exits `2` when it could not start (no configuration, an unreadable
   configuration); the failure is one JSON notice on stderr and nothing is written to stdout.
-- The root is `--root` when given, else resolved as the harness settings command resolves it (`ADR-89`): `CLAUDE_PROJECT_DIR`, else
-  the nearest real working tree holding `.urzua/config.yaml`. It is never the server's own directory by accident.
+- The root is `--root` when given, else the repository holding the directory the server was started in, found as every
+  command finds it. The engine reads no agent-vendor environment variable; a client that starts servers from another
+  directory passes `--root`.
 - The configuration is read for every call, so an edit to a record or to `.urzua/config.yaml` is seen by the next call.
 - No other flag is accepted. In particular there is no flag that enables a write, a format or a listener.
 
@@ -92,6 +93,9 @@ spawns no process, and never calls `urzua` as a child. The mutating commands (`n
   `mcp__urzua__urzua_write_record` as a write.
 
 The editor hook is advisory for agents (`SPEC-19`); the guarantee is the absence of write code, and the tests above are what keep it.
+One thing outside the server's code can change `.git`: `urzua_check` with `base` runs `git diff`, and git rewrites its own index
+when a working file was written in the same instant as the index ("racily clean"). That is git refreshing its cache, never a
+record or a working file; the tree-hash test starts from a settled index so it does not depend on timing.
 
 ## Registration
 
@@ -115,12 +119,12 @@ The server is registered by a person in a user-owned file, with a documented sni
 
 ## References
 
-- `ADR-99` (this server's shape), `ADR-46` (the report contract), `ADR-61` (declared status names), `ADR-64`, `ADR-89` (the
+- `ADR-99` (this server's shape, accepted by the maintainer on 2026-11-13), `ADR-46` (the report contract), `ADR-61` (declared status names), `ADR-64`, `ADR-89` (the
   harness and root resolution), `ADR-55`, `RFC-27`, `SPEC-13` (`explain` and `graph`), `SPEC-19`, `SPEC-24`, `MILE-29`, `MILE-47`.
 
 > **Revision log**
 >
 > | Date | Change | Class |
 > |---|---|---|
-> | 2026-11-13 | Initial spec; nothing built yet. **Why:** `ADR-99` accepted the read-only MCP server and requires its tool contract to be specified before the code. | **structural** |
+> | 2026-11-13 | Initial spec; nothing built yet. **Why:** `ADR-99` decides the read-only MCP server and requires its tool contract to be specified before the code. | **structural** |
 > | 2026-11-13 | Bumped to `0.2`. `urzua mcp` is built with `urzua_check` and `urzua_list_records` (`rust/crates/urzua-mcp`, `commands/mcp.rs`); the other three tools, the harness interaction tests and the registration docs follow. A listing leaves out `sections` and `preamble` as well as `raw_text`; `paths` may not leave the repository. **Why:** the server core of `MILE-29`. | **substantive** |

@@ -3,8 +3,6 @@
 //! same function, and hands it to the protocol layer (`urzua-mcp`) as JSON. This
 //! module and that crate contain no code that writes (`mcp_integration` scans
 //! both for write APIs).
-//!
-//! Implements: ADR-99
 
 use std::io::Write;
 use std::path::{Component, Path, PathBuf};
@@ -89,11 +87,6 @@ fn start(config: Option<PathBuf>, root: Option<PathBuf>) -> Result<Server, Strin
         .map(std::path::absolute)
         .transpose()
         .map_err(|e| e.to_string())?;
-    let root = root.or_else(|| {
-        std::env::var_os("CLAUDE_PROJECT_DIR")
-            .filter(|v| !v.is_empty())
-            .map(PathBuf::from)
-    });
     if let Some(root) = root {
         std::env::set_current_dir(&root)
             .map_err(|e| format!("could not use {} as the root: {e}", root.display()))?;

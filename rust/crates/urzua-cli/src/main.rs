@@ -213,7 +213,7 @@ enum Command {
     /// `urzua_list_records`. No tool writes. Register it in your agent's MCP
     /// configuration with `command: urzua`, `args: [mcp]`; `harness install` does not.
     Mcp {
-        /// The repository to serve. Defaults to `CLAUDE_PROJECT_DIR`, else the current directory.
+        /// The repository to serve. Defaults to the repository holding the current directory.
         #[arg(long)]
         root: Option<PathBuf>,
     },

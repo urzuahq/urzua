@@ -228,8 +228,8 @@ urzua mcp [--root <dir>]
 
 A read-only Model Context Protocol server on stdio, so an agent can read the corpus without a shell. It
 speaks newline-delimited JSON-RPC 2.0 on stdin and stdout until stdin closes, and stdout carries protocol
-frames only. `--root` is the repository to serve; without it the server uses `CLAUDE_PROJECT_DIR`, else
-the current directory. It exits 2, with a JSON could-not-run on stderr, when it cannot read the config.
+frames only. `--root` is the repository to serve; without it the server uses the repository holding the
+current directory. It exits 2, with a JSON could-not-run on stderr, when it cannot read the config.
 `--as-of` is refused.
 
 Two tools are built, each returning the report its command prints as `structuredContent` and as the same
@@ -241,7 +241,7 @@ JSON in one text block, and each advertised read-only:
   `type: "adr"` with `status: ["Rejected", "Superseded"]`.
 
 No tool writes. A call to any other tool name is refused. Register it in your agent's MCP configuration
-with `command: urzua` and `args: ["mcp"]`; `harness install` does not write MCP configuration.
+with `command: urzua` and `args: ["mcp"]` (add `--root` when the agent does not start it in the repository); `harness install` does not write MCP configuration.
 
 ## rules
 

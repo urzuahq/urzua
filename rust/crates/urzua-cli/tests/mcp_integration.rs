@@ -3,8 +3,6 @@
 //! asserted: no write tool exists, the working tree and `.git` hash the same
 //! after every call, stdout carries only JSON-RPC frames, and a scan of the
 //! server's sources finds no write API (a planted source shows it can fail).
-//!
-//! Verifies: ADR-99
 
 mod common;
 
@@ -55,27 +53,69 @@ fn fixture(name: &str) -> common::TempDir {
     }
     git(&dir, &["add", "-A"]);
     git(&dir, &["commit", "-q", "-m", "fixture"]);
+    settle(&dir);
     dir
 }
 
-/// A fingerprint of every file under `dir`, `.git` included, by path and content.
-fn tree_hash(dir: &Path) -> u64 {
-    fn walk(dir: &Path, out: &mut BTreeMap<String, Vec<u8>>, root: &Path) {
+/// Gives every working file an old modification time and refreshes git's index.
+/// A file written in the same instant as the index is "racily clean", and any git
+/// command that compares the working tree (`git diff`, which `check --base` runs)
+/// then rewrites the index to record that it is not. That is git tidying its own
+/// cache, not the server writing, but it would make a byte-for-byte hash of `.git`
+/// depend on timing, so the fixture starts with nothing for git to tidy.
+fn settle(dir: &Path) {
+    fn age(dir: &Path) {
+        let old = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_600_000_000);
+        for entry in std::fs::read_dir(dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.file_name().is_some_and(|n| n == ".git") {
+                continue;
+            }
+            if path.is_dir() {
+                age(&path);
+            } else {
+                std::fs::File::options()
+                    .write(true)
+                    .open(&path)
+                    .unwrap()
+                    .set_modified(old)
+                    .unwrap();
+            }
+        }
+    }
+    age(dir);
+    git(dir, &["update-index", "-q", "--refresh"]);
+}
+
+/// A fingerprint of every file under `dir`, `.git` included: path to content hash.
+fn tree_hash(dir: &Path) -> BTreeMap<String, u64> {
+    fn walk(dir: &Path, out: &mut BTreeMap<String, u64>, root: &Path) {
         for entry in std::fs::read_dir(dir).unwrap() {
             let path = entry.unwrap().path();
             if path.is_dir() {
                 walk(&path, out, root);
             } else {
                 let key = path.strip_prefix(root).unwrap().display().to_string();
-                out.insert(key, std::fs::read(&path).unwrap_or_default());
+                let mut hasher = DefaultHasher::new();
+                std::fs::read(&path).unwrap_or_default().hash(&mut hasher);
+                out.insert(key, hasher.finish());
             }
         }
     }
     let mut files = BTreeMap::new();
     walk(dir, &mut files, dir);
-    let mut hasher = DefaultHasher::new();
-    files.hash(&mut hasher);
-    hasher.finish()
+    files
+}
+
+/// Fails naming every path that was added, removed or changed.
+fn assert_tree_unchanged(before: &BTreeMap<String, u64>, dir: &Path, what: &str) {
+    let after = tree_hash(dir);
+    let changed: Vec<&String> = before
+        .keys()
+        .chain(after.keys())
+        .filter(|k| before.get(*k) != after.get(*k))
+        .collect();
+    assert!(changed.is_empty(), "{what} changed the tree: {changed:?}");
 }
 
 /// Runs `urzua mcp` in `dir`, feeds it the frames, and returns the raw stdout
@@ -303,7 +343,7 @@ fn a_write_attempt_is_refused_and_the_tree_is_unchanged() {
     // A declared tool is not given an argument it does not declare either.
     let reply = call_one(&dir, "urzua_list_records", json!({"apply": true}));
     assert_eq!(reply["error"]["code"], -32602);
-    assert_eq!(tree_hash(&dir), before);
+    assert_tree_unchanged(&before, &dir, "a refused write attempt");
 }
 
 #[test]
