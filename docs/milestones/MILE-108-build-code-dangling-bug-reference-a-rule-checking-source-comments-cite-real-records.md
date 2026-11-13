@@ -31,10 +31,10 @@ milestone's implementation has to resolve, in an ADR, before shipping the rule.
 
 ## Done means
 
-- The rule `code.dangling-bug-reference` reads tracked source files whose extensions config declares and reports a comment citing a record id (`BUG-\d+`, `ADR-\d+`, `RFC-\d+` per the type prefixes) whose record does not exist under that type's declared `dir`.
-- The extensions and prefixes come from config.
-- A fixture covers a dangling and a live citation.
-- The rule is declared in urzua's own `.urzua/config.yaml`, and it reports nothing unwaived on this repository's `rust/` and `scripts/`.
+- The rule `code.dangling-bug-reference` reads tracked source files whose extensions config declares and reports a comment citing a record id (`BUG-\d+`, `ADR-\d+`, `RFC-\d+` per the type prefixes) whose record does not exist under that type's declared `dir`. — evidence: code:rust/crates/urzua-core/src/rules/code_citation.rs#code_dangling_bug_reference, test:rust/crates/urzua-cli/tests/code_dangling_reference_integration.rs#a_dangling_citation_is_reported_with_its_line_and_a_live_one_is_not, test:rust/crates/urzua-cli/tests/code_dangling_reference_integration.rs#only_files_with_a_declared_extension_are_read
+- The extensions and prefixes come from config. — evidence: test:rust/crates/urzua-cli/tests/code_dangling_reference_integration.rs#the_prefixes_come_from_the_declared_record_types, test:rust/crates/urzua-cli/tests/code_dangling_reference_integration.rs#the_rule_needs_extensions_and_refuses_one_written_with_a_dot
+- A fixture covers a dangling and a live citation. — evidence: test:rust/crates/urzua-cli/tests/code_dangling_reference_integration.rs#a_dangling_citation_is_reported_with_its_line_and_a_live_one_is_not
+- The rule is declared in urzua's own `.urzua/config.yaml`, and it reports nothing unwaived on this repository's `rust/` and `scripts/`. — evidence: code:.urzua/config.yaml#rules::code.dangling-bug-reference, test:rust/crates/urzua-cli/tests/own_config_integration.rs#the_own_config_reports_a_dangling_citation_in_rust_and_scripts_and_nothing_else
 
 > **Revision log**
 >

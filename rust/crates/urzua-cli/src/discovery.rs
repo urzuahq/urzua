@@ -1573,6 +1573,39 @@ pub(crate) fn read_decision_gate_sources(
     )
 }
 
+/// The source files `code.dangling-bug-reference` reads (`MILE-108`): those
+/// under its `back_pointer_paths` with one of its `extensions`. Only these are
+/// read, so the rule costs nothing on a file it was not asked about.
+pub(crate) fn read_code_citation_sources(
+    repo_root: &Path,
+    discovered: &urzua_io::DiscoveredFiles,
+    config: &Config,
+) -> Result<Option<BackPointerSources>, String> {
+    const RULE: &str = rules::RULE_CODE_DANGLING_BUG_REFERENCE;
+    let Some(setting) = config
+        .rules
+        .get(RULE)
+        .filter(|s| s.level != urzua_core::config::RuleLevel::Off)
+    else {
+        return Ok(None);
+    };
+    let (Some(paths), Some(extensions)) = (&setting.back_pointer_paths, &setting.extensions) else {
+        return Ok(None);
+    };
+    let files = read_files_where(repo_root, discovered, RULE, |path| {
+        paths.iter().any(|e| rules::path_is_published(path, e))
+            && path
+                .extension()
+                .and_then(|e| e.to_str())
+                .is_some_and(|e| extensions.iter().any(|x| x == e))
+    })?;
+    Ok(Some(BackPointerSources {
+        files,
+        back_pointer_paths: paths.clone(),
+        test_paths: Vec::new(),
+    }))
+}
+
 fn read_sources_for_rule(
     repo_root: &Path,
     discovered: &urzua_io::DiscoveredFiles,

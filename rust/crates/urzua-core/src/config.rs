@@ -516,6 +516,11 @@ pub struct RuleSetting {
     /// `embodiment.back-pointer-resolution`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub back_pointer_paths: Option<Vec<String>>,
+    /// File extensions, without the dot (`rs`, `sh`), of the source files
+    /// `code.dangling-bug-reference` reads under `back_pointer_paths`. Only
+    /// meaningful to that rule, which needs it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub extensions: Option<Vec<String>>,
     /// Path prefixes, each inside a `back_pointer_paths` entry, whose files are
     /// the test class: a `Verifies:` comment there is test-tier evidence for
     /// the record it cites (`MILE-146`). Only meaningful to
@@ -601,7 +606,7 @@ pub struct RuleSetting {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub accepted_statuses: Option<Vec<String>>,
     /// Prefixed ids that are not records of this repository (`MILE-156`): an
-    /// exact id (`RFC-4122`) or an inclusive numeric range (`RFC-4000..4999`)
+    /// exact id (`RFC-4122`) or an inclusive numeric range (`PREFIX-LOW..HIGH`)
     /// under a declared record prefix, for a public standard number sharing a
     /// record prefix. Only meaningful to `citation.resolution`; optional.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -2218,6 +2223,12 @@ const RULE_OPTIONS: &[RuleOption] = &[
         fallback_for_undeclared_statuses: false,
     },
     RuleOption {
+        name: "extensions",
+        consequence_if_missing: "reads no source file extension and can never report",
+        optional: false,
+        fallback_for_undeclared_statuses: false,
+    },
+    RuleOption {
         name: "test_paths",
         consequence_if_missing: "reads no `Verifies:` comment as test evidence",
         optional: true,
@@ -2722,6 +2733,12 @@ fn validate_ignore_markers(config: &Config) -> Result<(), ConfigError> {
                 "must be non-blank text on one line with no surrounding whitespace".to_string(),
             ));
         }
+        if name == crate::rules::RULE_CODE_DANGLING_BUG_REFERENCE {
+            // Read by this rule alone, so it shares no marker and no keyword.
+            if let Some(reason) = generic_marker_problem(config, marker) {
+                return Err(bad(name, reason));
+            }
+        }
         if back_pointer_rules.contains(&name.as_str()) {
             if let Some(reason) = generic_marker_problem(config, marker) {
                 return Err(bad(name, reason));
@@ -2782,6 +2799,7 @@ pub fn parse_with_document_models(
     validate_claim_fields(&config)?;
     validate_non_reference_fields(&config)?;
     validate_test_paths(&config)?;
+    validate_extensions(&config)?;
     validate_rule_fields(&config)?;
     Ok((config, models))
 }
@@ -3746,6 +3764,29 @@ fn validate_non_reference_fields(config: &Config) -> Result<(), ConfigError> {
                 return Err(bad(format!(
                     "names '{field}', which record type '{type_name}' declares in {role}; those rules would resolve the ids as references"
                 )));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// `extensions` entries are bare extensions: letters and digits, no dot, no
+/// path. An entry that could never match a file name is a rule option that is
+/// a silent no-op.
+fn validate_extensions(config: &Config) -> Result<(), ConfigError> {
+    for (name, setting) in &config.rules {
+        if setting.level == RuleLevel::Off {
+            continue;
+        }
+        for entry in setting.extensions.iter().flatten() {
+            if entry.is_empty() || !entry.bytes().all(|b| b.is_ascii_alphanumeric()) {
+                return Err(ConfigError::InvalidBoundary {
+                    rule: name.clone(),
+                    option: "extensions",
+                    reason: format!(
+                        "entry '{entry}' must be a file extension written without the dot, letters and digits only (`rs`, not `.rs` or `*.rs`)"
+                    ),
+                });
             }
         }
     }

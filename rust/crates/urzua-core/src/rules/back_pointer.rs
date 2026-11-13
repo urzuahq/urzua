@@ -49,14 +49,9 @@ pub fn scan_marker(
     prefixes: &[String],
     marker: &str,
 ) -> Vec<BackPointer> {
-    // Longest first, so `//!` and `///` are not read as `//` plus text.
-    const LEADERS: &[&str] = &["<!--", "///", "//!", "//", "/*", "--", "#", ";", "*"];
-    // The leaders that open a trailing comment after code.
-    const TRAILING: &[&str] = &["<!--", "//", "/*", "--", "#"];
-
     let mut out = Vec::new();
     for (i, line) in content.lines().enumerate() {
-        let Some(rest) = marker_rest(line, LEADERS, TRAILING, marker) else {
+        let Some(rest) = marker_rest(line, marker) else {
             continue;
         };
         for id in cited_ids(rest, prefixes) {
@@ -65,6 +60,39 @@ pub fn scan_marker(
                 line: i + 1,
                 id,
             });
+        }
+    }
+    out
+}
+
+/// A record id cited in a source comment, wherever in the comment it stands.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CommentCitation {
+    pub line: usize,
+    pub id: String,
+}
+
+/// Every record id (a declared type prefix, a hyphen and a number, standing
+/// alone) in the comments of `content`, in line order, once per line and id.
+/// A comment is read as the back-pointer rules read one (`comment_starts`); the
+/// text of a line outside a comment is not read. Case-sensitive. An id run into
+/// a longer token (`ADR-12-title.md`, `ADR-12x`) is a name, not a citation.
+pub fn scan_comment_citations(content: &str, prefixes: &[String]) -> Vec<CommentCitation> {
+    let mut out = Vec::new();
+    for (i, line) in content.lines().enumerate() {
+        // The first comment start holds the text of every later one.
+        let Some(text) = comment_starts(line).into_iter().next() else {
+            continue;
+        };
+        let mut seen: Vec<&str> = Vec::new();
+        for token in text.split(|c: char| !(c.is_ascii_alphanumeric() || c == '-' || c == '_')) {
+            if is_record_id(token, prefixes) && !seen.contains(&token) {
+                seen.push(token);
+                out.push(CommentCitation {
+                    line: i + 1,
+                    id: token.to_string(),
+                });
+            }
         }
     }
     out
@@ -149,7 +177,7 @@ fn unused_marker_lines(
         .collect()
 }
 
-fn unused_marker_finding(
+pub(super) fn unused_marker_finding(
     rule: &str,
     variant: &'static str,
     path: &std::path::Path,
@@ -246,22 +274,24 @@ fn decision_verdict(
     }
 }
 
-/// The text after the marker of the first comment on `line` that carries one.
-fn marker_rest<'a>(
-    line: &'a str,
-    leaders: &[&str],
-    trailing: &[&str],
-    marker: &str,
-) -> Option<&'a str> {
+// Longest first, so `//!` and `///` are not read as `//` plus text.
+const LEADERS: &[&str] = &["<!--", "///", "//!", "//", "/*", "--", "#", ";", "*"];
+// The leaders that open a trailing comment after code.
+const TRAILING: &[&str] = &["<!--", "//", "/*", "--", "#"];
+
+/// The text of each comment `line` opens, in the order they are read: the one
+/// the line starts with, then one per trailing leader that follows whitespace.
+/// The one reading of what a comment is, shared by the back-pointer rules and
+/// `code.dangling-bug-reference`.
+fn comment_starts(line: &str) -> Vec<&str> {
+    let mut out = Vec::new();
     let trimmed = line.trim_start();
-    if let Some(leader) = leaders.iter().find(|l| trimmed.starts_with(**l)) {
-        if let Some(rest) = trimmed[leader.len()..].trim_start().strip_prefix(marker) {
-            return Some(rest);
-        }
+    if let Some(leader) = LEADERS.iter().find(|l| trimmed.starts_with(**l)) {
+        out.push(&trimmed[leader.len()..]);
     }
     for (at, _) in line.char_indices() {
         let here = &line[at..];
-        let Some(leader) = trailing.iter().find(|l| here.starts_with(**l)) else {
+        let Some(leader) = TRAILING.iter().find(|l| here.starts_with(**l)) else {
             continue;
         };
         let after_space = line[..at]
@@ -273,16 +303,20 @@ fn marker_rest<'a>(
         }
         // `///` and `//!` are `//` plus one more character.
         let tail = &here[leader.len()..];
-        let tail = if *leader == "//" {
+        out.push(if *leader == "//" {
             tail.strip_prefix(['/', '!']).unwrap_or(tail)
         } else {
             tail
-        };
-        if let Some(rest) = tail.trim_start().strip_prefix(marker) {
-            return Some(rest);
-        }
+        });
     }
-    None
+    out
+}
+
+/// The text after the marker of the first comment on `line` that carries one.
+fn marker_rest<'a>(line: &'a str, marker: &str) -> Option<&'a str> {
+    comment_starts(line)
+        .into_iter()
+        .find_map(|text| text.trim_start().strip_prefix(marker))
 }
 
 /// The identifiers a marker's text cites; see [`scan_back_pointers`].
@@ -427,13 +461,13 @@ pub fn back_pointer_evidence(
     evidence
 }
 
-fn is_test_file(path: &std::path::Path, test_paths: &[String]) -> bool {
+pub(super) fn is_test_file(path: &std::path::Path, test_paths: &[String]) -> bool {
     test_paths.iter().any(|e| path_matches_entry(path, e))
 }
 
 /// One finding per declared path covering no tracked file: nothing under it
 /// was checked, and an empty set of files reads exactly like a clean one.
-fn uncovered_source_paths(
+pub(super) fn uncovered_source_paths(
     rule: &str,
     variant: &'static str,
     files: &[SourceFile],

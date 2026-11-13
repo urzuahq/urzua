@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.138'
+Version: '0.139'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:6daa34e96997ef2790c6e8987bde7412d7214784deb8870c891f0946d90ac03a, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:92a2b9ceca89133f30987a013734da66b9332c4e937a87e72e53571596e18093, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:3c8aa671582772499ab7345cdbfb5a4dc2c50462882851fb20f853992acfd57c
@@ -1998,6 +1998,49 @@ rules:
 `test_paths` belongs to `embodiment.back-pointer-resolution` and to `embodiment.locator-on-back-pointer-path`
 (below); on any other rule it is the usual option-on-a-rule-that-does-not-take-it load error.
 
+### Source comments that cite a record: `code.dangling-bug-reference` (`MILE-108`, `RFC-41`)
+
+An opt-in rule, the mirror of `embodiment.locator-exists`: a source comment citing a record id is a
+claim that the record exists, and one whose id resolves to no record is an error. It declares its own
+paths, as `embodiment.back-pointer-decision-accepted` does, so it does not depend on the back-pointer
+rules being on.
+
+```yaml
+rules:
+  code.dangling-bug-reference:
+    level: error
+    back_pointer_paths: ["rust", "scripts"]   # path prefixes, as for the back-pointer rules
+    extensions: ["rs", "sh", "py"]            # required: no language is compiled in
+    external_ids: ["RFC-822", "RFC-4122"]     # optional: ids that are not records
+    ignore_marker: "record-id-ok"             # optional: excuses the line it is on
+```
+
+- `back_pointer_paths` and `extensions` are both required. `extensions` lists bare extensions
+  (`rs`, not `.rs` or `*.rs`: a dot, a glob or a blank entry is a load error), and only a tracked file
+  under a path with one of them is read, so nothing else is opened. A declared path covering no such
+  file is a finding.
+- The record prefixes are the ones the record types declare. An id is a declared prefix, a hyphen
+  and a number, standing alone; it resolves when a record of that type holds that number (compared by
+  value, so `BUG-0001` is `BUG-1`). Only existence is judged: a citation of a superseded, retired or
+  fixed record is not reported.
+- A comment is read as the back-pointer rules read one: a leader (`//`, `///`, `//!`, `#`, `--`, `;`,
+  `/*`, `*`, `<!--`) opening the line, or `//`, `#`, `--`, `/*`, `<!--` after whitespace following
+  code, and every id in the rest of it counts. The engine reads no syntax beyond that, so an id in a
+  string literal after a leader is read and a string with none is not; the `ignore_marker` is the
+  escape for the first. An id run into a longer token (`ADR-12-title.md`) is a name and is not read.
+- A citation `embodiment.back-pointer-resolution` already judges (an `Implements:` back-pointer, or a
+  `Verifies:` one in its test class, in a file under its paths) is left to that rule while it is
+  enabled, so one line is never reported twice. With that rule off, the line is this rule's.
+- `external_ids` is `citation.resolution`'s option, with the same entries (`RFC-4122`,
+  `PREFIX-LOW..HIGH`) and the same load errors. `ignore_marker` is the boundary rule's option (`ADR-80`),
+  read by this rule alone: a marker of fewer than three characters, with no letter or digit, or that is
+  or ends a record id is refused at load. A line carrying it is neither reported nor counted, the count
+  is the population's `excused_lines` and an `info` notice, and a marker on a line citing no record is
+  a finding.
+- The population is the files read, so a run over none is distinguishable from a clean one.
+  Undeclared, nothing is read. The rule's findings are kept under `check <path>` scoping, like the
+  back-pointer rules'; scoping the read itself belongs to `MILE-207`.
+
 ### Preferring the lighter mechanism: `embodiment.locator-on-back-pointer-path` (`ADR-78` item 4, `MILE-189`)
 
 An opt-in warning for a `Realized-by` locator on a file the back-pointer scan already reads, where an
@@ -2440,3 +2483,4 @@ proves this configuration produces the three findings.
 > | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` d62499673ea9 -> 6daa34e96997. Reason: Read the diff of each pinned file since the previous pin. rust/crates/urzua-core/src/config.rs: generic_marker_problem also refuses an ignore_marker that is the tail of a declared id head followed by digits (DR-1, R-12), with test cases; nothing else changed. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-09 | Bumped to `0.137`. The merge-base copy of a renamed record is matched by `Stable-Id` and the same record id, so a renumber reads as new. **Why:** `ADR-89` amendment (rename pairing). | **substantive** |
 > | 2026-11-13 | Bumped to `0.138`. A type may declare `statuses: {pending: [...]}` without `values`; a declaration of neither is refused at load, and a type declaring `values` loads as before. The readers of `values` handle the empty list: `status.undeclared-value` and `authority.gates` say the type declares no values, and `urzua new` leaves the status blank. **Why:** `MILE-205` items 1-3, so a waiver type can hold a pending `Reason` without inventing a status vocabulary (`ADR-91`). | **substantive** |
+> | 2026-11-13 | Bumped to `0.139`. Documents `code.dangling-bug-reference` and its `extensions` option: bare file extensions, required beside `back_pointer_paths`, a dot, a glob or a blank entry refused at load; `external_ids` and `ignore_marker` are the options of `citation.resolution` and the boundary rule, the marker read by this rule alone and refused at load when it would sit on every citation. **Why:** `MILE-108`, `RFC-41` -- the opt-in rule that checks source comments cite records that exist. | **substantive** |

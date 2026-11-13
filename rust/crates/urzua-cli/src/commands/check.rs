@@ -77,6 +77,7 @@ struct Context<'a> {
     override_log: Option<rules::OverrideLog>,
     back_pointer_sources: Option<rules::BackPointerSources>,
     decision_gate_sources: Option<rules::BackPointerSources>,
+    code_citation_sources: Option<rules::BackPointerSources>,
     back_pointed: rules::BackPointerEvidence,
     drift: crate::discovery::DriftedRecords,
     claim_ages: HashMap<PathBuf, u64>,
@@ -278,6 +279,7 @@ impl<'a> Context<'a> {
             override_log: self.override_log.as_ref(),
             back_pointer_sources: self.back_pointer_sources.as_ref(),
             decision_gate_sources: self.decision_gate_sources.as_ref(),
+            code_citation_sources: self.code_citation_sources.as_ref(),
             back_pointed: &self.back_pointed,
             drifted: &self.drift.drifted,
             fresh: &self.drift.fresh,
@@ -1060,6 +1062,7 @@ struct SourceInputs {
     override_log: Option<rules::OverrideLog>,
     back_pointer_sources: Option<rules::BackPointerSources>,
     decision_gate_sources: Option<rules::BackPointerSources>,
+    code_citation_sources: Option<rules::BackPointerSources>,
 }
 
 /// Stage 2a: read the source files the rules are handed.
@@ -1132,6 +1135,11 @@ fn read_source_inputs(
     } else {
         None
     };
+    let code_citation_sources = if wanted(&[rules::RULE_CODE_DANGLING_BUG_REFERENCE]) {
+        crate::discovery::read_code_citation_sources(repo_root, discovered, config)?
+    } else {
+        None
+    };
     Ok(SourceInputs {
         claims,
         published_files,
@@ -1141,6 +1149,7 @@ fn read_source_inputs(
         override_log,
         back_pointer_sources,
         decision_gate_sources,
+        code_citation_sources,
     })
 }
 
@@ -1830,6 +1839,7 @@ fn load_context<'a>(
             override_log: sources.override_log,
             back_pointer_sources: sources.back_pointer_sources,
             decision_gate_sources: sources.decision_gate_sources,
+            code_citation_sources: sources.code_citation_sources,
             back_pointed,
             drift,
             claim_ages,

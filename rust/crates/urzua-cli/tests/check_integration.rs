@@ -180,7 +180,7 @@ fn a_waiver_record_suppresses_blocking_but_the_finding_stays_listed() {
          Scope: docs/adr/0001-x.md\n\
          Reason: RFC-9999 is tracked externally, not yet in this corpus\n\
          ---\n\
-         # 0001 — Waive the dangling RFC-9999 reference on ADR-0001\n\
+         # 0001 — Waive the dangling RFC-9999 reference on ADR-0001 citation-fixture\n\
          \n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Created | **structural** |\n",
     )
     .unwrap();
@@ -3517,6 +3517,9 @@ fn every_header_reading_rule_reports_a_header_none_type_as_out_of_scope() {
             | "embodiment.locator-on-back-pointer-path" => {
                 format!("{id}: {{level: error, back_pointer_paths: [\"docs/claims\"]}}")
             }
+            "code.dangling-bug-reference" => format!(
+                "{id}: {{level: error, back_pointer_paths: [\"docs/claims\"], extensions: [\"md\"]}}"
+            ),
             "date.field-valid" => format!("{id}: {{level: error, date_fields: [\"Date\"]}}"),
             "embodiment.claim-expired" => {
                 format!("{id}: {{level: error, anchor_field: Date, periods: [{{type: note, days: 30}}]}}")

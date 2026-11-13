@@ -76,5 +76,7 @@ pub const RULE_OVERRIDE_UNREVIEWED: &str = "override.unreviewed";
 pub const RULE_EMBODIMENT_LOCATOR_ON_BACK_POINTER_PATH: &str =
     "embodiment.locator-on-back-pointer-path";
 
+pub const RULE_CODE_DANGLING_BUG_REFERENCE: &str = "code.dangling-bug-reference";
+
 pub const RULE_EMBODIMENT_CLAIM_EXPIRED: &str = "embodiment.claim-expired";
 pub const RULE_EMBODIMENT_CLAIM_RENEWAL_UNATTESTED: &str = "embodiment.claim-renewal-unattested";
