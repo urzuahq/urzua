@@ -16,6 +16,7 @@ path = "src/main.rs"
 urzua-core = { workspace = true }
 urzua-io = { workspace = true }
 urzua-id = { workspace = true }
+urzua-mcp = { workspace = true }
 clap = { workspace = true }
 yaml_serde = { workspace = true }
 serde = { workspace = true }

@@ -674,6 +674,7 @@ dependencies = [
  "urzua-core",
  "urzua-id",
  "urzua-io",
+ "urzua-mcp",
  "yaml_serde",
 ]
 
@@ -704,6 +705,13 @@ dependencies = [
  "chrono",
  "sha2",
  "thiserror",
+]
+
+[[package]]
+name = "urzua-mcp"
+version = "0.3.0"
+dependencies = [
+ "serde_json",
 ]
 
 [[package]]
