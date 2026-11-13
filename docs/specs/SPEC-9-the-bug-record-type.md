@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5RYJF3MHRJT1RSA1K9
-Version: '0.18'
+Version: '0.19'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -149,3 +149,4 @@ something broke, or it doesn't exist yet.
 > | 2026-11-13 | Bumped to `0.18`. The pinned `.urzua/config.yaml` evidence was re-baselined for `MILE-104`; the text of this specification is unchanged. **Why:** the revision log gained a structural re-baseline row, which `revision-log.version-bump-required` asks a spec to answer with a version bump. | **structural** |
 > | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/record_types_own_config_integration.rs` 44fea1626a54 -> dc29b51bde5a, `rust/crates/urzua-cli/tests/own_config_integration.rs` 92a2b9ceca89 -> 5aafdaf17779. Reason: Read the diff of each pinned test file since the previous pin. The repo() fixture helper now also copies the repository's .urzua/templates into the fixture, because the own config declares sections.order from templates; no assertion or test body changed; the claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` dd656d471f38 -> 323884ad0b6e, `rust/crates/urzua-cli/tests/record_types_own_config_integration.rs` dc29b51bde5a -> a795b5e7a784, `rust/crates/urzua-cli/tests/own_config_integration.rs` 5aafdaf17779 -> f91ef0b83e49. Reason: `.urzua/config.yaml` gained only the `drift_baseline: {ref: v0.3.0}` declaration and its comment under `embodiment.consistency`; no other declaration changed. own_config_integration.rs: its fixture strips the `drift_baseline` line, and it gains the test that this repository's baseline ref resolves; other assertions unchanged. record_types_own_config_integration.rs: the fixture takes the repository's config through `common::own_config_for_fixture`, which drops the `drift_baseline` line a throwaway repository cannot resolve; the assertions are unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-13 | Bumped to `0.19`. Evidence pins re-baselined for this change (the `Re-baselined` row above); the specification text is unchanged. **Why:** a revision-log entry that adds a structural change bumps `Version`. | **structural** |
