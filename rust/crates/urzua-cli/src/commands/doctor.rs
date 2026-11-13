@@ -468,9 +468,8 @@ fn template_section_checks(
 ) {
     const CHECK: &str = "template-sections";
     for name in config.sorted_type_names() {
-        let Ok(Some(model)) =
-            urzua_core::document_model::declared_model(name, &config.record_types[name])
-        else {
+        let type_config = &config.record_types[name];
+        let Ok(Some(model)) = urzua_core::document_model::declared_model(name, type_config) else {
             continue;
         };
         let Some(decl) = model.sections.filter(|d| !d.required.is_empty()) else {
@@ -487,7 +486,8 @@ fn template_section_checks(
                 format!("could not read {rel}: {e} -- cannot tell whether the template and the configuration agree"),
             ),
             Ok(text) => {
-                let missing = decl.required_missing_from(&text);
+                let missing =
+                    urzua_core::rules::template_missing_sections(name, type_config, &text);
                 if missing.is_empty() {
                     (
                         DoctorStatus::Ok,

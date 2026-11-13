@@ -161,3 +161,70 @@ fn this_repositorys_own_templates_agree_with_its_own_configuration() {
         assert_eq!(c["status"], "ok", "{c}");
     }
 }
+
+/// A repository whose `adr` type requires a `Decision` that may instead be a
+/// Y-statement block in the preamble, with `text` as both its template and one
+/// record, and `section.required` on.
+fn marker_repo(name: &str, text: &str) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-doctor-tpl-{name}"));
+    for d in [".urzua/templates", "docs/adr"] {
+        std::fs::create_dir_all(dir.join(d)).unwrap();
+    }
+    git(&dir, &["init", "-q"]);
+    git(&dir, &["config", "user.email", "t@example.com"]);
+    git(&dir, &["config", "user.name", "t"]);
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2\nrules:\n  section.required: error\nrecord_types:\n  adr:\n    dir: docs/adr\n    prefix: ADR\n    \
+         required_fields: [Status]\n    header_shape: yaml-frontmatter\n    sections:\n      from: headings\n      \
+         required: [{name: Decision, shape: y-statement, marker: 'Y-statement', preamble: true}]\n",
+    )
+    .unwrap();
+    std::fs::write(dir.join(".urzua/templates/adr.md"), text).unwrap();
+    std::fs::write(dir.join("docs/adr/ADR-1-x.md"), text).unwrap();
+    git(&dir, &["add", "-A"]);
+    git(&dir, &["commit", "-q", "-m", "fixture"]);
+    dir
+}
+
+/// `section.required` and `doctor` judge the same text the same way: a marker
+/// in the preamble prose meets the requirement; one inside a fenced block or
+/// inside the header does not.
+#[test]
+fn doctor_and_section_required_agree_on_a_marker_in_prose_a_fence_and_the_header() {
+    let cases = [
+        (
+            "prose",
+            "---\nStatus: Proposed\n---\n# 1 — T\n\nY-statement: in the context of x.\n",
+            true,
+        ),
+        (
+            "fence",
+            "---\nStatus: Proposed\n---\n# 1 — T\n\n```\nY-statement: in the context of x.\n```\n",
+            false,
+        ),
+        (
+            "header",
+            "---\nStatus: Proposed\nSubject: Y-statement\n---\n# 1 — T\n\nNothing.\n",
+            false,
+        ),
+    ];
+    for (name, text, met) in cases {
+        let dir = marker_repo(name, text);
+        let tpl = template_checks(&doctor(&dir));
+        assert_eq!(tpl.len(), 1, "{name}");
+        assert_eq!(tpl[0]["status"] == "ok", met, "{name} doctor: {}", tpl[0]);
+        let out = common::urzua()
+            .args(["check"])
+            .current_dir(&dir)
+            .output()
+            .unwrap();
+        let report: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+        let missing = report["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|f| f["rule"] == "section.required");
+        assert_eq!(missing, !met, "{name} section.required: {report}");
+    }
+}
