@@ -1898,7 +1898,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_SECTION_DUPLICATE,
-        description: "A heading appears once among its siblings (`MILE-104`): the same heading text twice at one level under one parent is an error naming both lines, so two `## Open questions` in one record are caught while the same `### Pros` under two different options are not. Opt-in per type through `sections.unique_headings: true`; a type that does not declare it is out of scope, and a rule enabled with no declaring type is reported by `config.scope-matches-nothing`. The sections are read down to the type's `sections.depth`, and a heading inside a fenced code block is not one. A record's `exempt_statuses` do not set it aside: a duplicated section is a broken document whatever was decided. The population's unit is the record.",
+        description: "A heading appears once among its siblings (`MILE-104`): the same heading text twice at one level under one parent is an error naming both lines, so two `## Open questions` in one record are caught while the same `### Pros` under two different options are not. Headings are compared as exact text, whitespace trimmed and case-sensitive (`## Context` and `## context` are different). Opt-in per type through `sections.unique_headings: true`; a type that does not declare it is out of scope, and a rule enabled with no declaring type is reported by `config.scope-matches-nothing`. The sections are read down to the type's `sections.depth`, and a heading inside a fenced code block is not one. A record's `exempt_statuses` do not set it aside: a duplicated section is a broken document whatever was decided. The population's unit is the record.",
         scope: Scope::Records,
         anchor: Anchor::Record,
         judges: Judges::OneRecord,
@@ -1946,7 +1946,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_SECTION_ORDER,
-        description: "A record's sections follow the order its type's template gives them (`MILE-104`). Opt-in per type through `sections.order: {from: template}`, which reads the headings of `.urzua/templates/<type>.md` down to the type's `sections.depth`. Order is judged among siblings sharing a parent: a section the template places before one the record already showed is an error on that section's line, naming both. A section the template does not name is ignored and a template section the record lacks is not reported (`section.required` owns presence). A declared order whose template is missing or holds no sections reads nothing: `check` prints a warning notice, and the records are counted eligible and unexamined. The population's unit is the record.",
+        description: "A record's sections follow the order its type's template gives them (`MILE-104`). Opt-in per type through `sections.order: {from: template}`, which reads the headings of `.urzua/templates/<type>.md` down to the type's `sections.depth`. Order is judged among siblings sharing a parent: a section the template places before one the record already showed is an error on that section's line, naming both. A section the template does not name is ignored and a template section the record lacks is not reported (`section.required` owns presence). Order matching is by heading text alone and ignores `sections.required` aliases. A declared order whose template is missing or holds no sections reads nothing: each record of the type is an error saying so and is counted eligible and unexamined, so a deleted template fails a run rather than switching the rule off. The population's unit is the record.",
         scope: Scope::Records,
         anchor: Anchor::Record,
         judges: Judges::OneRecord,
@@ -1961,6 +1961,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         population: PopulationUnit::Record,
         actions: &[
             VariantAction::new("section-order", ActionDecl::Exempt("moving a section is an author's edit; the template, not the tool, says where it belongs")),
+            VariantAction::new("section-order-unreadable", ActionDecl::Exempt("restoring or filling the template is an author's edit; the tool does not invent a type's template")),
         ],
         phase: Phase::Main,
         companion: None,

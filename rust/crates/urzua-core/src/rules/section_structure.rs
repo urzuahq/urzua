@@ -122,12 +122,29 @@ pub fn section_order(
         full_text,
         |d| d.order.is_some_and(|o| o.from == OrderSource::Template),
         |record, decl, sections| {
+            // A declared order that reads nothing is a finding on every record of
+            // the type, so a deleted or emptied template fails a run under
+            // `fail_on: warning` rather than switching the rule off; the record
+            // stays unexamined.
+            let mut unreadable = |why: &str| {
+                findings.push(Finding::new(
+                    RULE_SECTION_ORDER,
+                    FindingSeverity::Error,
+                    record.path.clone(),
+                    ActionSource::new("section-order-unreadable"),
+                    format!(
+                        "`sections.order: {{from: template}}` for '{}' reads nothing: .urzua/templates/{}.md {why}, so this record's section order is not examined",
+                        record.record_type, record.record_type
+                    ),
+                ));
+                Outcome::Absent
+            };
             let Some(template) = template_texts.get(&record.record_type) else {
-                return Outcome::Absent;
+                return unreadable("does not exist");
             };
             let expected = sibling_groups(&parse_sections_to_depth(template, 1, decl.depth));
             if expected.is_empty() {
-                return Outcome::Absent;
+                return unreadable("holds no section");
             }
             for (parent, listed) in sibling_groups(sections) {
                 let Some(wanted) = expected.get(&parent) else {
@@ -180,12 +197,6 @@ pub fn types_reading_a_template_order(config: &Config) -> Vec<(String, u8)> {
                 .then(|| (name.clone(), decl.depth))
         })
         .collect()
-}
-
-/// Whether a template holds a section at the given `depth`; one with none
-/// gives `section.order` nothing to compare against.
-pub fn template_has_sections(template: &str, depth: u8) -> bool {
-    !parse_sections_to_depth(template, 1, depth).is_empty()
 }
 
 /// A template's section tree as `parent heading -> [(heading, line, level)]`,

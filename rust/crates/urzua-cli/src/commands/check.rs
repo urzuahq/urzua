@@ -256,13 +256,12 @@ pub(crate) fn load_templates(
 
 /// `section.order`'s template text (`MILE-104`): `.urzua/templates/<type>.md`
 /// for each type declaring `sections.order: {from: template}`, read only while
-/// the rule is enabled. A declared order whose template is missing, or holds no
-/// section the type's depth reads, reads nothing, so each is a warning notice
-/// and the rule leaves the type's records unexamined, never passed.
+/// the rule is enabled. A missing template is simply absent from the map; the
+/// rule reports a missing or section-less template as a finding on each record
+/// of the type, so it gates a run under `fail_on`.
 pub(crate) fn load_template_texts(
     repo_root: &Path,
     config: &Config,
-    notices: &mut Vec<Notice>,
 ) -> Result<HashMap<String, String>, String> {
     let mut texts = HashMap::new();
     if config
@@ -272,39 +271,15 @@ pub(crate) fn load_template_texts(
     {
         return Ok(texts);
     }
-    for (record_type, depth) in rules::types_reading_a_template_order(config) {
+    for (record_type, _) in rules::types_reading_a_template_order(config) {
         let path = repo_root
             .join(".urzua/templates")
             .join(format!("{record_type}.md"));
         match urzua_io::read_to_string(&path) {
             Ok(text) => {
-                if !rules::template_has_sections(&text, depth) {
-                    notices.push(Notice {
-                        severity: NoticeSeverity::Warning,
-                        subject: rules::RULE_SECTION_ORDER.to_string(),
-                        message: format!(
-                            "{}: .urzua/templates/{record_type}.md holds no section, so \
-                             `sections.order` for '{record_type}' reads nothing and the type's records are not examined",
-                            rules::RULE_SECTION_ORDER
-                        ),
-                        detail: None,
-                    });
-                }
                 texts.insert(record_type, text);
             }
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                notices.push(Notice {
-                    severity: NoticeSeverity::Warning,
-                    subject: rules::RULE_SECTION_ORDER.to_string(),
-                    message: format!(
-                        "{}: record type '{record_type}' declares `sections.order: {{from: template}}` \
-                         but .urzua/templates/{record_type}.md does not exist -- the order reads nothing, \
-                         and the type's records are not examined",
-                        rules::RULE_SECTION_ORDER
-                    ),
-                    detail: None,
-                });
-            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
             Err(e) => {
                 return Err(format!(
                     "{}: template '{}' could not be read: {e}",
@@ -1479,7 +1454,7 @@ fn read_diff_inputs(
     });
     let pull_ref_claims = load_pull_ref_claims(session, added_paths.as_deref(), notices);
     let templates = load_templates(repo_root, config, notices)?;
-    let template_texts = load_template_texts(repo_root, config, notices)?;
+    let template_texts = load_template_texts(repo_root, config)?;
     // The diff rules judge the changed set itself; `None` without `--base`.
     let changed_paths = changes.map(|c| c.changed.iter().cloned().collect());
     let base_gate = load_base_gate(session, changes, notices);

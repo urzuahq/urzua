@@ -10,4 +10,4 @@ reports a section nested more than one level below the one above it, such as a `
 above it, reading levels from `##` down to the type's `depth`. `section.order`
 (`order: {from: template}`) reports a section that follows one the type's template
 (`.urzua/templates/<type>.md`) puts after it. A type that declares none of the keys is unchanged, and
-a declared order with no template prints a warning notice and leaves the records unexamined.
+a declared order whose template is missing or holds no section is an error on each record of the type, so it fails a `fail_on: warning` run and the records are counted unexamined.

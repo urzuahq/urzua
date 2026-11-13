@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.139'
+Version: '0.140'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:6daa34e96997ef2790c6e8987bde7412d7214784deb8870c891f0946d90ac03a, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:92a2b9ceca89133f30987a013734da66b9332c4e937a87e72e53571596e18093, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:3c8aa671582772499ab7345cdbfb5a4dc2c50462882851fb20f853992acfd57c
@@ -317,7 +317,8 @@ Two details carry weight:
     ```
 
     - `unique_headings: true` makes the same heading text twice at one level under one parent a
-      `section.duplicate` error naming both lines. A `### Pros` under each of two different `##`
+      `section.duplicate` error naming both lines. Headings are compared as exact text, whitespace
+      trimmed and case-sensitive: `## Context` and `## context` are different headings. A `### Pros` under each of two different `##`
       sections is not a duplicate.
     - `no_skipped_levels: true` makes a section more than one level deeper than the one above it, or
       deeper than `##` with no section above it, a `section.level-skipped` error. Levels count from
@@ -328,9 +329,11 @@ Two details carry weight:
       (`.urzua/templates/<type>.md`, the file `urzua new` writes from) places before one the record
       already showed a `section.order` error on that section's line. Order is judged among sibling
       sections sharing a parent. A section the template does not name is ignored, and a template
-      section the record lacks is not reported: presence is `section.required`'s. A missing template,
-      or one with no section down to `depth`, reads nothing, so `check` prints a warning notice and
-      leaves the type's records eligible and unexamined. `template` is the only source; any other
+      section the record lacks is not reported: presence is `section.required`'s. Headings are matched
+      by text alone and `sections.required` aliases are not consulted. A missing template, or one with
+      no section down to `depth`, reads nothing, so each record of the type is a `section.order`
+      error saying so, and stays eligible and unexamined; the rule never goes quiet because a template
+      was deleted, and the finding gates `fail_on`. `template` is the only source; any other
       `from` is a load-time error.
     - A key that is not a boolean, an unknown `order.from` or an unknown key under `order` is a
       load-time error naming the record type and the key.
@@ -2476,3 +2479,4 @@ proves this configuration produces the three findings.
 > | 2026-11-09 | Bumped to `0.137`. The merge-base copy of a renamed record is matched by `Stable-Id` and the same record id, so a renumber reads as new. **Why:** `ADR-89` amendment (rename pairing). | **substantive** |
 > | 2026-11-13 | Bumped to `0.138`. A type may declare `statuses: {pending: [...]}` without `values`; a declaration of neither is refused at load, and a type declaring `values` loads as before. The readers of `values` handle the empty list: `status.undeclared-value` and `authority.gates` say the type declares no values, and `urzua new` leaves the status blank. **Why:** `MILE-205` items 1-3, so a waiver type can hold a pending `Reason` without inventing a status vocabulary (`ADR-91`). | **substantive** |
 > | 2026-11-13 | Bumped to `0.139`. A type's `sections` may declare `unique_headings`, `no_skipped_levels` and `order: {from: template}`, read by the opt-in rules `section.duplicate`, `section.level-skipped` and `section.order`; `no_skipped_levels` needs a `depth` of at least 2, and a bad value is refused at load. A type that declares none loads and is checked as before. **Why:** `MILE-104`. | **substantive** |
+> | 2026-11-13 | Bumped to `0.140`. A declared `sections.order` whose template is missing or holds no section is a `section.order` error on each record of the type (it was a warning notice), so it gates `fail_on: warning`; duplicate detection is documented as exact, trimmed, case-sensitive text, and order matching as ignoring `required` aliases. **Why:** a notice does not set the exit code, so a deleted template would have switched the rule off silently. | **structural** |

@@ -292,41 +292,96 @@ fn sections_out_of_the_templates_order_are_reported() {
 }
 
 #[test]
-fn a_missing_template_is_disclosed_and_the_records_stay_unexamined() {
+fn a_missing_template_is_a_finding_that_fails_under_fail_on_warning() {
     let dir = fixture(
         "order-no-template",
-        "{ section.order: error }",
+        "{ section.order: warn }\nfail_on: warning",
         ORDER,
         None,
         &[("ADR-2-swapped.md", SWAPPED)],
     );
     let (code, report) = check(&dir);
-    assert_eq!(code, 0, "{report}");
-    assert!(findings_of(&report, "section.order").is_empty());
-    assert_eq!(population(&report, "section.order"), (1, 0, 0));
-    let notices = report["notices"].to_string();
-    assert!(
-        notices.contains("section.order") && notices.contains(".urzua/templates/adr.md"),
-        "{notices}"
+    assert_eq!(
+        code, 1,
+        "a deleted template must not switch the rule off: {report}"
     );
+    let found = findings_of(&report, "section.order");
+    assert_eq!(found.len(), 1, "{report}");
+    let message = found[0]["message"].as_str().unwrap();
+    assert!(
+        message.contains(".urzua/templates/adr.md") && message.contains("does not exist"),
+        "{message}"
+    );
+    // The record is eligible and unexamined, never passed.
+    assert_eq!(population(&report, "section.order"), (1, 0, 0));
 }
 
 #[test]
-fn a_template_with_no_section_is_disclosed_and_reads_nothing() {
+fn a_template_with_no_section_is_a_finding_that_fails_under_fail_on_warning() {
     let dir = fixture(
         "order-empty-template",
-        "{ section.order: error }",
+        "{ section.order: warn }\nfail_on: warning",
         ORDER,
         Some("---\nStatus: Proposed\n---\n# NNNN — Title\n"),
         &[("ADR-2-swapped.md", SWAPPED)],
     );
     let (code, report) = check(&dir);
-    assert_eq!(code, 0, "{report}");
-    assert_eq!(population(&report, "section.order"), (1, 0, 0));
+    assert_eq!(code, 1, "{report}");
+    let found = findings_of(&report, "section.order");
+    assert_eq!(found.len(), 1, "{report}");
     assert!(
-        report["notices"].to_string().contains("holds no section"),
+        found[0]["message"]
+            .as_str()
+            .unwrap()
+            .contains("holds no section"),
         "{report}"
     );
+    assert_eq!(population(&report, "section.order"), (1, 0, 0));
+}
+
+#[test]
+fn order_matches_heading_text_and_ignores_required_aliases() {
+    let sections = "    sections:\n      from: headings\n      order: {from: template}\n      required:\n        - {name: Decision, aliases: [Outcome]}\n";
+    // `Outcome` is an alias of `Decision`, but order compares heading text only,
+    // so it is a section the template does not name and is ignored.
+    let aliased = "---\nStatus: Accepted\n---\n\n# 3 — Aliased\n\n## Context\n\nc\n\n## Consequences\n\nc\n\n## Outcome\n\nd\n";
+    let dir = fixture(
+        "order-alias",
+        "{ section.order: error }",
+        sections,
+        Some(TEMPLATE),
+        &[("ADR-3-aliased.md", aliased)],
+    );
+    let (code, report) = check(&dir);
+    assert_eq!(code, 0, "{report}");
+    assert!(findings_of(&report, "section.order").is_empty(), "{report}");
+    assert_eq!(population(&report, "section.order"), (1, 1, 0));
+}
+
+#[test]
+fn duplicate_headings_are_compared_as_exact_trimmed_case_sensitive_text() {
+    let sections = "    sections:\n      from: headings\n      unique_headings: true\n";
+    let case = "---\nStatus: Accepted\n---\n\n# 4 — Case\n\n## Context\n\nc\n\n## context\n\nc\n";
+    let padded =
+        "---\nStatus: Accepted\n---\n\n# 5 — Padded\n\n## Context\n\nc\n\n##   Context  \n\nc\n";
+    let dir = fixture(
+        "dup-exact",
+        "{ section.duplicate: error }",
+        sections,
+        None,
+        &[("ADR-4-case.md", case), ("ADR-5-padded.md", padded)],
+    );
+    let (_, report) = check(&dir);
+    let found = findings_of(&report, "section.duplicate");
+    assert_eq!(
+        found.len(),
+        1,
+        "case differs, whitespace does not: {report}"
+    );
+    assert!(found[0]["file"]
+        .as_str()
+        .unwrap()
+        .ends_with("ADR-5-padded.md"));
 }
 
 #[test]
