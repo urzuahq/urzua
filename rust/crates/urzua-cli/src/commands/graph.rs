@@ -13,10 +13,11 @@ use crate::session::{emit_or_not_run, Session};
 use urzua_core::report::Failure;
 
 pub fn run(config_path: Option<PathBuf>) -> ExitCode {
-    emit_or_not_run(run_inner(config_path))
+    emit_or_not_run(build(config_path).map(|report| emit(&report)))
 }
 
-fn run_inner(config_path: Option<PathBuf>) -> Result<ExitCode, Failure> {
+/// The report `urzua graph` prints, also built by the MCP server.
+pub(crate) fn build(config_path: Option<PathBuf>) -> Result<GraphReport, Failure> {
     let Session {
         config, records, ..
     } = Session::open(config_path)?;
@@ -43,10 +44,10 @@ fn run_inner(config_path: Option<PathBuf>) -> Result<ExitCode, Failure> {
     let (population, left_out) = urzua_core::graph::read_population(&records, &config, "graph");
     notices.extend(left_out);
 
-    Ok(emit(&GraphReport {
+    Ok(GraphReport {
         status: ReportStatus::Ok,
         edges,
         population,
         notices,
-    }))
+    })
 }

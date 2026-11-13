@@ -1802,3 +1802,84 @@ fn a_gated_record_with_an_upper_case_extension_is_judged_as_a_record() {
     let (code, v) = run_edit(&dir, "docs/adr/ADR-2-b.MD", PROPOSED);
     assert_eq!(code, 0, "{v}");
 }
+
+// `urzua mcp` and the editor hook (SPEC-26, SPEC-19): the hook reads an MCP call
+// as a write by the words in its tool name, so the server's names are load-bearing.
+
+/// The tool names `urzua mcp` advertises, read from the real server.
+fn urzua_mcp_tool_names(dir: &Path) -> Vec<String> {
+    let mut c = common::urzua();
+    c.arg("mcp").current_dir(dir);
+    let out = run_with_stdin(
+        &mut c,
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}\n",
+    );
+    let reply: serde_json::Value =
+        serde_json::from_slice(&out.stdout).unwrap_or_else(|e| panic!("{e}: {out:?}"));
+    reply["result"]["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|t| t["name"].as_str().unwrap().to_string())
+        .collect()
+}
+
+#[test]
+fn every_urzua_mcp_tool_is_left_alone_by_the_editor_hook_even_when_it_names_a_gated_path() {
+    let dir = fixture("mcp-urzua-read", &config(""));
+    let names = urzua_mcp_tool_names(&dir);
+    assert_eq!(names.len(), 5, "{names:?}");
+    let abs = |f: &str| dir.join(f).to_string_lossy().to_string();
+    for name in names {
+        let tool = format!("mcp__urzua__{name}");
+        for target in [PATH_1, ".claude/settings.json"] {
+            let mut c = Command::new("python3");
+            c.arg("-I")
+                .arg(translator())
+                .args(["edit", "--"])
+                .args(ENGINE)
+                .current_dir(&dir)
+                .env("URZUA_BIN", env!("CARGO_BIN_EXE_urzua"));
+            let input = serde_json::json!({"path": abs(target), "id": "ADR-1"});
+            let out = run_with_stdin(&mut c, &mcp(&dir, &tool, input));
+            assert_eq!(out.status.code(), Some(0), "{tool}: {out:?}");
+            assert!(
+                out.stdout.is_empty(),
+                "{tool} on {target} was judged: {out:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_planted_write_named_urzua_mcp_tool_is_judged_as_a_write() {
+    // The other half of the pair above: it shows the hook does read the name, so
+    // the read-named tools passing is not the hook ignoring `mcp__urzua__*`.
+    let dir = fixture("mcp-urzua-write", &config(""));
+    let abs = |f: &str| dir.join(f).to_string_lossy().to_string();
+    for tool in [
+        "mcp__urzua__urzua_write_record",
+        "mcp__urzua__urzua_fix_apply",
+    ] {
+        let v = translate(
+            &dir,
+            &mcp(
+                &dir,
+                tool,
+                serde_json::json!({"path": abs(PATH_1), "content": ACCEPTED}),
+            ),
+            &ENGINE,
+        );
+        assert_eq!(decision(&v), Some("deny"), "{tool}: {v}");
+        let v = translate(
+            &dir,
+            &mcp(
+                &dir,
+                tool,
+                serde_json::json!({"path": abs(".claude/settings.json"), "content": "{}"}),
+            ),
+            &ENGINE,
+        );
+        assert_eq!(decision(&v), Some("deny"), "{tool}: {v}");
+    }
+}

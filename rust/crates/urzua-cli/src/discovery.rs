@@ -533,6 +533,24 @@ pub(crate) struct DriftedRecords {
     /// to judge their locator against (`ADR-92` clause 7). Not drift, and not
     /// "no drift": disclosed by [`no_history_notice`].
     pub(crate) no_history: HashSet<PathBuf>,
+    /// For each record with drifted or held-back locators, the commit that last
+    /// changed each (`None` when git could not say): what a `drift_baseline`
+    /// attributes the drift to (`MILE-49`).
+    pub(crate) causes: HashMap<PathBuf, Vec<DriftCause>>,
+    /// The identity of each locator that drifted outside every grace window,
+    /// per record: its category, its text before the anchor and its anchor, so
+    /// a pin edited since a baseline is a different locator (`MILE-49`).
+    pub(crate) drifted_identities: HashMap<PathBuf, HashSet<String>>,
+}
+
+/// What one drifted or held-back locator is attributed to.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct DriftCause {
+    /// The commit that last touched the cited file (the newest of a directory
+    /// or glob's files).
+    pub(crate) commit: Option<String>,
+    /// Drifted outside every grace window, so it is reported unless baselined.
+    pub(crate) confirmed: bool,
 }
 
 /// Notice subject for git trouble in the drift computation (`MILE-159`).
@@ -801,6 +819,9 @@ struct DriftJudge<'a> {
     ignore_acknowledgements: bool,
     /// The name of each drifted or held-back locator, by record.
     names: HashMap<PathBuf, HashSet<String>>,
+    /// The identity (`locator_identity`) of each drifted or held-back locator,
+    /// by record, and whether it drifted outside every grace window.
+    identities: HashMap<PathBuf, HashMap<String, bool>>,
     /// The id a cited file has as a record, by path; `None` for a file that is
     /// no record.
     cited_ids: HashMap<String, Option<String>>,
@@ -809,6 +830,7 @@ struct DriftJudge<'a> {
     fresh_until: HashMap<PathBuf, i64>,
     locators: HashMap<PathBuf, Vec<urzua_core::reverify::LocatorDrift>>,
     no_history: HashSet<PathBuf>,
+    causes: HashMap<PathBuf, Vec<DriftCause>>,
     problems: Vec<String>,
 }
 
@@ -839,12 +861,14 @@ impl<'a> DriftJudge<'a> {
             acknowledged_until: HashMap::new(),
             ignore_acknowledgements: false,
             names: HashMap::new(),
+            identities: HashMap::new(),
             cited_ids: HashMap::new(),
             drifted: HashSet::new(),
             fresh: HashSet::new(),
             fresh_until: HashMap::new(),
             locators: HashMap::new(),
             no_history: HashSet::new(),
+            causes: HashMap::new(),
             problems: Vec::new(),
         }
     }
@@ -1006,6 +1030,17 @@ impl<'a> DriftJudge<'a> {
                 // renewal's drift policy is per category (`ADR-97` amendment).
                 let verdict =
                     self.judge_locator(&parsed, &entry.category, &reference_commit, audit_time);
+                if verdict != Judged::Next {
+                    let covered = self.covered_files(&parsed).map(|(_, files)| files);
+                    let commit = self.last_commit(&PathBuf::from(&parsed.path), covered.as_deref());
+                    self.causes
+                        .entry(record.path.clone())
+                        .or_default()
+                        .push(DriftCause {
+                            commit,
+                            confirmed: verdict == Judged::Drifted,
+                        });
+                }
                 self.note(record, &entry.category, &parsed, verdict);
             }
         }
@@ -1039,6 +1074,7 @@ impl<'a> DriftJudge<'a> {
         parsed: &urzua_core::locator::Locator,
         verdict: Judged,
     ) {
+        let verdict_confirmed = verdict == Judged::Drifted;
         match verdict {
             Judged::Next => return,
             Judged::Fresh(leaves) => self.hold_back(record, leaves),
@@ -1047,6 +1083,13 @@ impl<'a> DriftJudge<'a> {
             }
         }
         let name = self.locator_name(category, parsed);
+        let confirmed = verdict_confirmed;
+        *self
+            .identities
+            .entry(record.path.clone())
+            .or_default()
+            .entry(locator_identity(category, parsed))
+            .or_insert(false) |= confirmed;
         self.names
             .entry(record.path.clone())
             .or_default()
@@ -1265,7 +1308,9 @@ pub(crate) fn compute_drifted_records_at(
         mut fresh_until,
         locators,
         no_history,
+        causes,
         problems,
+        identities,
         ..
     } = judge;
     fresh.retain(|path| !drifted.contains(path));
@@ -1282,6 +1327,113 @@ pub(crate) fn compute_drifted_records_at(
         git_problems: problems,
         shallow,
         no_history,
+        causes,
+        drifted_identities: identities
+            .into_iter()
+            .map(|(path, ids)| {
+                let drifted = ids.into_iter().filter(|(_, d)| *d).map(|(id, _)| id);
+                (path, drifted.collect())
+            })
+            .collect(),
+    }
+}
+
+/// What makes one cited locator the same locator across two copies of a
+/// record: its category, its text before the anchor and its anchor.
+fn locator_identity(category: &str, parsed: &urzua_core::locator::Locator) -> String {
+    format!("{category}|{}|{:?}", parsed.spelling, parsed.anchor)
+}
+
+/// The records a `drift_baseline` split (`MILE-49`).
+pub(crate) struct BaselineSplit {
+    /// The record existed at the ref and every drifted locator had drifted there.
+    pub(crate) pre_existing: Vec<PathBuf>,
+    /// The record is newer than the ref, or some drifted locator is new or was
+    /// changed after it, or git could not say.
+    pub(crate) introduced: Vec<PathBuf>,
+}
+
+/// Holds out of `drift.drifted` the records whose drift was already there at
+/// the baseline: each is judged as it stood at the ref. A record is
+/// pre-existing only when it existed at the ref, every locator that drifts now
+/// is the same locator (same category, spelling and pin) that its copy at the
+/// ref cited and drifted, judged by [`base_drift_identities`] with the ref as
+/// the base, and its file was not changed since (a file changed after the ref
+/// is introduced drift, even where an earlier change had already drifted it).
+/// A record added after the ref, one whose pin was edited or renewed since, and
+/// a commit git cannot place are all introduced, never pre-existing. A
+/// held-out record moves to `drift.fresh`, the set that computes to its tier
+/// and also accepts a stated drift state, so it agrees with either and no
+/// finding is made (`MILE-49`, `ADR-91` amendment of 2026-11-13).
+pub(crate) fn apply_drift_baseline(
+    drift: &mut DriftedRecords,
+    repo_root: &Path,
+    config: &Config,
+    baseline_commit: &str,
+) -> BaselineSplit {
+    let mut at_or_before: HashMap<String, bool> = HashMap::new();
+    let cache = urzua_io::BlameCache::new(repo_root);
+    let now = urzua_io::now_unix();
+    let mut paths: Vec<PathBuf> = drift.drifted.iter().cloned().collect();
+    paths.sort();
+    let (mut pre_existing, mut introduced) = (Vec::new(), Vec::new());
+    for path in paths {
+        let confirmed: Vec<Option<String>> = drift
+            .causes
+            .get(&path)
+            .map(|c| {
+                c.iter()
+                    .filter(|c| c.confirmed)
+                    .map(|c| c.commit.clone())
+                    .collect()
+            })
+            .unwrap_or_default();
+        let file_old = !confirmed.is_empty()
+            && confirmed.iter().all(|commit| {
+                let Some(commit) = commit else { return false };
+                *at_or_before.entry(commit.clone()).or_insert_with(|| {
+                    commit == baseline_commit
+                        || urzua_io::commit_strictly_before(repo_root, commit, baseline_commit)
+                            .unwrap_or_else(|e| {
+                                note_problem(&mut drift.git_problems, e);
+                                false
+                            })
+                })
+            });
+        let old = file_old && {
+            let now_ids = drift.drifted_identities.get(&path);
+            match urzua_io::read_at_commit_if_present(repo_root, baseline_commit, &path) {
+                Ok(Some(text)) => base_drift_identities(
+                    repo_root,
+                    config,
+                    baseline_commit,
+                    &path,
+                    &text,
+                    now,
+                    &cache,
+                )
+                .is_some_and(|then| {
+                    now_ids
+                        .is_some_and(|ids| !ids.is_empty() && ids.iter().all(|i| then.contains(i)))
+                }),
+                Ok(None) => false,
+                Err(e) => {
+                    note_problem(&mut drift.git_problems, e.to_string());
+                    false
+                }
+            }
+        };
+        if old {
+            drift.drifted.remove(&path);
+            drift.fresh.insert(path.clone());
+            pre_existing.push(path);
+        } else {
+            introduced.push(path);
+        }
+    }
+    BaselineSplit {
+        pre_existing,
+        introduced,
     }
 }
 
@@ -1300,6 +1452,55 @@ pub(crate) fn compute_base_drift(
     now_unix: i64,
     cache: &urzua_io::BlameCache,
 ) -> Option<HashSet<String>> {
+    let (mut judge, record) = judge_base_copy(
+        repo_root,
+        config,
+        base_commit,
+        path,
+        base_text,
+        now_unix,
+        cache,
+    )?;
+    Some(judge.names.remove(&record.path).unwrap_or_default())
+}
+
+/// The identities (`locator_identity`) of the locators the base's copy of a
+/// record cited that had drifted, as `compute_base_drift` judges them: what a
+/// `drift_baseline` compares the current drift against, so a pin edited since
+/// the ref is a different locator from the one that drifted at it.
+pub(crate) fn base_drift_identities(
+    repo_root: &Path,
+    config: &Config,
+    base_commit: &str,
+    path: &Path,
+    base_text: &str,
+    now_unix: i64,
+    cache: &urzua_io::BlameCache,
+) -> Option<HashSet<String>> {
+    let (mut judge, record) = judge_base_copy(
+        repo_root,
+        config,
+        base_commit,
+        path,
+        base_text,
+        now_unix,
+        cache,
+    )?;
+    let ids = judge.identities.remove(&record.path).unwrap_or_default();
+    Some(ids.into_keys().collect())
+}
+
+/// Judges the base's copy of a record with its claim lines dated as of
+/// `base_commit`, acknowledgements ignored.
+fn judge_base_copy<'a>(
+    repo_root: &'a Path,
+    config: &'a Config,
+    base_commit: &str,
+    path: &Path,
+    base_text: &str,
+    now_unix: i64,
+    cache: &'a urzua_io::BlameCache,
+) -> Option<(DriftJudge<'a>, Record)> {
     let record = parse_prospective_record(config, path, base_text).ok()?;
     let claims = drift_claims(config, &record);
     let references = claims
@@ -1316,7 +1517,7 @@ pub(crate) fn compute_base_drift(
     let mut judge = DriftJudge::new(repo_root, config, now_unix, cache);
     judge.ignore_acknowledgements = true;
     judge.judge_record(&record, &claims, references);
-    Some(judge.names.remove(&record.path).unwrap_or_default())
+    Some((judge, record))
 }
 
 /// Whole days since each record's `Realized-by` line was last touched

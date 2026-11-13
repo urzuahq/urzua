@@ -353,6 +353,10 @@ absorb it.
   (a one-line list of the records it closes, `[]` for none) and the record in it is closed in the same
   PR (ADR-85).
 
+## Reading records over MCP (optional)
+
+`urzua mcp` is a read-only MCP server over stdio. An agent that registers it can list records, read one with its relations, ask which records govern a path, run `check` and read the graph without a shell. To see what was already rejected or superseded, call `urzua_list_records` with `{"type": "adr", "status": ["Rejected", "Superseded"]}`, then `urzua_show_record`. Register it in your own MCP configuration (`{ "mcpServers": { "urzua": { "command": "urzua", "args": ["mcp"] } } }`); `urzua harness install` does not write it. It has no tool that writes. See `docs/reference/mcp.md`.
+
 <!-- urzua-harness:begin -->
 ## urzua harness
 
