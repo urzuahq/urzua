@@ -1,0 +1,20 @@
+fixtures:
+  - path: records/docs/DOC-0001-clean.md
+    irregularity: >-
+      none -- the clean positive control: an extra section the template does not name, and a
+      nested `###` under a `##`.
+  - path: records/docs/DOC-0002-twice.md
+    irregularity: >-
+      `## Context` appears twice, so the record carries two answers under one heading.
+  - path: records/docs/DOC-0003-skipped.md
+    irregularity: >-
+      a `###` before any `##`, a level skipped at depth 2.
+  - path: records/docs/DOC-0004-swapped.md
+    irregularity: >-
+      `## Decision` comes before `## Context`, against the template's order.
+  - path: .urzua/templates/doc.md
+    irregularity: >-
+      the order the doc type's sections follow; not a record.
+  - path: .urzua/config.yaml
+    irregularity: >-
+      one type declaring unique_headings, no_skipped_levels and order; not a record.
