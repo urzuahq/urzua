@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5AJB7EBVDWVSMCSYZQ
-Version: '0.39'
+Version: '0.40'
 Date: 2026-07-29
 Status: Shipped
 Embodiment: Verified
@@ -104,7 +104,7 @@ reason, and not on stderr (`ADR-93`, Amendment of 2026-11-07).
 ### `urzua mcp`
 **Specified in full by SPEC-26.** A read-only MCP server on stdio (`ADR-99`): newline-delimited JSON-RPC on stdin and
 stdout, stdout carrying protocol frames only, each tool returning a report this CLI already builds. Tools built:
-`urzua_check` and `urzua_list_records`. It has no tool that writes.
+`urzua_check`, `urzua_list_records`, `urzua_show_record`, `urzua_get_findings_for_path` and `urzua_get_graph`. It has no tool that writes.
 
 ### `urzua waive --from-report`
 **Specified in full by SPEC-25.** Drafts one pending waiver per rule and file for the current findings
@@ -398,3 +398,4 @@ None. Every question this spec carried has been answered or routed:
 > | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/main.rs#Command` (lines 114-365) 5d496742ffbe -> fcb93f9409e5. Reason: Re-pinned after PR4 of MILE-205 (urzua waive --apply), the stated delta being: main.rs: `Command::Waive` now holds a clap WaiveArgs struct (defined in commands/waive.rs) that gains `--apply`, and `waive` joins the `--as-of` refusal match; the waive arm of main() shrinks to one line to stay under the SPEC-22 bound; no other command or output changed. The claim holds as the changed code does not alter what this record states. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-13 | Bumped to `0.39`. The CLI gains `urzua mcp` (`ADR-99`, `SPEC-26`), a read-only MCP server over stdio; the `Command` enum pin is re-baselined in the Re-baselined row. **Why:** `MILE-29`. | **substantive** |
 > | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/main.rs#Command` (lines 114-377) fcb93f9409e5 -> 9abff7e3a62a. Reason: Read the diff of main.rs#Command against main. The Command enum gained one Mcp variant (urzua mcp --root); every existing variant is unchanged, so the command surface SPEC-1 describes still holds with one added command. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-13 | Bumped to `0.40`. `urzua mcp` serves all five tools (`SPEC-26`). **Why:** `MILE-29`. | **substantive** |
