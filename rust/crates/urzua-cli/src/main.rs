@@ -206,6 +206,18 @@ enum Command {
     /// `Derives-from`/`Supersedes` edge, as data (ADR-0024).
     Graph,
 
+    /// Serve the corpus to an agent over the Model Context Protocol, read-only (`SPEC-26`).
+    ///
+    /// Speaks newline-delimited JSON-RPC on stdin and stdout until stdin closes; stdout
+    /// carries protocol frames and nothing else. Tools: `urzua_check` and
+    /// `urzua_list_records`. No tool writes. Register it in your agent's MCP
+    /// configuration with `command: urzua`, `args: [mcp]`; `harness install` does not.
+    Mcp {
+        /// The repository to serve. Defaults to `CLAUDE_PROJECT_DIR`, else the current directory.
+        #[arg(long)]
+        root: Option<PathBuf>,
+    },
+
     /// The order of work, computed from the records: waves, the ready set, the
     /// critical path, what each record blocks and a grouping (ADR-82).
     ///
@@ -553,6 +565,7 @@ fn main() -> ExitCode {
         Command::Explain { path, rule } => commands::explain::run(cli.config, path, rule),
         Command::Graph => commands::graph::run(cli.config),
         Command::Roadmap => commands::roadmap::run(cli.config),
+        Command::Mcp { root } => commands::mcp::run(cli.config, root),
         Command::New {
             record_type,
             title,
@@ -717,6 +730,7 @@ fn command_name(command: &Command) -> &'static str {
         Command::Explain { .. } => "explain",
         Command::Graph => "graph",
         Command::Roadmap => "roadmap",
+        Command::Mcp { .. } => "mcp",
         Command::Audit => "audit",
         Command::Migrate { .. } => "migrate",
         Command::Export { .. } => "export",

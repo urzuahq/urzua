@@ -5,9 +5,10 @@
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
+use urzua_core::config::RelationRole;
 use urzua_core::report::{
-    ExportReport, ExportTypeCount, ExportedField, ExportedRecord, ExportedSectionEntry,
-    ReportStatus,
+    ExportReport, ExportTypeCount, ExportedField, ExportedRecord, ExportedSectionEntry, Notice,
+    NoticeSeverity, ReportStatus,
 };
 
 use urzua_core::config::Config;
@@ -17,10 +18,28 @@ use crate::session::{emit_or_not_run, Session};
 use urzua_core::report::Failure;
 
 pub fn run(config_path: Option<PathBuf>) -> ExitCode {
-    emit_or_not_run(run_inner(config_path))
+    emit_or_not_run(build(config_path, &RecordFilter::default()).map(|report| emit(&report)))
 }
 
-fn run_inner(config_path: Option<PathBuf>) -> Result<ExitCode, Failure> {
+/// Which records `build` keeps. The default keeps every record with its text,
+/// which is `urzua export --format json`; the MCP server narrows it
+/// (`urzua_list_records`, `SPEC-26`).
+#[derive(Default)]
+pub(crate) struct RecordFilter {
+    /// Keep only this record type.
+    pub record_type: Option<String>,
+    /// Keep only records whose status field holds one of these values, compared
+    /// as written. The field is the type's declared `status` relation field
+    /// (`ADR-61`), so no status name is known here.
+    pub status: Vec<String>,
+}
+
+/// The export report, filtered. A filter that names a type the configuration
+/// does not declare, or a status no kept record holds, says so in a notice.
+pub(crate) fn build(
+    config_path: Option<PathBuf>,
+    filter: &RecordFilter,
+) -> Result<ExportReport, Failure> {
     // `raw_text` publishes a file's contents, so a tracked record that is a
     // symlink resolving outside the repository must not be read: the export
     // would otherwise disclose an arbitrary file under a repository path.
@@ -96,6 +115,7 @@ fn run_inner(config_path: Option<PathBuf>) -> Result<ExitCode, Failure> {
         })
         .collect();
     exported.sort_by(|a, b| (&a.record_type, &a.path).cmp(&(&b.record_type, &b.path)));
+    let notices = apply_filter(&mut exported, &config, filter);
 
     let types = config
         .sorted_type_names()
@@ -107,15 +127,59 @@ fn run_inner(config_path: Option<PathBuf>) -> Result<ExitCode, Failure> {
         })
         .collect();
 
-    Ok(emit(&ExportReport {
+    Ok(ExportReport {
         status: ReportStatus::Ok,
         record_count: exported.len(),
         types,
         records: exported,
         roadmap: (!config.roadmap.pairs.is_empty())
             .then(|| urzua_core::rules::compute_roadmap(&records, &config)),
-        notices: Vec::new(),
-    }))
+        notices,
+    })
+}
+
+/// Narrows `exported` to what `filter` names and returns the notices for a
+/// filter value that matched nothing (`SPEC-1`: no silent no-op).
+fn apply_filter(
+    exported: &mut Vec<ExportedRecord>,
+    config: &Config,
+    filter: &RecordFilter,
+) -> Vec<Notice> {
+    let mut notices = Vec::new();
+    if let Some(wanted) = &filter.record_type {
+        if !config.record_types.contains_key(wanted) {
+            notices.push(Notice::new(
+                NoticeSeverity::Warning,
+                "list-records.type",
+                format!("no record type `{wanted}` is declared"),
+            ));
+        }
+        exported.retain(|r| &r.record_type == wanted);
+    }
+    if !filter.status.is_empty() {
+        let status_of = |r: &ExportedRecord| -> Option<String> {
+            let field = config.record_types[&r.record_type].relation_field(RelationRole::Status);
+            r.header
+                .iter()
+                .find(|f| f.name == field)
+                .map(|f| f.value.clone())
+        };
+        let held: Vec<Option<String>> = exported.iter().map(status_of).collect();
+        for wanted in &filter.status {
+            if !held.iter().any(|h| h.as_deref() == Some(wanted.as_str())) {
+                notices.push(Notice::new(
+                    NoticeSeverity::Info,
+                    "list-records.status",
+                    format!("no record of the selected type holds the status `{wanted}`"),
+                ));
+            }
+        }
+        let mut keep = held
+            .iter()
+            .map(|h| h.as_ref().is_some_and(|v| filter.status.contains(v)));
+        exported.retain(|_| keep.next().unwrap_or(false));
+    }
+    notices
 }
 
 /// The first tracked file in a record directory whose real location is
