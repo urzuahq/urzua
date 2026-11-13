@@ -10,6 +10,7 @@ pub mod fix;
 pub mod graph;
 pub mod index;
 pub mod init;
+pub mod mcp;
 pub mod migrate;
 pub mod migrate_filenames;
 pub mod new;
