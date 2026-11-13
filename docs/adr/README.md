@@ -103,4 +103,5 @@ This directory holds urzua's ADRs, one `ADR-N-slug.md` file each. This index is 
 - [A milestone's Done means is a checklist whose items each name their evidence, and its status is computed from the items](ADR-96-a-milestone-s-done-means-is-a-checklist-whose-items-each-name-their-evidence-and-its-status-is-computed-from-the-items.md)
 - [A claim expires after a period declared per record type, status and evidence tier, and only urzua reverify renews it](ADR-97-a-claim-expires-after-a-period-declared-per-record-type-status-and-evidence-tier-and-only-urzua-reverify-renews-it.md)
 - [Test CI is sharded across parallel jobs and one gate job aggregates them](ADR-98-test-ci-is-sharded-across-parallel-jobs-and-one-gate-job-aggregates-them.md)
+- [urzua ships a read-only MCP server as a stdio transport over its existing reports](ADR-99-urzua-ships-a-read-only-mcp-server-as-a-stdio-transport-over-its-existing-reports.md)
 <!-- urzua:index:end -->
