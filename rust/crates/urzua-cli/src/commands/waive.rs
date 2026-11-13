@@ -12,7 +12,7 @@ use std::process::ExitCode;
 
 use urzua_core::config::RecordTypeConfig;
 use urzua_core::report::{
-    CouldNotRun, Failure, ReportStatus, WaiveDraft, WaiveFindings, WaiveReport,
+    CouldNotRun, Failure, ReportStatus, WaiveDraft, WaiveFindings, WaiveReport, WaiveStatus,
 };
 use urzua_core::waive::{self, Filters, Group, PendingChoice, SkipReason};
 use urzua_core::waiver::SuppressionType;
@@ -117,11 +117,7 @@ fn execute(config_path: Option<PathBuf>, args: WaiveArgs) -> Result<WaiveReport,
         drafts = built.into_iter().map(|b| b.draft).collect();
     }
     Ok(WaiveReport {
-        status: if error.is_some() {
-            ReportStatus::NotRun
-        } else {
-            ReportStatus::Ok
-        },
+        status: status_of(error.as_deref(), &drafts),
         mode: if apply { "apply" } else { "dry-run" },
         pending_value: ctx.pending.value,
         pending_source: ctx.pending.source,
@@ -130,6 +126,16 @@ fn execute(config_path: Option<PathBuf>, args: WaiveArgs) -> Result<WaiveReport,
         unmatched_filters: plan.unmatched,
         error,
     })
+}
+
+/// `partial-failure` when an `--apply` failed after writing some drafts, `not-run`
+/// when it failed before writing any.
+fn status_of(error: Option<&str>, drafts: &[WaiveDraft]) -> WaiveStatus {
+    match error {
+        None => WaiveStatus::Ok,
+        Some(_) if drafts.iter().any(|d| d.written) => WaiveStatus::PartialFailure,
+        Some(_) => WaiveStatus::NotRun,
+    }
 }
 
 /// The paths of the suppression type's records: a finding inside one is a draft's
@@ -384,11 +390,28 @@ fn write_all(
 ) -> Result<(), String> {
     let root = &ctx.session.repo_root;
     let dir = root.join(&type_config(ctx).dir);
+    write_drafts(
+        built,
+        &mut |b| write_new_file(root, &dir, &root.join(&b.path), &b.content),
+        &mut |from| {
+            *numbering = number(ctx, false)?.1;
+            build(ctx, numbering, &groups[from..])
+        },
+    )
+}
+
+/// The write loop of [`write_all`], with the file write and the renumbering
+/// passed in. `rebuild(i)` returns the drafts from the `i`th group on, numbered
+/// afresh.
+fn write_drafts(
+    built: &mut Vec<Built>,
+    write: &mut dyn FnMut(&Built) -> Result<(), String>,
+    rebuild: &mut dyn FnMut(usize) -> Result<Vec<Built>, String>,
+) -> Result<(), String> {
     let mut retakes = 0;
     let mut i = 0;
     while i < built.len() {
-        let b = &built[i];
-        match write_new_file(root, &dir, &root.join(&b.path), &b.content) {
+        match write(&built[i]) {
             Ok(()) => {
                 built[i].draft.written = true;
                 built[i].draft.stable_id = Some(built[i].stable_id.clone());
@@ -396,8 +419,7 @@ fn write_all(
             }
             Err(e) if e.contains("already exists") && retakes < MAX_RETAKES => {
                 retakes += 1;
-                *numbering = number(ctx, false)?.1;
-                let rest = build(ctx, numbering, &groups[i..])?;
+                let rest = rebuild(i)?;
                 built.truncate(i);
                 built.extend(rest);
             }
@@ -518,5 +540,110 @@ mod tests {
         assert!(!owner_declared(&closed_without, Some(template)));
         assert!(!owner_declared(&closed_with, Some(no_owner)));
         assert!(!owner_declared(&closed_with, None));
+    }
+
+    fn built(name: &str) -> Built {
+        let group = Group {
+            rule: "r".into(),
+            scope: name.into(),
+            findings: Vec::new(),
+        };
+        Built {
+            draft: draft_entry(Path::new(name), &group),
+            path: PathBuf::from(name),
+            content: String::new(),
+            stable_id: format!("id-{name}"),
+        }
+    }
+
+    #[test]
+    fn a_failure_after_one_write_is_a_partial_failure_with_per_draft_written() {
+        let mut drafts = vec![built("a"), built("b"), built("c")];
+        let mut calls = 0;
+        let err = write_drafts(
+            &mut drafts,
+            &mut |_| {
+                calls += 1;
+                if calls == 2 {
+                    Err("disk full".to_string())
+                } else {
+                    Ok(())
+                }
+            },
+            &mut |_| panic!("no retake for a failure that is not a taken number"),
+        )
+        .unwrap_err();
+        assert_eq!(err, "disk full");
+        let written: Vec<bool> = drafts.iter().map(|b| b.draft.written).collect();
+        assert_eq!(written, [true, false, false]);
+        assert_eq!(drafts[0].draft.stable_id.as_deref(), Some("id-a"));
+        assert!(drafts[1].draft.stable_id.is_none());
+        let entries: Vec<WaiveDraft> = drafts.into_iter().map(|b| b.draft).collect();
+        assert_eq!(status_of(Some(&err), &entries), WaiveStatus::PartialFailure);
+    }
+
+    #[test]
+    fn a_failure_before_any_write_is_not_run_and_no_failure_is_ok() {
+        let mut drafts = vec![built("a")];
+        let err = write_drafts(
+            &mut drafts,
+            &mut |_| Err("outside the repository".to_string()),
+            &mut |_| Ok(Vec::new()),
+        )
+        .unwrap_err();
+        let entries: Vec<WaiveDraft> = drafts.into_iter().map(|b| b.draft).collect();
+        assert_eq!(status_of(Some(&err), &entries), WaiveStatus::NotRun);
+        assert_eq!(status_of(None, &entries), WaiveStatus::Ok);
+    }
+
+    #[test]
+    fn a_taken_number_is_taken_again_and_the_rest_renumbered() {
+        let mut drafts = vec![built("a"), built("b"), built("c")];
+        let mut written: Vec<String> = Vec::new();
+        let mut taken = true;
+        let mut rebuilt_from = None;
+        write_drafts(
+            &mut drafts,
+            &mut |b| {
+                if b.path == Path::new("b") && taken {
+                    taken = false;
+                    return Err("WAIVER-2 already exists".to_string());
+                }
+                written.push(b.path.display().to_string());
+                Ok(())
+            },
+            &mut |from| {
+                rebuilt_from = Some(from);
+                Ok(vec![built("b2"), built("c2")])
+            },
+        )
+        .unwrap();
+        assert_eq!(rebuilt_from, Some(1));
+        assert_eq!(written, ["a", "b2", "c2"]);
+        let flags: Vec<(String, bool)> = drafts
+            .iter()
+            .map(|b| (b.path.display().to_string(), b.draft.written))
+            .collect();
+        assert_eq!(
+            flags,
+            [("a".into(), true), ("b2".into(), true), ("c2".into(), true)]
+        );
+    }
+
+    #[test]
+    fn retaking_is_bounded() {
+        let mut drafts = vec![built("a")];
+        let mut rebuilds = 0;
+        let err = write_drafts(
+            &mut drafts,
+            &mut |_| Err("already exists".to_string()),
+            &mut |_| {
+                rebuilds += 1;
+                Ok(vec![built("a")])
+            },
+        )
+        .unwrap_err();
+        assert!(err.contains("already exists"));
+        assert_eq!(rebuilds, MAX_RETAKES);
     }
 }

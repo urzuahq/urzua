@@ -684,7 +684,7 @@ fn fix_evaluation_date(cli: &Cli) -> Result<(), String> {
         Command::Waive(args) => ("waive", args.apply),
         other => {
             return Err(format!(
-                "--as-of is not accepted by `urzua {}`: it compares no dates against an evaluation date (it applies to check, audit, fix and reverify)",
+                "--as-of is not accepted by `urzua {}`: it compares no dates against an evaluation date (it applies to check, audit, fix, reverify and waive)",
                 command_name(other)
             ))
         }

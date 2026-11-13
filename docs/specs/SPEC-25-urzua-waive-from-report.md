@@ -2,7 +2,7 @@
 Stable-Id: 01M7A3B7TD1N87WAEFWDMB5CTJ
 Status: Draft
 Date: 2026-11-13
-Version: '0.2'
+Version: '0.3'
 Author: beauwilliams
 Subject: '`urzua waive --from-report` -- drafting one waiver per rule and file from the current findings.'
 Implements: ADR-91
@@ -37,8 +37,7 @@ urzua waive --from-report [--apply] [--rule ID[,ID]]... [--path PATH]... [--by N
   carries an `Owner` header, set to that name, only when the waiver template lists `Owner` and the
   type declares it.
 
-Exit `0` whenever the command ran, with or without drafts; `2` when it could not run or a write failed. It never exits `1`:
-whether the repository is clean is `check`'s answer. Stdout is one JSON document; notices go to stderr.
+Exit `0` whenever the command ran, with or without drafts; `2` when it could not run, or an `--apply` failed before writing any draft; `1` when an `--apply` failed after writing some (`partial-failure`, as for `fix`, `index`, `reverify` and `migrate`). Whether the repository is clean is still `check`'s answer. Stdout is one JSON document; notices go to stderr.
 
 ## Which findings are drafted
 
@@ -78,11 +77,15 @@ are left as the template has them.
 `--apply` takes the numbering lock `new` takes (and, with `new.check_open_prs`, scans open pull
 requests), numbers the drafts once, so a numbering notice prints once, and writes each draft confined to
 the repository and never over an existing file. A number another file took since numbering is taken
-again and the remaining drafts renumbered, up to five times. A write error stops the run with exit `2`,
-`status` `not-run` and an `error`; `drafts[].written` says which were written. After a run `check` reports
+again and the remaining drafts renumbered, up to five times. A write error stops the run with an `error`: `status` `partial-failure` and exit `1` when some drafts were written,
+`not-run` and exit `2` when none was; `drafts[].written` says which were written. After a run `check` reports
 each original finding again beside `waiver-ineffective` on its draft, and exits 1 under `fail_on: warning`,
 until a person writes a real `Reason` and an `Expires` (or, where the type declares `permanent`, a listed
 rule and category).
+
+Without `new.check_open_prs` the numbering sees only this clone, so two concurrent runs, or a run beside a
+`urzua new` in another clone, can take the same number, as `new` can; the lock serialises runs in one
+repository only. With it, numbers held by open pull requests are skipped.
 
 ## Refusals (exit 2, nothing written)
 
@@ -99,7 +102,7 @@ Before `check` runs the command proves a draft would suppress nothing, and refus
 ## Output
 
 ```json
-{"status":"ok","mode":"dry-run|apply","pending_value":"Pending","pending_source":"declared|default",
+{"status":"ok|partial-failure|not-run","mode":"dry-run|apply","pending_value":"Pending","pending_source":"declared|default",
  "drafts":[{"path":"docs/waiver/WAIVER-0053-index-freshness-in-docs-specs-readme-md.md","stable_id":null,"rule":"x.y","scope":"docs/a.md",
             "findings":{"count":2,"lines":["docs/a.md:12 message"]},"written":false}],
  "skipped":[{"rule":"..","file":"..","reason":"already-waived","waiver":"docs/waiver/WAIVER-0007-..md"}],
@@ -131,3 +134,4 @@ entry is `null` for `no-file`; `waiver` is present only for `already-waived` and
 > |---|---|---|
 > | 2026-11-13 | Initial spec: the preview of `urzua waive --from-report` as built (eligibility, grouping, the pending value, refusals, the JSON report); `--apply` is not built. **Why:** `MILE-205`, plan PR3, maintainer decisions of 2026-11-13. | **structural** |
 > | 2026-11-13 | `--apply` documented: the numbering lock, one numbering, retaken numbers, write errors (exit 2, `error`), idempotence, check-after-apply; `Expires` omitted from drafts; skip reasons `resolved-by-own-draft` and `waiver-record`, and `resolved-by-drafts` judged again on the kept set. **Why:** `MILE-205`, plan PR4. | **substantive** |
+> | 2026-11-13 | An `--apply` that fails after writing some drafts reports `partial-failure` with exit 1, and `not-run` with exit 2 only when none was written; the numbering limit without `new.check_open_prs` is stated. Version `0.2` -> `0.3`. **Why:** review of the `--apply` change: the same outcome is `partial-failure` in `fix`, `index`, `reverify` and `migrate`. | **substantive** |
