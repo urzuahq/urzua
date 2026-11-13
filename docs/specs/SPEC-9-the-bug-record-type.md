@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5RYJF3MHRJT1RSA1K9
-Version: '0.19'
+Version: '0.20'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:.urzua/config.yaml@sha256:dd656d471f380787e18d7a2d2267975552c953858cc33a165c33b0afde087d7e, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs@sha256:dc29b51bde5a2ba79d95c5e0a09466a54e816e8e2cc4a86a80e4459be477a447, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:e60116ae0a7034a14619b4949265b88470479f15e854b37803f4d63a2d17646a
+Realized-by: code:.urzua/config.yaml@sha256:08ab457062ac7829f33128b5a103b868dad726dc650afceb8757608845f98296, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs@sha256:dc29b51bde5a2ba79d95c5e0a09466a54e816e8e2cc4a86a80e4459be477a447, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:d6dcb432d05a03f8593ee899b9427365680ad3f24b158d98cd0964d2b15d78b9
 Author: beauwilliams
 Subject: 'The `bug` record type -- real, already-found defects and a Status that follows the test evidence in Realized-by.'
 Implements: ADR-35
@@ -151,3 +151,5 @@ something broke, or it doesn't exist yet.
 > | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/own_config_integration.rs` 5aafdaf17779 -> 5ca7a48405d4. Reason: own_config_integration.rs gained the test that the own config's shape accepts a `drift_baseline` on `embodiment.consistency` without declaring one; other tests unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-13 | Bumped to `0.19`. Evidence pins re-baselined for this change (the `Re-baselined` row above); the specification text is unchanged. **Why:** a revision-log entry that adds a structural change bumps `Version`. | **structural** |
 > | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/own_config_integration.rs` 5ca7a48405d4 -> e60116ae0a70. Reason: own_config_integration.rs: rustfmt wrapped one assert in the test added by this change; formatting only, no behaviour change. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` dd656d471f38 -> 08ab457062ac, `rust/crates/urzua-cli/tests/own_config_integration.rs` e60116ae0a70 -> d6dcb432d05a. Reason: Read the diff of each re-pinned file against main and the claim still holds. config.yaml: the rules table gains one entry, code.dangling-bug-reference (level error, back_pointer_paths rust and scripts, extensions rs sh py, external_ids RFC-822 and RFC-4122, ignore_marker citation-fixture) with its comment; no other declaration changed; own_config_integration.rs: adds the test the_own_config_reports_a_dangling_citation_in_rust_and_scripts_and_nothing_else; no existing test changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-13 | Bumped to `0.20`. Evidence pins re-baselined for this change (the `Re-baselined` row above); the specification text is unchanged. **Why:** a revision-log entry that adds a structural change bumps `Version`. | **structural** |

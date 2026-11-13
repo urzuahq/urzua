@@ -104,7 +104,7 @@ fn example_5_an_ordered_item_and_a_marker_inside_a_reason() {
 
 #[test]
 fn example_6_evidence_and_waiver_together() {
-    let d = parse("- A second platform builds. — evidence: test:rust/crates/urzua-cli/tests/platform_windows.rs#builds — waived: deferred-to (MILE-230, 2027-01-31) -- the runner is not available until MILE-230 lands\n");
+    let d = parse("- A second platform builds. — evidence: test:rust/crates/urzua-cli/tests/platform_windows.rs#builds — waived: deferred-to (MILE-230, 2027-01-31) -- the runner is not available until MILE-230 lands citation-fixture\n");
     assert!(d.issues.is_empty(), "{:?}", issues(&d));
     let item = &d.items[0];
     assert_eq!(

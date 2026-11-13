@@ -392,7 +392,7 @@ fn file_name_of(record: &Record) -> String {
 
 /// The name a file should have. A leading run of digits is the number the
 /// author already gave it (`0005-x.md` -> `ADR-0005-x.md`, padding kept, as
-/// `ADR-0173` and `ADR-173` compare equal); otherwise there is no number to
+/// `ADR-0017` and `ADR-17` compare equal); otherwise there is no number to
 /// carry and the name is a template. A candidate the type's declared pattern
 /// would itself reject is not offered: the guidance must not point at another
 /// off-pattern name.

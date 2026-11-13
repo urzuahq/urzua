@@ -174,7 +174,7 @@ fn match_entry<'a>(line: &'a str, segments: &'a [FormatSegment]) -> Option<Entry
 }
 
 /// The title the H1 carries without its identifier (`MILE-152`): the leading
-/// number (`# 139 \u{2014} Title`) or the record's own id (`# ADR-139: Title`,
+/// number (`# 139 \u{2014} Title`) or the record's own id (`# ADR-64: Title`,
 /// compared by value so padding does not matter) is dropped along with the
 /// separator after it. `None` when the record has no H1.
 fn record_title(record: &Record, full_text: &HashMap<PathBuf, String>) -> Option<String> {

@@ -836,6 +836,52 @@ pub const RULE_TABLE: &[RuleDef] = &[
             },
     },
     RuleDef {
+        id: RULE_CODE_DANGLING_BUG_REFERENCE,
+        description: "A source comment that cites a record id (a declared type prefix, a hyphen and a number, standing alone: `BUG-12`, `ADR-3`) which resolves to no record is an error, the mirror of `embodiment.locator-exists` (`MILE-108`, `RFC-41`): a locator names a file and this names a record from the file's side. Only existence is judged, never currency, so a citation of a superseded or retired record is not reported; ids are compared numerically. Opt-in, and needs `back_pointer_paths` (path prefixes, normalised at config load, no globs) and `extensions` (file extensions without the dot, such as `rs` or `sh`; both are declared, and the engine compiles in no language): only a tracked file under a path with one of those extensions is read. A comment is read as `embodiment.back-pointer-resolution` reads one by default: a leader (`//`, `///`, `//!`, `#`, `--`, `;`, `/*`, `*`, `<!--`) at the start of a line, or `//`, `#`, `--`, `/*`, `<!--` after whitespace following code, and every id in the rest of the comment counts. The optional `code_comment_prefixes` option declares the leaders per extension instead (a map such as `rs: [\"//\"]`, `sh: [\"#\"]`): a leader opening a line or following whitespace starts a comment, the longest leader at a position wins, an extension with no entry reads the built-in set, and a key that is not one of `extensions`, an empty list, or a blank, whitespace-holding or repeated leader is a load error. The engine reads no syntax beyond a leader, so an id in a string literal or a doc-comment code example after a leader is read, and the declared `ignore_marker` excuses it. An id run into a longer token (`ADR-12-title.md`) is a name, a word holding `://` is a URL, neither is a citation, and prose outside a comment is not read. A citation `embodiment.back-pointer-resolution` judges (an `Implements:` back-pointer, or a `Verifies:` one in its test class) is left to that rule while it is enabled over the file, so one line is not reported twice. The optional `external_ids` option (`citation.resolution`'s) lists ids that share a record prefix but are not records (`RFC-4122`, or a range written `PREFIX-LOW..HIGH`) and are not judged. The optional `ignore_marker` option (`ADR-80`, the boundary rule's option reused, read by this rule alone) declares text that excuses the whole line it is on: the line's citations are neither reported nor counted, the count is disclosed in the population's `excused_lines` and in an `info` notice, and a marker on a line that cites no record is itself a finding (a marker of fewer than three characters, with no letter or digit, or that is or ends a record id is refused at load). A declared path covering no tracked file with a declared extension is itself a finding, and a non-text file is counted as unreadable, never as clean. The population is the source files read, so a run over none is distinguishable from a clean one. Undeclared, nothing is read and nothing changes.",
+        scope: Scope::Files,
+        anchor: Anchor::Outside,
+        judges: Judges::NotRecordLevel,
+        needs_identity_index: false,
+        requires_relation_pairs: false,
+        requires_acyclic_pair: false,
+        requires_override_log: false,
+        requires_authority: false,
+        reads_declaration: None,
+        header_none: HeaderNone::Exempt("population is source files, not records"),
+        options: &["back_pointer_paths", "extensions", "code_comment_prefixes", "external_ids", "ignore_marker"],
+        population: PopulationUnit::File,
+        actions: &[
+            VariantAction::new("dangling-reference", ActionDecl::Exempt("the edit is to a source file comment, and no action kind addresses a non-record file yet")),
+            VariantAction::new("dangling-reference-uncovered-path", ActionDecl::CONFIG_SET),
+            VariantAction::new("dangling-reference-marker-unused", ActionDecl::Exempt("the edit removes a marker from a source file comment, and no action kind addresses a non-record file yet")),
+        ],
+        phase: Phase::Main,
+        companion: None,
+        run: |c| {
+                let (files, paths, extensions): (&[_], &[String], Vec<String>) =
+                    match c.code_citation_sources {
+                        Some(s) => (
+                            &s.files,
+                            &s.back_pointer_paths,
+                            c.config
+                                .rules
+                                .get(RULE_CODE_DANGLING_BUG_REFERENCE)
+                                .and_then(|r| r.extensions.clone())
+                                .unwrap_or_default(),
+                        ),
+                        None => (&[], &[], Vec::new()),
+                    };
+                code_dangling_bug_reference(
+                    files,
+                    paths,
+                    &extensions,
+                    c.config,
+                    c.config_path,
+                    c.index,
+                )
+            },
+    },
+    RuleDef {
         id: RULE_EMBODIMENT_LOCATOR_EXISTS,
         description: "A `Realized-by` locator names a path that is not both git-tracked **and** present on disk, is empty, does not parse, or carries a scope (`#symbol` or `#L<a>-L<b>`) that does not resolve in the file, a scope without a pin, or a commit anchor (not yet supported). Tracked alone passes a staged deletion; on disk alone passes a gitignored file. A locator that resolves outside the repository (absolute, `..` or a link out) is never probed on disk, so it reads as not in the working tree, and a Done-means item that carries a valid waiver is not examined (the waiver holds while its evidence does not resolve). A locator naming a file that exists on disk but is not tracked by git is a separate variant from one naming nothing (`BUG-13`), because the repair is to track the file. A comma separates `Realized-by` entries only when a category prefix (`spec:`, `code:`, `test:`) follows it; any other comma is part of the path (`BUG-129`), and a path that itself contains `,<category>:` is read as two entries. The `locator_kinds` option (`file`, `directory`, `glob`; default `[file]`) declares which kinds a locator may be: a directory or glob is legal when it matches at least one tracked file present on disk, and one of a kind not declared is reported naming the option. The `pinnable` option (default `[file]`, each kind also in `locator_kinds`) declares which kinds may carry a `@sha256:` pin (`BUG-176`).",
         scope: Scope::Records,

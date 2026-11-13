@@ -71,6 +71,9 @@ pub struct RuleCtx<'a> {
     /// `None` when the rule is absent or off.
     pub back_pointer_sources: Option<&'a BackPointerSources>,
     pub decision_gate_sources: Option<&'a BackPointerSources>,
+    /// The source files `code.dangling-bug-reference` reads, filtered to its
+    /// declared extensions; `None` when the rule is absent or off.
+    pub code_citation_sources: Option<&'a BackPointerSources>,
     pub back_pointed: &'a BackPointerEvidence,
     pub drifted: &'a HashSet<PathBuf>,
     pub fresh: &'a HashSet<PathBuf>,

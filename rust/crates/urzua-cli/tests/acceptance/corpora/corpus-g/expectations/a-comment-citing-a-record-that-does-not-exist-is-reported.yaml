@@ -1,0 +1,13 @@
+id: a-comment-citing-a-record-that-does-not-exist-is-reported
+corpus: corpus-g
+# A plain comment, not a back-pointer, names ADR-0098; no record is identified as
+# ADR-0098 (ADR-0001's prose only mentions ADR-0099, which a mention cannot define
+# either). The comment on the line above it cites ADR-0001, which exists, and is
+# not reported.
+commits:
+  - write:
+      src/queue.rs: "// the queue follows ADR-0001\n// see also ADR-0098\nfn queue() { push(1); }\n"
+invocation: [check]
+expect_exit: 1
+expect_findings:
+  - {rule: code.dangling-bug-reference, file: src/queue.rs, message_contains: ADR-0098}

@@ -353,6 +353,63 @@ fn new_waiver_scaffolds_justified_by_from_the_repositorys_own_template() {
     }
 }
 
+/// `MILE-108`: this repository declares `code.dangling-bug-reference` over
+/// `rust/` and `scripts/`. A comment citing a record the corpus holds passes, a
+/// public standard number it lists as external passes, a fixture line carrying
+/// its declared marker passes, and a dangling one is reported; a file with an
+/// undeclared extension is not read.
+#[test]
+fn the_own_config_reports_a_dangling_citation_in_rust_and_scripts_and_nothing_else() {
+    let bug1 = bug("Fixed", "a review", "Realized-by: test:rust/t.rs\n");
+    let dir = repo(
+        "dangling-reference",
+        &[
+            ("docs/bugs/BUG-1-a-bug.md", &bug1),
+            (
+                "rust/t.rs",
+                concat!(
+                    "// BUG-1 is live\n// RFC-4122 is a standard\n// BUG-9999 is gone\n",
+                    // The declared marker, split so this file does not carry it on a line.
+                    "// BUG-9998 citation-",
+                    "fixture\n"
+                ),
+            ),
+            ("scripts/a.sh", "# BUG-9997 is gone too\n"),
+            ("scripts/notes.txt", "# BUG-9996 is not read\n"),
+        ],
+    );
+    let out = urzua(&dir, &["check"]);
+    let report: serde_json::Value = serde_json::from_slice(&out.stdout).expect("JSON on stdout");
+    let mut found: Vec<(String, u64)> = report["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|f| f["rule"] == "code.dangling-bug-reference")
+        .map(|f| {
+            (
+                f["file"].as_str().unwrap().to_string(),
+                f["line"].as_u64().unwrap(),
+            )
+        })
+        .collect();
+    found.sort();
+    assert_eq!(
+        found,
+        vec![
+            ("rust/t.rs".to_string(), 3),
+            ("scripts/a.sh".to_string(), 1)
+        ],
+        "{report}"
+    );
+    let execution = report["rules_executed"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| e["rule"] == "code.dangling-bug-reference")
+        .unwrap();
+    assert_eq!(execution["population"]["eligible"], 2, "{execution}");
+}
+
 /// MILE-49: this repository does not declare `drift_baseline` (it would hold
 /// out nothing here; fixtures exercise it), but its configuration's shape
 /// accepts the option on `embodiment.consistency`.
