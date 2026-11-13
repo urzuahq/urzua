@@ -453,6 +453,17 @@ enum MigrateTarget {
         apply: bool,
     },
 
+    /// Rename every record file whose name does not match its type's declared
+    /// filename convention (`identity.pattern`, else `TYPE-NNNN-slug.md`) and
+    /// rewrite the citations of the renamed paths. The number and slug are kept,
+    /// so a record's `Stable-Id` and id do not change. Reports every rename, every
+    /// rewritten citation, and every citation in a file it does not edit. Dry-run
+    /// by default.
+    Filenames {
+        #[arg(long)]
+        apply: bool,
+    },
+
     /// Rewrite the config from the previous schema version to the current one,
     /// in place, keeping its comments. Reports every key it added, changed,
     /// renamed, moved or dropped, and reports nothing to do when the config is
@@ -641,6 +652,7 @@ fn dispatch_export(config: Option<PathBuf>, format: ExportFormat) -> ExitCode {
 fn dispatch_migrate(config: Option<PathBuf>, target: MigrateTarget) -> ExitCode {
     match target {
         MigrateTarget::Ids { apply } => commands::migrate::run_ids(config, apply),
+        MigrateTarget::Filenames { apply } => commands::migrate_filenames::run(config, apply),
         MigrateTarget::Config => commands::migrate::run_config(config),
         MigrateTarget::Schema {
             report: true,
