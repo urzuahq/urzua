@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5C0WX34AQKF79DQDS5
-Version: '0.25'
+Version: '0.26'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/commands/new.rs@sha256:7abffc2519d4afca971621f8f4ed85ee88231a2faeab539683bd98f5b6191ec1, code:rust/crates/urzua-core/src/new_record.rs@sha256:0f9f2d4f6a94e3adeaf4d8e8a15d7615084315c4b2d5cf752488379baf349ce1, test:rust/crates/urzua-cli/tests/new_integration.rs@sha256:c319a5750aa11e1bd2b6be9fc6a2d707f34150c514d49c35290ad353f0ef61f7
+Realized-by: code:rust/crates/urzua-cli/src/commands/new.rs@sha256:b465b2c40766295a8df12562ee3123de7cb89b5eee90e29cabae125c1945f0b7, code:rust/crates/urzua-core/src/new_record.rs@sha256:258765bfb7917a39c8aed677d9c89829665950ebd9c234f5be3f9cb576a782f2, test:rust/crates/urzua-cli/tests/new_integration.rs@sha256:c319a5750aa11e1bd2b6be9fc6a2d707f34150c514d49c35290ad353f0ef61f7
 Author: beauwilliams
 Subject: '`urzua new` -- generating a record''s initial content with a real stable ID assigned.'
 Implements: ADR-27
@@ -156,10 +156,16 @@ echo the generated content back; the caller reads the file at `path` if it needs
 
 ## Purity boundary
 
-`urzua-core::new_record` is the pure render layer (`render_from_template`, `render_synthetic_yaml`),
+`urzua-core::new_record` is the pure render layer (`scaffold_record`, `render_synthetic_yaml`),
 following the same pure-render/impure-caller split as `fix.rs`: the CLI resolves identity, reads the
 template file, scans the directory for the next number, and writes; `new_record`'s own functions
 take content and parameters, returning a string.
+
+`scaffold_record` is the record scaffold shared by every command that creates a record from a type:
+given the type's declarations, the file name, number, stable id, author and date, and the template's
+text when there is one, it returns the synthesized header, the H1 and the template's body. `new` calls
+it, and `waive --from-report` (`MILE-205`) will, so the scaffold has one definition and a record either
+command writes has the same shape.
 
 ## What's deliberately not built
 
@@ -213,3 +219,5 @@ take content and parameters, returning a string.
 > | 2026-11-09 | Bumped to `0.24`. Re-pin rows in this revision log were reworded to name who re-verified, matching the tool's wording since 2026-11-09; hashes, reasons and dates are unchanged. **Why:** Maintainer decision, 2026-11-09. | **structural** |
 > | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/new_record.rs` 21f5012c2b5f -> 0f9f2d4f6a94. Reason: Read the diff of each pinned file since the previous pin. rust/crates/urzua-core/src/new_record.rs: parse_record_filename reads the extension through strip_md_extension (any case), with a unit test; nothing else changed. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-09 | Bumped to `0.25`. Evidence pins re-baselined for this change; the specification text is unchanged. **Why:** a revision-log entry that adds a structural change bumps `Version`. | **structural** |
+> | 2026-11-13 | Bumped to `0.26`. The record scaffold `new` builds moved into `urzua-core` as `scaffold_record`, shared with the coming `waive --from-report`; `new`'s output is unchanged. **Why:** `MILE-205` item 15, the scaffold is shared and not duplicated. | **structural** |
+> | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: unspecified): re-pinned `rust/crates/urzua-cli/src/commands/new.rs` 7abffc2519d4 -> b465b2c40766, `rust/crates/urzua-core/src/new_record.rs` 0f9f2d4f6a94 -> 258765bfb791. Reason: Read the diff of each pinned file against main. rust/crates/urzua-core/src/new_record.rs: added ScaffoldSpec, scaffold_record and a private declared_template_fields (the header-and-body scaffold moved here from the CLI) plus one unit test; no existing function changed. rust/crates/urzua-cli/src/commands/new.rs: render_record now reads the template file and calls urzua_core::new_record::scaffold_record; its body moved to core unchanged, and new's tests pass unchanged. Nothing else changed in the pinned file, and the output of urzua new is identical. The claim this record evidences still holds. **Why:** the pinned evidence changed and the attesting actor re-verified that the claim still holds. | **structural** |
