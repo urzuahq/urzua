@@ -5,7 +5,7 @@ Phase: '0'
 Track: roadmap-tracking
 Implements: ADR-34
 Blocked-on: —
-Realized-by: code:.urzua/config.yaml@sha256:323884ad0b6e1ee7c8485e6f75052f0266a742e29a2f43dababf665573a2a2cc, spec:docs/specs/SPEC-6-the-milestone-record-type.md, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs#a_milestone_must_state_its_done_means_unless_it_is_wontdo@sha256:25ce42b874d80cc7d3a2ab911a79c88c7494b512d80f465ad0b3f621af7e9a16
+Realized-by: code:.urzua/config.yaml@sha256:b6ecfd818489fca2a671cb4d5a140bc5d066fc6e3285b60bf7216ed00d8d6d1c, spec:docs/specs/SPEC-6-the-milestone-record-type.md, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs#a_milestone_must_state_its_done_means_unless_it_is_wontdo@sha256:25ce42b874d80cc7d3a2ab911a79c88c7494b512d80f465ad0b3f621af7e9a16
 ---
 # 8 — Add the milestone record type
 
@@ -19,9 +19,9 @@ The backlog was accumulating in conversation history and an unstructured documen
 
 ## Done means
 
-- A `milestone` record type is configured in `.urzua/config.yaml` with `Status`, `Phase` and `Track` required and `Implements` a pointer field. — evidence: code:.urzua/config.yaml@sha256:323884ad0b6e1ee7c8485e6f75052f0266a742e29a2f43dababf665573a2a2cc
+- A `milestone` record type is configured in `.urzua/config.yaml` with `Status`, `Phase` and `Track` required and `Implements` a pointer field. — evidence: code:.urzua/config.yaml@sha256:b6ecfd818489fca2a671cb4d5a140bc5d066fc6e3285b60bf7216ed00d8d6d1c
 - `SPEC-6` documents it. — evidence: spec:docs/specs/SPEC-6-the-milestone-record-type.md
-- `urzua check` examines every `docs/milestones/` record under it. — evidence: code:.urzua/config.yaml@sha256:323884ad0b6e1ee7c8485e6f75052f0266a742e29a2f43dababf665573a2a2cc, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs#a_milestone_must_state_its_done_means_unless_it_is_wontdo@sha256:25ce42b874d80cc7d3a2ab911a79c88c7494b512d80f465ad0b3f621af7e9a16
+- `urzua check` examines every `docs/milestones/` record under it. — evidence: code:.urzua/config.yaml@sha256:b6ecfd818489fca2a671cb4d5a140bc5d066fc6e3285b60bf7216ed00d8d6d1c, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs#a_milestone_must_state_its_done_means_unless_it_is_wontdo@sha256:25ce42b874d80cc7d3a2ab911a79c88c7494b512d80f465ad0b3f621af7e9a16
 - Adding it needed no change to urzua-core. — waived: process-outcome -- a property of the change that added the type (commit 784fa758: a config declaration, a template and a spec, with two unrelated core defects fixed beside it), which no file can evidence now
 
 > **Revision log**
@@ -43,3 +43,4 @@ The backlog was accumulating in conversation history and an unstructured documen
 | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` cbb1c67c40a0 -> 21e9ab57a37a. Reason: Read the diff of .urzua/config.yaml: the authority section gains `waivable: never` and a two-line comment; no other key changed. The pinned evidence still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` 21e9ab57a37a -> dd656d471f38. Reason: Read the diff of each pinned file since the previous pin. config.yaml gained section.duplicate, section.level-skipped and section.order at error under rules, and unique_headings, no_skipped_levels and order (from: template) under each type's sections, with depth: 2 added where a type had none; the change is additive; the claim holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` dd656d471f38 -> 323884ad0b6e. Reason: `.urzua/config.yaml` gained only the `drift_baseline: {ref: v0.3.0}` declaration and its comment under `embodiment.consistency`; no other declaration changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+| 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` 323884ad0b6e -> b6ecfd818489. Reason: `.urzua/config.yaml`: only the comment above the `drift_baseline: {ref: v0.3.0}` declaration was reworded (drift a record already had at the ref); the declaration and every other rule are unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
