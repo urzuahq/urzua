@@ -2,7 +2,7 @@
 Stable-Id: 01M7A8QGWXMR8WYFDC36XW8XEF
 Status: Draft
 Date: 2026-11-13
-Version: '0.3'
+Version: '0.4'
 Author: beauwilliams
 Subject: '`urzua mcp` -- a read-only MCP server over stdio that serves the reports urzua already builds.'
 Implements: ADR-99
@@ -57,8 +57,8 @@ schema does not name is `-32602`, never ignored. Names carry a read word and no 
 | `urzua_check` | `{paths?: [string], base?: string, rules?: [string]}` | `CheckReport` |
 | `urzua_list_records` | `{type?: string, status?: [string]}` | `ExportReport` with each record's `raw_text`, `sections` and `preamble` left out: `types`, `record_count` and `records[]` (id, type, path, header fields). `types[].records` and `record_count` count the records listed, not the corpus. |
 | `urzua_show_record` | `{id: string}` | one `ExportedRecord` (header, `sections`, `raw_text`) and the `GraphEdge`s that touch it, supersession included |
-| `urzua_findings_for_path` | `{path: string}` | `ExplainReport` |
-| `urzua_graph` | `{}` | `GraphReport` |
+| `urzua_get_findings_for_path` | `{path: string}` | `ExplainReport` |
+| `urzua_get_graph` | `{}` | `GraphReport` |
 
 `urzua_check` runs `check` in process over the corpus. It has no equivalent of `--stdin-path`, `--actors`, `fix` or any
 `--apply`. `urzua_list_records` filters by the record type when `type` is given and by the header's status value when `status`
@@ -67,8 +67,12 @@ that matches nothing is a notice in the result (`list-records.type`, `list-recor
 `{type: "adr", status: ["Rejected", "Superseded"]}` in a corpus that declares those statuses. `urzua_show_record` returns the
 record's sections as written; the reasons for a decision are the prose of its sections and are not parsed (`ADR-64`).
 
-Built today: `urzua_check` and `urzua_list_records`. `urzua_show_record`, `urzua_findings_for_path` and `urzua_graph` follow
-and are not served yet. `tools/list` lists exactly the tools built. `urzua_check` refuses a `paths` entry that is absolute or
+All five tools are built, and `tools/list` lists exactly them. Each name carries a read word and no write word, because the editor
+hook leaves an MCP call alone only by its name (`SPEC-19`): `urzua_findings_for_path` and `urzua_graph` were named without one and
+were judged as edits when given a gated path, so they are `urzua_get_findings_for_path` and `urzua_get_graph`.
+`urzua_show_record` returns `{status, record, edges, notices}`: the `ExportedRecord` and the `GraphEdge`s whose `from` or `to` is
+the id (`ADR-46` has no report for this, so it is those two existing types in one object); an id no record carries is a
+could-not-run result. `urzua_get_findings_for_path` refuses a `path` that is absolute or contains `..`, as `urzua_check` refuses a `paths` entry that is absolute or
 contains `..` (`-32602`): the tools read the repository, not the disk around it.
 
 ## Results and errors
@@ -94,14 +98,14 @@ The mutating commands (`new`, `fix --apply`, `index --apply`, `migrate`,
 - the working tree and `.git`, every file and every directory (an empty one included), hash the same before and after every tool, in a
   table of every tool;
 - a scan of the production code of the `urzua-mcp` crate, the `mcp` command and the `urzua-cli` files its tools run through
-  (`commands/check.rs`, `commands/export.rs`, `session.rs`, `discovery.rs`, `file_texts.rs`, `diff_scope.rs`) finds no write API
+  (`commands/check.rs`, `commands/export.rs`, `commands/explain.rs`, `commands/graph.rs`, `session.rs`, `discovery.rs`, `file_texts.rs`, `diff_scope.rs`) finds no write API
   (`fs::write`, `rename`, `remove_*`, `create_dir*`, `File::create`, every `OpenOptions` spelling including `File::options()` and its
   `write`, `append`, `create`, `create_new` and `truncate` switches, `write_atomic`, process spawning). A `#[cfg(test)]` item hides
   only itself, and planted sources show the scan can fail (`ADR-55`). The scan does not cover `urzua-io` or `urzua-core`: `urzua-io`
   also holds the writers other commands use, so what the tools reach there is covered by the next item, not by the scan;
 - every stdout line is a JSON-RPC frame;
-- the harness leaves `mcp__urzua__urzua_list_records` with a `path` argument alone and judges a planted
-  `mcp__urzua__urzua_write_record` as a write.
+- every tool name the real server advertises carries a read word and no write word, the harness leaves each
+  `mcp__urzua__<tool>` alone when given a gated path, and judges a planted `mcp__urzua__urzua_write_record` as a write.
 
 The editor hook is advisory for agents (`SPEC-19`); the guarantee is the absence of write code, and the tests above are what keep it.
 One thing outside the server's code can change `.git`, and the guarantee is worded to allow it: `urzua_check` with `base` runs `git diff`, and git rewrites its own index
@@ -111,7 +115,7 @@ the server writes no record, no working file and no git object or ref; it does n
 
 ## Registration
 
-The server is registered by a person in a user-owned file, with a documented snippet in the README and `AGENTS.md`:
+The server is registered by a person in a user-owned file, with the snippet documented in `docs/reference/mcp.md`, the README and `AGENTS.md`:
 
 ```json
 { "mcpServers": { "urzua": { "command": "urzua", "args": ["mcp"] } } }
@@ -141,3 +145,4 @@ The server is registered by a person in a user-owned file, with a documented sni
 > | 2026-11-13 | Initial spec; nothing built yet. **Why:** `ADR-99` decides the read-only MCP server and requires its tool contract to be specified before the code. | **structural** |
 > | 2026-11-13 | Bumped to `0.2`. `urzua mcp` is built with `urzua_check` and `urzua_list_records` (`rust/crates/urzua-mcp`, `commands/mcp.rs`); the other three tools, the harness interaction tests and the registration docs follow. A listing leaves out `sections` and `preamble` as well as `raw_text`; `paths` may not leave the repository. **Why:** the server core of `MILE-29`. | **substantive** |
 > | 2026-11-13 | Bumped to `0.3`. A request line is capped at 1 MiB and a non-UTF-8 line is answered, both without ending the session; `id` null is refused and a message without an `id` never runs a tool; the read-only guarantee no longer says the server spawns no process (it runs read-only `git`, which may refresh its own index) and states what the source scan covers. **Why:** the review of the server core. | **substantive** |
+> | 2026-11-13 | Bumped to `0.4`. `urzua_show_record`, `urzua_get_findings_for_path` and `urzua_get_graph` are built; the last two are renamed from `urzua_findings_for_path` and `urzua_graph` so each name carries a read word the editor hook recognises; the harness interaction tests and the registration documentation exist. **Why:** the second change of `MILE-29`; the hook test showed the first names were judged as edits. | **substantive** |

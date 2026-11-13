@@ -747,6 +747,25 @@ pub enum ScopeSource {
     Stdin,
 }
 
+/// The drift a `drift_baseline` held out of the gate (`MILE-49`, `SPEC-2`).
+/// Counts cover the records the run judged drift for: under a path or `--base`
+/// scope, the records in scope.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct BaselineInfo {
+    /// The ref as declared.
+    #[serde(rename = "ref")]
+    pub git_ref: String,
+    /// The commit it resolved to.
+    pub commit: String,
+    /// Records whose every drifted locator was last changed at or before the
+    /// baseline: reported here and not as findings.
+    pub pre_existing: usize,
+    /// The first records counted in `pre_existing`, by path.
+    pub pre_existing_records: Vec<String>,
+    /// Records with drift introduced since the baseline: the ones the rule reports.
+    pub introduced: usize,
+}
+
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct ScopeInfo {
     pub source: ScopeSource,
@@ -822,6 +841,10 @@ pub struct CheckReport {
     /// policy it declared.
     pub rules_selected: Option<Vec<String>>,
     pub scope: ScopeInfo,
+    /// What `embodiment.consistency`'s `drift_baseline` split (`MILE-49`); absent
+    /// unless that option is declared and the rule ran.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub baseline: Option<BaselineInfo>,
     pub blocking: bool,
     pub findings: Vec<Finding>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -1689,6 +1712,7 @@ mod tests {
                 untracked_included: 0,
                 diff: None,
             },
+            baseline: None,
             blocking: false,
             findings: vec![],
             notices: vec![warning_notice()],
@@ -1716,6 +1740,7 @@ mod tests {
                 untracked_included: 0,
                 diff: None,
             },
+            baseline: None,
             blocking: false,
             findings: vec![Finding {
                 rule: "field.pending".to_string(),

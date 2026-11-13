@@ -1417,6 +1417,24 @@ pub fn commit_strictly_before(
     }
 }
 
+/// The full commit id `rev` (a branch, tag or commit) names, for a drift
+/// baseline (`MILE-49`). `Err` says why git could not resolve it, which a
+/// shallow clone that lacks the commit is one cause of.
+pub fn resolve_commit(repo_root: &Path, rev: &str) -> Result<String, String> {
+    let output = GitRun::new()
+        .args(["rev-parse", "--verify", "--quiet", "--end-of-options"])
+        .arg(format!("{rev}^{{commit}}"))
+        .cwd(repo_root)
+        .output()
+        .map_err(|e| format!("could not run git rev-parse: {}", e.into_io()))?;
+    let sha = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if output.status.success() && !sha.is_empty() {
+        Ok(sha)
+    } else {
+        Err(format!("'{rev}' does not name a commit in this repository"))
+    }
+}
+
 /// Whether the repository is a shallow clone, which hides the history the
 /// drift computation reads (`MILE-159`). `Err` when git cannot say.
 pub fn is_shallow_repository(repo_root: &Path) -> Result<bool, String> {

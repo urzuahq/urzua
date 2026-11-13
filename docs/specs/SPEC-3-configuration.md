@@ -1,9 +1,9 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.141'
+Version: '0.142'
 Date: 2026-08-20
 Status: Shipped
-Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:4c673f8d977134494cc40e2ad95b712df8e9536647c474b6de70da039ef4db2c, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:85949a6eddbac53734d58eb7be8e2b6a65a9f50004cbbe0b6e96269dcc82903b, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:3c8aa671582772499ab7345cdbfb5a4dc2c50462882851fb20f853992acfd57c
+Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:ad8c3554a542fce1d9d1336c6e3ae2f9a066224a42e095f5b5fcabba0a512a55, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:e60116ae0a7034a14619b4949265b88470479f15e854b37803f4d63a2d17646a, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:3c8aa671582772499ab7345cdbfb5a4dc2c50462882851fb20f853992acfd57c
 Embodiment: Verified
 Author: beauwilliams
 Subject: '`.urzua/config.yaml` -- the schema for record types, required/known fields, and per-type behavior.'
@@ -1702,6 +1702,38 @@ rules:
 Both options belong to `embodiment.consistency` alone; on any other rule they are the usual
 option-on-a-rule-that-does-not-take-it load error.
 
+### Drift baseline: `drift_baseline` (`MILE-49`)
+
+A corpus adopting urzua on existing code can show drift nobody caused today. `drift_baseline` names a git ref,
+and drift that predates it stops gating while drift introduced since it still does. It is opt-in and belongs to
+`embodiment.consistency`; a configuration that does not declare it behaves as before.
+
+```yaml
+rules:
+  embodiment.consistency:
+    level: warn
+    drift_baseline: {ref: v0.3.0}   # a branch, tag or commit
+```
+
+- `ref` (required, one key): a git ref. A blank ref, one that starts with `-`, one that holds whitespace, an unknown
+  key beside it, or the value written as a bare string is a load error. Whether the ref resolves is judged when
+  `check` runs, because a configuration cannot see the repository: a ref that names no commit stops the run (exit
+  2) and names the option and the ref. It is never read as "no pre-existing drift", which would put the whole
+  backlog back on the gate. A shallow clone that lacks the commit fails the same way.
+- Drift is judged as it stood at the ref. A record is pre-existing when it existed at the ref, every locator that
+  drifts now is the same locator (same category, spelling and pin) that its copy at the ref cited and had
+  drifted, and the commit that last changed each cited file (for a directory or glob, the newest of its files) is
+  the baseline commit or an ancestor of it. A record added after the ref, a pin edited or renewed after it, a file
+  changed after it (even where an earlier change had already drifted it), and a commit git cannot place all count
+  as introduced.
+- A pre-existing record agrees with its computed tier or with a stated drift state, so it draws no finding and does
+  not gate under any `fail_on`. It is listed in the `embodiment-drift-baselined` info notice and counted in the
+  report's `baseline` object (`SPEC-2`).
+- The option holds no list of records or findings, so there is nothing to keep in step with the corpus: the
+  baseline retires itself as records are re-verified, advancing the ref moves it, and deleting the option removes it.
+  A whole-corpus run in which it holds nothing out says so in `embodiment-drift-baseline-unused`.
+- `urzua fix` and `urzua reverify` read no baseline; `--base` composes with it.
+
 ### Claim expiry: `embodiment.claim-expired` (`ADR-97`, `MILE-129`)
 
 `embodiment.claim-expired` expires a claim after a period declared per record type, status and
@@ -2534,8 +2566,9 @@ proves this configuration produces the three findings.
 > | 2026-11-13 | Bumped to `0.139`. A type's `sections` may declare `unique_headings`, `no_skipped_levels` and `order: {from: template}`, read by the opt-in rules `section.duplicate`, `section.level-skipped` and `section.order`; `no_skipped_levels` needs a `depth` of at least 2, and a bad value is refused at load. A type that declares none loads and is checked as before. **Why:** `MILE-104`. | **substantive** |
 > | 2026-11-13 | Bumped to `0.140`. A declared `sections.order` whose template is missing or holds no section is a `section.order` error on each record of the type (it was a warning notice), so it gates `fail_on: warning`; duplicate detection is documented as exact, trimmed, case-sensitive text, and order matching as ignoring `required` aliases. **Why:** a notice does not set the exit code, so a deleted template would have switched the rule off silently. | **structural** |
 > | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/own_config_integration.rs` 92a2b9ceca89 -> 5aafdaf17779. Reason: Read the diff of each pinned test file since the previous pin. The repo() fixture helper now also copies the repository's .urzua/templates into the fixture, because the own config declares sections.order from templates; no assertion or test body changed; the claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
-> | 2026-11-13 | Bumped to `0.141`. Documents `code.dangling-bug-reference` and its `extensions` option: bare file extensions, required beside `back_pointer_paths`, a dot, a glob or a blank entry refused at load; `external_ids` and `ignore_marker` are the options of `citation.resolution` and the boundary rule, the marker read by this rule alone and refused at load when it would sit on every citation. **Why:** `MILE-108`, `RFC-41` -- the opt-in rule that checks source comments cite records that exist. | **substantive** |
-> | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 6daa34e96997 -> a20fffddd1d5, `rust/crates/urzua-cli/tests/own_config_integration.rs` 5aafdaf17779 -> 85949a6eddba. Reason: Read the diff of each re-pinned file against main and the claim still holds. own_config_integration.rs: adds the test the_own_config_reports_a_dangling_citation_in_rust_and_scripts_and_nothing_else; no existing test changed; config.rs: RuleSetting gains the optional extensions field, RULE_OPTIONS gains the extensions entry, validate_extensions refuses an entry that is not a bare extension, validate_ignore_markers applies the generic marker guard to code.dangling-bug-reference, and the external_ids doc comment names PREFIX-LOW..HIGH instead of a sample range; no existing option, parse or default changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
-> | 2026-11-13 | `code.dangling-bug-reference` also takes `code_comment_prefixes`, the comment leaders per extension (built-in set when undeclared), and skips an id inside a URL; documented in the same section. Version unchanged from the bump above. **Why:** `ADR-100`, `RFC-41` -- the maintainer chose configurable leaders on 2026-11-13. | **substantive** |
-> | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` a20fffddd1d5 -> 6c31b9ebdda2. Reason: Read the diff of each re-pinned file against main and the claim still holds. config.rs: RuleSetting gains the optional extensions field, RULE_OPTIONS gains the extensions entry, validate_extensions refuses an entry that is not a bare extension, the optional code_comment_prefixes field with validate_code_comment_prefixes and its applicability check, validate_ignore_markers applies the generic marker guard to code.dangling-bug-reference, and the external_ids doc comment names PREFIX-LOW..HIGH instead of a sample range; no existing option, parse or default changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
-> | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 6c31b9ebdda2 -> 4c673f8d9771. Reason: Read the diff of each re-pinned file against main and the claim still holds. config.rs: RuleSetting gains the optional extensions field, RULE_OPTIONS gains the extensions entry, validate_extensions refuses an entry that is not a bare extension, the optional code_comment_prefixes field with validate_code_comment_prefixes and its applicability check, validate_ignore_markers applies the generic marker guard to code.dangling-bug-reference, and the external_ids doc comment names PREFIX-LOW..HIGH instead of a sample range; no existing option, parse or default changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-13 | Bumped to `0.141`. Documents the opt-in `drift_baseline: {ref}` option of `embodiment.consistency`: its shape, what a pre-existing record is, the unresolvable-ref error, and that it holds no list. Maintainer decision, 2026-11-13: exercised by fixtures, not declared in the own config, since it would hold out nothing. **Why:** `MILE-49`, decided by the `ADR-91` amendment of 2026-11-13. | **substantive** |
+> | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 6daa34e96997 -> 33f505e4cb50, `rust/crates/urzua-cli/tests/own_config_integration.rs` 5aafdaf17779 -> f91ef0b83e49. Reason: own_config_integration.rs: its fixture strips the `drift_baseline` line, and it gains the test that this repository's baseline ref resolves; other assertions unchanged. config.rs gained the `DriftBaseline` type, the `drift_baseline` option of `embodiment.consistency` with its validation (`check_rule_drift_baseline`) and a unit test; no existing parsing changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 33f505e4cb50 -> ad8c3554a542. Reason: config.rs: only the doc comment on the `drift_baseline` option was reworded (drift a record already had at the ref, with the same pin); no parsing or validation changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/own_config_integration.rs` f91ef0b83e49 -> 5ca7a48405d4. Reason: own_config_integration.rs gained the test that the own config's shape accepts a drift_baseline on embodiment.consistency without declaring one; other tests unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/own_config_integration.rs` 5ca7a48405d4 -> e60116ae0a70. Reason: own_config_integration.rs: rustfmt wrapped one assert in the test added by this change; formatting only, no behaviour change. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-13 | Bumped to `0.142`. Documents `code.dangling-bug-reference` and its `extensions` and `code_comment_prefixes` options: bare file extensions required beside `back_pointer_paths`, comment leaders declared per extension with the back-pointer rules' set as the default, an id inside a URL not read; a dot, a glob or a blank entry, or a malformed leader declaration, is refused at load; `external_ids` and `ignore_marker` are the options of `citation.resolution` and the boundary rule, the marker read by this rule alone. **Why:** `MILE-108`, `RFC-41`, `ADR-100` -- the opt-in rule that checks source comments cite records that exist. | **substantive** |

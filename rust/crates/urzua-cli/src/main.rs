@@ -546,12 +546,16 @@ fn main() -> ExitCode {
 
     panic_if_requested();
 
-    let cli = match parse_cli() {
-        Ok(cli) => cli,
-        Err(code) => return code,
-    };
+    match parse_cli() {
+        Ok(cli) => dispatch(cli.config, cli.command),
+        Err(code) => code,
+    }
+}
 
-    match cli.command {
+/// Runs the parsed command. Kept apart from `main` so neither is near SPEC-22's
+/// 100-line bound.
+fn dispatch(config: Option<PathBuf>, command: Command) -> ExitCode {
+    match command {
         Command::Check {
             base,
             fail_on,
@@ -560,7 +564,7 @@ fn main() -> ExitCode {
             actors,
             paths,
         } => commands::check::run(
-            cli.config,
+            config,
             commands::check::CheckArgs {
                 paths,
                 base,
@@ -571,28 +575,28 @@ fn main() -> ExitCode {
                 ..Default::default()
             },
         ),
-        Command::Explain { path, rule } => commands::explain::run(cli.config, path, rule),
-        Command::Graph => commands::graph::run(cli.config),
-        Command::Roadmap => commands::roadmap::run(cli.config),
-        Command::Mcp { root } => commands::mcp::run(cli.config, root),
+        Command::Explain { path, rule } => commands::explain::run(config, path, rule),
+        Command::Graph => commands::graph::run(config),
+        Command::Roadmap => commands::roadmap::run(config),
+        Command::Mcp { root } => commands::mcp::run(config, root),
         Command::New {
             record_type,
             title,
             by,
-        } => commands::new::run(cli.config, record_type, title, by),
-        Command::Waive(args) => commands::waive::run(cli.config, args),
-        Command::Audit => commands::audit::run(cli.config),
-        Command::Migrate { target } => dispatch_migrate(cli.config, target),
-        Command::Export { format } => dispatch_export(cli.config, format),
+        } => commands::new::run(config, record_type, title, by),
+        Command::Waive(args) => commands::waive::run(config, args),
+        Command::Audit => commands::audit::run(config),
+        Command::Migrate { target } => dispatch_migrate(config, target),
+        Command::Export { format } => dispatch_export(config, format),
         Command::Import { .. } => not_implemented("import"),
-        init @ Command::Init { .. } => dispatch_init(cli.config, init),
-        Command::Harness { target } => dispatch_harness(cli.config, target),
-        Command::Doctor => commands::doctor::run(cli.config),
+        init @ Command::Init { .. } => dispatch_init(config, init),
+        Command::Harness { target } => dispatch_harness(config, target),
+        Command::Doctor => commands::doctor::run(config),
         Command::Rules => commands::rules::run(),
-        Command::Index { apply } => commands::index::run(cli.config, apply),
+        Command::Index { apply } => commands::index::run(config, apply),
         Command::Refs {
             target: RefsTarget::Refresh,
-        } => commands::refs::run_refresh(cli.config),
+        } => commands::refs::run_refresh(config),
         Command::Reverify {
             ids,
             apply,
@@ -602,7 +606,7 @@ fn main() -> ExitCode {
             force,
             reason,
         } => commands::reverify::run(
-            cli.config,
+            config,
             commands::reverify::ReverifyArgs {
                 ids,
                 apply,
@@ -625,7 +629,7 @@ fn main() -> ExitCode {
             rebaseline,
             reason,
         } => commands::fix::run(
-            cli.config,
+            config,
             commands::fix::FixArgs {
                 paths,
                 stdin_path,

@@ -3,6 +3,8 @@
 //! asserted: no write tool exists, the working tree and `.git` hash the same
 //! after every call, stdout carries only JSON-RPC frames, and a scan of the
 //! server's sources finds no write API (a planted source shows it can fail).
+//!
+//! Verifies: ADR-99
 
 mod common;
 
@@ -14,7 +16,7 @@ use std::process::{Command, Stdio};
 
 use serde_json::{json, Value};
 
-const CONFIG: &str = "schema_version: 2\nrules: {header.required-fields: error, section.required: error}\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\", \"Date\"]\n    known_fields: [\"Superseded-by\", \"Supersedes\"]\n    sections:\n      from: headings\n      required:\n        - {name: Context}\n";
+const CONFIG: &str = "schema_version: 2\nrules: {header.required-fields: error, section.required: error}\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\", \"Date\"]\n    known_fields: [\"Superseded-by\", \"Supersedes\"]\n    pointer_fields: [\"Superseded-by\", \"Supersedes\"]\n    sections:\n      from: headings\n      required:\n        - {name: Context}\n";
 
 fn git(dir: &Path, args: &[&str]) {
     let status = Command::new("git")
@@ -27,6 +29,31 @@ fn git(dir: &Path, args: &[&str]) {
 
 fn adr(status: &str, extra: &str, n: u32) -> String {
     format!("---\nStatus: {status}\nDate: 2026-01-01\n{extra}---\n# ADR-{n}: Decision {n}\n\n## Context\n\nreason {n}\n")
+}
+
+const EXPLAIN_CONFIG: &str = "schema_version: 2\nrules: {header.required-fields: error}\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\"]\n    known_fields: [\"Realized-by\"]\n";
+
+/// One ADR whose `Realized-by` names `src/a.rs`, plus that file and an ungoverned one.
+fn explain_fixture(name: &str) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-mcp-{name}"));
+    for sub in ["docs/adr", ".urzua", "src"] {
+        std::fs::create_dir_all(dir.join(sub)).unwrap();
+    }
+    git(&dir, &["init", "-q"]);
+    git(&dir, &["config", "user.email", "test@example.com"]);
+    git(&dir, &["config", "user.name", "test"]);
+    std::fs::write(dir.join(".urzua/config.yaml"), EXPLAIN_CONFIG).unwrap();
+    std::fs::write(dir.join("src/a.rs"), "fn a() {}\n").unwrap();
+    std::fs::write(dir.join("src/b.rs"), "fn b() {}\n").unwrap();
+    std::fs::write(
+        dir.join("docs/adr/ADR-1-a.md"),
+        "---\nStatus: Accepted\nRealized-by: code:src/a.rs\n---\n# ADR-1: A\n",
+    )
+    .unwrap();
+    git(&dir, &["add", "-A"]);
+    git(&dir, &["commit", "-q", "-m", "fixture"]);
+    settle(&dir);
+    dir
 }
 
 /// ADR-1 Accepted, ADR-2 Rejected, ADR-3 Superseded by ADR-4, ADR-5 broken (no Date).
@@ -184,7 +211,16 @@ fn initialize_and_tools_list_advertise_exactly_the_read_only_tools_built() {
     assert_eq!(replies[0]["result"]["capabilities"], json!({"tools": {}}));
     let tools = replies[1]["result"]["tools"].as_array().unwrap();
     let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
-    assert_eq!(names, ["urzua_check", "urzua_list_records"]);
+    assert_eq!(
+        names,
+        [
+            "urzua_check",
+            "urzua_list_records",
+            "urzua_show_record",
+            "urzua_get_findings_for_path",
+            "urzua_get_graph"
+        ]
+    );
     for tool in tools {
         assert_eq!(tool["annotations"]["readOnlyHint"], true);
         assert_eq!(tool["inputSchema"]["additionalProperties"], false);
@@ -192,7 +228,7 @@ fn initialize_and_tools_list_advertise_exactly_the_read_only_tools_built() {
 }
 
 #[test]
-fn tool_names_carry_no_write_word() {
+fn tool_names_carry_a_read_word_and_no_write_word() {
     // The harness reads an MCP call as a write by the words in its tool name
     // (SPEC-19); the names are load-bearing, so a write word here is a bug.
     let dir = fixture("names");
@@ -204,14 +240,25 @@ fn tool_names_carry_no_write_word() {
         "write", "create", "set", "update", "move", "delete", "remove", "apply", "fix", "edit",
         "patch", "install",
     ];
+    // The hook leaves a tool alone only when its name carries one of these (and no
+    // write word); a tool without one is judged as an edit when it is given a path.
+    let read_words = [
+        "read", "get", "list", "search", "find", "stat", "view", "show", "cat", "fetch", "query",
+        "describe", "info", "tree", "diff", "status", "log", "count", "check", "lookup", "inspect",
+    ];
     for tool in replies[0]["result"]["tools"].as_array().unwrap() {
         let name = tool["name"].as_str().unwrap();
-        for word in name.split('_') {
+        let words: Vec<&str> = name.split('_').collect();
+        for word in &words {
             assert!(
-                !write_words.contains(&word),
+                !write_words.contains(word),
                 "tool `{name}` has the write word `{word}`"
             );
         }
+        assert!(
+            words.iter().any(|w| read_words.contains(w)),
+            "tool `{name}` has no read word, so the editor hook would judge it as an edit"
+        );
     }
 }
 
@@ -361,16 +408,38 @@ fn the_working_tree_and_git_hash_the_same_after_every_tool() {
             "urzua_list_records",
             json!({"type": "adr", "status": ["Rejected"]}),
         ),
+        ("urzua_show_record", json!({"id": "ADR-3"})),
+        ("urzua_show_record", json!({"id": "ADR-999"})),
+        (
+            "urzua_get_findings_for_path",
+            json!({"path": "docs/adr/ADR-1-a.md"}),
+        ),
+        ("urzua_get_findings_for_path", json!({"path": "docs/**"})),
+        (
+            "urzua_get_findings_for_path",
+            json!({"path": "docs/adr/ADR-1-a.md#Context"}),
+        ),
+        ("urzua_get_graph", json!({})),
     ];
+    // The table must name every tool the server advertises, so a new tool cannot
+    // be added without a row here.
+    let (listed, _) = session(
+        &dir,
+        &[json!({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})],
+    );
+    let advertised: std::collections::BTreeSet<&str> = listed[0]["result"]["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|t| t["name"].as_str().unwrap())
+        .collect();
+    let covered: std::collections::BTreeSet<&str> = table.iter().map(|(t, _)| *t).collect();
+    assert_eq!(covered, advertised, "every advertised tool has a row");
     for (tool, arguments) in table {
         let before = tree_hash(&dir);
         let reply = call_one(&dir, tool, arguments.clone());
         assert!(reply.get("result").is_some(), "{tool} {arguments}: {reply}");
-        assert_eq!(
-            tree_hash(&dir),
-            before,
-            "{tool} {arguments} changed the tree"
-        );
+        assert_tree_unchanged(&before, &dir, &format!("{tool} {arguments}"));
     }
 }
 
@@ -552,7 +621,7 @@ fn forbidden_in(source: &str) -> Vec<&'static str> {
 }
 
 /// The server's own sources, and the `urzua-cli` files its tools run through:
-/// `check` (`commands/check.rs` and what it reads with), and `export`. The
+/// `check` (`commands/check.rs` and what it reads with), `export`, `explain` and `graph`. The
 /// `urzua-io` and `urzua-core` crates are not scanned: `urzua-io` holds the
 /// writers other commands use and runs `git`, so what the tools reach there is
 /// covered by the tree-hash test instead (SPEC-26, "Read-only guarantee").
@@ -560,6 +629,8 @@ const SCANNED: &[&str] = &[
     "urzua-cli/src/commands/mcp.rs",
     "urzua-cli/src/commands/check.rs",
     "urzua-cli/src/commands/export.rs",
+    "urzua-cli/src/commands/explain.rs",
+    "urzua-cli/src/commands/graph.rs",
     "urzua-cli/src/session.rs",
     "urzua-cli/src/discovery.rs",
     "urzua-cli/src/file_texts.rs",
@@ -683,4 +754,91 @@ fn a_bad_or_oversized_line_over_the_real_process_gets_an_error_and_the_server_ke
         .collect();
     assert_eq!(codes, [-32700, -32600, 0]);
     assert_eq!(replies[2]["id"], 3);
+}
+
+#[test]
+fn show_record_returns_the_record_with_its_sections_text_and_supersession_edges() {
+    let dir = fixture("show");
+    let reply = call_one(&dir, "urzua_show_record", json!({"id": "ADR-3"}));
+    let result = &reply["result"];
+    assert_eq!(result["isError"], false);
+    let report = &result["structuredContent"];
+    let text: Value = serde_json::from_str(result["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert_eq!(&text, report);
+    let record = &report["record"];
+    assert_eq!(record["id"], "ADR-3");
+    assert!(record["raw_text"].as_str().unwrap().contains("reason 3"));
+    assert_eq!(record["sections"][0]["name"], "Context");
+    let edges = report["edges"].as_array().unwrap();
+    assert!(
+        edges
+            .iter()
+            .any(|e| e["from"] == "ADR-3" && e["to"] == "ADR-4"),
+        "ADR-3 is superseded by ADR-4: {edges:?}"
+    );
+    assert!(edges
+        .iter()
+        .all(|e| e["from"] == "ADR-3" || e["to"] == "ADR-3"));
+}
+
+#[test]
+fn show_record_of_an_unknown_id_is_an_error_result_not_an_empty_record() {
+    let dir = fixture("showunknown");
+    let reply = call_one(&dir, "urzua_show_record", json!({"id": "ADR-999"}));
+    assert_eq!(reply["result"]["isError"], true);
+    let report = &reply["result"]["structuredContent"];
+    assert_eq!(report["status"], "not-run");
+    assert!(report["error"].as_str().unwrap().contains("ADR-999"));
+    assert!(report.get("record").is_none());
+}
+
+#[test]
+fn findings_for_path_returns_the_records_that_govern_it() {
+    let dir = explain_fixture("explain");
+    let reply = call_one(
+        &dir,
+        "urzua_get_findings_for_path",
+        json!({"path": "src/a.rs"}),
+    );
+    let report = &reply["result"]["structuredContent"];
+    assert_eq!(reply["result"]["isError"], false, "{reply}");
+    assert_eq!(report["path"], "src/a.rs");
+    assert_eq!(report["governing_records"].as_array().unwrap().len(), 1);
+    let cli = common::urzua()
+        .args(["explain", "src/a.rs"])
+        .current_dir(&dir)
+        .output()
+        .unwrap();
+    let cli: Value = serde_json::from_slice(&cli.stdout).unwrap();
+    assert_eq!(report["governing_records"], cli["governing_records"]);
+    let ungoverned = call_one(
+        &dir,
+        "urzua_get_findings_for_path",
+        json!({"path": "src/b.rs"}),
+    );
+    assert_eq!(
+        ungoverned["result"]["structuredContent"]["governing_records"],
+        json!([])
+    );
+    let escaping = call_one(&dir, "urzua_get_findings_for_path", json!({"path": "../x"}));
+    assert_eq!(escaping["error"]["code"], -32602);
+}
+
+#[test]
+fn graph_returns_the_cli_graph_report() {
+    let dir = fixture("graph");
+    let reply = call_one(&dir, "urzua_get_graph", json!({}));
+    let report = &reply["result"]["structuredContent"];
+    assert_eq!(reply["result"]["isError"], false);
+    let cli = common::urzua()
+        .args(["graph"])
+        .current_dir(&dir)
+        .output()
+        .unwrap();
+    let cli: Value = serde_json::from_slice(&cli.stdout).unwrap();
+    assert_eq!(report["edges"], cli["edges"]);
+    assert_eq!(report["population"], cli["population"]);
+    assert!(!report["edges"].as_array().unwrap().is_empty());
+    let extra = call_one(&dir, "urzua_get_graph", json!({"id": "ADR-1"}));
+    assert_eq!(extra["error"]["code"], -32602);
 }

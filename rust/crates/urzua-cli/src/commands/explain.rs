@@ -29,7 +29,7 @@ use urzua_core::report::Failure;
 
 pub fn run(config_path: Option<PathBuf>, path: Option<String>, rule: Option<String>) -> ExitCode {
     match (path, rule) {
-        (Some(path), None) => emit_or_not_run(run_inner(config_path, path)),
+        (Some(path), None) => emit_or_not_run(build(config_path, path).map(|report| emit(&report))),
         (None, Some(rule)) => emit_or_not_run(run_rule(config_path, &rule)),
         // clap rejects both and neither before this is reached.
         _ => emit_or_not_run(Err("give a path, or --rule <rule-id>".to_string().into())),
@@ -123,7 +123,8 @@ fn run_rule(config_path: Option<PathBuf>, id: &str) -> Result<ExitCode, Failure>
     }))
 }
 
-fn run_inner(config_path: Option<PathBuf>, path: String) -> Result<ExitCode, Failure> {
+/// The report `urzua explain <path>` prints, also built by the MCP server.
+pub(crate) fn build(config_path: Option<PathBuf>, path: String) -> Result<ExplainReport, Failure> {
     let Session {
         config,
         records,
@@ -184,7 +185,7 @@ fn run_inner(config_path: Option<PathBuf>, path: String) -> Result<ExitCode, Fai
         .into());
     }
 
-    Ok(emit(&ExplainReport {
+    Ok(ExplainReport {
         status: ReportStatus::Ok,
         path: parsed.path.clone(),
         governing_records,
@@ -192,7 +193,7 @@ fn run_inner(config_path: Option<PathBuf>, path: String) -> Result<ExitCode, Fai
         coverage,
         population,
         notices,
-    }))
+    })
 }
 
 // BUG-176: explain shows the files a directory or glob pin covers
