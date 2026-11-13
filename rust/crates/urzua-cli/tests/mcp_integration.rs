@@ -3,6 +3,8 @@
 //! asserted: no write tool exists, the working tree and `.git` hash the same
 //! after every call, stdout carries only JSON-RPC frames, and a scan of the
 //! server's sources finds no write API (a planted source shows it can fail).
+//!
+//! Verifies: ADR-99
 
 mod common;
 

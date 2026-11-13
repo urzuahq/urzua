@@ -1,10 +1,11 @@
 ---
 Stable-Id: 01M7A8QFEVHGZ559S89JSYR8TA
-Status: Proposed
+Status: Accepted
+Accepted-on: 2026-11-13
 Date: 2026-11-13
 Author: beauwilliams
 Deciders: beauwilliams
-Embodiment: null
+Embodiment: Verified
 Supersedes / Superseded-by: null
 ---
 # 99 — urzua ships a read-only MCP server as a stdio transport over its existing reports
@@ -77,7 +78,7 @@ track one protocol revision ourselves:*
 7. **Registration is a documented snippet.** `urzua harness install` writes no MCP configuration. Registering the server is a
    person's act in a user-owned file.
 
-The tools are `urzua_check`, `urzua_list_records`, `urzua_show_record`, `urzua_get_findings_for_path` and `urzua_get_graph`, every one
+The tools are `urzua_check`, `urzua_list_records`, `urzua_show_record`, `urzua_findings_for_path` and `urzua_graph`, every one
 advertised `readOnlyHint: true`. Their names carry a read word and no write word, so the harness's name-based reading of an MCP
 call leaves them alone; that naming is load-bearing and a test pins it.
 
@@ -88,6 +89,12 @@ a JSON-RPC frame; and the harness judges a read-named tool carrying a path as an
 
 This ADR closes `MILE-47`. It builds in two changes: the server core with `urzua_check` and `urzua_list_records`, then the other
 three tools, the read-only tests and the registration documentation. `MILE-29` is done when both have landed.
+
+## Amendment (2026-11-13): two tool names carry a read word
+
+The Decision says every tool name carries a read word and no write word, because the editor hook leaves an MCP call alone only by its name.
+Testing the hook against the server showed `urzua_findings_for_path` and `urzua_graph` had no read word and were judged as edits when given a
+gated record path. They are named `urzua_get_findings_for_path` and `urzua_get_graph`; the maintainer chose to keep these names. Nothing else decided changes.
 
 ## Reversibility
 
@@ -120,4 +127,6 @@ costs a dependency review, because the tools sit behind the dispatch layer.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-13 | Filed as Proposed; the decisions were approved by the maintainer in conversation on 2026-11-13, and the Status moves to Accepted in a follow-up the maintainer approves. **Why:** the maintainer's decision of 2026-11-13, taking the recommendation on each of the seven choices (engine transport, generic status filter, stdio only, `urzua mcp`, hand-written JSON-RPC crate, report JSON as the result, registration by snippet) and choosing an ADR with no separate RFC; it closes `MILE-47`. The status stays Proposed here because `status.transition-allowed` refuses a new ADR that starts at Accepted (`ADR-72`), and `diff.decider-required` asks for an approver of the change that makes it Accepted. | **substantive** |
-> | 2026-11-13 | Tool names `urzua_findings_for_path` and `urzua_graph` are now `urzua_get_findings_for_path` and `urzua_get_graph`; nothing else decided changes. **Why:** the Decision says every name carries a read word, and the editor hook's test showed these two had none and were judged as edits when given a gated path. | **substantive** |
+> | 2026-11-13 | Status changed from Proposed to Accepted; accepted by the maintainer on 2026-11-13. **Why:** the maintainer approved these decisions in conversation on 2026-11-13 (see the row above); this change, which the maintainer approves on the pull request, carries the acceptance that `status.transition-allowed` and `diff.decider-required` require to happen in its own change. | **substantive** |
+> | 2026-11-13 | Amendment added: the tools `urzua_findings_for_path` and `urzua_graph` are named `urzua_get_findings_for_path` and `urzua_get_graph`. The Decision text is unchanged. **Why:** the hook test showed the first names were judged as edits; the maintainer chose to keep the new names. | **substantive** |
+> | 2026-11-13 | Tool-authored (by beauwilliams, identity: gh-verified, actor: agent): recomputed `Embodiment` from `no Realized-by field; cited by test back-pointers` -- stated no value disagreed with the computed value `Verified`. | **structural** |
