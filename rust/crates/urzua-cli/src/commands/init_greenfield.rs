@@ -73,9 +73,8 @@ pub(crate) const PROFILES: &[Profile] = &[
         implementable: &["Accepted"],
         transitions: &[
             ("Draft", &["Discussion", "Accepted", "Rejected"]),
-            ("Discussion", &["Draft", "Accepted", "Rejected"]),
+            ("Discussion", &["Accepted", "Rejected"]),
             ("Accepted", &["Superseded"]),
-            ("Rejected", &["Draft"]),
         ],
         title_field: None,
         versioned: false,
@@ -105,7 +104,7 @@ pub(crate) const PROFILES: &[Profile] = &[
         implementable: &["Approved"],
         transitions: &[
             ("Draft", &["Review"]),
-            ("Review", &["Draft", "Approved", "Rejected"]),
+            ("Review", &["Approved", "Rejected"]),
             ("Approved", &["Superseded"]),
         ],
         title_field: None,

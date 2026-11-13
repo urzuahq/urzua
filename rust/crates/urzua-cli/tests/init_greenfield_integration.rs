@@ -89,6 +89,27 @@ fn the_profiles_are_materialized_as_visible_rules_in_the_config() {
     }
     let text = config(dir.path());
     assert!(!text.contains("profile:"), "no by-name reference: {text}");
+    // The lifecycle is written out as visible config.
+    let value: yaml_serde::Value = yaml_serde::from_str(&text).unwrap();
+    let transitions = |t: &str| value["record_types"][t]["statuses"]["transitions"].clone();
+    let list = |v: &yaml_serde::Value, from: &str| -> Vec<String> {
+        v[from]
+            .as_sequence()
+            .map(|s| s.iter().map(|x| x.as_str().unwrap().to_string()).collect())
+            .unwrap_or_default()
+    };
+    let adr = transitions("adr");
+    assert_eq!(list(&adr, "Proposed"), ["Accepted", "Rejected"]);
+    assert_eq!(list(&adr, "Accepted"), ["Superseded"]);
+    let prd = transitions("prd");
+    assert_eq!(list(&prd, "Draft"), ["Review"]);
+    assert_eq!(list(&prd, "Review"), ["Approved", "Rejected"]);
+    assert_eq!(list(&prd, "Approved"), ["Superseded"]);
+    assert_eq!(
+        list(&transitions("rfc"), "Discussion"),
+        ["Accepted", "Rejected"]
+    );
+    assert_eq!(list(&transitions("spec"), "Accepted"), ["Shipped"]);
 }
 
 /// MILE-114 Done: the config greenfield init writes passes `check` (over the
