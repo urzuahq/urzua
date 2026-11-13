@@ -222,7 +222,10 @@ fn plan_one(
         return skip(
             out,
             SkipReason::TargetExists,
-            format!("{} already exists or is another rename's new name; nothing is overwritten", to.display()),
+            format!(
+                "{} already exists or is another rename's new name; nothing is overwritten",
+                to.display()
+            ),
         );
     }
     out.renames.push(Rename {
@@ -335,10 +338,22 @@ mod tests {
     #[test]
     fn the_target_keeps_the_number_and_slug_and_takes_the_declared_padding() {
         let id = declared(PADDED);
-        assert_eq!(target_name(Some(&id), "ADR", "0005-x.md").unwrap(), "ADR-0005-x.md");
-        assert_eq!(target_name(Some(&id), "ADR", "5-x.md").unwrap(), "ADR-0005-x.md");
-        assert_eq!(target_name(None, "ADR", "0005-x.md").unwrap(), "ADR-0005-x.md");
-        assert_eq!(target_name(None, "ADR", "5_x y.MD").unwrap(), "ADR-5-x y.md");
+        assert_eq!(
+            target_name(Some(&id), "ADR", "0005-x.md").unwrap(),
+            "ADR-0005-x.md"
+        );
+        assert_eq!(
+            target_name(Some(&id), "ADR", "5-x.md").unwrap(),
+            "ADR-0005-x.md"
+        );
+        assert_eq!(
+            target_name(None, "ADR", "0005-x.md").unwrap(),
+            "ADR-0005-x.md"
+        );
+        assert_eq!(
+            target_name(None, "ADR", "5_x y.MD").unwrap(),
+            "ADR-5-x y.md"
+        );
     }
 
     #[test]
@@ -346,7 +361,8 @@ mod tests {
         let id = declared(PADDED);
         let (reason, _) = target_name(Some(&id), "ADR", "README.md").unwrap_err();
         assert_eq!(reason, SkipReason::NoNumber);
-        let (reason, _) = target_name(Some(&id), "ADR", "99999999999999999999999-x.md").unwrap_err();
+        let (reason, _) =
+            target_name(Some(&id), "ADR", "99999999999999999999999-x.md").unwrap_err();
         assert_eq!(reason, SkipReason::NumberTooLarge);
         let (reason, _) = target_name(Some(&id), "ADR", "12345-x.md").unwrap_err();
         assert_eq!(reason, SkipReason::PatternRejects);

@@ -244,7 +244,10 @@ fn rename_one(root: &Path, rename: &Rename) -> WriteResult {
         urzua_io::confine_to_root(root, &from)?;
         urzua_io::confine_to_root(root, &to)?;
         if std::fs::symlink_metadata(&to).is_ok() {
-            return Err(format!("{} appeared; nothing is overwritten", rename.to.display()));
+            return Err(format!(
+                "{} appeared; nothing is overwritten",
+                rename.to.display()
+            ));
         }
         std::fs::rename(&from, &to).map_err(|e| e.to_string())
     })();
