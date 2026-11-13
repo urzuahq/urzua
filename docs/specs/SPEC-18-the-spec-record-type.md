@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5GHR70MNKQTXHQJGJB
-Version: '0.22'
+Version: '0.23'
 Date: 2026-09-08
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:.urzua/config.yaml@sha256:21e9ab57a37acf5df4921e86bca7127e7e3881e648115b370e7357339549054d, test:rust/crates/urzua-cli/tests/spec_shipped_integration.rs@sha256:b03ddbc2eacaccee634b27b070f66f6a730197313c3b114a882becc342acb7a8
+Realized-by: code:.urzua/config.yaml@sha256:dd656d471f380787e18d7a2d2267975552c953858cc33a165c33b0afde087d7e, test:rust/crates/urzua-cli/tests/spec_shipped_integration.rs@sha256:b03ddbc2eacaccee634b27b070f66f6a730197313c3b114a882becc342acb7a8
 Author: beauwilliams
 Subject: 'The `spec` record type -- schema, required fields (including this one, `Subject`), and lifecycle.'
 Parent: —
@@ -140,3 +140,5 @@ any other class, a new spec, or an unchanged log is not reported.
 > | 2026-11-09 | Bumped to `0.21`. Re-pin rows in this revision log were reworded to name who re-verified, matching the tool's wording since 2026-11-09; hashes, reasons and dates are unchanged. **Why:** Maintainer decision, 2026-11-09. | **structural** |
 > | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` cbb1c67c40a0 -> 21e9ab57a37a. Reason: Read the diff of .urzua/config.yaml: the authority section gains `waivable: never` and a two-line comment; no other key changed. The pinned evidence still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-09 | Bumped to `0.22`. Evidence pins on `.urzua/config.yaml` were re-pinned (row above) after the config's authority section gained `waivable: never`; the specification's content is unchanged. **Why:** `ADR-89` amendment of 2026-11-09 (gate waivers). | **substantive** |
+> | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` 21e9ab57a37a -> dd656d471f38. Reason: Read the diff of each pinned file since the previous pin. config.yaml gained section.duplicate, section.level-skipped and section.order at error under rules, and unique_headings, no_skipped_levels and order (from: template) under each type's sections, with depth: 2 added where a type had none; the change is additive; the claim holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-13 | Bumped to `0.23`. The pinned `.urzua/config.yaml` evidence was re-baselined for `MILE-104`; the text of this specification is unchanged. **Why:** the revision log gained a structural re-baseline row, which `revision-log.version-bump-required` asks a spec to answer with a version bump. | **structural** |
