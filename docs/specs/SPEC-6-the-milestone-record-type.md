@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5QF32RM76Y50THPQEG
-Version: '0.27'
+Version: '0.28'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -338,3 +338,4 @@ to another record — nothing to check for resolution, no cycle risk, no new rul
 > | 2026-11-09 | Bumped to `0.26`. States that an item waiver's date is exclusive while a waiver record's `Expires` is inclusive, and that a first-line waiver clause before the evidence clause is a shape finding as on final lines. **Why:** round-5 review: the first-line order swallowed the evidence into the waiver reason without a finding. | **substantive** |
 > | 2026-11-09 | Bumped to `0.27`. Re-pin rows in this revision log were reworded to name who re-verified, matching the tool's wording since 2026-11-09; hashes, reasons and dates are unchanged. **Why:** Maintainer decision, 2026-11-09. | **structural** |
 > | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: unspecified): re-pinned `rust/crates/urzua-core/src/status_model.rs` 35b191cc38f8 -> 00ed614a24d4. Reason: Read the diff of the pinned file since the old pin. status_model.rs: StatusDecl.values gains a serde default and the empty-list check is relaxed when the type declares pending (a declaration of neither values nor pending is still refused); new declared_summary helper; unit tests added. A type declaring values loads and behaves as before. The spec's claim still holds. **Why:** the pinned evidence changed and the attesting actor re-verified that the claim still holds. | **structural** |
+> | 2026-11-13 | Bumped to `0.28`. Re-pinned `status_model.rs` evidence after the declaration of `statuses` gained an optional `values` (a type may declare `pending` alone); this spec's claims are unchanged. **Why:** `MILE-205` items 1-3; the revision-log version-bump rule requires a bump beside the re-pin row. | **structural** |
