@@ -6,6 +6,8 @@
 //! `tools/call`). It reads from a `BufRead`, writes to a `Write`, and has no
 //! filesystem, process or network code: the report-producing calls are supplied
 //! by the caller through [`Host`], and every tool is advertised read-only.
+//!
+//! Implements: ADR-99
 
 #![forbid(unsafe_code)]
 

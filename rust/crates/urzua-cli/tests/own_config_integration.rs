@@ -352,3 +352,27 @@ fn new_waiver_scaffolds_justified_by_from_the_repositorys_own_template() {
         );
     }
 }
+
+/// MILE-49: this repository does not declare `drift_baseline` (it would hold
+/// out nothing here; fixtures exercise it), but its configuration's shape
+/// accepts the option on `embodiment.consistency`.
+#[test]
+fn own_config_shape_accepts_a_drift_baseline_on_consistency() {
+    let own = own_config();
+    assert!(
+        !own.contains("drift_baseline"),
+        "not declared in the own config"
+    );
+    let anchor = "    drift_audit_field: \"Last-audited\"\n";
+    assert_eq!(own.matches(anchor).count(), 1, "the anchor line moved");
+    let declared = own.replace(
+        anchor,
+        &format!("{anchor}    drift_baseline: {{ref: v0.3.0}}\n"),
+    );
+    let config = urzua_core::config::parse(&declared).expect("config with a baseline parses");
+    let baseline = config.rules["embodiment.consistency"]
+        .drift_baseline
+        .as_ref()
+        .expect("drift_baseline is read");
+    assert_eq!(baseline.git_ref, "v0.3.0");
+}

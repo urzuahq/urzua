@@ -18,11 +18,11 @@ use std::process::ExitCode;
 
 use urzua_core::config::{Config, RuleLevel, RuleSetting};
 use urzua_core::refs_snapshot::RefsSnapshot;
+use urzua_core::report::{BaselineInfo, DetailValue, Failure};
 use urzua_core::report::{
     CheckReport, CouldNotRun, DiffScope, Finding, FindingSeverity, Notice, NoticeSeverity,
     RuleExecution, ScopeInfo,
 };
-use urzua_core::report::{DetailValue, Failure};
 use urzua_core::rules;
 
 use crate::discovery::{
@@ -549,6 +549,7 @@ pub(crate) fn execute(
     add_records(&mut opened.session, added_records)?;
     let session = &opened.session;
     let selection = validate_selection(&session.config, &requested_rules)?;
+    let baseline_commit = resolve_drift_baseline(session, selection.as_deref())?;
     let scope = narrow(
         session,
         opened.requested_scopes,
@@ -556,21 +557,19 @@ pub(crate) fn execute(
         opened.prospective,
     )?;
     let (mut context, mut notices) = load_context(session, &scope, selection.as_deref())?;
-    notices.extend(untracked_notices(session, &scope, &context.drift));
-    notices.extend(crate::discovery::grace_notice(
-        &context.drift,
-        &session.records,
-        &session.config,
-        &context.back_pointed,
-    ));
-    notices.extend(harness_key_notices(session.config.harness.as_ref()));
-    notices.extend(decider_gate_notices(
-        &session.config,
-        &context,
-        (base.is_some(), actors.is_some()),
-        selection.as_deref(),
-    ));
+    let baseline = hold_out_baseline(
+        baseline_commit,
+        session,
+        &scope,
+        (&mut context, &mut notices),
+    );
     context.actors = actors;
+    notices.extend(session_notices(
+        session,
+        &scope,
+        &context,
+        (base.is_some(), selection.as_deref()),
+    ));
     notices.extend(extra_notices);
     let (mut executions, mut findings) = run_rules(&context);
     notices.extend(scope_changed_notices(
@@ -615,11 +614,176 @@ pub(crate) fn execute(
         rules_executed: executions,
         rules_selected: selection,
         scope: scope_info(session, scope, base),
+        baseline,
         blocking,
         findings,
         notices,
         // The flag wins over the configuration; either only moves the exit code.
         fail_on: fail_on.unwrap_or(context.fail_on),
+    })
+}
+
+/// The notices a run raises from its session, scope and context before any rule
+/// runs; `with_base` says whether `--base` was given.
+fn session_notices(
+    session: &Session,
+    scope: &ReportScope,
+    context: &Context<'_>,
+    (with_base, selection): (bool, Option<&[String]>),
+) -> Vec<Notice> {
+    let mut notices = untracked_notices(session, scope, &context.drift);
+    notices.extend(crate::discovery::grace_notice(
+        &context.drift,
+        &session.records,
+        &session.config,
+        &context.back_pointed,
+    ));
+    notices.extend(harness_key_notices(session.config.harness.as_ref()));
+    notices.extend(decider_gate_notices(
+        &session.config,
+        context,
+        (with_base, context.actors.is_some()),
+        selection,
+    ));
+    notices
+}
+
+/// Holds the drift a `drift_baseline` names out of `context` and discloses it
+/// in `notices`; `None` when no baseline applies to this run.
+fn hold_out_baseline(
+    resolved: Option<(String, String)>,
+    session: &Session,
+    scope: &ReportScope,
+    (context, notices): (&mut Context<'_>, &mut Vec<Notice>),
+) -> Option<BaselineInfo> {
+    let (git_ref, commit) = resolved?;
+    let known_problems = context.drift.git_problems.len();
+    let split = crate::discovery::apply_drift_baseline(
+        &mut context.drift,
+        &session.repo_root,
+        &session.config,
+        &commit,
+    );
+    // A git failure met while attributing drift is disclosed like any other.
+    notices.extend(crate::discovery::drift_notices(
+        false,
+        &context.drift.git_problems[known_problems..],
+    ));
+    notices.extend(baseline_notices(
+        &git_ref,
+        &commit,
+        &split,
+        scope.whole_corpus(),
+    ));
+    Some(baseline_info(git_ref, commit, &split))
+}
+
+/// Notice subject for the drift a `drift_baseline` holds out of the gate.
+const NOTICE_DRIFT_BASELINED: &str = "embodiment-drift-baselined";
+
+/// Notice subject for a baseline that holds out nothing.
+const NOTICE_DRIFT_BASELINE_UNUSED: &str = "embodiment-drift-baseline-unused";
+
+/// The records a notice or the report names; the count says the rest.
+const BASELINE_RECORDS_SHOWN: usize = 20;
+
+/// The ref and commit of `embodiment.consistency`'s `drift_baseline`, when the
+/// rule is on, declares one and the run reaches it. A ref that names no commit
+/// stops the run (`MILE-49`): a baseline that cannot be read must never read as
+/// "no pre-existing drift", which would put the whole backlog back on the gate.
+fn resolve_drift_baseline(
+    session: &Session,
+    selection: Option<&[String]>,
+) -> Result<Option<(String, String)>, Failure> {
+    let Some(consistency) = enabled_setting(&session.config, rules::RULE_EMBODIMENT_CONSISTENCY)
+    else {
+        return Ok(None);
+    };
+    let Some(baseline) = consistency.drift_baseline.as_ref() else {
+        return Ok(None);
+    };
+    if !selection_wants(selection, &[rules::RULE_EMBODIMENT_CONSISTENCY]) {
+        return Ok(None);
+    }
+    let git_ref = baseline.git_ref.trim().to_string();
+    match urzua_io::resolve_commit(&session.repo_root, &git_ref) {
+        Ok(commit) => Ok(Some((git_ref, commit))),
+        Err(e) => Err(format!(
+            "{}.drift_baseline.ref: {e}; fix the ref or remove drift_baseline (a shallow clone may lack the commit: fetch full history)",
+            rules::RULE_EMBODIMENT_CONSISTENCY
+        )
+        .into()),
+    }
+}
+
+fn baseline_info(
+    git_ref: String,
+    commit: String,
+    split: &crate::discovery::BaselineSplit,
+) -> urzua_core::report::BaselineInfo {
+    urzua_core::report::BaselineInfo {
+        git_ref,
+        commit,
+        pre_existing: split.pre_existing.len(),
+        pre_existing_records: split
+            .pre_existing
+            .iter()
+            .take(BASELINE_RECORDS_SHOWN)
+            .map(|p| p.display().to_string())
+            .collect(),
+        introduced: split.introduced.len(),
+    }
+}
+
+/// The info notice for pre-existing drift held out of the gate, or, when none
+/// is held out on a whole-corpus run, the nudge to remove the baseline. A scoped
+/// run proves nothing about the rest of the corpus, so it gives no nudge.
+fn baseline_notices(
+    git_ref: &str,
+    commit: &str,
+    split: &crate::discovery::BaselineSplit,
+    whole_corpus: bool,
+) -> Option<Notice> {
+    let n = split.pre_existing.len();
+    let mut detail = std::collections::BTreeMap::new();
+    detail.insert("ref".to_string(), DetailValue::Text(git_ref.to_string()));
+    detail.insert("commit".to_string(), DetailValue::Text(commit.to_string()));
+    if n == 0 {
+        if !whole_corpus {
+            return None;
+        }
+        return Some(Notice {
+            severity: NoticeSeverity::Info,
+            subject: NOTICE_DRIFT_BASELINE_UNUSED.to_string(),
+            message: format!(
+                "drift_baseline '{git_ref}' holds out no drift: no record's drift predates it, so the baseline can be removed from {}",
+                rules::RULE_EMBODIMENT_CONSISTENCY
+            ),
+            detail: Some(detail),
+        });
+    }
+    detail.insert("count".to_string(), DetailValue::Text(n.to_string()));
+    detail.insert(
+        "records".to_string(),
+        DetailValue::List(
+            split
+                .pre_existing
+                .iter()
+                .take(BASELINE_RECORDS_SHOWN)
+                .map(|p| p.display().to_string())
+                .collect(),
+        ),
+    );
+    Some(Notice {
+        severity: NoticeSeverity::Info,
+        subject: NOTICE_DRIFT_BASELINED.to_string(),
+        message: format!(
+            "{n} record{} drifted before drift_baseline '{git_ref}' ({}) and {} not reported as drift; drift introduced since it is",
+            if n == 1 { "" } else { "s" },
+            &commit[..commit.len().min(12)],
+            if n == 1 { "is" } else { "are" },
+        ),
+        detail: Some(detail),
     })
 }
 
