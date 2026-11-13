@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5C0WX34AQKF79DQDS5
-Version: '0.27'
+Version: '0.28'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -164,7 +164,7 @@ take content and parameters, returning a string.
 `scaffold_record` is the record scaffold shared by every command that creates a record from a type:
 given the type's declarations, the file name, number, stable id, author and date, and the template's
 text when there is one, it returns the synthesized header, the H1 and the template's body. `new` calls
-it, and `waive --from-report` (`MILE-205`) will, so the scaffold has one definition and a record either
+it, and `waive --from-report` (`MILE-205`) does, so the scaffold has one definition and a record either
 command writes has the same shape.
 
 `ScaffoldSpec` carries what a caller may add to that scaffold: a value for the `Reason` and `Expires`
@@ -229,3 +229,4 @@ output is unchanged.
 > | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: unspecified): re-pinned `rust/crates/urzua-cli/src/commands/new.rs` 7abffc2519d4 -> b465b2c40766, `rust/crates/urzua-core/src/new_record.rs` 0f9f2d4f6a94 -> 258765bfb791. Reason: Read the diff of each pinned file against main. rust/crates/urzua-core/src/new_record.rs: added ScaffoldSpec, scaffold_record and a private declared_template_fields (the header-and-body scaffold moved here from the CLI) plus one unit test; no existing function changed. rust/crates/urzua-cli/src/commands/new.rs: render_record now reads the template file and calls urzua_core::new_record::scaffold_record; its body moved to core unchanged, and new's tests pass unchanged. Nothing else changed in the pinned file, and the output of urzua new is identical. The claim this record evidences still holds. **Why:** the pinned evidence changed and the attesting actor re-verified that the claim still holds. | **structural** |
 > | 2026-11-13 | Bumped to `0.27`. `ScaffoldSpec` gains optional `Reason` and `Expires` values, caller-supplied header pairs, a first revision-log row and an extra body, for `waive --from-report` (`SPEC-25`); `new` builds it with `ScaffoldSpec::plain` and its output is unchanged. **Why:** `MILE-205`, plan PR3. | **structural** |
 > | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/new.rs` b465b2c40766 -> ade841f31f8d, `rust/crates/urzua-core/src/new_record.rs` 258765bfb791 -> 40f0fce95cd0. Reason: Read the diff of each re-pinned file against main. new.rs: five items (lookup_record_type, Numbered and its three fields, number_record, build_filename, disabled_pull_report) became pub(crate) for waive, and render_record builds the spec with ScaffoldSpec::plain; no behaviour changed and new's tests pass unchanged; new_record.rs: ScaffoldSpec gained optional Reason, Expires, header-pair, log-row and extra-body fields and a ScaffoldSpec::plain constructor; scaffold_record applies them only when set, and render_synthetic_yaml now delegates to a private render_yaml_with with no supplied values, so the output for urzua new is unchanged; added with_first_log_row and three unit tests (identity padding, supplied values, nothing supplied). The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-13 | Bumped to `0.28`. `ScaffoldSpec` gains `omit_fields`, header fields left out of the record altogether, used by `waive --from-report --apply` so a draft carries no `Expires` key (`SPEC-25`); `new` passes none and its output is unchanged. **Why:** `MILE-205`, plan PR4. | **structural** |
