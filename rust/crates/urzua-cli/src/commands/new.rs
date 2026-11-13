@@ -440,76 +440,28 @@ struct NewRecordInputs<'a> {
     today: &'a str,
 }
 
+/// Reads the type's checked-in template, if any, and hands it to the shared
+/// scaffold in core.
 fn render_record(inputs: &NewRecordInputs) -> String {
-    let type_config = inputs.type_config;
-    let compiled = inputs.compiled;
-    // The entry state of the type's own vocabulary, not a choice: moving a
-    // record on from it stays a human decision.
-    let status_decl = type_config.status_decl();
-    let params = urzua_core::new_record::NewRecordParams {
-        display_number: inputs.display_number,
-        // The H1 id is padded exactly as the file name is: the width of the
-        // `number` the declared pattern reads back from it (`BUG-188`).
-        h1_width: compiled
-            .and_then(|c| c.identify(inputs.filename).number)
-            .map_or(0, |n| n.len()),
-        h1_prefix: compiled.map(|_| inputs.type_prefix),
-        initial_status: status_decl
-            .as_ref()
-            .and_then(|d| d.values.first())
-            .map(String::as_str),
-        status_field: type_config.relation_field(urzua_core::config::RelationRole::Status),
-        date_field: type_config.date_field(),
-        author_field: type_config.author_field(),
-        title_field: type_config.title_field(),
-        initial_version: type_config.initial_version(),
-        title: inputs.title,
-        stable_id: inputs.stable_id,
-        author: inputs.author,
-        today: inputs.today,
-    };
-
-    // BUG-3: the configured header_shape wins unconditionally -- a template
-    // file's own (possibly stale) header is never
-    // allowed to override what the config actually declares. A yaml-
-    // frontmatter type still gets a template's body scaffolding (`## What`,
-    // the revision log) when one exists; it just doesn't get the template's
-    // header.
     let template_path = inputs
         .repo_root
         .join(".urzua/templates")
         .join(format!("{}.md", inputs.record_type));
-    // `none` returned above, so the only shape left is `yaml-frontmatter`
-    // (MILE-85 removed the blockquote and bold-list shapes a template's own
-    // header could once have been rendered in).
     let template = urzua_io::read_to_string(&template_path).ok();
-    // The header fields the template names beyond the required ones stay
-    // on the new record, blank, when the type declares them (`BUG-188`);
-    // one the type does not declare would only trip
-    // `header.field-set-consistency`, so it is left out.
-    let declared = type_config.declared_fields();
-    let template_fields: Vec<String> = template
-        .as_deref()
-        .map(urzua_core::new_record::template_header_fields)
-        .unwrap_or_default()
-        .into_iter()
-        .filter(|f| {
-            type_config.known_fields.is_none()
-                || declared.contains(&urzua_core::values::FieldName::new(f.as_str()))
-        })
-        .collect();
-    let mut out = urzua_core::new_record::render_synthetic_yaml(
-        &params,
-        &type_config.required_fields,
-        &template_fields,
-    );
-    if let Some(template) = template {
-        if let Some(body) = urzua_core::new_record::template_body(&template) {
-            out.push('\n');
-            out.push_str(body);
-        }
-    }
-    out
+    urzua_core::new_record::scaffold_record(
+        &urzua_core::new_record::ScaffoldSpec {
+            type_config: inputs.type_config,
+            compiled: inputs.compiled,
+            type_prefix: inputs.type_prefix,
+            filename: inputs.filename,
+            display_number: inputs.display_number,
+            title: inputs.title,
+            stable_id: inputs.stable_id,
+            author: inputs.author,
+            today: inputs.today,
+        },
+        template.as_deref(),
+    )
 }
 
 /// Writes the record, refusing a path that leaves the repository and never

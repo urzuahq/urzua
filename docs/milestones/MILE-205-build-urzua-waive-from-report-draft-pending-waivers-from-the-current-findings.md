@@ -53,3 +53,4 @@ engine, so it belongs in Phase 1.
 > | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |
 > | 2026-11-08 | Done means gains the item for findings the drafts resolve. **Why:** `ADR-91` amendment of 2026-11-08, maintainer decision. | **substantive** |
 > | 2026-11-13 | Done means items 1-3 delivered (the `statuses.values` default and empty-list check relaxed; every reader of `values` audited and covered by a test); the milestone stays open for the command itself. **Why:** first of five PRs of the plan, maintainer decisions of 2026-11-13. | **structural** |
+> | 2026-11-13 | Scaffold item delivered: `urzua new`'s record scaffold is extracted into `urzua-core` as `scaffold_record`, with a test calling it on a synthetic type; `new`'s tests are unchanged. The milestone stays open, the other items are not built. **Why:** plan PR2 of this milestone, item `The scaffold is shared with urzua new`. | **substantive** |

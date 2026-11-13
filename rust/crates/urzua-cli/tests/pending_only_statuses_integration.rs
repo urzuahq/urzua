@@ -23,6 +23,16 @@ fn fixture(name: &str, config_tail: &str) -> common::TempDir {
 }
 
 fn fixture_with(name: &str, config_tail: &str, waiver: Option<&str>) -> common::TempDir {
+    fixture_cfg(name, config_tail, "", waiver)
+}
+
+/// `waiver_statuses` is spliced into the waiver type's `statuses` block.
+fn fixture_cfg(
+    name: &str,
+    config_tail: &str,
+    waiver_statuses: &str,
+    waiver: Option<&str>,
+) -> common::TempDir {
     let dir = common::TempDir::new(&format!("urzua-pending-only-{name}"));
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     std::fs::create_dir_all(dir.join("docs/waiver")).unwrap();
@@ -33,7 +43,7 @@ fn fixture_with(name: &str, config_tail: &str, waiver: Option<&str>) -> common::
     std::fs::write(
         dir.join(".urzua/config.yaml"),
         format!(
-            "schema_version: 2\n{config_tail}\nrecord_types:\n  waiver:\n    dir: docs/waiver\n    prefix: WAIVER\n    header_shape: yaml-frontmatter\n    required_fields: [Status]\n    statuses:\n      pending: [pending]\n  adr:\n    dir: docs/adr\n    prefix: ADR\n    header_shape: yaml-frontmatter\n    required_fields: [Status]\n    statuses:\n      values: [Proposed, Accepted]\n      success: [Accepted]\n"
+            "schema_version: 2\n{config_tail}\nrecord_types:\n  waiver:\n    dir: docs/waiver\n    prefix: WAIVER\n    header_shape: yaml-frontmatter\n    required_fields: [Status]\n    known_fields: [Blocks, Blocked-by, Ack, Realized-by]\n    statuses:\n      pending: [pending]\n{waiver_statuses}  adr:\n    dir: docs/adr\n    prefix: ADR\n    header_shape: yaml-frontmatter\n    required_fields: [Status]\n    known_fields: [Date, Realized-by]\n    statuses:\n      values: [Proposed, Accepted]\n      success: [Accepted]\n"
         ),
     )
     .unwrap();
@@ -173,4 +183,82 @@ fn a_type_declaring_values_still_starts_at_its_first_value() {
     let report: serde_json::Value = serde_json::from_str(&stdout).unwrap();
     let text = std::fs::read_to_string(dir.join(report["path"].as_str().unwrap())).unwrap();
     assert!(text.contains("Status: Proposed"), "{text}");
+}
+
+/// Reader: `delivery` validation. `delivery.not_done` must name declared values, and a
+/// type with no values declares none, so the declaration is refused rather than ignored.
+#[test]
+fn a_delivery_declaration_on_a_type_with_no_values_is_refused_at_load() {
+    let dir = fixture_cfg(
+        "delivery",
+        "rules: {header.required-fields: error}",
+        "      delivery: {delivered_tiers: [Implemented], unevidenced_tiers: [], not_done: [Open], set_status: Done}\n",
+        None,
+    );
+    let (code, stdout, stderr) = run(&dir, &["check"]);
+    let text = format!("{stdout}{stderr}");
+    assert_eq!(code, 2, "{text}");
+    assert!(text.contains("delivery.not_done"), "{text}");
+    assert!(text.contains("not in `values`"), "{text}");
+}
+
+/// Reader: the provisional status set (`config.rs`). A pending entry is not a status: a
+/// provisional split naming it is refused, while a status of a type that declares values
+/// still loads.
+#[test]
+fn a_provisional_status_is_drawn_from_declared_values_only() {
+    let pair = |status: &str| {
+        format!(
+            "relation_pairs:\n  - {{name: p, forward: Blocks, inverse: Blocked-by, reciprocity: required, provisional: {{statuses: [{status}], acknowledged_by: Ack}}}}\n"
+        )
+    };
+    let dir = fixture("provisional-bad", &pair("pending"));
+    let (code, stdout, stderr) = run(&dir, &["check"]);
+    let text = format!("{stdout}{stderr}");
+    assert_eq!(code, 2, "{text}");
+    assert!(text.contains("statuses.values"), "{text}");
+    let dir = fixture(
+        "provisional-ok",
+        &format!(
+            "rules: {{header.required-fields: error}}\n{}",
+            pair("Proposed")
+        ),
+    );
+    let (code, stdout, stderr) = run(&dir, &["check"]);
+    assert_eq!(code, 0, "{stdout}{stderr}");
+}
+
+/// Reader: `diff_scope` reads `has_transitions` to decide whose merge-base copy to fetch.
+/// A pending-only type has no graph, so a changed record of it is simply not judged for a
+/// status move, and `check --base` runs clean.
+#[test]
+fn check_base_over_a_changed_record_of_a_type_with_no_values_runs_clean() {
+    let dir = fixture_with(
+        "diff-scope",
+        "rules: {status.transition-allowed: error}",
+        Some("---\nStatus: Open\n---\n# 1 - X\n"),
+    );
+    git(&dir, &["tag", "base"]);
+    std::fs::write(
+        dir.join("docs/waiver/WAIVER-1-x.md"),
+        "---\nStatus: Closed\n---\n# 1 - X\n",
+    )
+    .unwrap();
+    git(&dir, &["add", "-A"]);
+    let (code, stdout, stderr) = run(&dir, &["check", "--base", "base"]);
+    assert_eq!(code, 0, "{stdout}{stderr}");
+}
+
+/// Reader: `claim_expiry` skips a retained claim by reading `claim_retained`. A type with no
+/// values retains none, so its records fall through to the period match, and a type no
+/// period names is unexamined, not an error.
+#[test]
+fn claim_expiry_over_a_record_of_a_type_with_no_values_runs_clean() {
+    let dir = fixture_with(
+        "claim-expiry",
+        "rules:\n  embodiment.claim-expired:\n    level: warn\n    anchor_field: Date\n    require_pin: [code]\n    periods:\n      - {type: adr, days: 30}\n",
+        Some("---\nStatus: Open\nEmbodiment: Verified\n---\n# 1 - X\n"),
+    );
+    let (code, report) = check_json(&dir);
+    assert_eq!(code, 0, "{report}");
 }

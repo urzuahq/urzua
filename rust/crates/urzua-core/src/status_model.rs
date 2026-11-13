@@ -1061,6 +1061,13 @@ mod tests {
         .contains("not in `values`"));
     }
 
+    /// Readers: `claim_retained` (claim expiry) and `has_transitions` (diff scope).
+    #[test]
+    fn a_type_with_no_values_retains_no_claim() {
+        let d = decl(PENDING_ONLY);
+        assert!(d.claim_retained.is_empty() && !d.has_transitions());
+    }
+
     /// Reader: `first_non_progress_status`.
     #[test]
     fn no_first_non_progress_status_exists_when_no_values_are_declared() {
