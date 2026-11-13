@@ -3,7 +3,6 @@
 
 mod common;
 
-use std::path::Path;
 use std::process::Command;
 
 fn run_with_own_config(name: &str, files: &[(&str, &str)]) -> serde_json::Value {

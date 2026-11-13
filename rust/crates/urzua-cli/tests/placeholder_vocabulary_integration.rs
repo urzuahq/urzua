@@ -5,7 +5,6 @@
 
 mod common;
 
-use std::path::Path;
 use std::process::Command;
 
 fn own_config() -> String {
