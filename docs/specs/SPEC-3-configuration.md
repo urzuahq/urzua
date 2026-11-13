@@ -1,9 +1,9 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.139'
+Version: '0.141'
 Date: 2026-08-20
 Status: Shipped
-Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:33f505e4cb50c5df91623a90c49a7e0bac9697570d5d08e986adaf95e757a334, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:9920e4fe583113310652fa8eb9b44126fcf4bed2b621b57d6d6a99c71876aeee, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:3c8aa671582772499ab7345cdbfb5a4dc2c50462882851fb20f853992acfd57c
+Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:6daa34e96997ef2790c6e8987bde7412d7214784deb8870c891f0946d90ac03a, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:5aafdaf17779aaf27ce2c0cc02373f6308d5a283e9670c782a60c3748384ed72, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:3c8aa671582772499ab7345cdbfb5a4dc2c50462882851fb20f853992acfd57c
 Embodiment: Verified
 Author: beauwilliams
 Subject: '`.urzua/config.yaml` -- the schema for record types, required/known fields, and per-type behavior.'
@@ -279,7 +279,7 @@ Two details carry weight:
   `pattern` or a key present with no value is a load-time error naming the record type and key.
 
   **`identity` and `fields` drive record loading; `sections` is read by `section.required` and
-  `section.shape` only, down to the declared `depth`.** A type that declares none of the three loads, and is checked, exactly as it
+  `section.shape`, and its structure keys by `section.duplicate`, `section.level-skipped` and `section.order`, down to the declared `depth`.** A type that declares none of the three loads, and is checked, exactly as it
   did before the declaration existed.
 
   - **`identity`.** The pattern, not the `TYPE-N-slug.md` convention, decides a record's identifier:
@@ -299,6 +299,44 @@ Two details carry weight:
     `Key: value` lines between the title and the first `##` heading (a key is an ASCII letter then
     letters, digits, `-` or `_`; the colon is followed by a space or ends the line). `none` gates as
     `header_shape: none` does (`RecordTypeConfig::has_no_header`).
+
+  - **`sections.unique_headings`, `sections.no_skipped_levels` and `sections.order`** (`MILE-104`). Three
+    optional keys that declare a type's section *structure*, as against `required`, which declares
+    which sections a type wants. Each is opt-in per type and read by one rule; a type that declares
+    none of them is untouched, and a rule with no type declaring its key has nothing eligible. Their
+    population unit is `record`. A record's `exempt_statuses` do not set it aside: a duplicated
+    section is a broken document whatever was decided.
+
+    ```yaml
+    sections:
+      from: headings
+      depth: 2
+      unique_headings: true      # section.duplicate
+      no_skipped_levels: true    # section.level-skipped
+      order: {from: template}    # section.order
+    ```
+
+    - `unique_headings: true` makes the same heading text twice at one level under one parent a
+      `section.duplicate` error naming both lines. Headings are compared as exact text, whitespace
+      trimmed and case-sensitive: `## Context` and `## context` are different headings. A `### Pros` under each of two different `##`
+      sections is not a duplicate.
+    - `no_skipped_levels: true` makes a section more than one level deeper than the one above it, or
+      deeper than `##` with no section above it, a `section.level-skipped` error. Levels count from
+      `##`, as `depth` does, and a heading deeper than `depth` is body text and never read. It needs a
+      `depth` of at least 2: at depth 1 only `##` is a section and no level can be skipped, so the
+      config does not load.
+    - `order: {from: template}` makes a section that the type's template
+      (`.urzua/templates/<type>.md`, the file `urzua new` writes from) places before one the record
+      already showed a `section.order` error on that section's line. Order is judged among sibling
+      sections sharing a parent. A section the template does not name is ignored, and a template
+      section the record lacks is not reported: presence is `section.required`'s. Headings are matched
+      by text alone and `sections.required` aliases are not consulted. A missing template, or one with
+      no section down to `depth`, reads nothing, so each record of the type is a `section.order`
+      error saying so, and stays eligible and unexamined; the rule never goes quiet because a template
+      was deleted, and the finding gates `fail_on`. `template` is the only source; any other
+      `from` is a load-time error.
+    - A key that is not a boolean, an unknown `order.from` or an unknown key under `order` is a
+      load-time error naming the record type and the key.
 
   - **`sections.required`** (`MILE-4`, `MILE-5`, `MILE-121`). A list of the `##` sections a record of
     the type must carry, each `{name: ...}` matched exactly against the heading text after trimming,
@@ -2470,5 +2508,7 @@ proves this configuration produces the three findings.
 > | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` d62499673ea9 -> 6daa34e96997. Reason: Read the diff of each pinned file since the previous pin. rust/crates/urzua-core/src/config.rs: generic_marker_problem also refuses an ignore_marker that is the tail of a declared id head followed by digits (DR-1, R-12), with test cases; nothing else changed. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-09 | Bumped to `0.137`. The merge-base copy of a renamed record is matched by `Stable-Id` and the same record id, so a renumber reads as new. **Why:** `ADR-89` amendment (rename pairing). | **substantive** |
 > | 2026-11-13 | Bumped to `0.138`. A type may declare `statuses: {pending: [...]}` without `values`; a declaration of neither is refused at load, and a type declaring `values` loads as before. The readers of `values` handle the empty list: `status.undeclared-value` and `authority.gates` say the type declares no values, and `urzua new` leaves the status blank. **Why:** `MILE-205` items 1-3, so a waiver type can hold a pending `Reason` without inventing a status vocabulary (`ADR-91`). | **substantive** |
-> | 2026-11-13 | Bumped to `0.139`. Documents the opt-in `drift_baseline: {ref}` option of `embodiment.consistency`: its shape, what a pre-existing record is, the unresolvable-ref error, and that it holds no list. **Why:** `MILE-49`, decided by the `ADR-91` amendment of 2026-11-13. | **substantive** |
-> | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 6daa34e96997 -> 33f505e4cb50, `rust/crates/urzua-cli/tests/own_config_integration.rs` 92a2b9ceca89 -> 9920e4fe5831. Reason: own_config_integration.rs: its fixture strips the `drift_baseline` line, and it gains the test that this repository's baseline ref resolves; other assertions unchanged. config.rs gained the `DriftBaseline` type, the `drift_baseline` option of `embodiment.consistency` with its validation (`check_rule_drift_baseline`) and a unit test; no existing parsing changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-13 | Bumped to `0.139`. A type's `sections` may declare `unique_headings`, `no_skipped_levels` and `order: {from: template}`, read by the opt-in rules `section.duplicate`, `section.level-skipped` and `section.order`; `no_skipped_levels` needs a `depth` of at least 2, and a bad value is refused at load. A type that declares none loads and is checked as before. **Why:** `MILE-104`. | **substantive** |
+> | 2026-11-13 | Bumped to `0.140`. A declared `sections.order` whose template is missing or holds no section is a `section.order` error on each record of the type (it was a warning notice), so it gates `fail_on: warning`; duplicate detection is documented as exact, trimmed, case-sensitive text, and order matching as ignoring `required` aliases. **Why:** a notice does not set the exit code, so a deleted template would have switched the rule off silently. | **structural** |
+> | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/own_config_integration.rs` 92a2b9ceca89 -> 5aafdaf17779. Reason: Read the diff of each pinned test file since the previous pin. The repo() fixture helper now also copies the repository's .urzua/templates into the fixture, because the own config declares sections.order from templates; no assertion or test body changed; the claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-13 | Bumped to `0.141`. Documents the opt-in `drift_baseline: {ref}` option of `embodiment.consistency`: its shape, what a pre-existing record is, the unresolvable-ref error, and that it holds no list. **Why:** `MILE-49`, decided by the `ADR-91` amendment of 2026-11-13. | **substantive** |

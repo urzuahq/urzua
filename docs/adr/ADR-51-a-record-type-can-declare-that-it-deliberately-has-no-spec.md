@@ -72,6 +72,11 @@ instance today. Building a general mechanism for a pattern with a single member 
 capability `AGENTS.md` prohibits; if a second key needs it, that is the evidence to generalise, and
 this decision is cheap to fold into a broader one.
 
+## Reversibility
+
+Remove the sentinel handling; configs containing `spec = "none"` then resolve as a dangling pointer —
+visible and loud, not silent. No data format change.
+
 ## Consequences
 
 - **A newly adopted corpus can reach a clean run.** Combined with `ADR-50`, the two findings
@@ -85,11 +90,6 @@ this decision is cheap to fold into a broader one.
   capability by implication.
 - **`MILE-80` is unaffected and still worth doing.** Configurable severity addresses noise in general;
   this addresses one finding's unanswerability. Neither substitutes for the other.
-
-## Reversibility
-
-Remove the sentinel handling; configs containing `spec = "none"` then resolve as a dangling pointer —
-visible and loud, not silent. No data format change.
 
 ## References
 
@@ -106,6 +106,7 @@ visible and loud, not silent. No data format change.
 > |---|---|---|
 > | 2026-09-16 | Initial decision. **Why:** the deciding evidence turned out to be in the code, not the corpus -- `config.rs`'s own doc comment already promises "a type can permanently have none declared" and nothing implements it, while the `header_layout` it cites as the same principle behaves oppositely. | **structural** |
 > | 2026-11-07 | Removed the placeholder `Realized-by: —` line: the field is optional and `embodiment.locator-exists` now reports text that is not a `spec:`, `code:` or `test:` entry. Nothing is realized-by yet. | **structural** |
+> | 2026-11-13 | Moved `## Reversibility` above `## Consequences`, the order `.urzua/templates/adr.md` gives. **Why:** `section.order` (MILE-104) is enabled for the `adr` type; the text of every section is unchanged and so is the decision. | **structural** |
 
 ## Why this was rejected (2026-09-16)
 

@@ -1,0 +1,11 @@
+id: a-skipped-heading-level-is-reported
+corpus: corpus-z
+invocation: [check]
+expect_exit: 1
+expect_findings:
+  - rule: section.level-skipped
+    file: records/docs/DOC-0003-skipped.md
+    severity: error
+    message_contains: "skips a level"
+expect_no_findings:
+  - {rule: section.level-skipped, file: records/docs/DOC-0001-clean.md}

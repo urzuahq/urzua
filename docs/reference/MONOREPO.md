@@ -11,7 +11,7 @@ Nothing language-specific lives at the repo root — no `Cargo.toml`, no `packag
 | `docs/adr/` | Decisions made about Urzua itself — accepted, load-bearing. |
 | `docs/rfc/` | Pre-decision proposals — read these first for design rationale. |
 | `docs/specs/` | Build-level detail for what actually ships. |
-| `docs/reference/` | This file and other internal engineering docs — added only once they earn their place. |
+| `docs/reference/` | The user documentation (start at [its README](README.md)), this file and other internal engineering docs — added only once they earn their place. |
 | `.git-hooks/` | Opt-in local hooks (pre-commit, pre-push) — `make hooks-install` wires them into `.git/hooks/`. |
 
 Build with `make`, not `cargo`, directly — `make ci` runs exactly what CI runs. `make help` lists
