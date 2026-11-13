@@ -5,7 +5,7 @@ Phase: '0'
 Track: header-format
 Implements: ADR-33
 Blocked-on: —
-Realized-by: code:.urzua/config.yaml@sha256:dd656d471f380787e18d7a2d2267975552c953858cc33a165c33b0afde087d7e, code:.github/workflows/checks.yml@sha256:ad6ab57882dfac0d3a819e549bccd9ba6f81abafe0699d09d26f828a5714398b
+Realized-by: code:.urzua/config.yaml@sha256:323884ad0b6e1ee7c8485e6f75052f0266a742e29a2f43dababf665573a2a2cc, code:.github/workflows/checks.yml@sha256:ad6ab57882dfac0d3a819e549bccd9ba6f81abafe0699d09d26f828a5714398b
 ---
 # 3 — Convert this repo's own docs to yaml-frontmatter
 
@@ -21,7 +21,7 @@ The actual dogfooding step ADR-33 named as the real forcing function for this wo
 
 ## Done means
 
-- Every record type configured in this repository's `.urzua/config.yaml` declares `header_shape: yaml-frontmatter`. — evidence: code:.urzua/config.yaml@sha256:dd656d471f380787e18d7a2d2267975552c953858cc33a165c33b0afde087d7e
+- Every record type configured in this repository's `.urzua/config.yaml` declares `header_shape: yaml-frontmatter`. — evidence: code:.urzua/config.yaml@sha256:323884ad0b6e1ee7c8485e6f75052f0266a742e29a2f43dababf665573a2a2cc
 - Every ADR, RFC, spec, milestone and bug record parses under it, and `urzua check` over this repository reports no unreadable header. — evidence: code:.github/workflows/checks.yml@sha256:ad6ab57882dfac0d3a819e549bccd9ba6f81abafe0699d09d26f828a5714398b
 - The conversion was a one-time pass that shipped no tool, and nothing below the header changed. — waived: process-outcome -- a property of the one-time conversion of 2026-09-08, verified at the time by a before/after field-set comparison against every file (see the revision log); the scratch tool was never committed, so no file can evidence it now
 
@@ -46,3 +46,4 @@ The actual dogfooding step ADR-33 named as the real forcing function for this wo
 > | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` cbb1c67c40a0 -> 21e9ab57a37a. Reason: Read the diff of .urzua/config.yaml: the authority section gains `waivable: never` and a two-line comment; no other key changed. The pinned evidence still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-10 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.github/workflows/checks.yml` a201f4e57f5f -> ad6ab57882df. Reason: checks.yml gained one additive, report-only step in the build job (no stale evidence pins: runs fix --rebaseline without --apply and fails unless the report status is ok); no existing step changed, so the claim still holds **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` 21e9ab57a37a -> dd656d471f38. Reason: Read the diff of each pinned file since the previous pin. config.yaml gained section.duplicate, section.level-skipped and section.order at error under rules, and unique_headings, no_skipped_levels and order (from: template) under each type's sections, with depth: 2 added where a type had none; the change is additive; the claim holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` dd656d471f38 -> 323884ad0b6e. Reason: `.urzua/config.yaml` gained only the `drift_baseline: {ref: v0.3.0}` declaration and its comment under `embodiment.consistency`; no other declaration changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
