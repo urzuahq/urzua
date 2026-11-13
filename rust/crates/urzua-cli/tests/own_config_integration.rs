@@ -408,6 +408,7 @@ fn the_own_config_reports_a_dangling_citation_in_rust_and_scripts_and_nothing_el
         .find(|e| e["rule"] == "code.dangling-bug-reference")
         .unwrap();
     assert_eq!(execution["population"]["eligible"], 2, "{execution}");
+}
 
 /// MILE-49: this repository does not declare `drift_baseline` (it would hold
 /// out nothing here; fixtures exercise it), but its configuration's shape
