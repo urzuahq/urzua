@@ -348,6 +348,7 @@ pub fn run(config: Option<PathBuf>) -> ExitCode {
     };
 
     config_shape_checks(&config, &repo_root, &mut checks);
+    template_section_checks(&config, &repo_root, &mut checks);
     checks.push(ci_wired_check(&repo_root));
 
     // Local hook layers (ADR-71, MILE-179). Warn, not error, when absent:
@@ -449,6 +450,68 @@ fn config_shape_checks(
                 ),
             ));
         }
+    }
+}
+
+/// One check per record type that declares required sections (`MILE-6`): the
+/// type's template, `.urzua/templates/<type>.md`, has a heading for each of
+/// them. A template that lacks one scaffolds records that `section.required`
+/// reports the moment they are written, so the disagreement is a `warn` here,
+/// naming each missing section. A type with no template has nothing to compare
+/// (`urzua new` scaffolds it from the declaration), and a template that cannot
+/// be read is an `error`: not knowing is not agreeing. A type that declares no
+/// required section is not listed.
+fn template_section_checks(
+    config: &urzua_core::config::Config,
+    repo_root: &std::path::Path,
+    checks: &mut Vec<DoctorCheck>,
+) {
+    const CHECK: &str = "template-sections";
+    for name in config.sorted_type_names() {
+        let type_config = &config.record_types[name];
+        let Ok(Some(model)) = urzua_core::document_model::declared_model(name, type_config) else {
+            continue;
+        };
+        let Some(decl) = model.sections.filter(|d| !d.required.is_empty()) else {
+            continue;
+        };
+        let rel = format!(".urzua/templates/{name}.md");
+        let (status, message) = match urzua_io::read_to_string(&repo_root.join(&rel)) {
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => (
+                DoctorStatus::Ok,
+                format!("record type '{name}' has no template at {rel}; there is nothing to compare its required sections with"),
+            ),
+            Err(e) => (
+                DoctorStatus::Error,
+                format!("could not read {rel}: {e} -- cannot tell whether the template and the configuration agree"),
+            ),
+            Ok(text) => {
+                let missing =
+                    urzua_core::rules::template_missing_sections(name, type_config, &text);
+                if missing.is_empty() {
+                    (
+                        DoctorStatus::Ok,
+                        format!(
+                            "{rel} has a heading for each of the {} required section(s) of '{name}'",
+                            decl.required.len()
+                        ),
+                    )
+                } else {
+                    let named: Vec<String> = missing
+                        .iter()
+                        .map(|r| format!("`{} {}`", "#".repeat(usize::from(r.level)), r.name))
+                        .collect();
+                    (
+                        DoctorStatus::Warn,
+                        format!(
+                            "{rel} has no heading for the required section(s) {} of '{name}', so a record made from it fails section.required; add the heading(s) to the template or correct the declaration",
+                            named.join(", ")
+                        ),
+                    )
+                }
+            }
+        };
+        checks.push(DoctorCheck::new(CHECK, status, message));
     }
 }
 
