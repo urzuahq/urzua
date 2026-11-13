@@ -408,16 +408,38 @@ fn the_working_tree_and_git_hash_the_same_after_every_tool() {
             "urzua_list_records",
             json!({"type": "adr", "status": ["Rejected"]}),
         ),
+        ("urzua_show_record", json!({"id": "ADR-3"})),
+        ("urzua_show_record", json!({"id": "ADR-999"})),
+        (
+            "urzua_get_findings_for_path",
+            json!({"path": "docs/adr/ADR-1-a.md"}),
+        ),
+        ("urzua_get_findings_for_path", json!({"path": "docs/**"})),
+        (
+            "urzua_get_findings_for_path",
+            json!({"path": "docs/adr/ADR-1-a.md#Context"}),
+        ),
+        ("urzua_get_graph", json!({})),
     ];
+    // The table must name every tool the server advertises, so a new tool cannot
+    // be added without a row here.
+    let (listed, _) = session(
+        &dir,
+        &[json!({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})],
+    );
+    let advertised: std::collections::BTreeSet<&str> = listed[0]["result"]["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|t| t["name"].as_str().unwrap())
+        .collect();
+    let covered: std::collections::BTreeSet<&str> = table.iter().map(|(t, _)| *t).collect();
+    assert_eq!(covered, advertised, "every advertised tool has a row");
     for (tool, arguments) in table {
         let before = tree_hash(&dir);
         let reply = call_one(&dir, tool, arguments.clone());
         assert!(reply.get("result").is_some(), "{tool} {arguments}: {reply}");
-        assert_eq!(
-            tree_hash(&dir),
-            before,
-            "{tool} {arguments} changed the tree"
-        );
+        assert_tree_unchanged(&before, &dir, &format!("{tool} {arguments}"));
     }
 }
 

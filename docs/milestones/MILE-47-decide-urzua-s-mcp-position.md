@@ -19,8 +19,8 @@ MILE-29 already names "a read-only MCP server" as a build target, but no RFC or 
 ## Done means
 
 - A decision record states urzua's MCP position: whether to ship an MCP server, why read-only if so, and which data it exposes (rejected and superseded decisions, through a generic status filter). The maintainer chose an ADR with no separate RFC on 2026-11-13. — evidence: code:docs/adr/ADR-99-urzua-ships-a-read-only-mcp-server-as-a-stdio-transport-over-its-existing-reports.md@sha256:cebd6a67fb88f6139999702c92ab04a657a0823d7c0bf2ddbaa931adadaa5c92
-- The record is filed under `docs/adr/` and passes `urzua check`. — evidence: code:docs/adr/ADR-99-urzua-ships-a-read-only-mcp-server-as-a-stdio-transport-over-its-existing-reports.md@sha256:cebd6a67fb88f6139999702c92ab04a657a0823d7c0bf2ddbaa931adadaa5c92
-- `MILE-29` cites it in `Implements`, so the build milestone no longer rests on an unrecorded stance. — waived: process-outcome -- the citation is `MILE-29`'s own `Implements: ADR-99` header, and a record cannot evidence itself without pinning a file that changes with every row added to it; `pointer.resolution` in `urzua check` judges that the citation resolves
+- The record is filed under `docs/adr/` and passes `urzua check`. — evidence: code:docs/adr/ADR-99-urzua-ships-a-read-only-mcp-server-as-a-stdio-transport-over-its-existing-reports.md@sha256:cebd6a67fb88f6139999702c92ab04a657a0823d7c0bf2ddbaa931adadaa5c92, code:.github/workflows/checks.yml
+- `MILE-29` cites it in `Implements`, so the build milestone no longer rests on an unrecorded stance. — evidence: code:docs/milestones/MILE-29-a-read-only-mcp-server.md
 
 > **Revision log**
 >
@@ -32,3 +32,4 @@ MILE-29 already names "a read-only MCP server" as a build target, but no RFC or 
 > | 2026-11-13 | Blank line removed after the revision-log header row, so the tool can append rows. **Why:** `urzua reverify` and `fix` refused to append to a log whose table was split by a blank line. | **structural** |
 > | 2026-11-13 | Done means reworded from an RFC to a decision record. **Why:** the maintainer decided on 2026-11-13 that `ADR-99` decides the MCP position without a separate RFC, taking the recommendation on each choice; `MILE-29` cites it in `Implements`. | **structural** |
 > | 2026-11-13 | Tool-authored (by beauwilliams, identity: gh-verified, actor: agent): recomputed `Status` from `the Done means items (2 of 3 items resolved, 1 waived) computes to Implemented` -- stated `Planned` disagreed with the computed value `Done`. | **structural** |
+> | 2026-11-13 | The "MILE-29 cites it" item now cites `MILE-29`'s file as evidence instead of a waiver, and the "passes `urzua check`" item adds the CI workflow that runs it. **Why:** ADR-96 reserves a waiver for a result no file can evidence, and `MILE-29`'s `Implements: ADR-99` is in a file. | **structural** |
