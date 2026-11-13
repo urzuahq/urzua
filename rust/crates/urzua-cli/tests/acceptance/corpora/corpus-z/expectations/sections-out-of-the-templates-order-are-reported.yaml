@@ -1,0 +1,11 @@
+id: sections-out-of-the-templates-order-are-reported
+corpus: corpus-z
+invocation: [check]
+expect_exit: 1
+expect_findings:
+  - rule: section.order
+    file: records/docs/DOC-0004-swapped.md
+    severity: error
+    message_contains: "the template puts it before"
+expect_no_findings:
+  - {rule: section.order, file: records/docs/DOC-0001-clean.md}

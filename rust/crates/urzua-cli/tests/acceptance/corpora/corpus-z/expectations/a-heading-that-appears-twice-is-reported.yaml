@@ -1,0 +1,11 @@
+id: a-heading-that-appears-twice-is-reported
+corpus: corpus-z
+invocation: [check]
+expect_exit: 1
+expect_findings:
+  - rule: section.duplicate
+    file: records/docs/DOC-0002-twice.md
+    severity: error
+    message_contains: "appears twice"
+expect_no_findings:
+  - {rule: section.duplicate, file: records/docs/DOC-0001-clean.md}

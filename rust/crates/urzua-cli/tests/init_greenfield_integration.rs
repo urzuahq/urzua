@@ -312,16 +312,25 @@ fn adopt_reports_a_root_level_record_it_could_not_classify() {
 
 /// MILE-114: on a terminal, `init` in a repository with no record directory
 /// shows a menu and reads the selection. `script` gives the binary a pseudo
-/// terminal; its transcript holds the menu (standard error) and the JSON report.
+/// terminal; the binary's standard output is redirected to a file inside it, so
+/// the transcript holds the menu (standard error) and the file holds only the JSON report.
 #[test]
 fn on_a_terminal_init_asks_which_types_to_govern() {
     let dir = repo("menu");
     let binary = common::urzua().get_program().to_os_string();
+    let stdout_file = dir.path().join("..").join(format!(
+        "urzua-menu-stdout-{}.json",
+        dir.path().file_name().unwrap().to_string_lossy()
+    ));
     let mut script = std::process::Command::new("script");
     script
         .args([
             "-qec",
-            &(binary.to_string_lossy().to_string() + " init"),
+            &(format!(
+                "{} init > {}",
+                binary.to_string_lossy(),
+                stdout_file.display()
+            )),
             "/dev/null",
         ])
         .env("PATH", common::path_with_stub_gh())
@@ -342,18 +351,22 @@ fn on_a_terminal_init_asks_which_types_to_govern() {
     let transcript = String::from_utf8_lossy(&out.stdout).to_string();
     assert!(
         transcript.contains("Choose the record types"),
-        "{transcript}"
+        "the menu goes to the terminal (standard error): {transcript}"
     );
-    // The report is the transcript from its opening brace (0x7b) onward.
-    let open = char::from(0x7b_u8);
-    let json = &transcript[transcript.find(open).expect("a JSON report")..];
-    let report: serde_json::Value = serde_json::from_str(json.trim()).unwrap();
+    let stdout = std::fs::read_to_string(&stdout_file).unwrap();
+    let _ = std::fs::remove_file(&stdout_file);
+    assert!(
+        !stdout.contains("Choose the record types"),
+        "the menu never reaches standard output: {stdout}"
+    );
+    let report: serde_json::Value =
+        serde_json::from_str(stdout.trim()).expect("standard output is the JSON report only");
     let names: Vec<&str> = report["proposed"]
         .as_array()
         .unwrap()
         .iter()
         .map(|p| p["name"].as_str().unwrap())
         .collect();
-    assert_eq!(names, ["adr", "spec"], "{transcript}");
+    assert_eq!(names, ["adr", "spec"], "{stdout}");
     assert!(dir.path().join(".urzua/config.yaml").is_file());
 }

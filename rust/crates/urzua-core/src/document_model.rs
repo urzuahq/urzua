@@ -224,6 +224,51 @@ pub struct SectionsDecl {
     /// against the record's status field. Only meaningful with `required`.
     #[serde(default, deserialize_with = "deserialize_exempt_statuses")]
     pub exempt_statuses: Vec<String>,
+    /// A heading may appear once among its siblings (`MILE-104`): the same
+    /// heading text twice at one level under one parent is a
+    /// `section.duplicate` finding. Omitted means `false`, and the rule has
+    /// nothing eligible in the type.
+    #[serde(default, deserialize_with = "deserialize_unique_headings")]
+    pub unique_headings: bool,
+    /// Read the section tree for a skipped level (`MILE-104`): a section deeper
+    /// than the one above it by more than one level, or deeper than `##` with
+    /// no section above it, is a `section.level-skipped` finding. Needs a
+    /// `depth` of at least 2, because at depth 1 only `##` is a section and
+    /// there is no level to skip. Omitted means `false`.
+    #[serde(default, deserialize_with = "deserialize_no_skipped_levels")]
+    pub no_skipped_levels: bool,
+    /// Where the order sections must follow is read from (`MILE-104`), read by
+    /// `section.order`. Omitted means no order is declared.
+    #[serde(default)]
+    pub order: Option<SectionOrder>,
+}
+
+/// `sections.order`: the source of the order a record's sections follow.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SectionOrder {
+    pub from: OrderSource,
+}
+
+/// Where a declared section order is read from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OrderSource {
+    /// The headings of `.urzua/templates/<type>.md`, in the order the template
+    /// gives them: the file an author is looking at while writing.
+    Template,
+}
+
+impl<'de> Deserialize<'de> for OrderSource {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(d)
+            .map_err(|_| serde::de::Error::custom("`order.from` must be `template`"))?;
+        match s.as_str() {
+            "template" => Ok(OrderSource::Template),
+            other => Err(serde::de::Error::custom(format!(
+                "`order.from` is '{other}'; the only source is `template`"
+            ))),
+        }
+    }
 }
 
 /// One required section: its heading text and the shape its content takes.
@@ -451,6 +496,18 @@ fn deserialize_depth<'de, D: serde::Deserializer<'de>>(d: D) -> Result<u8, D::Er
     }
 }
 
+fn deserialize_unique_headings<'de, D: serde::Deserializer<'de>>(d: D) -> Result<bool, D::Error> {
+    yaml_serde::Value::deserialize(d)?
+        .as_bool()
+        .ok_or_else(|| serde::de::Error::custom("`unique_headings` must be true or false"))
+}
+
+fn deserialize_no_skipped_levels<'de, D: serde::Deserializer<'de>>(d: D) -> Result<bool, D::Error> {
+    yaml_serde::Value::deserialize(d)?
+        .as_bool()
+        .ok_or_else(|| serde::de::Error::custom("`no_skipped_levels` must be true or false"))
+}
+
 fn deserialize_items<'de, D: serde::Deserializer<'de>>(d: D) -> Result<bool, D::Error> {
     yaml_serde::Value::deserialize(d)?
         .as_bool()
@@ -499,6 +556,14 @@ pub(crate) fn validate_declarations(
                         ),
                     ));
                 }
+            }
+            if sd.no_skipped_levels && sd.depth < 2 {
+                return Err(invalid(
+                    name,
+                    "sections",
+                    "`no_skipped_levels` needs a `depth` of at least 2: at depth 1 only `##` is a section, so no level can be skipped"
+                        .into(),
+                ));
             }
             if sd.required.is_empty() && !sd.exempt_statuses.is_empty() {
                 return Err(invalid(
@@ -839,6 +904,35 @@ mod tests {
         }
         let e = invalid("    sections: {from: headings, required: [{name: A}, {name: A}]}\n");
         assert!(e.contains("twice"), "{e}");
+    }
+
+    #[test]
+    fn the_structure_keys_default_off_and_parse_when_declared() {
+        let m = split(&cfg("    sections: {from: headings}\n")).unwrap();
+        let s = m["adr"].sections.as_ref().unwrap();
+        assert!(!s.unique_headings && !s.no_skipped_levels && s.order.is_none());
+        let m = split(&cfg(
+            "    sections: {from: headings, depth: 2, unique_headings: true, no_skipped_levels: true, order: {from: template}}\n",
+        ))
+        .unwrap();
+        let s = m["adr"].sections.as_ref().unwrap();
+        assert!(s.unique_headings && s.no_skipped_levels);
+        assert_eq!(s.order.unwrap().from, OrderSource::Template);
+    }
+
+    #[test]
+    fn a_structure_key_that_could_never_report_or_is_malformed_is_refused() {
+        let e = invalid("    sections: {from: headings, no_skipped_levels: true}\n");
+        assert!(
+            e.contains("no_skipped_levels") && e.contains("depth"),
+            "{e}"
+        );
+        let e = invalid("    sections: {from: headings, unique_headings: 1}\n");
+        assert!(e.contains("unique_headings"), "{e}");
+        let e = invalid("    sections: {from: headings, order: {from: alphabet}}\n");
+        assert!(e.contains("order") && e.contains("template"), "{e}");
+        let e = invalid("    sections: {from: headings, order: {from: template, by: x}}\n");
+        assert!(e.contains("order") || e.contains("by"), "{e}");
     }
 
     #[test]
