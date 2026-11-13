@@ -9,7 +9,7 @@
 
 #![forbid(unsafe_code)]
 
-use std::io::{BufRead, Write};
+use std::io::{BufRead, Read, Write};
 
 use serde_json::{json, Map, Value};
 
@@ -58,28 +58,88 @@ pub trait Host {
     fn call(&mut self, name: &str, args: &Map<String, Value>) -> Result<ToolResult, String>;
 }
 
+/// The longest request line the server reads, in bytes, newline excluded
+/// (`SPEC-26`). A longer line is answered with `-32600` and skipped to its
+/// newline without being held in memory; the server keeps serving.
+pub const MAX_LINE_BYTES: usize = 1024 * 1024;
+
 /// Serve until `input` closes. Every line written to `output` is one JSON-RPC
-/// message; nothing else is ever written to it.
+/// message; nothing else is ever written to it. A line that is not UTF-8 is
+/// answered with `-32700` and a line over [`MAX_LINE_BYTES`] with `-32600`; in
+/// both cases the next line is served.
 pub fn serve<H: Host>(
     host: &mut H,
     server_version: &str,
-    input: impl BufRead,
+    mut input: impl BufRead,
     mut output: impl Write,
 ) -> std::io::Result<()> {
-    for line in input.lines() {
-        let line = line?;
-        if line.trim().is_empty() {
-            continue;
-        }
-        if let Some(response) = handle_line(host, server_version, &line) {
+    let mut buf = Vec::new();
+    loop {
+        let line = match read_line(&mut input, &mut buf)? {
+            Line::End => return Ok(()),
+            Line::TooLong => Some(error(
+                Value::Null,
+                INVALID_REQUEST,
+                &format!("request line exceeds {MAX_LINE_BYTES} bytes"),
+            )),
+            Line::Bytes => match std::str::from_utf8(&buf) {
+                Err(_) => Some(error(
+                    Value::Null,
+                    PARSE_ERROR,
+                    "parse error: the line is not UTF-8",
+                )),
+                Ok(text) if text.trim().is_empty() => None,
+                Ok(text) => handle_line(host, server_version, text),
+            },
+        };
+        if let Some(response) = line {
             writeln!(output, "{response}")?;
             output.flush()?;
         }
     }
-    Ok(())
+}
+
+enum Line {
+    End,
+    Bytes,
+    TooLong,
+}
+
+/// Reads one line into `buf` (newline removed), holding at most
+/// `MAX_LINE_BYTES + 1` bytes: the rest of a longer line is read and dropped.
+fn read_line(input: &mut impl BufRead, buf: &mut Vec<u8>) -> std::io::Result<Line> {
+    buf.clear();
+    let limit = MAX_LINE_BYTES as u64 + 1;
+    let n = (&mut *input).take(limit).read_until(b'\n', buf)?;
+    if n == 0 {
+        return Ok(Line::End);
+    }
+    if buf.last() == Some(&b'\n') {
+        buf.pop();
+        return Ok(if buf.len() > MAX_LINE_BYTES {
+            Line::TooLong
+        } else {
+            Line::Bytes
+        });
+    }
+    if n < limit as usize {
+        // The input ended without a newline: the last line.
+        return Ok(Line::Bytes);
+    }
+    // Over the cap: drop the rest of the line, a bounded chunk at a time.
+    loop {
+        buf.clear();
+        let n = (&mut *input).take(limit).read_until(b'\n', buf)?;
+        if n == 0 || buf.last() == Some(&b'\n') {
+            buf.clear();
+            return Ok(Line::TooLong);
+        }
+    }
 }
 
 /// The response to one frame, or `None` for a notification or a client reply.
+/// A message without an `id` is a notification: it is never answered and never
+/// runs a tool. `id` must be a string or a number, never `null` (MCP).
 pub fn handle_line<H: Host>(host: &mut H, server_version: &str, line: &str) -> Option<Value> {
     let message: Value = match serde_json::from_str(line) {
         Ok(v) => v,
@@ -98,19 +158,26 @@ pub fn handle_line<H: Host>(host: &mut H, server_version: &str, line: &str) -> O
             "a message must be a JSON object (batches are not supported)",
         ));
     };
-    let id = object.get("id").filter(|v| v.is_string() || v.is_number());
+    let id = object.get("id");
+    if id.is_some_and(|v| !(v.is_string() || v.is_number())) {
+        return Some(error(
+            Value::Null,
+            INVALID_REQUEST,
+            "`id` must be a string or a number, never null",
+        ));
+    }
     let method = object.get("method").and_then(Value::as_str);
     let valid = object.get("jsonrpc").and_then(Value::as_str) == Some("2.0");
-    match (valid, method) {
+    match (valid, method, id) {
         // A reply to a request the server never sent: nothing to answer.
-        (true, None) if object.contains_key("result") || object.contains_key("error") => None,
-        (true, Some(method)) => {
+        (true, None, _) if object.contains_key("result") || object.contains_key("error") => None,
+        // A notification: never answered, never run.
+        (true, Some(_), None) => None,
+        (true, Some(method), Some(id)) => {
             let result = dispatch(host, server_version, method, object.get("params"));
-            // No `id` is a notification, which is never answered.
-            let id = object.get("id")?.clone();
             Some(match result {
                 Ok(result) => json!({"jsonrpc": "2.0", "id": id, "result": result}),
-                Err((code, message)) => error(id, code, &message),
+                Err((code, message)) => error(id.clone(), code, &message),
             })
         }
         _ => Some(error(
@@ -138,10 +205,12 @@ fn dispatch<H: Host>(
         "ping" => Ok(json!({})),
         "tools/list" => Ok(json!({"tools": host.tools().iter().map(describe).collect::<Vec<_>>()})),
         "tools/call" => call_tool(host, params),
-        // Notifications (`notifications/initialized`, `notifications/cancelled`)
-        // reach here too and are dropped by the caller; a request for anything
-        // else is not found.
-        m if m.starts_with("notifications/") => Ok(Value::Null),
+        // A notification method sent with an `id` is a malformed request, not a
+        // notification and not a method this server answers.
+        m if m.starts_with("notifications/") => Err((
+            INVALID_REQUEST,
+            format!("{m} is a notification and takes no id"),
+        )),
         _ => Err((METHOD_NOT_FOUND, format!("method not found: {method}"))),
     }
 }
@@ -248,6 +317,8 @@ mod tests {
 
     struct Fake;
 
+    static CALLS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
     static TOOLS: &[ToolSpec] = &[ToolSpec {
         name: "fake_list",
         description: "a read tool",
@@ -278,6 +349,7 @@ mod tests {
             TOOLS
         }
         fn call(&mut self, _: &str, args: &Map<String, Value>) -> Result<ToolResult, String> {
+            CALLS.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             Ok(ToolResult {
                 report: json!({"status": "ok", "got": args.len()}),
                 is_error: false,
@@ -383,5 +455,85 @@ mod tests {
             let v: Value = serde_json::from_str(line).unwrap();
             assert_eq!(v["jsonrpc"], "2.0");
         }
+    }
+
+    fn serve_bytes(input: &[u8]) -> Vec<Value> {
+        let mut out = Vec::new();
+        serve(&mut Fake, "1", input, &mut out).unwrap();
+        String::from_utf8(out)
+            .unwrap()
+            .lines()
+            .map(|l| serde_json::from_str(l).unwrap())
+            .collect()
+    }
+
+    #[test]
+    fn a_line_that_is_not_utf8_gets_a_parse_error_and_the_next_line_is_served() {
+        let mut input =
+            b"{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\",\"x\":\"\xff\xfe\"}\n".to_vec();
+        input.extend_from_slice(b"{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"ping\"}\n");
+        let replies = serve_bytes(&input);
+        assert_eq!(replies.len(), 2);
+        assert_eq!(replies[0]["error"]["code"], PARSE_ERROR);
+        assert_eq!(replies[1]["result"], json!({}));
+    }
+
+    #[test]
+    fn a_line_over_the_cap_gets_invalid_request_is_not_held_and_the_next_line_is_served() {
+        let mut input = vec![b'a'; MAX_LINE_BYTES * 2 + 10];
+        input.push(b'\n');
+        input.extend_from_slice(b"{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"ping\"}\n");
+        let replies = serve_bytes(&input);
+        assert_eq!(replies.len(), 2);
+        assert_eq!(replies[0]["error"]["code"], INVALID_REQUEST);
+        assert_eq!(replies[1]["id"], 2);
+    }
+
+    #[test]
+    fn a_line_exactly_at_the_cap_is_read_and_one_byte_over_is_refused() {
+        let pad = |n: usize| {
+            format!(
+                "{{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\",\"p\":\"{}\"}}\n",
+                "a".repeat(n)
+            )
+        };
+        let base = pad(0).len() - 1;
+        let at = pad(MAX_LINE_BYTES - base);
+        assert_eq!(at.len() - 1, MAX_LINE_BYTES);
+        assert_eq!(serve_bytes(at.as_bytes())[0]["result"], json!({}));
+        let over = pad(MAX_LINE_BYTES - base + 1);
+        assert_eq!(
+            serve_bytes(over.as_bytes())[0]["error"]["code"],
+            INVALID_REQUEST
+        );
+    }
+
+    #[test]
+    fn a_final_line_without_a_newline_is_still_served() {
+        let replies = serve_bytes(b"{\"jsonrpc\":\"2.0\",\"id\":7,\"method\":\"ping\"}");
+        assert_eq!(replies[0]["id"], 7);
+    }
+
+    #[test]
+    fn a_null_or_malformed_id_is_an_invalid_request() {
+        for id in ["null", "true", "{}", "[1]"] {
+            let line = format!(r#"{{"jsonrpc":"2.0","id":{id},"method":"ping"}}"#);
+            assert_eq!(err_code(&line), INVALID_REQUEST, "id {id}");
+        }
+    }
+
+    #[test]
+    fn a_tool_call_without_an_id_is_a_notification_and_never_runs() {
+        let before = CALLS.load(std::sync::atomic::Ordering::SeqCst);
+        let line = r#"{"jsonrpc":"2.0","method":"tools/call","params":{"name":"fake_list","arguments":{"must":"x"}}}"#;
+        assert!(ask(line).is_none());
+        assert_eq!(CALLS.load(std::sync::atomic::Ordering::SeqCst), before);
+    }
+
+    #[test]
+    fn a_notification_method_sent_with_an_id_is_an_error_not_a_null_result() {
+        let r = ask(r#"{"jsonrpc":"2.0","id":4,"method":"notifications/initialized"}"#).unwrap();
+        assert_eq!(r["error"]["code"], INVALID_REQUEST);
+        assert!(r.get("result").is_none());
     }
 }

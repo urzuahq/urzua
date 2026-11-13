@@ -87,12 +87,15 @@ fn settle(dir: &Path) {
     git(dir, &["update-index", "-q", "--refresh"]);
 }
 
-/// A fingerprint of every file under `dir`, `.git` included: path to content hash.
+/// A fingerprint of every file and directory under `dir`, `.git` included: path to content hash (a directory, which has no content, is `path/` to 0).
 fn tree_hash(dir: &Path) -> BTreeMap<String, u64> {
     fn walk(dir: &Path, out: &mut BTreeMap<String, u64>, root: &Path) {
         for entry in std::fs::read_dir(dir).unwrap() {
             let path = entry.unwrap().path();
             if path.is_dir() {
+                // A directory is an entry of its own, so an empty one is seen.
+                let key = format!("{}/", path.strip_prefix(root).unwrap().display());
+                out.insert(key, 0);
                 walk(&path, out, root);
             } else {
                 let key = path.strip_prefix(root).unwrap().display().to_string();
@@ -453,11 +456,14 @@ fn root_selects_the_repository_and_as_of_is_refused() {
 }
 
 // ---------------------------------------------------------------------------
-// The source scan: the server's code contains no write API.
+// The source scan: the server's code, and the CLI code its tools call, contain
+// no write API.
 // ---------------------------------------------------------------------------
 
-/// APIs that write, rename, delete or spawn. The scan is textual and
-/// deliberately broad: a legitimate need for one of these is a decision for
+/// APIs that write, rename, delete, change a file's metadata or spawn a process,
+/// including the `OpenOptions` spellings (`File::options()` and its `write`,
+/// `append`, `create`, `create_new` and `truncate` switches). The scan is textual
+/// and deliberately broad: a legitimate need for one of these is a decision for
 /// ADR-99's amendment, not an allowlist entry.
 const FORBIDDEN: &[&str] = &[
     "fs::write",
@@ -466,24 +472,78 @@ const FORBIDDEN: &[&str] = &[
     "fs::copy",
     "fs::create_dir",
     "fs::set_permissions",
+    "fs::hard_link",
+    "fs::soft_link",
     "File::create",
+    "File::options",
     "OpenOptions",
+    ".append(true)",
+    ".write(true)",
+    ".create(true)",
+    ".create_new(true)",
+    ".truncate(true)",
+    "remove_file(",
+    "remove_dir_all(",
+    "remove_dir(",
+    "create_dir_all(",
+    "set_permissions(",
+    "set_modified(",
+    "set_times(",
+    "set_len(",
+    "symlink(",
+    "write_atomic",
     "Command::new",
     "process::Command",
     ".write_all(",
-    "set_len(",
-    "hard_link(",
-    "symlink(",
 ];
 
-/// The forbidden APIs in `source`, ignoring the `#[cfg(test)]` tail and comments.
-fn forbidden_in(source: &str) -> Vec<&'static str> {
-    let production = source.split("#[cfg(test)]").next().unwrap_or(source);
-    let code: String = production
-        .lines()
+/// `source` without its test code: every item that follows a `#[cfg(test)]`
+/// attribute is removed (a `mod`'s braces to the matching one, any other item to
+/// its `;` or its block), and so are `//` comments. Code after a test module is
+/// kept, so a write placed after one is still seen.
+fn production_code(source: &str) -> String {
+    let mut rest = source;
+    let mut kept = String::new();
+    while let Some(at) = rest.find("#[cfg(test)]") {
+        kept.push_str(&rest[..at]);
+        let after = &rest[at + "#[cfg(test)]".len()..];
+        let open = after.find('{');
+        let semi = after.find(';');
+        let skip = match (open, semi) {
+            (Some(o), Some(s)) if s < o => s + 1,
+            (Some(o), _) => {
+                let mut depth = 0usize;
+                let mut end = after.len();
+                for (i, c) in after[o..].char_indices() {
+                    match c {
+                        '{' => depth += 1,
+                        '}' => {
+                            depth -= 1;
+                            if depth == 0 {
+                                end = o + i + 1;
+                                break;
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                end
+            }
+            (None, Some(s)) => s + 1,
+            (None, None) => after.len(),
+        };
+        rest = &after[skip..];
+    }
+    kept.push_str(rest);
+    kept.lines()
         .filter(|line| !line.trim_start().starts_with("//"))
         .collect::<Vec<_>>()
-        .join("\n");
+        .join("\n")
+}
+
+/// The forbidden APIs in the production part of `source`.
+fn forbidden_in(source: &str) -> Vec<&'static str> {
+    let code = production_code(source);
     FORBIDDEN
         .iter()
         .copied()
@@ -491,9 +551,24 @@ fn forbidden_in(source: &str) -> Vec<&'static str> {
         .collect()
 }
 
+/// The server's own sources, and the `urzua-cli` files its tools run through:
+/// `check` (`commands/check.rs` and what it reads with), and `export`. The
+/// `urzua-io` and `urzua-core` crates are not scanned: `urzua-io` holds the
+/// writers other commands use and runs `git`, so what the tools reach there is
+/// covered by the tree-hash test instead (SPEC-26, "Read-only guarantee").
+const SCANNED: &[&str] = &[
+    "urzua-cli/src/commands/mcp.rs",
+    "urzua-cli/src/commands/check.rs",
+    "urzua-cli/src/commands/export.rs",
+    "urzua-cli/src/session.rs",
+    "urzua-cli/src/discovery.rs",
+    "urzua-cli/src/file_texts.rs",
+    "urzua-cli/src/diff_scope.rs",
+];
+
 fn server_sources() -> Vec<(String, String)> {
     let crates = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
-    let mut files = vec![crates.join("urzua-cli/src/commands/mcp.rs")];
+    let mut files: Vec<_> = SCANNED.iter().map(|f| crates.join(f)).collect();
     for entry in std::fs::read_dir(crates.join("urzua-mcp/src")).unwrap() {
         files.push(entry.unwrap().path());
     }
@@ -509,11 +584,11 @@ fn server_sources() -> Vec<(String, String)> {
 }
 
 #[test]
-fn the_server_sources_contain_no_write_api() {
+fn the_server_sources_and_the_code_its_tools_call_contain_no_write_api() {
     let sources = server_sources();
     assert!(
-        sources.len() >= 2,
-        "the scan must see the crate and the command"
+        sources.len() > SCANNED.len(),
+        "the scan must see every file it names"
     );
     for (path, text) in &sources {
         assert_eq!(
@@ -539,8 +614,73 @@ fn the_source_scan_fails_on_a_planted_write() {
         forbidden_in("// fs::write is mentioned here only\nfn ok() {}"),
         Vec::<&str>::new()
     );
+}
+
+#[test]
+fn the_source_scan_catches_open_options_style_writes() {
+    for planted in [
+        "let f = std::fs::File::options().append(true).open(p);",
+        "let f = std::fs::OpenOptions::new().write(true).open(p);",
+        "let f = options.create_new(true).open(p);",
+        "let f = options.truncate(true).open(p);",
+        "use std::fs::remove_file; remove_file(p);",
+        "urzua_io::write_atomic(p, t);",
+    ] {
+        assert!(!forbidden_in(planted).is_empty(), "missed: {planted}");
+    }
+}
+
+#[test]
+fn a_cfg_test_item_hides_only_itself_not_the_code_after_it() {
+    let tests_only = "fn ok() {}\n#[cfg(test)]\nmod t { fn f() { std::fs::write(1, 2); } }";
+    assert_eq!(forbidden_in(tests_only), Vec::<&str>::new());
+    let then_production = "#[cfg(test)]\nmod t { fn f() { let x = { 1 }; std::fs::write(1, 2); } }\nfn later() { std::fs::remove_file(p); }";
     assert_eq!(
-        forbidden_in("fn ok() {}\n#[cfg(test)]\nmod t { fn f() { std::fs::write(1, 2); } }"),
-        Vec::<&str>::new()
+        forbidden_in(then_production),
+        ["fs::remove", "remove_file("]
     );
+    let one_item = "#[cfg(test)]\nuse std::fs::File;\nfn later() { File::create(p); }";
+    assert_eq!(forbidden_in(one_item), ["File::create"]);
+}
+
+#[test]
+#[should_panic(expected = "changed the tree")]
+fn the_tree_hash_sees_a_new_empty_directory() {
+    let dir = fixture("emptydir");
+    let before = tree_hash(&dir);
+    std::fs::create_dir(dir.join("docs/empty")).unwrap();
+    assert_tree_unchanged(&before, &dir, "a planted empty directory");
+}
+
+#[test]
+fn a_bad_or_oversized_line_over_the_real_process_gets_an_error_and_the_server_keeps_serving() {
+    let dir = fixture("badlines");
+    let mut child = common::urzua()
+        .args(["mcp"])
+        .current_dir(&dir)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut stdin = child.stdin.take().unwrap();
+    stdin
+        .write_all(b"{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\",\"x\":\"\xff\"}\n")
+        .unwrap();
+    stdin.write_all(&vec![b'a'; 2 * 1024 * 1024]).unwrap();
+    stdin
+        .write_all(b"\n{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"ping\"}\n")
+        .unwrap();
+    drop(stdin);
+    let out = child.wait_with_output().unwrap();
+    let replies: Vec<Value> = String::from_utf8(out.stdout)
+        .unwrap()
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect();
+    let codes: Vec<i64> = replies
+        .iter()
+        .map(|r| r["error"]["code"].as_i64().unwrap_or(0))
+        .collect();
+    assert_eq!(codes, [-32700, -32600, 0]);
+    assert_eq!(replies[2]["id"], 3);
 }
