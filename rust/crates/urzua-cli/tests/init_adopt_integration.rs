@@ -377,3 +377,43 @@ fn adopt_config_is_byte_identical_to_the_pre_greenfield_output() {
         "adopt writes no starter templates"
     );
 }
+
+/// `MILE-104`: `section.duplicate`, `section.level-skipped` and `section.order`
+/// each read a `sections.*` key adopt never writes, so proposing them would
+/// have them report `ran` over zero records (`BUG-73`). Adopt withholds them,
+/// names each with the key it needs, and `check` shows them as not enabled.
+#[test]
+fn adopt_withholds_the_section_structure_rules_and_names_the_key_each_needs() {
+    let dir = realistic_repo("init-adopt-section-structure");
+    let out = run_urzua(&dir, &["init"]);
+    assert_eq!(out.status.code(), Some(0));
+    let report = json(&out);
+    let written = std::fs::read_to_string(dir.join(".urzua/config.yaml")).unwrap();
+    let notice = report["notices"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|n| n["message"].as_str())
+        .find(|m| m.contains("not proposed") && m.contains("field.quality"))
+        .expect("the withheld-rule notice")
+        .to_string();
+    for (rule, key) in [
+        ("section.duplicate", "sections.unique_headings"),
+        ("section.level-skipped", "sections.no_skipped_levels"),
+        ("section.order", "sections.order"),
+    ] {
+        assert!(!written.contains(rule), "{rule} is not written: {written}");
+        assert!(notice.contains(rule) && notice.contains(key), "{notice}");
+    }
+    // The two rules that read `sections.required` are unchanged: still proposed.
+    assert!(written.contains("section.required: warn"));
+    let check = json(&run_urzua(&dir, &["check"]));
+    for e in check["rules_executed"].as_array().unwrap() {
+        if matches!(
+            e["rule"].as_str(),
+            Some("section.duplicate" | "section.level-skipped" | "section.order")
+        ) {
+            assert_eq!(e["status"], "not-enabled", "{e}");
+        }
+    }
+}
