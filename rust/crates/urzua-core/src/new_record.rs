@@ -387,6 +387,86 @@ pub fn render_synthetic_yaml(
     out
 }
 
+/// What `scaffold_record` needs to build a record's initial text: the type's
+/// declarations and the values only the caller can resolve (number, id,
+/// author, date). Shared by every command that creates a record from a type
+/// (`urzua new`, and `waive --from-report` after it).
+pub struct ScaffoldSpec<'a> {
+    pub type_config: &'a crate::config::RecordTypeConfig,
+    pub compiled: Option<&'a crate::document_model::CompiledIdentity>,
+    pub type_prefix: &'a str,
+    pub filename: &'a str,
+    pub display_number: u32,
+    pub title: &'a str,
+    pub stable_id: &'a str,
+    pub author: &'a str,
+    pub today: &'a str,
+}
+
+/// The initial text of a record: a synthesized YAML header from the type's
+/// declarations, then the body scaffolding of `template` (the caller reads the
+/// checked-in template, if any). Pure: no file is read or written.
+///
+/// BUG-3: the configured header shape wins unconditionally -- a template's own
+/// (possibly stale) header is never used, only the field names it lists and its
+/// body.
+pub fn scaffold_record(spec: &ScaffoldSpec, template: Option<&str>) -> String {
+    let type_config = spec.type_config;
+    // The entry state of the type's own vocabulary, not a choice: moving a
+    // record on from it stays a human decision.
+    let status_decl = type_config.status_decl();
+    let params = NewRecordParams {
+        display_number: spec.display_number,
+        // The H1 id is padded exactly as the file name is: the width of the
+        // `number` the declared pattern reads back from it (`BUG-188`).
+        h1_width: spec
+            .compiled
+            .and_then(|c| c.identify(spec.filename).number)
+            .map_or(0, |n| n.len()),
+        h1_prefix: spec.compiled.map(|_| spec.type_prefix),
+        initial_status: status_decl
+            .as_ref()
+            .and_then(|d| d.values.first())
+            .map(String::as_str),
+        status_field: type_config.relation_field(crate::config::RelationRole::Status),
+        date_field: type_config.date_field(),
+        author_field: type_config.author_field(),
+        title_field: type_config.title_field(),
+        initial_version: type_config.initial_version(),
+        title: spec.title,
+        stable_id: spec.stable_id,
+        author: spec.author,
+        today: spec.today,
+    };
+    let template_fields = declared_template_fields(type_config, template);
+    let mut out = render_synthetic_yaml(&params, &type_config.required_fields, &template_fields);
+    if let Some(body) = template.and_then(template_body) {
+        out.push('\n');
+        out.push_str(body);
+    }
+    out
+}
+
+/// The header fields the template names beyond the required ones stay on the
+/// new record, blank, when the type declares them (`BUG-188`); one the type
+/// does not declare would only trip `header.field-set-consistency`, so it is
+/// left out.
+fn declared_template_fields(
+    type_config: &crate::config::RecordTypeConfig,
+    template: Option<&str>,
+) -> Vec<String> {
+    let declared = type_config.declared_fields();
+    template
+        .map(template_header_fields)
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|f| {
+            type_config.known_fields.is_none()
+                || declared.contains(&crate::values::FieldName::new(f.as_str()))
+        })
+        .collect()
+}
+
 /// The field names a template's header lists, in order: the `> Name: value`
 /// lines of a blockquote header or the keys of a leading YAML frontmatter
 /// block, read before the first `## ` section. Only the names are used
@@ -944,5 +1024,46 @@ mod tests {
         params.initial_status = None;
         let rendered = render_synthetic_yaml(&params, &["State".to_string()], &[]);
         assert!(rendered.contains("State: null"), "{rendered}");
+    }
+
+    #[test]
+    fn scaffold_record_builds_header_and_template_body_from_a_synthetic_type() {
+        let type_config = crate::config::RecordTypeConfig {
+            dir: "docs/x".to_string(),
+            required_fields: vec!["Status".to_string(), "Author".to_string()],
+            known_fields: Some(vec![
+                "Status".to_string(),
+                "Author".to_string(),
+                "Note".to_string(),
+            ]),
+            ..Default::default()
+        };
+        let template =
+            "---\nStatus: null\nNote: null\nOther: null\n---\n# 0 -- T\n\n## What\n\nbody\n";
+        let spec = ScaffoldSpec {
+            type_config: &type_config,
+            compiled: None,
+            type_prefix: "X",
+            filename: "X-3-t.md",
+            display_number: 3,
+            title: "Synthetic",
+            stable_id: "01SYNTH",
+            author: "tester",
+            today: "2026-11-13",
+        };
+        let out = scaffold_record(&spec, Some(template));
+        // Header: generated id, filled author, blank decisions, the declared
+        // template field kept and the undeclared one dropped.
+        assert!(out.starts_with("---\nStable-Id: 01SYNTH\n"), "{out}");
+        assert!(out.contains("Author: tester\n"), "{out}");
+        assert!(out.contains("Status: null\n"), "{out}");
+        assert!(out.contains("Note: null\n"), "{out}");
+        assert!(!out.contains("Other"), "{out}");
+        assert!(out.contains("# 3 — Synthetic\n"), "{out}");
+        // The template's body scaffolding follows the synthesized header.
+        assert!(out.ends_with("\n## What\n\nbody\n"), "{out}");
+        // Without a template there is only the header and the H1.
+        let bare = scaffold_record(&spec, None);
+        assert!(bare.ends_with("# 3 — Synthetic\n"), "{bare}");
     }
 }
