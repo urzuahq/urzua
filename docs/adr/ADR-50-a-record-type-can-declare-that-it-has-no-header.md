@@ -57,6 +57,11 @@ Under `none`:
   `config.pointer-narrative-overlap`, which exists for exactly this class of self-contradictory
   declaration.
 
+## Reversibility
+
+Remove the variant and the config-validation rule; any config declaring `none` then fails to parse,
+which is a loud failure rather than a silent behaviour change. No data format changes.
+
 ## Consequences
 
 - **`header.deprecated-shape` must stop being a negative test.** It reads
@@ -80,11 +85,6 @@ Under `none`:
   sections nothing reads (`MILE-4`) and a filename convention nothing can express (`RFC-29`). This
   closes one of `MILE-51`'s five gaps.
 
-## Reversibility
-
-Remove the variant and the config-validation rule; any config declaring `none` then fails to parse,
-which is a loud failure rather than a silent behaviour change. No data format changes.
-
 ## References
 
 - RFC-31 -- the proposal this decides.
@@ -101,3 +101,4 @@ which is a loud failure rather than a silent behaviour change. No data format ch
 > | 2026-09-16 | Initial decision. **Why:** decided before building, because the obvious implementation (`header.deprecated-shape`'s negative test) would have flagged the new variant as deprecated on its first run -- found by reading the rule while writing this, not while debugging it. | **structural** |
 > | 2026-11-04 | Backfilled `Accepted-on` from git history, commit 2de0e51f2. | **structural** |
 > | 2026-11-07 | Removed the placeholder `Realized-by: —` line: the field is optional and `embodiment.locator-exists` now reports text that is not a `spec:`, `code:` or `test:` entry. Nothing is realized-by yet. | **structural** |
+> | 2026-11-13 | Moved `## Reversibility` above `## Consequences`, the order `.urzua/templates/adr.md` gives. **Why:** `section.order` (MILE-104) is enabled for the `adr` type; the text of every section is unchanged and so is the decision. | **structural** |

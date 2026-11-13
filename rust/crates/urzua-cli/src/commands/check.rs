@@ -114,6 +114,8 @@ struct Context<'a> {
     base_drift: HashMap<PathBuf, HashSet<String>>,
     added_row_days: HashMap<PathBuf, rules::RowWindows>,
     templates: urzua_core::new_record::TemplateValues,
+    /// `section.order`'s template texts, by type (`MILE-104`).
+    template_texts: HashMap<String, String>,
     /// A proposed record is being judged (`--stdin-path`).
     record_only: bool,
     /// `--rules`: the only rules to run (`ADR-79`); `None` runs every declared rule.
@@ -252,6 +254,69 @@ pub(crate) fn load_templates(
     Ok(templates)
 }
 
+/// `section.order`'s template text (`MILE-104`): `.urzua/templates/<type>.md`
+/// for each type declaring `sections.order: {from: template}`, read only while
+/// the rule is enabled. A declared order whose template is missing, or holds no
+/// section the type's depth reads, reads nothing, so each is a warning notice
+/// and the rule leaves the type's records unexamined, never passed.
+pub(crate) fn load_template_texts(
+    repo_root: &Path,
+    config: &Config,
+    notices: &mut Vec<Notice>,
+) -> Result<HashMap<String, String>, String> {
+    let mut texts = HashMap::new();
+    if config
+        .rules
+        .get(rules::RULE_SECTION_ORDER)
+        .is_none_or(|s| s.level == urzua_core::config::RuleLevel::Off)
+    {
+        return Ok(texts);
+    }
+    for (record_type, depth) in rules::types_reading_a_template_order(config) {
+        let path = repo_root
+            .join(".urzua/templates")
+            .join(format!("{record_type}.md"));
+        match urzua_io::read_to_string(&path) {
+            Ok(text) => {
+                if !rules::template_has_sections(&text, depth) {
+                    notices.push(Notice {
+                        severity: NoticeSeverity::Warning,
+                        subject: rules::RULE_SECTION_ORDER.to_string(),
+                        message: format!(
+                            "{}: .urzua/templates/{record_type}.md holds no section, so \
+                             `sections.order` for '{record_type}' reads nothing and the type's records are not examined",
+                            rules::RULE_SECTION_ORDER
+                        ),
+                        detail: None,
+                    });
+                }
+                texts.insert(record_type, text);
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                notices.push(Notice {
+                    severity: NoticeSeverity::Warning,
+                    subject: rules::RULE_SECTION_ORDER.to_string(),
+                    message: format!(
+                        "{}: record type '{record_type}' declares `sections.order: {{from: template}}` \
+                         but .urzua/templates/{record_type}.md does not exist -- the order reads nothing, \
+                         and the type's records are not examined",
+                        rules::RULE_SECTION_ORDER
+                    ),
+                    detail: None,
+                });
+            }
+            Err(e) => {
+                return Err(format!(
+                    "{}: template '{}' could not be read: {e}",
+                    rules::RULE_SECTION_ORDER,
+                    path.display()
+                ))
+            }
+        }
+    }
+    Ok(texts)
+}
+
 impl<'a> Context<'a> {
     fn rule_ctx(
         &'a self,
@@ -267,6 +332,7 @@ impl<'a> Context<'a> {
             records: &s.records,
             full_text: &s.full_text,
             templates: &self.templates,
+            template_texts: &self.template_texts,
             index: &self.record_index,
             collisions: &self.collisions,
             untracked_records: &self.untracked_records,
@@ -1169,6 +1235,7 @@ struct DiffInputs {
     added_paths: Option<Vec<PathBuf>>,
     pull_ref_claims: rules::PullRefClaims,
     templates: urzua_core::new_record::TemplateValues,
+    template_texts: HashMap<String, String>,
     changed_paths: Option<Vec<PathBuf>>,
     committed_statuses: Option<HashMap<PathBuf, rules::CommittedStatus>>,
     deleted_records: Vec<rules::DeletedRecord>,
@@ -1387,6 +1454,7 @@ fn read_diff_inputs(
     });
     let pull_ref_claims = load_pull_ref_claims(session, added_paths.as_deref(), notices);
     let templates = load_templates(repo_root, config, notices)?;
+    let template_texts = load_template_texts(repo_root, config, notices)?;
     // The diff rules judge the changed set itself; `None` without `--base`.
     let changed_paths = changes.map(|c| c.changed.iter().cloned().collect());
     let base_gate = load_base_gate(session, changes, notices);
@@ -1424,6 +1492,7 @@ fn read_diff_inputs(
         added_paths,
         pull_ref_claims,
         templates,
+        template_texts,
         changed_paths,
         committed_statuses,
         deleted_records,
@@ -1839,6 +1908,7 @@ fn load_context<'a>(
             base_drift: diff.base_drift,
             added_row_days: diff.added_row_days,
             templates: diff.templates,
+            template_texts: diff.template_texts,
             record_only: scope.prospective.is_some(),
             selected: selection.map(|s| s.iter().cloned().collect()),
         },

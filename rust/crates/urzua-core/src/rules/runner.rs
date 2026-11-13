@@ -49,6 +49,10 @@ pub struct RuleCtx<'a> {
     /// `.urzua/templates/<type>.md`; empty unless `field.quality` declares
     /// `template_placeholders`.
     pub templates: &'a crate::new_record::TemplateValues,
+    /// Each type's template text, read by the caller from
+    /// `.urzua/templates/<type>.md`; empty unless `section.order` is enabled
+    /// (`MILE-104`).
+    pub template_texts: &'a HashMap<String, String>,
     /// Resolves a reference to a record; built once for every rule that resolves one.
     pub index: &'a RecordIndex<'a>,
     pub collisions: &'a [IdentifierCollision<'a>],
