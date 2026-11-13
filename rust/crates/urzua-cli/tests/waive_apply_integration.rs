@@ -74,7 +74,6 @@ fn a_written_draft_has_a_pending_reason_no_expires_key_and_the_findings_as_its_b
     );
     let path = &written_paths(&report)[0];
     let text = std::fs::read_to_string(dir.join(path)).unwrap();
-    let header: Vec<&str> = text.lines().take_while(|l| *l != "").collect();
     let head = text.split("\n---\n").next().unwrap();
     assert!(head.contains("\nRule: header.required-fields\n"), "{text}");
     assert!(head.contains("\nScope: docs/adr/ADR-1-a.md\n"), "{text}");
@@ -95,7 +94,6 @@ fn a_written_draft_has_a_pending_reason_no_expires_key_and_the_findings_as_its_b
         "{text}"
     );
     assert!(text.contains("| **structural** |"), "{text}");
-    let _ = header;
 }
 
 #[test]
