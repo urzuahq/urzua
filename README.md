@@ -230,6 +230,7 @@ The chain above is one path through this repo's own graph, documented here becau
 | `init` | Adopt mode only: proposes config from an existing corpus, never moves files |
 | `fix` | Detect mode (Embodiment, Tier 1) and apply mode, both real |
 | `migrate ids` | Real: backfills a collision-free stable ID ([ULID](docs/adr/ADR-21-ulid-as-the-stable-id-encoding.md)) into every record lacking one |
+| `migrate filenames` | Real: renames record files to the filename convention the type declares and rewrites citations of the renamed paths; dry-run unless `--apply` |
 | `migrate schema --report` | Real: previews which records lack a real value for a proposed new required field, before it's ever added to config |
 | `migrate config` | Real: rewrites a config from the previous `schema_version` to the current one, in place, reporting every key it added, changed, dropped, renamed or moved ([ADR-77](docs/adr/ADR-77-config-schema-versions-have-a-declared-support-window-and-a-migration-path.md)) |
 | `doctor` | Real: reports on the tool's own configuration health, not record content |
