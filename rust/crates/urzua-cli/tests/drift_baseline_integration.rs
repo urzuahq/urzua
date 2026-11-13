@@ -254,3 +254,125 @@ fn the_baseline_composes_with_a_base_diff_run() {
         "{parsed}"
     );
 }
+
+// ----------------------------------------------- pins: drift is judged at the ref
+
+const A_V1: &str = "fn a() {}\n";
+const A_V2: &str = "fn a() { let _ = 1; }\n";
+
+fn sha256(content: &str) -> String {
+    let path = common::TempFile::new("urzua-baseline-pin");
+    std::fs::write(&path, content).unwrap();
+    let out = Command::new("sha256sum").arg(&path).output().unwrap();
+    String::from_utf8(out.stdout)
+        .unwrap()
+        .split_whitespace()
+        .next()
+        .unwrap()
+        .to_string()
+}
+
+fn pinned_record(n: u8, pin: &str) -> String {
+    format!(
+        "---\nEmbodiment: 'Implemented'\nRealized-by: 'code:src/a.rs@sha256:{pin}'\n---\n# ADR-{n}: Record {n}\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Initial. | **structural** |\n"
+    )
+}
+
+/// `src/a.rs` is changed to V2 before the baseline is tagged and never after.
+/// ADR-1 pins `pin_at_ref` when the tag is made; `a.rs` is untouched since, so
+/// any drift a later edit of a record causes is not the file's.
+fn pin_repo(name: &str, pin_at_ref: &str) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-baseline-pin-{name}"));
+    for d in ["docs/adr", "src", ".urzua"] {
+        std::fs::create_dir_all(dir.join(d)).unwrap();
+    }
+    git(&dir, &["init", "-q"]);
+    git(&dir, &["config", "user.email", "test@example.com"]);
+    git(&dir, &["config", "user.name", "test"]);
+    std::fs::write(dir.join(".urzua/config.yaml"), config(BASELINE)).unwrap();
+    std::fs::write(dir.join("src/a.rs"), A_V1).unwrap();
+    commit_all(&dir, "a v1");
+    std::fs::write(dir.join("src/a.rs"), A_V2).unwrap();
+    commit_all(&dir, "a v2");
+    std::fs::write(
+        dir.join("docs/adr/ADR-1-record-1.md"),
+        pinned_record(1, pin_at_ref),
+    )
+    .unwrap();
+    commit_all(&dir, "adr 1");
+    git(&dir, &["tag", "adoption"]);
+    dir
+}
+
+#[test]
+fn a_pin_that_was_already_stale_at_the_ref_is_pre_existing() {
+    let dir = pin_repo("stale-at-ref", &sha256(A_V1));
+    let parsed = json(&run(&dir, &["check"]));
+    assert_eq!(drift_findings(&parsed), Vec::<String>::new(), "{parsed}");
+    assert_eq!(parsed["baseline"]["pre_existing"], 1, "{parsed}");
+}
+
+#[test]
+fn a_pin_edited_after_the_ref_to_a_wrong_hash_is_introduced_drift() {
+    let dir = pin_repo("edited", &sha256(A_V2));
+    let clean = json(&run(&dir, &["check"]));
+    assert_eq!(drift_findings(&clean), Vec::<String>::new(), "{clean}");
+    std::fs::write(
+        dir.join("docs/adr/ADR-1-record-1.md"),
+        pinned_record(1, &"0".repeat(64)),
+    )
+    .unwrap();
+    commit_all(&dir, "edit the pin");
+    let out = run(&dir, &["check"]);
+    let parsed = json(&out);
+    assert_eq!(
+        drift_findings(&parsed),
+        ["docs/adr/ADR-1-record-1.md"],
+        "{parsed}"
+    );
+    assert_eq!(out.status.code(), Some(1), "{parsed}");
+    assert_eq!(parsed["baseline"]["pre_existing"], 0, "{parsed}");
+    assert_eq!(parsed["baseline"]["introduced"], 1, "{parsed}");
+}
+
+#[test]
+fn a_record_added_after_the_ref_citing_an_old_file_with_a_wrong_pin_is_introduced_drift() {
+    let dir = pin_repo("added", &sha256(A_V2));
+    std::fs::write(
+        dir.join("docs/adr/ADR-2-record-2.md"),
+        pinned_record(2, &sha256(A_V1)),
+    )
+    .unwrap();
+    commit_all(&dir, "add adr 2");
+    let out = run(&dir, &["check"]);
+    let parsed = json(&out);
+    assert_eq!(
+        drift_findings(&parsed),
+        ["docs/adr/ADR-2-record-2.md"],
+        "{parsed}"
+    );
+    assert_eq!(out.status.code(), Some(1), "{parsed}");
+    assert_eq!(parsed["baseline"]["introduced"], 1, "{parsed}");
+}
+
+#[test]
+fn a_pin_renewed_after_the_ref_to_another_wrong_hash_is_introduced_drift() {
+    // Stale at the ref (V1 against a V2 file), then renewed to a different wrong
+    // pin: not the locator that was already drifted when the ref was tagged.
+    let dir = pin_repo("renewed", &sha256(A_V1));
+    std::fs::write(
+        dir.join("docs/adr/ADR-1-record-1.md"),
+        pinned_record(1, &sha256("fn a() { let _ = 99; }\n")),
+    )
+    .unwrap();
+    commit_all(&dir, "renew the pin to the wrong content");
+    let out = run(&dir, &["check"]);
+    let parsed = json(&out);
+    assert_eq!(
+        drift_findings(&parsed),
+        ["docs/adr/ADR-1-record-1.md"],
+        "{parsed}"
+    );
+    assert_eq!(out.status.code(), Some(1), "{parsed}");
+    assert_eq!(parsed["baseline"]["pre_existing"], 0, "{parsed}");
+}

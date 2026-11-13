@@ -1720,10 +1720,12 @@ rules:
   `check` runs, because a configuration cannot see the repository: a ref that names no commit stops the run (exit
   2) and names the option and the ref. It is never read as "no pre-existing drift", which would put the whole
   backlog back on the gate. A shallow clone that lacks the commit fails the same way.
-- A record is pre-existing when every locator that drifted is attributed to the baseline commit or an ancestor of
-  it: the commit that last changed the cited file (for a directory or glob, the newest of its files). A pinned
-  locator is attributed the same way. A file changed after the baseline makes the record's drift introduced even
-  where an earlier change had already drifted it, and a commit git cannot place counts as introduced.
+- Drift is judged as it stood at the ref. A record is pre-existing when it existed at the ref, every locator that
+  drifts now is the same locator (same category, spelling and pin) that its copy at the ref cited and had
+  drifted, and the commit that last changed each cited file (for a directory or glob, the newest of its files) is
+  the baseline commit or an ancestor of it. A record added after the ref, a pin edited or renewed after it, a file
+  changed after it (even where an earlier change had already drifted it), and a commit git cannot place all count
+  as introduced.
 - A pre-existing record agrees with its computed tier or with a stated drift state, so it draws no finding and does
   not gate under any `fail_on`. It is listed in the `embodiment-drift-baselined` info notice and counted in the
   report's `baseline` object (`SPEC-2`).

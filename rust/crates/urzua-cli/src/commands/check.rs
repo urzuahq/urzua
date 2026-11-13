@@ -658,8 +658,12 @@ fn hold_out_baseline(
 ) -> Option<BaselineInfo> {
     let (git_ref, commit) = resolved?;
     let known_problems = context.drift.git_problems.len();
-    let split =
-        crate::discovery::apply_drift_baseline(&mut context.drift, &session.repo_root, &commit);
+    let split = crate::discovery::apply_drift_baseline(
+        &mut context.drift,
+        &session.repo_root,
+        &session.config,
+        &commit,
+    );
     // A git failure met while attributing drift is disclosed like any other.
     notices.extend(crate::discovery::drift_notices(
         false,

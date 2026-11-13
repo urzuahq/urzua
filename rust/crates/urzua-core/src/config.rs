@@ -546,8 +546,9 @@ pub struct RuleSetting {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub drift_audit_field: Option<String>,
     /// A git ref whose drift is pre-existing (`MILE-49`, `ADR-91` amendment of
-    /// 2026-11-13): drift of a locator last changed at or before it is reported
-    /// as an info notice and does not gate; drift introduced since it does. Only
+    /// 2026-11-13): drift a record already had at it (the same locator, with the same
+    /// pin, drifted there) is reported as an info notice and does not gate;
+    /// drift introduced since it does. Only
     /// meaningful to `embodiment.consistency`; omitted means no baseline.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub drift_baseline: Option<DriftBaseline>,

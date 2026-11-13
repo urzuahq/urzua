@@ -761,8 +761,8 @@ rules:
     # can declare the day its evidence was last audited and the window counts
     # from that instead of from the cited file's last change (MILE-166).
     drift_audit_field: "Last-audited"
-    # Drift whose cited files were last changed at or before the 0.3.0 release is
-    # pre-existing and does not gate; drift introduced since does (MILE-49, ADR-91
+    # Drift a record already had at the 0.3.0 release (the same locator, drifted
+    # there) is pre-existing and does not gate; drift introduced since does (MILE-49, ADR-91
     # amendment of 2026-11-13). A git ref, not a list: it holds no record, and
     # moving it forward or deleting it retires it. Nothing in this corpus predates it
     # today, so a whole-repo `check` says the baseline is unused; it stays declared

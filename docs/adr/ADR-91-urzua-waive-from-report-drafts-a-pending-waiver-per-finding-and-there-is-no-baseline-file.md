@@ -187,32 +187,35 @@ can gate on the second without the first. Read against point 1 the two look oppo
 
 1. **It holds no list.** What point 1 and `ADR-11` refuse is a committed list of today's findings that `check`
    ignores: unreviewable, and growing as the corpus does. A ref names one point in history. Which records are
-   pre-existing is computed on every run from the corpus and git (a drifted locator last changed at or before the
-   ref), so nothing in the configuration enumerates a record or a finding, and nothing can fall out of step with
-   the corpus or be edited to hide a new one.
+   pre-existing is computed on every run from the corpus and git, by judging each record as it stood at the ref
+   (a record is pre-existing only if it existed there and its drifted locator, with the same pin, had already
+   drifted there), so nothing in the configuration enumerates a record or a finding, and nothing can fall out of
+   step with the corpus. Editing a record after the ref, to change a pin or to add a citation, does not hide
+   drift: the edited or added locator was not drifted at the ref, so it is introduced and reported.
 2. **It expires itself.** A list entry outlives its cause until a person deletes it. A ref's effect shrinks as
-   records are re-verified and re-pinned, because a record whose locators are re-attributed to later commits is
-   no longer pre-existing. When nothing is held out, a whole-corpus `check` says so in an info notice, the nudge to
+   records are re-verified and re-pinned, because a re-pin or a re-verification removes the drift, and a record no
+   longer drifting is no longer held out. When nothing is held out, a whole-corpus `check` says so in an info notice, the nudge to
    delete the option. Advancing the ref forgets older drift on purpose; deleting it ends the baseline.
 3. **It generalises `--base`, which already works this way.** `check --base <ref>` (`MILE-123`) reports only on the
    records changed since the merge base and their dependents, so a pull request is gated on what it touched and
    not on a backlog. That is a baseline whose ref moves with each branch. `drift_baseline` is the same idea with
    the ref fixed in configuration, for the whole-repository run that `--base` does not cover and for the day an
-   adopter first runs `check`. It adds no machinery for the question of what is old: the cited file's history
-   already answers it, which is how drift is computed.
+   adopter first runs `check`. It adds no machinery for the question of what is old: it reuses the judgement
+   `--base` already makes of a record's copy at a ref (`compute_base_drift`, the drift of the base copy), so the
+   baseline is that same comparison with the ref fixed.
 4. **Suppression stays the waiver.** The baseline suppresses nothing in the waiver's sense. It does not hide a
    finding of any rule: it states which drift predates a point, the held-out records are listed in an info
    notice and the report's `baseline` object on every run, and a finding that is not drift is untouched. A waiver
    remains the only way to silence a finding, and its `Reason` and `Expires` are not replaced by a ref. A record
-   with a locator changed after the ref is reported in full, even when an earlier change had already drifted it.
+   with a locator changed after the ref, a pin edited or renewed after it, or a record added after it is reported
+   in full, even where an earlier change had already drifted it.
 5. **It cannot fail open.** A ref that does not resolve stops the run (exit 2) instead of reading as no
    pre-existing drift, which would put the whole backlog back on the gate.
 
 What this does not decide: the baseline's scope is drift of `Realized-by` locators under `embodiment.consistency`
 alone, and no other rule gains one. A baseline for any other rule's findings is still the waiver, drafted by
-`urzua waive --from-report`. Drift is attributed to the commit that last changed the cited file, so a file edited
-since the ref counts as introduced for every record citing it, which is stricter than blaming only the changed
-lines.
+`urzua waive --from-report`. A cited file changed since the ref makes the drift of every record citing it
+introduced, which is stricter than blaming only the changed lines.
 
 ## Reversibility
 
