@@ -1,12 +1,12 @@
 ---
 Stable-Id: 01M6R3NK5EEDKBJSNGJHTYE0QZ
-Version: '0.16'
+Version: '0.18'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/commands/migrate.rs@sha256:f3fe484ef1e800cafe0af678597102d62432a421e15f176981aacf4e8d20622f, code:rust/crates/urzua-core/src/migrate.rs@sha256:a8b30583f9658b1ffdcd5920fb2bd08adf9e41bd55d406ac94aaaaf5f59fe768, test:rust/crates/urzua-core/src/migrate.rs@sha256:a8b30583f9658b1ffdcd5920fb2bd08adf9e41bd55d406ac94aaaaf5f59fe768, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:a60c9c61b94c5707e0aa4e96713a843556cd50bce97e01c514826d61ca0aac08
+Realized-by: code:rust/crates/urzua-cli/src/commands/migrate.rs@sha256:f3fe484ef1e800cafe0af678597102d62432a421e15f176981aacf4e8d20622f, code:rust/crates/urzua-core/src/migrate.rs@sha256:a8b30583f9658b1ffdcd5920fb2bd08adf9e41bd55d406ac94aaaaf5f59fe768, test:rust/crates/urzua-core/src/migrate.rs@sha256:a8b30583f9658b1ffdcd5920fb2bd08adf9e41bd55d406ac94aaaaf5f59fe768, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:a60c9c61b94c5707e0aa4e96713a843556cd50bce97e01c514826d61ca0aac08, code:rust/crates/urzua-cli/src/commands/migrate_filenames.rs@sha256:f5b90c25b3a3f58307b7befa3de6fb093a60167082d89086c77ba7203bdf2fbd, code:rust/crates/urzua-core/src/migrate_filenames.rs@sha256:a7126c7f473ca6f9b85a4fe8402e189c9883f9b9ba2d86dc8437ddec1714b7d0, test:rust/crates/urzua-core/src/migrate_filenames.rs@sha256:a7126c7f473ca6f9b85a4fe8402e189c9883f9b9ba2d86dc8437ddec1714b7d0, test:rust/crates/urzua-cli/tests/migrate_filenames_integration.rs@sha256:91cda512bee82530a47e780cf3138f07b46af243f91e4e63130f8b710cbf4ddb
 Author: beauwilliams
-Subject: '`urzua migrate ids`/`urzua migrate schema`/`urzua migrate config` -- backfilling stable IDs, previewing schema changes and rewriting a config to the current schema version.'
+Subject: '`urzua migrate ids`/`urzua migrate filenames`/`urzua migrate schema`/`urzua migrate config` -- backfilling stable IDs, renaming record files to the declared filename convention, previewing schema changes and rewriting a config to the current schema version.'
 Implements: ADR-21, ADR-22, ADR-77
 Parent: SPEC-1
 ---
@@ -14,8 +14,9 @@ Parent: SPEC-1
 
 ## Purpose
 
-Migrates the corpus itself — three genuinely different operations under one verb, not one command
-with mode flags: backfilling stable identifiers onto existing records, previewing what a
+Migrates the corpus itself — four genuinely different operations under one verb, not one command
+with mode flags: backfilling stable identifiers onto existing records, renaming record files to
+the filename convention their type declares, previewing what a
 newly-required field would break before it's ever added to config, and rewriting the config from the
 previous schema version to the current one.
 
@@ -56,6 +57,78 @@ code agree. `--apply` takes the lock `fix --apply` takes (`.urzua/cache/fix.lock
 right before writing and fails that record, writing nothing, if it changed since it was read, and
 replaces each file through a temporary file and a rename, so it cannot overwrite a concurrent edit or
 leave a truncated record. `migrate config` replaces the config the same way.
+
+## `urzua migrate filenames`
+
+Renames every record file whose name does not match its type's filename convention, and rewrites the
+citations of the renamed paths (`MILE-134`; `RFC-46` was rejected, so a corpus in another shape is
+renamed rather than tolerated, `ADR-36`). Dry-run by default; `--apply` writes, as `migrate ids` does.
+
+- **Which files.** The records `filename.identity-pattern` reports: a file directly in a type's `dir`
+  whose name yields no record id. A file already on the convention is never touched.
+- **The new name** is read from the type's declared `identity.pattern`, never a hardcoded shape. The
+  leading digits of the old name are the number, the rest (after any `-`, `_` or space) is the slug, and
+  the name is `PREFIX-NUMBER-slug.md`, the number keeping its written zero-padding when the pattern
+  accepts it, otherwise widened or narrowed to the nearest width it accepts, never changing the number's
+  value (`5-x.md` becomes `ADR-0005-x.md` and `00012-z.md` becomes `ADR-0012-z.md` under `\d{4}`). A name
+  that already carries the prefix but is mispadded for the pattern (`ADR-5-x.md`) keeps its number. A type declaring no pattern gets `TYPE-NNNN-slug.md` as written. The directory, number and
+  slug never change, so the record id is the same and the file is untouched apart from its citations.
+  `Stable-Id` is not read or written, so a rename keeps the pairing the decider gate uses (`ADR-89`); a
+  record without one is named in a `stable-id-missing` notice, because a diff can pair the rename
+  with the old file only through it, and `migrate ids --apply` should run first.
+- **Citations.** Every path token ending `.md` in a record or any other tracked markdown file is read
+  as the file's own relative link (`./x.md`, `../adr/x.md`, `x.md`), a repository path (`docs/adr/x.md`)
+  or a root path (`/docs/adr/x.md`); one that leads to a renamed file has its file name replaced and
+  nothing else (a `#anchor`, the directory part and the surrounding text stay). A same-named file in
+  another directory is not a citation. A citation in a tracked file that is not markdown (code,
+  configuration, text) is not edited: it is reported in `unrewritten`.
+- **Skipped, never overwritten.** A file with no leading number, a number too large to read, a name the
+  declared pattern rejects, a new name that is already a file or another rename's new name, and a
+  number that is already another record's of the type or that two renames would both take (`5-x.md` and
+  `0005-y.md`: one record id on two files) are listed in `skipped` with a `reason` (`no-number`,
+  `number-too-large`, `pattern-rejects`, `target-exists`, `number-collision`) and left alone. A
+  collision skips every file of the clash, since renaming one would hide it. Nothing is overwritten.
+- **Evidence pins.** A pin (`path@sha256:...`) on a file whose text the run rewrites goes stale. The
+  command never re-pins, because a re-pin carries a reason a person attests: each such pin is listed in
+  `stale_pins` (`file`, `line`, `locator`, `changed_file`) with a `stale-pins` notice, and `urzua fix
+  --rebaseline` re-pins them.
+- **Writes.** `--apply` takes the `fix` lock, rewrites citations first (each file re-read and replaced
+  atomically, failing without writing if it changed since it was read), then renames; a failed rewrite
+  stops the renames, so a renamed file never keeps citations of its old name. It uses the filesystem, not
+  `git mv`: git sees a delete and an add that its rename detection pairs, and nothing is staged. A second
+  applied run finds nothing to rename, reports empty lists and writes nothing.
+- **A failed rename.** If a rename fails after the rewrites, the rewritten citations name the new path
+  of a file still at its old one: the rename is reported `failed` (exit 1, `partial-failure`) and the
+  rewrites stay. Running the command again heals it: the file is still off the convention, so it is
+  renamed, and its citations already read the new name.
+
+```json
+{
+  "status": "ok",
+  "apply": true,
+  "renames": [
+    { "record_type": "adr", "from": "docs/adr/0001-first.md", "to": "docs/adr/ADR-0001-first.md" }
+  ],
+  "rewrites": [
+    { "file": "docs/adr/ADR-0002-second.md", "line": 9, "from": "./0001-first.md", "to": "./ADR-0001-first.md" }
+  ],
+  "stale_pins": [],
+  "unrewritten": [
+    { "file": "notes.txt", "line": 1, "reference": "docs/adr/0001-first.md", "renamed_to": "docs/adr/ADR-0001-first.md" }
+  ],
+  "skipped": [
+    { "from": "docs/adr/README.md", "reason": "no-number", "message": "..." }
+  ],
+  "results": [
+    { "path": "docs/adr/ADR-0002-second.md", "action": "rewrite", "outcome": "applied" },
+    { "path": "docs/adr/0001-first.md", "action": "rename", "outcome": "applied" }
+  ]
+}
+```
+
+`results` is present only when something was written; each `outcome` is `applied`, `failed` (carries an
+`error`) or `skipped` (a rename stopped by a failed rewrite). Exit code is 1 if any result is `failed`,
+and `status` is then `partial-failure`.
 
 ## `urzua migrate schema --report --field <Name>`
 
@@ -147,3 +220,7 @@ path of a rename or a move; `value` is what an added or changed key now holds; `
 > | 2026-11-09 | Bumped to `0.15`. Re-pin rows in this revision log were reworded to name who re-verified, matching the tool's wording since 2026-11-09; hashes, reasons and dates are unchanged. **Why:** Maintainer decision, 2026-11-09. | **structural** |
 > | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/check_integration.rs` 5ab61b95fd58 -> a60c9c61b94c. Reason: Read the diff of each pinned file since the previous pin. rust/crates/urzua-cli/tests/check_integration.rs: adds one regression test that a claim file with an upper-case .MD extension under claim_paths is read; nothing else changed. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-09 | Bumped to `0.16`. Evidence pins re-baselined for this change; the specification text is unchanged. **Why:** a revision-log entry that adds a structural change bumps `Version`. | **structural** |
+> | 2026-11-13 | Bumped to `0.17`. Added `urzua migrate filenames` and its output contract. **Why:** `MILE-134`: a corpus whose record files are named in another shape is renamed to the type's declared convention, with its citations rewritten, rather than by a one-off script. | **substantive** |
+> | 2026-11-13 | Pinned (attested by beauwilliams, identity: gh-verified, actor: agent): 4 locators pinned, 4 file-level, 0 scoped. Evidence: rust/crates/urzua-cli/src/commands/migrate_filenames.rs@sha256:39efa2e76028, rust/crates/urzua-core/src/migrate_filenames.rs@sha256:fc13122703fe, rust/crates/urzua-core/src/migrate_filenames.rs@sha256:fc13122703fe, rust/crates/urzua-cli/tests/migrate_filenames_integration.rs@sha256:fc77b1cc5faf Reason: Pinned the new migrate filenames code and tests this record evidences, as written in this change **Why:** a claim is renewed only over pinned code and test evidence. | **structural** |
+> | 2026-11-13 | Bumped to `0.18`. `migrate filenames` skips a record-id clash (`number-collision`), narrows zero-padding as well as widening it, fixes a prefixed but mispadded name, lists the evidence pins its rewrites make stale (`stale_pins`) instead of re-pinning them, and states what a failed rename leaves and that a rerun heals it. **Why:** review of the first build of `MILE-134`. | **substantive** |
+> | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/migrate_filenames.rs` 39efa2e76028 -> f5b90c25b3a3, `rust/crates/urzua-core/src/migrate_filenames.rs` fc13122703fe -> a7126c7f473c, `rust/crates/urzua-cli/tests/migrate_filenames_integration.rs` fc77b1cc5faf -> 91cda512bee8. Reason: Read the diff of each pinned file. core migrate_filenames.rs: number-collision skip reason and check, narrowing zero-padding, prefixed mispadded names, stale_pins detection. cli migrate_filenames.rs: stale_pins in the report with a stale-pins notice, a doc comment on write_plan and a unit test of the failed-rename path. The integration test file gained four tests for these. The documented behaviour is unchanged where not stated in the new SPEC-14 text. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
