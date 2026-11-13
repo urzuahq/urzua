@@ -111,6 +111,8 @@ pin that cannot be read at all.
           echo "no stale evidence pins"
 ```
 
+This step needs a build that has `fix --rebaseline`; the published `v0.3.0` does not, so with `version: v0.3.0` use the `binary` input instead.
+
 `fix --rebaseline` without `--apply` only reads. The step passes only when the report says
 `"status": "ok"`: any other status, a missing key, empty or unparseable output fails it. `urzua` must
 be on `PATH` (with the gate's `binary` input, call it by its path), and `jq` is preinstalled on

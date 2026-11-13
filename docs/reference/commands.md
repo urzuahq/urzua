@@ -10,7 +10,7 @@ Two flags are accepted by every command:
   the current directory.
 - `--as-of <YYYY-MM-DD>` evaluates every date comparison (waiver expiry, claim age, status expiry) as
   of that UTC date instead of today, and echoes it in the report's `as_of`. It is accepted by the
-  read-only modes of `check`, `fix` and `reverify`; it is refused with `--apply`, where it would write
+  read-only modes of `check`, `audit`, `fix` and `reverify`; it is refused with `--apply`, where it would write
   a revision row with a false date, and by commands that compare no dates.
 
 Every command prints one JSON object to stdout. Where a command has a `status`, it is one of the

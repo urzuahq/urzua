@@ -220,7 +220,7 @@ The chain above is one path through this repo's own graph, documented here becau
 
 ## Status
 
-**v0.1.0, self-hosting.** Real and validated against this repository's own `docs/` on every commit:
+**Self-hosting.** Real and validated against this repository's own `docs/` on every commit. This table describes `main`; the latest published release is older (see [`docs/reference/install.md`](docs/reference/install.md)). Every command and flag is in [`docs/reference/commands.md`](docs/reference/commands.md).
 
 | Command | State |
 |---|---|
@@ -235,7 +235,16 @@ The chain above is one path through this repo's own graph, documented here becau
 | `doctor` | Real: reports on the tool's own configuration health, not record content |
 | `new <type> [title]` | Real: fills a checked-in template (or synthesizes YAML frontmatter if none exists) with a fresh stable ID, never asking for a number ([ADR-27](docs/adr/ADR-27-urzua-new-fills-the-template-in-not-the-decision.md)) |
 | `audit` | Deprecated alias of `check` over the configured rules, with a deprecation notice; removed in the next release ([ADR-79](docs/adr/ADR-79-audit-folds-into-check-and-the-command-surface-keeps-one-read-only-validator.md)). `check --rules <id>,...` selects declared rules |
-| `migrate schema --assist-waivers`/`--apply`, `export`, `import` | Not implemented yet: exit 2 with "not implemented yet" |
+| `export --format json` | Real: every record as plain JSON data |
+| `waive --from-report` | Preview only: drafts one pending waiver per rule and file for the current findings and writes nothing; `--apply` is not accepted yet |
+| `reverify` | Real: renews an expired evidence claim, or pins unpinned locators with `--pin-only`; read-only without `--apply` |
+| `fix --rebaseline` | Real: lists, and with `--apply` re-pins, stale `@sha256:` evidence pins |
+| `harness` | Real: `install`, `status`, `update`, `uninstall`, `adapters` and `run` for the agent harness |
+| `roadmap` | Real: the order of work, computed from the declared sequencing pairs |
+| `rules` | Real: every rule this build ships, with its description |
+| `index` | Real: regenerates declared index files; read-only without `--apply` |
+| `refs refresh` | Real: rewrites the issue and pull request number snapshot from the GitHub API |
+| `migrate schema --assist-waivers`/`--apply`, `export --format agdr`, `import` | Not implemented yet: exit 2 |
 
 See [`CHANGELOG.md`](CHANGELOG.md) for what shipped when, and [`docs/rfc/`](docs/rfc/) / [`docs/adr/`](docs/adr/) for what's designed but not yet built, including the fuller claim-graph model (AND/OR composites, cross-record-shared claims) this release's Embodiment tracking deliberately ships a narrower slice of first.
 
