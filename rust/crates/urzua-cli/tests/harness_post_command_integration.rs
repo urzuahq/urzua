@@ -212,6 +212,24 @@ fn a_gated_deletion_is_reported_once_across_repeated_commands() {
     );
 }
 
+/// A gated record deleted, restored and deleted again is reported again by the
+/// second deletion: restoring it ends the memory of the first.
+#[test]
+fn a_gated_record_deleted_restored_and_deleted_again_is_reported_again() {
+    let sid = "01M6R3NK40JBCPESD89J6FN865";
+    let accepted = format!("---\nStable-Id: {sid}\nStatus: Accepted\n---\n# ADR-1: T\n\nprose\n");
+    let dir = fixture("gated-rm-restore", GATED_CONFIG, &accepted);
+    let reported = |dir: &std::path::Path| post(dir)["gated_moves"].as_array().map_or(0, Vec::len);
+    bash(&dir, &format!("rm {PATH_1}"));
+    assert_eq!(reported(&dir), 1, "the first deletion is reported");
+    assert_eq!(reported(&dir), 0, "and not again while it stays deleted");
+    bash(&dir, &format!("git checkout -q -- {PATH_1}"));
+    assert_eq!(reported(&dir), 0, "a restored record is not a deletion");
+    bash(&dir, &format!("rm {PATH_1}"));
+    assert_eq!(reported(&dir), 1, "the second deletion is reported again");
+    assert_eq!(reported(&dir), 0, "and once");
+}
+
 // ----------------------------------------------------- the three writers
 
 #[test]

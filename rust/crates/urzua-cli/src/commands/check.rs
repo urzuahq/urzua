@@ -1255,7 +1255,8 @@ fn load_added_row_days(
     // One day of slack before the branch began: `reverify` may run just before
     // UTC midnight and the first commit be authored just after it. A branch
     // with no commit yet starts at its merge base, so a row written yesterday
-    // and not yet committed passes.
+    // and not yet committed passes. The merge-base fallback also fires when
+    // `git log` itself errors (the window then starts at the merge base too).
     let branch_start = urzua_io::branch_first_author_unix_time(repo_root, &changes.merge_base)
         .or_else(|| urzua_io::commit_author_unix_time(repo_root, &changes.merge_base))
         .map(|t| t.div_euclid(DAY) * DAY - DAY);
@@ -1335,6 +1336,7 @@ fn load_deleted_records(
     base_authority: &urzua_core::authority::BaseAuthority,
     gated_types: &std::collections::BTreeSet<&str>,
     notices: &mut Vec<Notice>,
+    warned: &mut HashSet<PathBuf>,
 ) -> Vec<rules::DeletedRecord> {
     let Some(c) = changes else {
         return Vec::new();
@@ -1355,6 +1357,7 @@ fn load_deleted_records(
         c,
         gated_types,
         notices,
+        warned,
     )
 }
 
@@ -1392,6 +1395,17 @@ fn read_diff_inputs(
         apply_base_gate(&session.config, &base_gate, changes.is_some(), notices);
     let rule_config = gate_config.as_ref().unwrap_or(&session.config);
     let gated_types = gated_type_names(rule_config, &base_authority);
+    // One warning per unreadable deleted base copy, whichever reader reaches it
+    // first; the deletion judging goes first so the decider rule owns it.
+    let mut warned = HashSet::new();
+    let deleted_records = load_deleted_records(
+        session,
+        changes,
+        &base_authority,
+        &gated_types,
+        notices,
+        &mut warned,
+    );
     let committed_statuses = changes.map(|c| {
         crate::diff_scope::committed_statuses(
             repo_root,
@@ -1400,10 +1414,9 @@ fn read_diff_inputs(
             c,
             &gated_types,
             notices,
+            &mut warned,
         )
     });
-    let deleted_records =
-        load_deleted_records(session, changes, &base_authority, &gated_types, notices);
     Ok(DiffInputs {
         base_text,
         base_drift,
