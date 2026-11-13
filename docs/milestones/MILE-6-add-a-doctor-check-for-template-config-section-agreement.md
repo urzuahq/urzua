@@ -1,5 +1,5 @@
 ---
-Status: Planned
+Status: Done
 Stable-Id: 01M1Y5JF83Z09VVDSV35G4BS2W
 Phase: '1'
 Track: section-checks
@@ -18,9 +18,9 @@ Nothing today checks that a template and its config haven't drifted apart -- the
 
 ## Done means
 
-- `urzua doctor` reports, per record type, each section the config declares required that the type's template has no heading for. — evidence: code:rust/crates/urzua-cli/src/commands/doctor.rs#template_section_checks, code:rust/crates/urzua-core/src/document_model.rs#required_missing_from, test:rust/crates/urzua-cli/tests/doctor_template_sections_integration.rs#a_template_missing_a_required_section_is_reported_by_name
-- A fixture with a template missing one reports it, and a matching template reports clean. — evidence: test:rust/crates/urzua-cli/tests/doctor_template_sections_integration.rs#a_template_missing_a_required_section_is_reported_by_name, test:rust/crates/urzua-cli/tests/doctor_template_sections_integration.rs#a_matching_template_reports_clean_and_an_alias_satisfies_a_requirement
-- The check runs against urzua's own `.urzua/config.yaml` and `.urzua/templates/` and finds no disagreement. — evidence: test:rust/crates/urzua-cli/tests/doctor_template_sections_integration.rs#this_repositorys_own_templates_agree_with_its_own_configuration
+- `urzua doctor` reports, per record type, each section the config declares required that the type's template has no heading for. — evidence: code:rust/crates/urzua-cli/src/commands/doctor.rs#template_section_checks@sha256:3ee36e11c83acf4907164d716b2c0f5224058512ba4ffea7350ca427e5412004, code:rust/crates/urzua-core/src/document_model.rs#required_missing_from@sha256:1641c52d1f6b3b1b8794cbf3105ba6ec258117f85625b7bdab930c8353d6900a, test:rust/crates/urzua-cli/tests/doctor_template_sections_integration.rs#a_template_missing_a_required_section_is_reported_by_name@sha256:2d772b96ec10f8c3f47363b4d67f8b2397f222a36960c3197086804082783ff3
+- A fixture with a template missing one reports it, and a matching template reports clean. — evidence: test:rust/crates/urzua-cli/tests/doctor_template_sections_integration.rs#a_template_missing_a_required_section_is_reported_by_name@sha256:2d772b96ec10f8c3f47363b4d67f8b2397f222a36960c3197086804082783ff3, test:rust/crates/urzua-cli/tests/doctor_template_sections_integration.rs#a_matching_template_reports_clean_and_an_alias_satisfies_a_requirement@sha256:a3a663ce6a2e96aed72237c5f13a4c1fce67d12e5b2f419b80ecf1506923139c
+- The check runs against urzua's own `.urzua/config.yaml` and `.urzua/templates/` and finds no disagreement. — evidence: test:rust/crates/urzua-cli/tests/doctor_template_sections_integration.rs#this_repositorys_own_templates_agree_with_its_own_configuration@sha256:3a2fd7efb395e6d3bcd6918c5c26dec903fb1f338ab1679d97f22b29ab80612a
 
 > **Revision log**
 >
@@ -35,3 +35,5 @@ Nothing today checks that a template and its config haven't drifted apart -- the
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |
 > | 2026-11-04 | `Blocked-on` cleared: `MILE-98` is Done (declared `identity`, `fields` and `sections`, including `###` headings read through `sections.depth`). `Status` unchanged. **Why:** `narrative-field.stale` flagged a blocker that reached a terminal status; the dependency no longer holds. | **substantive** |
 > | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |
+> | 2026-11-13 | Tool-authored (by beauwilliams, identity: gh-verified, actor: agent): recomputed `Status` from `the Done means items (3 of 3 items resolved) computes to Verified` -- stated `Planned` disagreed with the computed value `Done`. | **structural** |
+> | 2026-11-13 | Delivered: the `template-sections` check of `urzua doctor` (`SPEC-15`); `Done means` items now carry their pinned evidence. A template missing a required section is a `warn`, not an `error`: it is a configuration disagreement a repository can live with until its next record, and an adopter's existing `doctor` exit code does not change; a type with no template is `ok` (nothing to compare) and a type declaring no required section is not listed. **Why:** `MILE-6`, `RFC-18`; the check reads headings as a record's are read (`depth`, aliases, code fences), through one method on the declaration, so it and `section.required` agree on what counts as present. | **substantive** |
