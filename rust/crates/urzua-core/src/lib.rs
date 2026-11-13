@@ -36,6 +36,7 @@ pub mod schema_version;
 pub mod section;
 pub mod status_model;
 pub mod values;
+pub mod waive;
 pub mod waiver;
 
 /// Presence state of a field.

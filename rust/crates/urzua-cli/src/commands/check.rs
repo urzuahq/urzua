@@ -328,6 +328,10 @@ pub struct CheckArgs {
     pub actors: Option<PathBuf>,
     /// Notices the invoking command adds to the report (`audit`'s deprecation).
     pub extra_notices: Vec<Notice>,
+    /// Records that exist only in memory, as `(path, content)`, added to the
+    /// whole-corpus run as if written (`waive --from-report` judges the tree
+    /// with its drafts). Unlike `stdin_path`, the run still reports on every record.
+    pub added_records: Vec<(PathBuf, String)>,
 }
 
 pub fn run(config_path: Option<PathBuf>, args: CheckArgs) -> ExitCode {
@@ -477,7 +481,10 @@ fn load_waivers(
     waivers
 }
 
-fn execute(config_path: Option<PathBuf>, args: CheckArgs) -> Result<CheckReport, Failure> {
+pub(crate) fn execute(
+    config_path: Option<PathBuf>,
+    args: CheckArgs,
+) -> Result<CheckReport, Failure> {
     reject_flag_conflicts(&args)?;
     let CheckArgs {
         paths,
@@ -488,15 +495,17 @@ fn execute(config_path: Option<PathBuf>, args: CheckArgs) -> Result<CheckReport,
         rules: requested_rules,
         actors: actors_path,
         extra_notices,
+        added_records,
     } = args;
     let actors = actors_path.as_deref().map(read_actors).transpose()?;
-    let opened = open_session(
+    let mut opened = open_session(
         &paths,
         config_path,
         base.as_deref(),
         stdin_path.as_deref(),
         proposed,
     )?;
+    add_records(&mut opened.session, added_records)?;
     let session = &opened.session;
     let selection = validate_selection(&session.config, &requested_rules)?;
     let scope = narrow(
@@ -804,6 +813,22 @@ fn open_session(
         changed,
         prospective,
     })
+}
+
+/// Puts records that exist only in memory into the session, as `propose` does
+/// for one, without narrowing what the run reports on.
+fn add_records(session: &mut Session, added: Vec<(PathBuf, String)>) -> Result<(), String> {
+    for (rel, content) in added {
+        let record = crate::discovery::parse_prospective_record(&session.config, &rel, &content)?;
+        session.records.retain(|r| r.path != rel);
+        session.records.push(record);
+        session.full_text.insert(rel.clone(), content);
+        if !session.discovered.paths.contains(&rel) {
+            session.discovered.paths.push(rel);
+        }
+    }
+    session.discovered.paths.sort();
+    Ok(())
 }
 
 /// Reads the proposed content from stdin and puts it in the session in place of
