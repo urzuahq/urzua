@@ -581,11 +581,11 @@ pub fn status_undeclared_value(
             vec![(
                 None,
                 format!(
-                    "{} '{}' is not declared for type '{}' (declared: {})",
+                    "{} '{}' is not declared for type '{}' ({})",
                     j.status_field,
                     j.status,
                     j.record_type,
-                    j.decl.values.join(", ")
+                    j.decl.declared_summary()
                 ),
             )]
         },

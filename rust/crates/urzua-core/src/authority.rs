@@ -589,8 +589,8 @@ impl AuthorityDecl {
                 };
                 if let Some(bad) = gate.to.iter().find(|s| !statuses.declares(s)) {
                     return Some(format!(
-                        "{at} names the status '{bad}', which the type '{t}' does not declare (declared: {})",
-                        statuses.values.join(", ")
+                        "{at} names the status '{bad}', which the type '{t}' does not declare ({})",
+                        statuses.declared_summary()
                     ));
                 }
             }

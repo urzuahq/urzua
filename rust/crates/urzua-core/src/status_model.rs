@@ -31,7 +31,10 @@ use std::collections::BTreeMap;
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct StatusDecl {
-    /// Every status the type allows.
+    /// Every status the type allows. Empty for a type that declares only
+    /// `pending` (a suppression type such as a waiver, whose `Reason` is not a
+    /// lifecycle vocabulary, `MILE-205`); such a type declares no status.
+    #[serde(default)]
     pub values: Vec<String>,
     /// Terminal statuses that mean the work was done.
     #[serde(default)]
@@ -210,6 +213,16 @@ impl StatusDecl {
         self.values.iter().any(|v| v == status)
     }
 
+    /// The declared vocabulary for a message: the values, or a plain statement
+    /// that the type declares none (never an empty list).
+    pub fn declared_summary(&self) -> String {
+        if self.values.is_empty() {
+            "the type declares no values".to_string()
+        } else {
+            format!("declared: {}", self.values.join(", "))
+        }
+    }
+
     /// Terminal success or terminal failure.
     pub fn is_terminal(&self, status: &str) -> bool {
         self.success
@@ -381,7 +394,14 @@ fn validate_one(
     d: &StatusDecl,
     embodiment: &EmbodimentDecl,
 ) -> Result<(), String> {
-    check_list("values", &d.values, false)?;
+    // A type may declare `pending` and no `values` (`MILE-205`); a declaration
+    // of neither says nothing and would be a silent no-op, so it is refused.
+    if d.values.is_empty() && d.pending.is_none() {
+        return Err(
+            "`values` must list at least one entry, or the type must declare `pending`".into(),
+        );
+    }
+    check_list("values", &d.values, true)?;
     check_list("success", &d.success, true)?;
     check_list("failure", &d.failure, true)?;
     check_list("implementable", &d.implementable, true)?;
@@ -978,6 +998,88 @@ mod tests {
         );
         assert!(
             err("      values: [Open]\n      claim_retained: [Open, Open]\n").contains("twice")
+        );
+    }
+
+    const PENDING_ONLY: &str = "      pending: [pending]\n";
+
+    #[test]
+    fn a_type_declaring_pending_and_no_values_loads_observed_failing() {
+        let c = parse(&cfg(PENDING_ONLY)).unwrap();
+        let d = c.record_types["bug"].status_decl().unwrap();
+        assert!(d.values.is_empty());
+        assert_eq!(d.is_pending_value("pending"), Some(true));
+        assert_eq!(d.is_pending_value("Reason"), Some(false));
+    }
+
+    #[test]
+    fn an_explicit_empty_values_list_loads_beside_pending() {
+        let c = parse(&cfg("      values: []\n      pending: [pending]\n")).unwrap();
+        assert!(c.record_types["bug"]
+            .status_decl()
+            .unwrap()
+            .values
+            .is_empty());
+    }
+
+    #[test]
+    fn a_declaration_of_neither_values_nor_pending_is_refused() {
+        assert!(err("      values: []\n").contains("values"));
+        assert!(err("      {}\n").contains("values"));
+    }
+
+    /// Reader: `StatusDecl::declares`. Nothing is declared by an empty vocabulary.
+    #[test]
+    fn declares_is_false_for_every_status_when_no_values_are_declared() {
+        let d = decl(PENDING_ONLY);
+        assert!(!d.declares("Open") && !d.declares(""));
+        // Unchanged when values are declared.
+        assert!(decl("      values: [Open, Fixed]\n").declares("Open"));
+    }
+
+    /// Reader: `StatusDecl::unreachable` and `has_transitions`.
+    #[test]
+    fn a_type_with_no_values_has_no_graph_and_nothing_unreachable() {
+        let d = decl(PENDING_ONLY);
+        assert!(!d.has_transitions());
+        assert!(d.unreachable().is_empty());
+        // A graph needs declared statuses to name: refused, not silently ignored.
+        assert!(err("      pending: [pending]\n      initial: [Open]\n      transitions:\n        Open: [Fixed]\n")
+            .contains("values"));
+    }
+
+    /// Reader: the `require`/`forbid` checks over `values` (`validate_one`).
+    #[test]
+    fn require_and_forbid_on_a_type_with_no_values_name_a_status_it_does_not_declare() {
+        assert!(err(
+            "      pending: [pending]\n      require: [{when: [Open], fields: [Fixed-in]}]\n"
+        )
+        .contains("not in `values`"));
+        assert!(err(
+            "      pending: [pending]\n      forbid: [{when: [Open], fields: [Fixed-in]}]\n"
+        )
+        .contains("not in `values`"));
+    }
+
+    /// Readers: `claim_retained` (claim expiry) and `has_transitions` (diff scope).
+    #[test]
+    fn a_type_with_no_values_retains_no_claim() {
+        let d = decl(PENDING_ONLY);
+        assert!(d.claim_retained.is_empty() && !d.has_transitions());
+    }
+
+    /// Reader: `first_non_progress_status`.
+    #[test]
+    fn no_first_non_progress_status_exists_when_no_values_are_declared() {
+        assert_eq!(
+            crate::rules::first_non_progress_status(&decl(PENDING_ONLY)),
+            None
+        );
+        assert_eq!(
+            crate::rules::first_non_progress_status(&decl(
+                "      values: [Open, Fixed]\n      success: [Fixed]\n"
+            )),
+            Some("Open")
         );
     }
 

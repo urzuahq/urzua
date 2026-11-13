@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5QF32RM76Y50THPQEG
-Version: '0.27'
+Version: '0.28'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-core/src/status_model.rs@sha256:35b191cc38f8816b0df848277d51c7887776bd573e2b975792381bfe8051122d, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs@sha256:44fea1626a547a6d9226f09c5e9cd116aad2dfe384a082aaeb8eec2c74f22af5, test:rust/crates/urzua-cli/tests/status_delivery_integration.rs@sha256:3e956fb6227ce9dd6f5fcc614a871d8c20ace9a4ba0169eaf3fee431b4e176a9
+Realized-by: code:rust/crates/urzua-core/src/status_model.rs@sha256:31006f883b8cbd8da18dae10dfe146e2ed0e0963008224f63c60de0cdae73f23, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs@sha256:44fea1626a547a6d9226f09c5e9cd116aad2dfe384a082aaeb8eec2c74f22af5, test:rust/crates/urzua-cli/tests/status_delivery_integration.rs@sha256:3e956fb6227ce9dd6f5fcc614a871d8c20ace9a4ba0169eaf3fee431b4e176a9
 Author: beauwilliams
 Subject: 'The `milestone` record type -- this project''s own planned-work backlog as a checkable corpus.'
 Implements: ADR-34
@@ -337,3 +337,6 @@ to another record — nothing to check for resolution, no cycle risk, no new rul
 > | 2026-11-09 | Bumped to `0.25`. Removed an appeal to research a reader cannot open; the argument now rests on the backlog this type tracks. **Why:** a revision-log entry that adds a structural change needs a `Version` bump (`revision-log.version-bump-required`). | **structural** |
 > | 2026-11-09 | Bumped to `0.26`. States that an item waiver's date is exclusive while a waiver record's `Expires` is inclusive, and that a first-line waiver clause before the evidence clause is a shape finding as on final lines. **Why:** round-5 review: the first-line order swallowed the evidence into the waiver reason without a finding. | **substantive** |
 > | 2026-11-09 | Bumped to `0.27`. Re-pin rows in this revision log were reworded to name who re-verified, matching the tool's wording since 2026-11-09; hashes, reasons and dates are unchanged. **Why:** Maintainer decision, 2026-11-09. | **structural** |
+> | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: unspecified): re-pinned `rust/crates/urzua-core/src/status_model.rs` 35b191cc38f8 -> 00ed614a24d4. Reason: Read the diff of the pinned file since the old pin. status_model.rs: StatusDecl.values gains a serde default and the empty-list check is relaxed when the type declares pending (a declaration of neither values nor pending is still refused); new declared_summary helper; unit tests added. A type declaring values loads and behaves as before. The spec's claim still holds. **Why:** the pinned evidence changed and the attesting actor re-verified that the claim still holds. | **structural** |
+> | 2026-11-13 | Bumped to `0.28`. Re-pinned `status_model.rs` evidence after the declaration of `statuses` gained an optional `values` (a type may declare `pending` alone); this spec's claims are unchanged. **Why:** `MILE-205` items 1-3; the revision-log version-bump rule requires a bump beside the re-pin row. | **structural** |
+> | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: unspecified): re-pinned `rust/crates/urzua-core/src/status_model.rs` 00ed614a24d4 -> 31006f883b8c. Reason: Read the diff of the pinned file since the previous pin. status_model.rs: only one unit test was added (a_type_with_no_values_retains_no_claim); no code outside the test module changed. The claim this record evidences still holds. **Why:** the pinned evidence changed and the attesting actor re-verified that the claim still holds. | **structural** |
