@@ -83,6 +83,13 @@ fn fixture(name: &str) -> common::TempDir {
         )
         .unwrap();
     }
+    // The copy is a new history without the repository's tags, so its
+    // `drift_baseline` ref (MILE-49) would name no commit.
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        common::own_config_for_fixture(),
+    )
+    .unwrap();
     git(&dir, &["init", "-q"]);
     git(&dir, &["config", "user.email", "test@example.com"]);
     git(&dir, &["config", "user.name", "test"]);

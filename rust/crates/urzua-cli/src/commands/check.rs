@@ -18,11 +18,11 @@ use std::process::ExitCode;
 
 use urzua_core::config::{Config, RuleLevel, RuleSetting};
 use urzua_core::refs_snapshot::RefsSnapshot;
+use urzua_core::report::{BaselineInfo, DetailValue, Failure};
 use urzua_core::report::{
     CheckReport, CouldNotRun, DiffScope, Finding, FindingSeverity, Notice, NoticeSeverity,
     RuleExecution, ScopeInfo,
 };
-use urzua_core::report::{DetailValue, Failure};
 use urzua_core::rules;
 
 use crate::discovery::{
@@ -516,38 +516,19 @@ pub(crate) fn execute(
         opened.prospective,
     )?;
     let (mut context, mut notices) = load_context(session, &scope, selection.as_deref())?;
-    let baseline = baseline_commit.map(|(git_ref, commit)| {
-        let known_problems = context.drift.git_problems.len();
-        let split =
-            crate::discovery::apply_drift_baseline(&mut context.drift, &session.repo_root, &commit);
-        // A git failure met while attributing drift is disclosed like any other.
-        notices.extend(crate::discovery::drift_notices(
-            false,
-            &context.drift.git_problems[known_problems..],
-        ));
-        notices.extend(baseline_notices(
-            &git_ref,
-            &commit,
-            &split,
-            scope.whole_corpus(),
-        ));
-        baseline_info(git_ref, commit, &split)
-    });
-    notices.extend(untracked_notices(session, &scope, &context.drift));
-    notices.extend(crate::discovery::grace_notice(
-        &context.drift,
-        &session.records,
-        &session.config,
-        &context.back_pointed,
-    ));
-    notices.extend(harness_key_notices(session.config.harness.as_ref()));
-    notices.extend(decider_gate_notices(
-        &session.config,
-        &context,
-        (base.is_some(), actors.is_some()),
-        selection.as_deref(),
-    ));
+    let baseline = hold_out_baseline(
+        baseline_commit,
+        session,
+        &scope,
+        (&mut context, &mut notices),
+    );
     context.actors = actors;
+    notices.extend(session_notices(
+        session,
+        &scope,
+        &context,
+        (base.is_some(), selection.as_deref()),
+    ));
     notices.extend(extra_notices);
     let (mut executions, mut findings) = run_rules(&context);
     notices.extend(scope_changed_notices(
@@ -601,6 +582,57 @@ pub(crate) fn execute(
     })
 }
 
+/// The notices a run raises from its session, scope and context before any rule
+/// runs; `with_base` says whether `--base` was given.
+fn session_notices(
+    session: &Session,
+    scope: &ReportScope,
+    context: &Context<'_>,
+    (with_base, selection): (bool, Option<&[String]>),
+) -> Vec<Notice> {
+    let mut notices = untracked_notices(session, scope, &context.drift);
+    notices.extend(crate::discovery::grace_notice(
+        &context.drift,
+        &session.records,
+        &session.config,
+        &context.back_pointed,
+    ));
+    notices.extend(harness_key_notices(session.config.harness.as_ref()));
+    notices.extend(decider_gate_notices(
+        &session.config,
+        context,
+        (with_base, context.actors.is_some()),
+        selection,
+    ));
+    notices
+}
+
+/// Holds the drift a `drift_baseline` names out of `context` and discloses it
+/// in `notices`; `None` when no baseline applies to this run.
+fn hold_out_baseline(
+    resolved: Option<(String, String)>,
+    session: &Session,
+    scope: &ReportScope,
+    (context, notices): (&mut Context<'_>, &mut Vec<Notice>),
+) -> Option<BaselineInfo> {
+    let (git_ref, commit) = resolved?;
+    let known_problems = context.drift.git_problems.len();
+    let split =
+        crate::discovery::apply_drift_baseline(&mut context.drift, &session.repo_root, &commit);
+    // A git failure met while attributing drift is disclosed like any other.
+    notices.extend(crate::discovery::drift_notices(
+        false,
+        &context.drift.git_problems[known_problems..],
+    ));
+    notices.extend(baseline_notices(
+        &git_ref,
+        &commit,
+        &split,
+        scope.whole_corpus(),
+    ));
+    Some(baseline_info(git_ref, commit, &split))
+}
+
 /// Notice subject for the drift a `drift_baseline` holds out of the gate.
 const NOTICE_DRIFT_BASELINED: &str = "embodiment-drift-baselined";
 
@@ -618,10 +650,11 @@ fn resolve_drift_baseline(
     session: &Session,
     selection: Option<&[String]>,
 ) -> Result<Option<(String, String)>, Failure> {
-    let Some(setting) = enabled_setting(&session.config, rules::RULE_EMBODIMENT_CONSISTENCY) else {
+    let Some(consistency) = enabled_setting(&session.config, rules::RULE_EMBODIMENT_CONSISTENCY)
+    else {
         return Ok(None);
     };
-    let Some(baseline) = setting.drift_baseline.as_ref() else {
+    let Some(baseline) = consistency.drift_baseline.as_ref() else {
         return Ok(None);
     };
     if !selection_wants(selection, &[rules::RULE_EMBODIMENT_CONSISTENCY]) {
