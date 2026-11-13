@@ -14,7 +14,7 @@ use std::process::{Command, Stdio};
 
 use serde_json::{json, Value};
 
-const CONFIG: &str = "schema_version: 2\nrules: {header.required-fields: error, section.required: error}\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\", \"Date\"]\n    known_fields: [\"Superseded-by\", \"Supersedes\"]\n    sections:\n      from: headings\n      required:\n        - {name: Context}\n";
+const CONFIG: &str = "schema_version: 2\nrules: {header.required-fields: error, section.required: error}\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\", \"Date\"]\n    known_fields: [\"Superseded-by\", \"Supersedes\"]\n    pointer_fields: [\"Superseded-by\", \"Supersedes\"]\n    sections:\n      from: headings\n      required:\n        - {name: Context}\n";
 
 fn git(dir: &Path, args: &[&str]) {
     let status = Command::new("git")
@@ -27,6 +27,31 @@ fn git(dir: &Path, args: &[&str]) {
 
 fn adr(status: &str, extra: &str, n: u32) -> String {
     format!("---\nStatus: {status}\nDate: 2026-01-01\n{extra}---\n# ADR-{n}: Decision {n}\n\n## Context\n\nreason {n}\n")
+}
+
+const EXPLAIN_CONFIG: &str = "schema_version: 2\nrules: {header.required-fields: error}\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\"]\n    known_fields: [\"Realized-by\"]\n";
+
+/// One ADR whose `Realized-by` names `src/a.rs`, plus that file and an ungoverned one.
+fn explain_fixture(name: &str) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-mcp-{name}"));
+    for sub in ["docs/adr", ".urzua", "src"] {
+        std::fs::create_dir_all(dir.join(sub)).unwrap();
+    }
+    git(&dir, &["init", "-q"]);
+    git(&dir, &["config", "user.email", "test@example.com"]);
+    git(&dir, &["config", "user.name", "test"]);
+    std::fs::write(dir.join(".urzua/config.yaml"), EXPLAIN_CONFIG).unwrap();
+    std::fs::write(dir.join("src/a.rs"), "fn a() {}\n").unwrap();
+    std::fs::write(dir.join("src/b.rs"), "fn b() {}\n").unwrap();
+    std::fs::write(
+        dir.join("docs/adr/ADR-1-a.md"),
+        "---\nStatus: Accepted\nRealized-by: code:src/a.rs\n---\n# ADR-1: A\n",
+    )
+    .unwrap();
+    git(&dir, &["add", "-A"]);
+    git(&dir, &["commit", "-q", "-m", "fixture"]);
+    settle(&dir);
+    dir
 }
 
 /// ADR-1 Accepted, ADR-2 Rejected, ADR-3 Superseded by ADR-4, ADR-5 broken (no Date).
@@ -184,7 +209,16 @@ fn initialize_and_tools_list_advertise_exactly_the_read_only_tools_built() {
     assert_eq!(replies[0]["result"]["capabilities"], json!({"tools": {}}));
     let tools = replies[1]["result"]["tools"].as_array().unwrap();
     let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
-    assert_eq!(names, ["urzua_check", "urzua_list_records"]);
+    assert_eq!(
+        names,
+        [
+            "urzua_check",
+            "urzua_list_records",
+            "urzua_show_record",
+            "urzua_findings_for_path",
+            "urzua_graph"
+        ]
+    );
     for tool in tools {
         assert_eq!(tool["annotations"]["readOnlyHint"], true);
         assert_eq!(tool["inputSchema"]["additionalProperties"], false);
@@ -552,7 +586,7 @@ fn forbidden_in(source: &str) -> Vec<&'static str> {
 }
 
 /// The server's own sources, and the `urzua-cli` files its tools run through:
-/// `check` (`commands/check.rs` and what it reads with), and `export`. The
+/// `check` (`commands/check.rs` and what it reads with), `export`, `explain` and `graph`. The
 /// `urzua-io` and `urzua-core` crates are not scanned: `urzua-io` holds the
 /// writers other commands use and runs `git`, so what the tools reach there is
 /// covered by the tree-hash test instead (SPEC-26, "Read-only guarantee").
@@ -560,6 +594,8 @@ const SCANNED: &[&str] = &[
     "urzua-cli/src/commands/mcp.rs",
     "urzua-cli/src/commands/check.rs",
     "urzua-cli/src/commands/export.rs",
+    "urzua-cli/src/commands/explain.rs",
+    "urzua-cli/src/commands/graph.rs",
     "urzua-cli/src/session.rs",
     "urzua-cli/src/discovery.rs",
     "urzua-cli/src/file_texts.rs",
@@ -683,4 +719,83 @@ fn a_bad_or_oversized_line_over_the_real_process_gets_an_error_and_the_server_ke
         .collect();
     assert_eq!(codes, [-32700, -32600, 0]);
     assert_eq!(replies[2]["id"], 3);
+}
+
+#[test]
+fn show_record_returns_the_record_with_its_sections_text_and_supersession_edges() {
+    let dir = fixture("show");
+    let reply = call_one(&dir, "urzua_show_record", json!({"id": "ADR-3"}));
+    let result = &reply["result"];
+    assert_eq!(result["isError"], false);
+    let report = &result["structuredContent"];
+    let text: Value = serde_json::from_str(result["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert_eq!(&text, report);
+    let record = &report["record"];
+    assert_eq!(record["id"], "ADR-3");
+    assert!(record["raw_text"].as_str().unwrap().contains("reason 3"));
+    assert_eq!(record["sections"][0]["name"], "Context");
+    let edges = report["edges"].as_array().unwrap();
+    assert!(
+        edges
+            .iter()
+            .any(|e| e["from"] == "ADR-3" && e["to"] == "ADR-4"),
+        "ADR-3 is superseded by ADR-4: {edges:?}"
+    );
+    assert!(edges
+        .iter()
+        .all(|e| e["from"] == "ADR-3" || e["to"] == "ADR-3"));
+}
+
+#[test]
+fn show_record_of_an_unknown_id_is_an_error_result_not_an_empty_record() {
+    let dir = fixture("showunknown");
+    let reply = call_one(&dir, "urzua_show_record", json!({"id": "ADR-999"}));
+    assert_eq!(reply["result"]["isError"], true);
+    let report = &reply["result"]["structuredContent"];
+    assert_eq!(report["status"], "not-run");
+    assert!(report["error"].as_str().unwrap().contains("ADR-999"));
+    assert!(report.get("record").is_none());
+}
+
+#[test]
+fn findings_for_path_returns_the_records_that_govern_it() {
+    let dir = explain_fixture("explain");
+    let reply = call_one(&dir, "urzua_findings_for_path", json!({"path": "src/a.rs"}));
+    let report = &reply["result"]["structuredContent"];
+    assert_eq!(reply["result"]["isError"], false, "{reply}");
+    assert_eq!(report["path"], "src/a.rs");
+    assert_eq!(report["governing_records"].as_array().unwrap().len(), 1);
+    let cli = common::urzua()
+        .args(["explain", "src/a.rs"])
+        .current_dir(&dir)
+        .output()
+        .unwrap();
+    let cli: Value = serde_json::from_slice(&cli.stdout).unwrap();
+    assert_eq!(report["governing_records"], cli["governing_records"]);
+    let ungoverned = call_one(&dir, "urzua_findings_for_path", json!({"path": "src/b.rs"}));
+    assert_eq!(
+        ungoverned["result"]["structuredContent"]["governing_records"],
+        json!([])
+    );
+    let escaping = call_one(&dir, "urzua_findings_for_path", json!({"path": "../x"}));
+    assert_eq!(escaping["error"]["code"], -32602);
+}
+
+#[test]
+fn graph_returns_the_cli_graph_report() {
+    let dir = fixture("graph");
+    let reply = call_one(&dir, "urzua_graph", json!({}));
+    let report = &reply["result"]["structuredContent"];
+    assert_eq!(reply["result"]["isError"], false);
+    let cli = common::urzua()
+        .args(["graph"])
+        .current_dir(&dir)
+        .output()
+        .unwrap();
+    let cli: Value = serde_json::from_slice(&cli.stdout).unwrap();
+    assert_eq!(report["edges"], cli["edges"]);
+    assert_eq!(report["population"], cli["population"]);
+    assert!(!report["edges"].as_array().unwrap().is_empty());
+    let extra = call_one(&dir, "urzua_graph", json!({"id": "ADR-1"}));
+    assert_eq!(extra["error"]["code"], -32602);
 }

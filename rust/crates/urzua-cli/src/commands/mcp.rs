@@ -14,6 +14,7 @@ use urzua_mcp::{Host, Param, ParamKind, ToolResult, ToolSpec};
 
 use crate::commands::check::{self, CheckArgs};
 use crate::commands::export::{self, RecordFilter};
+use crate::commands::{explain, graph};
 use crate::session::Workspace;
 
 const TOOLS: &[ToolSpec] = &[
@@ -58,6 +59,31 @@ const TOOLS: &[ToolSpec] = &[
                 description: "Only records whose status field holds one of these values, compared as written.",
             },
         ],
+    },
+    ToolSpec {
+        name: "urzua_show_record",
+        description: "Read one record by its id (for example ADR-23): its header fields, its sections, its complete text and the relation edges that touch it, supersession included. An unknown id is an error result.",
+        params: &[Param {
+            name: "id",
+            kind: ParamKind::Text,
+            required: true,
+            description: "The record's display id, as urzua_list_records shows it.",
+        }],
+    },
+    ToolSpec {
+        name: "urzua_findings_for_path",
+        description: "Which records govern a path: every record whose evidence names it, with the path's scope and coverage. This is urzua explain for a path.",
+        params: &[Param {
+            name: "path",
+            kind: ParamKind::Text,
+            required: true,
+            description: "A repository-relative file, directory or glob, or path#scope.",
+        }],
+    },
+    ToolSpec {
+        name: "urzua_graph",
+        description: "The full record-relationship graph: every Implements, Derives-from and Supersedes edge, with its kind and whether its target exists.",
+        params: &[],
     },
 ];
 
@@ -115,6 +141,9 @@ impl Host for Server {
         match name {
             "urzua_check" => self.check(args),
             "urzua_list_records" => Ok(self.list_records(args)),
+            "urzua_show_record" => Ok(self.show_record(args)),
+            "urzua_findings_for_path" => self.findings_for_path(args),
+            "urzua_graph" => Ok(outcome(graph::build(self.config.clone()))),
             other => Err(format!("unknown tool: {other}")),
         }
     }
@@ -157,6 +186,60 @@ impl Server {
         }
         result
     }
+}
+
+impl Server {
+    fn findings_for_path(&self, args: &Map<String, Value>) -> Result<ToolResult, String> {
+        let path = text(args, "path");
+        let file = path.split('#').next().unwrap_or_default();
+        if !is_inside(Path::new(file)) {
+            return Err(format!("`path` must stay inside the repository: {path}"));
+        }
+        Ok(outcome(explain::build(self.config.clone(), path)))
+    }
+
+    /// One record and the edges that touch it. An id no record carries is a
+    /// could-not-run, never an empty record.
+    fn show_record(&self, args: &Map<String, Value>) -> ToolResult {
+        let id = text(args, "id");
+        let built = export::build(self.config.clone(), &RecordFilter::default())
+            .and_then(|export| Ok((export, graph::build(self.config.clone())?)));
+        let (export, graph) = match built {
+            Ok(both) => both,
+            Err(failure) => return outcome::<Value>(Err(failure)),
+        };
+        let Some(record) = export
+            .records
+            .iter()
+            .find(|r| r.id.as_deref() == Some(id.as_str()))
+        else {
+            let message = format!("no record has the id `{id}`; urzua_list_records lists the ids");
+            return outcome::<Value>(Err(message.into()));
+        };
+        let edges: Vec<_> = graph
+            .edges
+            .iter()
+            .filter(|e| e.from == id || e.to == id)
+            .collect();
+        let mut notices = export.notices.clone();
+        notices.extend(graph.notices.iter().cloned());
+        ToolResult {
+            report: serde_json::json!({
+                "status": "ok",
+                "record": record,
+                "edges": edges,
+                "notices": notices,
+            }),
+            is_error: false,
+        }
+    }
+}
+
+fn text(args: &Map<String, Value>, key: &str) -> String {
+    args.get(key)
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string()
 }
 
 /// A report, or the could-not-run shape with `isError` (`ADR-46`).
