@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5QF32RM76Y50THPQEG
-Version: '0.28'
+Version: '0.29'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -341,3 +341,4 @@ to another record — nothing to check for resolution, no cycle risk, no new rul
 > | 2026-11-13 | Bumped to `0.28`. Re-pinned `status_model.rs` evidence after the declaration of `statuses` gained an optional `values` (a type may declare `pending` alone); this spec's claims are unchanged. **Why:** `MILE-205` items 1-3; the revision-log version-bump rule requires a bump beside the re-pin row. | **structural** |
 > | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: unspecified): re-pinned `rust/crates/urzua-core/src/status_model.rs` 00ed614a24d4 -> 31006f883b8c. Reason: Read the diff of the pinned file since the previous pin. status_model.rs: only one unit test was added (a_type_with_no_values_retains_no_claim); no code outside the test module changed. The claim this record evidences still holds. **Why:** the pinned evidence changed and the attesting actor re-verified that the claim still holds. | **structural** |
 > | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/record_types_own_config_integration.rs` 44fea1626a54 -> dc29b51bde5a. Reason: Read the diff of each pinned test file since the previous pin. The repo() fixture helper now also copies the repository's .urzua/templates into the fixture, because the own config declares sections.order from templates; no assertion or test body changed; the claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-13 | Bumped to `0.29`. Evidence pins re-baselined for this change (the `Re-baselined` row above); the specification text is unchanged. **Why:** a revision-log entry that adds a structural change bumps `Version`. | **structural** |
