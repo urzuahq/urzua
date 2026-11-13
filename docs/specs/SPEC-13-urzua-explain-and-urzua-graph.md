@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5DB4YPSWZ6MQV85PQ7
-Version: '0.16'
+Version: '0.17'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/commands/explain.rs@sha256:58f30c13d91ff0b4d4897789eb30192f843625c9f47ee1ac693c5fa491fb1f0f, code:rust/crates/urzua-cli/src/commands/graph.rs@sha256:379b00875a633e9d8e59f690e2a12ce3ed3b0d5635d533f0a8242580041bfd0a, code:rust/crates/urzua-core/src/graph.rs@sha256:03f7eed2679cc43971411a8874bb09e17c284a7f1b3a9c4accc15ace4cd518f6, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs@sha256:44fea1626a547a6d9226f09c5e9cd116aad2dfe384a082aaeb8eec2c74f22af5
+Realized-by: code:rust/crates/urzua-cli/src/commands/explain.rs@sha256:58f30c13d91ff0b4d4897789eb30192f843625c9f47ee1ac693c5fa491fb1f0f, code:rust/crates/urzua-cli/src/commands/graph.rs@sha256:379b00875a633e9d8e59f690e2a12ce3ed3b0d5635d533f0a8242580041bfd0a, code:rust/crates/urzua-core/src/graph.rs@sha256:03f7eed2679cc43971411a8874bb09e17c284a7f1b3a9c4accc15ace4cd518f6, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs@sha256:dc29b51bde5a2ba79d95c5e0a09466a54e816e8e2cc4a86a80e4459be477a447
 Author: beauwilliams
 Subject: '`urzua explain`/`urzua graph` -- read-only relationship queries over already-parsed data.'
 Implements: ADR-24, ADR-44
@@ -166,3 +166,5 @@ Both are stdout-JSON-always (ADR-23) and never write. `graph` reads `pointer_fie
 > | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/explain.rs` 15d3bc36d944 -> 58f30c13d91f, `rust/crates/urzua-core/src/graph.rs` 7d43a868a856 -> 03f7eed2679c. Reason: Read the diff of each re-pinned file against main. cli/src/commands/explain.rs: Notice struct literals gained detail: None; no behaviour change; core/src/graph.rs: Notice struct literals gained detail: None; no behaviour change. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-08 | Bumped to `0.15`. The pins this spec's `Realized-by` holds on files this change touched were re-baselined (the `Re-baselined` row above); no behaviour this spec describes changed. | **structural** |
 > | 2026-11-09 | Bumped to `0.16`. Re-pin rows in this revision log were reworded to name who re-verified, matching the tool's wording since 2026-11-09; hashes, reasons and dates are unchanged. **Why:** Maintainer decision, 2026-11-09. | **structural** |
+> | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/record_types_own_config_integration.rs` 44fea1626a54 -> dc29b51bde5a. Reason: Read the diff of each pinned test file since the previous pin. The repo() fixture helper now also copies the repository's .urzua/templates into the fixture, because the own config declares sections.order from templates; no assertion or test body changed; the claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-13 | Bumped to `0.17`. Evidence pins re-baselined for this change (the `Re-baselined` row above); the specification text is unchanged. **Why:** a revision-log entry that adds a structural change bumps `Version`. | **structural** |

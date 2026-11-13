@@ -1,0 +1,24 @@
+schema_version: 2
+record_types:
+  doc:
+    dir: records/docs
+    prefix: DOC
+    required_fields: [Status]
+    header_shape: yaml-frontmatter
+    statuses:
+      values: [Open, Closed]
+      success: [Closed]
+      failure: []
+      implementable: [Open]
+    pointer_fields: []
+    narrative_fields: []
+    sections:
+      from: headings
+      depth: 2
+      unique_headings: true
+      no_skipped_levels: true
+      order: {from: template}
+rules:
+  section.duplicate: error
+  section.level-skipped: error
+  section.order: error
