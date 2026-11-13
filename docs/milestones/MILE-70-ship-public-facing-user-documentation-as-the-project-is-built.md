@@ -1,5 +1,5 @@
 ---
-Status: Planned
+Status: InProgress
 Stable-Id: 01M1YR7GH547SCN3Z4Q9Z9WCVH
 Phase: '1'
 Track: user-docs
@@ -28,9 +28,9 @@ ships.
 
 ## Done means
 
-- The public documentation set exists beyond the README, contributing guide and changelog: a command reference for every shipped command.
-- The public documentation set includes the config schema (record types, header shapes, required fields).
-- The public documentation set includes the adoption walkthrough and the record-type model.
+- The public documentation set exists beyond the README, contributing guide and changelog: a command reference for every shipped command. — evidence: spec:docs/reference/commands.md
+- The public documentation set includes the config schema (record types, header shapes, required fields). — evidence: spec:docs/reference/config.md
+- The public documentation set includes the adoption walkthrough and the record-type model. — evidence: spec:docs/reference/adopt.md, spec:docs/reference/record-model.md
 - A feature's documentation lands in the change that ships it, and a command with no reference page is reported by a check or listed here.
 - The format and hosting are decided in an ADR first.
 
@@ -41,3 +41,4 @@ ships.
 
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |
 > | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |
+> | 2026-11-13 | InProgress: the user documentation exists under `docs/reference/` (start at its README, linked from the project README) and covers install, `init` and adoption, the config file, `check`, `check --base` and its JSON output, every shipped command, CI (the gate action and the stale-pin step), the agent harness, waivers and drift. Evidence is attached to the three items it satisfies. Two items stay open: no check reports a shipped command that has no reference page, and the format and hosting decision has no ADR yet, which needs the maintainer's decision. Pages chosen as plain markdown under `docs/reference/` follow the existing directory; that is not a hosting decision. **Why:** the milestone is partly delivered, so it is not `Done`. | **substantive** |
