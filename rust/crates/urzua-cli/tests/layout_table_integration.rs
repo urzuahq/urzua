@@ -1,5 +1,7 @@
 //! SPEC-21 success criterion 1: the layout table matches `ls -A` at the
 //! repository root.
+//!
+//! Verifies: SPEC-21
 
 use std::collections::BTreeSet;
 use std::path::Path;
@@ -39,12 +41,24 @@ fn the_layout_table_matches_ls_a_of_the_repository_root() {
         .expect("SPEC-21 readable");
     let listed = listed_entries(&spec);
 
-    // Build output and untracked scratch are not part of the tracked layout.
-    let ignored = |name: &str| matches!(name, ".git" | "target");
-    let on_disk: BTreeSet<String> = std::fs::read_dir(&root)
-        .unwrap()
-        .map(|e| e.unwrap().file_name().to_string_lossy().to_string())
-        .filter(|n| !ignored(n))
+    // Git's view, not the raw directory: a gitignored entry such as `.DS_Store`
+    // or `.idea/` on a developer machine is not part of the layout.
+    let out = std::process::Command::new("git")
+        .args([
+            "ls-files",
+            "-z",
+            "--cached",
+            "--others",
+            "--exclude-standard",
+        ])
+        .current_dir(&root)
+        .output()
+        .expect("git should run");
+    assert!(out.status.success(), "git ls-files failed");
+    let on_disk: BTreeSet<String> = String::from_utf8_lossy(&out.stdout)
+        .split('\0')
+        .filter(|p| !p.is_empty() && root.join(p).exists())
+        .map(|p| p.split('/').next().unwrap().to_string())
         .collect();
 
     let unlisted: Vec<_> = on_disk.difference(&listed).collect();

@@ -1,6 +1,8 @@
 //! `urzua init` (SPEC-5): the files-touched criterion and the withheld-rule
 //! mechanism. The dry-run equivalence criterion is held by
 //! `init_adopt_integration.rs`.
+//!
+//! Verifies: SPEC-5
 
 mod common;
 
