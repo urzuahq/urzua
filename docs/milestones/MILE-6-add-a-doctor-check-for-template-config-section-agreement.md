@@ -18,9 +18,9 @@ Nothing today checks that a template and its config haven't drifted apart -- the
 
 ## Done means
 
-- `urzua doctor` reports, per record type, each section the config declares required that the type's template has no heading for.
-- A fixture with a template missing one reports it, and a matching template reports clean.
-- The check runs against urzua's own `.urzua/config.yaml` and `.urzua/templates/` and finds no disagreement.
+- `urzua doctor` reports, per record type, each section the config declares required that the type's template has no heading for. — evidence: code:rust/crates/urzua-cli/src/commands/doctor.rs#template_section_checks, code:rust/crates/urzua-core/src/document_model.rs#required_missing_from, test:rust/crates/urzua-cli/tests/doctor_template_sections_integration.rs#a_template_missing_a_required_section_is_reported_by_name
+- A fixture with a template missing one reports it, and a matching template reports clean. — evidence: test:rust/crates/urzua-cli/tests/doctor_template_sections_integration.rs#a_template_missing_a_required_section_is_reported_by_name, test:rust/crates/urzua-cli/tests/doctor_template_sections_integration.rs#a_matching_template_reports_clean_and_an_alias_satisfies_a_requirement
+- The check runs against urzua's own `.urzua/config.yaml` and `.urzua/templates/` and finds no disagreement. — evidence: test:rust/crates/urzua-cli/tests/doctor_template_sections_integration.rs#this_repositorys_own_templates_agree_with_its_own_configuration
 
 > **Revision log**
 >

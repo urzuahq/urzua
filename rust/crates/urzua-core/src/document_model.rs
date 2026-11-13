@@ -271,6 +271,47 @@ impl<'de> Deserialize<'de> for OrderSource {
     }
 }
 
+impl SectionsDecl {
+    /// The `required` sections that `text`, a record-shaped body such as a
+    /// type's template, has no heading for (`MILE-6`): the headings are read as
+    /// a record's are, to this declaration's `depth`, and a requirement is met
+    /// by its name or an alias at its level and under its declared parent. A
+    /// requirement that also reads a Y-statement from the preamble is met by
+    /// the preamble carrying the shape's marker. Presence only, as
+    /// `section.required`.
+    pub fn required_missing_from(&self, text: &str) -> Vec<&RequiredSection> {
+        let sections = crate::section::parse_sections_to_depth(text, 1, self.depth);
+        let preamble_end = sections.iter().map(|s| s.line).min().unwrap_or(usize::MAX);
+        let preamble: String = text
+            .lines()
+            .take(preamble_end.saturating_sub(1))
+            .collect::<Vec<_>>()
+            .join("\n")
+            .to_ascii_lowercase();
+        self.required
+            .iter()
+            .filter(|r| {
+                let found = r.headings().any(|h| {
+                    sections.iter().any(|s| {
+                        s.heading == h
+                            && s.level == r.level
+                            && r.under
+                                .as_deref()
+                                .is_none_or(|u| s.parent.is_some_and(|p| sections[p].heading == u))
+                    })
+                });
+                let in_preamble = r.preamble
+                    && matches!(
+                        &r.shape,
+                        Some(SectionShape::YStatement { marker: Some(m) })
+                            if preamble.contains(&m.to_ascii_lowercase())
+                    );
+                !found && !in_preamble
+            })
+            .collect()
+    }
+}
+
 /// One required section: its heading text and the shape its content takes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RequiredSection {
