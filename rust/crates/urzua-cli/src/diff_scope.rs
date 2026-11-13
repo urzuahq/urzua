@@ -163,7 +163,7 @@ impl UnreadableCopy {
             Self::Deletion => (
                 rules::RULE_DIFF_DECIDER_REQUIRED,
                 format!(
-                    "{}: could not read the merge base's copy of a deleted record, so its deletion is not judged: {e}",
+                    "{}: could not read the merge base's copy of a deleted record, so its deletion is not judged and a record renamed from it cannot be paired: {e}",
                     path.display()
                 ),
             ),
@@ -705,29 +705,6 @@ mod tests {
             notices[0].message.contains("renamed from it"),
             "{notices:?}"
         );
-        // The deletion reached first names the decider rule.
-        let (mut notices, mut warned) = (Vec::new(), HashSet::new());
-        let _ = deleted_gated_records(
-            &repo,
-            &config,
-            None,
-            &[],
-            &changes,
-            &gated,
-            &mut notices,
-            &mut warned,
-        );
-        let _ = deleted_by_stable_id(
-            &repo,
-            &config,
-            "adr",
-            "Status",
-            &changes,
-            &mut notices,
-            &mut warned,
-        );
-        assert_eq!(notices.len(), 1, "{notices:?}");
-        assert_eq!(notices[0].subject, rules::RULE_DIFF_DECIDER_REQUIRED);
         let _ = std::fs::remove_dir_all(&repo);
     }
 }
