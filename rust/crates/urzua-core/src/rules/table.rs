@@ -102,6 +102,8 @@ pub enum Declaration {
     NoSkippedLevels,
     /// `sections.order` (`MILE-104`).
     SectionOrder,
+    /// `sections.required`, read by `section.required` and `section.shape`.
+    SectionsRequired,
 }
 
 impl Declaration {
@@ -117,6 +119,7 @@ impl Declaration {
             Declaration::UniqueHeadings => "sections.unique_headings",
             Declaration::NoSkippedLevels => "sections.no_skipped_levels",
             Declaration::SectionOrder => "sections.order",
+            Declaration::SectionsRequired => "sections.required",
         }
     }
 }
@@ -1868,7 +1871,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         requires_acyclic_pair: false,
         requires_override_log: false,
         requires_authority: false,
-        reads_declaration: None,
+        reads_declaration: Some(Declaration::SectionsRequired),
         header_none: HeaderNone::Exempt("reads body sections; the header only for exempt_statuses, which a header-less type declaring them is counted out of scope for (unit-tested)"),
         options: &[],
         population: PopulationUnit::Section,
@@ -1892,7 +1895,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         requires_acyclic_pair: false,
         requires_override_log: false,
         requires_authority: false,
-        reads_declaration: None,
+        reads_declaration: Some(Declaration::SectionsRequired),
         header_none: HeaderNone::Exempt("reads body sections, as section.required does"),
         options: &[],
         population: PopulationUnit::Section,
@@ -2356,6 +2359,8 @@ mod tests {
                 (RULE_HEADER_POINTER_FIELD_CLEAN, Declaration::PointerFields),
                 (RULE_STATUS_DONE_ITEMS_SHAPE, Declaration::DeliveryItems),
                 (RULE_STATUS_WAIVED_ITEM_STALE, Declaration::DeliveryItems),
+                (RULE_SECTION_REQUIRED, Declaration::SectionsRequired),
+                (RULE_SECTION_SHAPE, Declaration::SectionsRequired),
                 (RULE_SECTION_DUPLICATE, Declaration::UniqueHeadings),
                 (RULE_SECTION_LEVEL_SKIPPED, Declaration::NoSkippedLevels),
                 (RULE_SECTION_ORDER, Declaration::SectionOrder),

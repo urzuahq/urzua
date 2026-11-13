@@ -1215,6 +1215,9 @@ mod tests {
             "sections.no_skipped_levels",
             "section.order",
             "sections.order",
+            "section.required",
+            "section.shape",
+            "sections.required",
         ] {
             assert!(message.contains(needle), "{needle} missing from: {message}");
         }

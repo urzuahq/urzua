@@ -401,17 +401,23 @@ fn adopt_withholds_the_section_structure_rules_and_names_the_key_each_needs() {
         ("section.duplicate", "sections.unique_headings"),
         ("section.level-skipped", "sections.no_skipped_levels"),
         ("section.order", "sections.order"),
+        ("section.required", "sections.required"),
+        ("section.shape", "sections.required"),
     ] {
         assert!(!written.contains(rule), "{rule} is not written: {written}");
         assert!(notice.contains(rule) && notice.contains(key), "{notice}");
     }
-    // The two rules that read `sections.required` are unchanged: still proposed.
-    assert!(written.contains("section.required: warn"));
     let check = json(&run_urzua(&dir, &["check"]));
     for e in check["rules_executed"].as_array().unwrap() {
         if matches!(
             e["rule"].as_str(),
-            Some("section.duplicate" | "section.level-skipped" | "section.order")
+            Some(
+                "section.duplicate"
+                    | "section.level-skipped"
+                    | "section.order"
+                    | "section.required"
+                    | "section.shape"
+            )
         ) {
             assert_eq!(e["status"], "not-enabled", "{e}");
         }
