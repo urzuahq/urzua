@@ -36,10 +36,22 @@ const MAX_TITLE_CHARS: usize = 100;
 const MAX_RETAKES: usize = 5;
 
 /// The `urzua waive` command line.
+#[derive(clap::Args)]
 pub struct WaiveArgs {
-    pub rules: Vec<String>,
-    pub paths: Vec<PathBuf>,
-    pub by: Option<String>,
+    /// Draft from the current findings (the only source today).
+    #[arg(long, required = true)]
+    from_report: bool,
+    /// Only findings of these rules (comma-separated or repeated).
+    #[arg(long, value_delimiter = ',')]
+    rule: Vec<String>,
+    /// Only findings in this file or under this directory (repeatable; a path, not a glob).
+    #[arg(long)]
+    path: Vec<PathBuf>,
+    /// Author named in each draft's revision log; defaults to the git identity.
+    #[arg(long)]
+    by: Option<String>,
+    /// Write the drafts. Without it nothing is written.
+    #[arg(long)]
     pub apply: bool,
 }
 
@@ -67,10 +79,11 @@ fn type_config(ctx: &Ctx) -> &RecordTypeConfig {
 
 fn execute(config_path: Option<PathBuf>, args: WaiveArgs) -> Result<WaiveReport, Failure> {
     let WaiveArgs {
-        rules,
-        paths,
+        rule: rules,
+        path: paths,
         by,
         apply,
+        from_report: _,
     } = args;
     let ctx = open_ctx(config_path.clone(), by)?;
     let filters = filters(&ctx.session.repo_root, rules, &paths)?;
