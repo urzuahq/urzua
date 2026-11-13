@@ -486,9 +486,9 @@ fn the_own_corpus_checks_clean_and_no_prose_wait_is_left_to_report() {
 fn the_own_config_declares_the_type_and_holds_met_to_its_evidence() {
     let repo = common::TempDir::new("urzua-cond-own");
     std::fs::create_dir_all(repo.join(".urzua")).unwrap();
-    std::fs::copy(
-        root().join(".urzua/config.yaml"),
+    std::fs::write(
         repo.join(".urzua/config.yaml"),
+        common::own_config_for_fixture(),
     )
     .unwrap();
     write(

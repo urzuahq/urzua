@@ -5,7 +5,7 @@ Phase: '0'
 Track: schema-governance
 Implements: BUG-10
 Blocked-on: —
-Realized-by: code:.urzua/config.yaml@sha256:21e9ab57a37acf5df4921e86bca7127e7e3881e648115b370e7357339549054d, code:.github/workflows/checks.yml@sha256:ad6ab57882dfac0d3a819e549bccd9ba6f81abafe0699d09d26f828a5714398b, spec:docs/bugs/BUG-10-parent-field-defaults-to-spec-1-across-most-specs-without-a-real-relationship.md, spec:docs/specs/SPEC-18-the-spec-record-type.md
+Realized-by: code:.urzua/config.yaml@sha256:90caecacfd12c5e92646b52d10a28771a209fc5b7574e4b09ce09a7ed7cb1a8f, code:.github/workflows/checks.yml@sha256:ad6ab57882dfac0d3a819e549bccd9ba6f81abafe0699d09d26f828a5714398b, spec:docs/bugs/BUG-10-parent-field-defaults-to-spec-1-across-most-specs-without-a-real-relationship.md, spec:docs/specs/SPEC-18-the-spec-record-type.md
 ---
 # 91 — Correct spec Parent values, add required Subject field, backfill all specs
 
@@ -44,8 +44,8 @@ type, no new mechanism or rule.
 
 ## Done means
 
-- `spec` requires a one-line `Subject` field in `.urzua/config.yaml`. — evidence: code:.urzua/config.yaml@sha256:21e9ab57a37acf5df4921e86bca7127e7e3881e648115b370e7357339549054d
-- Every spec carries a `Subject`, and `urzua check` reports no missing `Subject`. — evidence: code:.urzua/config.yaml@sha256:21e9ab57a37acf5df4921e86bca7127e7e3881e648115b370e7357339549054d, code:.github/workflows/checks.yml@sha256:ad6ab57882dfac0d3a819e549bccd9ba6f81abafe0699d09d26f828a5714398b
+- `spec` requires a one-line `Subject` field in `.urzua/config.yaml`. — evidence: code:.urzua/config.yaml@sha256:90caecacfd12c5e92646b52d10a28771a209fc5b7574e4b09ce09a7ed7cb1a8f
+- Every spec carries a `Subject`, and `urzua check` reports no missing `Subject`. — evidence: code:.urzua/config.yaml@sha256:90caecacfd12c5e92646b52d10a28771a209fc5b7574e4b09ce09a7ed7cb1a8f, code:.github/workflows/checks.yml@sha256:ad6ab57882dfac0d3a819e549bccd9ba6f81abafe0699d09d26f828a5714398b
 - The corrected `Parent` values from `BUG-10` are in place on all specs. — evidence: spec:docs/bugs/BUG-10-parent-field-defaults-to-spec-1-across-most-specs-without-a-real-relationship.md
 - `SPEC-18` documents both. — evidence: spec:docs/specs/SPEC-18-the-spec-record-type.md
 
@@ -68,3 +68,4 @@ type, no new mechanism or rule.
 > | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` 2f0e023ed5a5 -> cbb1c67c40a0. Reason: Read the diff of each pinned file since the old pin and the claim still holds. config.yaml: read the diff since the old pin; the only change is the added key authority.decider_table: base with its two-line comment (this repository declares the new decider_table option, ADR-89 amendment of 2026-11-09). No record type, rule, status, relation or other declaration this record relies on changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` cbb1c67c40a0 -> 21e9ab57a37a. Reason: Read the diff of .urzua/config.yaml: the authority section gains `waivable: never` and a two-line comment; no other key changed. The pinned evidence still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-10 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.github/workflows/checks.yml` a201f4e57f5f -> ad6ab57882df. Reason: checks.yml gained one additive, report-only step in the build job (no stale evidence pins: runs fix --rebaseline without --apply and fails unless the report status is ok); no existing step changed, so the claim still holds **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` 21e9ab57a37a -> 90caecacfd12. Reason: `.urzua/config.yaml` gained only the `drift_baseline: {ref: v0.3.0}` declaration and its comment under `embodiment.consistency`; no other declaration changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |

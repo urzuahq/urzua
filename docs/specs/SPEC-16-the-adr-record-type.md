@@ -4,7 +4,7 @@ Version: '0.20'
 Date: 2026-09-08
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:.urzua/config.yaml@sha256:21e9ab57a37acf5df4921e86bca7127e7e3881e648115b370e7357339549054d, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs@sha256:44fea1626a547a6d9226f09c5e9cd116aad2dfe384a082aaeb8eec2c74f22af5
+Realized-by: code:.urzua/config.yaml@sha256:90caecacfd12c5e92646b52d10a28771a209fc5b7574e4b09ce09a7ed7cb1a8f, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs@sha256:b1769908d1efac6b86ad75cdcd2646c5884f0570ee49ba13d58140dc68918be1
 Author: beauwilliams
 Subject: 'The `adr` record type -- schema, required fields, and lifecycle for decision records.'
 Parent: —
@@ -148,3 +148,4 @@ the original Decision text never touched. This session amended `ADR-33`, `ADR-34
 > | 2026-11-09 | Bumped to `0.19`. Re-pin rows in this revision log were reworded to name who re-verified, matching the tool's wording since 2026-11-09; hashes, reasons and dates are unchanged. **Why:** Maintainer decision, 2026-11-09. | **structural** |
 > | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` cbb1c67c40a0 -> 21e9ab57a37a. Reason: Read the diff of .urzua/config.yaml: the authority section gains `waivable: never` and a two-line comment; no other key changed. The pinned evidence still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-09 | Bumped to `0.20`. Evidence pins on `.urzua/config.yaml` were re-pinned (row above) after the config's authority section gained `waivable: never`; the specification's content is unchanged. **Why:** `ADR-89` amendment of 2026-11-09 (gate waivers). | **substantive** |
+> | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` 21e9ab57a37a -> 90caecacfd12, `rust/crates/urzua-cli/tests/record_types_own_config_integration.rs` 44fea1626a54 -> b1769908d1ef. Reason: `.urzua/config.yaml` gained only the `drift_baseline: {ref: v0.3.0}` declaration and its comment under `embodiment.consistency`; no other declaration changed. record_types_own_config_integration.rs: the fixture takes the repository's config through `common::own_config_for_fixture`, which drops the `drift_baseline` line a throwaway repository cannot resolve; the assertions are unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
