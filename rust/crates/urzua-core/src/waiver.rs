@@ -53,6 +53,25 @@ impl SuppressionType {
         }
     }
 
+    /// How `value` reads as the field `field` of a suppression of this type:
+    /// the one judgment `load_suppressions` makes of an `effective_requires`
+    /// field, so a command that writes a value can prove how `check` will read it.
+    pub fn field_state(&self, field: &str, value: Option<&str>) -> FieldState {
+        let mut state = classify_against_template(
+            value,
+            self.template.get(field).map(String::as_str),
+            self.declared.as_ref(),
+        );
+        // The default vocabulary still applies to the whole value: a Reason
+        // that is just `TBD` or `TODO` is a placeholder.
+        if state == FieldState::Present {
+            if let Some(default) = value.and_then(crate::field_state::whole_value_default_state) {
+                state = default;
+            }
+        }
+        state
+    }
+
     /// The same type, judging a placeholder against the template's text.
     pub fn with_template(mut self, template: &str) -> Self {
         self.template = crate::new_record::template_header_values(template);
@@ -242,22 +261,7 @@ pub fn load_suppressions(
                 .effective_requires
                 .iter()
                 .filter_map(|field| {
-                    let mut state = classify_against_template(
-                        r.header.get(field),
-                        suppression_type.template.get(field).map(String::as_str),
-                        suppression_type.declared.as_ref(),
-                    );
-                    // The default vocabulary still applies to the whole value:
-                    // a Reason that is just `TBD` or `TODO` is a placeholder.
-                    if state == FieldState::Present {
-                        if let Some(default) = r
-                            .header
-                            .get(field)
-                            .and_then(crate::field_state::whole_value_default_state)
-                        {
-                            state = default;
-                        }
-                    }
+                    let state = suppression_type.field_state(field, r.header.get(field));
                     (state != FieldState::Present).then(|| (field.clone(), state))
                 })
                 .unzip();

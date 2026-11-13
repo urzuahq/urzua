@@ -125,6 +125,26 @@ enum Command {
         by: Option<String>,
     },
 
+    /// Draft one pending waiver per rule and file for the current findings.
+    ///
+    /// Runs `check` in process and previews the waivers it would write; nothing is
+    /// written yet. A draft carries a pending Reason and no Expires, so it suppresses
+    /// nothing until a person fills it in. Exit 0 when it ran, 2 when it could not.
+    Waive {
+        /// Draft from the current findings (the only source today).
+        #[arg(long, required = true)]
+        from_report: bool,
+        /// Only findings of these rules (comma-separated or repeated).
+        #[arg(long, value_delimiter = ',')]
+        rule: Vec<String>,
+        /// Only findings in this file or under this directory (repeatable; a path, not a glob).
+        #[arg(long)]
+        path: Vec<PathBuf>,
+        /// Author named in each draft's revision log; defaults to the git identity.
+        #[arg(long)]
+        by: Option<String>,
+    },
+
     /// Validate records. Non-zero exit on error.
     ///
     /// Reports files examined and rules executed: a check that found nothing
@@ -538,6 +558,7 @@ fn main() -> ExitCode {
             title,
             by,
         } => commands::new::run(cli.config, record_type, title, by),
+        Command::Waive { rule, path, by, .. } => commands::waive::run(cli.config, rule, path, by),
         Command::Audit => commands::audit::run(cli.config),
         Command::Migrate { target } => dispatch_migrate(cli.config, target),
         Command::Export { format } => dispatch_export(cli.config, format),
@@ -691,6 +712,7 @@ fn fix_evaluation_date(cli: &Cli) -> Result<(), String> {
 fn command_name(command: &Command) -> &'static str {
     match command {
         Command::New { .. } => "new",
+        Command::Waive { .. } => "waive",
         Command::Check { .. } => "check",
         Command::Explain { .. } => "explain",
         Command::Graph => "graph",

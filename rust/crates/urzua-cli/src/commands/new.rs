@@ -124,7 +124,7 @@ pub fn run(
 }
 
 /// The type prefix and the file name of the new record.
-fn build_filename(
+pub(crate) fn build_filename(
     record_type: &str,
     type_config: &urzua_core::config::RecordTypeConfig,
     title: &str,
@@ -167,7 +167,7 @@ fn build_filename(
     Ok((type_prefix, filename))
 }
 
-fn lookup_record_type<'a>(
+pub(crate) fn lookup_record_type<'a>(
     config: &'a urzua_core::config::Config,
     record_type: &str,
     config_path: &std::path::Path,
@@ -192,14 +192,14 @@ fn lookup_record_type<'a>(
 
 /// What numbering a new record settles: the type's identity grammar and the
 /// number taken.
-struct Numbered {
-    declared: Option<urzua_core::document_model::IdentityDecl>,
-    compiled: Option<urzua_core::document_model::CompiledIdentity>,
-    display_number: u32,
+pub(crate) struct Numbered {
+    pub(crate) declared: Option<urzua_core::document_model::IdentityDecl>,
+    pub(crate) compiled: Option<urzua_core::document_model::CompiledIdentity>,
+    pub(crate) display_number: u32,
     skipped: Vec<SkippedReason>,
 }
 
-fn number_record(
+pub(crate) fn number_record(
     repo_root: &std::path::Path,
     record_type: &str,
     type_config: &urzua_core::config::RecordTypeConfig,
@@ -227,7 +227,7 @@ fn number_record(
     })
 }
 
-fn disabled_pull_report() -> PullRefsReport {
+pub(crate) fn disabled_pull_report() -> PullRefsReport {
     PullRefsReport {
         fetched: false,
         reason: Some("disabled".to_string()),
@@ -449,17 +449,17 @@ fn render_record(inputs: &NewRecordInputs) -> String {
         .join(format!("{}.md", inputs.record_type));
     let template = urzua_io::read_to_string(&template_path).ok();
     urzua_core::new_record::scaffold_record(
-        &urzua_core::new_record::ScaffoldSpec {
-            type_config: inputs.type_config,
-            compiled: inputs.compiled,
-            type_prefix: inputs.type_prefix,
-            filename: inputs.filename,
-            display_number: inputs.display_number,
-            title: inputs.title,
-            stable_id: inputs.stable_id,
-            author: inputs.author,
-            today: inputs.today,
-        },
+        &urzua_core::new_record::ScaffoldSpec::plain(
+            inputs.type_config,
+            inputs.compiled,
+            inputs.type_prefix,
+            inputs.filename,
+            inputs.display_number,
+            inputs.title,
+            inputs.stable_id,
+            inputs.author,
+            inputs.today,
+        ),
         template.as_deref(),
     )
 }

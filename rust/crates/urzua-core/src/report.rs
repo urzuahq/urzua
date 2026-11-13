@@ -1217,6 +1217,48 @@ pub struct NewReport {
     pub notices: Vec<Notice>,
 }
 
+/// `urzua waive --from-report`'s report (`ADR-91` point 12, `SPEC-25`).
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct WaiveReport {
+    pub status: ReportStatus,
+    /// `dry-run` or `apply`.
+    pub mode: &'static str,
+    /// The value each draft's `Reason` holds.
+    pub pending_value: String,
+    pub pending_source: crate::waive::PendingSource,
+    pub drafts: Vec<WaiveDraft>,
+    pub skipped: Vec<crate::waive::Skipped>,
+    pub unmatched_filters: Vec<crate::waive::UnmatchedFilter>,
+}
+
+/// One waiver the command drafts (or wrote), for one rule in one file.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct WaiveDraft {
+    /// The record's path: the number it would take now, in a dry run.
+    pub path: PathBuf,
+    /// `null` in a dry run: the id is minted when the record is written.
+    pub stable_id: Option<String>,
+    pub rule: String,
+    pub scope: String,
+    pub findings: WaiveFindings,
+    pub written: bool,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct WaiveFindings {
+    pub count: usize,
+    pub lines: Vec<String>,
+}
+
+impl Report for WaiveReport {
+    fn notices(&self) -> &[Notice] {
+        &[]
+    }
+    fn exit_code(&self) -> ExitCode {
+        ExitCode::from(0)
+    }
+}
+
 /// One reason a number was skipped: `open-pr <ref>` (held by a ref under
 /// `refs/urzua/pr`), `worktree <path>` (held in a sibling worktree) or `local`
 /// (held by a local branch or remote-tracking ref).

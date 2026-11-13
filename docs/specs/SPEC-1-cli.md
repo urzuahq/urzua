@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5AJB7EBVDWVSMCSYZQ
-Version: '0.36'
+Version: '0.37'
 Date: 2026-07-29
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/main.rs#Command@sha256:3476a956db42d6ad4e5fffb773edf176a5fecffad335dc42243a5afbca366224, code:rust/crates/urzua-cli/src/main.rs#emit@sha256:29d071bbb8232c8cd5678d8c5d104830ec9b083471d1575ab768050e59704a71, test:rust/crates/urzua-cli/tests/check_integration.rs#help_exits_0_with_plain_text_not_json@sha256:b188b2cc76395b745caae8e5012ca7a91f5d0e52f9a68aabe377b0cd9fc81c3e, test:rust/crates/urzua-cli/tests/check_integration.rs#a_bad_flag_emits_json_not_a_panic@sha256:eb8bfb4d74748038835831064ab072943e8c32648f99c1202940cb169993747a, test:rust/crates/urzua-cli/tests/check_integration.rs#check_exits_0_on_a_clean_corpus@sha256:585cb12f3f55fb534592e1802d0448163e7aa3fa06e5a91709bc32ab641fecb9, test:rust/crates/urzua-cli/tests/check_integration.rs#check_exits_1_on_a_missing_required_field@sha256:95b88e795e9a4ffb4fe1983f76bf57a3a3191dfc5c579f4ff207381a3ff0c307, test:rust/crates/urzua-cli/tests/check_integration.rs#check_exits_2_when_no_config_exists@sha256:ebf81ea1fb85124a9510dd6f7e0f737e8fd55d4532b0907a23eaa7f46152a5b5, test:rust/crates/urzua-cli/tests/export_integration.rs@sha256:05e83d2904484c2059524a4e60ad40d6141e6025dae569de536528f765954689
+Realized-by: code:rust/crates/urzua-cli/src/main.rs#Command@sha256:16e36c6e826f0e6ff4c8d94c4861c0a0cc5e54a3826c97427677b88172c870df, code:rust/crates/urzua-cli/src/main.rs#emit@sha256:29d071bbb8232c8cd5678d8c5d104830ec9b083471d1575ab768050e59704a71, test:rust/crates/urzua-cli/tests/check_integration.rs#help_exits_0_with_plain_text_not_json@sha256:b188b2cc76395b745caae8e5012ca7a91f5d0e52f9a68aabe377b0cd9fc81c3e, test:rust/crates/urzua-cli/tests/check_integration.rs#a_bad_flag_emits_json_not_a_panic@sha256:eb8bfb4d74748038835831064ab072943e8c32648f99c1202940cb169993747a, test:rust/crates/urzua-cli/tests/check_integration.rs#check_exits_0_on_a_clean_corpus@sha256:585cb12f3f55fb534592e1802d0448163e7aa3fa06e5a91709bc32ab641fecb9, test:rust/crates/urzua-cli/tests/check_integration.rs#check_exits_1_on_a_missing_required_field@sha256:95b88e795e9a4ffb4fe1983f76bf57a3a3191dfc5c579f4ff207381a3ff0c307, test:rust/crates/urzua-cli/tests/check_integration.rs#check_exits_2_when_no_config_exists@sha256:ebf81ea1fb85124a9510dd6f7e0f737e8fd55d4532b0907a23eaa7f46152a5b5, test:rust/crates/urzua-cli/tests/export_integration.rs@sha256:05e83d2904484c2059524a4e60ad40d6141e6025dae569de536528f765954689
 Author: beauwilliams
 Subject: 'The `urzua` CLI: its command surface, output contract, and the cross-cutting rules every command obeys -- the parent of the per-command and per-type specs split out from it.'
 Implements: ADR-1, ADR-2, ADR-3
@@ -46,6 +46,7 @@ because you cannot sell a decision graph you have never run against a real corpu
 > | **SPEC-13** | `urzua explain` / `urzua graph` | Accepted |
 > | **SPEC-14** | `urzua migrate ids` / `urzua migrate schema` / `urzua migrate config` | Accepted |
 > | **SPEC-15** | `urzua doctor` | Accepted |
+> | **SPEC-25** | `urzua waive --from-report` | Draft |
 >
 > Its number and identity are unchanged deliberately. Roughly thirty-five records, comments and
 > source files cite `SPEC-1` for the rules above; renumbering or repurposing it would be the
@@ -98,6 +99,12 @@ original command surface — the gap surfaced when the bootstrap plan needed it.
 assigned, never asking the author to pick a number. The numbers it passed over because a branch, an open
 pull request or a sibling worktree already holds them are in the report's `skipped` list, each with its
 reason, and not on stderr (`ADR-93`, Amendment of 2026-11-07).
+
+### `urzua waive --from-report`
+**Specified in full by SPEC-25.** Drafts one pending waiver per rule and file for the current findings
+(`ADR-91`): a `Reason` holding the type's pending value and no `Expires`, so a draft suppresses nothing until
+a person fills it in. Today it previews only (JSON on stdout, exit 0 when it ran, 2 when it could not);
+writing the drafts is the next change.
 
 ### `urzua check [paths...]`
 **Specified in full by SPEC-2.** The validator. Exit non-zero on error; stdout is always the JSON
@@ -379,3 +386,5 @@ None. Every question this spec carried has been answered or routed:
 > | 2026-11-08 | Bumped to `0.34`. The CLI gains the global `--as-of YYYY-MM-DD` evaluation date and a top-level `as_of` on the reports of `check`, `audit`, `fix` and `reverify`, with its refusals; no pinned symbol of this spec changed. **Why:** maintainer decision of 2026-11-08 (the second `ADR-97` amendment of that date): a verdict must be reproducible and upcoming expiries previewable. | **substantive** |
 > | 2026-11-09 | Bumped to `0.35`. Note on the log: The version numbers of earlier `Bumped to` rows are not strictly increasing, and history is not rewritten: the order of the rows is the order the changes landed, and the current `Version` header is authoritative. Rows affected: `0.15` appears twice (the `Accepted` to `Shipped` row and the later `urzua audit` row), and the `0.15` `audit` row comes after `0.17`. **Why:** a review found the out-of-order and repeated numbers and a reader could be misled about which row introduced which version. | **structural** |
 > | 2026-11-09 | Bumped to `0.36`. Re-pin rows in this revision log were reworded to name who re-verified, matching the tool's wording since 2026-11-09; hashes, reasons and dates are unchanged. **Why:** Maintainer decision, 2026-11-09. | **structural** |
+> | 2026-11-13 | Bumped to `0.37`. The CLI gains `urzua waive --from-report` (`ADR-91`, `SPEC-25`), previewing the pending waivers it would draft; the `Command` enum pin is re-baselined in the Re-baselined row. **Why:** `MILE-205`. | **substantive** |
+> | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/main.rs#Command` (lines 114-378) 3476a956db42 -> 16e36c6e826f. Reason: Read the diff of each re-pinned file against main. the Command enum gained one Waive variant (urzua waive --from-report, with --rule, --path and --by); every existing variant is unchanged, so the command surface SPEC-1 describes still holds with one added command. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
