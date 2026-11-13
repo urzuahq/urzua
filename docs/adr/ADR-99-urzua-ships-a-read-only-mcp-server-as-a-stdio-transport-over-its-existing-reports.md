@@ -1,6 +1,7 @@
 ---
 Stable-Id: 01M7A8QFEVHGZ559S89JSYR8TA
-Status: Proposed
+Status: Accepted
+Accepted-on: 2026-11-13
 Date: 2026-11-13
 Author: beauwilliams
 Deciders: beauwilliams
@@ -120,3 +121,4 @@ costs a dependency review, because the tools sit behind the dispatch layer.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-13 | Filed as Proposed; the decisions were approved by the maintainer in conversation on 2026-11-13, and the Status moves to Accepted in a follow-up the maintainer approves. **Why:** the maintainer's decision of 2026-11-13, taking the recommendation on each of the seven choices (engine transport, generic status filter, stdio only, `urzua mcp`, hand-written JSON-RPC crate, report JSON as the result, registration by snippet) and choosing an ADR with no separate RFC; it closes `MILE-47`. The status stays Proposed here because `status.transition-allowed` refuses a new ADR that starts at Accepted (`ADR-72`), and `diff.decider-required` asks for an approver of the change that makes it Accepted. | **substantive** |
+> | 2026-11-13 | Status changed from Proposed to Accepted; accepted by the maintainer on 2026-11-13. **Why:** the maintainer approved these decisions in conversation on 2026-11-13 (see the row above); this change, which the maintainer approves on the pull request, carries the acceptance that `status.transition-allowed` and `diff.decider-required` require to happen in its own change. | **substantive** |
