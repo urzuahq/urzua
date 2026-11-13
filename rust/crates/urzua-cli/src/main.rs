@@ -127,23 +127,10 @@ enum Command {
 
     /// Draft one pending waiver per rule and file for the current findings.
     ///
-    /// Runs `check` in process and previews the waivers it would write; nothing is
-    /// written yet. A draft carries a pending Reason and no Expires, so it suppresses
+    /// Runs `check` in process and previews the waivers it would write; `--apply`
+    /// writes them. A draft carries a pending Reason and no Expires, so it suppresses
     /// nothing until a person fills it in. Exit 0 when it ran, 2 when it could not.
-    Waive {
-        /// Draft from the current findings (the only source today).
-        #[arg(long, required = true)]
-        from_report: bool,
-        /// Only findings of these rules (comma-separated or repeated).
-        #[arg(long, value_delimiter = ',')]
-        rule: Vec<String>,
-        /// Only findings in this file or under this directory (repeatable; a path, not a glob).
-        #[arg(long)]
-        path: Vec<PathBuf>,
-        /// Author named in each draft's revision log; defaults to the git identity.
-        #[arg(long)]
-        by: Option<String>,
-    },
+    Waive(commands::waive::WaiveArgs),
 
     /// Validate records. Non-zero exit on error.
     ///
@@ -582,7 +569,7 @@ fn main() -> ExitCode {
             title,
             by,
         } => commands::new::run(cli.config, record_type, title, by),
-        Command::Waive { rule, path, by, .. } => commands::waive::run(cli.config, rule, path, by),
+        Command::Waive(args) => commands::waive::run(cli.config, args),
         Command::Audit => commands::audit::run(cli.config),
         Command::Migrate { target } => dispatch_migrate(cli.config, target),
         Command::Export { format } => dispatch_export(cli.config, format),
@@ -719,9 +706,10 @@ fn fix_evaluation_date(cli: &Cli) -> Result<(), String> {
         Command::Audit => ("audit", false),
         Command::Fix { apply, .. } => ("fix", *apply),
         Command::Reverify { apply, .. } => ("reverify", *apply),
+        Command::Waive(args) => ("waive", args.apply),
         other => {
             return Err(format!(
-                "--as-of is not accepted by `urzua {}`: it compares no dates against an evaluation date (it applies to check, audit, fix and reverify)",
+                "--as-of is not accepted by `urzua {}`: it compares no dates against an evaluation date (it applies to check, audit, fix, reverify and waive)",
                 command_name(other)
             ))
         }
@@ -737,7 +725,7 @@ fn fix_evaluation_date(cli: &Cli) -> Result<(), String> {
 fn command_name(command: &Command) -> &'static str {
     match command {
         Command::New { .. } => "new",
-        Command::Waive { .. } => "waive",
+        Command::Waive(_) => "waive",
         Command::Check { .. } => "check",
         Command::Explain { .. } => "explain",
         Command::Graph => "graph",
