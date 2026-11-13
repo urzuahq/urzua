@@ -1240,10 +1240,22 @@ pub struct NewReport {
     pub notices: Vec<Notice>,
 }
 
+/// How a `urzua waive` run ended.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum WaiveStatus {
+    /// It ran: a preview, or every draft written.
+    Ok,
+    /// An `--apply` wrote some drafts and then failed (exit 1), as `fix` does.
+    PartialFailure,
+    /// It could not run, or an `--apply` failed before writing any draft (exit 2).
+    NotRun,
+}
+
 /// `urzua waive --from-report`'s report (`ADR-91` point 12, `SPEC-25`).
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct WaiveReport {
-    pub status: ReportStatus,
+    pub status: WaiveStatus,
     /// `dry-run` or `apply`.
     pub mode: &'static str,
     /// The value each draft's `Reason` holds.
@@ -1252,6 +1264,11 @@ pub struct WaiveReport {
     pub drafts: Vec<WaiveDraft>,
     pub skipped: Vec<crate::waive::Skipped>,
     pub unmatched_filters: Vec<crate::waive::UnmatchedFilter>,
+    /// Why an `--apply` stopped before writing every draft (`status` is then
+    /// `partial-failure`, or `not-run` when none was written); `drafts[].written`
+    /// says which were written.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
 }
 
 /// One waiver the command drafts (or wrote), for one rule in one file.
@@ -1259,7 +1276,8 @@ pub struct WaiveReport {
 pub struct WaiveDraft {
     /// The record's path: the number it would take now, in a dry run.
     pub path: PathBuf,
-    /// `null` in a dry run: the id is minted when the record is written.
+    /// `null` in a dry run: the id is minted when the record is written, and
+    /// stays `null` for a draft that was not written.
     pub stable_id: Option<String>,
     pub rule: String,
     pub scope: String,
@@ -1277,8 +1295,13 @@ impl Report for WaiveReport {
     fn notices(&self) -> &[Notice] {
         &[]
     }
+    /// 0 when it ran, 1 after a partial write, 2 when nothing could be written.
     fn exit_code(&self) -> ExitCode {
-        ExitCode::from(0)
+        ExitCode::from(match self.status {
+            WaiveStatus::Ok => 0,
+            WaiveStatus::PartialFailure => 1,
+            WaiveStatus::NotRun => 2,
+        })
     }
 }
 

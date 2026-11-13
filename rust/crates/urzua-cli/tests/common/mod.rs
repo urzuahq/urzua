@@ -8,6 +8,8 @@
 // Each test crate compiles this module and uses only part of it.
 #![allow(dead_code)]
 
+pub mod waive;
+
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
