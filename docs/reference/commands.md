@@ -232,16 +232,20 @@ frames only. `--root` is the repository to serve; without it the server uses the
 current directory. It exits 2, with a JSON could-not-run on stderr, when it cannot read the config.
 `--as-of` is refused.
 
-Two tools are built, each returning the report its command prints as `structuredContent` and as the same
-JSON in one text block, and each advertised read-only:
+Five tools, each returning the report its command prints as `structuredContent` and as the same JSON in
+one text block, and each advertised read-only:
 
 - **`urzua_check`** takes optional `paths`, `base` and `rules` and returns the `check` report.
 - **`urzua_list_records`** takes an optional `type` and optional `status` list and returns each matching
   record's id, type, path and header fields, without its text. Rejected and superseded decisions are
   `type: "adr"` with `status: ["Rejected", "Superseded"]`.
+- **`urzua_show_record`** takes an `id` and returns that record in full and the relation edges that touch it.
+- **`urzua_get_findings_for_path`** takes a `path` and returns the `explain` report.
+- **`urzua_get_graph`** takes nothing and returns the `graph` report.
 
 No tool writes. A call to any other tool name is refused. Register it in your agent's MCP configuration
-with `command: urzua` and `args: ["mcp"]` (add `--root` when the agent does not start it in the repository); `harness install` does not write MCP configuration.
+with `command: urzua` and `args: ["mcp"]` (add `--root` when the agent does not start it in the repository);
+`harness install` does not write MCP configuration. [The MCP server](mcp.md) has the details.
 
 ## rules
 

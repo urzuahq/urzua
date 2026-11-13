@@ -17,6 +17,7 @@ Read them in this order the first time:
 | [Waivers and drift](waivers-and-drift.md) | Reviewed exceptions, evidence pins, `fix`, `reverify` |
 | [CI](ci.md) | The gate action and the stale-pin step |
 | [The agent harness](agent-harness.md) | Hooks that make an AI agent's edits go through urzua |
+| [The MCP server](mcp.md) | `urzua mcp`: a read-only server that lets an agent read records, findings and relations |
 
 Two things to know before you start:
 
