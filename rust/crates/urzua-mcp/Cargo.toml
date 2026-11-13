@@ -1,0 +1,14 @@
+[package]
+name = "urzua-mcp"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+# The protocol layer only (SPEC-26): framing and dispatch over `Read` and
+# `Write`. It touches no filesystem and takes no dependency beyond the
+# `serde_json` the workspace already uses (ADR-99).
+[dependencies]
+serde_json = { workspace = true }
