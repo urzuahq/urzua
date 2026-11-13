@@ -282,6 +282,7 @@ fn a_prefix_only_configuration_still_treats_a_test_file_as_source() {
 /// declaration, run on a throwaway repository with the same layout.
 #[test]
 fn this_repositorys_own_config_lets_a_crate_test_change_through_but_not_its_source() {
+    let own = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../.urzua/config.yaml");
     let dir = common::TempDir::new("urzua-diff-gate-own");
     for sub in [".urzua", "rust/crates/x/src", "rust/crates/x/tests"] {
         std::fs::create_dir_all(dir.join(sub)).unwrap();
@@ -289,11 +290,7 @@ fn this_repositorys_own_config_lets_a_crate_test_change_through_but_not_its_sour
     git(&dir, &["init", "-q"]);
     git(&dir, &["config", "user.email", "test@example.com"]);
     git(&dir, &["config", "user.name", "test"]);
-    std::fs::write(
-        dir.join(".urzua/config.yaml"),
-        common::own_config_for_fixture(),
-    )
-    .unwrap();
+    std::fs::copy(own, dir.join(".urzua/config.yaml")).unwrap();
     std::fs::write(dir.join("rust/crates/x/src/lib.rs"), "fn a() {}\n").unwrap();
     std::fs::write(dir.join("rust/crates/x/tests/t.rs"), "fn t() {}\n").unwrap();
     git(&dir, &["add", "-A"]);
@@ -595,6 +592,7 @@ fn the_gate_options_are_refused_on_a_rule_that_does_not_take_them() {
 /// repository carrying its record types.
 #[test]
 fn this_repositorys_own_gate_holds_a_source_change_until_a_decision_fix_or_link_changes() {
+    let own = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../.urzua/config.yaml");
     let dir = common::TempDir::new("urzua-diff-gate-own-decision");
     for sub in [
         ".urzua",
@@ -609,11 +607,7 @@ fn this_repositorys_own_gate_holds_a_source_change_until_a_decision_fix_or_link_
     git(&dir, &["init", "-q"]);
     git(&dir, &["config", "user.email", "test@example.com"]);
     git(&dir, &["config", "user.name", "test"]);
-    std::fs::write(
-        dir.join(".urzua/config.yaml"),
-        common::own_config_for_fixture(),
-    )
-    .unwrap();
+    std::fs::copy(own, dir.join(".urzua/config.yaml")).unwrap();
     let write = |path: &str, header: &str| {
         std::fs::write(
             dir.join(path),

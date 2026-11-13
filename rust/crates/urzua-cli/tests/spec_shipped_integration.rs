@@ -4,6 +4,7 @@
 
 mod common;
 
+use std::path::Path;
 use std::process::Command;
 
 fn run_with_own_config(name: &str, spec: &str) -> serde_json::Value {
@@ -16,11 +17,8 @@ fn run_with_own_config(name: &str, spec: &str) -> serde_json::Value {
         .status()
         .unwrap()
         .success());
-    std::fs::write(
-        dir.join(".urzua/config.yaml"),
-        common::own_config_for_fixture(),
-    )
-    .unwrap();
+    let cfg = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../.urzua/config.yaml");
+    std::fs::copy(cfg, dir.join(".urzua/config.yaml")).unwrap();
     std::fs::write(dir.join("docs/specs/SPEC-1-first.md"), spec).unwrap();
     assert!(Command::new("git")
         .args(["add", "-A"])

@@ -4,10 +4,12 @@
 
 mod common;
 
+use std::path::Path;
 use std::process::Command;
 
 fn own_config() -> String {
-    common::own_config_for_fixture()
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../.urzua/config.yaml");
+    std::fs::read_to_string(path).expect("repository config readable")
 }
 
 fn run(name: &str, config: &str) -> serde_json::Value {

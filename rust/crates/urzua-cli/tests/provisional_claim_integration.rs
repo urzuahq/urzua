@@ -3,17 +3,15 @@
 
 mod common;
 
+use std::path::Path;
 use std::process::Command;
 
 fn run_with_own_config(name: &str, files: &[(&str, &str)]) -> serde_json::Value {
     let dir = common::TempDir::new(&format!("urzua-provisional-{name}"));
     std::fs::create_dir_all(dir.join("docs/rfc")).unwrap();
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
-    std::fs::write(
-        dir.join(".urzua/config.yaml"),
-        common::own_config_for_fixture(),
-    )
-    .unwrap();
+    let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../.urzua/config.yaml");
+    std::fs::copy(config, dir.join(".urzua/config.yaml")).unwrap();
     for (file, body) in files {
         std::fs::write(dir.join("docs/rfc").join(file), body).unwrap();
     }

@@ -23,11 +23,8 @@ fn repo(name: &str, files: &[(&str, &str)]) -> common::TempDir {
     git(&dir, &["init", "-q"]);
     git(&dir, &["config", "user.email", "test@example.com"]);
     git(&dir, &["config", "user.name", "test"]);
-    std::fs::write(
-        dir.join(".urzua/config.yaml"),
-        common::own_config_for_fixture(),
-    )
-    .unwrap();
+    let cfg = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../.urzua/config.yaml");
+    std::fs::copy(cfg, dir.join(".urzua/config.yaml")).unwrap();
     // The own config declares `sections.order: {from: template}`, which reads
     // each type's template, so the fixture carries them.
     let templates = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../.urzua/templates");

@@ -492,7 +492,10 @@ fn an_edit_through_a_symlink_is_judged_as_the_file_it_writes() {
 
 #[test]
 fn this_repositorys_templates_are_a_protected_path() {
-    let own = common::own_config_for_fixture();
+    let own = std::fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../.urzua/config.yaml"),
+    )
+    .unwrap();
     let dir = fixture("templates", &own);
     let (code, v) = run_edit(&dir, ".urzua/templates/adr.md", "x\n");
     assert_eq!(code, 1, "{v}");

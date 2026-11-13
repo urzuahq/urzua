@@ -3,17 +3,15 @@
 
 mod common;
 
+use std::path::Path;
 use std::process::Command;
 
 fn run(name: &str, extra: &str) -> serde_json::Value {
     let dir = common::TempDir::new(&format!("urzua-date-order-{name}"));
     std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
-    std::fs::write(
-        dir.join(".urzua/config.yaml"),
-        common::own_config_for_fixture(),
-    )
-    .unwrap();
+    let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../.urzua/config.yaml");
+    std::fs::copy(config, dir.join(".urzua/config.yaml")).unwrap();
     std::fs::write(
         dir.join("docs/adr/ADR-1-first.md"),
         format!("---\nStatus: Accepted\nDate: 2026-03-02\nAuthor: Ana\nDeciders: Ana\n{extra}---\n# 1 - First\n"),

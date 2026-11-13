@@ -47,11 +47,7 @@ fn repo(name: &str, files: &[(&str, &str)]) -> common::TempDir {
     git(&dir, &["init", "-q"]);
     git(&dir, &["config", "user.email", "test@example.com"]);
     git(&dir, &["config", "user.name", "test"]);
-    std::fs::write(
-        dir.join(".urzua/config.yaml"),
-        common::strip_drift_baseline(&own_config()),
-    )
-    .unwrap();
+    std::fs::write(dir.join(".urzua/config.yaml"), own_config()).unwrap();
     // The own config declares `sections.order: {from: template}`, which reads
     // each type's template, so the fixture carries them.
     let templates = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../.urzua/templates");
@@ -357,19 +353,23 @@ fn new_waiver_scaffolds_justified_by_from_the_repositorys_own_template() {
     }
 }
 
-/// MILE-49: this repository declares `drift_baseline` on `embodiment.consistency`
-/// and the ref resolves to a commit in its own history, so every `check` of the
-/// repository exercises the option.
+/// MILE-49: this repository does not declare `drift_baseline` (it would hold
+/// out nothing here; fixtures exercise it), but its configuration's shape
+/// accepts the option on `embodiment.consistency`.
 #[test]
-fn own_config_declares_a_drift_baseline_that_resolves_in_this_repository() {
-    let config = urzua_core::config::parse(&own_config()).expect("repository config parses");
+fn own_config_shape_accepts_a_drift_baseline_on_consistency() {
+    let own = own_config();
+    assert!(!own.contains("drift_baseline"), "not declared in the own config");
+    let anchor = "    drift_audit_field: \"Last-audited\"\n";
+    assert_eq!(own.matches(anchor).count(), 1, "the anchor line moved");
+    let declared = own.replace(
+        anchor,
+        &format!("{anchor}    drift_baseline: {{ref: v0.3.0}}\n"),
+    );
+    let config = urzua_core::config::parse(&declared).expect("config with a baseline parses");
     let baseline = config.rules["embodiment.consistency"]
         .drift_baseline
         .as_ref()
-        .expect("embodiment.consistency declares drift_baseline");
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-    let commit = urzua_io::resolve_commit(&root, &baseline.git_ref).unwrap_or_else(|e| {
-        panic!("the baseline ref must resolve (fetch tags and full history): {e}")
-    });
-    assert_eq!(commit.len(), 40, "{commit}");
+        .expect("drift_baseline is read");
+    assert_eq!(baseline.git_ref, "v0.3.0");
 }
