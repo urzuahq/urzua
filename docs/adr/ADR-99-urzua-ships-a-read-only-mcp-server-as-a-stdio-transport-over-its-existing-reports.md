@@ -5,7 +5,7 @@ Accepted-on: 2026-11-13
 Date: 2026-11-13
 Author: beauwilliams
 Deciders: beauwilliams
-Embodiment: null
+Embodiment: Verified
 Supersedes / Superseded-by: null
 ---
 # 99 — urzua ships a read-only MCP server as a stdio transport over its existing reports
@@ -120,3 +120,4 @@ costs a dependency review, because the tools sit behind the dispatch layer.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-13 | Filed as Accepted: accepted by the maintainer on 2026-11-13. **Why:** the maintainer's decision of 2026-11-13, taking the recommendation on each of the seven choices (engine transport, generic status filter, stdio only, `urzua mcp`, hand-written JSON-RPC crate, report JSON as the result, registration by snippet) and choosing an ADR with no separate RFC; it closes `MILE-47`. | **substantive** |
+> | 2026-11-13 | Tool-authored (by beauwilliams, identity: gh-verified, actor: agent): recomputed `Embodiment` from `no Realized-by field; cited by test back-pointers` -- stated no value disagreed with the computed value `Verified`. | **structural** |

@@ -2,6 +2,7 @@
 //! type as plain data, so tooling reads records through the same parser
 //! `check` uses instead of a second one (`MILE-115`).
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
@@ -12,6 +13,7 @@ use urzua_core::report::{
 };
 
 use urzua_core::config::Config;
+use urzua_core::record::Record;
 
 use crate::emit;
 use crate::session::{emit_or_not_run, Session};
@@ -61,58 +63,7 @@ pub(crate) fn build(
 
     let mut exported: Vec<ExportedRecord> = records
         .iter()
-        .map(|record| {
-            let text = full_text
-                .get(&record.path)
-                .map(String::as_str)
-                .unwrap_or_default();
-            let read = urzua_core::rules::exported_sections(
-                record,
-                &config.record_types[&record.record_type],
-                text,
-            );
-            let (sections, preamble) = match read {
-                Some((sections, preamble)) => (
-                    Some(
-                        sections
-                            .into_iter()
-                            .map(|s| ExportedSectionEntry {
-                                name: s.name,
-                                heading: s.heading,
-                                line: s.line,
-                                end_line: s.end_line,
-                                content: s.content,
-                            })
-                            .collect(),
-                    ),
-                    Some(preamble),
-                ),
-                None => (None, None),
-            };
-            ExportedRecord {
-                sections,
-                preamble,
-                record_type: record.record_type.clone(),
-                path: record.path.clone(),
-                id: urzua_core::rules::record_id(record),
-                stable_id: record.header.get_reserved("Stable-Id").map(str::to_string),
-                // A type declaring `header_shape: none` has no header by
-                // design; that is readable, not a parse failure.
-                header_readable: config.record_types[&record.record_type].has_no_header()
-                    || !record.header.is_unreadable(),
-                header: record
-                    .header
-                    .fields
-                    .iter()
-                    .map(|f| ExportedField {
-                        name: f.key.to_string(),
-                        value: f.value.clone(),
-                        line: f.line,
-                    })
-                    .collect(),
-                raw_text: text.to_string(),
-            }
-        })
+        .map(|record| exported_record(record, &config, &full_text))
         .collect();
     exported.sort_by(|a, b| (&a.record_type, &a.path).cmp(&(&b.record_type, &b.path)));
     let notices = apply_filter(&mut exported, &config, filter);
@@ -136,6 +87,64 @@ pub(crate) fn build(
             .then(|| urzua_core::rules::compute_roadmap(&records, &config)),
         notices,
     })
+}
+
+/// One record as plain data: its header, sections and complete text.
+fn exported_record(
+    record: &Record,
+    config: &Config,
+    full_text: &HashMap<PathBuf, String>,
+) -> ExportedRecord {
+    let text = full_text
+        .get(&record.path)
+        .map(String::as_str)
+        .unwrap_or_default();
+    let read = urzua_core::rules::exported_sections(
+        record,
+        &config.record_types[&record.record_type],
+        text,
+    );
+    let (sections, preamble) = match read {
+        Some((sections, preamble)) => (
+            Some(
+                sections
+                    .into_iter()
+                    .map(|s| ExportedSectionEntry {
+                        name: s.name,
+                        heading: s.heading,
+                        line: s.line,
+                        end_line: s.end_line,
+                        content: s.content,
+                    })
+                    .collect(),
+            ),
+            Some(preamble),
+        ),
+        None => (None, None),
+    };
+    ExportedRecord {
+        sections,
+        preamble,
+        record_type: record.record_type.clone(),
+        path: record.path.clone(),
+        id: urzua_core::rules::record_id(record),
+        stable_id: record.header.get_reserved("Stable-Id").map(str::to_string),
+        // A type declaring `header_shape: none` has no header by
+        // design; that is readable, not a parse failure.
+        header_readable: config.record_types[&record.record_type].has_no_header()
+            || !record.header.is_unreadable(),
+        header: record
+            .header
+            .fields
+            .iter()
+            .map(|f| ExportedField {
+                name: f.key.to_string(),
+                value: f.value.clone(),
+                line: f.line,
+            })
+            .collect(),
+        raw_text: text.to_string(),
+    }
 }
 
 /// Narrows `exported` to what `filter` names and returns the notices for a

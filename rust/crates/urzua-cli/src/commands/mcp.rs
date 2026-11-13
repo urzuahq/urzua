@@ -4,7 +4,7 @@
 //! module and that crate contain no code that writes (`mcp_integration` scans
 //! both for write APIs).
 //!
-//! Implements: SPEC-26
+//! Implements: ADR-99
 
 use std::io::Write;
 use std::path::{Component, Path, PathBuf};

@@ -7,7 +7,7 @@
 //! filesystem, process or network code: the report-producing calls are supplied
 //! by the caller through [`Host`], and every tool is advertised read-only.
 //!
-//! Implements: SPEC-26
+//! Implements: ADR-99
 
 #![forbid(unsafe_code)]
 

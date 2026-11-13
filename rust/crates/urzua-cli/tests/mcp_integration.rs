@@ -4,7 +4,7 @@
 //! after every call, stdout carries only JSON-RPC frames, and a scan of the
 //! server's sources finds no write API (a planted source shows it can fail).
 //!
-//! Verifies: SPEC-26
+//! Verifies: ADR-99
 
 mod common;
 

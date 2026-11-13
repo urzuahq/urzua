@@ -27,6 +27,7 @@ below were written from that output.
 | [`fix`](#fix) | Detect, and with `--apply` repair, derived fields and stale pins | with `--apply` |
 | [`reverify`](#reverify) | Renew an expired evidence claim | with `--apply` |
 | [`waive`](#waive) | Preview waiver drafts for the current findings | no |
+| [`mcp`](#mcp) | Serve the corpus to an agent over MCP, read-only | no |
 | [`doctor`](#doctor) | Report the health of the config and its wiring | no |
 | [`explain`](#explain) | Which records govern a path, or what a rule is | no |
 | [`graph`](#graph) | The record relationship graph | no |
@@ -218,6 +219,29 @@ record blocks and a grouping. It reads the sequencing pairs declared under `road
 config and stores nothing. A repository that declares none gets a note (`no-sequencing-pair`), not an
 empty roadmap. Output: `status` and `roadmap` with `schema`, `pairs`, `waves`, `ready`,
 `critical_path`, `records`, `groups`, `needs_replan`, `cycles` and `notes`.
+
+## mcp
+
+```text
+urzua mcp [--root <dir>]
+```
+
+A read-only Model Context Protocol server on stdio, so an agent can read the corpus without a shell. It
+speaks newline-delimited JSON-RPC 2.0 on stdin and stdout until stdin closes, and stdout carries protocol
+frames only. `--root` is the repository to serve; without it the server uses `CLAUDE_PROJECT_DIR`, else
+the current directory. It exits 2, with a JSON could-not-run on stderr, when it cannot read the config.
+`--as-of` is refused.
+
+Two tools are built, each returning the report its command prints as `structuredContent` and as the same
+JSON in one text block, and each advertised read-only:
+
+- **`urzua_check`** takes optional `paths`, `base` and `rules` and returns the `check` report.
+- **`urzua_list_records`** takes an optional `type` and optional `status` list and returns each matching
+  record's id, type, path and header fields, without its text. Rejected and superseded decisions are
+  `type: "adr"` with `status: ["Rejected", "Superseded"]`.
+
+No tool writes. A call to any other tool name is refused. Register it in your agent's MCP configuration
+with `command: urzua` and `args: ["mcp"]`; `harness install` does not write MCP configuration.
 
 ## rules
 
