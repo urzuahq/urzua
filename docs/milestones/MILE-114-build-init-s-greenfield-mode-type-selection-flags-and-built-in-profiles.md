@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M378CTK581CR9DG5WXFT3N6R
-Status: Planned
+Status: Done
 Phase: '1'
 Track: write-path
 Implements: RFC-1
@@ -49,13 +49,13 @@ in `SPEC-5` before this milestone existed.
 
 ## Done means
 
-- `urzua init --types adr,rfc,spec [--dir docs]` runs non-interactively on a repository with no records.
-- An interactive `urzua init` run picks types from a menu.
-- Built-in profiles for `adr`, `rfc`, `spec` and `prd` are materialized as visible rules in the written `config.yaml`, never referenced by name.
-- The `config.yaml` that greenfield `init` writes passes `check`.
-- Adopt reports a record-shaped file it could not classify by path instead of excluding it silently.
-- The open questions listed in the What (CI and hook wiring, the display-number scheme, rule inference, one `.urzua/` per monorepo) are each decided or recorded.
-- `SPEC-5` describes exactly what ships.
+- `urzua init --types adr,rfc,spec [--dir docs]` runs non-interactively on a repository with no records. — evidence: test:rust/crates/urzua-cli/tests/init_greenfield_integration.rs#types_writes_a_config_and_templates_for_each_selected_profile@sha256:ed489550207d3c3714546944126650802ad0c443fb19c92af26543eccdc453df, test:rust/crates/urzua-cli/tests/init_greenfield_integration.rs#dir_sets_the_layout_root@sha256:fe74ff16c0b162486ba5b484af9a299e5df2b1302c33ed17d5c00de632aca89c
+- An interactive `urzua init` run picks types from a menu. — evidence: test:rust/crates/urzua-cli/tests/init_greenfield_integration.rs#on_a_terminal_init_asks_which_types_to_govern@sha256:dc846744eda315b6f7f2c4cad265ce86f493695ebc0949026271337ae5eb1709, code:rust/crates/urzua-cli/src/commands/init_greenfield.rs#prompt_selection@sha256:bd39286a93f9bb46349a30b70b8eba1a8616d43d1acb6bdaad7fb301b3e89f2a
+- Built-in profiles for `adr`, `rfc`, `spec` and `prd` are materialized as visible rules in the written `config.yaml`, never referenced by name. — evidence: test:rust/crates/urzua-cli/tests/init_greenfield_integration.rs#the_profiles_are_materialized_as_visible_rules_in_the_config@sha256:04d01a1649dd4e9b2cfb3f050baf07b858f17451c26895735f1f3a22b8c3e147, code:rust/crates/urzua-cli/src/commands/init_greenfield.rs@sha256:c82169d04f38e1b218465d63387f170a56507d9b8327a720e2e7093b1e8e10de
+- The `config.yaml` that greenfield `init` writes passes `check`. — evidence: test:rust/crates/urzua-cli/tests/init_greenfield_integration.rs#the_written_config_passes_check_and_new_writes_a_stable_id_for_every_type@sha256:c955fee775949944b66419eb7f31f44c5d292b958eebfd40a7d5c4bfb576038e
+- Adopt reports a record-shaped file it could not classify by path instead of excluding it silently. — evidence: test:rust/crates/urzua-cli/tests/init_greenfield_integration.rs#adopt_reports_a_root_level_record_it_could_not_classify@sha256:26650cd82a71054e44a96f88d2781f4a22d4c26864f86bf53451095b65ae047f, test:rust/crates/urzua-cli/tests/init_greenfield_integration.rs#record_shaped_files_outside_the_selected_types_are_reported_not_errored@sha256:c2a9685601c3475b3bcc663e66fe30be3750aa55b888351a517f2599078af0c3
+- The open questions listed in the What (CI and hook wiring, the display-number scheme, rule inference, one `.urzua/` per monorepo) are each decided or recorded. — evidence: spec:docs/specs/SPEC-5-urzua-init.md
+- `SPEC-5` describes exactly what ships. — evidence: spec:docs/specs/SPEC-5-urzua-init.md
 
 ## References
 
@@ -72,3 +72,7 @@ in `SPEC-5` before this milestone existed.
 > | 2026-09-23 | Filed, relocating `SPEC-5`'s aspirational sections (greenfield mode, `--types`/`--dir`, built-in profiles, unclassified-file reporting) and its two unresolved success criteria and four open questions, so `SPEC-5` can be corrected to describe only what ships (`BUG-26`). | **substantive** |
 > | 2026-11-04 | Done means added. **Why:** maintainer decision of 2026-11-04: every milestone, open or closed, states its Done means, and `section.required` enforces it. Derived from this record's What and Why; `Status` unchanged. | **structural** |
 > | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |
+> | 2026-11-13 | Built: greenfield `init` with `--types`/`--dir`, the `adr`, `rfc`, `spec` and `prd` profiles written out into the config, starter templates, the interactive menu, and adopt's notice for a root-level record; the four open questions are decided or recorded in `SPEC-5`. Evidence added to each Done item. **Why:** Maintainer decision, 2026-11-13: the profile contents, `Stable-Id` required in every profile, `prd` provisional, templates written by default, and a file `init` cannot classify is a notice with no exit-code change. | **substantive** |
+> | 2026-11-13 | Tool-authored (by beauwilliams, identity: gh-verified, actor: agent): recomputed `Status` from `the Done means items (7 of 7 items resolved) computes to Specified` -- stated `Planned` disagreed with the computed value `Done`. | **structural** |
+> | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/init_greenfield_integration.rs#the_profiles_are_materialized_as_visible_rules_in_the_config` (lines 69-113) 8b1422bc66a9 -> 04d01a1649dd, `rust/crates/urzua-cli/src/commands/init_greenfield.rs` bbf43c454ad0 -> c82169d04f38. Reason: init_greenfield.rs is a new file against main: it holds the built-in adr, rfc, spec and prd profiles, their materialization into the config, the starter templates and the terminal menu (prompt_selection), which the Done items evidence; the greenfield integration tests pass. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/init_greenfield_integration.rs#on_a_terminal_init_asks_which_types_to_govern` (lines 313-372) 5c9dc9fe74ce -> dc846744eda3. Reason: init_greenfield_integration.rs is a new file against main; the terminal-menu test now redirects the binary's stdout to a file inside the pseudo-terminal and asserts the menu is on the terminal only and stdout is the JSON report alone. The claim each record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
