@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.137'
+Version: '0.138'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:6daa34e96997ef2790c6e8987bde7412d7214784deb8870c891f0946d90ac03a, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:92a2b9ceca89133f30987a013734da66b9332c4e937a87e72e53571596e18093, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:3c8aa671582772499ab7345cdbfb5a4dc2c50462882851fb20f853992acfd57c
@@ -397,7 +397,7 @@ Two details carry weight:
   record_types:
     bug:
       statuses:
-        values:  [Open, Fixed, WontFix]   # every status the type allows; required
+        values:  [Open, Fixed, WontFix]   # every status the type allows; required unless `pending` is declared
         success: [Fixed]                  # terminal, the work was done
         failure: [WontFix]                # terminal, it ended without being done
         implementable: [Open]             # statuses at which code may implement the record
@@ -411,7 +411,7 @@ Two details carry weight:
         forbid:  [{when: [Open], fields: [Fixed-in]}]
   ```
 
-  `values` must list at least one status; `success`, `failure` and `implementable` are optional and
+  `values` must list at least one status unless the type declares `pending`: a type may declare `statuses: {pending: [...]}` and no `values` (a suppression type such as a waiver, whose `Reason` is a placeholder check and not a lifecycle). Such a type declares no status: nothing is `declared`, `success`, `failure`, `require`, `forbid`, `transitions` and `initial` have no status to name and are refused at load, `urzua new` leaves the status field blank, and `status.undeclared-value` reports any status a record of it holds, saying the type declares no values. A declaration of neither `values` nor `pending` is refused at load. A type declaring `values` loads and behaves as before. `success`, `failure` and `implementable` are optional and
   must be subsets of `values`; `success` and `failure` must not overlap. `implementable` names the
   statuses at which implementation of the record is permitted. It is independent of the terminals
   (an in-progress milestone is implementable and not terminal; an accepted decision is both), and
@@ -497,7 +497,7 @@ Two details carry weight:
 
   A type that declares no `statuses` behaves exactly as before. A declaration is read by:
 
-  - `status.undeclared-value`: a `Status` outside `values`.
+  - `status.undeclared-value`: a `Status` outside `values` (every `Status`, for a type that declares `pending` and no `values`).
   - `status.required-field-missing` / `status.forbidden-field-present`: a `require` field that is
     blank, unedited template text or, when the type declares `pending`, one of its whole pending
     values (`MILE-153`) at the record's status, and a `forbid` field that carries a value. Both read
@@ -2439,3 +2439,4 @@ proves this configuration produces the three findings.
 > | 2026-11-09 | Bumped to `0.136`. A back-pointer rule's `ignore_marker` is also refused when it is the tail of a declared id head followed by digits (`DR-1`, `R-12`, `dr-2`). **Why:** such a marker is a substring of every citation of `ADR-1` and of the ids it begins, and loaded. | **substantive** |
 > | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` d62499673ea9 -> 6daa34e96997. Reason: Read the diff of each pinned file since the previous pin. rust/crates/urzua-core/src/config.rs: generic_marker_problem also refuses an ignore_marker that is the tail of a declared id head followed by digits (DR-1, R-12), with test cases; nothing else changed. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-09 | Bumped to `0.137`. The merge-base copy of a renamed record is matched by `Stable-Id` and the same record id, so a renumber reads as new. **Why:** `ADR-89` amendment (rename pairing). | **substantive** |
+> | 2026-11-13 | Bumped to `0.138`. A type may declare `statuses: {pending: [...]}` without `values`; a declaration of neither is refused at load, and a type declaring `values` loads as before. The readers of `values` handle the empty list: `status.undeclared-value` and `authority.gates` say the type declares no values, and `urzua new` leaves the status blank. **Why:** `MILE-205` items 1-3, so a waiver type can hold a pending `Reason` without inventing a status vocabulary (`ADR-91`). | **substantive** |
