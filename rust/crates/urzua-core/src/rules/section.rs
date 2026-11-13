@@ -30,9 +30,7 @@ pub fn section_required(
         full_text,
         |_| true,
         |slot, sections| {
-            if find_section(sections, slot.required).is_none()
-                && !preamble_carries_marker(slot.required, &slot.preamble(sections))
-            {
+            if !required_is_met(slot.required, sections, &slot.preamble(sections)) {
                 findings.push(Finding::new(
                     RULE_SECTION_REQUIRED,
                     FindingSeverity::Error,
@@ -282,6 +280,51 @@ pub fn exported_sections(
         })
         .collect();
     Some((exported, preamble))
+}
+
+/// Whether `required` is present: a heading under its name or an alias at its
+/// level and parent, or, where it reads the preamble, the preamble carrying the
+/// shape's marker. The one test `section.required` and `urzua doctor` share.
+fn required_is_met(required: &RequiredSection, sections: &[Section], preamble: &Section) -> bool {
+    find_section(sections, required).is_some() || preamble_carries_marker(required, preamble)
+}
+
+/// The `required` sections of the record type `record_type` that `text`, its
+/// template, has no heading for (`MILE-6`). The template is read as a record of
+/// the type is: its header region is skipped, headings are read to the type's
+/// `depth`, and presence is judged by [`required_is_met`], so a heading or a
+/// marker inside a fence or the header counts or not exactly as in
+/// `section.required`. A type declaring no required section has none missing.
+pub fn template_missing_sections(
+    record_type: &str,
+    type_config: &crate::config::RecordTypeConfig,
+    text: &str,
+) -> Vec<RequiredSection> {
+    let Ok(Some(model)) = declared_model(record_type, type_config) else {
+        return Vec::new();
+    };
+    let Some(decl) = model.sections.clone() else {
+        return Vec::new();
+    };
+    let Ok(resolved) = model.resolve() else {
+        return Vec::new();
+    };
+    let record = Record::parse_with_model(
+        PathBuf::from(format!("{record_type}.md")),
+        record_type.to_string(),
+        text,
+        type_config.header_shape,
+        record_type.to_ascii_uppercase(),
+        &resolved,
+    );
+    let sections = record_section_tree(&record, text, decl.depth);
+    let header_end = record.header.region.map_or(0, |(_, end)| end);
+    let preamble = preamble_of(text, header_end, &sections);
+    decl.required
+        .iter()
+        .filter(|r| !required_is_met(r, &sections, &preamble))
+        .cloned()
+        .collect()
 }
 
 /// Whether the declaration reads the preamble and the block's marker sits in
