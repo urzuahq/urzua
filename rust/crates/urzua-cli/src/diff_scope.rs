@@ -139,6 +139,44 @@ fn touched_waiver_scopes(
 /// A record's pairing identity ([`rules::rename_identity`]).
 type Identity = (String, String);
 
+/// Why a deleted record's base copy is being read, which says what an unreadable
+/// copy costs and so which rule the warning names.
+#[derive(Clone, Copy)]
+enum UnreadableCopy {
+    /// To pair a renamed record with the status it had: a read failure leaves
+    /// the new record unpaired (`status.transition-allowed`).
+    RenamePairing,
+    /// To judge the deletion itself (`diff.decider-required`).
+    Deletion,
+}
+
+impl UnreadableCopy {
+    fn notice(self, path: &Path, e: impl std::fmt::Display) -> Notice {
+        let (subject, message) = match self {
+            Self::RenamePairing => (
+                rules::RULE_STATUS_TRANSITION_ALLOWED,
+                format!(
+                    "{}: could not read the merge base's copy of a deleted record, so a record renamed from it cannot be paired and its Status move is not judged: {e}",
+                    path.display()
+                ),
+            ),
+            Self::Deletion => (
+                rules::RULE_DIFF_DECIDER_REQUIRED,
+                format!(
+                    "{}: could not read the merge base's copy of a deleted record, so its deletion is not judged: {e}",
+                    path.display()
+                ),
+            ),
+        };
+        Notice {
+            severity: NoticeSeverity::Warning,
+            subject: subject.to_string(),
+            message,
+            detail: None,
+        }
+    }
+}
+
 /// A deleted record's path, pairing identity and `Status` (`None` where the
 /// base copy has no readable one).
 type DeletedCopy = (PathBuf, Option<Identity>, Option<String>);
@@ -163,6 +201,7 @@ fn deleted_by_stable_id(
     status_field: &str,
     changes: &urzua_io::GitChanges,
     notices: &mut Vec<Notice>,
+    warned: &mut HashSet<PathBuf>,
 ) -> DeletedByIdentity {
     let mut out = DeletedByIdentity::new();
     for (_, identity, status) in deleted_copies(
@@ -172,7 +211,9 @@ fn deleted_by_stable_id(
         type_name,
         status_field,
         changes,
+        UnreadableCopy::RenamePairing,
         notices,
+        warned,
     ) {
         if let Some(identity) = identity {
             out.entry(identity).or_default().push(status);
@@ -188,7 +229,10 @@ fn deleted_by_stable_id(
 /// given, in the base revision's: a pull request cannot take a record out of
 /// the type's reach by editing the declaration in the same change. The base's
 /// declaration is tried first, and parses the base copy. A base copy that
-/// cannot be read is left out and noted, as `committed_statuses` notes one.
+/// cannot be read is left out and noted once per path: `warned` holds the paths
+/// already noted, so the two readers of the same deletion (`committed_statuses`
+/// and `deleted_gated_records`) do not both warn.
+#[allow(clippy::too_many_arguments)]
 fn deleted_copies(
     repo_root: &Path,
     config: &Config,
@@ -196,7 +240,9 @@ fn deleted_copies(
     type_name: &str,
     status_field: &str,
     changes: &urzua_io::GitChanges,
+    reason: UnreadableCopy,
     notices: &mut Vec<Notice>,
+    warned: &mut HashSet<PathBuf>,
 ) -> Vec<DeletedCopy> {
     let mut out = Vec::new();
     let declared: Vec<&RecordTypeConfig> = base_types
@@ -225,15 +271,9 @@ fn deleted_copies(
         let content = match urzua_io::read_at_commit(repo_root, &changes.merge_base, path) {
             Ok(content) => content,
             Err(e) => {
-                notices.push(Notice {
-                    severity: NoticeSeverity::Warning,
-                    subject: rules::RULE_DIFF_DECIDER_REQUIRED.to_string(),
-                    message: format!(
-                        "{}: could not read the merge base's copy of a deleted record, so its deletion is not judged: {e}",
-                        path.display()
-                    ),
-                    detail: None,
-                });
+                if warned.insert(path.clone()) {
+                    notices.push(reason.notice(path, e));
+                }
                 continue;
             }
         };
@@ -274,6 +314,7 @@ fn deleted_copies(
 /// revision's record types, given under `authority.decider_table: base` or
 /// `both`: a file is a record of a gated type when either revision's
 /// declaration owns it.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn deleted_gated_records(
     repo_root: &Path,
     config: &Config,
@@ -282,6 +323,7 @@ pub(crate) fn deleted_gated_records(
     changes: &urzua_io::GitChanges,
     gated: &std::collections::BTreeSet<&str>,
     notices: &mut Vec<Notice>,
+    warned: &mut HashSet<PathBuf>,
 ) -> Vec<rules::DeletedRecord> {
     let mut out = Vec::new();
     if changes.deleted.is_empty() {
@@ -295,7 +337,15 @@ pub(crate) fn deleted_gated_records(
             .filter_map(rules::rename_identity)
             .collect();
         for (path, identity, status) in deleted_copies(
-            repo_root, config, base_types, type_name, field, changes, notices,
+            repo_root,
+            config,
+            base_types,
+            type_name,
+            field,
+            changes,
+            UnreadableCopy::Deletion,
+            notices,
+            warned,
         ) {
             let renamed = identity.is_some_and(|i| heads.contains(&i));
             if !renamed {
@@ -332,6 +382,7 @@ pub(crate) fn committed_statuses(
     changes: &urzua_io::GitChanges,
     also: &std::collections::BTreeSet<&str>,
     notices: &mut Vec<Notice>,
+    warned: &mut HashSet<PathBuf>,
 ) -> HashMap<PathBuf, CommittedStatus> {
     let mut out = HashMap::new();
     // The deleted records' Stable-Ids, read once per type and only when a
@@ -381,6 +432,7 @@ pub(crate) fn committed_statuses(
                             field,
                             changes,
                             notices,
+                            warned,
                         )
                     });
                 let matches: &[Option<String>] = rules::rename_identity(record)
@@ -590,12 +642,92 @@ mod tests {
             "adr",
             "Status",
             &changes,
+            UnreadableCopy::Deletion,
             &mut notices,
+            &mut HashSet::new(),
         );
         assert!(copies.is_empty());
         assert_eq!(notices.len(), 1, "{notices:?}");
         assert!(matches!(notices[0].severity, NoticeSeverity::Warning));
         assert!(notices[0].message.contains("ADR-1-a.md"), "{notices:?}");
+        assert_eq!(notices[0].subject, rules::RULE_DIFF_DECIDER_REQUIRED);
+        let _ = std::fs::remove_dir_all(&repo);
+    }
+
+    /// The same unreadable deleted copy, reached by the rename pairing and by the
+    /// deletion judging, is warned once, under the rule of whichever reached it
+    /// first.
+    #[test]
+    fn an_unreadable_deleted_copy_is_warned_once_per_path() {
+        let repo = std::env::temp_dir().join(format!("urzua-diff-once-{}", std::process::id()));
+        std::fs::create_dir_all(&repo).unwrap();
+        assert!(std::process::Command::new("git")
+            .args(["init", "-q"])
+            .current_dir(&repo)
+            .status()
+            .unwrap()
+            .success());
+        let config = urzua_core::config::parse(
+            "schema_version: 2\nrecord_types:\n  adr:\n    dir: docs/adr\n",
+        )
+        .unwrap();
+        let path = PathBuf::from("docs/adr/ADR-1-a.md");
+        let changes = urzua_io::GitChanges {
+            merge_base: "0000000000000000000000000000000000000000".to_string(),
+            changed: [path.clone()].into(),
+            deleted: [path.clone()].into(),
+            added: Default::default(),
+        };
+        let gated: std::collections::BTreeSet<&str> = ["adr"].into();
+        let (mut notices, mut warned) = (Vec::new(), HashSet::new());
+        let _ = deleted_by_stable_id(
+            &repo,
+            &config,
+            "adr",
+            "Status",
+            &changes,
+            &mut notices,
+            &mut warned,
+        );
+        let _ = deleted_gated_records(
+            &repo,
+            &config,
+            None,
+            &[],
+            &changes,
+            &gated,
+            &mut notices,
+            &mut warned,
+        );
+        assert_eq!(notices.len(), 1, "{notices:?}");
+        assert_eq!(notices[0].subject, rules::RULE_STATUS_TRANSITION_ALLOWED);
+        assert!(
+            notices[0].message.contains("renamed from it"),
+            "{notices:?}"
+        );
+        // The deletion reached first names the decider rule.
+        let (mut notices, mut warned) = (Vec::new(), HashSet::new());
+        let _ = deleted_gated_records(
+            &repo,
+            &config,
+            None,
+            &[],
+            &changes,
+            &gated,
+            &mut notices,
+            &mut warned,
+        );
+        let _ = deleted_by_stable_id(
+            &repo,
+            &config,
+            "adr",
+            "Status",
+            &changes,
+            &mut notices,
+            &mut warned,
+        );
+        assert_eq!(notices.len(), 1, "{notices:?}");
+        assert_eq!(notices[0].subject, rules::RULE_DIFF_DECIDER_REQUIRED);
         let _ = std::fs::remove_dir_all(&repo);
     }
 }

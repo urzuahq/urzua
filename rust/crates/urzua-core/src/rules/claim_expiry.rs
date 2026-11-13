@@ -729,12 +729,15 @@ fn renewal_problem(
     let then = anchor_in_text(then_text, field);
     match (&now, &then) {
         (None, Some((date, _))) => {
-            let written = header_value(now_text, field);
-            Some(match written {
-                Some(value) => format!(
+            let present = crate::header::parse(now_text).get(field).is_some();
+            Some(match (header_value(now_text, field), present) {
+                (Some(value), _) => format!(
                     "the anchor field {field} ('{value}') is malformed, not a date: it carried {date} at the merge base, and an unreadable date is not a way back to an earlier first-cycle offset"
                 ),
-                None => format!(
+                (None, true) => format!(
+                    "the anchor field {field} is empty: it carried {date} at the merge base, and a blank date is not a way back to an earlier first-cycle offset"
+                ),
+                (None, false) => format!(
                     "the anchor field {field} ({date} at the merge base) was removed: deleting it is not a way back to an earlier first-cycle offset"
                 ),
             })

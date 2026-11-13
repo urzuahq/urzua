@@ -961,6 +961,51 @@ fn a_malformed_anchor_is_reported_as_malformed_not_removed() {
 }
 
 #[test]
+fn a_removed_and_a_blank_anchor_are_each_reported_as_what_they_are() {
+    let extra = "  embodiment.claim-renewal-unattested: warn\n";
+    for (name, replacement, says, not_says) in [
+        ("unattested-removed", "", "was removed", "is empty"),
+        (
+            "unattested-blank",
+            "Last-audited:\n",
+            "is empty",
+            "was removed",
+        ),
+    ] {
+        let dir = fixture(name, &config(RULE, extra));
+        let old = day_days_ago(20);
+        std::fs::write(
+            dir.join(M1),
+            record(
+                "MILE-1",
+                "Done",
+                "01AAAAAAAAAAAAAAAAAAAAAAAA",
+                &format!("Last-audited: {old}\n"),
+                "code:src/a.rs",
+            ),
+        )
+        .unwrap();
+        commit_all(&dir, 20);
+        git(&dir, &["branch", "-M", "main"]);
+        git(&dir, &["checkout", "-q", "-b", "topic"]);
+        let text = std::fs::read_to_string(dir.join(M1)).unwrap();
+        std::fs::write(
+            dir.join(M1),
+            text.replace(&format!("Last-audited: {old}\n"), replacement),
+        )
+        .unwrap();
+        commit_all(&dir, 0);
+        let parsed = json(&run_urzua(&dir, &["check", "--base", "main"]));
+        let found = findings(&parsed, "embodiment.claim-renewal-unattested");
+        assert_eq!(found.len(), 1, "{name}: {parsed}");
+        let message = found[0]["message"].as_str().unwrap();
+        assert!(message.contains(says), "{name}: {message}");
+        assert!(!message.contains(not_says), "{name}: {message}");
+        assert!(!message.contains("is malformed"), "{name}: {message}");
+    }
+}
+
+#[test]
 fn the_companion_rule_needs_the_expiry_rule() {
     let cfg = "schema_version: 2\nrules:\n  embodiment.claim-renewal-unattested: warn\nrecord_types:\n  milestone:\n    dir: docs/milestones\n    prefix: MILE\n    header_shape: yaml-frontmatter\n    required_fields: [Status]\n";
     let out = load_error("companion-alone", cfg);
