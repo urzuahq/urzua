@@ -359,7 +359,10 @@ fn new_waiver_scaffolds_justified_by_from_the_repositorys_own_template() {
 #[test]
 fn own_config_shape_accepts_a_drift_baseline_on_consistency() {
     let own = own_config();
-    assert!(!own.contains("drift_baseline"), "not declared in the own config");
+    assert!(
+        !own.contains("drift_baseline"),
+        "not declared in the own config"
+    );
     let anchor = "    drift_audit_field: \"Last-audited\"\n";
     assert_eq!(own.matches(anchor).count(), 1, "the anchor line moved");
     let declared = own.replace(
