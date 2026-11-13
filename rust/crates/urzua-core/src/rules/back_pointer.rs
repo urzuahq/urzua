@@ -74,28 +74,69 @@ pub struct CommentCitation {
 
 /// Every record id (a declared type prefix, a hyphen and a number, standing
 /// alone) in the comments of `content`, in line order, once per line and id.
-/// A comment is read as the back-pointer rules read one (`comment_starts`); the
-/// text of a line outside a comment is not read. Case-sensitive. An id run into
-/// a longer token (`ADR-12-title.md`, `ADR-12x`) is a name, not a citation.
-pub fn scan_comment_citations(content: &str, prefixes: &[String]) -> Vec<CommentCitation> {
+/// With `leaders` undeclared a comment is read as the back-pointer rules read
+/// one (`comment_starts`); with a declared list a comment is the text after the
+/// first of those leaders that opens the line or follows whitespace
+/// (`declared_comment_text`). The text of a line outside a comment is not read.
+/// Case-sensitive. An id run into a longer token (`ADR-12-title.md`, `ADR-12x`)
+/// is a name, and a word holding `://` is a URL: neither is a citation.
+pub fn scan_comment_citations(
+    content: &str,
+    prefixes: &[String],
+    leaders: Option<&[String]>,
+) -> Vec<CommentCitation> {
     let mut out = Vec::new();
     for (i, line) in content.lines().enumerate() {
-        // The first comment start holds the text of every later one.
-        let Some(text) = comment_starts(line).into_iter().next() else {
+        let text = match leaders {
+            // The first comment start holds the text of every later one.
+            None => comment_starts(line).into_iter().next(),
+            Some(declared) => declared_comment_text(line, declared),
+        };
+        let Some(text) = text else {
             continue;
         };
         let mut seen: Vec<&str> = Vec::new();
-        for token in text.split(|c: char| !(c.is_ascii_alphanumeric() || c == '-' || c == '_')) {
-            if is_record_id(token, prefixes) && !seen.contains(&token) {
-                seen.push(token);
-                out.push(CommentCitation {
-                    line: i + 1,
-                    id: token.to_string(),
-                });
+        for word in text.split_whitespace().filter(|w| !w.contains("://")) {
+            for token in word.split(|c: char| !(c.is_ascii_alphanumeric() || c == '-' || c == '_'))
+            {
+                if is_record_id(token, prefixes) && !seen.contains(&token) {
+                    seen.push(token);
+                    out.push(CommentCitation {
+                        line: i + 1,
+                        id: token.to_string(),
+                    });
+                }
             }
         }
     }
     out
+}
+
+/// The text after the first declared comment leader on `line`: a leader that
+/// opens the line, or follows whitespace (a leader run into code is an
+/// operator or a string, not a comment). The longest leader at a position wins,
+/// so declaring `//` and `///` reads `///` as one leader.
+fn declared_comment_text<'a>(line: &'a str, leaders: &[String]) -> Option<&'a str> {
+    let first_non_space = line.len() - line.trim_start().len();
+    for (at, _) in line.char_indices() {
+        let opens = at == first_non_space
+            || line[..at]
+                .chars()
+                .next_back()
+                .is_some_and(char::is_whitespace);
+        if !opens {
+            continue;
+        }
+        let here = &line[at..];
+        if let Some(leader) = leaders
+            .iter()
+            .filter(|l| here.starts_with(l.as_str()))
+            .max_by_key(|l| l.len())
+        {
+            return Some(&here[leader.len()..]);
+        }
+    }
+    None
 }
 
 /// The one ignore marker both back-pointer rules and the evidence collector

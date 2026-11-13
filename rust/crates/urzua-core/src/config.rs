@@ -521,6 +521,13 @@ pub struct RuleSetting {
     /// meaningful to that rule, which needs it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub extensions: Option<Vec<String>>,
+    /// The comment leaders `code.dangling-bug-reference` reads, per extension
+    /// (`rs: ["//"]`, `sh: ["#"]`). An extension with no entry, and a rule that
+    /// declares none, read the built-in leader set the back-pointer rules use.
+    /// Each key is one of the rule's `extensions`; each list is non-empty with
+    /// no blank or repeated entry. Only meaningful to that rule; optional.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub code_comment_prefixes: Option<std::collections::BTreeMap<String, Vec<String>>>,
     /// Path prefixes, each inside a `back_pointer_paths` entry, whose files are
     /// the test class: a `Verifies:` comment there is test-tier evidence for
     /// the record it cites (`MILE-146`). Only meaningful to
@@ -2800,6 +2807,7 @@ pub fn parse_with_document_models(
     validate_non_reference_fields(&config)?;
     validate_test_paths(&config)?;
     validate_extensions(&config)?;
+    validate_code_comment_prefixes(&config)?;
     validate_rule_fields(&config)?;
     Ok((config, models))
 }
@@ -3787,6 +3795,57 @@ fn validate_extensions(config: &Config) -> Result<(), ConfigError> {
                         "entry '{entry}' must be a file extension written without the dot, letters and digits only (`rs`, not `.rs` or `*.rs`)"
                     ),
                 });
+            }
+        }
+    }
+    Ok(())
+}
+
+/// `code_comment_prefixes`: each key is one of the rule's `extensions` (a key
+/// matching no read file is a silent no-op), each list is non-empty, and no
+/// leader is blank, padded, containing whitespace, or repeated.
+fn validate_code_comment_prefixes(config: &Config) -> Result<(), ConfigError> {
+    for (name, setting) in &config.rules {
+        let Some(map) = &setting.code_comment_prefixes else {
+            continue;
+        };
+        if !crate::rules::rule_accepts_option(name, "code_comment_prefixes") {
+            return Err(ConfigError::OptionNotApplicable {
+                rule: name.clone(),
+                option: "code_comment_prefixes".to_string(),
+            });
+        }
+        if setting.level == RuleLevel::Off {
+            continue;
+        }
+        let bad = |reason: String| ConfigError::InvalidBoundary {
+            rule: name.clone(),
+            option: "code_comment_prefixes",
+            reason,
+        };
+        let extensions = setting.extensions.as_deref().unwrap_or_default();
+        for (ext, leaders) in map {
+            if !extensions.iter().any(|e| e == ext) {
+                return Err(bad(format!(
+                    "names the extension '{ext}', which is not one of the rule's `extensions`, so it would never apply"
+                )));
+            }
+            if leaders.is_empty() {
+                return Err(bad(format!(
+                    "gives '{ext}' no leader; name one or remove the entry"
+                )));
+            }
+            for (i, leader) in leaders.iter().enumerate() {
+                if leader.is_empty() || leader.chars().any(char::is_whitespace) {
+                    return Err(bad(format!(
+                        "gives '{ext}' the leader '{leader}', which is blank or holds whitespace"
+                    )));
+                }
+                if leaders[..i].contains(leader) {
+                    return Err(bad(format!(
+                        "lists the leader '{leader}' twice for '{ext}'"
+                    )));
+                }
             }
         }
     }
@@ -6788,6 +6847,7 @@ mod option_table_tests {
         "boundaries",
         "ignore_marker",
         "scope",
+        "code_comment_prefixes",
     ];
 
     /// The option names `RuleSetting` accepts, read from the derived

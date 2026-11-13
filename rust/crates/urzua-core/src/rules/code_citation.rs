@@ -48,6 +48,7 @@ pub fn code_dangling_bug_reference(
             .get(RULE_EMBODIMENT_BACK_POINTER_RESOLUTION)
             .filter(|s| s.level != crate::config::RuleLevel::Off),
         index,
+        leaders: setting.and_then(|s| s.code_comment_prefixes.as_ref()),
     };
     let mut findings = Vec::new();
     let mut excused_lines = 0;
@@ -100,6 +101,8 @@ struct Judge<'a> {
     external: &'a [ExternalId],
     resolution: Option<&'a crate::config::RuleSetting>,
     index: &'a RecordIndex<'a>,
+    /// The declared comment leaders per extension, where declared.
+    leaders: Option<&'a std::collections::BTreeMap<String, Vec<String>>>,
 }
 
 impl Judge<'_> {
@@ -108,7 +111,11 @@ impl Judge<'_> {
         const RULE_ID: &str = RULE_CODE_DANGLING_BUG_REFERENCE;
         let judged_elsewhere = judged_by_resolution(self.resolution, file, content, self.prefixes);
         let lines: Vec<&str> = content.lines().collect();
-        let citations = scan_comment_citations(content, self.prefixes);
+        let declared: Option<&[String]> = self.leaders.and_then(|m| {
+            let ext = file.path.extension()?.to_str()?;
+            m.get(ext).map(Vec::as_slice)
+        });
+        let citations = scan_comment_citations(content, self.prefixes, declared);
         let mut findings = Vec::new();
         let mut excused = BTreeSet::new();
         for citation in &citations {

@@ -326,3 +326,136 @@ fn the_prefixes_come_from_the_declared_record_types() {
     assert_eq!(found.len(), 1, "{}", report(&out));
     assert!(found[0]["message"].as_str().unwrap().contains("DEF-5"));
 }
+
+fn lines_of(out: &std::process::Output) -> Vec<(String, u64)> {
+    findings(out, RULE)
+        .iter()
+        .map(|f| {
+            (
+                f["file"].as_str().unwrap().to_string(),
+                f["line"].as_u64().unwrap(),
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn declared_comment_prefixes_replace_the_built_in_leaders_for_their_extension() {
+    let rules = "  code.dangling-bug-reference:\n    level: error\n    back_pointer_paths: [\"src\"]\n    extensions: [\"rs\", \"sql\", \"txt\"]\n    code_comment_prefixes:\n      sql: [\"--\", \"%%\"]\n";
+    let dir = repo(
+        "declared-leaders",
+        rules,
+        &[
+            // `%%` is not a built-in leader: only the declaration reads it.
+            (
+                "src/a.sql",
+                "select 1; %% BUG-9\n-- BUG-8\n# BUG-7 is not a sql comment\n",
+            ),
+            // No entry for `rs`: the built-in set applies.
+            ("src/b.rs", "// BUG-6\n"),
+            ("src/c.txt", "# BUG-5 and // BUG-4\n"),
+        ],
+    );
+    let out = run_urzua(&dir, &["check"]);
+    let mut found = lines_of(&out);
+    found.sort();
+    assert_eq!(
+        found,
+        vec![
+            ("src/a.sql".to_string(), 1),
+            ("src/a.sql".to_string(), 2),
+            ("src/b.rs".to_string(), 1),
+            // BUG-5 and BUG-4, both in the one comment.
+            ("src/c.txt".to_string(), 1),
+            ("src/c.txt".to_string(), 1),
+        ],
+        "{}",
+        report(&out)
+    );
+}
+
+#[test]
+fn an_undeclared_option_keeps_the_built_in_leaders() {
+    let dir = repo(
+        "builtin-leaders",
+        &rule(""),
+        &[("src/a.rs", "// BUG-9\nfn a() {} // BUG-8\n/// BUG-7\n")],
+    );
+    assert_eq!(lines_of(&run_urzua(&dir, &["check"])).len(), 3);
+}
+
+#[test]
+fn a_malformed_code_comment_prefixes_declaration_is_refused_at_load() {
+    for (decl, needle) in [
+        ("      rs: []\n", "no leader"),
+        ("      rs: [\"\"]\n", "blank"),
+        ("      rs: [\"//\", \"//\"]\n", "twice"),
+        ("      rs: [\"/ /\"]\n", "whitespace"),
+        ("      py: [\"#\"]\n", "not one of the rule's `extensions`"),
+    ] {
+        let rules = format!(
+            "  {RULE}:\n    level: error\n    back_pointer_paths: [\"src\"]\n    extensions: [\"rs\"]\n    code_comment_prefixes:\n{decl}"
+        );
+        let dir = repo("bad-leaders", &rules, &[("src/a.rs", "// BUG-1\n")]);
+        let out = run_urzua(&dir, &["check"]);
+        let text = format!(
+            "{}{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_ne!(out.status.code(), Some(0), "{decl}: {text}");
+        assert!(text.contains(needle), "{needle} missing for {decl}: {text}");
+    }
+}
+
+#[test]
+fn another_rule_refuses_code_comment_prefixes() {
+    let rules =
+        "  field.quality:\n    level: error\n    code_comment_prefixes:\n      rs: [\"//\"]\n";
+    let dir = repo("other-rule", rules, &[]);
+    let out = run_urzua(&dir, &["check"]);
+    let text =
+        String::from_utf8_lossy(&out.stderr).to_string() + &String::from_utf8_lossy(&out.stdout);
+    assert!(
+        text.contains("does not take the option 'code_comment_prefixes'"),
+        "{text}"
+    );
+}
+
+#[test]
+fn an_id_inside_a_url_in_a_comment_is_not_a_citation() {
+    let dir = repo(
+        "urls",
+        &rule(""),
+        &[(
+            "src/a.rs",
+            "// see https://example.com/issues/BUG-9 and (https://x.test/BUG-8)\n// but BUG-7 is read\n",
+        )],
+    );
+    let out = run_urzua(&dir, &["check"]);
+    assert_eq!(
+        lines_of(&out),
+        vec![("src/a.rs".to_string(), 2)],
+        "{}",
+        report(&out)
+    );
+}
+
+/// Pins the behaviour the ADR records: the engine reads a leader, not a
+/// language, so a string literal holding ` // ADR-9` and a doc-comment code
+/// example are read, and the declared marker is the escape.
+#[test]
+fn a_string_literal_after_a_leader_and_a_doc_example_are_read_and_the_marker_excuses_them() {
+    let source = "let s = \"x // BUG-9\";\n/// let id = \"BUG-8\";\n/// ```\n/// // BUG-7\n/// ```\nlet t = \"y // BUG-6 record-id-ok\";\nlet u = \"BUG-5 is in no comment\";\n";
+    let dir = repo(
+        "string-literals",
+        &rule("    ignore_marker: \"record-id-ok\"\n"),
+        &[("src/a.rs", source)],
+    );
+    let out = run_urzua(&dir, &["check"]);
+    let lines: Vec<u64> = lines_of(&out).iter().map(|(_, l)| *l).collect();
+    // 1: string after ` //`; 2: doc example; 4: fenced doc example; 6 is
+    // excused; 7 holds no leader.
+    assert_eq!(lines, vec![1, 2, 4], "{}", report(&out));
+    assert_eq!(population(&out)["excused_lines"], 1);
+}
