@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use urzua_core::migrate_filenames::{
-    plan, Citation, FilenamePlan, PlanInput, Rename, Skipped, Unrewritten,
+    plan, Citation, FilenamePlan, PlanInput, Rename, Skipped, StalePin, Unrewritten,
 };
 use urzua_core::report::{Failure, Notice, NoticeSeverity, Report};
 
@@ -25,6 +25,7 @@ struct FilenamesReport {
     renames: Vec<Rename>,
     rewrites: Vec<Citation>,
     unrewritten: Vec<Unrewritten>,
+    stale_pins: Vec<StalePin>,
     skipped: Vec<Skipped>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     results: Vec<WriteResult>,
@@ -95,7 +96,7 @@ fn run_inner(config_path: Option<PathBuf>, apply: bool) -> Result<ExitCode, Fail
         rewritable: &rewritable,
         report_only: &report_only,
     });
-    let notices = notices_for(&planned);
+    let notices = notices_for(&planned, apply);
     let results = if apply && !planned.renames.is_empty() {
         let _lock = urzua_io::FixLock::acquire(&session.repo_root)?;
         write_plan(&session.repo_root, &planned, &rewritable)
@@ -108,6 +109,7 @@ fn run_inner(config_path: Option<PathBuf>, apply: bool) -> Result<ExitCode, Fail
         skipped,
         rewrites,
         unrewritten,
+        stale_pins,
         ..
     } = planned;
     Ok(emit(&FilenamesReport {
@@ -120,6 +122,7 @@ fn run_inner(config_path: Option<PathBuf>, apply: bool) -> Result<ExitCode, Fail
         renames,
         rewrites,
         unrewritten,
+        stale_pins,
         skipped,
         results,
         notices,
@@ -156,7 +159,31 @@ fn scanned_texts(session: &Session) -> (HashMap<PathBuf, String>, HashMap<PathBu
     (rewritable, report_only)
 }
 
-fn notices_for(planned: &FilenamePlan) -> Vec<Notice> {
+fn notices_for(planned: &FilenamePlan, apply: bool) -> Vec<Notice> {
+    let mut notices = pin_notice(planned, apply);
+    notices.extend(stable_id_notice(planned));
+    notices
+}
+
+/// Rewriting a pinned file's text changes its hash. The tool does not re-pin: a re-pin
+/// carries a reason a person attests, so it names the command instead.
+fn pin_notice(planned: &FilenamePlan, apply: bool) -> Vec<Notice> {
+    if planned.stale_pins.is_empty() {
+        return Vec::new();
+    }
+    let verb = if apply { "are stale" } else { "will be stale" };
+    vec![Notice {
+        severity: NoticeSeverity::Warning,
+        subject: "stale-pins".to_string(),
+        message: format!(
+            "{} evidence pin(s) {verb}: they name a file whose text this run rewrites (see `stale_pins`); run `urzua fix --rebaseline` to list them and re-pin each with a reason you attest",
+            planned.stale_pins.len()
+        ),
+        detail: None,
+    }]
+}
+
+fn stable_id_notice(planned: &FilenamePlan) -> Vec<Notice> {
     let unpaired: Vec<String> = planned
         .renames
         .iter()
@@ -180,7 +207,9 @@ fn notices_for(planned: &FilenamePlan) -> Vec<Notice> {
 
 /// Rewrites citations first, then renames, so a failure never leaves a renamed file
 /// with its citations still pointing at the old name: a failed rewrite stops the
-/// renames. A rerun finishes whatever remains.
+/// renames. A rename that fails after the rewrites leaves citations naming the new
+/// path of a file still at its old one; each is reported `failed`, and a rerun renames
+/// it (its citations already read the new name), which heals the corpus.
 fn write_plan(
     root: &Path,
     planned: &FilenamePlan,
@@ -252,4 +281,45 @@ fn rename_one(root: &Path, rename: &Rename) -> WriteResult {
         std::fs::rename(&from, &to).map_err(|e| e.to_string())
     })();
     result(&rename.from, Action::Rename, outcome)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_rename_that_fails_after_the_rewrites_is_reported_and_leaves_the_rewrites() {
+        let root = std::env::temp_dir().join(format!("urzua-mf-unit-{}", std::process::id()));
+        std::fs::create_dir_all(root.join("docs")).unwrap();
+        std::fs::write(root.join("docs/cites.md"), "see 0001-a.md\n").unwrap();
+        let mut planned = FilenamePlan::default();
+        planned.new_texts.insert(
+            PathBuf::from("docs/cites.md"),
+            "see ADR-0001-a.md\n".to_string(),
+        );
+        // The file to rename is not there, so the rename itself fails.
+        planned.renames.push(Rename {
+            record_type: "adr".to_string(),
+            from: PathBuf::from("docs/0001-a.md"),
+            to: PathBuf::from("docs/ADR-0001-a.md"),
+            has_stable_id: true,
+            id: ("ADR".to_string(), 1),
+        });
+        let originals = HashMap::from([(
+            PathBuf::from("docs/cites.md"),
+            "see 0001-a.md\n".to_string(),
+        )]);
+        let results = write_plan(&root, &planned, &originals);
+        let text = std::fs::read_to_string(root.join("docs/cites.md")).unwrap();
+        let _ = std::fs::remove_dir_all(&root);
+        assert_eq!(results.len(), 2);
+        assert_eq!(results[0].outcome, Outcome::Applied);
+        assert_eq!(results[1].action, Action::Rename);
+        assert_eq!(results[1].outcome, Outcome::Failed);
+        assert!(results[1].error.is_some());
+        assert_eq!(
+            text, "see ADR-0001-a.md\n",
+            "the rewrite stays; a rerun renames"
+        );
+    }
 }

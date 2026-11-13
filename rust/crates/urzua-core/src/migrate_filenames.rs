@@ -23,6 +23,9 @@ pub struct Rename {
     /// Whether the record carries a `Stable-Id` for a diff to pair the rename by.
     #[serde(skip)]
     pub has_stable_id: bool,
+    /// The type prefix and number the new name carries: the record id it takes.
+    #[serde(skip)]
+    pub id: (String, u64),
 }
 
 /// Why a record file is left as it is.
@@ -37,6 +40,9 @@ pub enum SkipReason {
     PatternRejects,
     /// The new name is already a file, or another rename's new name.
     TargetExists,
+    /// The number is already another record's of the type, or two renames would take it:
+    /// the files would share one record id, so none of them is renamed.
+    NumberCollision,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
@@ -64,8 +70,22 @@ pub struct Unrewritten {
     pub renamed_to: PathBuf,
 }
 
+/// An evidence pin (`path@sha256:...`) on a file whose text this run changes, so the
+/// recorded hash no longer matches it: `urzua fix --rebaseline` re-pins it, with a reason
+/// a person attests.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct StalePin {
+    /// The file holding the pin, by its path now.
+    pub file: PathBuf,
+    pub line: usize,
+    pub locator: String,
+    /// The pinned file whose text changes.
+    pub changed_file: PathBuf,
+}
+
 #[derive(Debug, Default)]
 pub struct FilenamePlan {
+    pub stale_pins: Vec<StalePin>,
     pub renames: Vec<Rename>,
     pub skipped: Vec<Skipped>,
     /// Every rewritten citation, in file then line order.
@@ -88,6 +108,13 @@ pub fn target_name(
     file_name: &str,
 ) -> Result<String, (SkipReason, String)> {
     let stem = crate::record::strip_md_extension(file_name).unwrap_or(file_name);
+    // A name that already carries the prefix (`ADR-5-x.md`, mispadded for the pattern) has
+    // its number after it.
+    let stem = stem
+        .strip_prefix(prefix)
+        .and_then(|r| r.strip_prefix('-'))
+        .filter(|r| r.starts_with(|c: char| c.is_ascii_digit()))
+        .unwrap_or(stem);
     let digits = stem.chars().take_while(char::is_ascii_digit).count();
     if digits == 0 {
         return Err((
@@ -111,7 +138,10 @@ pub fn target_name(
     let Some(declared) = identity else {
         return Ok(format!("{prefix}-{written}{tail}.md"));
     };
-    for width in written.len()..=MAX_PADDING.max(written.len()) {
+    // The written padding first, then wider, then narrower: only the zeros change, never
+    // the number's value.
+    let widths = (written.len()..=MAX_PADDING).chain(1..written.len());
+    for width in widths {
         let name = format!("{prefix}-{value:0width$}{tail}.md");
         let found = declared.identify(&name);
         if found.title_prefix.as_deref() == Some(prefix)
@@ -123,7 +153,7 @@ pub fn target_name(
     Err((
         SkipReason::PatternRejects,
         format!(
-            "the declared identity pattern reads no '{prefix}-NNNN{tail}.md' name back as prefix '{prefix}' and number {value}"
+            "the declared identity pattern reads no '{prefix}-<{value} at any zero-padding>{tail}.md' name back as prefix '{prefix}' and number {value}"
         ),
     ))
 }
@@ -152,6 +182,7 @@ pub fn plan(input: &PlanInput) -> FilenamePlan {
     for record in by_path {
         plan_one(input, record, &mut claimed, &mut out);
     }
+    skip_number_collisions(input, &mut out);
     let moved: HashMap<PathBuf, PathBuf> = out
         .renames
         .iter()
@@ -169,6 +200,7 @@ pub fn plan(input: &PlanInput) -> FilenamePlan {
             out.rewrites.extend(citations.into_iter().map(|(c, _)| c));
         }
     }
+    out.stale_pins = stale_pins(input, &out.new_texts);
     let mut files: Vec<&PathBuf> = input.report_only.keys().collect();
     files.sort();
     for file in files {
@@ -182,6 +214,36 @@ pub fn plan(input: &PlanInput) -> FilenamePlan {
             }));
     }
     out
+}
+
+/// Pins (`path[#scope]@sha256:hex`) in any scanned text on a file whose text is rewritten.
+fn stale_pins(input: &PlanInput, changed: &BTreeMap<PathBuf, String>) -> Vec<StalePin> {
+    let pin = regex::Regex::new(r"[A-Za-z0-9_./\-]+(?:#[A-Za-z0-9_]+)?@sha256:[0-9a-fA-F]+")
+        .expect("a fixed pattern");
+    let mut found = Vec::new();
+    let mut files: Vec<(&PathBuf, &String)> = input
+        .rewritable
+        .iter()
+        .chain(input.report_only.iter())
+        .collect();
+    files.sort();
+    for (file, text) in files {
+        for m in pin.find_iter(text) {
+            let locator = m.as_str();
+            let path = locator.split(['#', '@']).next().unwrap_or_default();
+            if let Some(changed_file) =
+                normalize(Path::new(path)).filter(|p| changed.contains_key(p))
+            {
+                found.push(StalePin {
+                    file: file.clone(),
+                    line: text[..m.start()].matches('\n').count() + 1,
+                    locator: locator.to_string(),
+                    changed_file,
+                });
+            }
+        }
+    }
+    found
 }
 
 fn plan_one(
@@ -228,12 +290,56 @@ fn plan_one(
             ),
         );
     }
+    let Some(number) = number_after_prefix(&record.type_prefix, &name) else {
+        return skip(
+            out,
+            SkipReason::PatternRejects,
+            format!("'{name}' carries no number after '{}-'", record.type_prefix),
+        );
+    };
     out.renames.push(Rename {
         record_type: record.record_type.clone(),
         from,
         to,
         has_stable_id: record.header.get_reserved("Stable-Id").is_some(),
+        id: (record.type_prefix.clone(), number),
     });
+}
+
+fn number_after_prefix(prefix: &str, name: &str) -> Option<u64> {
+    let rest = name.strip_prefix(prefix)?.strip_prefix('-')?;
+    let digits = rest.chars().take_while(char::is_ascii_digit).count();
+    rest[..digits].parse().ok()
+}
+
+/// Two files sharing a record id is a defect a name check cannot see (`5-x.md` and
+/// `0005-y.md` get different names and one id), so a rename whose id another rename takes,
+/// or a record already has, is skipped, every file of the clash.
+fn skip_number_collisions(input: &PlanInput, out: &mut FilenamePlan) {
+    let mut taken: HashMap<(String, u64), usize> = HashMap::new();
+    for record in input.records {
+        let Some(id) = crate::rules::record_id(record) else {
+            continue;
+        };
+        if let Some(n) = number_after_prefix(&record.type_prefix, &id) {
+            *taken.entry((record.type_prefix.clone(), n)).or_default() += 1;
+        }
+    }
+    for rename in &out.renames {
+        *taken.entry(rename.id.clone()).or_default() += 1;
+    }
+    let (clash, kept): (Vec<Rename>, Vec<Rename>) = std::mem::take(&mut out.renames)
+        .into_iter()
+        .partition(|r| taken.get(&r.id).copied().unwrap_or(0) > 1);
+    out.renames = kept;
+    out.skipped.extend(clash.into_iter().map(|r| Skipped {
+        message: format!(
+            "{}-{} would be the record id of more than one file; renaming only one would hide the clash, so none is renamed -- renumber one by hand",
+            r.id.0, r.id.1
+        ),
+        from: r.from,
+        reason: SkipReason::NumberCollision,
+    }));
 }
 
 /// The path with `.` and `..` folded away; `None` when it climbs out of the root.
@@ -353,6 +459,31 @@ mod tests {
         assert_eq!(
             target_name(None, "ADR", "5_x y.MD").unwrap(),
             "ADR-5-x y.md"
+        );
+    }
+
+    #[test]
+    fn padding_narrows_or_widens_but_never_changes_the_value() {
+        let id = declared(PADDED);
+        assert_eq!(
+            target_name(Some(&id), "ADR", "00012-z.md").unwrap(),
+            "ADR-0012-z.md"
+        );
+        let (reason, message) = target_name(Some(&id), "ADR", "12345-x.md").unwrap_err();
+        assert_eq!(reason, SkipReason::PatternRejects);
+        assert!(!message.contains("NNNN"), "{message}");
+    }
+
+    #[test]
+    fn a_prefixed_but_mispadded_name_keeps_its_number() {
+        let id = declared(PADDED);
+        assert_eq!(
+            target_name(Some(&id), "ADR", "ADR-5-x.md").unwrap(),
+            "ADR-0005-x.md"
+        );
+        assert_eq!(
+            target_name(Some(&id), "ADR", "ADR-00005-x.md").unwrap(),
+            "ADR-0005-x.md"
         );
     }
 

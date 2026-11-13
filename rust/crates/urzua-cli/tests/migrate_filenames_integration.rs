@@ -257,3 +257,120 @@ fn a_record_without_a_stable_id_gets_a_notice_to_backfill_first() {
         "{report}"
     );
 }
+
+#[test]
+fn two_files_that_would_share_a_record_id_are_both_skipped() {
+    let dir = fixture("collision", Some(PATTERN));
+    write(&dir, "docs/adr/5-x.md", &record(5, "X", "x"));
+    write(&dir, "docs/adr/0005-y.md", &record(5, "Y", "y"));
+    // A third file renaming onto an id a conforming record already holds.
+    write(&dir, "docs/adr/ADR-0006-held.md", &record(6, "Held", "h"));
+    write(&dir, "docs/adr/6-z.md", &record(6, "Z", "z"));
+    commit(&dir);
+    let (code, report) = run(&dir, &["migrate", "filenames", "--apply"]);
+    assert_eq!(code, Some(0), "{report}");
+    assert_eq!(report["renames"].as_array().unwrap().len(), 0, "{report}");
+    let skipped = report["skipped"].as_array().unwrap();
+    for from in ["docs/adr/5-x.md", "docs/adr/0005-y.md", "docs/adr/6-z.md"] {
+        assert!(
+            skipped
+                .iter()
+                .any(|s| s["from"] == from && s["reason"] == "number-collision"),
+            "{from}: {report}"
+        );
+    }
+    assert!(dir.join("docs/adr/5-x.md").exists() && dir.join("docs/adr/0005-y.md").exists());
+}
+
+#[test]
+fn padding_may_narrow_and_a_prefixed_misspadded_name_is_fixed() {
+    let dir = fixture("narrow", Some(PATTERN));
+    write(&dir, "docs/adr/00012-z.md", &record(12, "Z", "z"));
+    write(&dir, "docs/adr/ADR-5-x.md", &record(5, "X", "x"));
+    commit(&dir);
+    let (_, report) = run(&dir, &["migrate", "filenames", "--apply"]);
+    let to: Vec<_> = report["renames"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| r["to"].as_str().unwrap().to_string())
+        .collect();
+    assert!(
+        to.contains(&"docs/adr/ADR-0012-z.md".to_string()),
+        "{report}"
+    );
+    assert!(
+        to.contains(&"docs/adr/ADR-0005-x.md".to_string()),
+        "{report}"
+    );
+    assert_eq!(report["skipped"].as_array().unwrap().len(), 0, "{report}");
+    commit(&dir);
+    let (code, check) = run(&dir, &["check"]);
+    assert_eq!(code, Some(0), "{check}");
+}
+
+/// The state a failed rename leaves: citations already name the new path while the file
+/// still has its old one. A rerun renames it and the corpus checks clean.
+#[test]
+fn a_rerun_heals_a_corpus_left_with_rewritten_citations_and_an_unrenamed_file() {
+    let dir = fixture("heal", Some(PATTERN));
+    write(&dir, "docs/adr/0001-first.md", &record(1, "First", "x"));
+    write(
+        &dir,
+        "docs/adr/ADR-0002-second.md",
+        &record(2, "Second", "See ADR-0001-first.md."),
+    );
+    commit(&dir);
+    let (code, report) = run(&dir, &["migrate", "filenames", "--apply"]);
+    assert_eq!(code, Some(0), "{report}");
+    assert_eq!(report["rewrites"].as_array().unwrap().len(), 0, "{report}");
+    assert_eq!(report["renames"].as_array().unwrap().len(), 1, "{report}");
+    commit(&dir);
+    let (code, check) = run(&dir, &["check"]);
+    assert_eq!(code, Some(0), "{check}");
+    assert_eq!(check["findings"].as_array().unwrap().len(), 0, "{check}");
+}
+
+#[test]
+fn a_pin_on_a_rewritten_record_is_reported_stale_not_silently_repinned() {
+    let dir = fixture("pins", Some(PATTERN));
+    write(
+        &dir,
+        "docs/adr/0001-first.md",
+        &record(1, "First", "Mentions 0001-first.md."),
+    );
+    write(
+        &dir,
+        "docs/adr/ADR-0003-pinner.md",
+        &record(3, "Pinner", "Evidence: code:docs/adr/0001-first.md@sha256:0123456789ab and code:docs/adr/ADR-0003-pinner.md@sha256:0123456789ab"),
+    );
+    commit(&dir);
+    let (_, report) = run(&dir, &["migrate", "filenames"]);
+    let pins = report["stale_pins"].as_array().unwrap();
+    // Both pins: the pinner's own text is rewritten too (it names the renamed file).
+    assert_eq!(pins.len(), 2, "{report}");
+    assert_eq!(pins[0]["file"], "docs/adr/ADR-0003-pinner.md");
+    assert!(
+        pins.iter()
+            .any(|p| p["changed_file"] == "docs/adr/0001-first.md"),
+        "{report}"
+    );
+    assert!(
+        pins.iter()
+            .any(|p| p["changed_file"] == "docs/adr/ADR-0003-pinner.md"),
+        "{report}"
+    );
+    let notices = report["notices"].as_array().unwrap();
+    assert!(
+        notices.iter().any(|n| n["subject"] == "stale-pins"
+            && n["message"].as_str().unwrap().contains("fix --rebaseline")),
+        "{report}"
+    );
+    let (_, applied) = run(&dir, &["migrate", "filenames", "--apply"]);
+    let text = std::fs::read_to_string(dir.join("docs/adr/ADR-0003-pinner.md")).unwrap();
+    assert!(
+        text.contains("code:docs/adr/ADR-0001-first.md@sha256:0123456789ab"),
+        "{text}"
+    );
+    assert_eq!(applied["stale_pins"].as_array().unwrap().len(), 2);
+}
