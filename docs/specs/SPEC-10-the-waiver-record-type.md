@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5BCRKD027XA81J0Q8Q
-Version: '0.19'
+Version: '0.20'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-core/src/waiver.rs@sha256:b8d83e370c4210efbc94d550a5552197bcf784acdec75f1ba9ff028ddb0f8f3e, code:rust/crates/urzua-core/src/rules/waiver.rs@sha256:121dd8d67a90e9d6bb1e76c2d8cdf45f8c4c3ea2b35ba97cae27048f4a1312c4, test:rust/crates/urzua-cli/tests/waiver_stale_integration.rs@sha256:34de7eb7e0b26307bd3136ca9aaada2395f10aac03ea2f68885f8e0251cbe774
+Realized-by: code:rust/crates/urzua-core/src/waiver.rs@sha256:748f534e72aabd6121739f6d7e126ad8cc62be77c84f1023a54a4590d0042d9f, code:rust/crates/urzua-core/src/rules/waiver.rs@sha256:121dd8d67a90e9d6bb1e76c2d8cdf45f8c4c3ea2b35ba97cae27048f4a1312c4, test:rust/crates/urzua-cli/tests/waiver_stale_integration.rs@sha256:34de7eb7e0b26307bd3136ca9aaada2395f10aac03ea2f68885f8e0251cbe774
 Author: beauwilliams
 Subject: 'The `waiver` record type -- time-boxed, scoped exceptions to a check finding.'
 Implements: ADR-11
@@ -102,6 +102,17 @@ target finding appears again (failing toward more findings, as for a missing `Ru
 `waiver.matches-nothing` enabled a finding on the waiver names the missing field. The default is
 unchanged.
 
+## Drafts
+
+`urzua waive --from-report` (`SPEC-25`, `ADR-91`) drafts waivers for the current findings: one per rule and
+file, with `Rule` and `Scope` copied from the findings, a `Reason` holding the pending value, and
+`Expires`, `Category` and `Justified-by` left blank. The pending value is the first whole-value entry of the
+type's `statuses.pending` (a waiver has no `Status`, so the type may declare `pending` alone, without
+`values`, `SPEC-3`), else `Pending`. A draft is not in effect: its `Reason` is pending, so its finding is reported
+again and `waiver.matches-nothing` reports the draft. The command refuses to run where a draft would take
+effect: when the type does not require `Reason`, and when it neither declares `permanent` nor requires
+`Expires`, since a `Reason` alone would then make a permanent waiver.
+
 ## Permanent waivers
 
 A waiver without `Expires` is permanent (`ADR-86`). Left ungoverned, any rule can be waived forever for
@@ -168,3 +179,5 @@ record is edited later.
 > | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/rules/waiver.rs` 040169d8cf3a -> 121dd8d67a90. Reason: Re-pinned after checking the delta in each pinned file against what this record evidences: waiver.rs: Finding/RuleExecution literals replaced by report.rs constructors; field values unchanged. Behaviour unchanged, outputs byte-identical (check, check --base, audit, fix --rebaseline, reverify, rules and explain --rule JSON compared before and after on this repo and five acceptance corpora, with and without --as-of). **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-09 | Bumped to `0.18`. The waiver rules' findings and executions are built by the shared `Finding` and `RuleExecution` constructors in `report.rs` instead of repeated struct literals (the re-baselined row above); no behaviour this spec describes changes. **Why:** adding a field to a finding had meant editing every rule module; the constructors make it one edit. | **structural** |
 > | 2026-11-09 | Bumped to `0.19`. Re-pin rows in this revision log were reworded to name who re-verified, matching the tool's wording since 2026-11-09; hashes, reasons and dates are unchanged. **Why:** Maintainer decision, 2026-11-09. | **structural** |
+> | 2026-11-13 | Bumped to `0.20`. Adds the `Drafts` section: the waiver `urzua waive --from-report` drafts and the refusals that keep a draft ineffective (`SPEC-25`). **Why:** `MILE-205`, `ADR-91` point 5. | **substantive** |
+> | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/waiver.rs` b8d83e370c42 -> 748f534e72aa. Reason: Read the diff of each re-pinned file against main. waiver.rs: added SuppressionType::field_state, and load_suppressions now calls it; the classification it holds is the code that was inline in load_suppressions, moved unchanged, so which waivers take effect is unchanged. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |

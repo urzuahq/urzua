@@ -409,7 +409,7 @@ pub(crate) fn find_revision_log_entries(
 }
 
 /// The index of the line that opens the log, outside any fenced code block.
-fn log_marker_line(lines: &[&str], id: &crate::config::RevisionLogId) -> Option<usize> {
+pub(crate) fn log_marker_line(lines: &[&str], id: &crate::config::RevisionLogId) -> Option<usize> {
     let mut fence: Option<char> = None;
     for (idx, line) in lines.iter().enumerate() {
         let stripped = line.trim_start_matches(|c: char| c == '>' || c.is_whitespace());

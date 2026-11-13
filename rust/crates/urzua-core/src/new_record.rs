@@ -331,6 +331,18 @@ pub fn render_synthetic_yaml(
     required_fields: &[String],
     template_fields: &[String],
 ) -> String {
+    render_yaml_with(params, required_fields, template_fields, &[])
+}
+
+/// [`render_synthetic_yaml`] with header values the caller supplies: each
+/// `(field, value)` replaces the field's blank value, or adds the field after
+/// the others when the header has none (`urzua waive --from-report`).
+fn render_yaml_with(
+    params: &NewRecordParams,
+    required_fields: &[String],
+    template_fields: &[String],
+    supplied: &[(&str, &str)],
+) -> String {
     use yaml_serde::Value;
 
     let mut mapping = yaml_serde::Mapping::new();
@@ -376,6 +388,13 @@ pub fn render_synthetic_yaml(
         }
     }
 
+    for (field, value) in supplied {
+        mapping.insert(
+            Value::String((*field).to_string()),
+            Value::String((*value).to_string()),
+        );
+    }
+
     let yaml_body = yaml_serde::to_string(&Value::Mapping(mapping)).unwrap_or_default();
     let mut out = String::from("---\n");
     out.push_str(yaml_body.trim_start_matches("---\n"));
@@ -401,6 +420,53 @@ pub struct ScaffoldSpec<'a> {
     pub stable_id: &'a str,
     pub author: &'a str,
     pub today: &'a str,
+    /// A value for the `Reason` header (the field `Waiver` reads), when the
+    /// caller drafts one. `None` leaves it as the type's blank.
+    pub reason: Option<&'a str>,
+    /// A value for the `Expires` header; `None` leaves it blank.
+    pub expires: Option<&'a str>,
+    /// Further `(field, value)` header pairs the caller supplies, written after
+    /// the type's own fields or over their blank value.
+    pub header_fields: &'a [(&'a str, &'a str)],
+    /// Text appended after the template's body.
+    pub extra_body: Option<&'a str>,
+    /// The narrative of a first revision-log row, written under the log's own
+    /// layout when the type declares a log. `None` writes none.
+    pub log_row: Option<&'a str>,
+}
+
+impl<'a> ScaffoldSpec<'a> {
+    /// The spec `urzua new` builds: nothing supplied beyond the type's own
+    /// declarations.
+    #[allow(clippy::too_many_arguments)]
+    pub fn plain(
+        type_config: &'a crate::config::RecordTypeConfig,
+        compiled: Option<&'a crate::document_model::CompiledIdentity>,
+        type_prefix: &'a str,
+        filename: &'a str,
+        display_number: u32,
+        title: &'a str,
+        stable_id: &'a str,
+        author: &'a str,
+        today: &'a str,
+    ) -> Self {
+        ScaffoldSpec {
+            type_config,
+            compiled,
+            type_prefix,
+            filename,
+            display_number,
+            title,
+            stable_id,
+            author,
+            today,
+            reason: None,
+            expires: None,
+            header_fields: &[],
+            extra_body: None,
+            log_row: None,
+        }
+    }
 }
 
 /// The initial text of a record: a synthesized YAML header from the type's
@@ -439,12 +505,77 @@ pub fn scaffold_record(spec: &ScaffoldSpec, template: Option<&str>) -> String {
         today: spec.today,
     };
     let template_fields = declared_template_fields(type_config, template);
-    let mut out = render_synthetic_yaml(&params, &type_config.required_fields, &template_fields);
+    let mut supplied: Vec<(&str, &str)> = Vec::new();
+    supplied.extend(spec.reason.map(|v| (REASON_FIELD, v)));
+    supplied.extend(spec.expires.map(|v| (EXPIRES_FIELD, v)));
+    supplied.extend(spec.header_fields.iter().copied());
+    let mut out = render_yaml_with(
+        &params,
+        &type_config.required_fields,
+        &template_fields,
+        &supplied,
+    );
     if let Some(body) = template.and_then(template_body) {
         out.push('\n');
         out.push_str(body);
     }
+    if let Some(narrative) = spec.log_row {
+        out = with_first_log_row(out, type_config, spec.today, narrative);
+    }
+    if let Some(extra) = spec.extra_body {
+        if !out.ends_with('\n') {
+            out.push('\n');
+        }
+        out.push('\n');
+        out.push_str(extra);
+        if !out.ends_with('\n') {
+            out.push('\n');
+        }
+    }
     out
+}
+
+/// The header fields `Waiver` reads by name beyond `Rule` and `Scope`.
+pub(crate) const REASON_FIELD: &str = "Reason";
+pub(crate) const EXPIRES_FIELD: &str = "Expires";
+
+/// `text` with one tool-authored row after the last line of its revision log's
+/// table, laid out by the log's own header (`ADR-94`). A type with no readable
+/// log, or none in the text, gets `text` unchanged.
+fn with_first_log_row(
+    text: String,
+    type_config: &crate::config::RecordTypeConfig,
+    today: &str,
+    narrative: &str,
+) -> String {
+    let id = type_config.revision_log_id();
+    let shape = type_config.revision_log_shape();
+    let Some(Ok(log)) = crate::rules::find_revision_log_entries(&text, &id, &shape) else {
+        return text;
+    };
+    let Ok(row) = crate::fix::log_row("> ", log.layout, &shape, today, narrative) else {
+        return text;
+    };
+    let lines: Vec<&str> = text.lines().collect();
+    let Some(marker) = crate::rules::log_marker_line(&lines, &id) else {
+        return text;
+    };
+    let last = lines
+        .iter()
+        .enumerate()
+        .skip(marker + 1)
+        .take_while(|(_, l)| l.trim_start().starts_with('>'))
+        .filter(|(_, l)| l.contains('|'))
+        .map(|(i, _)| i)
+        .last();
+    let Some(last) = last else {
+        return text;
+    };
+    let mut out: Vec<String> = lines.iter().map(|l| l.to_string()).collect();
+    out.insert(last + 1, row);
+    let mut joined = out.join("\n");
+    joined.push('\n');
+    joined
 }
 
 /// The header fields the template names beyond the required ones stay on the
@@ -1050,6 +1181,11 @@ mod tests {
             stable_id: "01SYNTH",
             author: "tester",
             today: "2026-11-13",
+            reason: None,
+            expires: None,
+            header_fields: &[],
+            extra_body: None,
+            log_row: None,
         };
         let out = scaffold_record(&spec, Some(template));
         // Header: generated id, filled author, blank decisions, the declared
@@ -1065,5 +1201,122 @@ mod tests {
         // Without a template there is only the header and the H1.
         let bare = scaffold_record(&spec, None);
         assert!(bare.ends_with("# 3 — Synthetic\n"), "{bare}");
+    }
+
+    fn waiver_type() -> crate::config::RecordTypeConfig {
+        crate::config::RecordTypeConfig {
+            dir: "docs/w".to_string(),
+            required_fields: vec![
+                "Rule".to_string(),
+                "Scope".to_string(),
+                "Reason".to_string(),
+            ],
+            known_fields: Some(vec!["Expires".to_string(), "Owner".to_string()]),
+            revision_log: Some(crate::config::RevisionLogDecl {
+                marker: Some("**Revision log**".to_string()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        }
+    }
+
+    const WAIVER_TEMPLATE: &str = "---\nRule: null\nExpires: null\nOwner: null\n---\n# N -- T\n\n## What\n\nbody\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n";
+
+    /// The compiled-identity path: the H1 carries the type prefix and the number
+    /// padded to the width the declared pattern reads back from the file name
+    /// (`h1_prefix`, `h1_width`, `BUG-188`); without a declared identity it is
+    /// the bare number.
+    #[test]
+    fn the_h1_is_padded_to_the_declared_identity_width_and_bare_without_one() {
+        let type_config = waiver_type();
+        let padded = compiled(r"^(?P<prefix>WAIVER)-(?P<number>\d{4})-(?P<slug>.+)$");
+        let unpadded = compiled(r"^(?P<prefix>WAIVER)-(?P<number>\d+)-(?P<slug>.+)$");
+        let h1 = |compiled: Option<&crate::document_model::CompiledIdentity>, filename: &str| {
+            let spec = ScaffoldSpec::plain(
+                &type_config,
+                compiled,
+                "WAIVER",
+                filename,
+                7,
+                "T",
+                "01ID",
+                "a",
+                "2026-11-13",
+            );
+            scaffold_record(&spec, None)
+                .lines()
+                .find(|l| l.starts_with("# "))
+                .unwrap()
+                .to_string()
+        };
+        assert_eq!(h1(Some(&padded), "WAIVER-0007-t.md"), "# WAIVER-0007 — T");
+        assert_eq!(h1(Some(&unpadded), "WAIVER-7-t.md"), "# WAIVER-7 — T");
+        assert_eq!(h1(None, "WAIVER-7-t.md"), "# 7 — T");
+    }
+
+    #[test]
+    fn supplied_values_fill_the_header_and_the_body_and_log_follow_the_template() {
+        let type_config = waiver_type();
+        let spec = ScaffoldSpec {
+            reason: Some("Pending"),
+            expires: Some("2027-01-31"),
+            header_fields: &[("Rule", "r.x"), ("Scope", "docs/a.md"), ("Owner", "me")],
+            extra_body: Some("## Findings\n\n- docs/a.md:3 msg"),
+            log_row: Some("Drafted."),
+            ..ScaffoldSpec::plain(
+                &type_config,
+                None,
+                "WAIVER",
+                "WAIVER-3-t.md",
+                3,
+                "T",
+                "01ID",
+                "a",
+                "2026-11-13",
+            )
+        };
+        let out = scaffold_record(&spec, Some(WAIVER_TEMPLATE));
+        assert!(
+            out.starts_with(
+                "---\nStable-Id: 01ID\nRule: r.x\nScope: docs/a.md\nReason: Pending\nExpires: "
+            ),
+            "{out}"
+        );
+        assert!(out.contains("2027-01-31"), "{out}");
+        assert!(out.contains("Owner: me\n---\n"), "{out}");
+        // The row is laid out by the log's own header, after the separator, and
+        // the supplied body follows the whole template.
+        assert!(
+            out.contains("> |---|---|---|\n> | 2026-11-13 | Drafted. | **structural** |\n"),
+            "{out}"
+        );
+        assert!(
+            out.ends_with("\n## Findings\n\n- docs/a.md:3 msg\n"),
+            "{out}"
+        );
+        let log_at = out.find("**Revision log**").unwrap();
+        assert!(log_at < out.find("## Findings").unwrap(), "{out}");
+    }
+
+    #[test]
+    fn nothing_supplied_leaves_the_scaffold_as_new_writes_it() {
+        let type_config = waiver_type();
+        let spec = ScaffoldSpec::plain(
+            &type_config,
+            None,
+            "WAIVER",
+            "WAIVER-3-t.md",
+            3,
+            "T",
+            "01ID",
+            "a",
+            "2026-11-13",
+        );
+        let out = scaffold_record(&spec, Some(WAIVER_TEMPLATE));
+        assert!(
+            out.contains("Rule: null\nScope: null\nReason: null\nExpires: null\nOwner: null\n"),
+            "{out}"
+        );
+        assert!(out.ends_with("> |---|---|---|\n"), "{out}");
     }
 }
