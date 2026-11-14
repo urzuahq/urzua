@@ -25,5 +25,7 @@
       "subject": "docs/milestones/MILE-1-a.md",
       "message": "Status is 'Done' with no delivery evidence (computes to 'Not started'); not downgraded -- add the evidence that delivered it"
     }
-  ]
+  ],
+  "next_action": "urzua fix --apply --ids docs/milestones/MILE-2-b.md",
+  "next_action_reason": "writes 1 repair"
 }

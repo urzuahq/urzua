@@ -12,6 +12,8 @@
       "docs/adr/ADR-3-third.md",
       "docs/note/NOTE-1-plain.md"
     ],
+    "next_action": null,
+    "next_action_reason": null,
     "status": "ok"
   }
 }

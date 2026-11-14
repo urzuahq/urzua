@@ -56,7 +56,7 @@ fn assert_not_run(out: &Output, error: &str, what: &str) {
         .unwrap_or_else(|e| panic!("{what}: stdout is not JSON ({e}): {out:?}"));
     assert_eq!(
         json,
-        serde_json::json!({ "status": "not-run", "error": error }),
+        serde_json::json!({ "status": "not-run", "error": error, "next_action": null, "next_action_reason": null }),
         "{what}"
     );
 }
