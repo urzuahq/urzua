@@ -1128,7 +1128,7 @@ fn invalid_items_declarations_are_refused_at_load() {
             String::from_utf8_lossy(&out.stdout),
             String::from_utf8_lossy(&out.stderr)
         );
-        assert_ne!(out.status.code(), Some(0), "{want}: {text}");
+        assert_eq!(out.status.code(), Some(2), "{want}: {text}");
         assert!(text.contains(want), "wanted {want:?}: {text}");
     }
 }
@@ -1151,7 +1151,7 @@ fn items_on_a_type_whose_delivery_rule_is_off_are_refused() {
             String::from_utf8_lossy(&out.stdout),
             String::from_utf8_lossy(&out.stderr)
         );
-        assert_ne!(out.status.code(), Some(0), "{text}");
+        assert_eq!(out.status.code(), Some(2), "{text}");
         assert!(
             text.contains("status.delivery-agreement"),
             "{level}: {text}"

@@ -436,6 +436,25 @@ fn an_edit_from_a_cwd_outside_the_repository_is_judged_by_the_files_repository()
     assert_eq!(code, 0, "{v}");
 }
 
+/// Review finding 8.3: a gated record whose current copy cannot be read as text cannot be
+/// compared with the status the edit sets, so the edit is treated as a move and refused, not
+/// allowed. A record holding bytes that are not UTF-8 is the reachable case.
+#[test]
+fn an_edit_to_a_gated_status_of_a_record_whose_copy_cannot_be_read_is_refused() {
+    let dir = fixture("unreadable-copy", &config(""));
+    let mut bytes = PROPOSED.as_bytes().to_vec();
+    bytes.extend_from_slice(&[0xff, 0xfe, b'\n']);
+    std::fs::write(dir.join(PATH_1), bytes).unwrap();
+    let (code, v) = run_edit(&dir, PATH_1, ACCEPTED);
+    assert_eq!((code, v["verdict"].as_str()), (1, Some("block")), "{v}");
+    let message = v["message"].as_str().unwrap();
+    assert!(message.contains("could not be read"), "{message}");
+    assert!(message.contains("treated as a move"), "{message}");
+    // An edit that does not reach a gated status is not caught by that arm.
+    let (code, v) = run_edit(&dir, PATH_1, PROPOSED);
+    assert_eq!(code, 0, "{v}");
+}
+
 // --------------------------------------------- 5. letter case
 
 #[test]
