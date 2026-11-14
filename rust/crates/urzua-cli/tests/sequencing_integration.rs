@@ -155,7 +155,7 @@ fn a_sequence_rule_with_no_acyclic_pair_declared_fails_to_load() {
         .current_dir(&dir)
         .output()
         .unwrap();
-    assert_ne!(out.status.code(), Some(0));
+    assert_eq!(out.status.code(), Some(2));
     let text = format!(
         "{}{}",
         String::from_utf8_lossy(&out.stdout),

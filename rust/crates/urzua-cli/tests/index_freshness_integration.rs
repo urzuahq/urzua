@@ -158,7 +158,7 @@ fn the_rule_does_not_load_without_indexes_or_with_a_bad_format() {
             .current_dir(&dir)
             .output()
             .unwrap();
-        assert_ne!(out.status.code(), Some(0), "{name}");
+        assert_eq!(out.status.code(), Some(2), "{name}");
         assert!(
             String::from_utf8_lossy(&out.stdout).contains("indexes"),
             "{name}: {}",

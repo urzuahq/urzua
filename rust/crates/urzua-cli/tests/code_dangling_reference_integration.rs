@@ -217,6 +217,79 @@ fn a_back_pointer_the_resolution_rule_judges_is_not_reported_twice() {
     assert_eq!(findings(&out, RULE).len(), 2, "{}", report(&out));
 }
 
+/// Review finding 8.4: a citation is left to `embodiment.back-pointer-resolution` only when that
+/// rule is on, covers the file and reads that marker there. In every other case this rule owns
+/// the line, or nothing reports it.
+#[test]
+fn a_citation_nothing_else_judges_is_this_rules_to_report() {
+    let resolution = |level: &str, paths: &str, extra: &str| {
+        format!(
+            "  embodiment.back-pointer-resolution:\n    level: {level}\n    back_pointer_paths: [{paths}]\n{extra}"
+        )
+    };
+    let cases = [
+        (
+            "off",
+            "the resolution rule is switched off",
+            resolution("off", "\"src\"", ""),
+            "// Implements: BUG-9\n",
+        ),
+        (
+            "uncovered",
+            "the resolution rule's paths do not cover the file",
+            resolution("error", "\"other\"", ""),
+            "// Implements: BUG-9\n",
+        ),
+        (
+            "verifies",
+            "a Verifies: marker outside the test class is not read by the resolution rule",
+            resolution(
+                "error",
+                "\"src\", \"tests\"",
+                "    test_paths: [\"tests\"]\n",
+            ),
+            "// Verifies: BUG-9\n",
+        ),
+    ];
+    for (name, why, resolution_rule, source) in cases {
+        let dir = repo(
+            name,
+            &format!("{resolution_rule}{}", rule("")),
+            &[("src/lib.rs", source)],
+        );
+        std::fs::create_dir_all(dir.join("other")).unwrap();
+        std::fs::write(dir.join("other/x.rs"), "fn x() {}\n").unwrap();
+        std::fs::create_dir_all(dir.join("tests")).unwrap();
+        std::fs::write(dir.join("tests/t.rs"), "fn t() {}\n").unwrap();
+        git(&dir, &["add", "-A"]);
+        git(&dir, &["commit", "-q", "-m", "more sources"]);
+        let out = run_urzua(&dir, &["check"]);
+        assert_eq!(
+            out.status.code(),
+            Some(1),
+            "{why}: {}",
+            String::from_utf8_lossy(&out.stdout)
+        );
+        let mine = findings(&out, RULE);
+        assert_eq!(mine.len(), 1, "{why}: {}", report(&out));
+        assert_eq!(mine[0]["line"], 1, "{why}");
+    }
+}
+
+/// Review finding 8.5: a source file that cannot be read is counted as unreadable, not as examined.
+#[test]
+fn an_unreadable_source_file_is_counted_unreadable_and_not_examined() {
+    let dir = repo("unreadable", &rule(""), &[("src/lib.rs", "// see BUG-9\n")]);
+    std::fs::write(dir.join("src/binary.rs"), [0xff_u8, 0xfe, 0x00, 0x80]).unwrap();
+    git(&dir, &["add", "-A"]);
+    git(&dir, &["commit", "-q", "-m", "unreadable"]);
+    let out = run_urzua(&dir, &["check"]);
+    let p = population(&out);
+    assert_eq!(p["eligible"], 2, "{p}");
+    assert_eq!(p["examined"], 1, "{p}");
+    assert_eq!(p["unreadable"], 1, "{p}");
+}
+
 #[test]
 fn external_ids_are_not_records() {
     let dir = repo(
@@ -287,7 +360,7 @@ fn the_rule_needs_extensions_and_refuses_one_written_with_a_dot() {
             String::from_utf8_lossy(&out.stdout),
             String::from_utf8_lossy(&out.stderr)
         );
-        assert_ne!(out.status.code(), Some(0), "{text}");
+        assert_eq!(out.status.code(), Some(2), "{text}");
         assert!(text.contains(needle), "{needle} missing: {text}");
     }
 }
@@ -403,7 +476,7 @@ fn a_malformed_code_comment_prefixes_declaration_is_refused_at_load() {
             String::from_utf8_lossy(&out.stdout),
             String::from_utf8_lossy(&out.stderr)
         );
-        assert_ne!(out.status.code(), Some(0), "{decl}: {text}");
+        assert_eq!(out.status.code(), Some(2), "{decl}: {text}");
         assert!(text.contains(needle), "{needle} missing for {decl}: {text}");
     }
 }

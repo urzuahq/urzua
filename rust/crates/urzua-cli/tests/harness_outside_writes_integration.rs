@@ -70,8 +70,17 @@ fn worktree(parent: &Path, proj: &Path, old: &str) -> PathBuf {
 }
 
 fn run_edit(proj: &Path, path: &Path, content: &str) -> (i32, serde_json::Value, String) {
+    run_edit_paths(proj, &[path], content)
+}
+
+/// One edit-tool call naming several paths, all with the same content.
+fn run_edit_paths(proj: &Path, paths: &[&Path], content: &str) -> (i32, serde_json::Value, String) {
+    let names: Vec<String> = paths
+        .iter()
+        .map(|p| p.to_string_lossy().to_string())
+        .collect();
     let request = serde_json::json!({
-        "event": "edit", "tool": "Write", "paths": [path.to_string_lossy()], "content": content,
+        "event": "edit", "tool": "Write", "paths": names, "content": content,
         "actor": "agent", "cwd": proj.to_string_lossy(), "project_dir": proj.to_string_lossy(),
     });
     let mut c = common::urzua();
@@ -200,7 +209,7 @@ fn an_unknown_outside_writes_value_stops_the_configuration_loading() {
         .current_dir(&proj)
         .output()
         .unwrap();
-    assert_ne!(out.status.code(), Some(0), "{out:?}");
+    assert_eq!(out.status.code(), Some(2), "{out:?}");
     let text = format!(
         "{}{}",
         String::from_utf8_lossy(&out.stdout),
@@ -504,5 +513,51 @@ fn shared_compares_a_record_with_the_worktrees_copy_not_the_sessions() {
     );
     // Leaving the worktree's status where it is stays allowed.
     let (code, v, _) = run_edit(&proj, &wt.join(ADR), PROPOSED);
+    assert_eq!(code, 0, "{v}");
+}
+
+/// Review finding 8.5: a call naming several paths is judged on every one, not only the first.
+#[test]
+fn a_denied_outside_write_is_found_wherever_it_sits_in_a_multi_path_call() {
+    let (parent, proj, _) = project("deny-multi", "  outside_writes: deny\n");
+    let other = parent.join("other");
+    std::fs::create_dir_all(&other).unwrap();
+    let inside = proj.join("notes.txt");
+    let inside_two = proj.join("more.txt");
+    let outside = other.join("a.txt");
+
+    // The outside path is second, then third: still refused, and the message names it.
+    for paths in [
+        vec![inside.as_path(), outside.as_path()],
+        vec![inside.as_path(), inside_two.as_path(), outside.as_path()],
+    ] {
+        let (code, v, _) = run_edit_paths(&proj, &paths, "x\n");
+        assert_eq!((code, verdict(&v)), (1, "block"), "{paths:?}: {v}");
+        assert!(
+            v["message"]
+                .as_str()
+                .unwrap()
+                .contains(&*outside.to_string_lossy()),
+            "{v}"
+        );
+    }
+    // Every path inside the repository stays allowed.
+    let (code, v, _) = run_edit_paths(&proj, &[inside.as_path(), inside_two.as_path()], "x\n");
+    assert_eq!(code, 0, "{v}");
+}
+
+#[test]
+fn a_shared_worktree_denial_is_found_wherever_it_sits_in_a_multi_path_call() {
+    let (parent, proj, old) = project("shared-multi", "  outside_writes: shared\n");
+    let wt = worktree(&parent, &proj, &old);
+    let plain = wt.join("notes.txt");
+    let protected = wt.join(".claude/settings.json");
+    let (code, v, _) = run_edit_paths(&proj, &[plain.as_path(), protected.as_path()], "{}\n");
+    assert_eq!((code, verdict(&v)), (1, "block"), "{v}");
+    assert!(
+        v["message"].as_str().unwrap().contains("linked worktree"),
+        "{v}"
+    );
+    let (code, v, _) = run_edit_paths(&proj, &[plain.as_path(), wt.join("b.txt").as_path()], "x\n");
     assert_eq!(code, 0, "{v}");
 }

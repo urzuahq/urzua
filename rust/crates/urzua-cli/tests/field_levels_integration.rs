@@ -120,6 +120,9 @@ fn an_unlisted_field_takes_the_rule_level() {
 fn without_the_option_every_finding_takes_the_rule_level() {
     let dir = fixture("none", "", BOTH_BLANK);
     let (code, v) = run_check(&dir);
-    assert!(severities(&v).iter().all(|(_, s)| s == "warning"), "{v}");
+    let found = severities(&v);
+    // Both blank fields are reported: `all` over no findings would pass too.
+    assert_eq!(found.len(), 2, "{v}");
+    assert!(found.iter().all(|(_, s)| s == "warning"), "{v}");
     assert_eq!(code, 0, "{v}");
 }

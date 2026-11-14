@@ -1,0 +1,12 @@
+# Test isolation (review finding 7.2). Cargo exports these to every test binary and to
+# everything the tests spawn, so no fixture git command reads the machine's global or system
+# git configuration: a `commit.gpgsign=true`, a signing helper, hooks or aliases cannot reach
+# the suite. `force` makes them win over a value already in the caller's environment.
+# Identity is set here too, since an empty global config leaves a commit with none.
+[env]
+GIT_CONFIG_GLOBAL = { value = "/dev/null", force = true }
+GIT_CONFIG_NOSYSTEM = { value = "1", force = true }
+GIT_AUTHOR_NAME = { value = "urzua test", force = true }
+GIT_AUTHOR_EMAIL = { value = "test@example.com", force = true }
+GIT_COMMITTER_NAME = { value = "urzua test", force = true }
+GIT_COMMITTER_EMAIL = { value = "test@example.com", force = true }
