@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5AJB7EBVDWVSMCSYZQ
-Version: '0.41'
+Version: '0.42'
 Date: 2026-07-29
 Status: Shipped
 Embodiment: Verified
@@ -403,3 +403,4 @@ None. Every question this spec carried has been answered or routed:
 > | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/main.rs#Command` (lines 114-388) 9abff7e3a62a -> 01c366f162d3. Reason: Read the diff of main.rs (and the Command enum in SPEC-1's pin) against main: the Init command gained the --types and --dir options with their help text and reaches init::run through a new dispatch_init; the Mcp command main added is untouched. No other command or option changed. The claim each record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-13 | Bumped to `0.41`. `urzua mcp` serves all five tools (`SPEC-26`). **Why:** `MILE-29`. | **substantive** |
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/main.rs#emit` (lines 44-61) 29d071bbb823 -> 62c36edb484b. Reason: Read the diff of rust/crates/urzua-cli/src/main.rs against main. emit now serializes through a WithNextAction wrapper that flattens the report and appends the next_action and next_action_reason keys after the report's own, report_value (used by urzua mcp) is added, and the panic hook JSON gains both keys as null (MILE-72); emit still prints one JSON document through the same writeln and returns the report's exit code, so the claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-14 | Bumped to `0.42`. The `emit` pin was re-baselined for the `next_action` keys every command's JSON now carries (`SPEC-2` 0.160, `MILE-72`); this spec states no output key list, so nothing it says changes. **Why:** `MILE-72` -- the re-pin row above is structural and `revision-log.version-bump-required` asks for a bump. | **structural** |
