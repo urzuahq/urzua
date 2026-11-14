@@ -213,8 +213,14 @@ fn no_report_type_declares_a_next_action_field() {
                 && path.file_name().is_some_and(|n| n != "main.rs")
             {
                 for (n, line) in std::fs::read_to_string(&path).unwrap().lines().enumerate() {
-                    let t = line.trim_start().trim_start_matches("pub ");
-                    if t.starts_with("next_action:") || t.starts_with("next_action_reason:") {
+                    // A `pub` field declaration anywhere on the line, so a one-line struct
+                    // is caught as well as one field per line.
+                    let compact = line.split_whitespace().collect::<Vec<_>>().join(" ");
+                    if compact.contains("pub next_action:")
+                        || compact.contains("pub next_action_reason:")
+                        || compact.starts_with("next_action:")
+                        || compact.starts_with("next_action_reason:")
+                    {
                         hits.push(format!("{}:{}", path.display(), n + 1));
                     }
                 }

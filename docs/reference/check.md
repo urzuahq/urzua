@@ -118,7 +118,7 @@ change that did not touch it.
 | `rules_selected` | The ids from `--rules`, or `null`. |
 | `scope` | What was selected. `source` is `tracked-sweep`, `argv` (a file named directly), `git-diff` (`--base`) or `stdin`. `base` is the ref for `git-diff`, else `null`. `record_types`, `include_untracked` and `untracked_included` are always present. A `git-diff` run adds `changed_paths`, `dependents` and `whole_corpus_reason`. |
 | `blocking` | `true` when the run exits 1. |
-| `next_action` | One command to run next, as a bare string such as `urzua fix --apply`, or `null` when nothing is better than reading the findings. On every urzua command's JSON, not only `check`'s. It runs as printed: unwaived error and warning findings that offer a `run-command` pick it, `urzua fix --apply --ids <their records>` before `urzua index --apply`. |
+| `next_action` | One command to run next, as a bare string such as `urzua fix --apply`, or `null` when nothing is better than reading the findings. On every urzua command's JSON, not only `check`'s. It runs as printed: unwaived error and warning findings that offer a `run-command` pick it, `urzua fix --apply --ids <their records>` before `urzua index --apply`. The command resolves who is applying from `gh` or `git config user.name`; where neither is set it exits 2 asking for `--by`, so append `--by <name>`. |
 | `next_action_reason` | Why, from counts: `repairs 3 of 5 findings`. `null` exactly when `next_action` is. |
 | `findings` | The findings, below. |
 | `notices` | Present when the run has something to say that is not a finding (an untracked record skipped, an empty diff, a section alias in use, ...). Each has `severity`, `subject`, `message` and sometimes `detail`. A notice never changes the exit code. |

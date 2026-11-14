@@ -714,8 +714,9 @@ does not replace them. `urzua mcp` tools return the same reports and so carry th
   A word with a character outside letters, digits and `-_./=:@+#,` is single-quoted for a shell. When
   several findings offer different tools, the earlier tool wins and the others are not mentioned; when
   several offer the same tool, they share one command, and the reason counts them. The command takes no
-  `--by`: it resolves an identity from `gh` or `git config user.name`, as `ADR-73` states, and a
-  consumer whose repository has neither adds `--by` itself. The reason is `<verb> N of M finding(s)`,
+  `--by`: it resolves an identity from `gh` or `git config user.name`, as `ADR-73` states. A
+  consumer with neither (no `gh` login and no `user.name`) finds the printed command exiting 2 and
+  asking for `--by`, and appends `--by <name>` itself; the field does not add it. The reason is `<verb> N of M finding(s)`,
   `N` the findings that offer the chosen tool, `M` all unwaived error and warning findings, the verb
   `repairs` (`fix`) or `regenerates the index for` (`index`). Both are `null` when no such finding offers
   a `run-command`, which includes the case where the only blocker needs a human, when a record path
