@@ -4,7 +4,7 @@ Status: Shipped
 Embodiment: Verified
 Realized-by: code:.github/workflows/ci.yml@sha256:a2b83039753098dd01df37de8b7a526422e290f9fb11ed400ced6a92849ca4ea, code:.github/workflows/checks.yml@sha256:0a3547c3f12a51cefe3dcc88696bacc8f9911356a4c6e61c56f8ef25e434e493, code:.github/workflows/prepare-release.yml@sha256:0e4d28280d1a77819841035b7ed7da5ee570cf96e80875d2f1e8cc83d7596b8d, code:.github/workflows/publish-release.yml@sha256:530bdeeececf77737d4d162e8aba4c8685bcc73834140675ed8565e3a04aef25, code:.github/actions/install-knope/action.yml@sha256:7890ed184b08dbc99d465a61b46f6bef28ea8fd37a2eba69f05484c44ee3826b, test:.github/scripts/knope-pin.test.sh@sha256:2c13f4fc3ca389b738f6f0a913e45696023f38236868bae27d5a9a352ad40a8d, test:.github/scripts/release-guard.test.sh@sha256:5fca6fe029d9bc486b023e4a401d0ae297f0e4e57ed9bb7a4f54fe62f9ceb82f, test:.github/scripts/release-invariants.test.sh@sha256:8fc2b5758338aef9953492f6d1977d9799c662f05589bf1d9064e6e5129b1381, test:.github/scripts/test-no-leak.test.sh@sha256:36c44d3cd4c56c6483e31d10e31ce44b29db039518446a3f305a1f1f4a2bce9d, test:.github/actions/urzua-gate/test.sh@sha256:41938df777f1c21826b2ace086817f00e23a9fff71bf1de07c49f4cb897d6325
 Date: 2026-09-10
-Version: '0.19'
+Version: '0.20'
 Author: beauwilliams
 Subject: 'This repo''s own CI/CD pipeline -- gating, release cutting, and distribution, as one buildable reference.'
 Implements: ADR-13, ADR-45
