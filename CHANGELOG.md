@@ -4,6 +4,28 @@ All notable changes to `urzua` are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/). Written for the person installing it — what changed
 for you — not a commit dump.
 
+## 0.4.3 (2026-11-14)
+
+### Features
+
+- First-run and configuration fixes. `urzua init --types` now creates each selected type's directory (with an empty `.gitkeep`) and lists them under `directories`, so on an empty repository `init`, `doctor` and `check` all pass: `check` over a repository with no record yet is `ok` with an `empty-corpus` notice instead of `not-run`, and `doctor` no longer warns about the `authority` block `init` writes. Greenfield proposes `revision-log.version-bump-required` when the `spec` profile declares the version bump and withholds `type.no-declared-spec`; adopt and greenfield no longer propose any rule that reads a declaration they do not write (`header.required-fields`, `pointer.resolution`, the field-hygiene, status, supersession, locator, revision-log and waiver rules). A key repeated under `rules:` or `record_types:` is a load error, and a config that starts with a byte order mark loads. A section rule enabled while no record type declares the `sections` key it reads is named in a `rule-reads-nothing-declared` warning notice and in `config.scope-matches-nothing`. `drift_baseline` accepts a tag or a commit sha and refuses a branch or `HEAD`, which would hold out every drift already merged. Config messages are written in YAML, and `new` reports a missing `extra_dirs` entry in its JSON.
+- A waiver may name the finding it excuses. `Variant` is the finding's action variant and `Key-path` the configuration key its `suggested_action.target.key_path` names; a waiver that names one covers only the findings it matches, so a waiver written for one finding in `.urzua/config.yaml` no longer hides every other finding of its rule there. A waiver scoped to the configuration file that names neither is reported by `waiver.matches-nothing` (variant `waiver-config-scope-too-broad`) while it stays in effect; every other waiver, and any waiver that names neither field, works as before. `urzua waive --from-report` groups drafts by rule, file, variant and key path, writes `Variant` and `Key-path` where the waiver type lists them in `known_fields`, reports `variant` and `key_path` on each draft, and skips only the finding an existing narrowed waiver names. A waiver type that lists neither field drafts as before.
+
+#### Blanking or un-accepting an Accepted record is now gated like deleting it. `diff.decider-required` reports a record that held a gated status at the merge base and is now empty, has no header, or has a status the gate does not name (Accepted to Proposed), as the finding `gated-departure-without-decider`, and the agent harness's editor hook refuses the same edit from an agent. A move between statuses the same gate names, and a decider's edit, are unchanged.
+
+`urzua fix --apply`, `urzua fix --rebaseline --apply` and `urzua reverify --apply` now require `--actor agent` or `--actor human` when the attestation identity is `gh-verified` (the default). Without it the command is `not-run` (exit 2), says which flag is missing and writes nothing, so a revision row can no longer record `actor: unspecified` under a verified login and read as a person's own attestation of what an agent ran. To adapt, add `--actor agent` to scripts and agent commands, or `--actor human` when a person runs it. The harness commands `/repin`, `/reverify` and `/done` already pass `--actor agent`. An `asserted` or `git-config` identity is unchanged.
+
+#### Adds the opt-in rule `header.scaffold-mismatch`. Under `urzua check --base`, it compares the header of
+
+each record the diff adds with the header `urzua new` would have written for it, and warns when they
+differ: a field added, a field `new` fills (the id, author, date) missing, the fields reordered, or a
+value `new` wrote (the initial status, the starting version) changed. A field `new` leaves null may be
+filled in or left out. The header is re-rendered from the
+run's own configuration and the type's template, with the record's own number, title, `Stable-Id`,
+author and date, so a pull request sees a hand-written header before it merges. A record renamed from a
+deleted one is not examined, and a run with no `--base` reports the rule `not-applicable`. The rule is
+off unless `rules` declares it, so a repository that does not is unchanged. `urzua init` does not propose it, since no record of a corpus just adopted was written with `urzua new`.
+
 ## 0.4.2 (2026-11-14)
 
 ### Fixes
