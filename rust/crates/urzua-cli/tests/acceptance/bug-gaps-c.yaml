@@ -3,6 +3,7 @@
 # the bug, tags it `bugs: [BUG-n]`, runs it red against a build without the fix,
 # and deletes the entry here and in `bug-gap-ceilings.tsv`. The list only
 # shrinks; an entry can never be added.
+- BUG-19  # Five CLI commands hand-roll their own JSON shape instead of one shared contract
 - BUG-40  # records_examined cannot distinguish nothing-to-check from checked-nothing, and is not one unit
 - BUG-76  # An unreadable tracked record drops out of the corpus and check reports ok
 - BUG-77  # check and audit report ok when no rule examined anything

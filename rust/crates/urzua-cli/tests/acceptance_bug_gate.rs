@@ -6,8 +6,8 @@
 mod bug_gate;
 
 use bug_gate::{
-    header_status, load, parse_ceilings, parse_gap_file, parse_ledger, violations, Facts, Ledgered,
-    Tag,
+    base_lists, growth, header_status, load, parse_ceilings, parse_gap_file, parse_ledger,
+    violations, Facts, Ledgered, Lists, Tag,
 };
 use std::path::Path;
 
@@ -52,6 +52,56 @@ fn the_repository_passes_the_gate() {
     let facts = load(&root).unwrap();
     let v = violations(&facts);
     assert!(v.is_empty(), "bug coverage gate:\n  {}", v.join("\n  "));
+}
+
+fn lists(gaps: &[&str], ceiling: &[&str], ledger: &[&str]) -> Lists {
+    let set = |v: &[&str]| v.iter().map(|s| s.to_string()).collect();
+    Lists {
+        gaps: set(gaps),
+        ceiling: set(ceiling),
+        ledger: set(ledger),
+    }
+}
+
+#[test]
+fn an_entry_added_to_any_list_is_growth_and_a_removal_is_not() {
+    let base = lists(&["BUG-1", "BUG-2"], &["BUG-1", "BUG-2"], &["BUG-3"]);
+    assert!(growth(&base, &lists(&["BUG-1"], &["BUG-1"], &[])).is_empty());
+    let v = growth(
+        &base,
+        &lists(
+            &["BUG-1", "BUG-2", "BUG-9"],
+            &["BUG-1", "BUG-2", "BUG-9"],
+            &["BUG-3", "BUG-8"],
+        ),
+    );
+    assert_eq!(v.len(), 3, "{v:?}");
+    assert!(
+        has(&v, &["BUG-9", "gap"]) && has(&v, &["BUG-9", "ceilings"]),
+        "{v:?}"
+    );
+    assert!(has(&v, &["BUG-8", "ledger", "bug-lists-grow"]), "{v:?}");
+}
+
+#[test]
+fn the_lists_do_not_grow_against_the_merge_base() {
+    if std::env::var_os("URZUA_BUG_LISTS_MAY_GROW").is_some_and(|v| !v.is_empty()) {
+        println!("bug lists: growth allowed by URZUA_BUG_LISTS_MAY_GROW");
+        return;
+    }
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let base = std::env::var("URZUA_BUG_GATE_BASE").unwrap_or_else(|_| "origin/main".to_string());
+    match base_lists(&root, &base) {
+        Ok(Some(was)) => {
+            let v = growth(&was, &Lists::current().unwrap());
+            assert!(v.is_empty(), "bug lists grew:\n  {}", v.join("\n  "));
+        }
+        Ok(None) => println!("bug lists: {base} has none, so this change introduces them"),
+        // Fail closed where the history is meant to be there; a local clone
+        // without the base ref has nothing to compare.
+        Err(e) if std::env::var_os("CI").is_some() => panic!("cannot read the base: {e}"),
+        Err(e) => println!("bug lists: not compared, {e}"),
+    }
 }
 
 #[test]

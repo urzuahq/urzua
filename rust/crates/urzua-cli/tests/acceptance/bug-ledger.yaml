@@ -2,93 +2,83 @@
 # CI workflow, duplication, performance, a comment, test hygiene, documentation
 # wording. `check`, `new`, `init`, `fix` and `doctor` over a corpus cannot make
 # any of them fail, so a case is not the evidence for them (their bug record's
-# `Realized-by` is). One line of reason each. An entry is stale, and fails the
+# `Realized-by` is). One line each, saying why no corpus case can reproduce the bug. An entry is stale, and fails the
 # gate, once a case tags its bug.
 - bug: BUG-14
-  reason: "a release or CI workflow, not a corpus behaviour: knope's PrepareRelease bumps Cargo.toml but never regenerates the workspace Cargo.lock"
+  reason: "a knope release-prep step regenerating Cargo.lock; it runs only in the release workflow, and no urzua command reads a corpus to reach it"
 - bug: BUG-15
-  reason: "a release or CI workflow, not a corpus behaviour: ci.yml's changeset gate evaluates a stale pre-label event payload since labeled isn't a trigger type"
+  reason: "ci.yml's changeset gate reading a stale label payload; only a GitHub Actions pull_request event exhibits it"
 - bug: BUG-27
-  reason: "a release or CI workflow, not a corpus behaviour: The release workflow reported success for six days while preparing nothing"
+  reason: "the release workflow reporting success while preparing nothing; a property of the workflow's steps, which no urzua command runs"
 - bug: BUG-28
-  reason: "a release or CI workflow, not a corpus behaviour: The release published with no binaries, because a bot-pushed tag triggers nothing"
+  reason: "a bot-pushed tag triggering no workflow; a GitHub Actions behaviour of the release pipeline, not of any urzua command"
 - bug: BUG-33
-  reason: "a release or CI workflow, not a corpus behaviour: prepare-release fails on every no-changeset merge, because knope treats nothing-to-release as an error"
+  reason: "prepare-release failing on a no-changeset merge; knope's exit status inside the release workflow, outside any corpus run"
 - bug: BUG-34
-  reason: "a release or CI workflow, not a corpus behaviour: The release PR's changeset gate can never pass on its own, because the label is applied with GITHUB_TOKEN"
+  reason: "the release PR's gate needing a label set with GITHUB_TOKEN; GitHub token semantics in the workflow, not urzua output"
 - bug: BUG-35
-  reason: "a release or CI workflow, not a corpus behaviour: A Conventional Commit prefix cut a release for a CI-only change"
+  reason: "a Conventional Commit prefix cutting a release; knope's release rules in CI, with no urzua command or corpus involved"
 - bug: BUG-48
-  reason: "a release or CI workflow, not a corpus behaviour: Seven changesets named a package that does not exist, and the release guard reported it as nothing to release"
+  reason: "changesets naming a missing package passing the release guard; a shell guard script in the release workflow, tested by its own planted-violation cases"
 - bug: BUG-92
-  reason: "a release or CI workflow, not a corpus behaviour: A release-prep version bump and changelog section reached main through a bugfix branch"
+  reason: "a release-prep bump reaching main on a bugfix branch; branch and merge process in git hosting, not a corpus state"
 - bug: BUG-93
-  reason: "a release or CI workflow, not a corpus behaviour: The release's computed version and its changesets' declared levels are facts nothing checks"
+  reason: "the computed release version versus the changesets' levels; checked by release scripts in CI, not by urzua over a corpus"
 - bug: BUG-96
-  reason: "a release or CI workflow, not a corpus behaviour: The release invariant guards run only in make ci, not on the unattended path the defects took"
+  reason: "release invariant guards running only under make ci; where a workflow invokes them, which no corpus case can vary"
 - bug: BUG-189
-  reason: "a release or CI workflow, not a corpus behaviour: The changeset required job fails with no merge base on a PR branch containing a merge commit"
-- bug: BUG-19
-  reason: "duplication, performance, comments or test hygiene in the source, not a behaviour a corpus run shows: Five CLI commands hand-roll their own JSON shape instead of one shared contract"
+  reason: "the changeset job failing without a merge base; a CI checkout depth problem in the workflow, not a urzua behaviour"
 - bug: BUG-52
-  reason: "duplication, performance, comments or test hygiene in the source, not a behaviour a corpus run shows: SPEC-2 enumerates the rule set and nothing checks it against ALL_RULES"
+  reason: "a SPEC-2 prose list of rules compared with ALL_RULES; a document-against-code check, which make rule-table-check performs, not a run of check over a corpus"
 - bug: BUG-105
-  reason: "duplication, performance, comments or test hygiene in the source, not a behaviour a corpus run shows: the declared field slot list is rebuilt independently by four or more rules"
+  reason: "duplication of the declared-slot list across rules; a refactor with identical output, so no case can fail before and pass after"
 - bug: BUG-106
-  reason: "duplication, performance, comments or test hygiene in the source, not a behaviour a corpus run shows: the declared for this type field union is computed independently in three places"
+  reason: "duplication of the declared-field union across three places; a refactor with identical output"
 - bug: BUG-107
-  reason: "duplication, performance, comments or test hygiene in the source, not a behaviour a corpus run shows: comments narrate bug-ticket history and use temporal language against the comment convention"
-- bug: BUG-108
-  reason: "duplication, performance, comments or test hygiene in the source, not a behaviour a corpus run shows: three independent and disagreeing definitions of record-shaped file"
+  reason: "comment wording against the comment convention; source text, with no runtime behaviour"
 - bug: BUG-113
-  reason: "duplication, performance, comments or test hygiene in the source, not a behaviour a corpus run shows: the population invariant check compiles out in release builds"
+  reason: "a population invariant that compiles out in release builds; it holds for every input, so no corpus makes it fail"
 - bug: BUG-115
-  reason: "duplication, performance, comments or test hygiene in the source, not a behaviour a corpus run shows: compute_drifted_records runs unconditionally even when embodiment.consistency is off"
+  reason: "compute_drifted_records running when embodiment.consistency is off; wasted work with identical findings, observable only as time"
 - bug: BUG-116
-  reason: "duplication, performance, comments or test hygiene in the source, not a behaviour a corpus run shows: identity.collision rebuilds the shared record index independently"
+  reason: "identity.collision rebuilding the shared record index; a performance duplication with identical findings"
 - bug: BUG-122
-  reason: "duplication, performance, comments or test hygiene in the source, not a behaviour a corpus run shows: census_records clones and sorts a PathBuf per examined slot instead of per record"
+  reason: "census_records cloning and sorting a PathBuf per slot; a performance cost with identical output"
 - bug: BUG-133
-  reason: "duplication, performance, comments or test hygiene in the source, not a behaviour a corpus run shows: is_record_reference and parse_record_filename independently re-implement the same record-identifier grammar"
+  reason: "two copies of the record-identifier grammar kept in step by a comment; the duplication is a refactor with identical output, and the drift it once allowed is BUG-114, which lane A reproduces"
 - bug: BUG-134
-  reason: "duplication, performance, comments or test hygiene in the source, not a behaviour a corpus run shows: declared_slots_for_roles and declared_cross_record_value rebuild a type's declared-field set per record instead of using the cached by_type map"
+  reason: "rebuilding a type's declared-field set per record; a performance cost with identical output"
 - bug: BUG-135
-  reason: "duplication, performance, comments or test hygiene in the source, not a behaviour a corpus run shows: compute_drifted_records spawns a git subprocess per locator per record with no caching across shared paths or commits"
+  reason: "a git subprocess per locator per record with no caching; a performance cost with identical findings"
 - bug: BUG-138
-  reason: "duplication, performance, comments or test hygiene in the source, not a behaviour a corpus run shows: the no-value em-dash sentinel is duplicated in two rules instead of shared"
+  reason: "the em-dash no-value sentinel duplicated in two rules; a constant shared in a refactor with identical output"
 - bug: BUG-139
-  reason: "duplication, performance, comments or test hygiene in the source, not a behaviour a corpus run shows: record_id and filename_number independently re-implement the same filename-id extraction"
+  reason: "two copies of filename-id extraction; a duplication refactor with identical output"
 - bug: BUG-140
-  reason: "duplication, performance, comments or test hygiene in the source, not a behaviour a corpus run shows: four reference-resolving rules duplicate the same declared-field guard chain"
+  reason: "a guard chain duplicated across four rules; a refactor with identical output"
 - bug: BUG-141
-  reason: "duplication, performance, comments or test hygiene in the source, not a behaviour a corpus run shows: eight config-schema rules duplicate the same record-type inventory skeleton"
+  reason: "a record-type inventory skeleton duplicated across eight config rules; a refactor with identical output"
 - bug: BUG-143
-  reason: "duplication, performance, comments or test hygiene in the source, not a behaviour a corpus run shows: relation.target-status-undeclared rebuilds declared-fields per reference instead of reusing the cache"
+  reason: "declared fields rebuilt per reference instead of cached; a performance cost with identical findings"
 - bug: BUG-144
-  reason: "duplication, performance, comments or test hygiene in the source, not a behaviour a corpus run shows: pointer.target-status and relation.target-status-undeclared duplicate the same resolved-target walk"
+  reason: "a resolved-target walk duplicated across two rules; a refactor with identical output"
 - bug: BUG-145
-  reason: "duplication, performance, comments or test hygiene in the source, not a behaviour a corpus run shows: two hand-maintained rule-id allowlists carry the same drift risk RuleOption was built to eliminate"
-- bug: BUG-149
-  reason: "duplication, performance, comments or test hygiene in the source, not a behaviour a corpus run shows: IDENTITY_DEPENDENT_RULES omits relation.target-status-undeclared"
+  reason: "two hand-kept lists of rule ids; the bug is where per-rule facts live, and the output is identical for every corpus"
 - bug: BUG-150
-  reason: "duplication, performance, comments or test hygiene in the source, not a behaviour a corpus run shows: discover_tracked_files spawns a redundant third git subprocess for staged deletions"
-- bug: BUG-178
-  reason: "duplication, performance, comments or test hygiene in the source, not a behaviour a corpus run shows: terminal_statuses and closed_statuses are hand-copied lists that already disagree"
+  reason: "a redundant third git subprocess in discovery; a performance cost with identical output"
 - bug: BUG-193
-  reason: "duplication, performance, comments or test hygiene in the source, not a behaviour a corpus run shows: Integration tests leave fixture directories in the temp dir on every run"
+  reason: "integration tests leaving temp directories behind; test hygiene, enforced by the CI no-leak script, not a corpus result"
 - bug: BUG-194
-  reason: "duplication, performance, comments or test hygiene in the source, not a behaviour a corpus run shows: Scope resolution recompiles every pattern and runs twice per locator, so urzua check on the own corpus takes 12 s of CPU"
+  reason: "scope resolution recompiling patterns, costing CPU time; a performance cost with identical output"
 - bug: BUG-8
-  reason: "documentation or spec wording, not a behaviour a corpus run shows: README overstates pointer-field genericity -- Implements/Derives-from/Parent/Blocked-on are hardcoded, not config-declared"
+  reason: "README wording overstating pointer-field genericity; documentation text with no runtime behaviour"
 - bug: BUG-9
-  reason: "documentation or spec wording, not a behaviour a corpus run shows: Legacy pre-ADR-36 filename support is unexercised dead weight in this repo's own corpus"
+  reason: "unexercised legacy filename support in this repository's own corpus; dead code in the source, not a defect a corpus case can show"
 - bug: BUG-10
-  reason: "documentation or spec wording, not a behaviour a corpus run shows: Parent field defaults to SPEC-1 across most specs without a real relationship"
+  reason: "a Parent value defaulting to SPEC-1 across this repository's own specs; a fault in this repository's records, not in what check does with a corpus"
 - bug: BUG-21
-  reason: "documentation or spec wording, not a behaviour a corpus run shows: SPEC-2 documents an illustrative shape that doesn't match what check ships"
+  reason: "SPEC-2 illustrating a shape that differs from the shipped output; spec wording, fixed in the spec"
 - bug: BUG-26
-  reason: "documentation or spec wording, not a behaviour a corpus run shows: Five specs are marked Draft while their subject is built and shipped"
-- bug: BUG-170
-  reason: "documentation or spec wording, not a behaviour a corpus run shows: SPEC-2 promises a no-git fallback that walks the directory, but the binary refuses to run outside a git repository"
+  reason: "five specs marked Draft though built; this repository's own record statuses, not a behaviour of check"
 - bug: BUG-146
-  reason: "a serialization error swallowed inside init, with no corpus input that reaches it: init silently swallows a YAML serialization error into an empty config body"
+  reason: "an init serialization error swallowed into an empty config body; no input makes the serialization fail, so no corpus can reach it"

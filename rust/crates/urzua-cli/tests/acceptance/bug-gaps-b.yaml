@@ -36,4 +36,6 @@
 - BUG-121  # check's path-scope filter still drops a claim.status-agreement finding whose claim file falls outside the requested scope
 - BUG-126  # type.record-outside-declared-dir warns about a record staged for deletion
 - BUG-168  # two record types may declare the same dir, so every record is loaded and validated once per type
+- BUG-170  # SPEC-2 promises a no-git fallback that walks the directory, but the binary refuses to run outside a git repository
 - BUG-177  # a waiver with no Reason still waives because load_waivers requires only Rule and Scope
+- BUG-178  # terminal_statuses and closed_statuses are hand-copied lists that already disagree

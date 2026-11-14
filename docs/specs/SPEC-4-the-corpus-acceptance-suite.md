@@ -260,9 +260,15 @@ built, and where it differs from the sketch:
   that had no case when the gate was introduced, and a line whose bug has left every gap file is stale
   and is deleted in the same change. A bug fixed after that has to be tagged or ledgered. The
   **ledger** (`tests/acceptance/bug-ledger.yaml`) holds a bug no corpus run can show, a release or CI
-  workflow, a refactor, a comment, a performance change or documentation wording, with a one-line
-  reason; its `Realized-by` is the evidence instead. The gate also fails when a case tags an unknown
-  bug or one that is not Fixed, when a bug is both tagged and listed, and when an entry has no reason.
+  workflow, a refactor with identical output, a comment, a performance change or documentation wording,
+  with a one-line reason saying why no case can reproduce it; its `Realized-by` is the evidence instead.
+  The gate also fails when a case tags an unknown bug or one that is not Fixed, when a bug is both
+  tagged and listed, and when an entry has no reason. **The lists cannot grow.** The gate compares the
+  gap files, the ceiling and the ledger with the merge base's copies (`HEAD` against
+  `URZUA_BUG_GATE_BASE`, default `origin/main`) and fails on any entry the change adds. The override
+  is explicit: `URZUA_BUG_LISTS_MAY_GROW=1`, which CI sets for a pull request carrying the
+  `bug-lists-grow` label. A base that has none of the files is the change that introduces them. In CI
+  (`CI` set) a base that cannot be read fails the gate rather than skipping it.
   `acceptance_bug_gate.rs` tests each of these with a planted case.
 - **Scratch names.** A case's temporary repository and its mutated config are named by process, corpus
   and case id. Cases run on several threads, and two corpora (a private one merged in through
@@ -476,5 +482,5 @@ own-corpus case lacks the flag. A case over a fixture corpus needs none.
 > | 2026-11-08 | Bumped to `0.18`. Added the "CI shard protocol" section: `URZUA_ACCEPTANCE_SHARD`, `URZUA_ACCEPTANCE_PROVEN_OUT` and `URZUA_ACCEPTANCE_MERGE`, how the cases are dealt, what a shard file holds, and what makes the merge refuse a set. **Why:** the protocol was built by `ADR-98` and described only in `SPEC-20` and an ADR, while this spec, which owns the runner and its coverage gate, did not say that the gate is now judged over merged shard files. No behaviour of the runner changed. | **substantive** |
 > | 2026-11-09 | Bumped to `0.19`. Added "Cases over this repository's own corpus pin the evaluation date": every `corpus: "@repo"` case passes `--as-of 2026-11-09`, and a test enforces it. **Why:** a review found those cases, and the integration tests over the repository root, would fail on 2026-12-23, when the first claim expires, with no code change; claim expiry is the records gate's job under the real clock. | **substantive** |
 > | 2026-11-09 | Bumped to `0.20`. Re-pin rows in this revision log were reworded to name who re-verified, matching the tool's wording since 2026-11-09; hashes, reasons and dates are unchanged. **Why:** Maintainer decision, 2026-11-09. | **structural** |
-> | 2026-11-14 | Bumped to `0.21`. Added the `bugs:` case field and the "Bug coverage gate": every Fixed bug record is tagged by a case, listed in one of four shrink-only lane gap files, or listed in a ledger of bugs no corpus run can show. **Why:** `MILE-101`'s remaining half is "every documented bug reproduces", and nothing linked a bug record to a case, so the count of reproduced bugs was a hand classification; the gate makes the gap a number that only falls. | **substantive** |
+> | 2026-11-14 | Bumped to `0.21`. Added the `bugs:` case field and the "Bug coverage gate": every Fixed bug record is tagged by a case, listed in one of four shrink-only lane gap files, or listed in a ledger of bugs no corpus run can show, and the lists cannot grow against the merge base without a label. **Why:** `MILE-101`'s remaining half is "every documented bug reproduces", and nothing linked a bug record to a case, so the count of reproduced bugs was a hand classification; the gate makes the gap a number that only falls. | **substantive** |
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/acceptance.rs` ae174f312e28 -> f67c9c223552. Reason: Read the diff of acceptance.rs since the pin: Case gained an optional bugs list (tags read by acceptance_bug_gate.rs, never by the runner), a doc paragraph, and bug_tag_problem, which fails a case whose tag is not BUG-<number> or that is a known_gap. How a case is run, mutation-proven, sharded or gated is unchanged, so the claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |

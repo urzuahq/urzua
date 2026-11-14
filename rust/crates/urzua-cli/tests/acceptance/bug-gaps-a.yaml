@@ -21,11 +21,13 @@
 - BUG-91  # doctor's ci-wired check reads one workflow by name so it reports a wired-in checker as unwired
 - BUG-99  # urzua audit exits 2 on the config urzua init writes for a corpus with no type prefix
 - BUG-102  # new record's date heuristic can reissue a colliding record number
+- BUG-108  # three independent and disagreeing definitions of record-shaped file
 - BUG-111  # a hyphenated type prefix reference is rejected by the reference recognizer
 - BUG-112  # the date filename heuristic requires zero-padded month and day segments
 - BUG-114  # a digit-bearing type prefix is silently rejected by the filename parser
 - BUG-123  # urzua new never generates the SPEC-N H1 prefix every existing spec file carries
 - BUG-132  # init's directory-name disambiguation doesn't check the final joined name for a second collision
+- BUG-149  # IDENTITY_DEPENDENT_RULES omits relation.target-status-undeclared
 - BUG-151  # init proposes a header shape the adopted corpus does not use, so the first check reads zero records
 - BUG-167  # urzua new with a title that slugifies to nothing creates a slug-less filename and the next new reissues the same number
 - BUG-173  # record-type prefix and dir are accepted unvalidated at config load so new writes unrecognizable or colliding records and an empty dir examines nothing

@@ -14,6 +14,15 @@
 //!   a one-line reason. No `check`, `new`, `init` or `fix` run over a corpus can
 //!   show such a bug, so a case is not the evidence for it.
 //!
+//! The lists cannot grow. Alongside the checks above, the gate compares the
+//! gap files, the ceiling and the ledger with the merge base's copies (`HEAD`
+//! against `URZUA_BUG_GATE_BASE`, default `origin/main`) and fails on any entry
+//! the change adds: a gap file cannot take a bug it did not hold, nor the ceiling
+//! a line, nor the ledger a bug, without an explicit override
+//! (`URZUA_BUG_LISTS_MAY_GROW=1`, which CI sets for a pull request carrying the
+//! `bug-lists-grow` label, so a reviewer sees the addition named). A base that
+//! has none of the files is the change that introduces them, and adds nothing.
+//!
 //! The gate runs no corpus and no binary: it reads the bug records, the case
 //! files and the committed lists. Shared by `acceptance_bug_gate.rs`, which
 //! tests it and enforces it over the repository.
@@ -21,6 +30,7 @@
 use serde::Deserialize;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
+use urzua_io::git::GitRun;
 
 /// The lanes that own a gap file, in order.
 pub const LANES: &[&str] = &["a", "b", "c", "d"];
@@ -324,4 +334,98 @@ pub fn violations(facts: &Facts) -> Vec<String> {
     out.extend(ledger_violations(facts, &tagged));
     out.extend(uncovered_violations(facts, &tagged));
     out
+}
+
+/// The bugs each committed list names, as of one revision.
+#[derive(Default, Debug, PartialEq, Eq)]
+pub struct Lists {
+    pub gaps: BTreeSet<String>,
+    pub ceiling: BTreeSet<String>,
+    pub ledger: BTreeSet<String>,
+}
+
+impl Lists {
+    /// The lists the working copy of this build was compiled with.
+    pub fn current() -> Result<Lists, String> {
+        let mut gaps = BTreeSet::new();
+        for (lane, text) in GAP_FILES {
+            gaps.extend(parse_gap_file(lane, text)?.into_iter().map(|(_, b)| b));
+        }
+        Ok(Lists {
+            gaps,
+            ceiling: parse_ceilings(CEILINGS)?
+                .into_iter()
+                .map(|(b, _)| b)
+                .collect(),
+            ledger: parse_ledger(LEDGER)?.into_iter().map(|l| l.bug).collect(),
+        })
+    }
+}
+
+/// Every entry `now` has that `base` does not, as one message each. Entries
+/// that left a list are not growth.
+pub fn growth(base: &Lists, now: &Lists) -> Vec<String> {
+    let mut out = Vec::new();
+    for (name, was, is) in [
+        ("a bug-gaps-<lane>.yaml file", &base.gaps, &now.gaps),
+        ("bug-gap-ceilings.tsv", &base.ceiling, &now.ceiling),
+        ("bug-ledger.yaml", &base.ledger, &now.ledger),
+    ] {
+        for bug in is.difference(was) {
+            out.push(format!(
+                "{bug} was added to {name}: these lists only shrink, so tag a case with `bugs: [{bug}]` instead (a bug no corpus run can show goes in the ledger with the `bug-lists-grow` label on the pull request)"
+            ));
+        }
+    }
+    out
+}
+
+const LIST_PATHS: &[(&str, &str)] = &[
+    ("a", "bug-gaps-a.yaml"),
+    ("b", "bug-gaps-b.yaml"),
+    ("c", "bug-gaps-c.yaml"),
+    ("d", "bug-gaps-d.yaml"),
+];
+const ACCEPTANCE_DIR: &str = "rust/crates/urzua-cli/tests/acceptance";
+
+fn git_text(root: &Path, args: &[&str]) -> Result<Option<String>, String> {
+    let out = GitRun::new()
+        .dash_c(root)
+        .args(args)
+        .discard_stderr()
+        .output()
+        .map_err(|e| format!("git {args:?}: {e:?}"))?;
+    Ok(out
+        .status
+        .success()
+        .then(|| String::from_utf8_lossy(&out.stdout).trim_end().to_string()))
+}
+
+/// The lists as the merge base of `HEAD` and `base_ref` held them. `Ok(None)`
+/// when the base has none of them (this change introduces the gate); `Err` when
+/// the base cannot be resolved at all.
+pub fn base_lists(root: &Path, base_ref: &str) -> Result<Option<Lists>, String> {
+    let mb = git_text(root, &["merge-base", "HEAD", base_ref])?
+        .ok_or_else(|| format!("no merge base between HEAD and {base_ref}"))?;
+    let show = |file: &str| git_text(root, &["show", &format!("{mb}:{ACCEPTANCE_DIR}/{file}")]);
+    let Some(ceilings) = show("bug-gap-ceilings.tsv")? else {
+        return Ok(None);
+    };
+    let mut lists = Lists {
+        ceiling: parse_ceilings(&ceilings)?
+            .into_iter()
+            .map(|(b, _)| b)
+            .collect(),
+        ..Lists::default()
+    };
+    for (lane, file) in LIST_PATHS {
+        let text = show(file)?.ok_or_else(|| format!("{file} is missing at {mb}"))?;
+        lists
+            .gaps
+            .extend(parse_gap_file(lane, &text)?.into_iter().map(|(_, b)| b));
+    }
+    let ledger =
+        show("bug-ledger.yaml")?.ok_or_else(|| format!("bug-ledger.yaml is missing at {mb}"))?;
+    lists.ledger = parse_ledger(&ledger)?.into_iter().map(|l| l.bug).collect();
+    Ok(Some(lists))
 }
