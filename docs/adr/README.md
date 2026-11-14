@@ -105,4 +105,5 @@ This directory holds urzua's ADRs, one `ADR-N-slug.md` file each. This index is 
 - [Test CI is sharded across parallel jobs and one gate job aggregates them](ADR-98-test-ci-is-sharded-across-parallel-jobs-and-one-gate-job-aggregates-them.md)
 - [urzua ships a read-only MCP server as a stdio transport over its existing reports](ADR-99-urzua-ships-a-read-only-mcp-server-as-a-stdio-transport-over-its-existing-reports.md)
 - [A source comment citing a record is checked against the corpus: declared comment leaders, existence only, opt-in](ADR-100-a-source-comment-citing-a-record-is-checked-against-the-corpus-declared-comment-leaders-existence-only-opt-in.md)
+- [Urzua's mission and the principles every decision is judged against](ADR-101-urzua-s-mission-and-the-principles-every-decision-is-judged-against.md)
 <!-- urzua:index:end -->
