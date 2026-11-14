@@ -150,7 +150,7 @@ steps:
       base-ref: ${{ github.base_ref }} # empty outside pull requests
 ```
 
-A run that could not run fails the job and is shown as NOT RUN; it is never a pass. Published builds are x86_64 Linux and arm64 and x86_64 macOS.
+A run that could not run fails the job and is shown as NOT RUN; it is never a pass. Published builds are x86_64 Linux and Apple Silicon macOS; Intel Macs build from source with `cargo install`.
 
 ## Adopt without a rewrite
 

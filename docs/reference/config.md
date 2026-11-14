@@ -64,7 +64,7 @@ setting is never silently ignored. `level` is the one option every rule takes: i
 severity ceiling.
 
 `scope: changed` is not general. It makes a rule judge only the records a `check --base` diff adds or
-changes, and four of the 73 rules accept it:
+changes, and four of the 74 rules accept it:
 
 - `embodiment.locator-promotion-candidate`
 - `embodiment.locator-on-back-pointer-path`

@@ -238,7 +238,10 @@ fn the_same_directory_alias_attack_is_blocked_at_both_steps_on_base_and_whole_ru
 
     std::fs::write(dir.join("docs/adr/draft.txt"), ACCEPTED).unwrap();
     commit_all(&dir, "pr2");
-    let (code, report, stdout) = run(&dir, &["check", "--base", "after-pr1", "--actors", &mallory]);
+    let (code, report, stdout) = run(
+        &dir,
+        &["check", "--base", "after-pr1", "--actors", &mallory],
+    );
     assert_eq!(escapes(&report).len(), 1, "{stdout}");
     assert_eq!(code, 1, "PR 2 must block (--base): {stdout}");
     let (code, report, stdout) = run(&dir, &["check"]);

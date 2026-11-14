@@ -1,0 +1,19 @@
+# Never reflow or normalize these fixtures: whitespace and wrapping are the material under test.
+fixtures:
+  - path: .urzua/config.yaml
+    irregularity: >-
+      an adr type with a declared initial status, one known field and the opt-in
+      header.scaffold-mismatch rule at warn; not a record.
+  - path: .urzua/templates/adr.md
+    irregularity: >-
+      the type's template: its header names the known field Deciders, which urzua
+      new writes after the required fields; not a record.
+  - path: records/ADR-0001-first.md
+    irregularity: >-
+      none -- a record whose header is exactly the scaffold's shape with its null
+      fields filled in; left unedited, so a diff run does not examine it.
+  - path: records/ADR-0002-legacy.md
+    irregularity: >-
+      a header written by hand before the scaffold existed: Status first, the id
+      second, no Deciders, Author before Date. A case renames it and it must not
+      be called a creation.

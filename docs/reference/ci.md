@@ -43,8 +43,8 @@ build urzua in an earlier step and pass its path.
 
 1. Installs the pinned release. It downloads `urzua-<target>.tar.gz` from the release, verifies its
    build provenance attestation (and its sha256 when you pass `sha256`), unpacks it, and refuses a
-   binary that does not report the pinned version. Published builds are x86_64 Linux and arm64 and
-   x86_64 macOS.
+   binary that does not report the pinned version. Published builds are x86_64 Linux and Apple Silicon
+   macOS; Intel Macs build from source with `cargo install`.
 2. Checks the checkout has the history drift reads. A shallow checkout fails the job with that
    reason, because drift detection would otherwise read as clean. With `base-ref` it also fetches
    the base branch as `origin/<base-ref>`.
