@@ -273,7 +273,9 @@ never accept a record or touch a guardrail rests on this file and on the person 
 - what the editor hook cannot read: a hard link is resolved on Unix only (elsewhere a write is judged by its
   own name), names are not Unicode-normalised, an MCP tool whose input has no string a path can be read from
   is not an edit it can see, an MCP tool that applies a patch or runs a shell command is an unparsed route, a change made before `session-start` took the protected baseline is not
-  reported, the agent's user-level and local settings are neither protected nor read, and a link swapped
+  reported, the agent's user-level settings (outside the repository) are neither protected nor read, the
+  project's `.claude/settings.local.json` is protected as a path under `.claude` but neither read nor wired by
+  the install (a hook entry or `disableAllHooks` set only there is not seen by `status`), and a link swapped
   between the judgement and the write is not seen;
 - a Bash command that writes what the edit tools cannot: `.urzua/cache`, `.urzua/harness.lock`, the override
   log, `.git/hooks` and `.git/config`. Nothing reports it;
