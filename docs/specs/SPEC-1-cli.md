@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5AJB7EBVDWVSMCSYZQ
-Version: '0.43'
+Version: '0.44'
 Date: 2026-07-29
 Status: Shipped
 Embodiment: Verified
@@ -14,7 +14,7 @@ Derives-from: RFC-1
 
 ## Purpose
 
-Ship the smallest thing that is **genuinely used in real codebases** (its own repository in Phase 0, a first adopter's and then two adopters' by the Phase 1 exit) and proves the founding
+Ship the smallest thing that is **genuinely used in real codebases** (its own repository in Phase 0, this repository (Rust) and one adopter, whose primary language is not Rust, by the Phase 1 exit) and proves the founding
 claim — one implementation instead of three — with documented bug histories from independently
 built tooling as its acceptance test.
 
@@ -78,7 +78,7 @@ Phase 1 is done when, and only when:
 0. It replaces one adopter's hand-written linter, which is then deleted. -- `MILE-102`. **This is
    the real bar.** A tool that runs *alongside* the thing it was meant to replace has not replaced
    it.
-1. It runs green in **at least two** real target codebases, with different primary languages, via
+1. It runs green in **two** real target codebases, this repository (Rust) and the adopter (a primary language other than Rust), each via
    pre-push hook and CI, with zero host-repo runtime added to either. -- `MILE-99` (the pre-push hook of this repository only),
    `MILE-100` (the second codebase, with its own hook and CI).
 2. It reproduces **every documented bug** in the acceptance suite against real corpora. Not synthetic
@@ -405,3 +405,4 @@ None. Every question this spec carried has been answered or routed:
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/main.rs#emit` (lines 44-69) 29d071bbb823 -> 660eb5588313. Reason: Read the diff of rust/crates/urzua-cli/src/main.rs against main. emit now serializes through a private WithNextAction wrapper that appends next_action and next_action_reason after the report's own keys, and falls back to a could-not-run JSON with exit 2 when a report cannot serialize as an object; report_value (used by urzua mcp) is added; the panic hook JSON gains both keys as null (MILE-72). emit still writes one JSON document and otherwise returns the report's exit code, so the claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-14 | Bumped to `0.42`. The `emit` pin was re-baselined for the `next_action` keys every command's JSON now carries (`SPEC-2` 0.160, `MILE-72`); this spec states no output key list, so nothing it says changes. **Why:** `MILE-72` -- the re-pin row above is structural and `revision-log.version-bump-required` asks for a bump. | **structural** |
 > | 2026-11-14 | Bumped to `0.43`. Success criterion 1 cites `MILE-99` for this repository's pre-push hook only and `MILE-100` for the second codebase's hook and CI. The criterion's wording is unchanged. **Why:** an external review (finding 9.4) found the citation implying `MILE-99` covers a hook in two codebases; it covers one. | **substantive** |
+> | 2026-11-14 | Bumped to `0.44`. The Purpose and success criterion 1 now name the two codebases: this repository (Rust) and the adopter (a primary language other than Rust), each via pre-push hook and CI; they no longer say "two adopters" or "at least two" targets. **Why:** maintainer decision of 2026-11-14, asked whether Phase 1 needs two real adopters or this repository plus the adopter: "Own repo + adopter". This records the reading `MILE-100` took on 2026-11-13 as a decision. | **substantive** |
