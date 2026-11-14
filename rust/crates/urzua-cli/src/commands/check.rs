@@ -2590,6 +2590,9 @@ fn run_after_scoping(
     let read_text = |p: &str| texts.get(p);
     let whole_corpus = scope.whole_corpus();
     let reached = |p: &Path| whole_corpus || scope.in_scope.contains(p);
+    let session = &context.session;
+    let config_file = crate::discovery::relative_to_root(&session.repo_root, &session.config_path)
+        .unwrap_or_else(|_| session.config_path.clone());
     let ctx = context.rule_ctx(
         &may_exist,
         &dir_exists,
@@ -2601,6 +2604,7 @@ fn run_after_scoping(
             whole_corpus,
             reached: &reached,
             today,
+            config_file: &config_file,
         },
     );
     let results = run_phase(context, rules::Phase::AfterScoping, &ctx);

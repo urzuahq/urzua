@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5GHR70MNKQTXHQJGJB
-Version: '0.26'
+Version: '0.27'
 Date: 2026-09-08
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:.urzua/config.yaml@sha256:6ed60a01c6e823151dfc3717d05cae4cc03578c27bdbd6e5346685da75b27bb0, test:rust/crates/urzua-cli/tests/spec_shipped_integration.rs@sha256:b03ddbc2eacaccee634b27b070f66f6a730197313c3b114a882becc342acb7a8
+Realized-by: code:.urzua/config.yaml@sha256:e544107a6abb54527dc5c7df8a73d144a287f4379eace12faee92b45bfb53d40, test:rust/crates/urzua-cli/tests/spec_shipped_integration.rs@sha256:b03ddbc2eacaccee634b27b070f66f6a730197313c3b114a882becc342acb7a8
 Author: beauwilliams
 Subject: 'The `spec` record type -- schema, required fields (including this one, `Subject`), and lifecycle.'
 Parent: —
@@ -149,3 +149,5 @@ any other class, a new spec, or an unchanged log is not reported.
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` ddff3b920ab0 -> 7b42a98a69e4. Reason: Read the diff of each re-pinned file against main and the claim still holds. .urzua/config.yaml: one more rule declared, header.scaffold-mismatch: warn, under a three-line comment; no other entry changed. rust/crates/urzua-core/src/rules/table.rs: one RuleDef entry added for header.scaffold-mismatch, and the changed-set rule list in its test names it. rust/crates/urzua-cli/src/commands/check.rs: Context and DiffInputs carry renamed_paths, load_renamed_paths is new, and load_template_texts also reads templates while header.scaffold-mismatch is enabled (its read error no longer starts with the section.order rule id). **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-14 | Bumped to `0.26`. Evidence pins re-baselined for this change (the `Re-baselined` row above); the specification text is unchanged. **Why:** a revision-log entry that adds a structural change bumps `Version`. | **structural** |
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` 7b42a98a69e4 -> 6ed60a01c6e8. Reason: Read the diff of .urzua/config.yaml against the pinned text and the claim still holds. The only change since the previous pin is the comment above header.scaffold-mismatch (it now says why the rule is at info) and its level, warn to info; no other entry changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` 6ed60a01c6e8 -> e544107a6abb. Reason: Read the diff of each pinned file against main and the claim still holds. config.yaml: only the waiver type gained two known_fields, Variant and Key-path, with a comment; no other key changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-14 | Bumped to `0.27`. Evidence pins re-baselined for this change (the `Re-baselined` row above); the specification text is unchanged. **Why:** a revision-log entry that adds a structural change bumps `Version`. | **structural** |

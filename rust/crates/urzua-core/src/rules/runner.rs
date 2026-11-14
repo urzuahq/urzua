@@ -56,6 +56,9 @@ pub struct RunState<'a> {
     /// Whether a path is inside what the run reports on.
     pub reached: &'a dyn Fn(&Path) -> bool,
     pub today: &'a str,
+    /// The configuration file as a finding on it names it: repository-relative.
+    /// A waiver scoped to it must narrow (`waiver.matches-nothing`, `SPEC-10`).
+    pub config_file: &'a Path,
 }
 
 impl RunState<'_> {
@@ -67,6 +70,7 @@ impl RunState<'_> {
             whole_corpus: false,
             reached: &|_| true,
             today: "",
+            config_file: Path::new(""),
         }
     }
 }
