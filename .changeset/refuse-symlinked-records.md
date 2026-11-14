@@ -1,6 +1,6 @@
 ---
 default: patch
-closes: []
+closes: [BUG-195]
 ---
 
 A tracked record file that is a symlink resolving outside the repository, or outside its record

@@ -1,6 +1,7 @@
 id: a-record-symlinked-out-of-its-directory-is-refused
 corpus: corpus-d
 invocation: [check]
+bugs: [BUG-195]
 # A tracked record that is a symlink to a file outside its type's directory is
 # never read. The finding is on for every configuration (corpus-d declares no
 # entry for the rule) and names the link; with the rule written `off` the
