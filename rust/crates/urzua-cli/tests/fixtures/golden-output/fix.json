@@ -9,6 +9,8 @@
       "source": "clock"
     },
     "failed": [],
+    "next_action": "urzua fix --apply",
+    "next_action_reason": "writes 1 repair",
     "population": {
       "eligible": 4,
       "examined": 2,

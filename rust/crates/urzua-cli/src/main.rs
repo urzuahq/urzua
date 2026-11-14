@@ -55,30 +55,37 @@ pub(crate) fn emit<T: Report>(report: &T) -> ExitCode {
     let _ = writeln!(
         std::io::stdout().lock(),
         "{}",
-        serde_json::to_string_pretty(&report_value(report)).unwrap()
+        serde_json::to_string_pretty(&with_next_action(report)).unwrap()
     );
     report.exit_code()
 }
 
-/// A report as JSON with the two `MILE-72` keys on its top level, always
-/// present and `null` when the report has no next action. The one
-/// serialisation every command and `urzua mcp` goes through.
-pub(crate) fn report_value<T: urzua_core::report::Report>(report: &T) -> serde_json::Value {
-    let mut value = serde_json::to_value(report).expect("a report serializes");
+/// A report with the two `MILE-72` keys after its own, always present and
+/// `null` when the report has no next action. Serialised straight from the
+/// report, never through a `Value`, so the report's own key order (and its
+/// hand-ordered maps) is untouched. `flatten` is safe here where `ADR-46`
+/// ruled it out for an envelope: no report declares either key itself.
+#[derive(serde::Serialize)]
+struct WithNextAction<'a, T: serde::Serialize> {
+    #[serde(flatten)]
+    report: &'a T,
+    next_action: Option<String>,
+    next_action_reason: Option<String>,
+}
+
+fn with_next_action<T: urzua_core::report::Report>(report: &T) -> WithNextAction<'_, T> {
     let next = report.next_action();
-    if let serde_json::Value::Object(map) = &mut value {
-        map.insert(
-            "next_action".to_string(),
-            next.as_ref()
-                .map_or(serde_json::Value::Null, |n| n.command.clone().into()),
-        );
-        map.insert(
-            "next_action_reason".to_string(),
-            next.as_ref()
-                .map_or(serde_json::Value::Null, |n| n.reason.clone().into()),
-        );
+    WithNextAction {
+        report,
+        next_action: next.as_ref().map(|n| n.command.clone()),
+        next_action_reason: next.map(|n| n.reason),
     }
-    value
+}
+
+/// A report as JSON with the two `MILE-72` keys. The one serialisation every
+/// command and `urzua mcp` goes through.
+pub(crate) fn report_value<T: urzua_core::report::Report>(report: &T) -> serde_json::Value {
+    serde_json::to_value(with_next_action(report)).expect("a report serializes")
 }
 
 /// The evaluation date this run compared against, for a report's `as_of`.

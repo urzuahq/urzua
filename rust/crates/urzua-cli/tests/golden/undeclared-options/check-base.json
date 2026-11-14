@@ -107,5 +107,7 @@
       "line": null,
       "message": "Realized-by names 'src/a.rs' (code:), a file under back_pointer_paths: a `Implements: ADR-1` comment in that file is read automatically and counts as the same tier, so it cannot go stale away from the code; add the comment first, then drop this locator from Realized-by; keep the locator only where a comment cannot be written"
     }
-  ]
+  ],
+  "next_action": null,
+  "next_action_reason": null
 }

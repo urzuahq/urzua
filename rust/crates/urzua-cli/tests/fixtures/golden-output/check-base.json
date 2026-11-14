@@ -48,6 +48,8 @@
         }
       }
     ],
+    "next_action": "urzua fix --apply",
+    "next_action_reason": "repairs 1 of 2 findings",
     "records_read_by_any_rule": 2,
     "rules_executed": [
       {

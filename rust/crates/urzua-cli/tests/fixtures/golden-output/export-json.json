@@ -6,6 +6,8 @@
   ],
   "exit": 0,
   "stdout": {
+    "next_action": null,
+    "next_action_reason": null,
     "record_count": 4,
     "records": [
       {
