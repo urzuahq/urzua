@@ -1624,9 +1624,9 @@ A repository declares which rules run and at what level. A rule that is not name
 "off" and "ran clean" must stay distinguishable.
 
 One rule runs without being named: `identity.record-symlink-escapes` is on for every configuration at `error`
-(`SPEC-2`, "Rules that are on by default"). A declared level other than `off` stands, and declaring it `off` is a
-config load error naming the rule, so a refusal cannot be switched off in silence. `urzua init` writes no entry
-for it.
+(`SPEC-2`, "Rules that are on by default"). A declared level stands, `off` included: `warn` reports a record that is a
+link without blocking, and `off` reads it through the link and reports nothing, which accepts the route `SPEC-2` and
+`ADR-89` (amendment of 2026-11-14) describe. `urzua init` writes no entry for it.
 
 ```yaml
 rules:
@@ -2592,5 +2592,5 @@ proves this configuration produces the three findings.
 > | 2026-11-14 | Bumped to `0.143`. The test files this spec's evidence pins were hardened (exact exit codes, isolated git, visible root skips); the pins are re-baselined in the row above and the specified behaviour is unchanged. **Why:** the review's test findings; a re-baseline row is structural, so the version moves with it. | **structural** |
 > | 2026-11-14 | Bumped to `0.144`. `## Resolution` states that a leading byte order mark is skipped and that a key repeated under `rules:` or `record_types:` is a load error naming the key. `drift_baseline`'s `ref` is a tag or a commit sha; a branch, `HEAD` or any ref that is neither is refused when `check` runs, with the reason. **Why:** the first-run review, findings 6.3, 6.6 and 1.4: a duplicate rule key disabled a rule silently, a BOM made the config unreadable, and a baseline on a branch hid all merged drift; the ref rule is the `ADR-91` amendment of 2026-11-14, decided by the orchestrator, pending maintainer review. | **substantive** |
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` d07f1b749110 -> 9b216fd928bd. Reason: Read the diff of each pinned file against main and the claim still holds. config.rs: strip_bom, read_in_window skips a BOM, unique_map refuses a repeated key under rules and record_types, and new unit tests; no other parsing or validation changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
-> | 2026-11-14 | Bumped to `0.145`. Documents that `identity.record-symlink-escapes` is on for every configuration and that declaring it `off` is a load error. **Why:** `ADR-89` amendment of 2026-11-14. | **substantive** |
+> | 2026-11-14 | Bumped to `0.145`. Documents that `identity.record-symlink-escapes` is on for every configuration and that a configuration sets its level or turns it `off`. **Why:** `ADR-89` amendment of 2026-11-14. | **substantive** |
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 9b216fd928bd -> 6e7b740a88d5, `rust/crates/urzua-cli/tests/own_config_integration.rs` d6dcb432d05a -> 09c2431a2693. Reason: Pinned file(s) changed by the symlinked-record refusal: config.rs: a rule that cannot be turned off, declared `off`, is a load error (RuleCannotBeOff, validate_default_on_rules); own_config_integration.rs: a revision row appended by an earlier re-pin in this change. The record's claim is unaffected by these changes. (Re-applied after merging main.) **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |

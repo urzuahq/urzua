@@ -136,20 +136,32 @@ fn a_symlink_to_a_sibling_record_in_the_same_directory_is_refused_too() {
 }
 
 #[test]
-fn the_refusal_cannot_be_turned_off_and_a_rule_entry_does_not_lower_it() {
-    let dir = fixture("off");
+fn a_configuration_may_set_the_level_or_turn_the_refusal_off() {
+    let dir = fixture("levels");
     std::fs::write(dir.join("notes/y.md"), PROPOSED).unwrap();
     std::os::unix::fs::symlink("../../notes/y.md", dir.join("docs/adr/ADR-2-b.md")).unwrap();
-    let config = CONFIG.replace("rules:\n", &format!("rules:\n  {RULE}: off\n"));
-    std::fs::write(dir.join(".urzua/config.yaml"), config).unwrap();
     commit_all(&dir, "link");
+    let with = |rule: &str| {
+        let config = CONFIG.replace("rules:\n", &format!("rules:\n  {RULE}: {rule}\n"));
+        std::fs::write(dir.join(".urzua/config.yaml"), config).unwrap();
+    };
+    // A declared `warn` still reports the link and no longer blocks.
+    with("warn");
     let (code, report, stdout) = run(&dir, &["check"]);
-    assert_eq!(code, 2, "{stdout}");
-    let error = report["error"].as_str().unwrap_or_default();
-    assert!(
-        error.contains(RULE) && error.contains("cannot be turned off"),
-        "{stdout}"
-    );
+    assert_eq!(escapes(&report).len(), 1, "{stdout}");
+    assert_eq!(escapes(&report)[0]["severity"], "warning", "{stdout}");
+    assert_eq!(code, 0, "{stdout}");
+    // `off` reads the record through the link, as before, and reports nothing: the
+    // risk the repository accepts (SPEC-2).
+    with("off");
+    let (code, report, stdout) = run(&dir, &["check"]);
+    assert!(escapes(&report).is_empty(), "{stdout}");
+    assert_eq!(code, 0, "{stdout}");
+    let (code, _, stdout) = run(&dir, &["graph"]);
+    assert_eq!(code, 0, "{stdout}");
+    // A selection does not bring it back once it is off.
+    let (_, report, stdout) = run(&dir, &["check", "--rules", "diff.decider-required"]);
+    assert!(escapes(&report).is_empty(), "{stdout}");
 }
 
 #[test]

@@ -271,13 +271,14 @@ pub enum Phase {
 
 /// A rule that runs for every configuration, declared or not (maintainer
 /// decision, 2026-11-14). The runner runs one at `level` when the configuration
-/// declares none; a declared level stands, except `off` on a rule that
-/// `can_turn_off` is false for, which is a load error: that rule is a refusal,
-/// not a preference.
+/// declares none; a declared level, `off` included, stands (a configuration
+/// decides, and the risk of `off` is documented with the rule). A rule with
+/// `under_selection` also runs under every `--rules` selection unless the
+/// configuration declared it `off`.
 pub struct DefaultOn {
     pub id: &'static str,
     pub level: crate::config::RuleLevel,
-    pub can_turn_off: bool,
+    pub under_selection: bool,
 }
 
 /// Every rule that is on by default. Their executions do not count as a rule
@@ -286,7 +287,7 @@ pub struct DefaultOn {
 pub const DEFAULT_ON_RULES: &[DefaultOn] = &[DefaultOn {
     id: RULE_IDENTITY_RECORD_SYMLINK_ESCAPES,
     level: crate::config::RuleLevel::Error,
-    can_turn_off: false,
+    under_selection: true,
 }];
 
 /// The default-on entry for `id`, if it has one.
@@ -1255,7 +1256,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_IDENTITY_RECORD_SYMLINK_ESCAPES,
-        description: "A tracked record file that is a symlink, or sits behind a symlinked directory, is refused and never read, by every command (`ADR-89` amendment of 2026-11-14). Without it a record could be moved out of the governed tree and a symlink left in its place, so a later edit to the moved copy changes the record's status where no gate on the governed path sees it, and a link to a file outside the repository would be read and published. A record is read where it is tracked, never through a link: a link to a sibling record or to a file in the same directory is refused too, because moving a record out of the governed tree under a name no type governs (`ADR-1-a.md` linked to `draft.txt`) would hide it just as well. The finding is an error that no waiver excuses, names the link and where it resolves, and is reported on a scoped or `--base` run too. Maintainer decision, 2026-11-14: on for every configuration and cannot be turned off, so a configuration that declares it `off` is a load error. It runs under every `--rules` selection and is listed in `rules_executed` of a narrowed run.",
+        description: "A tracked record file that is a symlink, or sits behind a symlinked directory, is refused and never read, by every command (`ADR-89` amendment of 2026-11-14). Without it a record could be moved out of the governed tree and a symlink left in its place, so a later edit to the moved copy changes the record's status where no gate on the governed path sees it, and a link to a file outside the repository would be read and published. A record is read where it is tracked, never through a link: a link to a sibling record or to a file in the same directory is refused too, because moving a record out of the governed tree under a name no type governs (`ADR-1-a.md` linked to `draft.txt`) would hide it just as well. The finding is an error that no waiver excuses, names the link and where it resolves, and is reported on a scoped or `--base` run too. Maintainer decision, 2026-11-14: on by default, at `error`, for every configuration, and a configuration sets another level or `off` under `rules:`; with `off` a record is read through a link as before and nothing is reported, so a repository that turns it off accepts that a record can be moved where no gate looks. Unless declared `off` it runs under every `--rules` selection and is listed in `rules_executed` of a narrowed run.",
         scope: Scope::Files,
         anchor: Anchor::Outside,
         judges: Judges::NotRecordLevel,
@@ -1269,7 +1270,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         options: &[],
         population: PopulationUnit::Path,
         actions: &[
-            VariantAction::new("record-symlink-escapes", ActionDecl::Exempt("the fix is to replace the link with the record file or remove it; neither is a field edit")).floored(FindingSeverity::Error).unwaivable(),
+            VariantAction::new("record-symlink-escapes", ActionDecl::Exempt("the fix is to replace the link with the record file or remove it; neither is a field edit")).unwaivable(),
         ],
         phase: Phase::Main,
         companion: None,

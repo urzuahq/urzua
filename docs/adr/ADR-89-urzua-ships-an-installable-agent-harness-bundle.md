@@ -856,14 +856,15 @@ never through a link.
   file in the same type directory through; a review showed that moving a record to `docs/adr/draft.txt`, a name no
   type governs, and leaving `ADR-1-a.md` linked to it, hides the record just as well. A record has no use for an
   alias. A link that does not resolve, or resolves to a directory, keeps the loader's own "could not read" error.
-- The rule is on for every configuration and cannot be turned off: `identity.record-symlink-escapes: off` is a
-  config load error. A declared level above `off` stands. `urzua init` does not write an entry for it, and this
-  repository's configuration does not declare it. It runs under every `--rules` selection and so appears in the
-  `rules_executed` of a narrowed run.
+- The rule is on for every configuration, and a configuration sets its level or turns it `off` under `rules:` like
+  any rule (maintainer principle, 2026-11-14: everything is a config); an earlier version made `off` a load error.
+  **Turning it off accepts the route above:** records are then read through links as before and nothing is reported.
+  `urzua init` does not write an entry for it, and this repository's configuration does not declare it. Unless
+  declared `off` it runs under every `--rules` selection and so appears in the `rules_executed` of a narrowed run.
 - **Why a default-on rule departs from opt-in configuration.** `ADR-53` makes a rule opt-in because a rule is a
   repository's policy about its records, and a repository may decline a policy. This is not a policy: it is a
   refusal that keeps the engine from reading a record where the gates do not look, a security property of the
-  tool and not a style rule, so a configuration that could switch it off could switch the gate off with it.
+  tool and not a style rule, so it is on unless a repository says otherwise, and the risk of saying so is written next to the rule.
 - The two-pull-request route is closed at its first step: the pull request that leaves the symlink behind carries
   the blocking finding, and the second pull request, had the first merged, carries it too, because the finding
   does not depend on what the second changes. The diff gate does not need to resolve a changed path back to the
