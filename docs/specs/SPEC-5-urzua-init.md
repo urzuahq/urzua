@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5PKKQRJF9WFZJA105B
-Version: '0.26'
+Version: '0.27'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Verified
@@ -166,9 +166,11 @@ rule added later with a `reads_declaration` is withheld without touching `init`.
 (severity `info`) lists the withheld rules, grouped by declaration, so the adopter knows what to declare on
 a record type before enabling the rule.
 
-`init` also writes `authority: {decider_table: base}`: no deciders and no gates, which no corpus can supply,
-only the choice that who may decide is read from a pull request's base revision (`SPEC-3`, `ADR-89`
-amendment of 2026-11-09), so the table the adopter writes next is not one a pull request can edit for itself.
+`init` also writes `authority: {decider_table: base, waivable: never}`: no deciders and no gates, which no
+corpus can supply, only the choice that who may decide is read from a pull request's base revision (`SPEC-3`,
+`ADR-89` amendment of 2026-11-09), so the table the adopter writes next is not one a pull request can edit for
+itself, and the choice that `diff.decider-required` is never waivable (`ADR-89` amendment of 2026-11-09, gate
+waivers).
 
 ## Safety
 
@@ -314,3 +316,4 @@ None open. The four questions `MILE-114` carried are decided or recorded:
 > | 2026-11-13 | Maintainer decision, 2026-11-13: `section.required` and `section.shape` are withheld the same way, naming `sections.required`. Both read it, `init` never writes it, and in an adopted repo they reported `ran` over zero records. The adopted config no longer carries those two rules; a repo that declares `sections.required` enables them as before. **Why:** the same silent no-op `BUG-73` withheld the other declaration-reading rules for; the section-structure rows above had left these two as the remaining cases. | **substantive** |
 > | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/init.rs` 92b8fdb24b1b -> 968559aeb15f, `rust/crates/urzua-cli/tests/init_adopt_integration.rs` 171fdc60fb17 -> d5e0c9b6c2eb. Reason: Read the diff of each re-pinned file against main and the claim still holds. init.rs: the unit test the_withheld_rules_are_disclosed_with_the_declaration_each_needs also expects section.duplicate, section.level-skipped and section.order with their keys; no non-test code changed; init_adopt_integration.rs: adds adopt_withholds_the_section_structure_rules_and_names_the_key_each_needs; no existing test changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: unspecified): re-pinned `rust/crates/urzua-cli/src/commands/init.rs` 968559aeb15f -> 15df5856d881, `rust/crates/urzua-cli/tests/init_adopt_integration.rs` d5e0c9b6c2eb -> 8a65e3417c62. Reason: Read the diff of each re-pinned file against main and the claim still holds. init.rs: the unit test the_withheld_rules_are_disclosed_with_the_declaration_each_needs also expects the section rules with their keys; no non-test code changed. init_adopt_integration.rs: adds adopt_withholds_the_section_structure_rules_and_names_the_key_each_needs, which asserts the five section rules are not written and the notice names each with its key; no existing test changed. **Why:** the pinned evidence changed and the attesting actor re-verified that the claim still holds. | **structural** |
+> | 2026-11-14 | Bumped to `0.27`. `## Proposed rules`'s statement of the `authority` block `init` writes now includes `waivable: never`, which `init` has written since 2026-11-09 (the `0.22` row recorded the config change but left this sentence stale). **Why:** the docs-versus-binary review of 2026-11-14 found the sentence disagreeing with `init`'s output. | **substantive** |
