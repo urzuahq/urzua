@@ -733,17 +733,43 @@ fn status(env: &Env, lock: &Lock) -> HarnessReport {
     let (unknown, unprovided) = harness_problems(env, &lock.adapters);
     report.problems.extend(unknown);
     report.problems.extend(unprovided);
+    // A setting that switches every hook off shows in no hook entry.
+    report
+        .problems
+        .extend(run::kill_switch_messages(&env.root, lock));
     if drift || !report.problems.is_empty() {
         report = report.drift();
     }
     report
 }
 
+/// Whether version `a` is older than `b`, comparing their dotted numbers as
+/// numbers (`0.10.0` is newer than `0.9.0`; as text it is older). A part that
+/// is not a number counts by its leading digits; versions equal in every number
+/// compare as text, so a pre-release suffix still orders.
+pub(super) fn version_is_older(a: &str, b: &str) -> bool {
+    let numbers = |v: &str| -> Vec<u64> {
+        v.split('.')
+            .map(|part| {
+                part.chars()
+                    .take_while(char::is_ascii_digit)
+                    .collect::<String>()
+                    .parse()
+                    .unwrap_or(0)
+            })
+            .collect()
+    };
+    match numbers(a).cmp(&numbers(b)) {
+        std::cmp::Ordering::Equal => a < b,
+        order => order.is_lt(),
+    }
+}
+
 fn status_bundle_version(lock: &Lock, run: &mut StatusRun) {
     if lock.bundle_version == VERSION {
         return;
     }
-    let older = lock.bundle_version.as_str() < VERSION;
+    let older = version_is_older(&lock.bundle_version, VERSION);
     run.report.notice(
         NoticeSeverity::Warning,
         if older {
@@ -1563,4 +1589,20 @@ pub(crate) fn doctor_checks(
         }
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::version_is_older;
+
+    #[test]
+    fn versions_compare_as_numbers_not_as_text() {
+        assert!(version_is_older("0.9.0", "0.10.0"));
+        assert!(!version_is_older("0.10.0", "0.9.0"));
+        assert!(version_is_older("0.3.0", "1.0.0"));
+        assert!(version_is_older("1.2.9", "1.2.10"));
+        assert!(!version_is_older("1.2.10", "1.2.9"));
+        assert!(!version_is_older("1.2.3", "1.2.3"));
+        assert!(version_is_older("1.2", "1.2.1"));
+    }
 }

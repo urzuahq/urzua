@@ -99,6 +99,11 @@ def _project_dir():
 PROJECT_DIR = _project_dir()
 
 
+def usable_dir(d):
+    """Whether `d` is a directory the engine can be run in."""
+    return isinstance(d, str) and bool(d) and os.path.isdir(d) and os.access(d, os.X_OK)
+
+
 def out(obj):
     json.dump(obj, sys.stdout)
     sys.stdout.write("\n")
@@ -117,11 +122,12 @@ def deny(message):
     return 0
 
 
-def closed_by_config_text(cwd):
-    """Last resort, only when the engine cannot be run: whether .urzua/config.yaml
-    turns on acceptance or protected-paths without `on_unjudged: allow`. A text
-    scan, so a configuration it cannot read is read as not closed."""
-    d = os.path.abspath(cwd or os.getcwd())
+def config_closes(d):
+    """Whether the configuration found at or above directory `d` turns on
+    acceptance or protected-paths without `on_unjudged: allow` (a text scan, so
+    a configuration it cannot read is read as not closed), or None when no
+    configuration is found."""
+    d = os.path.abspath(d)
     while True:
         try:
             with open(os.path.join(d, ".urzua", "config.yaml"), encoding="utf-8") as f:
@@ -130,7 +136,7 @@ def closed_by_config_text(cwd):
         except OSError:
             parent = os.path.dirname(d)
             if parent == d:
-                return False
+                return None
             d = parent
     for i, line in enumerate(lines):
         m = re.match(r"^(\s*)(acceptance|protected-paths)\s*:\s*(.*)$", line)
@@ -146,6 +152,17 @@ def closed_by_config_text(cwd):
         if re.search(r"\benabled\s*:\s*true\b", body) and not re.search(r"\bon_unjudged\s*:\s*[\"']?allow\b", body):
             return True
     return False
+
+
+def closed_by_config_text(cwd):
+    """Last resort, only when the engine cannot be run: whether .urzua/config.yaml
+    turns on acceptance or protected-paths without `on_unjudged: allow`, read from
+    the working directory and from the project this translator is installed in.
+    A text scan, so a configuration it cannot read is read as not closed."""
+    starts = [cwd or os.getcwd()]
+    if PROJECT_DIR:
+        starts.append(PROJECT_DIR)
+    return any(config_closes(d) for d in starts)
 
 
 def reason_of(message):
@@ -343,6 +360,11 @@ def mcp_scan(inp):
                     if isinstance(v, str):
                         if content is None:
                             content = v
+                        elif v != content:
+                            # A second, different string under a content key:
+                            # which of them a server writes is not known, so
+                            # the object is not a whole-file write urzua can read.
+                            partial = True
                     elif isinstance(v, (dict, list)):
                         # Only a string is content: a structure under a content
                         # key is walked like any other nested value.
@@ -551,9 +573,14 @@ def main():
     except ValueError:
         message = "urzua harness: the hook payload was unreadable, so this call was NOT judged"
         if event == "edit":
-            return unjudged_edit(message, argv, None, None, False)
+            return unjudged_edit(message, argv, PROJECT_DIR, None, False)
         return stated(message, event)
-    cwd = payload.get("cwd") or None
+    # A working directory that is gone, is not a directory or cannot be entered
+    # is replaced by the project this translator is installed in, for the
+    # engine's request and for the directory the engine is run in.
+    cwd = payload.get("cwd")
+    if not usable_dir(cwd):
+        cwd = PROJECT_DIR
     if event == "session-start":
         request = {"event": "session-start", "tool": None, "paths": [], "content": None, "actor": "agent", "cwd": cwd, "project_dir": PROJECT_DIR}
     elif event == "post-command":

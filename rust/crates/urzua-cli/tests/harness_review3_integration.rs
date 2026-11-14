@@ -1100,3 +1100,72 @@ fn a_read_named_mcp_tool_with_body_data_payload_or_value_is_judged_as_a_write() 
         );
     }
 }
+
+// ------------------------------------------------- review 7: status
+
+#[test]
+fn status_reports_the_kill_switch_and_compares_versions_numerically() {
+    let dir = fixture("status-kill", &config(""));
+    install(&dir);
+    let v = status_of(&dir);
+    assert_eq!(v["status"], "ok", "{v}");
+    let settings = std::fs::read_to_string(dir.join(".claude/settings.json")).unwrap();
+    let off = settings.replacen('{', "{\n  \"disableAllHooks\": true,", 1);
+    std::fs::write(dir.join(".claude/settings.json"), off).unwrap();
+    let v = status_of(&dir);
+    assert_eq!(v["status"], "drift", "{v}");
+    let problems = v["problems"].as_array().unwrap();
+    assert!(
+        problems
+            .iter()
+            .any(|p| p.as_str().unwrap().contains("disableAllHooks")),
+        "{v}"
+    );
+    // A string value is read as the setting reads it.
+    let off = settings.replacen('{', "{\n  \"disableAllHooks\": \"TRUE\",", 1);
+    std::fs::write(dir.join(".claude/settings.json"), off).unwrap();
+    assert_eq!(status_of(&dir)["status"], "drift");
+    // Off again: ok.
+    std::fs::write(dir.join(".claude/settings.json"), &settings).unwrap();
+    assert_eq!(status_of(&dir)["status"], "ok");
+
+    // A lock whose minor version has more digits than this binary's is newer,
+    // though it sorts before it as text ("0.10.0" < "0.3.0").
+    let mut parts = env!("CARGO_PKG_VERSION").split('.');
+    let major = parts.next().unwrap();
+    let minor = parts.next().unwrap();
+    let longer = format!("{major}.1{}.0", "0".repeat(minor.len()));
+    let lock = std::fs::read_to_string(dir.join(".urzua/harness.lock")).unwrap();
+    let bundle = lock
+        .lines()
+        .find_map(|l| l.trim().strip_prefix("\"bundle_version\": \""))
+        .unwrap()
+        .split('"')
+        .next()
+        .unwrap()
+        .to_string();
+    for (locked, newer) in [(longer.as_str(), true), ("0.0.1", false)] {
+        std::fs::write(
+            dir.join(".urzua/harness.lock"),
+            lock.replace(
+                &format!("\"bundle_version\": \"{bundle}\""),
+                &format!("\"bundle_version\": \"{locked}\""),
+            ),
+        )
+        .unwrap();
+        let v = status_of(&dir);
+        let notices = v["notices"].to_string();
+        assert_eq!(
+            notices.contains("this binary is only"),
+            newer,
+            "{locked}: {v}"
+        );
+        let session = session(&dir);
+        let text = session["message"].as_str().unwrap();
+        assert_eq!(
+            text.contains("is newer than this binary"),
+            newer,
+            "{locked}: {session}"
+        );
+    }
+}
