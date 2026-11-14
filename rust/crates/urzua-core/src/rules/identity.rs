@@ -58,10 +58,52 @@ pub fn identity_collision(
         }
     }
 
+    findings.extend(stable_id_collisions(records));
+
     (
         RuleExecution::ran(RULE_ID, population, examined_records),
         findings,
     )
+}
+
+/// Two records carrying one `Stable-Id`: a rename is paired with its deleted
+/// copy by that value, so it must name one record. One finding per claimant,
+/// each naming every claimant.
+fn stable_id_collisions(records: &[Record]) -> Vec<Finding> {
+    let mut by_id: std::collections::BTreeMap<&str, Vec<&Record>> = Default::default();
+    for record in records {
+        if let Some(id) = record
+            .header
+            .get_reserved("Stable-Id")
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+        {
+            by_id.entry(id).or_default().push(record);
+        }
+    }
+    let mut findings = Vec::new();
+    for (id, claimants) in by_id.iter().filter(|(_, c)| c.len() > 1) {
+        let mut paths: Vec<String> = claimants
+            .iter()
+            .map(|r| r.path.display().to_string())
+            .collect();
+        paths.sort();
+        for record in claimants {
+            findings.push(Finding::new(
+                RULE_IDENTITY_COLLISION,
+                FindingSeverity::Error,
+                record.path.clone(),
+                ActionSource::new("stable-id-collision"),
+                format!(
+                    "Stable-Id {id} is carried by {} records ({}) -- a rename is paired with its deleted copy by this value, so it must name one record",
+                    claimants.len(),
+                    paths.join(", ")
+                ),
+            ));
+        }
+    }
+    findings.sort_by(|a, b| a.file.cmp(&b.file));
+    findings
 }
 
 /// A tracked record file that is a symlink whose real location is outside the

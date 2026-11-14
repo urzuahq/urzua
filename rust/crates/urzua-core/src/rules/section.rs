@@ -804,6 +804,26 @@ mod tests {
     }
 
     #[test]
+    fn a_heading_inside_an_html_comment_is_not_a_section() {
+        // One line, then a block that spans lines: neither satisfies the rule.
+        for body in [
+            "## Context\n\n<!-- ## Decision -->\n",
+            "## Context\n\n<!--\n## Decision\nmore\n-->\n",
+            "## Context\n\n   <!-- note\n## Decision --> trailing\n",
+        ] {
+            let (_, f) = run(section_required, REQ, &doc("Accepted", body));
+            assert_eq!(f.len(), 1, "{body:?}: {f:?}");
+        }
+    }
+
+    #[test]
+    fn a_heading_after_a_closed_html_comment_is_a_section() {
+        let body = "## Context\n\n<!-- note -->\n\n<!--\nmore\n-->\n## Decision\n";
+        let (_, f) = run(section_required, REQ, &doc("Accepted", body));
+        assert!(f.is_empty(), "{f:?}");
+    }
+
+    #[test]
     fn a_type_declaring_sections_without_required_has_nothing_eligible() {
         let (e, f) = run(
             section_required,

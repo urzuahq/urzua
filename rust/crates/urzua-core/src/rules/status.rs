@@ -335,9 +335,14 @@ fn judge_delivery_evidence(input: &DeliveryInput<'_>) -> Result<DeliveryJudgemen
         delivery.back_pointer_evidence && ctx.back_pointed.code.contains(&record.path);
     let cited_by_test =
         delivery.back_pointer_evidence && ctx.back_pointed.test.contains(&record.path);
+    // Only locators that resolve are evidence (`embodiment.locator-exists`).
+    let resolving = match realized_by {
+        Some(value) => super::resolving_realized_by(value, locator_field, ctx.env).0,
+        None => Default::default(),
+    };
     let tier = compute_embodiment(
         &config.embodiment,
-        &realized_by.map(parse_realized_by).unwrap_or_default(),
+        &resolving,
         false,
         cited_by_code,
         cited_by_test,

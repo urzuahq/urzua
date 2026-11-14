@@ -10,7 +10,10 @@ use std::process::ExitCode;
 use urzua_core::migrate_filenames::{
     plan, Citation, FilenamePlan, PlanInput, Rename, Skipped, StalePin, Unrewritten,
 };
-use urzua_core::report::{Failure, Notice, NoticeSeverity, Report};
+use urzua_core::report::{
+    census, Failure, Notice, NoticeSeverity, Outcome as Examined, Population, PopulationUnit,
+    Report,
+};
 
 use crate::emit;
 use crate::session::{emit_or_not_run, Session};
@@ -22,6 +25,9 @@ const MAX_SCANNED_BYTES: u64 = 2 * 1024 * 1024;
 struct FilenamesReport {
     status: FilenamesStatus,
     apply: bool,
+    /// The records the plan read: a run that renames nothing says how many it
+    /// looked at, so an empty `renames` is told apart from a run over nothing.
+    population: Population,
     renames: Vec<Rename>,
     rewrites: Vec<Citation>,
     unrewritten: Vec<Unrewritten>,
@@ -96,6 +102,11 @@ fn run_inner(config_path: Option<PathBuf>, apply: bool) -> Result<ExitCode, Fail
         rewritable: &rewritable,
         report_only: &report_only,
     });
+    let population = census(
+        PopulationUnit::Record,
+        session.records.iter().collect(),
+        |_| Examined::Examined,
+    );
     let notices = notices_for(&planned, apply);
     let results = if apply && !planned.renames.is_empty() {
         let _lock = urzua_io::FixLock::acquire(&session.repo_root)?;
@@ -119,6 +130,7 @@ fn run_inner(config_path: Option<PathBuf>, apply: bool) -> Result<ExitCode, Fail
             FilenamesStatus::Ok
         },
         apply,
+        population,
         renames,
         rewrites,
         unrewritten,

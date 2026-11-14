@@ -109,6 +109,17 @@
       },
       {
         "population": {
+          "eligible": 4,
+          "examined": 2,
+          "out_of_scope": 1,
+          "unit": "record",
+          "unreadable": 0
+        },
+        "rule": "embodiment.pin-stale",
+        "status": "ran"
+      },
+      {
+        "population": {
           "eligible": 3,
           "examined": 3,
           "out_of_scope": 0,

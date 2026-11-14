@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5FRHCY6MQ6VB26JKFC
-Version: '0.24'
+Version: '0.25'
 Date: 2026-09-08
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:.urzua/config.yaml@sha256:cc2f13533f7a9f3d16818203956c77d9dc7d918873079840ba4a0792a8d6cc43, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs@sha256:dc29b51bde5a2ba79d95c5e0a09466a54e816e8e2cc4a86a80e4459be477a447
+Realized-by: code:.urzua/config.yaml@sha256:1ebbc9a2211295cc9683f91612126b893e7994cd26e209430ad7120998f2ecb3, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs@sha256:dc29b51bde5a2ba79d95c5e0a09466a54e816e8e2cc4a86a80e4459be477a447
 Author: beauwilliams
 Subject: 'The `rfc` record type -- schema, required fields, and lifecycle for proposals.'
 Parent: —
@@ -138,3 +138,5 @@ ADR's own `Deciders` field records.
 > | 2026-11-14 | Bumped to `0.23`. Evidence pins re-baselined for the `scope-changed-by-decision` waiver category added to `.urzua/config.yaml` (the `Re-baselined` row above); the specification text is unchanged. **Why:** a revision-log entry that adds a structural change asks for a version bump (`revision-log.version-bump-required`). | **structural** |
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` ddff3b920ab0 -> cc2f13533f7a. Reason: Pinned file(s) changed by the symlinked-record refusal: config.yaml: declares identity.record-symlink-escapes: error. The record's claim is unaffected by these changes. (Re-applied after merging main.) **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-14 | Bumped to `0.24`. A pinned evidence file was re-baselined for the symlinked-record refusal (`ADR-89` amendment of 2026-11-14); this spec's text is unchanged. | **structural** |
+> | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` cc2f13533f7a -> 1ebbc9a22112. Reason: Pinned file(s) changed by the engine review fixes (follow-up after the spec Version bumps): config.yaml: declares embodiment.pin-stale: warn. The record's claim is unaffected by these changes. (Re-applied after merging the first pull request and main.) **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-14 | Bumped to `0.25`. A pinned evidence file was re-baselined for the engine review fixes; this spec's text is unchanged. | **structural** |

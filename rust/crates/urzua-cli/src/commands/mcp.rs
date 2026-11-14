@@ -124,7 +124,7 @@ fn start(config: Option<PathBuf>, root: Option<PathBuf>) -> Result<Server, Strin
 }
 
 /// Stdout carries protocol frames only, so a start failure is JSON on stderr.
-fn could_not_start(message: &str) -> ExitCode {
+pub(crate) fn could_not_start(message: &str) -> ExitCode {
     let report = CouldNotRun::from(message.to_string());
     let _ = writeln!(
         std::io::stderr().lock(),

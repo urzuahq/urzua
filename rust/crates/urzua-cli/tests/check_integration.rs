@@ -3377,6 +3377,10 @@ fn edit_fixture(name: &str, record: &str) -> common::TempDir {
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     std::fs::write(dir.join(".urzua/config.yaml"), EDIT_CONFIG).unwrap();
     std::fs::write(dir.join("docs/adr/ADR-1-first.md"), record).unwrap();
+    // The file the record cites exists: a locator naming nothing is no evidence,
+    // so `fix` would repair nothing from it.
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::write(dir.join("src/a.rs"), "fn a() {}\n").unwrap();
     commit_all(&dir);
     dir
 }

@@ -174,6 +174,9 @@ fn a_bare_numbered_corpus_passes_a_hand_written_config() {
         .iter()
         .filter(|r| r["status"] == "ran" && r["population"]["examined"] == 0)
         .filter_map(|r| r["rule"].as_str())
+        // A rule that is on for every configuration runs over whatever the corpus
+        // holds, which here is no evidence to pin.
+        .filter(|rule| urzua_core::rules::default_on(rule).is_none())
         .collect();
     assert!(
         ran_empty.is_empty(),

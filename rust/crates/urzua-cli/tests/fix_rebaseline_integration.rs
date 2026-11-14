@@ -193,7 +193,7 @@ fn apply_re_pins_only_the_chosen_record_with_who_and_why_then_is_a_no_op_observe
             "--by",
             "ana",
             "--reason",
-            "r",
+            "Read the diff; the claim holds.",
         ],
     );
     assert_eq!(json(&second)["status"], "partial-failure");
@@ -212,7 +212,7 @@ fn apply_refuses_without_a_selector_or_a_reason_and_force_is_explicit_observed_f
             "--by",
             "ana",
             "--reason",
-            "r",
+            "Read the diff; the claim holds.",
         ],
         vec!["fix", "--rebaseline", "--apply", "--ids", A, "--by", "ana"],
     ] {
@@ -232,7 +232,7 @@ fn apply_refuses_without_a_selector_or_a_reason_and_force_is_explicit_observed_f
             "--by",
             "ana",
             "--reason",
-            "batch",
+            "Read the diff; the claim holds.",
         ],
     ));
     assert_eq!(forced["status"], "applied", "{forced}");
@@ -254,7 +254,7 @@ fn an_ids_entry_with_no_stale_pin_fails_naming_it_observed_failing() {
             "--by",
             "ana",
             "--reason",
-            "r",
+            "Read the diff; the claim holds.",
         ],
     );
     let parsed = json(&out);
@@ -286,7 +286,7 @@ fn an_authenticated_gh_login_is_recorded_over_by_and_the_override_is_disclosed()
             "--by",
             "ana",
             "--reason",
-            "r",
+            "Read the diff; the claim holds.",
         ],
         Some("gh-login"),
     );
@@ -322,7 +322,7 @@ fn an_identity_that_would_break_the_revision_row_is_refused_and_writes_nothing()
                 "--by",
                 by,
                 "--reason",
-                "r",
+                "Read the diff; the claim holds.",
             ],
             None,
         );
@@ -351,7 +351,7 @@ fn a_git_user_name_with_a_pipe_is_refused_for_the_row_too() {
             "--ids",
             A,
             "--reason",
-            "r",
+            "Read the diff; the claim holds.",
         ],
         None,
     );
@@ -418,4 +418,50 @@ fn a_carriage_return_in_the_reason_is_refused_like_a_newline() {
         assert!(json(&out).to_string().contains("one line"), "{reason:?}");
     }
     assert_eq!(std::fs::read_to_string(dir.join(A)).unwrap(), before);
+}
+
+#[test]
+fn a_reason_too_short_or_not_a_sentence_is_refused_and_nothing_is_written() {
+    // A re-pin is an attestation: "x" or "ok" says nothing a reviewer can check.
+    let dir = fixture("reason-thin");
+    let before = std::fs::read_to_string(dir.join(A)).unwrap();
+    for reason in ["x", "r", "ok", "...", "no change", "looks fine", "a b c d"] {
+        let out = run_urzua(
+            &dir,
+            &[
+                "fix",
+                "--rebaseline",
+                "--apply",
+                "--ids",
+                A,
+                "--by",
+                "ana",
+                "--reason",
+                reason,
+            ],
+        );
+        assert_eq!(out.status.code(), Some(2), "{reason:?}: {out:?}");
+        let message = json(&out).to_string();
+        assert!(
+            message.contains("at least 3 words") && message.contains("12 characters"),
+            "{reason:?}: {message}"
+        );
+    }
+    assert_eq!(std::fs::read_to_string(dir.join(A)).unwrap(), before);
+    // Three words of 12 characters or more is accepted.
+    let out = run_urzua(
+        &dir,
+        &[
+            "fix",
+            "--rebaseline",
+            "--apply",
+            "--ids",
+            A,
+            "--by",
+            "ana",
+            "--reason",
+            "Read the diff; claim holds.",
+        ],
+    );
+    assert_eq!(out.status.code(), Some(0), "{out:?}");
 }

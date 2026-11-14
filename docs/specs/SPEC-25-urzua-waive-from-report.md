@@ -2,7 +2,7 @@
 Stable-Id: 01M7A3B7TD1N87WAEFWDMB5CTJ
 Status: Draft
 Date: 2026-11-13
-Version: '0.4'
+Version: '0.5'
 Author: beauwilliams
 Subject: '`urzua waive --from-report` -- drafting one waiver per rule and file from the current findings.'
 Implements: ADR-91
@@ -14,7 +14,7 @@ Parent: SPEC-1
 
 `urzua waive --from-report` removes the transcription from adopting urzua on a corpus that already has
 findings: it drafts one waiver per rule and file for the current unwaived findings, in the repository's
-own waiver format, with a pending `Reason` and no `Expires`, `Category` or `Justified-by`. A draft
+own waiver format, with a pending `Reason` and no `Expires`, `Category` or `Justified-by` key. A draft
 suppresses nothing until a person writes the reason and the date, so the command adds no baseline
 file and hides no finding (`ADR-91`, `ADR-11`, `ADR-86`). This spec is the reference for the command as
 built (`MILE-205`).
@@ -69,8 +69,10 @@ the type's template body and a first revision-log row. On top of it the command 
 and `Reason` (the type's first whole-value `statuses.pending` entry, else `Pending`) and appends a
 `## Findings` section listing the finding messages verbatim, with no cap. The title is `<rule> in <file>`.
 A dry run shows the number each draft would take now, numbered consecutively in file then rule order.
-`Expires` is omitted from the header altogether, not written as `null`; `Category` and `Justified-by`
-are left as the template has them.
+`Expires` is omitted from the header altogether, not written as `null`, and so is every other key the
+template lists that the type does not require and the draft does not fill (`Category`, `Justified-by`): a
+`null` there would stand for a value nobody gave, and a `null` pointer value fails
+`header.pointer-field-clean`. The person who makes the waiver permanent adds the keys they need.
 
 ## Apply
 
@@ -136,3 +138,4 @@ entry is `null` for `no-file`; `waiver` is present only for `already-waived` and
 > | 2026-11-13 | `--apply` documented: the numbering lock, one numbering, retaken numbers, write errors (exit 2, `error`), idempotence, check-after-apply; `Expires` omitted from drafts; skip reasons `resolved-by-own-draft` and `waiver-record`, and `resolved-by-drafts` judged again on the kept set. **Why:** `MILE-205`, plan PR4. | **substantive** |
 > | 2026-11-13 | An `--apply` that fails after writing some drafts reports `partial-failure` with exit 1, and `not-run` with exit 2 only when none was written; the numbering limit without `new.check_open_prs` is stated. Version `0.2` -> `0.3`. **Why:** review of the `--apply` change: the same outcome is `partial-failure` in `fix`, `index`, `reverify` and `migrate`. | **substantive** |
 > | 2026-11-14 | `WaiveReport` gains `notices` (present when non-empty): the identity substitution and numbering's notices, which were on stderr only. Version `0.3` -> `0.4`. **Why:** the external review's finding 5.4; `ADR-46` item 8 puts anything that can be structured in the JSON. | **substantive** |
+> | 2026-11-14 | Bumped to `0.5`. Drafts omit the optional `Category` and `Justified-by` keys (and any other unrequired template key they do not fill) instead of writing `null`. **Why:** an external review found a drafted waiver failing `header.pointer-field-clean` on its own `Justified-by: null`. | **substantive** |

@@ -426,6 +426,26 @@ fn a_record_without_the_audit_field_counts_from_the_files_last_change() {
 }
 
 #[test]
+fn a_future_last_audit_is_ignored_and_reported_so_it_cannot_hold_drift_back_for_ever() {
+    // The locator changed long ago; an audit date far in the future would put
+    // the window's end beyond reach, so the drift would never be reported.
+    let dir = audit_repo(
+        "audit-future",
+        Some("2021-01-01T00:00:00"),
+        Some("2999-01-01"),
+    );
+    let parsed = json(&run_urzua(&dir, &["check", "docs/"]));
+    assert!(drift_reported(&parsed), "{parsed}");
+    let messages = consistency_messages(&parsed);
+    assert!(
+        messages
+            .iter()
+            .any(|m| m.contains("last-audit field Audited") && m.contains("future")),
+        "{parsed}"
+    );
+}
+
+#[test]
 fn a_malformed_last_audit_is_reported_and_falls_back_to_the_files_last_change() {
     let dir = audit_repo("audit-bad", None, Some("2026-13-45"));
     let parsed = json(&run_urzua(&dir, &["check", "docs/"]));

@@ -244,11 +244,18 @@ pub struct DefaultOn {
 /// Every rule that is on by default. Their executions do not count as a rule
 /// having looked at a corpus the repository chose to govern (`any_rule_looked`):
 /// a configuration that declares no rule still reports `not-run`.
-pub const DEFAULT_ON_RULES: &[DefaultOn] = &[DefaultOn {
-    id: RULE_IDENTITY_RECORD_SYMLINK_ESCAPES,
-    level: crate::config::RuleLevel::Error,
-    can_turn_off: false,
-}];
+pub const DEFAULT_ON_RULES: &[DefaultOn] = &[
+    DefaultOn {
+        id: RULE_IDENTITY_RECORD_SYMLINK_ESCAPES,
+        level: crate::config::RuleLevel::Error,
+        can_turn_off: false,
+    },
+    DefaultOn {
+        id: RULE_EMBODIMENT_PIN_STALE,
+        level: crate::config::RuleLevel::Warn,
+        can_turn_off: true,
+    },
+];
 
 /// The default-on entry for `id`, if it has one.
 pub fn default_on(id: &str) -> Option<&'static DefaultOn> {
@@ -661,7 +668,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_EMBODIMENT_CONSISTENCY,
-        description: "A stated `Embodiment` agrees with the tier its `Realized-by` locators compute to (the tier order of the `embodiment` declaration, by default `test:` outranks `code:` outranks `spec:`); a locator that changed per git history since `Realized-by` was last touched overrides the expected value to the declared drift state unconditionally (RFC-5 tier 1, ADR-18/ADR-32). A record with no `Realized-by` field is judged on the back-pointers that cite it (`MILE-149`); one stating a state the declaration marks `claims_built` that has neither a `Realized-by` field nor a citing back-pointer is reported as a claim with no evidence, computed to the declared no-evidence state (`MILE-161`), and one stating any other value is not judged and stays unexamined. Requires full git history — a shallow checkout makes this rule silently unable to detect anything. Three opt-in refinements, all off by default (`MILE-129`): a locator written `path@sha256:<64 hex>` drifts when the file's content hash differs and not otherwise, in place of the git-history heuristic; the `drift_grace_days` option holds back reporting drift whose locator last changed fewer than that many days ago, and a record in that window agrees with either its tier or a stated drift state (the window never contradicts a record that already says so, and `urzua fix` leaves it alone); `check` discloses what the window holds back in one info notice, `embodiment-drift-in-grace`, for the records the rule would report once the window ends (a record of a type with no `Embodiment`, one stating a sticky state, or one already stating the drift state is not counted), with the count, the earliest date they leave the window and their paths; the optional `drift_audit_field` option names a declared date field (needs `drift_grace_days`): a record carrying a `YYYY-MM-DD` date there has its window counted from that last-audit date instead of from the cited file's last change, and a malformed date is reported and falls back to the file (`MILE-166`); the `claim_max_age_days` option warns when the `Realized-by` line was last touched more than that many days ago. The optional `sticky_states` option lists `Embodiment` values a human sets that no evidence can compute, such as `Deprecated` and `Inactive`: a record stating one is examined and never reported as drift or as an old claim, `urzua fix` leaves it alone, and a listed value that evidence does compute (a state of the `embodiment` declaration) is a load error because it would hide real drift (`MILE-148`). The optional `drift_baseline` option, `{ref: <git ref>}`, separates drift that predates a ref from drift introduced since (`MILE-49`, `ADR-91` amendment of 2026-11-13): a record is pre-existing, and agrees with either its computed tier or a stated drift state so it is not reported and does not gate, only when it existed at the ref and each locator drifting now (same pin) had already drifted there with its file last changed at or before the ref, while any record added after the ref, with a pin edited or renewed since, with a locator whose file changed after it, or one git cannot place, is reported as before; `check` discloses the held-out records in one info notice, `embodiment-drift-baselined` (count and at most 20 paths), and in the report's `baseline` object (`ref`, `commit`, `pre_existing`, `pre_existing_records`, `introduced`), which is absent when no baseline is declared. A ref that names no commit in this repository stops the run (exit 2), never reading as no pre-existing drift; a whole-corpus run whose baseline holds out nothing says so in the info notice `embodiment-drift-baseline-unused`, the nudge to remove it. The ref holds no record list: moving it forward or deleting it retires the baseline. Source back-pointers (see `embodiment.back-pointer-resolution`) are evidence too: an `Implements:` citation is code tier and a `Verifies:` citation in a declared test file is test tier, equal to a `test:` locator (`MILE-146`). A record with `Embodiment` but no `Realized-by` field is judged on back-pointer evidence alone when one cites it, and a record neither cited nor carrying `Realized-by` is not judged (`MILE-149`); a finding names the evidence it computed from.",
+        description: "A stated `Embodiment` agrees with the tier its `Realized-by` locators compute to (the tier order of the `embodiment` declaration, by default `test:` outranks `code:` outranks `spec:`); a locator that changed per git history since `Realized-by` was last touched overrides the expected value to the declared drift state unconditionally (RFC-5 tier 1, ADR-18/ADR-32). A record with no `Realized-by` field is judged on the back-pointers that cite it (`MILE-149`); one stating a state the declaration marks `claims_built` that has neither a `Realized-by` field nor a citing back-pointer is reported as a claim with no evidence, computed to the declared no-evidence state (`MILE-161`), and one stating any other value is not judged and stays unexamined. Requires full git history — a shallow checkout makes this rule silently unable to detect anything. Three opt-in refinements, all off by default (`MILE-129`): a locator written `path@sha256:<64 hex>` drifts when the file's content hash differs and not otherwise, in place of the git-history heuristic; the `drift_grace_days` option holds back reporting drift whose locator last changed fewer than that many days ago, and a record in that window agrees with either its tier or a stated drift state (the window never contradicts a record that already says so, and `urzua fix` leaves it alone); `check` discloses what the window holds back in one info notice, `embodiment-drift-in-grace`, for the records the rule would report once the window ends (a record of a type with no `Embodiment`, one stating a sticky state, or one already stating the drift state is not counted), with the count, the earliest date they leave the window and their paths; the optional `drift_audit_field` option names a declared date field (needs `drift_grace_days`): a record carrying a `YYYY-MM-DD` date there has its window counted from that last-audit date instead of from the cited file's last change, and a malformed date is reported and falls back to the file (`MILE-166`); the `claim_max_age_days` option warns when the `Realized-by` line was last touched more than that many days ago. The optional `sticky_states` option lists `Embodiment` values a human sets that no evidence can compute, such as `Deprecated` and `Inactive`: a record stating one is examined and never reported as drift or as an old claim, `urzua fix` leaves it alone, and a listed value that evidence does compute (a state of the `embodiment` declaration) is a load error because it would hide real drift (`MILE-148`). The optional `drift_baseline` option, `{ref: <git ref>}`, separates drift that predates a ref from drift introduced since (`MILE-49`, `ADR-91` amendment of 2026-11-13): a record is pre-existing, and agrees with either its computed tier or a stated drift state so it is not reported and does not gate, only when it existed at the ref and each locator drifting now (same pin) had already drifted there with its file last changed at or before the ref, while any record added after the ref, with a pin edited or renewed since, with a locator whose file changed after it, or one git cannot place, is reported as before; `check` discloses the held-out records in one info notice, `embodiment-drift-baselined` (count and at most 20 paths), and in the report's `baseline` object (`ref`, `commit`, `pre_existing`, `pre_existing_records`, `introduced`), which is absent when no baseline is declared. A ref that names no commit in this repository stops the run (exit 2), never reading as no pre-existing drift; a whole-corpus run whose baseline holds out nothing says so in the info notice `embodiment-drift-baseline-unused`, the nudge to remove it. The ref holds no record list: moving it forward or deleting it retires the baseline. Source back-pointers (see `embodiment.back-pointer-resolution`) are evidence too: an `Implements:` citation is code tier and a `Verifies:` citation in a declared test file is test tier, equal to a `test:` locator (`MILE-146`). A record with `Embodiment` but no `Realized-by` field is judged on back-pointer evidence alone when one cites it, and a record neither cited nor carrying `Realized-by` is not judged (`MILE-149`); a finding names the evidence it computed from. A `drift_audit_field` date after today (UTC) is reported as `last-audit-date-invalid` and ignored, like a malformed one, so a date written forward cannot hold drift back for ever.",
         scope: Scope::Records,
         anchor: Anchor::Record,
         judges: Judges::OneRecord,
@@ -683,15 +690,37 @@ pub const RULE_TABLE: &[RuleDef] = &[
         phase: Phase::Main,
         companion: None,
         run: |c| {
-            embodiment_consistency(
+            embodiment_consistency_at(
                 c.records,
                 c.config,
-                c.drifted,
-                c.fresh,
+                (c.drifted, c.fresh),
                 c.back_pointed,
                 c.claim_ages,
+                c.now_unix,
             )
         },
+    },
+    RuleDef {
+        id: RULE_EMBODIMENT_PIN_STALE,
+        description: "A record whose `@sha256` evidence pin no longer matches the file it pins is reported, whatever the record states (external review, item 1.2). `embodiment.consistency` judges only a record that states an `Embodiment`, so a bug or a milestone that pins code or a test could drift with no finding; this rule reads the `Realized-by` field and the Done-means item evidence clauses of every record, hashes each pinned locator as `urzua fix --rebaseline` does, and reports one finding per record naming each pin that changed (recorded and current hash). A pin on a file that cannot be read is not a confirmed mismatch (`embodiment.locator-exists` reports it), an unpinned locator has nothing to compare, and a pin that is current is silent. The suggested action is `urzua fix --rebaseline --apply --ids <record>`, which takes `--reason`: a re-pin is an attestation that the evidence still holds, never a way to quiet the finding. Maintainer decision, 2026-11-14: on by default, at `warn`, for every configuration; a repository sets another level, or `off`, under `rules:`. A waiver for the record excuses the finding as for any rule.",
+        scope: Scope::Records,
+        anchor: Anchor::Record,
+        judges: Judges::OneRecord,
+        needs_identity_index: false,
+        requires_relation_pairs: false,
+        requires_acyclic_pair: false,
+        requires_override_log: false,
+        requires_authority: false,
+        reads_declaration: None,
+        header_none: HeaderNone::OutOfScope,
+        options: &[],
+        population: PopulationUnit::Record,
+        actions: &[
+            VariantAction::new("pin-stale", ActionDecl::RUN_COMMAND),
+        ],
+        phase: Phase::Main,
+        companion: None,
+        run: |c| embodiment_pin_stale(c.stale_pins),
     },
     RuleDef {
         id: RULE_EMBODIMENT_CLAIM_EXPIRED,
@@ -730,7 +759,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_EMBODIMENT_CLAIM_RENEWAL_UNATTESTED,
-        description: "On a `--base` run, a changed record whose `anchor_field` (declared by `embodiment.claim-expired`) is newer than in its merge-base copy and which gained no `Re-verified` revision row dated that day, or whose `anchor_field` the merge-base copy carried and the branch removed or left malformed, not a date (`ADR-97` section 6); the finding says \"was removed\" for a removed field, \"is empty\" for one left blank and \"is malformed\" for one that is not a date. A `Re-verified` row counts only in the shape `urzua reverify` writes (attested by, identity and actor, an `Evidence:` list, a `Reason:`); text that merely mentions a re-verification is not one. The rule also reports a drift-acknowledging `Re-verified` row the branch added that names a locator which had not drifted at the merge base (`category:locator`, or `category:ID` for a cited record, read from the merge base's copy of the record, its claim lines dated as of the merge base) or whose `Evidence:` list is not the record's current locators or lists a pin hash the record does not hold, or which is dated outside the branch (later than the evaluation date, more than one UTC day before the UTC author day of the branch's first commit (the merge base's when the branch has no commit yet), or after the later of the UTC author day and committer day of the commit that added the row, both settable like the typed row date; today for a row not yet committed), so a row typed by hand that does not describe the real drift is a finding at the pull request and a row the tool wrote passes. Prevention is not claimed, detection is: a date in a text file can be typed, and only `urzua reverify` writes the row that says who renewed the claim and what the tool checked. A reordered `Evidence:` list and a changed attestor are not seen, and a plain `check` without `--base` trusts a well-formed acknowledging row (a row dated after the evaluation date clears nothing in any run): the PR-time check is the `--base` run that CI makes. It cannot see a record that never carried the field, nor one new in the diff (no merge-base copy), and not-applicable on a run with no `--base`. Needs `embodiment.claim-expired` with an `anchor_field`; opt-in; its level is the repository's.",
+        description: "On a `--base` run, a changed record whose `anchor_field` (declared by `embodiment.claim-expired`) is newer than in its merge-base copy and which gained no `Re-verified` revision row dated that day, or whose `anchor_field` the merge-base copy carried and the branch removed or left malformed, not a date (`ADR-97` section 6); the finding says \"was removed\" for a removed field, \"is empty\" for one left blank and \"is malformed\" for one that is not a date. A `Re-verified` row counts only in the shape `urzua reverify` writes (attested by, identity and actor, an `Evidence:` list, a `Reason:`); text that merely mentions a re-verification is not one. The rule also reports a drift-acknowledging `Re-verified` row the branch added that names a locator which had not drifted at the merge base (`category:locator`, or `category:ID` for a cited record, read from the merge base's copy of the record, its claim lines dated as of the merge base) or whose `Evidence:` list is not the record's current locators or lists a pin hash the record does not hold, or which is dated outside the branch (later than the evaluation date, more than one UTC day before the UTC author day of the branch's first commit (the merge base's when the branch has no commit yet), or after the later of the UTC author day and committer day of the commit that added the row, both settable like the typed row date; today for a row not yet committed), so a row typed by hand that does not describe the real drift is a finding at the pull request and a row the tool wrote passes. Prevention is not claimed, detection is: a date in a text file can be typed, and only `urzua reverify` writes the row that says who renewed the claim and what the tool checked. A reordered `Evidence:` list and a changed attestor are not seen, and a plain `check` without `--base` trusts a well-formed acknowledging row (a row dated after the evaluation date clears nothing in any run): the PR-time check is the `--base` run that CI makes. It cannot see a record that never carried the field, nor one new in the diff (no merge-base copy), and not-applicable on a run with no `--base`. Needs `embodiment.claim-expired` with an `anchor_field`; opt-in; its level is the repository's. Both copies of a record are read with the record type's own document model (front matter, a blockquote or bare `Key: value` lines), as the loader reads it.",
         scope: Scope::Records,
         anchor: Anchor::Record,
         judges: Judges::OneRecord,
@@ -1192,7 +1221,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_IDENTITY_COLLISION,
-        description: "Two records resolving to the same identifier — a corpus error the index cannot represent, reported rather than papered over (`BUG-79`).",
+        description: "Two records resolving to the same identifier — a corpus error the index cannot represent, reported rather than papered over (`BUG-79`) — or two records carrying the same `Stable-Id` (any type), which the rename pairing of the diff gate matches a record by.",
         scope: Scope::Records,
         anchor: Anchor::Record,
         judges: Judges::CrossRecord,
@@ -1207,6 +1236,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         population: PopulationUnit::Record,
         actions: &[
             VariantAction::new("identifier-collision", ActionDecl::Exempt("the fix is a renumber, and no action kind addresses a rename yet (`urzua migrate ids` exists)")),
+            VariantAction::new("stable-id-collision", ActionDecl::Exempt("the fix is to give one record a new `Stable-Id`, which is a choice of the author and not a computed value")),
         ],
         phase: Phase::Main,
         companion: None,
@@ -1941,7 +1971,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_SECTION_REQUIRED,
-        description: "Each `##` section a type's declared `sections.required` names is present in every record of that type (`MILE-4`, `RFC-17`), under its `name` or one of its declared `aliases` (`MILE-165`; `check` discloses each alias in use as an info notice), or, for a `y-statement` declaring `preamble: true` and a `marker`, in the text before the first `##`. A type that declares none is out of scope; a record whose status is in the declaration's `exempt_statuses` (a record that made no decision, `MILE-7`) is counted eligible and unexamined, not asked for the sections, and not out of scope, so `config.scope-matches-nothing` does not read a declared exemption as a misconfiguration (`BUG-187`). A required section may declare `level` and `under` to be a `###` (or deeper) heading nested under a named `##`, which needs the type's `sections.depth` to reach it (`MILE-98`). Presence only: it never judges what a section says.",
+        description: "Each `##` section a type's declared `sections.required` names is present in every record of that type (`MILE-4`, `RFC-17`), under its `name` or one of its declared `aliases` (`MILE-165`; `check` discloses each alias in use as an info notice), or, for a `y-statement` declaring `preamble: true` and a `marker`, in the text before the first `##`. A type that declares none is out of scope; a record whose status is in the declaration's `exempt_statuses` (a record that made no decision, `MILE-7`) is counted eligible and unexamined, not asked for the sections, and not out of scope, so `config.scope-matches-nothing` does not read a declared exemption as a misconfiguration (`BUG-187`). A required section may declare `level` and `under` to be a `###` (or deeper) heading nested under a named `##`, which needs the type's `sections.depth` to reach it (`MILE-98`). Presence only: it never judges what a section says. A heading inside a fenced code block or an HTML comment (`<!-- ... -->`) is not a section.",
         scope: Scope::Records,
         anchor: Anchor::Record,
         judges: Judges::OneRecord,
@@ -1965,7 +1995,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_SECTION_SHAPE,
-        description: "A required section that declares a `shape` has that shape (`MILE-5`, `MILE-121`): `y-statement` needs its TL;DR block to carry the five phrases `In the context of`, `facing`, `we decided`, `to achieve`, `accepting`, word-boundary matched, and reports a marker with no block as its own error; `table-min-rows` needs a table with at least `min_rows` data rows. A section found under an alias is checked too, and a `preamble: true` Y-statement is judged from the text before the first `##`. A missing section is `section.required`'s to report, not this rule's. Shape only, never meaning.",
+        description: "A required section that declares a `shape` has that shape (`MILE-5`, `MILE-121`): `y-statement` needs its TL;DR block to carry the five phrases `In the context of`, `facing`, `we decided`, `to achieve`, `accepting`, word-boundary matched, and reports a marker with no block as its own error; `table-min-rows` needs a table with at least `min_rows` data rows. A section found under an alias is checked too, and a `preamble: true` Y-statement is judged from the text before the first `##`. A missing section is `section.required`'s to report, not this rule's. Shape only, never meaning. Sections are read as `section.required` reads them: a heading inside a fenced code block or an HTML comment is not one.",
         scope: Scope::Records,
         anchor: Anchor::Record,
         judges: Judges::OneRecord,

@@ -289,7 +289,9 @@ fn a_test_locator_list_in_realized_by_is_delivery_evidence_with_a_run_command_ac
     let dir = repo("waiver", &config(DELIVERY, ""));
     std::fs::write(
         dir.join("docs/milestones/MILE-9-x.md"),
-        milestone("InProgress", Some("test:tests/a.rs#t, test:src/a.rs#a")),
+        // Both files exist: a locator that names nothing, or a scope that does not
+        // resolve, is no evidence (`fix` and `check` count only what resolves).
+        milestone("InProgress", Some("test:tests/a.rs, test:src/a.rs")),
     )
     .unwrap();
     git(&dir, &["add", "-A"]);

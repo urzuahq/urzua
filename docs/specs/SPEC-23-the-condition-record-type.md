@@ -2,9 +2,9 @@
 Stable-Id: 01M6NNNZJ92WC419AF3NQP471H
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:.urzua/config.yaml@sha256:cc2f13533f7a9f3d16818203956c77d9dc7d918873079840ba4a0792a8d6cc43, code:rust/crates/urzua-core/src/rules/roadmap.rs@sha256:aeadbc1397d70dc3f7ab6422c160c4dc009592306c8a3743da44ad020983fb02, test:rust/crates/urzua-cli/tests/condition_type_integration.rs@sha256:fbf4c6b9927dfc724c1429040d48b4cda315bf2003da4f2c56af0356ef6af392, test:rust/crates/urzua-cli/tests/work_types_integration.rs@sha256:a319f14dc8d4b79971183ee16cf78de55366234377abe3d77e1fb3b5a0ebe7b2
+Realized-by: code:.urzua/config.yaml@sha256:1ebbc9a2211295cc9683f91612126b893e7994cd26e209430ad7120998f2ecb3, code:rust/crates/urzua-core/src/rules/roadmap.rs@sha256:aeadbc1397d70dc3f7ab6422c160c4dc009592306c8a3743da44ad020983fb02, test:rust/crates/urzua-cli/tests/condition_type_integration.rs@sha256:fbf4c6b9927dfc724c1429040d48b4cda315bf2003da4f2c56af0356ef6af392, test:rust/crates/urzua-cli/tests/work_types_integration.rs@sha256:a319f14dc8d4b79971183ee16cf78de55366234377abe3d77e1fb3b5a0ebe7b2
 Date: 2026-11-05
-Version: '0.19'
+Version: '0.20'
 Author: beauwilliams
 Subject: 'The `condition` record type -- a dependency on a fact that is observed rather than built, declared in configuration alone.'
 Parent: —
@@ -152,3 +152,5 @@ whether the Signal is precise is a reviewer's judgement, as for any section (`SP
 > | 2026-11-14 | Bumped to `0.18`. Evidence pins re-baselined for the `scope-changed-by-decision` waiver category added to `.urzua/config.yaml` (the `Re-baselined` row above); the specification text is unchanged. **Why:** a revision-log entry that adds a structural change asks for a version bump (`revision-log.version-bump-required`). | **structural** |
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` ddff3b920ab0 -> cc2f13533f7a. Reason: Pinned file(s) changed by the symlinked-record refusal: config.yaml: declares identity.record-symlink-escapes: error. The record's claim is unaffected by these changes. (Re-applied after merging main.) **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-14 | Bumped to `0.19`. A pinned evidence file was re-baselined for the symlinked-record refusal (`ADR-89` amendment of 2026-11-14); this spec's text is unchanged. | **structural** |
+> | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` cc2f13533f7a -> 1ebbc9a22112. Reason: Pinned file(s) changed by the engine review fixes (follow-up after the spec Version bumps): config.yaml: declares embodiment.pin-stale: warn. The record's claim is unaffected by these changes. (Re-applied after merging the first pull request and main.) **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-14 | Bumped to `0.20`. A pinned evidence file was re-baselined for the engine review fixes; this spec's text is unchanged. | **structural** |

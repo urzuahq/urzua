@@ -151,6 +151,9 @@ pub struct RuleCtx<'a> {
     pub refs_snapshot: &'a Result<crate::refs_snapshot::RefsSnapshot, String>,
     /// Every discovered path, staged deletions included.
     pub tracked_paths: &'a [PathBuf],
+    /// The stale `@sha256` evidence pins of every record, read by the caller
+    /// (`embodiment.pin-stale`); empty and examining nothing when the rule is off.
+    pub stale_pins: &'a StalePinScan,
     /// Tracked record files that are symlinks out of their governed tree;
     /// never loaded (`identity.record-symlink-escapes`).
     pub escaping_records: &'a [EscapingRecord],
@@ -163,6 +166,30 @@ pub struct RuleCtx<'a> {
     /// A file's text for a scoped locator to resolve in; read once per path.
     pub read_text: &'a dyn Fn(&str) -> crate::locator::SharedText,
     pub run: RunState<'a>,
+}
+
+/// The level a rule runs at: the repository's declared level, else the default
+/// of a rule that is on for every configuration (`DEFAULT_ON_RULES`), else `off`.
+/// The one place that decides, so the runner and a caller gathering a rule's
+/// inputs agree on whether it runs.
+pub fn effective_level(config: &Config, id: &str) -> crate::config::RuleLevel {
+    use crate::config::RuleLevel;
+    config
+        .rules
+        .get(id)
+        .map(|s| s.level)
+        .or_else(|| super::default_on(id).map(|d| d.level))
+        .unwrap_or(RuleLevel::Off)
+}
+
+/// What the caller read of the evidence pins of every record, for
+/// `embodiment.pin-stale`: the census over the records with evidence and the
+/// records whose pinned locators now hash differently (`fix --rebaseline`'s own
+/// detection). The core opens no file.
+#[derive(Debug, Clone, Default)]
+pub struct StalePinScan {
+    pub population: Option<crate::report::Population>,
+    pub found: Vec<crate::fix::Rebaseline>,
 }
 
 /// A rule the repository has not declared does not run at all -- it is not run
@@ -182,14 +209,9 @@ pub fn gate_and_run(
 
     // A rule on for every configuration runs at its default level when the
     // repository declares none (`DEFAULT_ON_RULES`).
-    let declared = config
-        .rules
-        .get(id)
-        .map(|s| s.level)
-        .or_else(|| super::default_on(id).map(|d| d.level));
-    match declared {
-        None | Some(RuleLevel::Off) => (RuleExecution::not_enabled(id), Vec::new()),
-        Some(level) => {
+    match effective_level(config, id) {
+        RuleLevel::Off => (RuleExecution::not_enabled(id), Vec::new()),
+        level => {
             let severity = level
                 .severity()
                 .expect("a level other than off has a severity");

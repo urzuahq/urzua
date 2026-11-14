@@ -85,6 +85,8 @@ struct Context<'a> {
     /// record's `Realized-by` line and its first-cycle offset seed.
     claim_line_times: HashMap<PathBuf, i64>,
     claim_seeds: HashMap<PathBuf, u64>,
+    /// The evidence pins that no longer match their file (`embodiment.pin-stale`).
+    stale_pins: rules::StalePinScan,
     now_unix: i64,
     refs_snapshot: Result<RefsSnapshot, String>,
     record_index: rules::RecordIndex<'a>,
@@ -341,6 +343,7 @@ impl<'a> Context<'a> {
             refs_snapshot: &self.refs_snapshot,
             tracked_paths: &s.discovered.paths,
             escaping_records: &s.escaping_records,
+            stale_pins: &self.stale_pins,
             live_paths: &self.live_paths,
             may_exist,
             dir_exists,
@@ -1390,6 +1393,10 @@ fn read_source_inputs(
 
     let (back_pointer_sources, decision_gate_sources, code_citation_sources) =
         read_comment_sources(session, scope, selection)?;
+    notices.extend(non_text_source_notice(
+        rules::RULE_CODE_DANGLING_BUG_REFERENCE,
+        code_citation_sources.as_ref(),
+    ));
     Ok(SourceInputs {
         claims,
         published_files,
@@ -1400,6 +1407,37 @@ fn read_source_inputs(
         back_pointer_sources,
         decision_gate_sources,
         code_citation_sources,
+    })
+}
+
+/// One warning naming the source files a rule was handed that are not valid
+/// UTF-8: they are counted unreadable in its population, and a citation in one
+/// is not seen, so the run says which they are rather than only how many.
+fn non_text_source_notice(
+    rule: &str,
+    sources: Option<&rules::BackPointerSources>,
+) -> Option<Notice> {
+    let mut paths: Vec<String> = sources?
+        .files
+        .iter()
+        .filter(|f| f.content.is_none())
+        .map(|f| f.path.display().to_string())
+        .collect();
+    if paths.is_empty() {
+        return None;
+    }
+    paths.sort();
+    let shown = paths.iter().take(5).cloned().collect::<Vec<_>>().join(", ");
+    let more = paths.len().saturating_sub(5);
+    Some(Notice {
+        severity: NoticeSeverity::Warning,
+        subject: rule.to_string(),
+        message: format!(
+            "{} source file(s) are not valid UTF-8 and were not read, so a citation in them is not judged: {shown}{}; convert them to UTF-8 or take them out of the declared paths",
+            paths.len(),
+            if more > 0 { format!(" and {more} more") } else { String::new() }
+        ),
+        detail: None,
     })
 }
 
@@ -2199,6 +2237,7 @@ fn load_context<'a>(
             claim_ages,
             claim_line_times,
             claim_seeds,
+            stale_pins: load_stale_pins(session, selection),
             now_unix: urzua_io::now_unix(),
             refs_snapshot,
             record_index,
@@ -2234,6 +2273,29 @@ fn load_context<'a>(
         },
         notices,
     ))
+}
+
+/// Reads every pinned locator of every record and keeps the records whose pin
+/// no longer matches (`embodiment.pin-stale`, `fix --rebaseline`'s own
+/// detection). Nothing is read when the rule is off or a `--rules` selection
+/// leaves it out.
+fn load_stale_pins(session: &Session, selection: Option<&[String]>) -> rules::StalePinScan {
+    let id = rules::RULE_EMBODIMENT_PIN_STALE;
+    if rules::effective_level(&session.config, id) == RuleLevel::Off
+        || !selection_wants(selection, &[id])
+    {
+        return rules::StalePinScan::default();
+    }
+    let texts = crate::file_texts::FileTexts::new(session.repo_root.clone(), &session.config);
+    let read = |locator: &urzua_core::locator::Locator| {
+        crate::pins::read_pin(&session.repo_root, &session.config, &texts, locator)
+    };
+    let (population, found, _failed_pins) =
+        urzua_core::fix::detect_rebaselines(&session.records, &session.config, &read);
+    rules::StalePinScan {
+        population: Some(population),
+        found,
+    }
 }
 
 /// The refs `identity.open-pr-collision` compares against (`ADR-93` clause 7): read

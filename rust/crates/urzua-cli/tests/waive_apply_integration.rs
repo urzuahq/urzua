@@ -77,10 +77,12 @@ fn a_written_draft_has_a_pending_reason_no_expires_key_and_the_findings_as_its_b
     let head = text.split("\n---\n").next().unwrap();
     assert!(head.contains("\nRule: header.required-fields\n"), "{text}");
     assert!(head.contains("\nScope: docs/adr/ADR-1-a.md\n"), "{text}");
-    assert!(head.contains("\nReason: Pending\n"), "{text}");
-    assert!(head.contains("\nCategory: null\n"), "{text}");
-    assert!(head.contains("\nJustified-by: null"), "{text}");
-    assert!(!head.contains("Expires"), "Expires must be omitted: {text}");
+    assert!(head.contains("\nReason: Pending"), "{text}");
+    // Optional keys the draft does not fill are left out, not written as `null`:
+    // a `null` pointer value fails `header.pointer-field-clean`.
+    for key in ["Expires", "Category", "Justified-by"] {
+        assert!(!head.contains(key), "{key} must be omitted: {text}");
+    }
     assert!(
         !head.contains("Owner"),
         "no Owner without a template line: {text}"
@@ -94,6 +96,37 @@ fn a_written_draft_has_a_pending_reason_no_expires_key_and_the_findings_as_its_b
         "{text}"
     );
     assert!(text.contains("| **structural** |"), "{text}");
+}
+
+#[test]
+fn a_draft_writes_only_the_template_fields_the_type_requires_or_the_draft_fills() {
+    // `Category` and `Justified-by` are listed by the template and the type, and a
+    // pointer field must hold references only: a draft must not carry them as
+    // `null`, and a key the type requires stays.
+    let dir = fixture(
+        "apply-optional-keys",
+        Setup {
+            waiver: "    effective_requires: [Reason, Expires]\n    pointer_fields: [Justified-by]\n",
+            rules: "header.required-fields: error, header.pointer-field-clean: error, field.quality: error",
+            adrs: vec![("ADR-1-a.md", noisy())],
+            ..Setup::default()
+        },
+    );
+    let (code, report) = apply(&dir, &["--rule", "field.quality"]);
+    assert_eq!(code, 0, "{report}");
+    let path = dir.join(&written_paths(&report)[0]);
+    let text = std::fs::read_to_string(&path).unwrap();
+    let head = text.split("\n---\n").next().unwrap();
+    assert!(
+        !head.contains("Category") && !head.contains("Justified-by"),
+        "{text}"
+    );
+    stage(&dir);
+    let (_, after) = check(&dir);
+    assert!(
+        unwaived(&after, "header.pointer-field-clean").is_empty(),
+        "{after}"
+    );
 }
 
 #[test]
