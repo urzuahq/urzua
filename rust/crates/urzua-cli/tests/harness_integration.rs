@@ -1425,3 +1425,20 @@ fn the_record_script_finds_a_repo_local_binary_ahead_of_path() {
     assert!(out.status.success(), "{out:?}");
     assert!(ran.exists(), "the repo-local binary was never run: {out:?}");
 }
+
+/// The session-start binary check uses the lookup the hooks use: `URZUA_BIN`,
+/// then `.urzua/bin/urzua`, then `PATH`, so a repository that carries its own
+/// binary is not told it is missing.
+#[test]
+fn session_start_finds_a_repo_local_binary_and_still_names_a_missing_one() {
+    let dir = fixture("session-local-bin", &config(""));
+    install(&dir);
+    wire_git_hooks(&dir);
+    let no_urzua = path_with(&["python3", "git", "sh"]);
+    let v = session_start(&dir, &no_urzua, true);
+    assert_eq!(checks_of(&v), ["binary"], "{v}");
+    assert!(msg(&v).contains(".urzua/bin/urzua"), "{v}");
+    repo_local_binary(&dir);
+    let v = session_start(&dir, &no_urzua, true);
+    assert_eq!(v["verdict"], "allow", "{v}");
+}

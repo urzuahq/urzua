@@ -75,6 +75,7 @@ mod tests {
             population: None,
             status,
             examined_records: Vec::new(),
+            unread_markers: Vec::new(),
         }
     }
 

@@ -587,11 +587,72 @@ fn an_id_followed_by_a_colon_is_read_as_a_back_pointer() {
     );
 }
 
-/// A marker that names an id in a form the scanner cannot read is reported,
-/// never skipped (ADR-101: no silent no-ops).
+/// A marker that names an id it cannot read is never silent (ADR-101): by default an `info`
+/// notice that counts and lists it and changes nothing for an existing configuration, and with
+/// `unread_markers: report` a finding at the rule's level.
+fn with_unread_option(dir: &common::TempDir, extra: &str) {
+    let config = std::fs::read_to_string(dir.join(".urzua/config.yaml")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        config.replace(
+            "back_pointer_paths: [\"src\"]\n",
+            &format!("back_pointer_paths: [\"src\"]\n{extra}"),
+        ),
+    )
+    .unwrap();
+}
+
+fn notices_of(out: &std::process::Output, subject: &str) -> Vec<String> {
+    let parsed: serde_json::Value = serde_json::from_slice(&out.stdout).expect("json");
+    parsed["notices"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default()
+        .iter()
+        .filter(|n| n["subject"] == subject)
+        .map(|n| n["message"].as_str().unwrap().to_string())
+        .collect()
+}
+
 #[test]
-fn a_marker_naming_an_id_it_cannot_read_is_reported_not_skipped() {
+fn a_marker_naming_an_id_it_cannot_read_is_a_notice_by_default() {
     let dir = repo("unread", true, "// Implements: (ADR-1)\nfn a() {}\n");
+    let out = run_urzua(&dir, &["check"]);
+    assert!(
+        findings(&out, "embodiment.back-pointer-resolution").is_empty(),
+        "{}",
+        String::from_utf8_lossy(&out.stdout)
+    );
+    let notes = notices_of(&out, "embodiment.back-pointer-resolution");
+    assert_eq!(notes.len(), 1, "{}", String::from_utf8_lossy(&out.stdout));
+    assert!(notes[0].contains("1 marker line(s)"), "{notes:?}");
+    assert!(notes[0].contains("src/lib.rs:1"), "{notes:?}");
+    assert!(notes[0].contains("unread_markers: report"), "{notes:?}");
+    // A marker with no id-shaped text is prose: no notice either.
+    let prose = repo(
+        "unread-prose",
+        true,
+        "// Implements: the trait\nfn a() {}\n",
+    );
+    let out = run_urzua(&prose, &["check"]);
+    assert!(notices_of(&out, "embodiment.back-pointer-resolution").is_empty());
+}
+
+#[test]
+fn the_notice_counts_every_unread_marker_and_lists_at_most_twenty() {
+    let source: String = (1..=25).map(|_| "// Implements: (ADR-1)\n").collect();
+    let dir = repo("unread-many", true, &source);
+    let out = run_urzua(&dir, &["check"]);
+    let notes = notices_of(&out, "embodiment.back-pointer-resolution");
+    assert!(notes[0].contains("25 marker line(s)"), "{notes:?}");
+    assert_eq!(notes[0].matches("src/lib.rs:").count(), 20, "{notes:?}");
+    assert!(notes[0].contains("and 5 more"), "{notes:?}");
+}
+
+#[test]
+fn with_unread_markers_report_the_unread_marker_is_a_finding() {
+    let dir = repo("unread-report", true, "// Implements: (ADR-1)\nfn a() {}\n");
+    with_unread_option(&dir, "    unread_markers: report\n");
     let out = run_urzua(&dir, &["check"]);
     let unread: Vec<_> = findings(&out, "embodiment.back-pointer-resolution")
         .into_iter()
@@ -606,13 +667,46 @@ fn a_marker_naming_an_id_it_cannot_read_is_reported_not_skipped() {
     assert_eq!(unread[0]["file"], "src/lib.rs");
     assert_eq!(unread[0]["line"], 1);
     assert!(unread[0]["message"].as_str().unwrap().contains("ADR-1"));
+    assert!(notices_of(&out, "embodiment.back-pointer-resolution").is_empty());
+}
 
-    // A marker with no id-shaped text at all is prose, not an unread pointer.
-    let prose = repo(
-        "unread-prose",
+/// The declared `ignore_marker` excuses an unread-marker line like any other, and a marker
+/// that does so is not reported as suppressing nothing.
+#[test]
+fn the_ignore_marker_excuses_an_unread_marker_line() {
+    let dir = repo(
+        "unread-ignore",
         true,
-        "// Implements: the trait\nfn a() {}\n",
+        "// Implements: (ADR-1) fixture-skip\nfn a() {}\n",
     );
-    let out = run_urzua(&prose, &["check"]);
-    assert!(findings(&out, "embodiment.back-pointer-resolution").is_empty());
+    with_unread_option(
+        &dir,
+        "    unread_markers: report\n    ignore_marker: \"fixture-skip\"\n",
+    );
+    let out = run_urzua(&dir, &["check"]);
+    assert!(
+        findings(&out, "embodiment.back-pointer-resolution").is_empty(),
+        "{}",
+        String::from_utf8_lossy(&out.stdout)
+    );
+    assert!(notices_of(&out, "embodiment.back-pointer-resolution")
+        .iter()
+        .all(|n| !n.contains("unread_markers --")));
+}
+
+#[test]
+fn unread_markers_is_refused_on_a_rule_that_has_no_back_pointers() {
+    let dir = repo("unread-wrong-rule", true, "fn a() {}\n");
+    let config = std::fs::read_to_string(dir.join(".urzua/config.yaml")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        config.replace(
+            "embodiment.consistency: error",
+            "embodiment.consistency: {level: error, unread_markers: report}",
+        ),
+    )
+    .unwrap();
+    let out = run_urzua(&dir, &["check"]);
+    assert_ne!(out.status.code(), Some(0));
+    assert!(String::from_utf8_lossy(&out.stdout).contains("unread_markers"));
 }

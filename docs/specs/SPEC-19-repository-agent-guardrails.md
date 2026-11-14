@@ -2,7 +2,7 @@
 Stable-Id: 01M20SH9CXA18HFPABZJQY795D
 Status: Accepted
 Date: 2026-09-08
-Version: '0.28'
+Version: '0.29'
 Author: beauwilliams
 Subject: 'Repository agent guardrails -- mechanisms that constrain or guide an AI agent working in this repo; today, `AGENTS.md` and the drafting commands in `.claude/commands/`.'
 Implements: MILE-36
@@ -295,3 +295,4 @@ and this section claims only what each place does.
 > | 2026-11-09 | Bumped to `0.26`. `urzua harness run edit` also judges a write into a linked worktree of the session's repository against the session's gates when `harness.outside_writes` is `shared`, and refuses a write outside the repository except under `allow_paths` when it is `deny`; `urzua doctor` warns when a guardrail is on and the key is undeclared. **Why:** `ADR-89` amendment of 2026-11-09 (outside writes), accepted by the maintainer: a linked worktree at a commit without gates was an unjudged place to write. | **substantive** |
 > | 2026-11-09 | Bumped to `0.27`. The fifth review of the harness (`SPEC-24` `0.24`): the post-command check judges a move against the baseline's status gates and `acceptance` flag as well as the edited configuration's, a new session forgets what an earlier one was told, and the MCP reading gains dictionary keys and `file:` URLs in any case, is bounded by refusal instead of silent truncation, judges gates first and sets a 120 second hook timeout. **Why:** bug fixes against what `ADR-89` promises. | **substantive** |
 > | 2026-11-09 | Bumped to `0.28`. The editor hook judges an MCP path that starts with `~` or `$HOME` as the home directory it names and a path nested under a content key such as `payload` or `data`; the acceptance gate treats `.MD` and `.Md` as the record extension `.md` (a case-insensitive filesystem makes them the same file); a write into a linked worktree is compared with that worktree's copy of the record (`SPEC-24` `0.27`). **Why:** the sixth review of the harness and the adopter dry run found each spelling allowed unjudged. | **substantive** |
+> | 2026-11-14 | Bumped to `0.29`. `AGENTS.md` lists `.urzua/bin` among the files the harness keeps for itself and among what a Bash command can write that the edit tools cannot. **Why:** the hooks now run a repository-local binary (`SPEC-24`); an agent that could replace it could replace the judge. | **substantive** |

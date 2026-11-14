@@ -559,6 +559,8 @@ fn the_edit_tools_cannot_write_what_the_harness_keeps_for_itself() {
         ".urzua/cache/protected-hashes.json",
         ".urzua/cache/post-command-head",
         ".urzua/harness.lock",
+        ".urzua/bin/urzua",
+        ".urzua/bin/other",
         ".urzua/override-log.md",
         ".git/hooks/pre-commit",
         ".git/config",

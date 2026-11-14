@@ -5,7 +5,7 @@ Phase: '0'
 Track: schema-governance
 Implements: ADR-34, SPEC-6
 Blocked-on: —
-Realized-by: code:.urzua/config.yaml@sha256:e544107a6abb54527dc5c7df8a73d144a287f4379eace12faee92b45bfb53d40, spec:docs/specs/SPEC-6-the-milestone-record-type.md, code:.urzua/templates/milestone.md@sha256:878708705fa067c5365be3434ce2ab904f0b29b72615df3595c8856e01b3597e
+Realized-by: code:.urzua/config.yaml@sha256:069d37e021e0d57c5e73afe9caccfbd16c5c9166acaa06e8ec0d08df5a28791c, spec:docs/specs/SPEC-6-the-milestone-record-type.md, code:.urzua/templates/milestone.md@sha256:878708705fa067c5365be3434ce2ab904f0b29b72615df3595c8856e01b3597e
 ---
 # 71 — Add a terminal status for deferred or abandoned milestones
 
@@ -27,10 +27,10 @@ crashes or emits wrong output today, the enum is just incomplete for a real case
 
 ## Done means
 
-- `WontDo` is a value of the milestone `Status` enum, declared as a failure status in urzua's own `.urzua/config.yaml`. — evidence: code:.urzua/config.yaml@sha256:e544107a6abb54527dc5c7df8a73d144a287f4379eace12faee92b45bfb53d40
+- `WontDo` is a value of the milestone `Status` enum, declared as a failure status in urzua's own `.urzua/config.yaml`. — evidence: code:.urzua/config.yaml@sha256:069d37e021e0d57c5e73afe9caccfbd16c5c9166acaa06e8ec0d08df5a28791c
 - `WontDo` is documented in `SPEC-6`. — evidence: spec:docs/specs/SPEC-6-the-milestone-record-type.md
 - `WontDo` is listed in the milestone template. — evidence: code:.urzua/templates/milestone.md@sha256:878708705fa067c5365be3434ce2ab904f0b29b72615df3595c8856e01b3597e
-- A deliberately abandoned milestone has an honest terminal state distinct from `Blocked`, which is derived and never a `Status` value. — evidence: code:.urzua/config.yaml@sha256:e544107a6abb54527dc5c7df8a73d144a287f4379eace12faee92b45bfb53d40, spec:docs/specs/SPEC-6-the-milestone-record-type.md
+- A deliberately abandoned milestone has an honest terminal state distinct from `Blocked`, which is derived and never a `Status` value. — evidence: code:.urzua/config.yaml@sha256:069d37e021e0d57c5e73afe9caccfbd16c5c9166acaa06e8ec0d08df5a28791c, spec:docs/specs/SPEC-6-the-milestone-record-type.md
 
 > **Revision log**
 >
@@ -56,3 +56,4 @@ crashes or emits wrong output today, the enum is just incomplete for a real case
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` ddff3b920ab0 -> 7b42a98a69e4. Reason: Read the diff of each re-pinned file against main and the claim still holds. .urzua/config.yaml: one more rule declared, header.scaffold-mismatch: warn, under a three-line comment; no other entry changed. rust/crates/urzua-core/src/rules/table.rs: one RuleDef entry added for header.scaffold-mismatch, and the changed-set rule list in its test names it. rust/crates/urzua-cli/src/commands/check.rs: Context and DiffInputs carry renamed_paths, load_renamed_paths is new, and load_template_texts also reads templates while header.scaffold-mismatch is enabled (its read error no longer starts with the section.order rule id). **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` 7b42a98a69e4 -> 6ed60a01c6e8. Reason: Read the diff of .urzua/config.yaml against the pinned text and the claim still holds. The only change since the previous pin is the comment above header.scaffold-mismatch (it now says why the rule is at info) and its level, warn to info; no other entry changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` 6ed60a01c6e8 -> e544107a6abb. Reason: Read the diff of each pinned file against main and the claim still holds. config.yaml: only the waiver type gained two known_fields, Variant and Key-path, with a comment; no other key changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` e544107a6abb -> 069d37e021e0. Reason: Read the diff of each re-pinned file against main. embodiment.back-pointer-resolution gained `unread_markers: report` and the protected-path gate gained `.urzua/bin`; no other line changed. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |

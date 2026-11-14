@@ -136,18 +136,70 @@ fn unread_finding(rule: &str, variant: &'static str, unread: UnreadMarker) -> Fi
     .at(unread.line)
 }
 
-/// The unread-marker findings of one file, for the markers it is read under.
-fn unread_marker_findings(
-    (rule, variant): (&str, &'static str),
+/// What one file's unread markers came to: findings (`unread_markers: report`),
+/// else `file:line` notes for the run's one info notice, and the lines a
+/// declared ignore marker excused.
+#[derive(Debug, Default)]
+struct UnreadOutcome {
+    findings: Vec<Finding>,
+    notes: Vec<String>,
+    excused: usize,
+}
+
+impl UnreadOutcome {
+    fn absorb(self, findings: &mut Vec<Finding>, notes: &mut Vec<String>, excused: &mut usize) {
+        findings.extend(self.findings);
+        notes.extend(self.notes);
+        *excused += self.excused;
+    }
+}
+
+/// How a rule treats its unread markers: its finding identity, whether the
+/// `unread_markers: report` option is declared, and its ignore marker.
+struct UnreadMode<'a> {
+    rule: &'a str,
+    variant: &'static str,
+    report: bool,
+    ignore: Option<&'a str>,
+}
+
+fn unread_markers_declared(config: &Config, rule: &str) -> bool {
+    config
+        .rules
+        .get(rule)
+        .is_some_and(|s| s.unread_markers == Some(crate::config::UnreadMarkers::Report))
+}
+
+/// The unread markers of one file, for the markers it is read under. A line
+/// carrying the declared ignore marker is excused, as for any back-pointer.
+fn judge_unread_markers(
+    mode: &UnreadMode,
     path: &std::path::Path,
     content: &str,
     (prefixes, markers): (&[String], &[&'static str]),
-) -> Vec<Finding> {
-    markers
+) -> UnreadOutcome {
+    let lines: Vec<&str> = content.lines().collect();
+    let mut out = UnreadOutcome::default();
+    let mut excused = std::collections::BTreeSet::new();
+    for unread in markers
         .iter()
         .flat_map(|m| scan_unread_markers(path, content, prefixes, m))
-        .map(|u| unread_finding(rule, variant, u))
-        .collect()
+    {
+        let carries = mode
+            .ignore
+            .is_some_and(|m| line_carries_ignore_marker(lines[unread.line - 1], m));
+        if carries {
+            excused.insert(unread.line);
+        } else if mode.report {
+            out.findings
+                .push(unread_finding(mode.rule, mode.variant, unread));
+        } else {
+            out.notes
+                .push(format!("{}:{}", path.display(), unread.line));
+        }
+    }
+    out.excused = excused.len();
+    out
 }
 
 /// A record id cited in a source comment, wherever in the comment it stands.
@@ -288,13 +340,21 @@ fn unused_marker_lines(
     prefixes: &[String],
     path: &std::path::Path,
     ignore: &str,
-    read_markers: &[&str],
+    read_markers: &[&'static str],
 ) -> Vec<usize> {
-    let pointer_lines: std::collections::BTreeSet<usize> = read_markers
+    // A line the marker excuses because its marker names an unread id carries a
+    // back-pointer in the sense that matters here: the marker has a job.
+    let mut pointer_lines: std::collections::BTreeSet<usize> = read_markers
         .iter()
         .flat_map(|m| scan_marker(path, content, prefixes, m))
         .map(|p| p.line)
         .collect();
+    pointer_lines.extend(
+        read_markers
+            .iter()
+            .flat_map(|m| scan_unread_markers(path, content, prefixes, m))
+            .map(|u| u.line),
+    );
     content
         .lines()
         .enumerate()
@@ -328,7 +388,7 @@ fn unused_marker_findings(
     (rule, variant): (&str, &'static str),
     file: &SourceFile,
     content: &str,
-    (prefixes, ignore, read): (&[String], &str, &[&str]),
+    (prefixes, ignore, read): (&[String], &str, &[&'static str]),
 ) -> Vec<Finding> {
     unused_marker_lines(content, prefixes, &file.path, ignore, read)
         .into_iter()
@@ -701,6 +761,8 @@ pub fn embodiment_back_pointer_resolution(
     let ignore = back_pointer_ignore_marker(config);
     let ignore = ignore.as_deref();
     let mut excused_lines = 0;
+    let mut unread = Vec::new();
+    let report_unread = unread_markers_declared(config, RULE_ID);
 
     // A path-scoped run judges the files under the requested paths; a file it
     // read only for the evidence it gives a record in scope is counted as
@@ -733,12 +795,13 @@ pub fn embodiment_back_pointer_resolution(
             .copied()
             .collect();
         excused_lines += excused.len();
-        findings.extend(resolution_marker_findings(
+        resolution_marker_findings(
             file,
             content,
-            (&prefixes, ignore),
+            (&prefixes, report_unread, ignore),
             is_test_file(&file.path, test_paths),
-        ));
+        )
+        .absorb(&mut findings, &mut unread, &mut excused_lines);
         for pointer in implements.kept.into_iter().chain(verifies.kept) {
             if !index.contains_key(&crate::values::RecordId::new(&pointer.id)) {
                 findings.push(unresolved_finding(pointer));
@@ -772,7 +835,8 @@ pub fn embodiment_back_pointer_resolution(
                 .with_excused_lines(excused_lines)
                 .with_deferred_by_scope(deferred),
             Vec::new(),
-        ),
+        )
+        .with_unread_markers(unread),
         findings,
     )
 }
@@ -784,30 +848,59 @@ pub fn embodiment_back_pointer_resolution(
 fn resolution_marker_findings(
     file: &SourceFile,
     content: &str,
-    (prefixes, ignore): (&[String], Option<&str>),
+    (prefixes, report, ignore): (&[String], bool, Option<&str>),
     test_class: bool,
-) -> Vec<Finding> {
+) -> UnreadOutcome {
     const RULE_ID: &str = RULE_EMBODIMENT_BACK_POINTER_RESOLUTION;
     let read: &[&'static str] = if test_class {
         &[MARKER_IMPLEMENTS, MARKER_VERIFIES]
     } else {
         &[MARKER_IMPLEMENTS]
     };
-    let mut findings = unread_marker_findings(
-        (RULE_ID, "back-pointer-unread"),
-        &file.path,
-        content,
-        (prefixes, read),
-    );
+    let mode = UnreadMode {
+        rule: RULE_ID,
+        variant: "back-pointer-unread",
+        report,
+        ignore,
+    };
+    let mut out = judge_unread_markers(&mode, &file.path, content, (prefixes, read));
     if let Some(marker) = ignore {
-        findings.extend(unused_marker_findings(
+        out.findings.extend(unused_marker_findings(
             (RULE_ID, "back-pointer-marker-unused"),
             file,
             content,
             (prefixes, marker, read),
         ));
     }
-    findings
+    out
+}
+
+/// The decision rule's findings about the markers of one file, reported here
+/// only while the resolution rule is not: an unused ignore marker and a marker
+/// naming an id it cannot read.
+fn decision_marker_findings(
+    file: &SourceFile,
+    content: &str,
+    (prefixes, report, ignore): (&[String], bool, Option<&str>),
+) -> UnreadOutcome {
+    const RULE_ID: &str = RULE_EMBODIMENT_BACK_POINTER_DECISION_ACCEPTED;
+    let mode = UnreadMode {
+        rule: RULE_ID,
+        variant: "decision-pointer-unread",
+        report,
+        ignore,
+    };
+    let read = &[MARKER_IMPLEMENTS];
+    let mut out = judge_unread_markers(&mode, &file.path, content, (prefixes, read));
+    if let Some(marker) = ignore {
+        out.findings.extend(unused_marker_findings(
+            (RULE_ID, "decision-marker-unused"),
+            file,
+            content,
+            (prefixes, marker, read),
+        ));
+    }
+    out
 }
 
 /// The findings of one file's back-pointers: each citing a record whose status
@@ -880,6 +973,8 @@ pub fn embodiment_back_pointer_decision_accepted(
         .is_none();
     let mut excused_lines = 0;
     let mut unused: Vec<Finding> = Vec::new();
+    let mut unread = Vec::new();
+    let report_unread = unread_markers_declared(config, RULE_ID);
 
     // The diff narrows what is handed to the rule; it is not the configuration
     // failing to reach a file, so an unchanged file is left out of the
@@ -908,21 +1003,12 @@ pub fn embodiment_back_pointer_decision_accepted(
         if whole_file {
             excused_lines += scanned.excused.len();
         }
-        if let Some(marker) = ignore.filter(|_| reports_unused && whole_file) {
-            unused.extend(unused_marker_findings(
-                (RULE_ID, "decision-marker-unused"),
-                file,
-                content,
-                (&prefixes, marker, &[MARKER_IMPLEMENTS]),
-            ));
-        }
         if reports_unused && whole_file {
-            findings.extend(unread_marker_findings(
-                (RULE_ID, "decision-pointer-unread"),
-                &file.path,
-                content,
-                (&prefixes, &[MARKER_IMPLEMENTS]),
-            ));
+            decision_marker_findings(file, content, (&prefixes, report_unread, ignore)).absorb(
+                &mut unused,
+                &mut unread,
+                &mut excused_lines,
+            );
         }
         findings.extend(decision_findings(
             scanned.kept,
@@ -949,7 +1035,8 @@ pub fn embodiment_back_pointer_decision_accepted(
                 .with_excused_lines(excused_lines)
                 .with_deferred_by_scope(sources.unread().len()),
             Vec::new(),
-        ),
+        )
+        .with_unread_markers(unread),
         findings,
     )
 }

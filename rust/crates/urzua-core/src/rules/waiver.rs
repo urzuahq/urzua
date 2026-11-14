@@ -353,6 +353,7 @@ mod tests {
             population: None,
             status: RuleStatus::NotEnabled,
             examined_records: Vec::new(),
+            unread_markers: Vec::new(),
         };
         let (exec, f) = run(&[w.clone()], &[], &[off], true);
         assert!(f.is_empty());
