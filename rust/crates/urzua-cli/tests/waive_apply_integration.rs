@@ -339,7 +339,7 @@ fn a_write_error_stops_the_run_and_lists_what_was_not_written() {
 /// (the adopter switchover, item 2).
 #[test]
 fn applying_drafts_for_a_dangling_citation_adds_no_citation_finding() {
-    let mut setup = Setup {
+    let setup = Setup {
         rules: "header.required-fields: error, citation.resolution: error",
         adrs: vec![(
             "ADR-1-a.md",
@@ -348,7 +348,6 @@ fn applying_drafts_for_a_dangling_citation_adds_no_citation_finding() {
         )],
         ..Setup::default()
     };
-    setup.waivers = Vec::new();
     let dir = fixture("apply-citation", setup);
     let (_, before) = check(&dir);
     let dangling = unwaived(&before, "citation.resolution");

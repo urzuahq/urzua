@@ -733,29 +733,11 @@ pub fn embodiment_back_pointer_resolution(
             .copied()
             .collect();
         excused_lines += excused.len();
-        if let Some(marker) = ignore {
-            let read: &[&str] = if is_test_file(&file.path, test_paths) {
-                &[MARKER_IMPLEMENTS, MARKER_VERIFIES]
-            } else {
-                &[MARKER_IMPLEMENTS]
-            };
-            findings.extend(unused_marker_findings(
-                (RULE_ID, "back-pointer-marker-unused"),
-                file,
-                content,
-                (&prefixes, marker, read),
-            ));
-        }
-        let read: &[&'static str] = if is_test_file(&file.path, test_paths) {
-            &[MARKER_IMPLEMENTS, MARKER_VERIFIES]
-        } else {
-            &[MARKER_IMPLEMENTS]
-        };
-        findings.extend(unread_marker_findings(
-            (RULE_ID, "back-pointer-unread"),
-            &file.path,
+        findings.extend(resolution_marker_findings(
+            file,
             content,
-            (&prefixes, read),
+            (&prefixes, ignore),
+            is_test_file(&file.path, test_paths),
         ));
         for pointer in implements.kept.into_iter().chain(verifies.kept) {
             if !index.contains_key(&crate::values::RecordId::new(&pointer.id)) {
@@ -793,6 +775,39 @@ pub fn embodiment_back_pointer_resolution(
         ),
         findings,
     )
+}
+
+/// The resolution rule's findings about the markers of one file that carry no
+/// back-pointer it reads: an unused ignore marker, and a marker naming an id in
+/// a form it cannot read. `Implements:` is read always, `Verifies:` in a file of
+/// the test class.
+fn resolution_marker_findings(
+    file: &SourceFile,
+    content: &str,
+    (prefixes, ignore): (&[String], Option<&str>),
+    test_class: bool,
+) -> Vec<Finding> {
+    const RULE_ID: &str = RULE_EMBODIMENT_BACK_POINTER_RESOLUTION;
+    let read: &[&'static str] = if test_class {
+        &[MARKER_IMPLEMENTS, MARKER_VERIFIES]
+    } else {
+        &[MARKER_IMPLEMENTS]
+    };
+    let mut findings = unread_marker_findings(
+        (RULE_ID, "back-pointer-unread"),
+        &file.path,
+        content,
+        (prefixes, read),
+    );
+    if let Some(marker) = ignore {
+        findings.extend(unused_marker_findings(
+            (RULE_ID, "back-pointer-marker-unused"),
+            file,
+            content,
+            (prefixes, marker, read),
+        ));
+    }
+    findings
 }
 
 /// The findings of one file's back-pointers: each citing a record whose status

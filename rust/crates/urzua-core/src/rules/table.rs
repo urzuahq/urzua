@@ -158,7 +158,7 @@ impl Declaration {
             Declaration::StatusForbid => "statuses.forbid",
             Declaration::StatusTransitions => "statuses.transitions",
             Declaration::StatusDelivery => "statuses.delivery",
-            Declaration::WaiverType => "a record type with `role: suppression` and `effective_requires: [Reason, Expires]` (or `permanent`), the form `waive --from-report` accepts; its directory need not exist until the first waiver",
+            Declaration::WaiverType => "a record type with `role: suppression` and `effective_requires: [Reason, Expires]` (or `permanent`), the form `waive --from-report` accepts",
         }
     }
 }

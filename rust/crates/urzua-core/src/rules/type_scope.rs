@@ -199,14 +199,7 @@ impl TypeDirCheck<'_> {
         // misdeclaration this rule exists for. Git does not track empty
         // directories, so declaring a type means committing a placeholder
         // alongside it.
-        // A suppression type's directory is the one most often absent for a
-        // good reason: it holds the exceptions to the rules, git does not track
-        // an empty directory, and a fresh clone has none before the first
-        // waiver is filed. A mistyped `dir` leaves every finding unwaived, which
-        // shows, so an absent one is a type with no records yet.
-        let suppression =
-            self.config.record_types[name].role == Some(crate::config::TypeRole::Suppression);
-        if !(self.dir_exists)(dir) && !suppression {
+        if !(self.dir_exists)(dir) {
             findings.push(self.finding(
                 ActionSource::new("dir-missing").key_path(["record_types", name, "dir"]),
                 format!(
