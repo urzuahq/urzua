@@ -504,6 +504,17 @@ pub(crate) fn resolve_attestation(
         require_verified: config.attestation.require_verified,
     };
     let resolved = urzua_io::resolve_identity_with(by, repo_root, policy)?;
+    // A `gh`-verified identity is a person's login; without `--actor` the row
+    // would read as that person's own attestation even when an agent ran it
+    // (`ADR-101`: people own decisions). The write is refused, never guessed.
+    if resolved.source == urzua_io::IdentitySource::GhVerified
+        && actor == urzua_core::fix::ActorKind::Unspecified
+    {
+        return Err(format!(
+            "--actor agent or --actor human is required with --apply when the attesting identity is gh-verified ({}): without it the revision row would read as that person's own attestation even if an agent ran the command",
+            resolved.name
+        ));
+    }
     let source = match resolved.source {
         urzua_io::IdentitySource::GhVerified => Source::GhVerified,
         urzua_io::IdentitySource::Asserted => Source::Asserted,
@@ -921,7 +932,7 @@ mod tests {
             ids: &[],
             force: true,
             by: Some("ana"),
-            actor: urzua_core::fix::ActorKind::Unspecified,
+            actor: urzua_core::fix::ActorKind::Agent,
             reason: "checked",
             after_lock: &|| std::fs::write(&evidence, v3).unwrap(),
         });

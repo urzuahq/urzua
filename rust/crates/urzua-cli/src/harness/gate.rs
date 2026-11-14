@@ -289,6 +289,45 @@ fn gate_summary(gate: &Gate) -> String {
     format!("gate: {}, by '{}'", gate.describe(), gate.by)
 }
 
+/// An edit that takes a record out of a gate's statuses (`ADR-89` amendment of
+/// 2026-11-14, leaving a gate): blanking it, stripping its header, or moving it
+/// to a status that gate does not name has a deletion's outcome, so it is
+/// denied the same way. A move to another status the same gate names is judged
+/// as a move by the caller.
+fn judge_leaving(
+    repo_root: &Path,
+    config: &Config,
+    authority: &urzua_core::authority::AuthorityDecl,
+    rel: &Path,
+    content: &str,
+) -> Option<Denial> {
+    let record = crate::discovery::parse_prospective_record(config, rel, content).ok()?;
+    let Some(Some(before)) = status_before(repo_root, config, rel) else {
+        return None;
+    };
+    let field = rules::relation_field_name(config, &record.record_type, RelationRole::Status);
+    let now = urzua_core::authority::gate_status(&record.header, field);
+    let gate = authority.gates.iter().find(|g| {
+        g.record_type.as_deref() == Some(record.record_type.as_str())
+            && g.to.iter().any(|t| same_status(t, &before))
+            && !now.is_some_and(|n| g.to.iter().any(|t| same_status(t, n)))
+    })?;
+    let what = match now {
+        Some(now) => format!("moves {} from {field} '{before}' to '{now}'", rel.display()),
+        None => format!(
+            "leaves {} with no readable {field} (it was '{before}'): blanking a record or stripping its header",
+            rel.display()
+        ),
+    };
+    Some(Denial {
+        guardrail: "acceptance",
+        reason: format!(
+            "this edit {what}, taking it out of a gated status, which has a deletion's outcome and which the authority table reserves for a decider ({}); an agent cannot make it through the edit tools",
+            gate_summary(gate)
+        ),
+    })
+}
+
 /// Judges one edit against the loaded `authority` table. `None` means the gates
 /// have nothing to say; the ordinary editor-hook judgement still follows.
 pub(super) fn judge(
@@ -324,6 +363,9 @@ pub(super) fn judge(
     if harness.enabled("acceptance") && authority.has_status_gate() {
         let folded = fold_to_declared_dir(config, rel);
         let rel = folded.as_path();
+        if let Some(denial) = judge_leaving(repo_root, config, authority, rel, content) {
+            return Some(denial);
+        }
         let (record_type, status) = status_of(config, rel, content)?;
         let gate = authority.status_gates(&record_type, &status).next()?;
         let field = rules::relation_field_name(config, &record_type, RelationRole::Status);

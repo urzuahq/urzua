@@ -2177,6 +2177,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         actions: &[
             VariantAction::new("gated-move-without-decider", ActionDecl::Exempt("accepting a record is a decider's act; no edit to the record supplies the pull request's author or approval")),
             VariantAction::new("gated-deletion-without-decider", ActionDecl::Exempt("deleting a gated record is a decider's act; no edit to the repository supplies the pull request's author or approval")),
+            VariantAction::new("gated-departure-without-decider", ActionDecl::Exempt("blanking, un-accepting or stripping the header of a gated record is a decider's act; no edit to the record supplies the pull request's author or approval")),
             VariantAction::new("gated-path-without-decider", ActionDecl::Exempt("changing a protected path is a decider's act; no edit to the file supplies the pull request's author or approval")),
         ],
         phase: Phase::Main,

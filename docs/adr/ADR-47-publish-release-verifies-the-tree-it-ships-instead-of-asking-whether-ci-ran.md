@@ -2,7 +2,7 @@
 Stable-Id: 01M2MP1F6VY4TNSH7J1QFMES1R
 Status: Accepted
 Embodiment: Implemented
-Realized-by: code:.github/workflows/checks.yml@sha256:0a3547c3f12a51cefe3dcc88696bacc8f9911356a4c6e61c56f8ef25e434e493, code:.github/workflows/ci.yml@sha256:b738f035984a2984511ce93cd77f71dbc2298d3ef1da3aadcb8d6750eea529a8, code:.github/workflows/publish-release.yml@sha256:0a1fc6e498fb769a9b8c19a0abb651746f0806e5882a9e6ae3e610efb67fba30
+Realized-by: code:.github/workflows/checks.yml@sha256:e166badec9b1eac84bcd921aaf137fc7552a48d8a35b96a4c36fac4bd2b3cb84, code:.github/workflows/ci.yml@sha256:b738f035984a2984511ce93cd77f71dbc2298d3ef1da3aadcb8d6750eea529a8, code:.github/workflows/publish-release.yml@sha256:0a1fc6e498fb769a9b8c19a0abb651746f0806e5882a9e6ae3e610efb67fba30
 Date: 2026-09-16
 Accepted-on: 2026-09-16
 Author: beauwilliams
@@ -117,6 +117,7 @@ than merely tedious.
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.github/workflows/checks.yml` ad6ab57882df -> 0a3547c3f12a. Reason: Read the diff of checks.yml since the pin: the only change is one env entry on the test job, URZUA_BUG_LISTS_MAY_GROW, set from the bug-lists-grow pull request label for acceptance_bug_gate.rs; no step, job, trigger or ordering changed, so the claim about the workflow still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.github/workflows/publish-release.yml` 530bdeeececf -> 0a1fc6e498fb. Reason: the macOS build runner image changed from macos-14, which GitHub retired, to macos-latest, with MACOSX_DEPLOYMENT_TARGET 11.0 set for the macOS build; the Intel Mac build was dropped so a release carries two archives; install.sh now fails clearly on an Intel Mac; nothing else changed **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.github/workflows/ci.yml` a2b830397530 -> b738f035984a. Reason: ci.yml: the gate (pinned release) job's ref, version and sha256 moved from v0.3.0 to v0.4.2 (checksum of the v0.4.2 Linux archive); no other line changed, so the claim still holds **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.github/workflows/checks.yml` 0a3547c3f12a -> e166badec9b1. Reason: checks.yml: the stale-pin step's suggested re-pin command now includes --actor (agent or human), required under a gh-verified identity; the rest of the workflow this record cites is unchanged **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 
 ## Amendment (2026-09-16): two Consequences corrected by the first real release
 

@@ -143,6 +143,7 @@ fn gated_changes<'a>(
                 }
             }
         }
+        out.extend(leaving_gated(path, records, config, authority, committed));
         for gate in authority.gates.iter().filter(|g| g.is_path_gate()) {
             if gate.paths.iter().any(|e| path_matches_entry(path, e)) {
                 out.push(Gated {
@@ -155,6 +156,50 @@ fn gated_changes<'a>(
         }
     }
     out
+}
+
+/// A changed record that held a gate's status at the merge base and no longer
+/// does (`ADR-89` amendment of 2026-11-14, leaving a gate): blanked, its header
+/// stripped, or moved to a status that gate does not name. Its outcome is a
+/// deletion's, so it is judged by the same gate. A move to another status the
+/// same gate names is the move `gated_changes` already judges.
+fn leaving_gated<'a>(
+    path: &'a PathBuf,
+    records: &[Record],
+    config: &Config,
+    authority: &'a AuthorityDecl,
+    committed: Option<&HashMap<PathBuf, CommittedStatus>>,
+) -> Vec<Gated<'a>> {
+    let Some(CommittedStatus::Status(old)) = committed.and_then(|c| c.get(path)) else {
+        return Vec::new();
+    };
+    let Some(record) = records.iter().find(|r| &r.path == path) else {
+        return Vec::new();
+    };
+    let field = relation_field_name(config, &record.record_type, RelationRole::Status);
+    let now = current_status(record, config);
+    authority
+        .gates
+        .iter()
+        .filter(|gate| {
+            gate.record_type.as_deref() == Some(record.record_type.as_str())
+                && gate.to.iter().any(|t| crate::authority::same_status(t, old))
+                && !now.is_some_and(|s| gate.to.iter().any(|t| crate::authority::same_status(t, s)))
+        })
+        .map(|gate| Gated {
+            path,
+            gate,
+            what: match now {
+                Some(now) => format!(
+                    "{field} moved from '{old}' to '{now}', out of the gate's statuses"
+                ),
+                None => format!(
+                    "{field} was '{old}' and is now missing or blank (the record was blanked or its header stripped)"
+                ),
+            },
+            variant: "gated-departure-without-decider",
+        })
+        .collect()
 }
 
 /// One table a run judges against, and what to call it in a message: `None`
@@ -402,7 +447,34 @@ mod tests {
             Some(&actors("mallory")),
             false,
         );
-        assert!(f.is_empty(), "Proposed is not a gated status");
+        // Leaving a gate is a gated move (`ADR-89`, amendment of 2026-11-14).
+        assert_eq!(f.len(), 1, "an un-accept is a gated departure: {f:?}");
+        assert!(f[0].message.contains("moved from 'Accepted' to 'Proposed'"));
+        let (_, f) = run(
+            &[REC],
+            "",
+            CommittedStatus::Status("Accepted".into()),
+            Some(&actors("mallory")),
+            false,
+        );
+        assert_eq!(f.len(), 1, "a blanked status is a gated departure: {f:?}");
+        assert!(f[0].message.contains("missing or blank"));
+        let (_, f) = run(
+            &[REC],
+            "Proposed",
+            CommittedStatus::Status("Accepted".into()),
+            Some(&actors("alice")),
+            false,
+        );
+        assert!(f.is_empty(), "a decider may un-accept");
+        let (_, f) = run(
+            &[REC],
+            "Proposed",
+            CommittedStatus::Status("Proposed".into()),
+            Some(&actors("mallory")),
+            false,
+        );
+        assert!(f.is_empty(), "Proposed to Proposed is not gated");
         let (_, f) = run(
             &["docs/other.md"],
             "Accepted",

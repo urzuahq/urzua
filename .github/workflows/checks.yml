@@ -208,7 +208,7 @@ jobs:
             echo "Pins that cannot be re-pinned (record  locator  reason):" >&2
             jq -r '(.failed_pins // [])[] | "\(.record)  \(.locator)  \(.reason)"' "$report" >&2 || true
             echo "Report status: $(jq -r '.status // "none"' "$report" 2>/dev/null || echo unreadable)" >&2
-            echo "Re-pin with: urzua fix --rebaseline --apply --ids <record> --by <you> --reason '<what changed in the pinned code>' (see .claude/commands/repin.md). Read the diff of each pinned file first; list every re-pin and its reason in the PR body." >&2
+            echo "Re-pin with: urzua fix --rebaseline --apply --ids <record> --by <you> --actor agent|human --reason '<what changed in the pinned code>' (see .claude/commands/repin.md). Read the diff of each pinned file first; list every re-pin and its reason in the PR body." >&2
             exit 1
           fi
           echo "no stale evidence pins"
