@@ -387,7 +387,7 @@ fn doctor_reports_an_invalid_record_type_prefix_or_dir() {
         let stdout = String::from_utf8_lossy(&out.stdout);
         assert_eq!(out.status.code(), Some(1), "stdout: {stdout}");
         assert!(stdout.contains("config does not parse"), "stdout: {stdout}");
-        assert_ne!(run_urzua(&dir, &["check"]).status.code(), Some(0));
+        assert_eq!(run_urzua(&dir, &["check"]).status.code(), Some(2));
     }
 }
 
@@ -1254,6 +1254,10 @@ fn migrate_ids_apply_reports_per_file_outcomes_as_structured_json() {
 #[cfg(unix)]
 #[test]
 fn migrate_ids_exits_1_on_a_real_write_failure() {
+    // A read-only file only fails the write for an ordinary user.
+    if !common::permission_test_can_run("migrate_ids_exits_1_on_a_real_write_failure") {
+        return;
+    }
     let dir = fixture_repo("migrate-ids-write-fail");
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     std::fs::write(
@@ -2041,7 +2045,7 @@ fn an_unreadable_tracked_record_stops_the_run_rather_than_shrinking_the_corpus()
         stdout.contains("could not read"),
         "an unreadable record must be named, not dropped: {stdout}"
     );
-    assert_ne!(out.status.code(), Some(0), "and must not exit 0: {stdout}");
+    assert_eq!(out.status.code(), Some(2), "and must not exit 0: {stdout}");
 }
 
 #[test]
@@ -2430,6 +2434,11 @@ fn ci_wired_finds_the_invocation_in_any_workflow_not_just_ci_yml() {
 
 #[test]
 fn ci_wired_reports_an_error_when_the_workflows_cannot_be_read() {
+    if !common::permission_test_can_run(
+        "ci_wired_reports_an_error_when_the_workflows_cannot_be_read",
+    ) {
+        return;
+    }
     // "No workflow invokes the checker" and "the workflows could not be read"
     // are different answers. Collapsing them reports confidently about a
     // directory never opened -- the defect BUG-91 fixed, one level down.
@@ -2468,7 +2477,11 @@ fn ci_wired_reports_an_error_when_the_workflows_cannot_be_read() {
         ci["status"], "error",
         "an unreadable workflows directory is not the same as an unwired checker: {stdout}"
     );
-    assert_ne!(out.status.code(), Some(0), "and must not exit 0: {stdout}");
+    assert_eq!(
+        out.status.code(),
+        Some(1),
+        "an error check exits 1: {stdout}"
+    );
 }
 
 #[test]
@@ -2879,6 +2892,11 @@ fn a_claim_paths_entry_behind_a_permission_denied_ancestor_aborts() {
     // permissions error instead of a typo.
     use std::os::unix::fs::PermissionsExt;
 
+    if !common::permission_test_can_run(
+        "a_claim_paths_entry_behind_a_permission_denied_ancestor_aborts",
+    ) {
+        return;
+    }
     let dir = fixture_repo("claim-paths-permission-denied");
     std::fs::create_dir_all(dir.join(".urzua")).unwrap();
     std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
@@ -2901,18 +2919,6 @@ fn a_claim_paths_entry_behind_a_permission_denied_ancestor_aborts() {
 
     let locked = dir.join("locked");
     std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o000)).unwrap();
-
-    // A sandbox running as root (or with an ACL bypassing the mode bits)
-    // would make this fixture assert nothing real. Detect that rather than
-    // let the test pass for the wrong reason.
-    let bypassed = locked.join("claims").try_exists().is_ok();
-    if bypassed {
-        std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o755)).unwrap();
-        eprintln!(
-            "skipped: permission bits did not block access in this environment (running as root?)"
-        );
-        return;
-    }
 
     let out = run_urzua(&dir, &["check"]);
     let stdout = String::from_utf8_lossy(&out.stdout).to_string();

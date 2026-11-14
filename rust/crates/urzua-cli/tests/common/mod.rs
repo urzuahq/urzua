@@ -168,14 +168,72 @@ impl AsRef<std::ffi::OsStr> for TempFile {
     }
 }
 
+/// A `git` command with the machine's configuration out of the way (review finding 7.2).
+///
+/// `rust/.cargo/config.toml` already exports these variables to every test process, so a
+/// helper that spawns `git` directly is isolated too. They are set again here so the helper
+/// stays isolated when a test binary runs outside cargo (a raw `target/debug/deps` run),
+/// and [`git_environment_is_isolated`] fails when the cargo-level setting is dropped.
+pub fn isolated_git() -> std::process::Command {
+    let mut cmd = std::process::Command::new("git");
+    cmd.env("GIT_CONFIG_GLOBAL", "/dev/null")
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .env("GIT_AUTHOR_NAME", "urzua test")
+        .env("GIT_AUTHOR_EMAIL", "test@example.com")
+        .env("GIT_COMMITTER_NAME", "urzua test")
+        .env("GIT_COMMITTER_EMAIL", "test@example.com");
+    cmd
+}
+
+/// Whether this test process sees the git isolation `rust/.cargo/config.toml` exports.
+pub fn git_environment_is_isolated() -> bool {
+    std::env::var("GIT_CONFIG_GLOBAL").as_deref() == Ok("/dev/null")
+        && std::env::var("GIT_CONFIG_NOSYSTEM").as_deref() == Ok("1")
+}
+
 /// Runs `git` in `dir` and asserts it succeeded.
 pub fn git(dir: &Path, args: &[&str]) {
-    let status = std::process::Command::new("git")
+    let status = isolated_git()
         .args(args)
         .current_dir(dir)
         .status()
         .expect("git should run");
     assert!(status.success(), "git {args:?} failed");
+}
+
+/// Whether mode bits stop this process reading a directory. They do not for root, nor with an
+/// ACL that bypasses them, and a test that needs `chmod 000` to deny access proves nothing then.
+pub fn permission_bits_are_enforced() -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    let probe = TempDir::new("urzua-perm-probe");
+    let locked = probe.join("locked");
+    std::fs::create_dir(&locked).expect("create the probe directory");
+    std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o000))
+        .expect("lock the probe directory");
+    let blocked = std::fs::read_dir(&locked).is_err();
+    std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o755))
+        .expect("unlock the probe directory");
+    blocked
+}
+
+/// The one way a test that needs the permission bits to deny access starts (review finding
+/// 7.3). Returns `true` when it can run. Where the bits are not enforced it never passes
+/// silently: under CI (`CI` set) it fails, because CI runs as an ordinary user and a skip there
+/// would hide a real regression; elsewhere it prints a `SKIPPED` line and returns `false`, and
+/// the test returns at once.
+pub fn permission_test_can_run(test: &str) -> bool {
+    if permission_bits_are_enforced() {
+        return true;
+    }
+    assert!(
+        std::env::var_os("CI").is_none(),
+        "{test}: permission bits do not block access here, so this test cannot run; CI must \
+         run as an ordinary user"
+    );
+    eprintln!(
+        "SKIPPED {test}: permission bits do not block access in this environment (running as root?)"
+    );
+    false
 }
 
 /// The UTC calendar day (days since 1970-01-01) the test process reads once, so every
@@ -210,7 +268,7 @@ pub fn date_days_ago(n: u32) -> String {
 pub fn commit_all(dir: &Path, days_ago: u32) {
     git(dir, &["add", "-A"]);
     let date = date_days_ago(days_ago);
-    let status = std::process::Command::new("git")
+    let status = isolated_git()
         .args(["commit", "-q", "-m", "fixture"])
         .env("GIT_AUTHOR_DATE", &date)
         .env("GIT_COMMITTER_DATE", &date)

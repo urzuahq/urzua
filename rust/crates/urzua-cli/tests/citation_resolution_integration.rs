@@ -177,7 +177,7 @@ fn an_external_id_under_no_declared_prefix_fails_the_config_load() {
         .current_dir(&dir)
         .output()
         .unwrap();
-    assert_ne!(output.status.code(), Some(0));
+    assert_eq!(output.status.code(), Some(2));
     let all = format!(
         "{}{}",
         String::from_utf8_lossy(&output.stdout),
@@ -332,7 +332,7 @@ fn a_non_reference_field_no_type_lists_fails_the_config_load() {
         .current_dir(&dir)
         .output()
         .unwrap();
-    assert_ne!(output.status.code(), Some(0));
+    assert_eq!(output.status.code(), Some(2));
     let all = format!(
         "{}{}",
         String::from_utf8_lossy(&output.stdout),
