@@ -138,12 +138,10 @@ fn a_source_file_citing_a_record_in_scope_is_read_and_one_citing_another_is_not(
 
     // The population says what was examined: one file, and the three it did
     // not read are counted, never dropped.
-    for rule in [DECISION] {
-        let p = population(&report, rule);
-        assert_eq!(p["examined"], 1, "{rule}: {p}");
-        assert_eq!(p["deferred_by_scope"], 3, "{rule}: {p}");
-        assert_eq!(p["eligible"], 4, "{rule}: {p}");
-    }
+    let p = population(&report, DECISION);
+    assert_eq!(p["examined"], 1, "{p}");
+    assert_eq!(p["deferred_by_scope"], 3, "{p}");
+    assert_eq!(p["eligible"], 4, "{p}");
     let p = population(&report, RESOLUTION);
     assert_eq!(p["examined"], 0, "{p}");
     assert_eq!(p["deferred_by_scope"], 4, "{p}");
@@ -213,9 +211,10 @@ fn a_declared_path_with_no_file_is_still_reported_under_a_scope() {
     // is the same on every run, even though no file was read for it.
     let dir = repo("uncovered", &sources());
     let config = dir.join(".urzua/config.yaml");
-    let text = std::fs::read_to_string(&config)
-        .unwrap()
-        .replace("back_pointer_paths: [\"src\"]", "back_pointer_paths: [\"src\", \"lib\"]");
+    let text = std::fs::read_to_string(&config).unwrap().replace(
+        "back_pointer_paths: [\"src\"]",
+        "back_pointer_paths: [\"src\", \"lib\"]",
+    );
     std::fs::write(&config, text).unwrap();
     git(&dir, &["add", "-A"]);
     git(&dir, &["commit", "-q", "-m", "declare lib"]);
@@ -226,7 +225,12 @@ fn a_declared_path_with_no_file_is_still_reported_under_a_scope() {
             .as_array()
             .unwrap()
             .iter()
-            .filter(|f| f["message"].as_str().unwrap().contains("covers no tracked file"))
+            .filter(|f| {
+                f["message"]
+                    .as_str()
+                    .unwrap()
+                    .contains("covers no tracked file")
+            })
             .count()
     };
     assert_eq!(uncovered(&full), 3, "one per rule: {full}");
@@ -328,9 +332,16 @@ fn a_scoped_run_over_this_repositorys_corpus_equals_a_whole_run_restricted_to_th
     };
     let rejected_file = walk(&root.join("docs/adr"))
         .into_iter()
-        .find(|f| std::fs::read_to_string(f).is_ok_and(|t| t.lines().any(|l| l == "Status: Rejected")))
+        .find(|f| {
+            std::fs::read_to_string(f).is_ok_and(|t| t.lines().any(|l| l == "Status: Rejected"))
+        })
         .unwrap();
-    let rejected_rel = rejected_file.strip_prefix(&root).unwrap().to_str().unwrap().to_string();
+    let rejected_rel = rejected_file
+        .strip_prefix(&root)
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_string();
     let scopes: Vec<Vec<&str>> = vec![
         vec!["docs/milestones"],
         vec!["docs/milestones/MILE-207-scope-the-back-pointer-rules-for-check-path-on-large-repos-where-they-scan-every-source-file.md"],
@@ -355,9 +366,12 @@ fn a_scoped_run_over_this_repositorys_corpus_equals_a_whole_run_restricted_to_th
             }
             let file = f["file"].as_str().unwrap();
             let about_a_record_in_scope = rule == DECISION
-                && in_scope_ids
-                    .iter()
-                    .any(|id| f["message"].as_str().unwrap().contains(&format!("cites {id},")));
+                && in_scope_ids.iter().any(|id| {
+                    f["message"]
+                        .as_str()
+                        .unwrap()
+                        .contains(&format!("cites {id},"))
+                });
             if under(file) || about_a_record_in_scope {
                 expected.insert(key(f));
             }
@@ -378,9 +392,15 @@ fn a_scoped_run_over_this_repositorys_corpus_equals_a_whole_run_restricted_to_th
         "the scopes compared only {compared_findings} findings"
     );
     let all = source_findings(&full);
-    assert!(all.iter().any(|(r, f, _)| r == RESOLUTION && f.ends_with("planted_unresolved.rs")));
-    assert!(all.iter().any(|(r, f, _)| r == DECISION && f.ends_with("planted_decision.rs")));
-    assert!(all.iter().any(|(r, f, _)| r == DANGLING && f.ends_with("planted_dangling.sh")));
+    assert!(all
+        .iter()
+        .any(|(r, f, _)| r == RESOLUTION && f.ends_with("planted_unresolved.rs")));
+    assert!(all
+        .iter()
+        .any(|(r, f, _)| r == DECISION && f.ends_with("planted_decision.rs")));
+    assert!(all
+        .iter()
+        .any(|(r, f, _)| r == DANGLING && f.ends_with("planted_dangling.sh")));
     assert!(!rejected.is_empty());
 }
 

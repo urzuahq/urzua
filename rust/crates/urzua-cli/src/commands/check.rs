@@ -578,7 +578,6 @@ pub(crate) fn execute(
         &executions,
         &why_deferred(&scope, base.as_deref()),
     ));
-    notices.extend(source_scope_notices(&executions));
     notices.extend(excused_line_notices(&executions));
     scope_findings(session, &scope, &mut findings);
     let waivers = effective_waivers(session, &context, &mut notices);
@@ -896,7 +895,7 @@ fn excused_line_notices(executions: &[RuleExecution]) -> Vec<Notice> {
 /// unjudged (`ADR-90`): the rule, the option, how many slots and why. Without
 /// it a plain `check` would show a nudge rule examining nothing with no cause.
 fn scope_changed_notices(executions: &[RuleExecution], why: &str) -> Vec<Notice> {
-    executions
+    let mut notices: Vec<Notice> = executions
         .iter()
         .filter(|e| !rules::PATH_SCOPED_SOURCE_RULES.contains(&e.rule.as_str()))
         .filter_map(|e| {
@@ -911,7 +910,9 @@ fn scope_changed_notices(executions: &[RuleExecution], why: &str) -> Vec<Notice>
                 detail: None,
             })
         })
-        .collect()
+        .collect();
+    notices.extend(source_scope_notices(executions));
+    notices
 }
 
 /// One info notice per source-reading rule that a path scope left files unread
@@ -1355,21 +1356,76 @@ fn read_source_inputs(
     let index_artifacts = read_index_artifacts(repo_root, &index_specs)?;
     let override_log = crate::discovery::read_override_log(repo_root, config)?;
 
-    // A path-scoped run reads the source files under the requested paths and
-    // those that cite a record in scope, not every file (`MILE-207`).
+    let (back_pointer_sources, decision_gate_sources, code_citation_sources) =
+        read_comment_sources(session, scope, selection)?;
+    Ok(SourceInputs {
+        claims,
+        published_files,
+        boundaries,
+        ignore_marker,
+        index_artifacts,
+        override_log,
+        back_pointer_sources,
+        decision_gate_sources,
+        code_citation_sources,
+    })
+}
+
+/// What a path-scoped run reads source files for (`MILE-207`), or `None` for a
+/// run that reads them all: a whole-corpus run, and a `--base` run, whose
+/// reading scope is the corpus whatever it reports on.
+fn path_scoped_read(scope: &ReportScope) -> Option<rules::ScopedRead> {
+    (!scope.requested.is_empty() && scope.diff.is_none()).then(|| rules::ScopedRead {
+        paths: scope.requested.clone(),
+        records: scope.in_scope.clone(),
+        unread: Vec::new(),
+    })
+}
+
+/// The identifiers, as the record index keys them, of the records in scope.
+fn scope_record_ids(
+    session: &Session,
+    scope: &ReportScope,
+) -> HashSet<urzua_core::values::RecordId> {
+    if scope.requested.is_empty() || scope.diff.is_some() {
+        return HashSet::new();
+    }
+    let (index, _) = rules::build_index_reporting_collisions(&session.records);
+    index
+        .into_iter()
+        .filter(|(_, record)| scope.in_scope.contains(&record.path))
+        .map(|(id, _)| id)
+        .collect()
+}
+
+/// The source files the three source-comment rules read, as each of them is
+/// handed them. A path-scoped run reads the files under the requested paths and
+/// those that cite a record in scope, not every file (`MILE-207`).
+type CommentSources = (
+    Option<rules::BackPointerSources>,
+    Option<rules::BackPointerSources>,
+    Option<rules::BackPointerSources>,
+);
+
+fn read_comment_sources(
+    session: &Session,
+    scope: &ReportScope,
+    selection: Option<&[String]>,
+) -> Result<CommentSources, String> {
+    let (repo_root, config, discovered) =
+        (&session.repo_root, &session.config, &session.discovered);
+    let wanted = |ids: &[&str]| selection_wants(selection, ids);
     let scoped = path_scoped_read(scope);
     let ids = scope_record_ids(session, scope);
     let prefixes = rules::declared_prefixes(config);
     let need = |reported: bool| {
-        scoped
-            .as_ref()
-            .map(|scoped| crate::discovery::ScopeNeed {
-                scoped,
-                ids: &ids,
-                prefixes: &prefixes,
-                reported,
-                cited: true,
-            })
+        scoped.as_ref().map(|scoped| crate::discovery::ScopeNeed {
+            scoped,
+            ids: &ids,
+            prefixes: &prefixes,
+            reported,
+            cited: true,
+        })
     };
     // The back-pointer evidence also feeds `embodiment.consistency` and
     // `status.delivery-agreement` (`back_pointed`).
@@ -1409,44 +1465,11 @@ fn read_source_inputs(
     } else {
         None
     };
-    Ok(SourceInputs {
-        claims,
-        published_files,
-        boundaries,
-        ignore_marker,
-        index_artifacts,
-        override_log,
+    Ok((
         back_pointer_sources,
         decision_gate_sources,
         code_citation_sources,
-    })
-}
-
-/// What a path-scoped run reads source files for (`MILE-207`), or `None` for a
-/// run that reads them all: a whole-corpus run, and a `--base` run, whose
-/// reading scope is the corpus whatever it reports on.
-fn path_scoped_read(scope: &ReportScope) -> Option<rules::ScopedRead> {
-    (!scope.requested.is_empty() && scope.diff.is_none()).then(|| rules::ScopedRead {
-        paths: scope.requested.clone(),
-        records: scope.in_scope.clone(),
-        unread: Vec::new(),
-    })
-}
-
-/// The identifiers, as the record index keys them, of the records in scope.
-fn scope_record_ids(
-    session: &Session,
-    scope: &ReportScope,
-) -> HashSet<urzua_core::values::RecordId> {
-    if scope.requested.is_empty() || scope.diff.is_some() {
-        return HashSet::new();
-    }
-    let (index, _) = rules::build_index_reporting_collisions(&session.records);
-    index
-        .into_iter()
-        .filter(|(_, record)| scope.in_scope.contains(&record.path))
-        .map(|(id, _)| id)
-        .collect()
+    ))
 }
 
 /// Stage 2b: the index every reference resolves against, with the notices that

@@ -1640,6 +1640,17 @@ mod tests {
     /// Additive on the wire: absent when zero, so a rule that does not declare
     /// the option reports byte for byte what it did before.
     #[test]
+    fn files_a_path_scope_did_not_read_are_eligible_and_deferred_never_examined() {
+        let p = census(PopulationUnit::File, vec![1, 2], |_| Outcome::Examined)
+            .with_deferred_by_scope(3);
+        assert_eq!(
+            (p.eligible(), p.examined(), p.deferred_by_scope()),
+            (5, 2, 3)
+        );
+        assert_eq!(p.out_of_scope(), 0);
+    }
+
+    #[test]
     fn deferred_by_scope_is_serialized_only_when_it_is_non_zero() {
         let none = census(PopulationUnit::Field, vec![Outcome::Examined], |o| *o);
         let json = serde_json::to_value(none).unwrap();

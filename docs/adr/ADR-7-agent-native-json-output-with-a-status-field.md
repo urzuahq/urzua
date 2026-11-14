@@ -2,7 +2,7 @@
 Stable-Id: 01M6R3NK4S1K3KKMGNV0RC498S
 Status: Superseded
 Embodiment: Deprecated
-Realized-by: code:rust/crates/urzua-core/src/report.rs@sha256:49678e010c60b80a455ef1bbb137d64e64a6ba00a8c878fa015078a2be569e05, spec:docs/specs/SPEC-2-urzua-check.md
+Realized-by: code:rust/crates/urzua-core/src/report.rs@sha256:f7ec877a8589c997477de6316199183801dcfa80a73691cf4bf4494ff44e904a, spec:docs/specs/SPEC-2-urzua-check.md
 Date: 2026-09-04
 Accepted-on: 2026-09-05
 Author: beauwilliams
@@ -75,3 +75,4 @@ Cheap to revise before v0 ships to any external user.
 > | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/report.rs` e4387ad0f746 -> c870766d6d47. Reason: Re-pinned after PR4 of MILE-205 (urzua waive --apply), the stated delta being: report.rs: WaiveReport gains an optional error field and exits 2 when not-run; other reports unchanged. The claim holds as the changed code does not alter what this record states. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/report.rs` c870766d6d47 -> a8e66b9f93f2. Reason: Re-pinned after PR4 of MILE-205 (urzua waive --apply), the stated delta being: report.rs: WaiveReport gets a WaiveStatus (ok, partial-failure exit 1, not-run exit 2) and an optional error field; other reports unchanged. The claim holds as the changed code does not alter what this record states. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/report.rs` a8e66b9f93f2 -> 49678e010c60. Reason: report.rs gained the optional `baseline` object (`BaselineInfo`) on the check report, omitted when no baseline is declared; no existing field changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/report.rs` 49678e010c60 -> f7ec877a8589. Reason: MILE-207 path-scoped source read: report.rs gains Population::with_deferred_by_scope, a builder the path-scoped source rules use to count files they did not read; no existing item changed **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
