@@ -191,7 +191,7 @@ fn a_whole_corpus_run_reads_every_source_file_and_defers_none() {
 }
 
 #[test]
-fn a_scoped_run_says_how_many_source_files_it_did_not_read() {
+fn a_scoped_run_says_how_many_source_files_it_did_not_judge() {
     let dir = repo("notice", &sources());
     let report = check(&dir, &["docs/adr/ADR-1-x.md"]);
     let notices = report["notices"].as_array().unwrap();
@@ -202,6 +202,8 @@ fn a_scoped_run_says_how_many_source_files_it_did_not_read() {
     assert_eq!(said.len(), 1, "{notices:?}");
     let message = said[0]["message"].as_str().unwrap();
     assert!(message.contains("3 of 4"), "{message}");
+    assert!(message.contains("not judged"), "{message}");
+    assert!(!message.contains("not read"), "{message}");
     assert!(message.contains("path scope"), "{message}");
 }
 

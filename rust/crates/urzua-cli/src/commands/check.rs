@@ -930,7 +930,7 @@ fn source_scope_notices(executions: &[RuleExecution]) -> Vec<Notice> {
                 severity: NoticeSeverity::Info,
                 subject: e.rule.clone(),
                 message: format!(
-                    "path scope -- {deferred} of {eligible} source file{} under back_pointer_paths not read: \
+                    "path scope -- {deferred} of {eligible} source file{} under back_pointer_paths not judged: \
                      this run judges the files under the requested paths, and the source comments that cite a record in scope; \
                      a run with no path argument reads them all",
                     if eligible == 1 { "" } else { "s" }
