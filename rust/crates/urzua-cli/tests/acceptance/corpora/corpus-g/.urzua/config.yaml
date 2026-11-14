@@ -12,3 +12,7 @@ rules:
   embodiment.back-pointer-resolution:
     level: error
     back_pointer_paths: [src]
+  code.dangling-bug-reference:
+    level: error
+    back_pointer_paths: [src]
+    extensions: [rs]

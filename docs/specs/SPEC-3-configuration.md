@@ -1,9 +1,9 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.141'
+Version: '0.142'
 Date: 2026-08-20
 Status: Shipped
-Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:ad8c3554a542fce1d9d1336c6e3ae2f9a066224a42e095f5b5fcabba0a512a55, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:e60116ae0a7034a14619b4949265b88470479f15e854b37803f4d63a2d17646a, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:3c8aa671582772499ab7345cdbfb5a4dc2c50462882851fb20f853992acfd57c
+Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:d07f1b749110be985c4adcea8991a4266443afdc83897e26e23e3a66dfe1adcd, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:d6dcb432d05a03f8593ee899b9427365680ad3f24b158d98cd0964d2b15d78b9, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:3c8aa671582772499ab7345cdbfb5a4dc2c50462882851fb20f853992acfd57c
 Embodiment: Verified
 Author: beauwilliams
 Subject: '`.urzua/config.yaml` -- the schema for record types, required/known fields, and per-type behavior.'
@@ -2068,6 +2068,59 @@ rules:
 `test_paths` belongs to `embodiment.back-pointer-resolution` and to `embodiment.locator-on-back-pointer-path`
 (below); on any other rule it is the usual option-on-a-rule-that-does-not-take-it load error.
 
+### Source comments that cite a record: `code.dangling-bug-reference` (`MILE-108`, `RFC-41`)
+
+An opt-in rule, the mirror of `embodiment.locator-exists`: a source comment citing a record id is a
+claim that the record exists, and one whose id resolves to no record is an error. It declares its own
+paths, as `embodiment.back-pointer-decision-accepted` does, so it does not depend on the back-pointer
+rules being on.
+
+```yaml
+rules:
+  code.dangling-bug-reference:
+    level: error
+    back_pointer_paths: ["rust", "scripts"]   # path prefixes, as for the back-pointer rules
+    extensions: ["rs", "sh", "py"]            # required: no language is compiled in
+    code_comment_prefixes:                    # optional: comment leaders per extension
+      sh: ["#"]
+      py: ["#"]
+    external_ids: ["RFC-822", "RFC-4122"]     # optional: ids that are not records
+    ignore_marker: "record-id-ok"             # optional: excuses the line it is on
+```
+
+- `back_pointer_paths` and `extensions` are both required. `extensions` lists bare extensions
+  (`rs`, not `.rs` or `*.rs`: a dot, a glob or a blank entry is a load error), and only a tracked file
+  under a path with one of them is read, so nothing else is opened. A declared path covering no such
+  file is a finding.
+- `code_comment_prefixes` maps an extension of the rule's `extensions` to its comment leaders. A
+  leader that opens a line or follows whitespace starts a comment (the longest leader at a position
+  wins), and every id in the rest of the line counts. An extension with no entry, and a rule that
+  declares none, read the leaders the back-pointer rules read (`//`, `///`, `//!`, `#`, `--`, `;`,
+  `/*`, `*`, `<!--`), so declaring it changes no back-pointer evidence. A key that is not one of the
+  rule's `extensions`, an empty list, or a blank, whitespace-holding or repeated leader is a load
+  error; another rule declaring the option is the usual option-not-taken error (`ADR-100`).
+- The record prefixes are the ones the record types declare. An id is a declared prefix, a hyphen
+  and a number, standing alone; it resolves when a record of that type holds that number (compared by
+  value, so `BUG-0001` is `BUG-1`). Only existence is judged: a citation of a superseded, retired or
+  fixed record is not reported.
+- Unless `code_comment_prefixes` declares them, a comment is read as the back-pointer rules read one: a leader (`//`, `///`, `//!`, `#`, `--`, `;`,
+  `/*`, `*`, `<!--`) opening the line, or `//`, `#`, `--`, `/*`, `<!--` after whitespace following
+  code, and every id in the rest of it counts. The engine reads no syntax beyond a leader, so an id in a
+  string literal or a doc-comment code example after a leader is read and a string with none is not;
+  the `ignore_marker` is the escape. A word holding `://` is a URL and is not read (`ADR-100`). An id run into a longer token (`ADR-12-title.md`) is a name and is not read.
+- A citation `embodiment.back-pointer-resolution` already judges (an `Implements:` back-pointer, or a
+  `Verifies:` one in its test class, in a file under its paths) is left to that rule while it is
+  enabled, so one line is never reported twice. With that rule off, the line is this rule's.
+- `external_ids` is `citation.resolution`'s option, with the same entries (`RFC-4122`,
+  `PREFIX-LOW..HIGH`) and the same load errors. `ignore_marker` is the boundary rule's option (`ADR-80`),
+  read by this rule alone: a marker of fewer than three characters, with no letter or digit, or that is
+  or ends a record id is refused at load. A line carrying it is neither reported nor counted, the count
+  is the population's `excused_lines` and an `info` notice, and a marker on a line citing no record is
+  a finding.
+- The population is the files read, so a run over none is distinguishable from a clean one.
+  Undeclared, nothing is read. The rule's findings are kept under `check <path>` scoping, like the
+  back-pointer rules'; scoping the read itself belongs to `MILE-207`.
+
 ### Preferring the lighter mechanism: `embodiment.locator-on-back-pointer-path` (`ADR-78` item 4, `MILE-189`)
 
 An opt-in warning for a `Realized-by` locator on a file the back-pointer scan already reads, where an
@@ -2518,3 +2571,5 @@ proves this configuration produces the three findings.
 > | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 33f505e4cb50 -> ad8c3554a542. Reason: config.rs: only the doc comment on the `drift_baseline` option was reworded (drift a record already had at the ref, with the same pin); no parsing or validation changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/own_config_integration.rs` f91ef0b83e49 -> 5ca7a48405d4. Reason: own_config_integration.rs gained the test that the own config's shape accepts a drift_baseline on embodiment.consistency without declaring one; other tests unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/own_config_integration.rs` 5ca7a48405d4 -> e60116ae0a70. Reason: own_config_integration.rs: rustfmt wrapped one assert in the test added by this change; formatting only, no behaviour change. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-13 | Bumped to `0.142`. Documents `code.dangling-bug-reference` and its `extensions` and `code_comment_prefixes` options: bare file extensions required beside `back_pointer_paths`, comment leaders declared per extension with the back-pointer rules' set as the default, an id inside a URL not read; a dot, a glob or a blank entry, or a malformed leader declaration, is refused at load; `external_ids` and `ignore_marker` are the options of `citation.resolution` and the boundary rule, the marker read by this rule alone. **Why:** `MILE-108`, `RFC-41`, `ADR-100` -- the opt-in rule that checks source comments cite records that exist. | **substantive** |
+> | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` ad8c3554a542 -> d07f1b749110, `rust/crates/urzua-cli/tests/own_config_integration.rs` e60116ae0a70 -> d6dcb432d05a. Reason: Read the diff of each re-pinned file against main and the claim still holds. own_config_integration.rs: adds the test the_own_config_reports_a_dangling_citation_in_rust_and_scripts_and_nothing_else; no existing test changed; config.rs: RuleSetting gains the optional extensions field, RULE_OPTIONS gains the extensions entry, validate_extensions refuses an entry that is not a bare extension, the optional code_comment_prefixes field with validate_code_comment_prefixes and its applicability check, validate_ignore_markers applies the generic marker guard to code.dangling-bug-reference, and the external_ids doc comment names PREFIX-LOW..HIGH instead of a sample range; no existing option, parse or default changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |

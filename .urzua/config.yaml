@@ -849,6 +849,18 @@ rules:
     level: error
     back_pointer_paths: ["rust", "scripts", "ts", "platform"]
     test_paths: ["rust/crates/urzua-cli/tests", "rust/crates/*-core/tests"]
+  # A source comment that cites a record id resolves to a record (MILE-108, RFC-41):
+  # the mirror of embodiment.locator-exists, read from the file's side. Only
+  # existence is judged, so a citation of a superseded record passes. Only the
+  # files under these paths with these extensions are read. The two RFC ids are
+  # public standards, not records (as for citation.resolution).
+  code.dangling-bug-reference:
+    level: error
+    back_pointer_paths: ["rust", "scripts"]
+    extensions: ["rs", "sh", "py"]
+    external_ids: ["RFC-822", "RFC-4122"]
+    # A record-shaped literal in a test fixture, whose line carries this text (ADR-80).
+    ignore_marker: "citation-fixture"
   # Advisory (MILE-189, ADR-87): a `Realized-by` locator on a file under these paths
   # could be an `Implements:` or `Verifies:` comment in that file. At `info` the
   # findings are reported and counted but never fail `fail_on: warning`. `scope:

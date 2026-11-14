@@ -5,7 +5,7 @@ Phase: '0'
 Track: schema-governance
 Implements: ADR-34, SPEC-6
 Blocked-on: —
-Realized-by: code:.urzua/config.yaml@sha256:dd656d471f380787e18d7a2d2267975552c953858cc33a165c33b0afde087d7e, spec:docs/specs/SPEC-6-the-milestone-record-type.md, code:.urzua/templates/milestone.md@sha256:878708705fa067c5365be3434ce2ab904f0b29b72615df3595c8856e01b3597e
+Realized-by: code:.urzua/config.yaml@sha256:08ab457062ac7829f33128b5a103b868dad726dc650afceb8757608845f98296, spec:docs/specs/SPEC-6-the-milestone-record-type.md, code:.urzua/templates/milestone.md@sha256:878708705fa067c5365be3434ce2ab904f0b29b72615df3595c8856e01b3597e
 ---
 # 71 — Add a terminal status for deferred or abandoned milestones
 
@@ -27,10 +27,10 @@ crashes or emits wrong output today, the enum is just incomplete for a real case
 
 ## Done means
 
-- `WontDo` is a value of the milestone `Status` enum, declared as a failure status in urzua's own `.urzua/config.yaml`. — evidence: code:.urzua/config.yaml@sha256:dd656d471f380787e18d7a2d2267975552c953858cc33a165c33b0afde087d7e
+- `WontDo` is a value of the milestone `Status` enum, declared as a failure status in urzua's own `.urzua/config.yaml`. — evidence: code:.urzua/config.yaml@sha256:08ab457062ac7829f33128b5a103b868dad726dc650afceb8757608845f98296
 - `WontDo` is documented in `SPEC-6`. — evidence: spec:docs/specs/SPEC-6-the-milestone-record-type.md
 - `WontDo` is listed in the milestone template. — evidence: code:.urzua/templates/milestone.md@sha256:878708705fa067c5365be3434ce2ab904f0b29b72615df3595c8856e01b3597e
-- A deliberately abandoned milestone has an honest terminal state distinct from `Blocked`, which is derived and never a `Status` value. — evidence: code:.urzua/config.yaml@sha256:dd656d471f380787e18d7a2d2267975552c953858cc33a165c33b0afde087d7e, spec:docs/specs/SPEC-6-the-milestone-record-type.md
+- A deliberately abandoned milestone has an honest terminal state distinct from `Blocked`, which is derived and never a `Status` value. — evidence: code:.urzua/config.yaml@sha256:08ab457062ac7829f33128b5a103b868dad726dc650afceb8757608845f98296, spec:docs/specs/SPEC-6-the-milestone-record-type.md
 
 > **Revision log**
 >
@@ -51,3 +51,4 @@ crashes or emits wrong output today, the enum is just incomplete for a real case
 > | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` 2f0e023ed5a5 -> cbb1c67c40a0. Reason: Read the diff of each pinned file since the old pin and the claim still holds. config.yaml: read the diff since the old pin; the only change is the added key authority.decider_table: base with its two-line comment (this repository declares the new decider_table option, ADR-89 amendment of 2026-11-09). No record type, rule, status, relation or other declaration this record relies on changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` cbb1c67c40a0 -> 21e9ab57a37a. Reason: Read the diff of .urzua/config.yaml: the authority section gains `waivable: never` and a two-line comment; no other key changed. The pinned evidence still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` 21e9ab57a37a -> dd656d471f38. Reason: Read the diff of each pinned file since the previous pin. config.yaml gained section.duplicate, section.level-skipped and section.order at error under rules, and unique_headings, no_skipped_levels and order (from: template) under each type's sections, with depth: 2 added where a type had none; the change is additive; the claim holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` dd656d471f38 -> 08ab457062ac. Reason: Read the diff of each re-pinned file against main and the claim still holds. config.yaml: the rules table gains one entry, code.dangling-bug-reference (level error, back_pointer_paths rust and scripts, extensions rs sh py, external_ids RFC-822 and RFC-4122, ignore_marker citation-fixture) with its comment; no other declaration changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |

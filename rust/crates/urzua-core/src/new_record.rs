@@ -15,7 +15,7 @@
 /// Validates the complete shape, not just enough to find a number:
 /// `strip_suffix(".md")` requires the extension, and the three-way split
 /// requires a nonempty type prefix, a numeric second segment, and a nonempty
-/// slug -- a directory entry like `ADR-999` (no `.md`) or `-999-slug.md`
+/// slug -- a directory entry like `PREFIX-999` (no `.md`) or `-999-slug.md`
 /// (empty prefix) is real, once a stray non-record file sits in a type's
 /// directory, and must not silently affect the computed max.
 /// The number and slug of a record filename, in either convention this project
