@@ -254,7 +254,10 @@ pub fn run_phase_with(
 ) -> Vec<(RuleExecution, Vec<Finding>)> {
     let mut out = Vec::new();
     for d in RULE_TABLE.iter().filter(|d| d.phase == phase) {
-        if plan.selected.is_some_and(|s| !s.contains(d.id)) {
+        // A refusal that cannot be turned off runs under any selection: narrowing
+        // a run to other rules must not hide it (`DEFAULT_ON_RULES`).
+        let pinned = default_on(d.id).is_some_and(|o| !o.can_turn_off);
+        if !pinned && plan.selected.is_some_and(|s| !s.contains(d.id)) {
             continue;
         }
         let can_report_on_a_record =

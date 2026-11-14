@@ -284,12 +284,13 @@ not a reading scope, exactly as a path argument is (`BUG-60`):
 A `null` base is not "no scope" — a full sweep legitimately has one. Any consumer keying "did this
 run" on a missing base is reading the wrong field, and the sources exist so it does not have to.
 
-**Symlinked records** (`ADR-89` amendment of 2026-11-14): a tracked record file whose real location is outside
-the repository, or outside the directory of the type that governs it, is never read. `check`, `check --base`,
+**Symlinked records** (`ADR-89` amendment of 2026-11-14): a tracked record file that is a symlink, or sits behind
+a symlinked directory, is never read. `check`, `check --base`,
 `audit` and the MCP check tool report it as the blocking finding `identity.record-symlink-escapes`, which names the
 link and where it points, and every other command that loads the corpus (`fix`, `reverify`, `waive`, `migrate`,
-`export`, `graph`, `index`, `roadmap`, `explain`) exits 2 with an `error` naming it. A link to another file directly
-in the same type directory is an alias and is read. A link that does not resolve, or resolves to a directory, keeps
+`export`, `graph`, `index`, `roadmap`, `explain`) exits 2 with an `error` naming it. No link is allowed, not even an
+alias to a sibling record: a record moved to a name no type governs, with its old path linked to it, would hide
+from the gates just as well. A link that does not resolve, or resolves to a directory, keeps
 the loader's "could not read" error. Without this a record could be moved out of the governed tree and a symlink
 left in its place, so that a later edit to the moved copy changed the record's status at a path no gate names.
 
@@ -316,9 +317,10 @@ A rule normally runs only when the repository declares it under `rules:`. A rule
 (`urzua_core::rules`) runs for every configuration at its default level whether or not it is declared; a declared
 level other than `off` stands. `identity.record-symlink-escapes` (default `error`) is the one that cannot be turned
 off: declaring it `off` is a config load error (exit 2) naming the rule, `check --rules` accepts it without a
-declaration and `urzua init` writes no entry for it, and no waiver excuses its finding. A `--rules` selection that
-leaves it out does not run it; when a record was refused the report then carries the warning notice
-`escaping-records` naming the records, so a narrowed run is never read as a corpus without them.
+declaration and `urzua init` writes no entry for it, and no waiver excuses its finding. It runs under every `--rules`
+selection, so it is listed in the `rules_executed` of a narrowed run although the selection did not name it: a
+security refusal must not be hidden by narrowing, which is why a default-on rule departs from opt-in configuration
+(`ADR-89`, amendment of 2026-11-14).
 An execution of a default-on rule does not count as a rule having looked at the corpus for `status`: a configuration
 that declares no rule still reports `not-run` (`ADR-55`).
 
@@ -1387,5 +1389,5 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/check.rs` 762c7c56bdb5 -> fe2fce22eac3, `rust/crates/urzua-cli/tests/fail_on_integration.rs` 4b1707f3b18a -> 2232e4cec5c3. Reason: Read the diff of each pinned file since the old pin and the claim still holds. check.rs: blocking comes from the fail_on threshold (gate_blocking), a path argument that selects no record adds a warning notice, last in the notices (unmatched_path_notices), and a not-run full report adds a reason notice unless that notice already says why (not_run_reason); session open, scope, rule running, waivers and status derivation are unchanged. fail_on_integration.rs: the config_fail_on_warning test keeps its name and now expects blocking true beside exit 1 with the JSON otherwise equal to the default run; the other fail_on tests are unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/check_integration.rs` bc2e870defc6 -> 3441046fd344. Reason: check_integration.rs changed by test hardening only: the three tests that need chmod to deny access now start with common::permission_test_can_run, so they skip loudly as root and fail in CI instead of passing silently, and 3 not-exit-0 assertions now pin the exact exit code; no assertion of the recorded behaviour was weakened **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-14 | Bumped to `0.163`. The test file this spec's evidence pins was hardened (exact exit codes, visible root skips); the pin is re-baselined in the row above and the specified behaviour is unchanged. **Why:** the review's test findings; a re-baseline row is structural, so the version moves with it. | **structural** |
-> | 2026-11-14 | Bumped to `0.164`. Added the rule `identity.record-symlink-escapes` to the generated rule table and a section on rules that are on by default: a tracked record file symlinked outside the repository or its type's directory is never read; `check` reports a blocking, unwaivable finding, every other corpus command exits 2 naming it, and the rule is on for every configuration and cannot be turned off. **Why:** `ADR-89` amendment of 2026-11-14 (decided by the orchestrator, pending maintainer review); an external review reproduced a non-decider landing an Accepted record through a symlink. | **substantive** |
+> | 2026-11-14 | Bumped to `0.164`. Added the rule `identity.record-symlink-escapes` to the generated rule table and a section on rules that are on by default: a tracked record file symlinked outside the repository or its type's directory is never read; `check` reports a blocking, unwaivable finding, every other corpus command exits 2 naming it, and the rule is on for every configuration and cannot be turned off. **Why:** `ADR-89` amendment of 2026-11-14 (decided by the orchestrator, pending maintainer review); an external review reproduced a non-decider landing an Accepted record through a symlink. A follow-up review closed the same-directory alias: no link is allowed, and the refusal runs under every `--rules` selection. | **substantive** |
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/check.rs` fe2fce22eac3 -> 4aa02fe449c9. Reason: Pinned file(s) changed by the symlinked-record refusal: check.rs: hands the session's escaping_records to the rule context and adds the escaping-records warning notice for a --rules selection that leaves out the rule. The record's claim is unaffected by these changes. (Re-applied after merging main.) **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |

@@ -185,7 +185,7 @@ fn export_json_refuses_a_record_symlinked_outside_the_repository() {
     assert_eq!(output.status.code(), Some(2), "{stdout}");
     assert!(!stdout.contains("secret contents"), "{stdout}");
     assert!(
-        stdout.contains("resolves outside the repository"),
+        stdout.contains("regular file at its own path"),
         "{stdout}"
     );
 }

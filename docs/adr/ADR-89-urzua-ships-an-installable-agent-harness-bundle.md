@@ -844,18 +844,26 @@ record type governs and no gate names, while the link at `docs/adr/ADR-1-a.md` n
 Neither change is a gated move. Separately, a link to a file outside the repository was read and, by
 `urzua export`, published.
 
-**The decision.** A tracked record file whose real location is outside the repository, or outside the directory
-of the record type that governs it, is refused by every command and never read (`identity.record-symlink-escapes`,
-`SPEC-2`).
+**The decision.** A tracked record file that is a symlink, or sits behind a symlinked directory, is refused by
+every command and never read (`identity.record-symlink-escapes`, `SPEC-2`). A record is read where it is tracked,
+never through a link.
 
 - `check`, `check --base`, `audit` and the MCP check tool report it as a blocking finding (an error) that names
   the link and where it points. It is reported on a path-scoped or `--base` run too, and no waiver excuses it.
   Every other command that loads the corpus (`fix`, `reverify`, `waive`, `migrate`, `export`, `graph`, `index`,
   `roadmap`, `explain`) stops with exit 2 naming the file, instead of shrinking the corpus without saying so.
-- A link to another file directly in the same type directory is a plain alias and is not refused. A link that
-  does not resolve, or resolves to a directory, keeps the loader's own "could not read" error.
+- No link is allowed, an alias to a sibling record included. A first version of this amendment let a link to a
+  file in the same type directory through; a review showed that moving a record to `docs/adr/draft.txt`, a name no
+  type governs, and leaving `ADR-1-a.md` linked to it, hides the record just as well. A record has no use for an
+  alias. A link that does not resolve, or resolves to a directory, keeps the loader's own "could not read" error.
 - The rule is on for every configuration and cannot be turned off: `identity.record-symlink-escapes: off` is a
-  config load error. A declared level above `off` stands. `urzua init` does not write an entry for it.
+  config load error. A declared level above `off` stands. `urzua init` does not write an entry for it, and this
+  repository's configuration does not declare it. It runs under every `--rules` selection and so appears in the
+  `rules_executed` of a narrowed run.
+- **Why a default-on rule departs from opt-in configuration.** `ADR-53` makes a rule opt-in because a rule is a
+  repository's policy about its records, and a repository may decline a policy. This is not a policy: it is a
+  refusal that keeps the engine from reading a record where the gates do not look, a security property of the
+  tool and not a style rule, so a configuration that could switch it off could switch the gate off with it.
 - The two-pull-request route is closed at its first step: the pull request that leaves the symlink behind carries
   the blocking finding, and the second pull request, had the first merged, carries it too, because the finding
   does not depend on what the second changes. The diff gate does not need to resolve a changed path back to the

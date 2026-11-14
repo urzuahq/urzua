@@ -250,7 +250,7 @@ codebase's own code can structure into JSON, including genuine errors (ADR-26's 
 
 Prints one `ExportReport` object (exit 0; exit 2 with a `CouldNotRun` object if the corpus cannot be
 read, as for `graph`). Because `raw_text` publishes file contents, a tracked file in a record
-directory whose real path resolves outside the repository or its record type's directory (a symlink) makes the
+directory that is a symlink, or sits behind one, makes the
 export exit 2 with a `CouldNotRun` naming it, rather than reading it; the guard is the shared one every corpus
 command applies (`SPEC-2`, "Symlinked records"):
 

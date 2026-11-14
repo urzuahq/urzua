@@ -16,5 +16,5 @@ expect_findings:
   - rule: identity.record-symlink-escapes
     file: records/ADR-0099-link.md
     severity: error
-    message_contains: "resolves outside the repository or its record type's directory"
+    message_contains: "regular file at its own path"
     no_suggested_action: true

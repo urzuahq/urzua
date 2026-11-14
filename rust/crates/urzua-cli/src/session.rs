@@ -60,8 +60,7 @@ impl Session {
         Self::open_with(&[], config_path, |_, _, _| Ok(()))?.refusing_escaping_records()
     }
 
-    /// Stops the run when a tracked record resolves outside the repository or
-    /// its record type's directory: the file is never read, and the refusal
+    /// Stops the run when a tracked record is a link, or sits behind one: the file is never read, and the refusal
     /// names it rather than letting the corpus shrink in silence.
     pub fn refusing_escaping_records(self) -> Result<Self, Failure> {
         match self.escaping_records.first() {

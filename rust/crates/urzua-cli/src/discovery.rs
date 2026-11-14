@@ -167,13 +167,15 @@ pub(crate) fn resolved_model(
     )
 }
 
-/// The tracked record files whose real location is outside the repository or
-/// outside the directory of the type that governs them (`ADR-89` amendment of
-/// 2026-11-14). The shared guard: a symlinked record must not be read, whatever
-/// command is reading, because its content would either leave the repository or
-/// sit at a path no gate judges as a record. A path that does not resolve (a
-/// removed or dangling record) or resolves to a directory is left to the
-/// loader's own errors.
+/// The tracked record files that are not a regular file at their own path:
+/// a symlink, or a file behind a symlinked directory (`ADR-89` amendment of
+/// 2026-11-14). The shared guard: a record must be read where it is tracked,
+/// whatever command is reading, because a link lets the content a gate judges
+/// live at a path no gate names (a link to a file outside the repository, to a
+/// file no record type governs, or to a sibling that is not itself a record).
+/// Aliases have no use a record needs, so none is allowed. A path that does not
+/// resolve (a removed or dangling record) or resolves to a directory is left to
+/// the loader's own errors.
 pub(crate) fn escaping_records(
     repo_root: &Path,
     paths: &[PathBuf],
@@ -182,32 +184,15 @@ pub(crate) fn escaping_records(
     let Ok(root) = repo_root.canonicalize() else {
         return Vec::new();
     };
-    let mut real_dirs: HashMap<String, Option<PathBuf>> = HashMap::new();
     let mut out = Vec::new();
     for rel in paths {
-        let types: Vec<&urzua_core::config::RecordTypeConfig> = config
-            .record_types
-            .values()
-            .filter(|t| type_governs(t, rel))
-            .collect();
-        if types.is_empty() {
+        if !is_governed(config, rel) {
             continue;
         }
         let Ok(real) = repo_root.join(rel).canonicalize() else {
             continue;
         };
-        if real.is_dir() {
-            continue;
-        }
-        let inside_a_type_dir = types.iter().any(|t| {
-            t.all_dirs().any(|dir| {
-                let canonical = real_dirs
-                    .entry(dir.to_string())
-                    .or_insert_with(|| repo_root.join(dir).canonicalize().ok());
-                canonical.as_deref() == real.parent()
-            })
-        });
-        if real.starts_with(&root) && inside_a_type_dir {
+        if real.is_dir() || real == root.join(rel) {
             continue;
         }
         let shown = real
@@ -216,7 +201,7 @@ pub(crate) fn escaping_records(
         out.push(urzua_core::rules::EscapingRecord {
             path: rel.clone(),
             reason: format!(
-                "that resolves outside the repository or its record type's directory (it points to {shown})"
+                "that points to {shown} instead of being a regular file at its own path (a record is read where it is tracked, never through a link)"
             ),
         });
     }

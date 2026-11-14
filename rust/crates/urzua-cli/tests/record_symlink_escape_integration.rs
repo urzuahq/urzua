@@ -123,12 +123,16 @@ fn a_record_symlinked_inside_the_repository_but_outside_its_type_directory_is_re
 }
 
 #[test]
-fn a_symlink_that_stays_inside_its_type_directory_is_not_refused() {
+fn a_symlink_to_a_sibling_record_in_the_same_directory_is_refused_too() {
+    // Aliases have no use a record needs, and a link to a file no type governs
+    // is the same attack (see the same-directory test below).
     let dir = fixture("inside-tree");
     std::os::unix::fs::symlink("ADR-1-a.md", dir.join("docs/adr/ADR-3-alias.md")).unwrap();
     commit_all(&dir, "alias");
-    let (_, report, stdout) = run(&dir, &["check"]);
-    assert!(escapes(&report).is_empty(), "{stdout}");
+    let (code, report, stdout) = run(&dir, &["check"]);
+    assert_eq!(escapes(&report).len(), 1, "{stdout}");
+    assert_eq!(escapes(&report)[0]["file"], "docs/adr/ADR-3-alias.md");
+    assert_eq!(code, 1, "{stdout}");
 }
 
 #[test]
@@ -170,7 +174,7 @@ fn every_other_corpus_command_refuses_the_escaping_record_naming_it() {
         assert_eq!(code, 2, "{args:?}: {stdout}");
         assert!(
             stdout.contains("docs/adr/ADR-9-link.md")
-                && stdout.contains("resolves outside the repository"),
+                && stdout.contains("regular file at its own path"),
             "{args:?}: {stdout}"
         );
         assert!(!stdout.contains("secret contents"), "{args:?}: {stdout}");
@@ -189,29 +193,57 @@ fn audit_is_check_and_reports_the_finding_too() {
 }
 
 #[test]
-fn a_rule_selection_that_leaves_the_refusal_out_warns_that_the_record_was_not_read() {
+fn the_refusal_runs_under_every_rules_selection_and_is_listed_in_a_narrowed_run() {
     let dir = fixture("selection");
     std::fs::write(dir.join("notes/y.md"), PROPOSED).unwrap();
     std::os::unix::fs::symlink("../../notes/y.md", dir.join("docs/adr/ADR-2-b.md")).unwrap();
     commit_all(&dir, "link");
-    let (_, report, stdout) = run(&dir, &["check", "--rules", "diff.decider-required"]);
-    assert!(escapes(&report).is_empty(), "{stdout}");
-    let notice = report["notices"]
-        .as_array()
-        .and_then(|n| n.iter().find(|n| n["subject"] == "escaping-records"))
-        .unwrap_or_else(|| panic!("no escaping-records notice: {stdout}"));
-    assert_eq!(notice["severity"], "warning", "{stdout}");
-    assert!(
-        notice["message"]
-            .as_str()
-            .unwrap()
-            .contains("docs/adr/ADR-2-b.md"),
-        "{stdout}"
-    );
-    // Naming the rule needs no declaration, and then it reports the finding.
-    let (code, report, stdout) = run(&dir, &["check", "--rules", RULE]);
+    let (code, report, stdout) = run(&dir, &["check", "--rules", "diff.decider-required"]);
     assert_eq!(escapes(&report).len(), 1, "{stdout}");
     assert_eq!(code, 1, "{stdout}");
+    let ran: Vec<&str> = report["rules_executed"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|e| e["rule"].as_str())
+        .collect();
+    assert!(ran.contains(&RULE), "{ran:?}");
+    // Naming it needs no declaration either.
+    let (_, report, stdout) = run(&dir, &["check", "--rules", RULE]);
+    assert_eq!(escapes(&report).len(), 1, "{stdout}");
+}
+
+/// The review's bypass: the target sits in the same directory under a name no
+/// type governs, so a target-directory test passed it.
+fn alias_step_one(dir: &Path) {
+    git(dir, &["mv", PATH_1, "docs/adr/draft.txt"]);
+    std::os::unix::fs::symlink("draft.txt", dir.join(PATH_1)).unwrap();
+    commit_all(dir, "pr1");
+}
+
+#[test]
+fn the_same_directory_alias_attack_is_blocked_at_both_steps_on_base_and_whole_runs() {
+    let dir = fixture("alias-attack");
+    let mallory = actors(&dir, "mallory");
+
+    alias_step_one(&dir);
+    let (code, report, stdout) = run(&dir, &["check", "--base", "base", "--actors", &mallory]);
+    assert_eq!(escapes(&report).len(), 1, "{stdout}");
+    assert_eq!(escapes(&report)[0]["file"], PATH_1);
+    assert_eq!(code, 1, "PR 1 must block (--base): {stdout}");
+    let (code, report, stdout) = run(&dir, &["check"]);
+    assert_eq!(escapes(&report).len(), 1, "{stdout}");
+    assert_eq!(code, 1, "PR 1 must block (whole corpus): {stdout}");
+    git(&dir, &["tag", "after-pr1"]);
+
+    std::fs::write(dir.join("docs/adr/draft.txt"), ACCEPTED).unwrap();
+    commit_all(&dir, "pr2");
+    let (code, report, stdout) = run(&dir, &["check", "--base", "after-pr1", "--actors", &mallory]);
+    assert_eq!(escapes(&report).len(), 1, "{stdout}");
+    assert_eq!(code, 1, "PR 2 must block (--base): {stdout}");
+    let (code, report, stdout) = run(&dir, &["check"]);
+    assert_eq!(escapes(&report).len(), 1, "{stdout}");
+    assert_eq!(code, 1, "PR 2 must block (whole corpus): {stdout}");
 }
 
 #[test]
