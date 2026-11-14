@@ -4772,12 +4772,10 @@ mod tests {
             with.record_types["adr"].dir,
             without.record_types["adr"].dir
         );
-        let upgraded = format!("\u{feff}schema_version: 1\nrecord_types: {{}}\n");
-        let e = parse(&upgraded).map(|_| ()).map_err(|e| e.to_string());
-        assert!(
-            !format!("{e:?}").contains("more than one document"),
-            "{e:?}"
-        );
+        // A previous-version config goes through the upgrade path, which reads
+        // the text a second time.
+        let upgraded = parse("\u{feff}schema_version: 1\nrecord_types: {}\n").unwrap();
+        assert!(upgraded.upgraded_from.is_some());
     }
 
     #[test]

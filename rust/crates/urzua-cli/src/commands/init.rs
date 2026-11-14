@@ -1164,7 +1164,7 @@ mod tests {
             );
         }
         assert!(
-            yaml.contains("header.required-fields"),
+            yaml.contains("header.case-variant-key"),
             "rules that do not read an identity are still proposed: {yaml}"
         );
     }
@@ -1195,8 +1195,20 @@ mod tests {
                 "{rule} reads a declaration init leaves empty, so it would examine zero records: {yaml}"
             );
         }
+        for rule in [
+            "header.required-fields",
+            "pointer.resolution",
+            "status.delivery-agreement",
+            "waiver.matches-nothing",
+            "revision-log.change-class-required",
+        ] {
+            assert!(
+                !yaml.contains(&format!("{rule}:")),
+                "{rule} reads a declaration init does not write: {yaml}"
+            );
+        }
         assert!(
-            yaml.contains("header.required-fields"),
+            yaml.contains("header.case-variant-key"),
             "rules that read no declaration are still proposed: {yaml}"
         );
     }
@@ -1223,6 +1235,15 @@ mod tests {
             "section.required",
             "section.shape",
             "sections.required",
+            "header.required-fields",
+            "pointer.resolution",
+            "pointer_fields or narrative_fields",
+            "status.delivery-agreement",
+            "statuses.delivery",
+            "waiver.matches-nothing",
+            "role: suppression",
+            "revision-log.change-class-required",
+            "revision_log",
         ] {
             assert!(message.contains(needle), "{needle} missing from: {message}");
         }

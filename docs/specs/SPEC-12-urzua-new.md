@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5C0WX34AQKF79DQDS5
-Version: '0.29'
+Version: '0.30'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -71,7 +71,7 @@ without an edit:
 
 ## Display-number assignment
 
-A type whose directory does not exist yet is numbered from 1 and the directory is created when the record is written; `new` says so on stderr.
+A type whose directory does not exist yet is numbered from 1 and the directory is created when the record is written; `new` says so on stderr. A declared `extra_dirs` entry that is not on disk is skipped for numbering and named in a `new.extra-dir-missing` warning notice in the JSON (an agent reads stdout, not stderr).
 
 Scans the type's directory for the highest existing numeric prefix and takes the next integer —
 **never reused**, even if a number was deleted, since a cross-reference elsewhere may still assume
@@ -233,3 +233,4 @@ output is unchanged.
 > | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/new.rs` ade841f31f8d -> 8cb79491eccb, `rust/crates/urzua-core/src/new_record.rs` 40f0fce95cd0 -> eab8490554bb. Reason: Re-pinned after PR4 of MILE-205 (urzua waive --apply), the stated delta being: new.rs: scan_pull_requests and write_new_file become pub(crate) so waive reuses them; no behaviour change; new_record.rs: ScaffoldSpec gains omit_fields and the YAML renderer drops those fields; new passes none, so its output is unchanged. The claim holds as the changed code does not alter what this record states. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/new_record.rs` eab8490554bb -> 4f85670917b9. Reason: Read the diff of each re-pinned file against main and the claim still holds. new_record.rs: one doc comment names PREFIX-999 where it named ADR-999; no code changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-13 | Bumped to `0.29`. Evidence pins re-baselined for this change (the `Re-baselined` row above); the specification text is unchanged. **Why:** a revision-log entry that adds a structural change bumps `Version`. | **structural** |
+> | 2026-11-14 | Bumped to `0.30`. A missing `extra_dirs` entry is a `new.extra-dir-missing` warning notice in the report instead of a stderr line; the unknown-record-type error points at `record_types:` rather than a TOML table. **Why:** the first-run review, finding 6.6. | **substantive** |

@@ -574,12 +574,12 @@ pub(crate) fn execute(
     ));
     notices.extend(extra_notices);
     let (mut executions, mut findings) = run_rules(&context);
-    notices.extend(scope_changed_notices(
+    notices.extend(post_run_notices(
+        session,
+        &scope,
+        base.as_deref(),
         &executions,
-        &why_deferred(&scope, base.as_deref()),
     ));
-    notices.extend(excused_line_notices(&executions));
-    notices.extend(undeclared_section_key_notices(&session.config, &executions));
     scope_findings(session, &scope, &mut findings);
     let waivers = effective_waivers(session, &context, &mut notices);
     let today = urzua_io::today();
@@ -2537,6 +2537,21 @@ fn run_after_scoping(
         executions.push(exec);
         findings.extend(rule_findings);
     }
+}
+
+/// What the rules' own executions say beyond their findings: what `scope: changed`
+/// deferred, the lines an `ignore_marker` excused, and a section rule that reads a
+/// key no type declares.
+fn post_run_notices(
+    session: &Session,
+    scope: &ReportScope,
+    base: Option<&str>,
+    executions: &[RuleExecution],
+) -> Vec<Notice> {
+    let mut notices = scope_changed_notices(executions, &why_deferred(scope, base));
+    notices.extend(excused_line_notices(executions));
+    notices.extend(undeclared_section_key_notices(&session.config, executions));
+    notices
 }
 
 /// A section rule enabled with no type declaring the key it reads passes
