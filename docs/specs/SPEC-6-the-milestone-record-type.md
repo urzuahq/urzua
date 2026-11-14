@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5QF32RM76Y50THPQEG
-Version: '0.30'
+Version: '0.31'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -345,3 +345,4 @@ to another record — nothing to check for resolution, no cycle risk, no new rul
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/status_delivery_integration.rs` 3e956fb6227c -> b3aee9963c76. Reason: a_delivery_declaration_naming_a_status_outside_the_type_is_refused_at_load now asserts exit code 2 instead of not 0; unchanged behaviour **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-14 | Bumped to `0.30`. The test files this spec's evidence pins were hardened (exact exit codes, isolated git, visible root skips); the pins are re-baselined in the row above and the specified behaviour is unchanged. **Why:** the review's test findings; a re-baseline row is structural, so the version moves with it. | **structural** |
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/status_delivery_integration.rs` b3aee9963c76 -> adebf61b0161. Reason: Pinned file(s) changed by the engine review fixes (follow-up after the spec Version bumps): status_delivery_integration.rs: a test cites files that exist. The record's claim is unaffected by these changes. (Re-applied after merging the first pull request and main.) **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-14 | Bumped to `0.31`. A pinned evidence file was re-baselined for the engine review fixes; this spec's text is unchanged. | **structural** |
