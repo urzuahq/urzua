@@ -248,7 +248,7 @@ A revision row, amendment or acceptance row that says the maintainer decided or 
 quotes the maintainer's instruction, or cites the PR or review where they gave it. An unquoted
 "maintainer decision, <date>" cannot be checked later, and a scope change recorded that way narrows
 a Done means without evidence. When the maintainer changes an item's scope, keep the item's original
-text and waive it with the decision cited (`ADR-96`, `ADR-101`); never rewrite the item to fit what was built.
+text and waive it with the decision quoted (`ADR-96`, item waivers; `ADR-101`, nothing is `Done` without evidence); never rewrite the item to fit what was built.
 
 ## Who accepts a record, and the accepted risk
 
