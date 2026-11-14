@@ -10,6 +10,11 @@
 //! then judges the coverage gate over every shard's file and runs no case. See
 //! `acceptance/sharding.rs`.
 //!
+//! Bug tags: a case lists the bugs it reproduces in `bugs:`. Nothing here reads
+//! the list; `acceptance_bug_gate.rs` (a fast test with no corpus runs) holds every
+//! Fixed bug record to a tagged case, a lane gap file or the ledger, see
+//! `acceptance/bug_gate.rs`.
+//!
 //! Private corpora: `URZUA_ACCEPTANCE_EXTRA` is a `:`-separated list of
 //! directories. Each is either one corpus (has `expectations/`) or a root of
 //! corpus directories. Unset, the runner says so and skips them.
@@ -45,6 +50,11 @@ use std::process::Command;
 #[serde(deny_unknown_fields)]
 struct Case {
     id: String,
+    /// The bug records (`BUG-<n>`) this case reproduces: the case fails on a
+    /// build that has the bug. Only Fixed bugs; `acceptance_bug_gate.rs` holds
+    /// every Fixed bug to a tagged case, a gap file or the ledger.
+    #[serde(default)]
+    bugs: Vec<String>,
     /// A corpus directory name, or `@repo` for this repository (in place).
     corpus: String,
     #[serde(default)]
@@ -82,6 +92,13 @@ struct Case {
     /// over this repository's whole corpus to two runs.
     #[serde(default)]
     expect_rules_ran: Vec<String>,
+    /// For a rule of `expect_rules_ran` whose population is the files of one
+    /// directory (the claim rule reads `.changeset/*.md`, which a release
+    /// deletes): the population may be empty when no such file exists. The rule
+    /// must still run. While any such file exists the population must be
+    /// non-empty, so the assertion keeps its meaning on every normal tree.
+    #[serde(default)]
+    empty_population_ok_without: Vec<EmptyPopulation>,
     /// Rules this case proves, beyond those it names in `expect_findings` and
     /// `expect_rules_ran`. Each is switched off in turn and the case must fail.
     #[serde(default)]
@@ -90,6 +107,16 @@ struct Case {
     /// case with neither a rule to prove nor this reason is rejected.
     mutation_exempt: Option<String>,
     known_gap: Option<KnownGap>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct EmptyPopulation {
+    rule: String,
+    /// Directory, relative to the corpus root, that holds the population.
+    under: String,
+    /// File extension (no dot) of the files that make up the population.
+    extension: String,
 }
 
 #[derive(Deserialize)]
@@ -200,8 +227,22 @@ enum Outcome {
     Fail(Vec<String>),
 }
 
+/// The tree `corpus: "@repo"` cases run over: this repository, or the git
+/// checkout `URZUA_ACCEPTANCE_REPO` names (the release-tree test points it at a
+/// worktree whose changeset fragments are deleted, as a release leaves it).
 fn repo_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..")
+    match std::env::var("URZUA_ACCEPTANCE_REPO") {
+        Ok(v) if !v.trim().is_empty() => PathBuf::from(v),
+        _ => Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.."),
+    }
+}
+
+/// True when some file with `extension` sits directly under `dir` of `root`.
+fn has_files(root: &Path, dir: &str, extension: &str) -> bool {
+    std::fs::read_dir(root.join(dir)).is_ok_and(|rd| {
+        rd.flatten()
+            .any(|e| e.path().extension().is_some_and(|x| x == extension))
+    })
 }
 
 fn git(dir: &Path, args: &[&str]) -> Result<(), String> {
@@ -631,7 +672,11 @@ fn evaluate(case: &Case, corpus_dir: &Path, mutate: Option<&str>) -> Result<Vec<
                 .and_then(|e| e.pointer("/population/examined"))
                 .and_then(|n| n.as_u64())
                 .unwrap_or(0);
-            if status != Some("ran") || examined == 0 {
+            let may_be_empty = case
+                .empty_population_ok_without
+                .iter()
+                .any(|e| e.rule == *rule && !has_files(&cwd, &e.under, &e.extension));
+            if status != Some("ran") || (examined == 0 && !may_be_empty) {
                 unmet.push(format!(
                     "rule {rule} did not run over a non-empty population (status {status:?}, examined {examined})"
                 ));
@@ -676,10 +721,32 @@ fn evaluate(case: &Case, corpus_dir: &Path, mutate: Option<&str>) -> Result<Vec<
     Ok(unmet)
 }
 
+/// What is wrong with the case's `bugs:` tags, if anything. Which bugs exist
+/// and are Fixed is the bug gate's judgement; the runner holds the shape, and
+/// that a case which is still a known gap reproduces no fixed bug.
+fn bug_tag_problem(case: &Case) -> Option<String> {
+    let bad = |b: &&String| {
+        b.strip_prefix("BUG-")
+            .is_none_or(|n| n.is_empty() || !n.chars().all(|c| c.is_ascii_digit()))
+    };
+    if let Some(b) = case.bugs.iter().find(bad) {
+        return Some(format!("bugs: {b:?} is not a bug id (BUG-<number>)"));
+    }
+    if case.known_gap.is_some() && !case.bugs.is_empty() {
+        return Some(
+            "a known_gap case cannot tag a bug: it fails, so it reproduces nothing fixed".into(),
+        );
+    }
+    None
+}
+
 /// Run the case, then prove each rule it names: with the rule off in the
 /// case's own config the case must fail. Returns the outcome and the rules
 /// whose proof held.
 fn run_case(case: &Case, corpus_dir: &Path) -> CaseResult {
+    if let Some(problem) = bug_tag_problem(case) {
+        return (Outcome::Fail(vec![problem]), Vec::new());
+    }
     let unmet = match evaluate(case, corpus_dir, None) {
         Ok(u) => u,
         Err(e) => {

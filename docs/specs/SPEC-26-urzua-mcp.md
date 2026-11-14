@@ -2,7 +2,7 @@
 Stable-Id: 01M7A8QGWXMR8WYFDC36XW8XEF
 Status: Draft
 Date: 2026-11-13
-Version: '0.5'
+Version: '0.6'
 Author: beauwilliams
 Subject: '`urzua mcp` -- a read-only MCP server over stdio that serves the reports urzua already builds.'
 Implements: ADR-99
@@ -56,7 +56,7 @@ schema does not name is `-32602`, never ignored. Names carry a read word and no 
 | Tool | Input | Result |
 |---|---|---|
 | `urzua_check` | `{paths?: [string], base?: string, rules?: [string]}` | `CheckReport` |
-| `urzua_list_records` | `{type?: string, status?: [string]}` | `ExportReport` with each record's `raw_text`, `sections` and `preamble` left out: `types`, `record_count` and `records[]` (id, type, path, header fields). `types[].records` and `record_count` count the records listed, not the corpus. |
+| `urzua_list_records` | `{type?: string, status?: [string]}` | `ExportReport` with each record's `raw_text`, `sections` and `preamble` left out: `types`, `record_count` and `records[]` (id, type, path, header fields). `types[].records` and `record_count` count the records listed, not the corpus. The `roadmap` block `export` carries is left out: it spans the whole corpus whatever the filter, so a two-record listing would carry the whole roadmap. A roadmap tool stays unbuilt (below); `urzua roadmap` is the command. |
 | `urzua_show_record` | `{id: string}` | one `ExportedRecord` (header, `sections`, `raw_text`) and the `GraphEdge`s that touch it, supersession included |
 | `urzua_get_findings_for_path` | `{path: string}` | `ExplainReport` |
 | `urzua_get_graph` | `{}` | `GraphReport` |
@@ -83,7 +83,7 @@ block in `content`. `isError` is `false`. A report that says the repository has 
 repository is clean is the report's answer, as for the CLI.
 
 A failure the command line reports as a could-not-run (an unreadable corpus, an unknown id, an unknown rule) is a result with
-`isError: true`, the `CouldNotRun` shape of `ADR-46` as `structuredContent` and as the text block. An unknown tool name is the
+`isError: true`, the `CouldNotRun` shape of `ADR-46` as `structuredContent` and as the text block. A report whose `status` is `not-run` is an error result too, whatever built it (a `urzua_check` whose `paths` name no record, as the command exits 2): `isError` is `true` exactly when `status` is `not-run`. A report with findings is `isError: false`; its `blocking` is true exactly when the command line would exit 1, `fail_on` included, because a client has no exit code to read. An unknown tool name is the
 JSON-RPC error `-32602` and is never forwarded. A result that examined no records says so in the report's `population` or
 `files_examined`; a tool never returns an empty report for a corpus it could not read.
 
@@ -109,9 +109,10 @@ The mutating commands (`new`, `fix --apply`, `index --apply`, `migrate`,
   `mcp__urzua__<tool>` alone when given a gated path, and judges a planted `mcp__urzua__urzua_write_record` as a write.
 
 The editor hook is advisory for agents (`SPEC-19`); the guarantee is the absence of write code, and the tests above are what keep it.
-One thing outside the server's code can change `.git`, and the guarantee is worded to allow it: `urzua_check` with `base` runs `git diff`, and git rewrites its own index
-when a working file was written in the same instant as the index ("racily clean"). That is git refreshing its cache, never a
-record or a working file; the tree-hash test starts from a settled index so it does not depend on timing. The guarantee is that
+One thing outside the server's code can change `.git`, and the guarantee is worded to allow it: `urzua_check` with `base` runs `git diff`, and git refreshes its own index
+whenever a tracked file's stat data no longer matches the index (a touched file, a checkout that changed an mtime, a file written in the same
+instant as the index: "racily clean"), which rewrites `.git/index` and takes `.git/index.lock` for the moment. That is git refreshing its cache, never a
+record or a working file; a client that holds `index.lock` itself sees the call wait or fail; the tree-hash test starts from a settled index so it does not depend on timing. The guarantee is that
 the server writes no record, no working file and no git object or ref; it does not promise that git leaves its own index alone.
 
 ## Registration
@@ -147,4 +148,5 @@ The server is registered by a person in a user-owned file, with the snippet docu
 > | 2026-11-13 | Bumped to `0.2`. `urzua mcp` is built with `urzua_check` and `urzua_list_records` (`rust/crates/urzua-mcp`, `commands/mcp.rs`); the other three tools, the harness interaction tests and the registration docs follow. A listing leaves out `sections` and `preamble` as well as `raw_text`; `paths` may not leave the repository. **Why:** the server core of `MILE-29`. | **substantive** |
 > | 2026-11-13 | Bumped to `0.3`. A request line is capped at 1 MiB and a non-UTF-8 line is answered, both without ending the session; `id` null is refused and a message without an `id` never runs a tool; the read-only guarantee no longer says the server spawns no process (it runs read-only `git`, which may refresh its own index) and states what the source scan covers. **Why:** the review of the server core. | **substantive** |
 > | 2026-11-13 | Bumped to `0.4`. `urzua_show_record`, `urzua_get_findings_for_path` and `urzua_get_graph` are built; the last two are renamed from `urzua_findings_for_path` and `urzua_graph` so each name carries a read word the editor hook recognises; the harness interaction tests and the registration documentation exist. **Why:** the second change of `MILE-29`; the hook test showed the first names were judged as edits. | **substantive** |
-> | 2026-11-14 | Bumped to `0.5`. A usage error of `urzua mcp` (an unknown flag or argument, `--as-of`) is one JSON object on stderr and nothing on stdout, as the command section already said. **Why:** an external review found the refusal printed on stdout, where a client expects frames only. | **substantive** |
+> | 2026-11-14 | Bumped to `0.5`. A `not-run` report is an error result (`isError: true`); `urzua_list_records` leaves out the whole-corpus `roadmap` block; the `.git/index` note says git refreshes the index for any stat-dirty tracked file and may hold `index.lock`, not only for a racily clean one. **Why:** the external review's findings 4.3, 4.4 and 4.5; `ADR-46` says a result that established nothing is not a success. | **substantive** |
+> | 2026-11-14 | Bumped to `0.6`. A usage error of `urzua mcp` (an unknown flag or argument, `--as-of`) is one JSON object on stderr and nothing on stdout, as the command section already said. **Why:** an external review found the refusal printed on stdout, where a client expects frames only. | **substantive** |

@@ -1,6 +1,6 @@
 ---
 default: minor
-closes: []
+closes: [BUG-196]
 ---
 
 `check` now reports a stale `@sha256` evidence pin on any record as the warning `embodiment.pin-stale`,

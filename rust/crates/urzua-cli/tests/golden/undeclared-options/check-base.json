@@ -120,7 +120,7 @@
     "dependents": [],
     "whole_corpus_reason": null
   },
-  "blocking": false,
+  "blocking": true,
   "findings": [
     {
       "rule": "embodiment.locator-on-back-pointer-path",

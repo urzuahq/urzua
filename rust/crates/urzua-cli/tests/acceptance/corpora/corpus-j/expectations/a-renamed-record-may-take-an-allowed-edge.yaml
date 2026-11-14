@@ -1,4 +1,5 @@
 id: a-renamed-record-may-take-an-allowed-edge
+bugs: [BUG-191]
 corpus: corpus-j
 # Renamed and Accepted to Superseded in one change: judged against Accepted,
 # the edge the graph lists, not as a new record starting outside initial.

@@ -100,6 +100,16 @@ without failing the run, accepting a third severity in the report.
    severity is exhaustive: an unknown or unhandled value is a load error, never a fallback to `error`
    (today `options.rs:82-84` falls back with `_ => Error`). The build tests both.
 
+## Amendment (2026-11-14): `blocking` follows the `fail_on` threshold
+
+Decided by the orchestrator on 2026-11-14, pending maintainer review.
+
+The Decision and the Context above say the report is byte-identical under either `fail_on` value, and that `blocking` counts only `Error` findings. That split was deliberate and is reversed for `blocking` only: `blocking` is now true exactly when the run exits 1, so an unwaived warning under `fail_on: warning` (or `--fail-on warning`) reads `"blocking": true`. Under `fail_on: error` it reads `false`, as before. Nothing else in the report depends on the threshold: `status`, `findings`, severities and counts are unchanged, and an `info` finding still never counts.
+
+Why: consumers branch on stdout alone. The MCP server has no exit code, so an agent that read `blocking: false` on a change this repository's CI fails had no way to know. Nothing in this repository gates on `blocking`: the gate action, `render.sh` and the hooks read the exit code, so the change moves no gate. The external review (finding 5.1) found the disagreement. `SPEC-2` (0.162) and `MILE-145` record the same change.
+
+The Decision text is unchanged.
+
 ## Reversibility
 
 Moderate. Adding the level is additive and configs without it are unchanged. Walking it back later means
@@ -145,3 +155,4 @@ contains `info` unless the repository chose it.
 > | 2026-11-05 | Status changed from Proposed to Accepted. Added point 10 from the independent review: a declared severity never overrides `info`, and a level string never maps silently to `error`. **Why:** Maintainer decision, 2026-11-05. | **substantive** |
 > | 2026-11-05 | Tool-authored (by beauwilliams): recomputed `Embodiment` from `no Realized-by field; cited by test back-pointers` -- stated no value disagreed with the computed value `Verified`. | **structural** |
 > | 2026-11-05 | Records edit: the Consequences bullet "Boundary severity ... not extended here" is superseded by point 10 for the `info` value: a boundary `severity` accepts `info` and a rule set to `info` caps it. The provisional level (`ProvisionalLevel`) stays `warn`/`error`; the cap in point 10 keeps it from lifting an `info` rule. Status stays Accepted. **Why:** point 10 was added at acceptance and the Consequences section was not updated; `MILE-194` follows point 10. | **structural** |
+> | 2026-11-14 | Amendment added, decided by the orchestrator on 2026-11-14, pending maintainer review: `blocking` follows the `fail_on` threshold (true exactly when the run exits 1), reversing the "byte-identical under either value" split for that one key; the Decision is unchanged. **Why:** the MCP server and other agent consumers branch on stdout alone and have no exit code; no gate reads `blocking`. External review finding 5.1. | **substantive** |

@@ -174,6 +174,11 @@ impl Server {
             status: strings(args, "status"),
         };
         let mut result = outcome(export::build(self.config.clone(), &filter));
+        // A listing names records. The roadmap spans the whole corpus whatever
+        // the filter, so it is `urzua roadmap`'s, not a listing's.
+        if let Some(report) = result.report.as_object_mut() {
+            report.remove("roadmap");
+        }
         if let Some(records) = result
             .report
             .get_mut("records")
@@ -251,7 +256,15 @@ fn text(args: &Map<String, Value>, key: &str) -> String {
 /// A report, or the could-not-run shape with `isError` (`ADR-46`).
 fn outcome<R: urzua_core::report::Report>(built: Result<R, Failure>) -> ToolResult {
     let (value, is_error) = match built {
-        Ok(report) => (crate::report_value(&report), false),
+        Ok(report) => {
+            let value = crate::report_value(&report);
+            // A report that says it could not run established nothing: an error
+            // result, as the command line's exit 2 is a failure, not a finding.
+            let not_run = value
+                .as_ref()
+                .is_ok_and(|v| v.get("status").and_then(Value::as_str) == Some("not-run"));
+            (value, not_run)
+        }
         Err(failure) => (crate::report_value(&CouldNotRun::from(failure)), true),
     };
     match value {

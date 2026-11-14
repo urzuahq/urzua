@@ -128,7 +128,7 @@ GitHub-hosted runners. This is the step this repository's own CI runs.
 - `urzua harness status` fails (exit 1) when an installed agent harness has drifted from what
   `urzua harness install` generates. See [the agent harness](agent-harness.md).
 - `urzua refs refresh` is for a maintainer to run and commit the result; it uses the network, so it
-  does not belong in the gate.
+  does not belong in the gate. (`check` and `check --base` make no network call.)
 
 ## Local hooks
 

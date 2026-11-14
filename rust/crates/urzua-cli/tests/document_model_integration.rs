@@ -128,7 +128,7 @@ fn an_identity_pattern_that_does_not_compile_stops_the_run_naming_the_type() {
         String::from_utf8_lossy(&out.stdout),
         String::from_utf8_lossy(&out.stderr)
     );
-    assert!(!out.status.success());
+    assert_eq!(out.status.code(), Some(2));
     assert!(all.contains("adr") && all.contains("identity"), "{all}");
 }
 
@@ -142,7 +142,7 @@ fn an_identity_pattern_without_a_prefix_group_stops_the_run_naming_the_type() {
         String::from_utf8_lossy(&out.stdout),
         String::from_utf8_lossy(&out.stderr)
     );
-    assert!(!out.status.success());
+    assert_eq!(out.status.code(), Some(2));
     assert!(all.contains("adr") && all.contains("(?P<prefix>"), "{all}");
 }
 
@@ -187,6 +187,6 @@ fn a_bare_numbered_corpus_passes_a_hand_written_config() {
     std::fs::write(dir.join("doc/adr/0001-first.md"), broken).unwrap();
     let out = run(&dir, &["check"]);
     let report: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
-    assert!(!out.status.success(), "{report}");
+    assert_eq!(out.status.code(), Some(1), "{report}");
     assert!(report["findings"].to_string().contains("Consequences"));
 }
