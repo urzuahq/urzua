@@ -86,7 +86,7 @@ fn a_written_draft_has_a_pending_reason_no_expires_key_and_the_findings_as_its_b
         "no Owner without a template line: {text}"
     );
     assert!(
-        text.contains("\n## Findings\n\n- docs/adr/ADR-1-a.md missing required header field 'Owner' for record type 'adr'\n"),
+        text.contains("\n## Findings\n\n```text\ndocs/adr/ADR-1-a.md missing required header field 'Owner' for record type 'adr'\n```\n"),
         "{text}"
     );
     assert!(
@@ -332,4 +332,44 @@ fn a_write_error_stops_the_run_and_lists_what_was_not_written() {
     assert_eq!(drafts.len(), 6, "{report}");
     assert!(drafts.iter().all(|d| d["written"] == false), "{report}");
     assert_eq!(std::fs::read_dir(&*outside).unwrap().count(), 0);
+}
+
+/// A draft quotes the findings it covers; a finding about a dangling citation
+/// names the dangling id, so the quote must not be read as a citation itself
+/// (the adopter switchover, item 2).
+#[test]
+fn applying_drafts_for_a_dangling_citation_adds_no_citation_finding() {
+    let setup = Setup {
+        rules: "header.required-fields: error, citation.resolution: error",
+        adrs: vec![(
+            "ADR-1-a.md",
+            "---\nStatus: Proposed\nDate: 2026-01-01\nAuthor: a\nOwner: o\n---\n# 1 - X\n\nSee ADR-99 for why.\n"
+                .to_string(),
+        )],
+        ..Setup::default()
+    };
+    let dir = fixture("apply-citation", setup);
+    let (_, before) = check(&dir);
+    let dangling = unwaived(&before, "citation.resolution");
+    assert_eq!(dangling.len(), 1, "{before}");
+    assert!(dangling[0]["message"].as_str().unwrap().contains("ADR-99"));
+
+    let (code, report) = apply(&dir, &["--rule", "citation.resolution"]);
+    assert_eq!(code, 0, "{report}");
+    let paths = written_paths(&report);
+    assert_eq!(paths.len(), 1, "{report}");
+    stage(&dir);
+
+    let (_, after) = check(&dir);
+    let cites = unwaived(&after, "citation.resolution");
+    assert_eq!(
+        cites.len(),
+        1,
+        "the draft added a citation finding: {after}"
+    );
+    assert_eq!(cites[0]["file"], "docs/adr/ADR-1-a.md", "{after}");
+    // The quoted finding is still in the draft, as fenced text.
+    let text = std::fs::read_to_string(dir.join(&paths[0])).unwrap();
+    assert!(text.contains("ADR-99"), "{text}");
+    assert!(text.contains("\n## Findings\n\n```text\n"), "{text}");
 }

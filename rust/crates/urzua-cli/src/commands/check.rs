@@ -901,6 +901,40 @@ fn excused_line_notices(executions: &[RuleExecution]) -> Vec<Notice> {
         .collect()
 }
 
+/// The most `file:line` entries an unread-marker notice lists.
+const UNREAD_MARKERS_LISTED: usize = 20;
+
+/// One info notice per back-pointer rule that found marker lines naming an id it
+/// cannot read while `unread_markers` is undeclared (`ADR-101`: never silent,
+/// and nothing changes for a configuration written before the option).
+fn unread_marker_notices(executions: &[RuleExecution]) -> Vec<Notice> {
+    executions
+        .iter()
+        .filter(|e| !e.unread_markers.is_empty())
+        .map(|e| {
+            let mut lines = e.unread_markers.clone();
+            lines.sort();
+            let total = lines.len();
+            let more = total.saturating_sub(UNREAD_MARKERS_LISTED);
+            lines.truncate(UNREAD_MARKERS_LISTED);
+            let tail = if more > 0 {
+                format!(" and {more} more")
+            } else {
+                String::new()
+            };
+            Notice {
+                severity: NoticeSeverity::Info,
+                subject: e.rule.clone(),
+                message: format!(
+                    "unread_markers -- {total} marker line(s) name an id this rule cannot read, so they are no evidence and cite no checked record: {}{tail}; declare `unread_markers: report` on this rule to make them findings",
+                    lines.join(", ")
+                ),
+                detail: None,
+            }
+        })
+        .collect()
+}
+
 // ADR-90: a rule that declares scope: changed says how many slots it did not judge, and why.
 /// One info notice per rule that declared `scope: changed` and left slots
 /// unjudged (`ADR-90`): the rule, the option, how many slots and why. Without
@@ -2621,6 +2655,7 @@ fn execution_notices(
     executions: &[RuleExecution],
 ) -> Vec<Notice> {
     let mut notices = excused_line_notices(executions);
+    notices.extend(unread_marker_notices(executions));
     notices.extend(undeclared_section_key_notices(config, executions));
     notices
 }

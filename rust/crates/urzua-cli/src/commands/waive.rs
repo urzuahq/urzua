@@ -551,14 +551,22 @@ fn scaffold(
     (content, stable_id.as_str().to_string())
 }
 
-/// The finding messages, verbatim, one list item each.
+/// The finding messages, verbatim, one per line, in a fenced block. A fenced
+/// block is not read as prose, so a message naming a dangling id, a missing path
+/// or a bad link is quoted without becoming a finding of the waiver itself. The
+/// fence is longer than any backtick run in the quoted text.
 fn findings_body(group: &Group) -> String {
-    let items: Vec<String> = group
-        .lines()
+    let lines = group.lines();
+    let longest = lines
         .iter()
-        .map(|l| format!("- {}", l.replace('\n', "\n  ")))
-        .collect();
-    format!("## Findings\n\n{}\n", items.join("\n"))
+        .flat_map(|l| l.split(|c| c != '`').map(str::len))
+        .max()
+        .unwrap_or(0);
+    let fence = "`".repeat((longest + 1).max(3));
+    format!(
+        "## Findings\n\n{fence}text\n{}\n{fence}\n",
+        lines.join("\n")
+    )
 }
 
 fn draft_entry(path: &Path, group: &Group) -> WaiveDraft {

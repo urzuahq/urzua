@@ -183,6 +183,9 @@ pub(super) fn walk_entries(root: &Path, entries: &[String]) -> (Vec<String>, boo
 pub(super) fn engine_owned(override_log: Option<&str>) -> Vec<String> {
     let mut owned: Vec<String> = [
         ".urzua/cache",
+        // The binary the hooks run: an agent that could replace it could
+        // replace the judge.
+        ".urzua/bin",
         super::lock::LOCK_PATH,
         ".git/hooks",
         ".git/config",

@@ -20,12 +20,14 @@ cd "$root"
 # URZUA_BIN is the name the translator and the docs use; URZUA is still accepted.
 bin="${URZUA_BIN:-${URZUA:-}}"
 if [ -z "$bin" ]; then
-  if [ -x "$root/rust/target/release/urzua" ]; then
+  if [ -x "$root/.urzua/bin/urzua" ]; then
+    bin="$root/.urzua/bin/urzua"
+  elif [ -x "$root/rust/target/release/urzua" ]; then
     bin="$root/rust/target/release/urzua"
   elif command -v urzua >/dev/null 2>&1; then
     bin="$(command -v urzua)"
   else
-    echo "urzua-record: no urzua binary on PATH; install urzua or set URZUA_BIN" >&2
+    echo "urzua-record: no urzua binary at .urzua/bin/urzua or on PATH; install urzua or set URZUA_BIN" >&2
     exit 2
   fi
 fi

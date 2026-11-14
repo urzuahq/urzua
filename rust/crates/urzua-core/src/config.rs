@@ -503,6 +503,13 @@ pub struct RuleSetting {
     /// level of its findings and the rule's `level` only enables the rule.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub boundaries: Option<Vec<Boundary>>,
+    /// Whether a marker line that names an id the matcher cannot read
+    /// (`Implements: (ADR-1)`) is a finding at the rule's level (`report`) or,
+    /// undeclared, an `info` notice that counts and lists it. Only meaningful to
+    /// `embodiment.back-pointer-resolution` and
+    /// `embodiment.back-pointer-decision-accepted`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unread_markers: Option<UnreadMarkers>,
     /// The text that, on a line inside a boundary, excuses that line alone
     /// (`ADR-80`). Declared, never compiled in. Meaningful to
     /// `boundary.published-path-reference` and, for a back-pointer on the line,
@@ -2786,6 +2793,30 @@ fn strip_generic_head(text: &str, prefix: &str) -> String {
     out
 }
 
+/// The `unread_markers` option: what a back-pointer rule does with a marker line
+/// it cannot read an id from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum UnreadMarkers {
+    /// A finding at the rule's level.
+    Report,
+}
+
+/// `unread_markers` belongs to the two back-pointer rules.
+fn validate_unread_markers(config: &Config) -> Result<(), ConfigError> {
+    for (name, setting) in &config.rules {
+        if setting.unread_markers.is_some()
+            && !crate::rules::rule_accepts_option(name, "unread_markers")
+        {
+            return Err(ConfigError::OptionNotApplicable {
+                rule: name.clone(),
+                option: "unread_markers".to_string(),
+            });
+        }
+    }
+    Ok(())
+}
+
 /// The declared `ignore_marker` (`ADR-80`): only the boundary rule and the two
 /// back-pointer rules take one; it is one non-blank line with no padding; on a
 /// back-pointer rule it is not part of a back-pointer keyword (it would sit in
@@ -3694,6 +3725,7 @@ fn validate_boundaries(config: &mut Config) -> Result<(), ConfigError> {
     // path. A boundary that cannot be matched would be a rule that never
     // reports, so every reason is a load error.
     validate_ignore_markers(config)?;
+    validate_unread_markers(config)?;
     for (name, setting) in config.rules.iter_mut() {
         let owner = crate::rules::rule_accepts_option(name, "boundaries");
         if setting.boundaries.is_some() && !owner {
@@ -7047,6 +7079,7 @@ mod option_table_tests {
         "drift",
         "boundaries",
         "ignore_marker",
+        "unread_markers",
         "scope",
         "code_comment_prefixes",
     ];

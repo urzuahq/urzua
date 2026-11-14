@@ -1,9 +1,9 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.144'
+Version: '0.145'
 Date: 2026-08-20
 Status: Shipped
-Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:9b216fd928bd3f9899537d02dc64718b869ec42f36c6d041af0d27fe911a4936, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:d6dcb432d05a03f8593ee899b9427365680ad3f24b158d98cd0964d2b15d78b9, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:255395e7d2caa34947cef28f463e2ec050e3eba798a4dc7573a3cad946fee1ae
+Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:76578456015b87eeb207755ce96691671a584f6017d10f0cba31669478f777be, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:d6dcb432d05a03f8593ee899b9427365680ad3f24b158d98cd0964d2b15d78b9, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:255395e7d2caa34947cef28f463e2ec050e3eba798a4dc7573a3cad946fee1ae
 Embodiment: Verified
 Author: beauwilliams
 Subject: '`.urzua/config.yaml` -- the schema for record types, required/known fields, and per-type behavior.'
@@ -2075,6 +2075,8 @@ rules:
   `Not started`. A record stating any other value there is not judged and stays unexamined in the
   census. `urzua fix` repairs the cited records only.
 
+`unread_markers: report` belongs to `embodiment.back-pointer-resolution` and `embodiment.back-pointer-decision-accepted` (any other rule refuses it at load). A marker line naming an id it cannot read (`Implements: (ADR-12)`) is, undeclared, an `info` notice listing the count and at most 20 `file:line` entries; with the option it is a finding at the rule's level. The rule's `ignore_marker` excuses such a line either way (`ADR-101`).
+
 `test_paths` belongs to `embodiment.back-pointer-resolution` and to `embodiment.locator-on-back-pointer-path`
 (below); on any other rule it is the usual option-on-a-rule-that-does-not-take-it load error.
 
@@ -2587,3 +2589,5 @@ proves this configuration produces the three findings.
 > | 2026-11-14 | Bumped to `0.143`. The test files this spec's evidence pins were hardened (exact exit codes, isolated git, visible root skips); the pins are re-baselined in the row above and the specified behaviour is unchanged. **Why:** the review's test findings; a re-baseline row is structural, so the version moves with it. | **structural** |
 > | 2026-11-14 | Bumped to `0.144`. `## Resolution` states that a leading byte order mark is skipped and that a key repeated under `rules:` or `record_types:` is a load error naming the key. `drift_baseline`'s `ref` is a tag or a commit sha; a branch, `HEAD` or any ref that is neither is refused when `check` runs, with the reason. **Why:** the first-run review, findings 6.3, 6.6 and 1.4: a duplicate rule key disabled a rule silently, a BOM made the config unreadable, and a baseline on a branch hid all merged drift; the ref rule is the `ADR-91` amendment of 2026-11-14, decided by the orchestrator, pending maintainer review. | **substantive** |
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` d07f1b749110 -> 9b216fd928bd. Reason: Read the diff of each pinned file against main and the claim still holds. config.rs: strip_bom, read_in_window skips a BOM, unique_map refuses a repeated key under rules and record_types, and new unit tests; no other parsing or validation changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-14 | Bumped to `0.145`. Documents `unread_markers: report` on the two back-pointer rules: undeclared, a marker line naming an id the matcher cannot read is an `info` notice (count and at most 20 `file:line`); declared, a finding at the rule's level; `ignore_marker` excuses it either way. **Why:** the adopter switchover found markers silently read as no back-pointer (`ADR-101`); a finding by default would change existing configurations. | **substantive** |
+> | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 9b216fd928bd -> 76578456015b. Reason: Read the diff of each re-pinned file against main. the UnreadMarkers enum, the unread_markers RuleSetting option, its field-name list entry and its load validation (validate_unread_markers) were added; nothing else changed. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |

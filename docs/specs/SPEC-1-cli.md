@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5AJB7EBVDWVSMCSYZQ
-Version: '0.46'
+Version: '0.47'
 Date: 2026-07-29
 Status: Shipped
 Embodiment: Verified
@@ -176,7 +176,10 @@ commit, never a flaky run.
   repository answers, with the lower rate limit) and an info notice says so. `URZUA_GITHUB_API`
   replaces the default API origin `https://api.github.com` (GitHub Enterprise, and tests).
 - Pages of 100 are requested by `page=N` until the listing's `Link` header has no `rel="next"`; the
-  `Link` URL itself is never followed, so the token only goes to the configured origin. An entry
+  `Link` URL itself is never followed, so the token only goes to the configured origin. When the first
+  answer's `Link` also names `rel="last"`, the remaining pages are requested four at a time and merged
+  in page order, so the snapshot does not depend on which answered first; without a `rel="last"`
+  the pages are followed one at a time. An entry
   with a `pull_request` key is a pull request, any other an issue.
 - Output is the snapshot, `{schema_version, repository, generated_at, issues, pulls}` (`generated_at`
   is the current UTC date), both lists
@@ -412,3 +415,4 @@ None. Every question this spec carried has been answered or routed:
 > | 2026-11-14 | Bumped to `0.45`. The Purpose and success criterion 1 now name the two codebases: this repository (Rust) and the adopter (a primary language other than Rust), each via pre-push hook and CI; they no longer say "two adopters" or "at least two" targets. **Why:** maintainer decision of 2026-11-14, asked whether Phase 1 needs two real adopters or this repository plus the adopter: "Own repo + adopter". This records the reading `MILE-100` took on 2026-11-13 as a decision. | **substantive** |
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/export_integration.rs` 05e83d290448 -> 58ac0e2a0da0. Reason: export_integration.rs: export_json_refuses_a_record_symlinked_outside_the_repository now asserts exit code 2 instead of not 0; unchanged behaviour **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-14 | Bumped to `0.46`. The test files this spec's evidence pins were hardened (exact exit codes, isolated git, visible root skips); the pins are re-baselined in the row above and the specified behaviour is unchanged. **Why:** the review's test findings; a re-baseline row is structural, so the version moves with it. | **structural** |
+> | 2026-11-14 | Bumped to `0.47`. `urzua refs refresh` requests the pages of a listing four at a time when the first answer names its last page. **Why:** the adopter switchover (item 10): 5,700 numbers took about 75 s paged serially. | **substantive** |

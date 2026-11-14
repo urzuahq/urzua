@@ -30,6 +30,10 @@ const PER_PAGE: usize = 100;
 /// A repository would need a million issues and pull requests to reach this;
 /// it only stops a server that never ends a listing.
 const MAX_PAGES: usize = 10_000;
+/// Pages requested at once. GitHub asks clients to keep concurrent requests
+/// few; the same number of requests is made either way, so the primary rate
+/// limit is spent no faster per request.
+const WORKERS: usize = 4;
 
 pub fn run_refresh(config_path: Option<PathBuf>) -> ExitCode {
     let Workspace {
@@ -140,7 +144,7 @@ impl Response {
 
 /// The one seam to the network, so the paging and failure handling are tested
 /// against recorded responses.
-pub(crate) trait Fetch {
+pub(crate) trait Fetch: Sync {
     fn get(&self, url: &str, token: Option<&str>) -> Result<Response, String>;
 }
 
@@ -231,45 +235,148 @@ pub(crate) fn parse_response(raw: &str) -> Result<Response, String> {
     })
 }
 
+/// The numbers one page of the listing holds, and whether it says more follow.
+struct Page {
+    issues: Vec<u64>,
+    pulls: Vec<u64>,
+    /// The page was empty or carried no `rel="next"`: the listing ends here.
+    last: bool,
+    /// The page count from `rel="last"`, when the answer carries one.
+    page_count: Option<usize>,
+}
+
+fn read_page(
+    fetch: &dyn Fetch,
+    (base, repository): (&str, &str),
+    token: Option<&str>,
+    page: usize,
+) -> Result<Page, String> {
+    let url = format!("{base}/repos/{repository}/issues?state=all&per_page={PER_PAGE}&page={page}");
+    let response = fetch.get(&url, token)?;
+    check_status(&response, repository, token.is_some())?;
+    let items: Vec<serde_json::Value> = serde_json::from_str(&response.body)
+        .map_err(|e| format!("GitHub's answer for page {page} was not a JSON list: {e}"))?;
+    let (mut issues, mut pulls) = (Vec::new(), Vec::new());
+    for item in &items {
+        let number = item
+            .get("number")
+            .and_then(|n| n.as_u64())
+            .ok_or_else(|| format!("an entry on page {page} carries no number"))?;
+        if item.get("pull_request").is_some() {
+            pulls.push(number);
+        } else {
+            issues.push(number);
+        }
+    }
+    let link = response.header("link");
+    let more = link.is_some_and(|l| l.contains("rel=\"next\""));
+    Ok(Page {
+        issues,
+        pulls,
+        last: items.is_empty() || !more,
+        page_count: link.and_then(last_page),
+    })
+}
+
+/// The `page=N` of the `rel="last"` entry of a `Link` header. Only the number
+/// is read: the URL is never followed.
+fn last_page(link: &str) -> Option<usize> {
+    let entry = link.split(',').find(|e| e.contains("rel=\"last\""))?;
+    let url = entry.split_once('<')?.1.split_once('>')?.0;
+    url.split(['?', '&'])
+        .find_map(|kv| kv.strip_prefix("page="))
+        .and_then(|n| n.parse().ok())
+}
+
 /// Every issue and pull request number of `repository`, as
 /// `(issues, pulls)`, fetched a page at a time with `page=N`. The listing's
 /// `Link: rel="next"` is read only as the signal that another page exists: its
 /// URL is not followed, so the token is only ever sent to `base`.
+///
+/// When the first answer also carries `rel="last"`, the page count is known and
+/// pages 2 onward are fetched by [`WORKERS`] threads at once; the pages are
+/// merged in page order, so the result does not depend on which answered first.
+/// An answer with no `rel="last"` is followed one page at a time.
 pub(crate) fn collect_numbers(
     fetch: &dyn Fetch,
     base: &str,
     repository: &str,
     token: Option<&str>,
 ) -> Result<(Vec<u64>, Vec<u64>), String> {
-    let (mut issues, mut pulls) = (Vec::new(), Vec::new());
-    for page in 1..=MAX_PAGES {
-        let url =
-            format!("{base}/repos/{repository}/issues?state=all&per_page={PER_PAGE}&page={page}");
-        let response = fetch.get(&url, token)?;
-        check_status(&response, repository, token.is_some())?;
-        let items: Vec<serde_json::Value> = serde_json::from_str(&response.body)
-            .map_err(|e| format!("GitHub's answer for page {page} was not a JSON list: {e}"))?;
-        for item in &items {
-            let number = item
-                .get("number")
-                .and_then(|n| n.as_u64())
-                .ok_or_else(|| format!("an entry on page {page} carries no number"))?;
-            if item.get("pull_request").is_some() {
-                pulls.push(number);
-            } else {
-                issues.push(number);
-            }
+    let at = (base, repository);
+    let first = read_page(fetch, at, token, 1)?;
+    let (mut issues, mut pulls) = (first.issues, first.pulls);
+    if first.last {
+        return Ok((issues, pulls));
+    }
+    let too_long = || format!("the listing of {repository} did not end after {MAX_PAGES} pages");
+    if let Some(count) = first.page_count.filter(|n| *n >= 2) {
+        if count > MAX_PAGES {
+            return Err(too_long());
         }
-        let more = response
-            .header("link")
-            .is_some_and(|l| l.contains("rel=\"next\""));
-        if items.is_empty() || !more {
+        for page in fetch_pages_at_once(fetch, at, token, 2..=count)? {
+            issues.extend(page.issues);
+            pulls.extend(page.pulls);
+        }
+        return Ok((issues, pulls));
+    }
+    for page in 2..=MAX_PAGES {
+        let read = read_page(fetch, at, token, page)?;
+        issues.extend(read.issues);
+        pulls.extend(read.pulls);
+        if read.last {
             return Ok((issues, pulls));
         }
     }
-    Err(format!(
-        "the listing of {repository} did not end after {MAX_PAGES} pages"
-    ))
+    Err(too_long())
+}
+
+/// The listing's pages in `range`, in page order, fetched by up to [`WORKERS`]
+/// threads. The first failure in page order is the error returned, and the
+/// pages not yet started when any fails are skipped.
+fn fetch_pages_at_once(
+    fetch: &dyn Fetch,
+    at: (&str, &str),
+    token: Option<&str>,
+    range: std::ops::RangeInclusive<usize>,
+) -> Result<Vec<Page>, String> {
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+    use std::sync::Mutex;
+
+    let (first, last) = (*range.start(), *range.end());
+    let next = AtomicUsize::new(first);
+    let failed = AtomicBool::new(false);
+    let slots: Mutex<Vec<Option<Result<Page, String>>>> =
+        Mutex::new((first..=last).map(|_| None).collect());
+    std::thread::scope(|scope| {
+        for _ in 0..WORKERS.min(last - first + 1) {
+            scope.spawn(|| loop {
+                let page = next.fetch_add(1, Ordering::SeqCst);
+                if page > last || failed.load(Ordering::SeqCst) {
+                    return;
+                }
+                let read = read_page(fetch, at, token, page);
+                if read.is_err() {
+                    failed.store(true, Ordering::SeqCst);
+                }
+                slots.lock().unwrap()[page - first] = Some(read);
+            });
+        }
+    });
+    let mut pages = Vec::new();
+    let mut skipped = false;
+    for slot in slots.into_inner().unwrap() {
+        match slot {
+            Some(Ok(page)) => pages.push(page),
+            Some(Err(e)) => return Err(e),
+            // Skipped after a failure, which comes later in page order.
+            None => skipped = true,
+        }
+    }
+    if skipped {
+        return Err("a page of the listing was not fetched; nothing was written".to_string());
+    }
+    Ok(pages)
 }
 
 fn check_status(r: &Response, repository: &str, with_token: bool) -> Result<(), String> {
@@ -319,7 +426,7 @@ fn check_status(r: &Response, repository: &str, with_token: bool) -> Result<(), 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::cell::RefCell;
+    use std::sync::Mutex;
 
     const BASE: &str = "https://api.test";
 
@@ -334,15 +441,15 @@ mod tests {
 
     /// Replays recorded responses in order and remembers what was asked.
     struct Replay {
-        responses: RefCell<Vec<String>>,
-        asked: RefCell<Vec<(String, Option<String>)>>,
+        responses: Mutex<Vec<String>>,
+        asked: Mutex<Vec<(String, Option<String>)>>,
     }
 
     impl Replay {
         fn of(names: &[&str]) -> Self {
             Self {
-                responses: RefCell::new(names.iter().rev().map(|n| fixture(n)).collect()),
-                asked: RefCell::new(Vec::new()),
+                responses: Mutex::new(names.iter().rev().map(|n| fixture(n)).collect()),
+                asked: Mutex::new(Vec::new()),
             }
         }
     }
@@ -350,11 +457,13 @@ mod tests {
     impl Fetch for Replay {
         fn get(&self, url: &str, token: Option<&str>) -> Result<Response, String> {
             self.asked
-                .borrow_mut()
+                .lock()
+                .unwrap()
                 .push((url.to_string(), token.map(String::from)));
             let raw = self
                 .responses
-                .borrow_mut()
+                .lock()
+                .unwrap()
                 .pop()
                 .expect("more requests than recorded responses");
             parse_response(&raw)
@@ -371,7 +480,7 @@ mod tests {
         let (issues, pulls) = collect_numbers(&replay, BASE, "urzuahq/urzua", Some("tok")).unwrap();
         assert_eq!(issues, vec![217]);
         assert_eq!(pulls, vec![224, 223, 222, 221, 220, 219, 218, 216]);
-        let asked = replay.asked.borrow();
+        let asked = replay.asked.lock().unwrap();
         assert_eq!(asked.len(), 3);
         assert_eq!(
             asked[0].0,
@@ -379,6 +488,112 @@ mod tests {
         );
         assert!(asked[2].0.ends_with("&page=3"));
         assert!(asked.iter().all(|(_, t)| t.as_deref() == Some("tok")));
+    }
+
+    /// A listing of `pages` pages that names its last page, answering each page
+    /// slowly and later pages sooner, so the order of arrival is not the order
+    /// of the pages. Remembers the most requests it had in flight at once.
+    struct Listing {
+        pages: usize,
+        in_flight: std::sync::atomic::AtomicUsize,
+        most: std::sync::atomic::AtomicUsize,
+        asked: Mutex<Vec<usize>>,
+        fail_page: Option<usize>,
+    }
+
+    impl Listing {
+        fn of(pages: usize) -> Self {
+            Self {
+                pages,
+                in_flight: Default::default(),
+                most: Default::default(),
+                asked: Mutex::new(Vec::new()),
+                fail_page: None,
+            }
+        }
+    }
+
+    impl Fetch for Listing {
+        fn get(&self, url: &str, _: Option<&str>) -> Result<Response, String> {
+            use std::sync::atomic::Ordering::SeqCst;
+            let page: usize = url.rsplit("page=").next().unwrap().parse().unwrap();
+            self.asked.lock().unwrap().push(page);
+            let now = self.in_flight.fetch_add(1, SeqCst) + 1;
+            self.most.fetch_max(now, SeqCst);
+            std::thread::sleep(std::time::Duration::from_millis(
+                5 * (self.pages - page) as u64 + 20,
+            ));
+            self.in_flight.fetch_sub(1, SeqCst);
+            if self.fail_page == Some(page) {
+                return Ok(Response {
+                    status: 404,
+                    headers: Vec::new(),
+                    body: String::new(),
+                });
+            }
+            // Page p holds numbers 10p-9..=10p, every third one a pull request.
+            let items: Vec<String> = (10 * page - 9..=10 * page)
+                .map(|n| {
+                    if n % 3 == 0 {
+                        format!("{{\"number\":{n},\"pull_request\":{{}}}}")
+                    } else {
+                        format!("{{\"number\":{n}}}")
+                    }
+                })
+                .collect();
+            let mut headers = Vec::new();
+            if page < self.pages {
+                let base = "https://api.test/repos/o/r/issues?state=all&per_page=100";
+                headers.push((
+                    "link".to_string(),
+                    format!(
+                        "<{base}&page={}>; rel=\"next\", <{base}&page={}>; rel=\"last\"",
+                        page + 1,
+                        self.pages
+                    ),
+                ));
+            }
+            Ok(Response {
+                status: 200,
+                headers,
+                body: format!("[{}]", items.join(",")),
+            })
+        }
+    }
+
+    #[test]
+    fn a_listing_that_names_its_last_page_is_fetched_several_pages_at_once() {
+        let listing = Listing::of(12);
+        let (issues, pulls) = collect_numbers(&listing, BASE, "o/r", None).unwrap();
+        let most = listing.most.load(std::sync::atomic::Ordering::SeqCst);
+        assert!(most > 1, "the pages were fetched one at a time");
+        assert!(most <= WORKERS, "{most} requests at once");
+        let mut asked = listing.asked.lock().unwrap().clone();
+        asked.sort_unstable();
+        assert_eq!(asked, (1..=12).collect::<Vec<_>>());
+        // Merged in page order, whichever page answered first.
+        let all: Vec<u64> = (1..=120).collect();
+        let expected_pulls: Vec<u64> = all.iter().copied().filter(|n| n % 3 == 0).collect();
+        let expected_issues: Vec<u64> = all.iter().copied().filter(|n| n % 3 != 0).collect();
+        assert_eq!((issues, pulls), (expected_issues, expected_pulls));
+    }
+
+    #[test]
+    fn a_failing_page_among_parallel_ones_is_the_error_and_nothing_is_returned() {
+        let mut listing = Listing::of(9);
+        listing.fail_page = Some(5);
+        let err = collect_numbers(&listing, BASE, "o/r", None).unwrap_err();
+        assert!(err.contains("no repository 'o/r'"), "{err}");
+    }
+
+    #[test]
+    fn the_last_page_is_read_from_the_link_header_only() {
+        assert_eq!(
+            last_page("<https://x/i?per_page=100&page=2>; rel=\"next\", <https://x/i?per_page=100&page=57>; rel=\"last\""),
+            Some(57)
+        );
+        assert_eq!(last_page("<https://x/i?page=2>; rel=\"next\""), None);
+        assert_eq!(last_page("<https://x/i?per_page=3>; rel=\"last\""), None);
     }
 
     #[test]

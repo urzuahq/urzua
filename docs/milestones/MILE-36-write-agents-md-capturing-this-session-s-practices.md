@@ -5,7 +5,7 @@ Phase: '0'
 Track: roadmap-tracking
 Implements: —
 Blocked-on: —
-Realized-by: code:AGENTS.md@sha256:b4528bdc6df6b4384117cce6d8067e5b127ef4603477d3233cf61f5d5cfff86c
+Realized-by: code:AGENTS.md@sha256:c804cffd69e7cfb87aa432caa6d0de380dae789a064d71aab0e2e43acff8f032
 ---
 # 36 — Write AGENTS.md capturing this session's practices
 
@@ -23,12 +23,12 @@ something worth writing rather than letting it keep living nowhere.
 
 ## Done means
 
-- `AGENTS.md` exists at the repository root. — evidence: code:AGENTS.md@sha256:b4528bdc6df6b4384117cce6d8067e5b127ef4603477d3233cf61f5d5cfff86c
-- `AGENTS.md` instructs an agent to track work in the tool's own record types. — evidence: code:AGENTS.md@sha256:b4528bdc6df6b4384117cce6d8067e5b127ef4603477d3233cf61f5d5cfff86c
-- `AGENTS.md` instructs an agent to verify claims against real runs rather than memory. — evidence: code:AGENTS.md@sha256:b4528bdc6df6b4384117cce6d8067e5b127ef4603477d3233cf61f5d5cfff86c
-- `AGENTS.md` instructs an agent never to silently rewrite an Accepted decision (amend with a dated `## Amendment`). — evidence: code:AGENTS.md@sha256:b4528bdc6df6b4384117cce6d8067e5b127ef4603477d3233cf61f5d5cfff86c
-- `AGENTS.md` instructs an agent not to build speculative capability. — evidence: code:AGENTS.md@sha256:b4528bdc6df6b4384117cce6d8067e5b127ef4603477d3233cf61f5d5cfff86c
-- Each of these is a section an agent reads at session start. — evidence: code:AGENTS.md@sha256:b4528bdc6df6b4384117cce6d8067e5b127ef4603477d3233cf61f5d5cfff86c
+- `AGENTS.md` exists at the repository root. — evidence: code:AGENTS.md@sha256:c804cffd69e7cfb87aa432caa6d0de380dae789a064d71aab0e2e43acff8f032
+- `AGENTS.md` instructs an agent to track work in the tool's own record types. — evidence: code:AGENTS.md@sha256:c804cffd69e7cfb87aa432caa6d0de380dae789a064d71aab0e2e43acff8f032
+- `AGENTS.md` instructs an agent to verify claims against real runs rather than memory. — evidence: code:AGENTS.md@sha256:c804cffd69e7cfb87aa432caa6d0de380dae789a064d71aab0e2e43acff8f032
+- `AGENTS.md` instructs an agent never to silently rewrite an Accepted decision (amend with a dated `## Amendment`). — evidence: code:AGENTS.md@sha256:c804cffd69e7cfb87aa432caa6d0de380dae789a064d71aab0e2e43acff8f032
+- `AGENTS.md` instructs an agent not to build speculative capability. — evidence: code:AGENTS.md@sha256:c804cffd69e7cfb87aa432caa6d0de380dae789a064d71aab0e2e43acff8f032
+- Each of these is a section an agent reads at session start. — evidence: code:AGENTS.md@sha256:c804cffd69e7cfb87aa432caa6d0de380dae789a064d71aab0e2e43acff8f032
 
 > **Revision log**
 >
@@ -47,3 +47,4 @@ something worth writing rather than letting it keep living nowhere.
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `AGENTS.md` 48d431863e87 -> 2ea89528735a. Reason: Read the diff of AGENTS.md since the previous pin: one paragraph is added to 'A record's Status: who sets it' saying a maintainer-decision row quotes the instruction or cites the PR or review, and that a changed Done-when item keeps its text and is waived. No other line changed, so the claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `AGENTS.md` b4c539ee8370 -> 76cd697c2a77. Reason: Read the diff of AGENTS.md since the previous pin: one paragraph is added to 'A record's Status: who sets it' saying a maintainer-decision row quotes the instruction or cites the PR or review, and that a changed Done-when item keeps its text and is waived. No other line changed, so the claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `AGENTS.md` 76cd697c2a77 -> b4528bdc6df6. Reason: Read the diff of each pinned file since the previous pin. .urzua/config.yaml: one line is added to the milestone type's waiver_categories, declaring the scope-changed-by-decision category (no cite, no expiry); no other key changed, so the record_types::milestone section differs only by that entry. AGENTS.md: one paragraph is added under 'A record's Status: who sets it' about quoting maintainer decisions and waiving a changed Done-when item; no other line changed. The claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `AGENTS.md` b4528bdc6df6 -> c804cffd69e7. Reason: Read the diff of each re-pinned file against main. `.urzua/bin` was added to the list of files the harness keeps for itself and to the list of what a Bash command can write; no other text changed. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |

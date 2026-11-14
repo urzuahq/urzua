@@ -2,7 +2,7 @@
 Stable-Id: 01M7A3B7TD1N87WAEFWDMB5CTJ
 Status: Draft
 Date: 2026-11-13
-Version: '0.5'
+Version: '0.6'
 Author: beauwilliams
 Subject: '`urzua waive --from-report` -- drafting one waiver per rule and file from the current findings.'
 Implements: ADR-91
@@ -67,7 +67,7 @@ The record is produced by the scaffold `urzua new` uses (`SPEC-12`, `scaffold_re
 number past every directory the type declares, fitted to its declared identity, a minted `Stable-Id`,
 the type's template body and a first revision-log row. On top of it the command supplies `Rule`, `Scope`
 and `Reason` (the type's first whole-value `statuses.pending` entry, else `Pending`) and appends a
-`## Findings` section listing the finding messages verbatim, with no cap. The title is `<rule> in <file>`.
+`## Findings` section listing the finding messages verbatim, with no cap, one per line in a fenced `text` block (a fence longer than any backtick run in the messages). A fenced block is not read as prose, so a message that names a dangling id, a missing path or a dead issue is quoted without making the drafted waiver a finding of `citation.resolution` or its siblings itself. The title is `<rule> in <file>`.
 A dry run shows the number each draft would take now, numbered consecutively in file then rule order.
 `Expires` is omitted from the header altogether, not written as `null`; `Category` and `Justified-by`
 are left as the template has them.
@@ -138,3 +138,4 @@ entry is `null` for `no-file`; `waiver` is present only for `already-waived` and
 > | 2026-11-13 | An `--apply` that fails after writing some drafts reports `partial-failure` with exit 1, and `not-run` with exit 2 only when none was written; the numbering limit without `new.check_open_prs` is stated. Version `0.2` -> `0.3`. **Why:** review of the `--apply` change: the same outcome is `partial-failure` in `fix`, `index`, `reverify` and `migrate`. | **substantive** |
 > | 2026-11-14 | `WaiveReport` gains `notices` (present when non-empty): the identity substitution and numbering's notices, which were on stderr only. Version `0.3` -> `0.4`. **Why:** the external review's finding 5.4; `ADR-46` item 8 puts anything that can be structured in the JSON. | **substantive** |
 > | 2026-11-14 | Bumped to `0.5`. Drafts are grouped by finding variant and key path as well as rule and file, carry `Variant` and `Key-path` where the waiver type lists them, and a waiver that names a variant or key path skips only the finding it names; the report's drafts gain `variant` and `key_path`. A type that lists neither field drafts as before and says so in a `waive.narrowing` notice. Maintainer decision, 2026-11-14. **Why:** the first-run review (finding 1.6): a draft that matched on rule and file alone, scoped to the configuration, would hide every later finding of the rule there. | **substantive** |
+> | 2026-11-14 | Bumped to `0.6`. A draft's `## Findings` section is one fenced `text` block, not a bullet list, so applying drafts adds no citation finding of its own. **Why:** the adopter switchover: a drafted waiver quoting `ADR-99, which resolves to no record` itself tripped `citation.resolution`. | **substantive** |

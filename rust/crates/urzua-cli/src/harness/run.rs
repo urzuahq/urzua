@@ -1315,6 +1315,15 @@ fn on_path(name: &str) -> bool {
     })
 }
 
+/// Whether the hook commands can find `urzua`, in the order the translator and
+/// the record helper look: `URZUA_BIN`, the binary the repository carries at
+/// `.urzua/bin/urzua`, then `PATH`.
+fn binary_found(root: &Path) -> bool {
+    std::env::var_os("URZUA_BIN").is_some_and(|b| !b.is_empty())
+        || root.join(".urzua/bin/urzua").is_file()
+        || on_path("urzua")
+}
+
 /// Moves into the session's own governed repository: the one that holds the
 /// directory the session started in (`project_dir`), else the nearest above the
 /// current directory. A session whose directory is inside a nested repository
@@ -1578,10 +1587,10 @@ fn session_start(config: Option<PathBuf>) -> Verdict {
     }
 
     // The binary: found on PATH, and the same version as the installed bundle.
-    if !on_path("urzua") {
+    if !binary_found(&ws.repo_root) {
         problems.push(Problem {
             check: "binary",
-            message: "urzua is not on PATH in this session, so the hook commands cannot find it (a build directory needs URZUA_BIN set)".to_string(),
+            message: "urzua is not at .urzua/bin/urzua or on PATH in this session, so the hook commands cannot find it (a build directory needs URZUA_BIN set)".to_string(),
         });
     }
     let Some(lock) = installed_lock_problems(&ws.repo_root, &mut problems) else {

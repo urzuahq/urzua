@@ -254,7 +254,7 @@ text and waive it with the decision quoted (`ADR-96`, item waivers; `ADR-101`, n
 
 `authority` in `.urzua/config.yaml` (`ADR-89` section 4, `SPEC-3`) names the maintainer as the only
 decider for an ADR or RFC moving to `Accepted`, `Rejected` or `Superseded` (an ADR also `Retired`) and for the protected paths (`.claude`,
-`.git-hooks`, `.github/workflows`, `.urzua/config.yaml`, `.urzua/templates`; matched without regard to letter case, with Unicode case folding; and the files the harness keeps for itself: `.urzua/cache`, `.urzua/harness.lock`, the override log, `.git/hooks`, `.git/config`). Through `urzua harness run
+`.git-hooks`, `.github/workflows`, `.urzua/config.yaml`, `.urzua/templates`; matched without regard to letter case, with Unicode case folding; and the files the harness keeps for itself: `.urzua/cache`, `.urzua/bin` (the binary the hooks run), `.urzua/harness.lock`, the override log, `.git/hooks`, `.git/config`). Through `urzua harness run
 edit` the engine refuses an agent's Write, Edit, MultiEdit or NotebookEdit, or a file-writing MCP tool, that does either (a
 file hard-linked to a protected or gated one included, on Unix), and no override lifts it;
 a person edits outside the agent harness. In CI `diff.decider-required` checks that the pull request's
@@ -284,8 +284,9 @@ never accept a record or touch a guardrail rests on this file and on the person 
   project's `.claude/settings.local.json` is protected as a path under `.claude` but neither read nor wired by
   the install (a hook entry or `disableAllHooks` set only there is not seen by `status`), and a link swapped
   between the judgement and the write is not seen;
-- a Bash command that writes what the edit tools cannot: `.urzua/cache`, `.urzua/harness.lock`, the override
-  log, `.git/hooks` and `.git/config`. Nothing reports it;
+- a Bash command that writes what the edit tools cannot: `.urzua/cache`, `.urzua/bin` (replacing the binary the
+  hooks run replaces the judge; CI's `diff.decider-required` sees a committed one as a protected path),
+  `.urzua/harness.lock`, the override log, `.git/hooks` and `.git/config`. Nothing reports it;
 - without `python3` or the translator, the editor hook's command reads `.urzua/config.yaml` as text and
   refuses every edit if it finds `acceptance` or `protected-paths` enabled without `on_unjudged: allow`; a
   configuration that scan misreads is read as not closed, and an invalid or empty `.urzua/config.yaml` (only

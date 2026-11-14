@@ -468,9 +468,14 @@ def proposed(tool, inp, path):
 def engine(argv, request, cwd):
     """Runs the engine command with the request on stdin; returns the verdict object."""
     argv = list(argv)
-    # A binary that is not on PATH (a build directory, a pinned install) is named here.
-    if argv and argv[0] == "urzua" and os.environ.get("URZUA_BIN"):
-        argv[0] = os.environ["URZUA_BIN"]
+    # A binary that is not on PATH is named here: URZUA_BIN first, then the one the
+    # project carries at .urzua/bin/urzua (a pinned install), then PATH.
+    if argv and argv[0] == "urzua":
+        local = os.path.join(PROJECT_DIR, ".urzua", "bin", "urzua") if PROJECT_DIR else None
+        if os.environ.get("URZUA_BIN"):
+            argv[0] = os.environ["URZUA_BIN"]
+        elif local and os.path.isfile(local) and os.access(local, os.X_OK):
+            argv[0] = local
     p = subprocess.run(argv, input=json.dumps(request), capture_output=True, text=True, cwd=cwd or None)
     verdict = json.loads(p.stdout)
     if not isinstance(verdict, dict) or "verdict" not in verdict:

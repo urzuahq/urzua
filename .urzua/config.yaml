@@ -656,7 +656,7 @@ authority:
   gates:
     - {type: adr, to: [Accepted, Rejected, Superseded, Retired], by: maintainers}
     - {type: rfc, to: [Accepted, Rejected, Superseded], by: maintainers}
-    - paths: [".claude", ".git-hooks", ".github/workflows", ".github/actions", ".github/scripts", "knope.toml", ".urzua/config.yaml", ".urzua/templates"]
+    - paths: [".claude", ".git-hooks", ".github/workflows", ".github/actions", ".github/scripts", "knope.toml", ".urzua/config.yaml", ".urzua/templates", ".urzua/bin"]
       by: maintainers
 
 # The pairs that are dependencies, and how `urzua roadmap` groups its records
@@ -861,6 +861,8 @@ rules:
     level: error
     back_pointer_paths: ["rust", "scripts", "ts", "platform"]
     test_paths: ["rust/crates/urzua-cli/tests", "rust/crates/*-core/tests"]
+    # A marker naming an id the matcher cannot read is a finding here, never a silent skip (ADR-101).
+    unread_markers: report
   # A source comment that cites a record id resolves to a record (MILE-108, RFC-41):
   # the mirror of embodiment.locator-exists, read from the file's side. Only
   # existence is judged, so a citation of a superseded record passes. Only the

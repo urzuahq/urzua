@@ -1266,6 +1266,8 @@ mod tests {
             "statuses.delivery",
             "waiver.matches-nothing",
             "role: suppression",
+            // The form `waive --from-report` accepts.
+            "effective_requires: [Reason, Expires]",
             "revision-log.change-class-required",
             "revision_log",
         ] {
