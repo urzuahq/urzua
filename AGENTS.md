@@ -244,6 +244,12 @@ decision was reached on someone's behalf (`Supersedes / Superseded-by`, a vacate
 closing a cross-reference) and is not covered by the exceptions above. Distinct from the rule above
 this one: that one guards an already-decided record's content; this one guards the decision itself.
 
+A revision row, amendment or acceptance row that says the maintainer decided or accepted something
+quotes the maintainer's instruction, or cites the PR or review where they gave it. An unquoted
+"maintainer decision, <date>" cannot be checked later, and a scope change recorded that way narrows
+a Done means without evidence. When the maintainer changes an item's scope, keep the item's original
+text and waive it with the decision quoted (`ADR-96`, item waivers; `ADR-101`, nothing is `Done` without evidence); never rewrite the item to fit what was built.
+
 ## Who accepts a record, and the accepted risk
 
 `authority` in `.urzua/config.yaml` (`ADR-89` section 4, `SPEC-3`) names the maintainer as the only
