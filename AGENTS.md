@@ -175,7 +175,8 @@ conversation history. If you're doing multi-step work worth remembering:
   `Verified`/`Drift detected`/etc. yourself and skip the command that exists to get it right.
 - **`urzua new`'s assigned display number is provisional, not reserved.** It scans the working tree and
   every local branch and remote-tracking ref (MILE-89), skipping past numbers found there and naming
-  the claiming refs on stderr. It is blind to refs never fetched into this clone, so `git fetch` first
+  them, with the reason, in the `skipped` list of its JSON (never on stderr). It is blind
+  to refs never fetched into this clone, so `git fetch` first
   and, before opening a PR, manually check other open PRs for the same type/number — e.g. `gh
   pr list --search "in:title <TYPE>-<N>"` or `git log --all --oneline -- 'docs/<type>/<TYPE>-<N>-*'`
   — a collision found this way is expected and cheap to rename, not a bug in the tool.
@@ -243,6 +244,12 @@ decision was reached on someone's behalf (`Supersedes / Superseded-by`, a vacate
 closing a cross-reference) and is not covered by the exceptions above. Distinct from the rule above
 this one: that one guards an already-decided record's content; this one guards the decision itself.
 
+A revision row, amendment or acceptance row that says the maintainer decided or accepted something
+quotes the maintainer's instruction, or cites the PR or review where they gave it. An unquoted
+"maintainer decision, <date>" cannot be checked later, and a scope change recorded that way narrows
+a Done means without evidence. When the maintainer changes an item's scope, keep the item's original
+text and waive it with the decision quoted (`ADR-96`, item waivers; `ADR-101`, nothing is `Done` without evidence); never rewrite the item to fit what was built.
+
 ## Who accepts a record, and the accepted risk
 
 `authority` in `.urzua/config.yaml` (`ADR-89` section 4, `SPEC-3`) names the maintainer as the only
@@ -273,7 +280,9 @@ never accept a record or touch a guardrail rests on this file and on the person 
 - what the editor hook cannot read: a hard link is resolved on Unix only (elsewhere a write is judged by its
   own name), names are not Unicode-normalised, an MCP tool whose input has no string a path can be read from
   is not an edit it can see, an MCP tool that applies a patch or runs a shell command is an unparsed route, a change made before `session-start` took the protected baseline is not
-  reported, the agent's user-level and local settings are neither protected nor read, and a link swapped
+  reported, the agent's user-level settings (outside the repository) are neither protected nor read, the
+  project's `.claude/settings.local.json` is protected as a path under `.claude` but neither read nor wired by
+  the install (a hook entry or `disableAllHooks` set only there is not seen by `status`), and a link swapped
   between the judgement and the write is not seen;
 - a Bash command that writes what the edit tools cannot: `.urzua/cache`, `.urzua/harness.lock`, the override
   log, `.git/hooks` and `.git/config`. Nothing reports it;

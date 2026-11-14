@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5AJB7EBVDWVSMCSYZQ
-Version: '0.43'
+Version: '0.46'
 Date: 2026-07-29
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/main.rs#Command@sha256:01c366f162d355f5a6621e7616d30356b5d6be7b9fb0cc9706bac6e76ed476bf, code:rust/crates/urzua-cli/src/main.rs#emit@sha256:660eb55883131c1eab900d3a2a7ad5d93c5e0c6ace9c0f135f13ef83351f31fd, test:rust/crates/urzua-cli/tests/check_integration.rs#help_exits_0_with_plain_text_not_json@sha256:b188b2cc76395b745caae8e5012ca7a91f5d0e52f9a68aabe377b0cd9fc81c3e, test:rust/crates/urzua-cli/tests/check_integration.rs#a_bad_flag_emits_json_not_a_panic@sha256:eb8bfb4d74748038835831064ab072943e8c32648f99c1202940cb169993747a, test:rust/crates/urzua-cli/tests/check_integration.rs#check_exits_0_on_a_clean_corpus@sha256:585cb12f3f55fb534592e1802d0448163e7aa3fa06e5a91709bc32ab641fecb9, test:rust/crates/urzua-cli/tests/check_integration.rs#check_exits_1_on_a_missing_required_field@sha256:95b88e795e9a4ffb4fe1983f76bf57a3a3191dfc5c579f4ff207381a3ff0c307, test:rust/crates/urzua-cli/tests/check_integration.rs#check_exits_2_when_no_config_exists@sha256:ebf81ea1fb85124a9510dd6f7e0f737e8fd55d4532b0907a23eaa7f46152a5b5, test:rust/crates/urzua-cli/tests/export_integration.rs@sha256:05e83d2904484c2059524a4e60ad40d6141e6025dae569de536528f765954689
+Realized-by: code:rust/crates/urzua-cli/src/main.rs#Command@sha256:c06e873285d4c80a17cb325516d851e8b2e5a39ce27d4e4f14115b10799797d9, code:rust/crates/urzua-cli/src/main.rs#emit@sha256:660eb55883131c1eab900d3a2a7ad5d93c5e0c6ace9c0f135f13ef83351f31fd, test:rust/crates/urzua-cli/tests/check_integration.rs#help_exits_0_with_plain_text_not_json@sha256:b188b2cc76395b745caae8e5012ca7a91f5d0e52f9a68aabe377b0cd9fc81c3e, test:rust/crates/urzua-cli/tests/check_integration.rs#a_bad_flag_emits_json_not_a_panic@sha256:eb8bfb4d74748038835831064ab072943e8c32648f99c1202940cb169993747a, test:rust/crates/urzua-cli/tests/check_integration.rs#check_exits_0_on_a_clean_corpus@sha256:585cb12f3f55fb534592e1802d0448163e7aa3fa06e5a91709bc32ab641fecb9, test:rust/crates/urzua-cli/tests/check_integration.rs#check_exits_1_on_a_missing_required_field@sha256:95b88e795e9a4ffb4fe1983f76bf57a3a3191dfc5c579f4ff207381a3ff0c307, test:rust/crates/urzua-cli/tests/check_integration.rs#check_exits_2_when_no_config_exists@sha256:ebf81ea1fb85124a9510dd6f7e0f737e8fd55d4532b0907a23eaa7f46152a5b5, test:rust/crates/urzua-cli/tests/export_integration.rs@sha256:05e83d2904484c2059524a4e60ad40d6141e6025dae569de536528f765954689
 Author: beauwilliams
 Subject: 'The `urzua` CLI: its command surface, output contract, and the cross-cutting rules every command obeys -- the parent of the per-command and per-type specs split out from it.'
 Implements: ADR-1, ADR-2, ADR-3
@@ -14,7 +14,7 @@ Derives-from: RFC-1
 
 ## Purpose
 
-Ship the smallest thing that is **genuinely used in real codebases** (its own repository in Phase 0, a first adopter's and then two adopters' by the Phase 1 exit) and proves the founding
+Ship the smallest thing that is **genuinely used in real codebases** (its own repository in Phase 0, this repository (Rust) and one adopter, whose primary language is not Rust, by the Phase 1 exit) and proves the founding
 claim — one implementation instead of three — with documented bug histories from independently
 built tooling as its acceptance test.
 
@@ -44,7 +44,7 @@ because you cannot sell a decision graph you have never run against a real corpu
 > | **SPEC-11** | `urzua audit` — a deprecated alias of `check` (`ADR-79`) | Accepted |
 > | **SPEC-12** | `urzua new` | Accepted |
 > | **SPEC-13** | `urzua explain` / `urzua graph` | Accepted |
-> | **SPEC-14** | `urzua migrate ids` / `urzua migrate schema` / `urzua migrate config` | Accepted |
+> | **SPEC-14** | `urzua migrate ids` / `urzua migrate filenames` / `urzua migrate schema` / `urzua migrate config` | Accepted |
 > | **SPEC-15** | `urzua doctor` | Accepted |
 > | **SPEC-25** | `urzua waive --from-report` | Draft |
 > | **SPEC-26** | `urzua mcp` | Draft |
@@ -78,9 +78,9 @@ Phase 1 is done when, and only when:
 0. It replaces one adopter's hand-written linter, which is then deleted. -- `MILE-102`. **This is
    the real bar.** A tool that runs *alongside* the thing it was meant to replace has not replaced
    it.
-1. It runs green in **at least two** real target codebases, with different primary languages, via
-   pre-push hook and CI, with zero host-repo runtime added to either. -- `MILE-99` (the hook),
-   `MILE-100` (the second codebase).
+1. It runs green in **two** real target codebases, this repository (Rust) and the adopter (a primary language other than Rust), each via
+   pre-push hook and CI, with zero host-repo runtime added to either. -- `MILE-99` (the pre-push hook of this repository only),
+   `MILE-100` (the second codebase, with its own hook and CI).
 2. It reproduces **every documented bug** in the acceptance suite against real corpora. Not synthetic
    tests only -- fixtures engineered to exhibit the same variance a real corpus does. -- `MILE-101`.
 3. `urzua new` is what people and agents actually invoke, because hand-authoring is now the slower
@@ -110,8 +110,8 @@ stdout, stdout carrying protocol frames only, each tool returning a report this 
 ### `urzua waive --from-report`
 **Specified in full by SPEC-25.** Drafts one pending waiver per rule and file for the current findings
 (`ADR-91`): a `Reason` holding the type's pending value and no `Expires`, so a draft suppresses nothing until
-a person fills it in. Today it previews only (JSON on stdout, exit 0 when it ran, 2 when it could not);
-writing the drafts is the next change.
+a person fills it in. It previews without `--apply` and writes the drafts as waiver records with it (JSON on
+stdout; exit 0 when it ran, 2 when it could not, 1 when an `--apply` wrote some drafts and then failed).
 
 ### `urzua check [paths...]`
 **Specified in full by SPEC-2.** The validator. Exit non-zero on error; stdout is always the JSON
@@ -190,10 +190,11 @@ commit, never a flaky run.
   declared `issue_refs` is exit `2` with `status: not-run` and the reason in `error`, and the
   existing snapshot is left as it was.
 
-### `urzua migrate ids` / `urzua migrate schema` / `urzua migrate config`
-**Specified in full by SPEC-14.** Backfills stable identifiers onto existing records, previews
-what a newly-required field would break before it's added to config, and rewrites a config from the
-previous schema version to the current one.
+### `urzua migrate ids` / `urzua migrate filenames` / `urzua migrate schema` / `urzua migrate config`
+**Specified in full by SPEC-14.** Backfills stable identifiers onto existing records, renames record files
+to the type's declared filename convention and rewrites the citations of the renamed paths (a dry run
+unless `--apply`), previews what a newly-required field would break before it's added to config, and
+rewrites a config from the previous schema version to the current one.
 
 ### `urzua export --format json`
 Every record of every configured type as plain JSON data, so tooling reads records through the one
@@ -405,4 +406,9 @@ None. Every question this spec carried has been answered or routed:
 > | 2026-11-13 | Bumped to `0.41`. `urzua mcp` serves all five tools (`SPEC-26`). **Why:** `MILE-29`. | **substantive** |
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/main.rs#emit` (lines 44-69) 29d071bbb823 -> 660eb5588313. Reason: Read the diff of rust/crates/urzua-cli/src/main.rs against main. emit now serializes through a private WithNextAction wrapper that appends next_action and next_action_reason after the report's own keys, and falls back to a could-not-run JSON with exit 2 when a report cannot serialize as an object; report_value (used by urzua mcp) is added; the panic hook JSON gains both keys as null (MILE-72). emit still writes one JSON document and otherwise returns the report's exit code, so the claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-14 | Bumped to `0.42`. The `emit` pin was re-baselined for the `next_action` keys every command's JSON now carries (`SPEC-2` 0.160, `MILE-72`); this spec states no output key list, so nothing it says changes. **Why:** `MILE-72` -- the re-pin row above is structural and `revision-log.version-bump-required` asks for a bump. | **structural** |
-> | 2026-11-14 | Bumped to `0.43`. The export's refusal of a record symlinked outside the repository is the guard every corpus command now applies, and it also covers a link to a file outside the record type's directory. **Why:** `ADR-89` amendment of 2026-11-14. | **substantive** |
+> | 2026-11-14 | Bumped to `0.43`. `## Commands` describes `urzua waive --from-report` as it ships (it writes the drafts with `--apply`, and exits 1 on a partial failure) and lists `urzua migrate filenames` (`SPEC-14`); the `urzua new` help text no longer says the skipped numbers are named on stderr (the `Command` pin is re-baselined in the row below). **Why:** the docs-versus-binary review of 2026-11-14 found the `waive` paragraph saying `--apply` was the next change and the command list missing `migrate filenames`. | **substantive** |
+> | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/main.rs#Command` (lines 153-427) 01c366f162d3 -> 9857ecf424a9. Reason: Read the diff of rust/crates/urzua-cli/src/main.rs against main: only help text changed. The doc comment of the New command now says the skipped numbers are in the JSON skipped field (stderr stays empty of them), and the --as-of help names waive among the commands that accept it. No command, flag, output key or behaviour changed, so each claim this record makes about main.rs (and SPEC-1's about the Command enum) still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/main.rs#Command` (lines 153-427) 9857ecf424a9 -> c06e873285d4. Reason: Read the diff of rust/crates/urzua-cli/src/main.rs against main: only help text changed. The doc comment of the New command now says the skipped numbers are in the JSON skipped field and not on stderr, and the --as-of help names waive among the commands that accept it. No command, flag, output key or behaviour changed, so each claim this record makes about main.rs (and SPEC-1's about the Command enum) still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-14 | Bumped to `0.44`. Success criterion 1 cites `MILE-99` for this repository's pre-push hook only and `MILE-100` for the second codebase's hook and CI. The criterion's wording is unchanged. **Why:** an external review (finding 9.4) found the citation implying `MILE-99` covers a hook in two codebases; it covers one. | **substantive** |
+> | 2026-11-14 | Bumped to `0.45`. The Purpose and success criterion 1 now name the two codebases: this repository (Rust) and the adopter (a primary language other than Rust), each via pre-push hook and CI; they no longer say "two adopters" or "at least two" targets. **Why:** maintainer decision of 2026-11-14, asked whether Phase 1 needs two real adopters or this repository plus the adopter: "Own repo + adopter". This records the reading `MILE-100` took on 2026-11-13 as a decision. | **substantive** |
+> | 2026-11-14 | Bumped to `0.46`. The export's refusal of a record symlinked outside the repository is the guard every corpus command now applies, and it also covers a link to a file outside the record type's directory. **Why:** `ADR-89` amendment of 2026-11-14. | **substantive** |
