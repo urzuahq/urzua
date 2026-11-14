@@ -1,0 +1,39 @@
+# Lane B (claim_paths, scope, waivers and config): Fixed bugs that are corpus-shaped and have no case
+# yet (SPEC-4, "Bug coverage gate"). The lane's PR writes a case that reproduces
+# the bug, tags it `bugs: [BUG-n]`, runs it red against a build without the fix,
+# and deletes the entry here and in `bug-gap-ceilings.tsv`. The list only
+# shrinks; an entry can never be added.
+- BUG-1  # check's paths argument was silently ignored for scoping
+- BUG-13  # check's dangling-reference message doesn't distinguish untracked-on-disk from genuinely nonexistent
+- BUG-24  # check's explicit argv paths filter the tracked set instead of overriding discovery, so an untracked record examines silently as zero files
+- BUG-31  # A waiver with an unparseable Expires value never expires
+- BUG-39  # narrative-field.stale silently misses a reference with punctuation attached
+- BUG-41  # Companion-field pairs are checked for one pair and hardcoded to it
+- BUG-44  # A rule's required options are unvalidated, so an incomplete rule inverts or never fires
+- BUG-45  # claim.status-agreement matches a verb inside another word and claims every reference on the line
+- BUG-46  # Every malformed rule setting collapses to one opaque untagged-enum message
+- BUG-56  # An unreadable claim_paths entry silently disables claim.status-agreement
+- BUG-59  # The engine hardcodes this repository's record types and status vocabulary
+- BUG-60  # A path-scoped check resolves pointers against the scoped set so cross-directory references report as dangling
+- BUG-63  # claim_paths is a prefix but is read one level deep so a nested layout goes inert
+- BUG-66  # A changeset that names a record without a closing verb is invisible to claim.status-agreement
+- BUG-67  # A finding about a file git does not track is dropped by any path scope so check dot passes what check fails
+- BUG-68  # The claim_paths guard accepts a file so the rule scans nothing and reports a clean run
+- BUG-69  # claim_paths recursion follows symlinks so one claim file is read dozens of times under paths that do not exist
+- BUG-71  # type.record-outside-declared-dir reports an unreadable or deleted record as owned by no type
+- BUG-72  # An empty type prefix passes the reference test so a bare hyphen-number token is read as a reference
+- BUG-74  # Suppressing a finding requires the record type to be named waiver
+- BUG-75  # A symlinked claim file is skipped in a walk that aborts on every other failure
+- BUG-80  # A claim_paths root that is a symlink to a real directory aborts the run
+- BUG-85  # A directory symlink is rejected inside claim_paths but accepted as its root
+- BUG-86  # make records scopes check to docs so every claim finding is filtered out of our own gate
+- BUG-89  # A claim_paths symlink to an ancestor sweeps the whole repository
+- BUG-90  # claim.status-agreement counted claim files in a field that reports records examined
+- BUG-98  # ADR-50 is accepted and unimplemented so a type declaring no header still fails the required-fields rule
+- BUG-100  # claim status agreement fails open on a case differently written Status key
+- BUG-101  # embodiment rules fail closed silently on a case differently written declared field
+- BUG-117  # a symlink resolving to the prefix root itself is rejected as an ancestor
+- BUG-121  # check's path-scope filter still drops a claim.status-agreement finding whose claim file falls outside the requested scope
+- BUG-126  # type.record-outside-declared-dir warns about a record staged for deletion
+- BUG-168  # two record types may declare the same dir, so every record is loaded and validated once per type
+- BUG-177  # a waiver with no Reason still waives because load_waivers requires only Rule and Scope

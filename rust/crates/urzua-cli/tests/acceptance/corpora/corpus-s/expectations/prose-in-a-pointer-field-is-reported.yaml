@@ -1,4 +1,5 @@
 id: prose-in-a-pointer-field-is-reported
+bugs: [BUG-7]
 corpus: corpus-s
 invocation: [check]
 # ADR-5's Implements holds `ADR-2 (see the thread)`, prose after the reference, in a field that holds only reference ids.

@@ -1,0 +1,137 @@
+# The most the bug gap files may ever hold (SPEC-4, "Bug coverage gate"):
+# `<bug><TAB><lane>` per line, the lane naming the gap file that owns the bug.
+#
+# The list only shrinks. `tests/acceptance_bug_gate.rs` fails when
+#   - a gap file names a bug that is not listed here (a Fixed bug needs a tagged
+#     case, or a ledger entry when no corpus run can show it; it can never be
+#     added to a gap file),
+#   - a bug is listed here and sits in no gap file (delete the line when the
+#     entry leaves the gap file), or
+#   - a bug sits in a gap file of a different lane than the one listed here.
+# A lane's PR tags a case with `bugs: [BUG-n]`, then deletes the bug from its gap
+# file and from this list. Each lane's lines are one block, so lanes do not
+# touch each other's lines.
+BUG-3	a
+BUG-4	a
+BUG-6	a
+BUG-12	a
+BUG-18	a
+BUG-20	a
+BUG-36	a
+BUG-37	a
+BUG-43	a
+BUG-53	a
+BUG-54	a
+BUG-58	a
+BUG-61	a
+BUG-70	a
+BUG-73	a
+BUG-91	a
+BUG-99	a
+BUG-102	a
+BUG-111	a
+BUG-112	a
+BUG-114	a
+BUG-123	a
+BUG-132	a
+BUG-151	a
+BUG-167	a
+BUG-173	a
+BUG-174	a
+BUG-182	a
+BUG-188	a
+BUG-1	b
+BUG-13	b
+BUG-24	b
+BUG-31	b
+BUG-39	b
+BUG-41	b
+BUG-44	b
+BUG-45	b
+BUG-46	b
+BUG-56	b
+BUG-59	b
+BUG-60	b
+BUG-63	b
+BUG-66	b
+BUG-67	b
+BUG-68	b
+BUG-69	b
+BUG-71	b
+BUG-72	b
+BUG-74	b
+BUG-75	b
+BUG-80	b
+BUG-85	b
+BUG-86	b
+BUG-89	b
+BUG-90	b
+BUG-98	b
+BUG-100	b
+BUG-101	b
+BUG-117	b
+BUG-121	b
+BUG-126	b
+BUG-168	b
+BUG-177	b
+BUG-40	c
+BUG-76	c
+BUG-77	c
+BUG-78	c
+BUG-81	c
+BUG-82	c
+BUG-83	c
+BUG-84	c
+BUG-87	c
+BUG-94	c
+BUG-95	c
+BUG-118	c
+BUG-119	c
+BUG-120	c
+BUG-124	c
+BUG-125	c
+BUG-128	c
+BUG-129	c
+BUG-131	c
+BUG-137	c
+BUG-142	c
+BUG-147	c
+BUG-152	c
+BUG-164	c
+BUG-165	c
+BUG-166	c
+BUG-169	c
+BUG-192	c
+BUG-2	d
+BUG-5	d
+BUG-11	d
+BUG-17	d
+BUG-22	d
+BUG-23	d
+BUG-25	d
+BUG-29	d
+BUG-30	d
+BUG-32	d
+BUG-42	d
+BUG-50	d
+BUG-55	d
+BUG-57	d
+BUG-64	d
+BUG-65	d
+BUG-97	d
+BUG-109	d
+BUG-110	d
+BUG-136	d
+BUG-148	d
+BUG-172	d
+BUG-175	d
+BUG-176	d
+BUG-179	d
+BUG-180	d
+BUG-181	d
+BUG-183	d
+BUG-184	d
+BUG-185	d
+BUG-186	d
+BUG-187	d
+BUG-190	d

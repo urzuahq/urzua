@@ -10,6 +10,11 @@
 //! then judges the coverage gate over every shard's file and runs no case. See
 //! `acceptance/sharding.rs`.
 //!
+//! Bug tags: a case lists the bugs it reproduces in `bugs:`. Nothing here reads
+//! the list; `acceptance_bug_gate.rs` (a fast test with no corpus runs) holds every
+//! Fixed bug record to a tagged case, a lane gap file or the ledger, see
+//! `acceptance/bug_gate.rs`.
+//!
 //! Private corpora: `URZUA_ACCEPTANCE_EXTRA` is a `:`-separated list of
 //! directories. Each is either one corpus (has `expectations/`) or a root of
 //! corpus directories. Unset, the runner says so and skips them.
@@ -45,6 +50,11 @@ use std::process::Command;
 #[serde(deny_unknown_fields)]
 struct Case {
     id: String,
+    /// The bug records (`BUG-<n>`) this case reproduces: the case fails on a
+    /// build that has the bug. Only Fixed bugs; `acceptance_bug_gate.rs` holds
+    /// every Fixed bug to a tagged case, a gap file or the ledger.
+    #[serde(default)]
+    bugs: Vec<String>,
     /// A corpus directory name, or `@repo` for this repository (in place).
     corpus: String,
     #[serde(default)]
@@ -663,10 +673,32 @@ fn evaluate(case: &Case, corpus_dir: &Path, mutate: Option<&str>) -> Result<Vec<
     Ok(unmet)
 }
 
+/// What is wrong with the case's `bugs:` tags, if anything. Which bugs exist
+/// and are Fixed is the bug gate's judgement; the runner holds the shape, and
+/// that a case which is still a known gap reproduces no fixed bug.
+fn bug_tag_problem(case: &Case) -> Option<String> {
+    let bad = |b: &&String| {
+        b.strip_prefix("BUG-")
+            .is_none_or(|n| n.is_empty() || !n.chars().all(|c| c.is_ascii_digit()))
+    };
+    if let Some(b) = case.bugs.iter().find(bad) {
+        return Some(format!("bugs: {b:?} is not a bug id (BUG-<number>)"));
+    }
+    if case.known_gap.is_some() && !case.bugs.is_empty() {
+        return Some(
+            "a known_gap case cannot tag a bug: it fails, so it reproduces nothing fixed".into(),
+        );
+    }
+    None
+}
+
 /// Run the case, then prove each rule it names: with the rule off in the
 /// case's own config the case must fail. Returns the outcome and the rules
 /// whose proof held.
 fn run_case(case: &Case, corpus_dir: &Path) -> CaseResult {
+    if let Some(problem) = bug_tag_problem(case) {
+        return (Outcome::Fail(vec![problem]), Vec::new());
+    }
     let unmet = match evaluate(case, corpus_dir, None) {
         Ok(u) => u,
         Err(e) => {

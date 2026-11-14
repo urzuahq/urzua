@@ -1,4 +1,5 @@
 id: two-records-one-identity-is-a-collision
+bugs: [BUG-79]
 corpus: corpus-d
 invocation: [check]
 expect_exit: 1

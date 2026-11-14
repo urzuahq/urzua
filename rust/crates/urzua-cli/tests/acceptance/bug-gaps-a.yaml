@@ -1,0 +1,34 @@
+# Lane A (new, init and doctor): Fixed bugs that are corpus-shaped and have no case
+# yet (SPEC-4, "Bug coverage gate"). The lane's PR writes a case that reproduces
+# the bug, tags it `bugs: [BUG-n]`, runs it red against a build without the fix,
+# and deletes the entry here and in `bug-gap-ceilings.tsv`. The list only
+# shrinks; an entry can never be added.
+- BUG-3  # urzua new ignores the configured header_shape when a template file exists
+- BUG-4  # urzua doctor outputs plain text instead of JSON
+- BUG-6  # render_synthetic_yaml wrote unescaped YAML values
+- BUG-12  # A broken YAML header reports "no header-shaped region found" instead of the real parse error
+- BUG-18  # the '@' prefix on Author values is purely decorative and breaks unquoted YAML
+- BUG-20  # urzua init and migrate ids still print plain-text prose, not JSON
+- BUG-36  # urzua init cannot adopt a corpus outside docs/, and writes a dir under docs/ regardless
+- BUG-37  # The two halves of adoption recognise mutually exclusive filename shapes
+- BUG-43  # init drops the outer record type when a subdirectory also holds records
+- BUG-53  # A date-named file hijacks urzua new's numbering permanently
+- BUG-54  # One stray record-shaped file collapses every sibling record type into its parent
+- BUG-58  # A hyphenated type prefix does not parse, so urzua new reissues one number forever
+- BUG-61  # init writes no prefix so the rules it proposes examine zero records on the corpus it adopted
+- BUG-70  # init disables the identity rules for every type when any one type lacks a prefix
+- BUG-73  # init proposes rules whose declarations it did not write so they examine zero records
+- BUG-91  # doctor's ci-wired check reads one workflow by name so it reports a wired-in checker as unwired
+- BUG-99  # urzua audit exits 2 on the config urzua init writes for a corpus with no type prefix
+- BUG-102  # new record's date heuristic can reissue a colliding record number
+- BUG-111  # a hyphenated type prefix reference is rejected by the reference recognizer
+- BUG-112  # the date filename heuristic requires zero-padded month and day segments
+- BUG-114  # a digit-bearing type prefix is silently rejected by the filename parser
+- BUG-123  # urzua new never generates the SPEC-N H1 prefix every existing spec file carries
+- BUG-132  # init's directory-name disambiguation doesn't check the final joined name for a second collision
+- BUG-151  # init proposes a header shape the adopted corpus does not use, so the first check reads zero records
+- BUG-167  # urzua new with a title that slugifies to nothing creates a slug-less filename and the next new reissues the same number
+- BUG-173  # record-type prefix and dir are accepted unvalidated at config load so new writes unrecognizable or colliding records and an empty dir examines nothing
+- BUG-174  # doctor reports healthy for a config that enables no rule where check exits 2 not-run
+- BUG-182  # Urzua new ignores the declared identity pattern and writes a literal null status
+- BUG-188  # Urzua new writes an H1 id that does not follow the declared identity pattern's padding and drops a template's non-required header fields
