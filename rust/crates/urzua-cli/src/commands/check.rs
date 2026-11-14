@@ -573,7 +573,7 @@ pub(crate) fn execute(
         (base.is_some(), selection.as_deref()),
     ));
     notices.extend(extra_notices);
-    notices.extend(unmatched_path_notices(session, &scope));
+    let unmatched = unmatched_path_notices(session, &scope);
     let (mut executions, mut findings) = run_rules(&context);
     notices.extend(scope_changed_notices(
         &executions,
@@ -596,9 +596,10 @@ pub(crate) fn execute(
         &scope,
         &executions,
         &findings,
-        &mut notices,
+        (&mut notices, !unmatched.is_empty()),
         base.as_deref(),
     );
+    notices.extend(unmatched);
     let fail_on = fail_on.unwrap_or(context.fail_on);
     let blocking = gate_blocking(&findings, fail_on);
     // Counted over the same set `files_examined` counts (`BUG-40`). Rules run
@@ -2545,7 +2546,7 @@ fn status_and_examined(
     scope: &ReportScope,
     executions: &[RuleExecution],
     findings: &[Finding],
-    notices: &mut Vec<Notice>,
+    (notices, has_unmatched): (&mut Vec<Notice>, bool),
     base: Option<&str>,
 ) -> (urzua_core::report::ReportStatus, usize) {
     let examined = session
@@ -2567,7 +2568,9 @@ fn status_and_examined(
     let active = findings.iter().filter(|f| f.waived.is_none());
     let blocking = active.clone().any(|f| f.severity == FindingSeverity::Error);
     let status = derive_status(blocking, empty_diff, examined, executions, active.count());
-    if status == urzua_core::report::ReportStatus::NotRun {
+    // With nothing examined and an argument that selected nothing, that
+    // argument's own notice is the reason; a second one would say it twice.
+    if status == urzua_core::report::ReportStatus::NotRun && !(examined == 0 && has_unmatched) {
         notices.push(not_run_reason(examined));
     }
     (status, examined)
@@ -2602,7 +2605,7 @@ fn not_run_reason(examined: usize) -> Notice {
     }
 }
 
-/// A path argument that selects no record is reported, whether or not another
+/// A path argument that selects no record is reported (last in the notices), whether or not another
 /// argument matched: a declared input that matches nothing is never dropped in
 /// silence (`ADR-23`). A diff run narrows by the diff as well, so this reads the
 /// parsed records the argument could name, before any narrowing.
@@ -2616,14 +2619,20 @@ fn unmatched_path_notices(session: &Session, scope: &ReportScope) -> Vec<Notice>
                 .iter()
                 .any(|record| record.path.starts_with(requested))
         })
-        .map(|requested| Notice {
-            severity: NoticeSeverity::Warning,
-            subject: "scope".to_string(),
-            message: format!(
-                "the path argument '{}' matches no record: it is not a governed record file or a directory holding one, so it selects nothing",
-                requested.display()
-            ),
-            detail: None,
+        .map(|requested| {
+            let what = if session.repo_root.join(requested).is_dir() {
+                format!("the directory '{}' holds no record", requested.display())
+            } else {
+                format!("'{}' is not a record", requested.display())
+            };
+            Notice {
+                severity: NoticeSeverity::Warning,
+                subject: "scope".to_string(),
+                message: format!(
+                    "the path argument {what}, so it selects nothing; a path names a record file or a directory that holds one"
+                ),
+                detail: None,
+            }
         })
         .collect()
 }

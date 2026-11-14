@@ -95,6 +95,13 @@ fn a_path_argument_that_matches_nothing_is_reported_beside_one_that_matches_obse
     let (code, report, _) = run(&dir, &["check", "docs/adr", "README.md"]);
     assert_eq!(code, 0, "{report}");
     let notices = report["notices"].as_array().unwrap();
+    assert!(
+        notices.last().unwrap()["message"]
+            .as_str()
+            .unwrap()
+            .contains("README.md"),
+        "the unmatched-argument notice comes last: {report}"
+    );
     let hit = notices
         .iter()
         .find(|n| n["message"].as_str().unwrap().contains("README.md"))
@@ -206,4 +213,32 @@ fn rules_carries_a_status_observed_failing() {
     let (code, report, _) = run(&dir, &["rules"]);
     assert_eq!(code, 0);
     assert_eq!(report["status"], "ok", "{}", report.to_string().len());
+}
+
+/// One reason, not two, for `check README.md`; a directory gets its own wording.
+#[test]
+fn an_unmatched_argument_is_one_notice_and_a_directory_says_so() {
+    let dir = fixture("one-reason", "");
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::write(dir.join("src/a.rs"), "fn a() {}\n").unwrap();
+    common::waive::git(&dir, &["add", "-A"]);
+    let (code, report, _) = run(&dir, &["check", "README.md"]);
+    assert_eq!(code, 2, "{report}");
+    let warnings: Vec<&Value> = report["notices"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|n| n["severity"] == "warning")
+        .collect();
+    assert_eq!(warnings.len(), 1, "{report}");
+    assert!(warnings[0]["message"]
+        .as_str()
+        .unwrap()
+        .contains("is not a record"));
+    let (_, report, _) = run(&dir, &["check", "src"]);
+    let text = notice_messages(&report).join("\n");
+    assert!(
+        text.contains("the directory 'src' holds no record"),
+        "{text}"
+    );
 }

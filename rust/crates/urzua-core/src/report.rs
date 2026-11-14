@@ -854,13 +854,16 @@ pub struct CheckReport {
     /// unless that option is declared and the rule ran.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub baseline: Option<BaselineInfo>,
+    /// True exactly when the run exits 1: an unwaived error, or under
+    /// `fail_on: warning` an unwaived warning. A reader with no exit code (the
+    /// MCP server's client) branches on it.
     pub blocking: bool,
     pub findings: Vec<Finding>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub notices: Vec<Notice>,
     /// The exit threshold in force (`fail_on` / `--fail-on`). Never
-    /// serialized: stdout is the same whatever the threshold, only the exit
-    /// code moves.
+    /// serialized: it moves the exit code, and `blocking` with it, and nothing
+    /// else on stdout.
     #[serde(skip)]
     pub fail_on: crate::config::FailOn,
 }

@@ -216,7 +216,7 @@ record, writing nothing; it is the call the editor hook relays.
   it unexamined. `filename.identity-pattern` and `type.record-outside-declared-dir` are not judged here
   (they are about a directory or a path, not the content), and are left to `check`.
 - **Drift is computed for that record only**, from the proposed text, as `fix --stdin-path` does.
-- **A path no record type governs** is `not-run` (exit 2) with a warning notice naming it, as is a run with
+- **A path no record type governs** is `not-run` (exit 2) with an `error` naming it, as is a run with
   no enabled rule that can look at the record. Combining `--stdin-path` with `PATHS` or `--base` is
   `not-run` (exit 2) too, not a flag ignored in silence.
 - Severity, waivers, `fail_on` and the exit codes are those of a full run: an unwaived error exits 1.

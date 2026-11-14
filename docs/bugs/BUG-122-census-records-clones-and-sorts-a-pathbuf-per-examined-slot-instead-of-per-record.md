@@ -23,7 +23,7 @@ Measured on this repository's own corpus (309 records), the largest slot count i
 1023 (`BUG-40`) -- a sort of ~1000 short strings costs microseconds, well under anything a benchmark or
 a human would notice. The inefficiency is real but has never been on a scale where it mattered here.
 
-## What this needs before a fix
+## Why it was deferred when filed
 
 Not a design decision -- a mechanical change (e.g. dedup with a `HashSet<PathBuf>` as candidates are
 examined, only materializing and sorting the final set once) -- but not worth doing without a corpus
@@ -56,3 +56,4 @@ none -- performance-only, no behavior change; full suite and real-corpus finding
 > | 2026-09-23 | Filed, not fixed. **Why:** found by a full-release code review; real but measured as negligible on this repository's own corpus, so left open to track rather than fixed under review pressure with no benchmark to verify against. | **substantive** |
 > | 2026-09-23 | Fixed. The user asked for this class of filed-but-deferred defect to be closed before 0.4.0 regardless of benchmark pressure. `examined_records` is now a `BTreeSet`, dedupe done incrementally rather than in a final sort pass. No behavior change: full suite and real-corpus finding count unchanged. | **substantive** |
 > | 2026-11-05 | `Regression-test` retired (ADR-84); it named no test, so `Realized-by` is unchanged and the original text is kept under Regression test. **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |
+> | 2026-11-14 | Heading "What this needs before a fix" renamed "Why it was deferred when filed"; the text is unchanged. **Why:** an external review (finding 9.7) found the heading stale above a Fix section: the bug is fixed. | **structural** |
