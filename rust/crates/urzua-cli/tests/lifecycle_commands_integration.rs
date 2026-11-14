@@ -222,7 +222,7 @@ fn done_refuses_when_the_engine_computes_no_status() {
         .current_dir(&dir)
         .output()
         .unwrap();
-    assert!(!out.status.success());
+    assert_eq!(out.status.code(), Some(1));
     assert!(
         String::from_utf8_lossy(&out.stderr).contains("computed no"),
         "{}",
@@ -255,7 +255,7 @@ fn a_status_an_authority_gate_names_is_never_written_by_fix_or_done() {
         .current_dir(&dir)
         .output()
         .unwrap();
-    assert!(!out.status.success());
+    assert_eq!(out.status.code(), Some(1));
     assert_eq!(read(&dir, path), before);
 }
 
@@ -296,7 +296,7 @@ fn repin_refuses_an_empty_reason_and_changes_nothing() {
     let before = read(&dir, "docs/milestones/MILE-1-x.md");
     for reason in ["", "   "] {
         let out = repin(&dir, reason);
-        assert!(!out.status.success());
+        assert_eq!(out.status.code(), Some(1));
         assert!(String::from_utf8_lossy(&out.stderr).contains("reason"));
     }
     assert_eq!(read(&dir, "docs/milestones/MILE-1-x.md"), before);
@@ -365,7 +365,7 @@ fn reverify_refuses_an_empty_reason_and_changes_nothing() {
     let before = read(&dir, "docs/milestones/MILE-1-x.md");
     for reason in ["", "   "] {
         let out = reverify(&dir, reason);
-        assert!(!out.status.success());
+        assert_eq!(out.status.code(), Some(1));
         assert!(String::from_utf8_lossy(&out.stderr).contains("reason"));
     }
     assert_eq!(read(&dir, "docs/milestones/MILE-1-x.md"), before);
@@ -420,7 +420,7 @@ fn reverify_refuses_changed_evidence_and_says_nothing_was_renewed() {
     std::fs::write(dir.join(path), &text).unwrap();
     git(&dir, &["commit", "-qam", "stale pin"]);
     let out = reverify(&dir, "looked at it");
-    assert!(!out.status.success());
+    assert_eq!(out.status.code(), Some(1));
     assert!(String::from_utf8_lossy(&out.stderr).contains("nothing was renewed"));
     assert_eq!(read(&dir, path), text);
 }
@@ -462,14 +462,14 @@ fn amend_accepts_an_added_dated_section_and_a_row_and_refuses_a_changed_decision
     let bad = good.replace("We do it this way.", "We do it another way.");
     std::fs::write(dir.join("docs/notes/NOTE-1-n.md"), bad).unwrap();
     let out = amend_finish(&dir);
-    assert!(!out.status.success());
+    assert_eq!(out.status.code(), Some(1));
     assert!(String::from_utf8_lossy(&out.stderr).contains("refusing"));
 
     let dir = note_repo("amend-none");
     let no_section = DECIDED.to_string() + "> | 2026-11-06 | Row only. | **substantive** |\n";
     std::fs::write(dir.join("docs/notes/NOTE-1-n.md"), no_section).unwrap();
     let out = amend_finish(&dir);
-    assert!(!out.status.success());
+    assert_eq!(out.status.code(), Some(1));
 }
 
 #[test]
@@ -493,7 +493,7 @@ fn amend_refuses_a_removed_list_item_blank_line_or_rule_in_the_decision() {
             + "> | 2026-11-06 | Amendment added: a correction. | **substantive** |\n";
         std::fs::write(dir.join("docs/notes/NOTE-1-n.md"), edited).unwrap();
         let out = amend_finish(&dir);
-        assert!(!out.status.success(), "{case} was accepted");
+        assert_eq!(out.status.code(), Some(1), "{case} was accepted");
         let stderr = String::from_utf8_lossy(&out.stderr);
         assert!(
             stderr.contains("refusing") && stderr.contains("changed or removed"),

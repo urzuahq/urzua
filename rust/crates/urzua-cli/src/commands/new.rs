@@ -207,7 +207,7 @@ pub(crate) fn number_record(
     pull: &mut PullRefsReport,
     notices: &mut Vec<Notice>,
 ) -> Result<Numbered, String> {
-    let filenames = read_type_filenames(repo_root, type_config, record_type)?;
+    let filenames = read_type_filenames(repo_root, type_config, record_type, notices)?;
     let (declared, compiled) = compile_declared_identity(record_type, type_config)?;
     let (display_number, skipped) = number_for_new_record(
         repo_root,
@@ -373,6 +373,7 @@ fn read_type_filenames(
     repo_root: &std::path::Path,
     type_config: &urzua_core::config::RecordTypeConfig,
     record_type: &str,
+    notices: &mut Vec<Notice>,
 ) -> Result<Vec<String>, String> {
     let mut filenames: Vec<String> = Vec::new();
     for (index, declared_dir) in type_config.all_dirs().enumerate() {
@@ -383,18 +384,37 @@ fn read_type_filenames(
                     .filter_map(|e| e.ok())
                     .filter_map(|e| e.file_name().into_string().ok()),
             ),
-            Err(e) if index > 0 && e.kind() == std::io::ErrorKind::NotFound => eprintln!(
-                "urzua: extra_dirs entry '{declared_dir}' of record type '{record_type}' does not exist; numbering without it"
-            ),
+            Err(e) if index > 0 && e.kind() == std::io::ErrorKind::NotFound => {
+                let message = format!(
+                    "extra_dirs entry '{declared_dir}' of record type '{record_type}' does not exist; numbering without it"
+                );
+                eprintln!("urzua: {message}");
+                notices.push(directory_notice(message));
+            }
             // The first record of a type: its directory does not exist yet and
             // is created when the record is written.
-            Err(e) if index == 0 && e.kind() == std::io::ErrorKind::NotFound => eprintln!(
-                "urzua: {declared_dir} does not exist yet; creating it for the first {record_type} record"
-            ),
+            Err(e) if index == 0 && e.kind() == std::io::ErrorKind::NotFound => {
+                let message = format!(
+                    "{declared_dir} does not exist yet; creating it for the first {record_type} record"
+                );
+                eprintln!("urzua: {message}");
+                notices.push(directory_notice(message));
+            }
             Err(e) => return Err(format!("could not read {}: {e}", dir.display())),
         }
     }
     Ok(filenames)
+}
+
+/// What numbering says about a directory it found missing: on stderr and, as
+/// the contract requires, in the report (`ADR-46`).
+fn directory_notice(message: String) -> Notice {
+    Notice {
+        severity: NoticeSeverity::Info,
+        subject: "numbering".to_string(),
+        message,
+        detail: None,
+    }
 }
 
 /// The type's declared identity pattern, when it has one, decides which

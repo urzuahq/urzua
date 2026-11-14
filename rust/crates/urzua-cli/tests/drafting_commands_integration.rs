@@ -290,7 +290,7 @@ fn a_decision_status_written_into_the_draft_is_refused_and_nothing_is_staged() {
         std::fs::write(&path, text.replacen(&scaffolded, "Status: Accepted", 1)).unwrap();
 
         let out = run_step(&dir, &s[1], "", &record);
-        assert!(!out.status.success(), "{command} must refuse");
+        assert_eq!(out.status.code(), Some(1), "{command} must refuse");
         assert!(
             String::from_utf8_lossy(&out.stderr).contains("refusing"),
             "{command}"
@@ -315,7 +315,7 @@ fn a_field_urzua_new_did_not_write_is_refused() {
     )
     .unwrap();
     let out = run_step(&dir, &s[1], "", &record);
-    assert!(!out.status.success());
+    assert_eq!(out.status.code(), Some(1));
     assert!(String::from_utf8_lossy(&out.stderr).contains("refusing"));
 }
 

@@ -82,6 +82,13 @@ struct Case {
     /// over this repository's whole corpus to two runs.
     #[serde(default)]
     expect_rules_ran: Vec<String>,
+    /// For a rule of `expect_rules_ran` whose population is the files of one
+    /// directory (the claim rule reads `.changeset/*.md`, which a release
+    /// deletes): the population may be empty when no such file exists. The rule
+    /// must still run. While any such file exists the population must be
+    /// non-empty, so the assertion keeps its meaning on every normal tree.
+    #[serde(default)]
+    empty_population_ok_without: Vec<EmptyPopulation>,
     /// Rules this case proves, beyond those it names in `expect_findings` and
     /// `expect_rules_ran`. Each is switched off in turn and the case must fail.
     #[serde(default)]
@@ -90,6 +97,16 @@ struct Case {
     /// case with neither a rule to prove nor this reason is rejected.
     mutation_exempt: Option<String>,
     known_gap: Option<KnownGap>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct EmptyPopulation {
+    rule: String,
+    /// Directory, relative to the corpus root, that holds the population.
+    under: String,
+    /// File extension (no dot) of the files that make up the population.
+    extension: String,
 }
 
 #[derive(Deserialize)]
@@ -200,8 +217,22 @@ enum Outcome {
     Fail(Vec<String>),
 }
 
+/// The tree `corpus: "@repo"` cases run over: this repository, or the git
+/// checkout `URZUA_ACCEPTANCE_REPO` names (the release-tree test points it at a
+/// worktree whose changeset fragments are deleted, as a release leaves it).
 fn repo_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..")
+    match std::env::var("URZUA_ACCEPTANCE_REPO") {
+        Ok(v) if !v.trim().is_empty() => PathBuf::from(v),
+        _ => Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.."),
+    }
+}
+
+/// True when some file with `extension` sits directly under `dir` of `root`.
+fn has_files(root: &Path, dir: &str, extension: &str) -> bool {
+    std::fs::read_dir(root.join(dir)).is_ok_and(|rd| {
+        rd.flatten()
+            .any(|e| e.path().extension().is_some_and(|x| x == extension))
+    })
 }
 
 fn git(dir: &Path, args: &[&str]) -> Result<(), String> {
@@ -631,7 +662,11 @@ fn evaluate(case: &Case, corpus_dir: &Path, mutate: Option<&str>) -> Result<Vec<
                 .and_then(|e| e.pointer("/population/examined"))
                 .and_then(|n| n.as_u64())
                 .unwrap_or(0);
-            if status != Some("ran") || examined == 0 {
+            let may_be_empty = case
+                .empty_population_ok_without
+                .iter()
+                .any(|e| e.rule == *rule && !has_files(&cwd, &e.under, &e.extension));
+            if status != Some("ran") || (examined == 0 && !may_be_empty) {
                 unmet.push(format!(
                     "rule {rule} did not run over a non-empty population (status {status:?}, examined {examined})"
                 ));

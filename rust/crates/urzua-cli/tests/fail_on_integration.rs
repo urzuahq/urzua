@@ -79,8 +79,15 @@ fn config_fail_on_warning_makes_a_warning_exit_1_with_unchanged_json_observed_fa
     let (_, baseline) = run_check(&default, &[]);
     let (code, out) = run_check(&strict, &[]);
     assert_eq!(code, 1, "{out}");
-    assert_eq!(out, baseline, "stdout must not change");
-    assert!(out.contains("\"blocking\": false"), "{out}");
+    // The JSON is unchanged but for `blocking`, which says what the exit code
+    // says (the test keeps its name: MILE-116 cites it).
+    assert_eq!(
+        out.replace("\"blocking\": true", "\"blocking\": false"),
+        baseline,
+        "stdout differs only in `blocking`"
+    );
+    assert!(out.contains("\"blocking\": true"), "{out}");
+    assert!(baseline.contains("\"blocking\": false"), "{baseline}");
 }
 
 #[test]

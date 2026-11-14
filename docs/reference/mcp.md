@@ -28,12 +28,12 @@ with a JSON could-not-run on stderr and nothing on stdout, when it cannot read `
 Every tool is advertised read-only and takes only the arguments listed; an argument it does not
 declare is refused, never ignored. A result carries the report as `structuredContent` and the same JSON
 as one text block. A failure that `urzua` would report as could-not-run (an unreadable corpus, an unknown
-id, an unknown rule) is a result with `isError: true` and `"status": "not-run"`.
+id, an unknown rule) is a result with `isError: true` and `"status": "not-run"`. So is a `urzua_check` report whose `status` is `not-run` because it established nothing (a `paths` entry that names no record): `isError` follows `status`, as the exit code 2 does on the command line. A report with findings is still `isError: false`; read `blocking` for whether the repository would fail its gate, which accounts for `fail_on`.
 
 | Tool | Arguments | Returns |
 |---|---|---|
 | `urzua_check` | `paths`, `base`, `rules` (all optional) | The `check` report: findings, scope and rules run. `paths` stay inside the repository. See [`check`](check.md). |
-| `urzua_list_records` | `type`, `status` (a list), both optional | Each matching record's id, type, path and header fields, without its text. A filter that matches nothing is a notice. |
+| `urzua_list_records` | `type`, `status` (a list), both optional | Each matching record's id, type, path and header fields, without its text. A filter that matches nothing is a notice. It carries no `roadmap` block: that spans the whole corpus whatever the filter, and is [`urzua roadmap`](commands.md#roadmap)'s. |
 | `urzua_show_record` | `id` (required, for example `ADR-23`) | One record: header, sections and complete text, and the relation edges that touch it, supersession included. An unknown id is an error result. |
 | `urzua_get_findings_for_path` | `path` (required) | Which records govern a file, directory or glob: the report of [`urzua explain`](commands.md#explain). |
 | `urzua_get_graph` | none | Every relation edge between records: the report of [`urzua graph`](commands.md#graph). |
@@ -51,7 +51,7 @@ Ask for the decisions your corpus has turned down, then read why:
 
 - It writes nothing: no record, no working file, no git object or ref. There is no tool for `new`,
   `fix --apply`, `index --apply`, `migrate`, `reverify`, `waive --apply` or the harness. (Reading a
-  repository can make git refresh its own index; that is git's cache, not your files.)
+  repository can make git refresh its own index, and `urzua_check` with `base` can take `.git/index.lock` while it does: git rewrites the index when any tracked file's stat data is stale, not only for one written in the same instant. That is git's cache, not your files.)
 - It listens on no port: stdin and stdout only. A request line is read up to 1 MiB.
 - It serves tools only: no resources, prompts or sampling.
 

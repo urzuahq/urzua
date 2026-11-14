@@ -231,7 +231,7 @@ fn the_rule_does_not_load_without_published_paths() {
 
     let out = run_urzua(&dir, &["check"]);
     let stdout = String::from_utf8_lossy(&out.stdout);
-    assert_ne!(out.status.code(), Some(0), "{stdout}");
+    assert_eq!(out.status.code(), Some(2), "{stdout}");
     assert!(stdout.contains("published_paths"), "{stdout}");
 }
 
@@ -503,7 +503,7 @@ fn a_boundary_without_a_reason_does_not_load() {
     commit_all(&dir);
     let out = run_urzua(&dir, &["check"]);
     let stdout = String::from_utf8_lossy(&out.stdout);
-    assert_ne!(out.status.code(), Some(0), "{stdout}");
+    assert_eq!(out.status.code(), Some(2), "{stdout}");
     assert!(stdout.contains("reason"), "{stdout}");
 }
 

@@ -131,7 +131,7 @@ fn fix_proposes_the_repair_for_a_cited_record_with_no_realized_by() {
 fn a_test_path_outside_every_back_pointer_path_is_refused_at_load() {
     let dir = repo("bad", "    test_paths: [\"elsewhere/tests\"]\n");
     let out = run_urzua(&dir, &["check"]);
-    assert!(!out.status.success());
+    assert_eq!(out.status.code(), Some(2));
     let text =
         String::from_utf8_lossy(&out.stdout).to_string() + &String::from_utf8_lossy(&out.stderr);
     assert!(text.contains("test_paths"), "{text}");
@@ -177,5 +177,5 @@ fn a_glob_test_path_and_a_prefix_work_together_and_an_unmatched_entry_is_reporte
 fn a_malformed_glob_test_path_is_refused_at_load() {
     let dir = repo("badglob", "    test_paths: [\"src/[\"]\n");
     let out = run_urzua(&dir, &["check"]);
-    assert!(!out.status.success());
+    assert_eq!(out.status.code(), Some(2));
 }
