@@ -134,3 +134,39 @@ fn this_repositorys_records_are_clean_once_the_release_has_consumed_the_changese
         findings.join("\n")
     );
 }
+
+/// The own-corpus acceptance cases assert that rules run over a population, and a
+/// population can be the changeset fragments themselves (`claim.status-agreement`).
+/// They run here over the fragment-deleted tree, through the acceptance runner's
+/// `URZUA_ACCEPTANCE_REPO`, so a case that expects a fragment to exist fails on the
+/// pull request that adds it and not on the release pull request. Two cases are
+/// named, not all of them: each runs the whole check once more per rule it proves.
+#[test]
+fn the_own_corpus_acceptance_cases_hold_once_the_release_has_consumed_the_changesets() {
+    let checkout = checkout_of_head();
+    let tree = checkout.dir.path();
+    consume_fragments(tree);
+    let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_string());
+    for case in ["own-config-claim-rules-run", "own-docs-check-has-no-errors"] {
+        let out = Command::new(&cargo)
+            .args([
+                "test",
+                "-p",
+                "urzua-cli",
+                "--test",
+                "acceptance",
+                "--",
+                case,
+            ])
+            .env("URZUA_ACCEPTANCE_REPO", tree)
+            .current_dir(checkout.root.join("rust"))
+            .output()
+            .expect("cargo should run");
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        assert!(
+            out.status.success() && stdout.contains(&format!("ok         [corpus-zero] {case}")),
+            "acceptance case {case} fails on the tree a release leaves behind:\n{stdout}\n{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+}
