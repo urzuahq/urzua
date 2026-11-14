@@ -60,6 +60,8 @@ change that did not touch it.
 - **References still resolve against the whole tracked corpus**, not just the changed files.
 - **A change to the config examines every record.** `scope.whole_corpus_reason` says so.
 - **An empty diff is `ok`**, with an info notice (subject `scope`) saying nothing was examined, not `not-run`.
+  So is a repository with no record yet whose declared record directories all exist (the state `urzua init`
+  leaves): `ok`, `files_examined: 0`, and an `empty-corpus` info notice.
 - **Diff rules only judge here.** Rules that compare a change with its base, such as
   `status.transition-allowed`, `diff.source-requires-record` and `diff.decider-required`, are
   `not-applicable` on a plain `check` and run on `--base`.

@@ -4,7 +4,7 @@ Version: '0.30'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/commands/new.rs@sha256:8cb79491eccb0c34eba66c37899fc3cb0860427e67bd83a3fd6ee3e551bb8d4d, code:rust/crates/urzua-core/src/new_record.rs@sha256:4f85670917b92d9e09fca2a839bfb9e6035e439dd7bf8081b6b03849c496578d, test:rust/crates/urzua-cli/tests/new_integration.rs@sha256:c319a5750aa11e1bd2b6be9fc6a2d707f34150c514d49c35290ad353f0ef61f7
+Realized-by: code:rust/crates/urzua-cli/src/commands/new.rs@sha256:54017947ccf3b527f2f03a44e6bd379f8ac693c7b8f369256b4ad9972ede6861, code:rust/crates/urzua-core/src/new_record.rs@sha256:4f85670917b92d9e09fca2a839bfb9e6035e439dd7bf8081b6b03849c496578d, test:rust/crates/urzua-cli/tests/new_integration.rs@sha256:c319a5750aa11e1bd2b6be9fc6a2d707f34150c514d49c35290ad353f0ef61f7
 Author: beauwilliams
 Subject: '`urzua new` -- generating a record''s initial content with a real stable ID assigned.'
 Implements: ADR-27
@@ -234,3 +234,4 @@ output is unchanged.
 > | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/new_record.rs` eab8490554bb -> 4f85670917b9. Reason: Read the diff of each re-pinned file against main and the claim still holds. new_record.rs: one doc comment names PREFIX-999 where it named ADR-999; no code changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-13 | Bumped to `0.29`. Evidence pins re-baselined for this change (the `Re-baselined` row above); the specification text is unchanged. **Why:** a revision-log entry that adds a structural change bumps `Version`. | **structural** |
 > | 2026-11-14 | Bumped to `0.30`. A missing `extra_dirs` entry is a `new.extra-dir-missing` warning notice in the report instead of a stderr line; the unknown-record-type error points at `record_types:` rather than a TOML table. **Why:** the first-run review, finding 6.6. | **substantive** |
+> | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/new.rs` 8cb79491eccb -> 54017947ccf3. Reason: Read the diff of each pinned file against main and the claim still holds. new.rs: a missing extra_dirs entry is a warning notice in the report instead of a stderr line, and the unknown-type error says record_types: in YAML wording; numbering and writing are unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
