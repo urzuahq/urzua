@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5PKKQRJF9WFZJA105B
-Version: '0.28'
+Version: '0.29'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Verified
@@ -52,9 +52,11 @@ today, and criterion 2 below holds it to that.)
 
 Adopt writes only `.urzua/config.yaml`. Greenfield writes `.urzua/config.yaml` and one
 `.urzua/templates/<type>.md` per selected type, never over a template that already exists. `cache/` is
-part of `.urzua/`'s settled shape but nothing in the write path generates it. Neither mode creates the
-record directories: `new` creates a type's directory when it writes the first record, and an empty
-directory is not tracked by git.
+part of `.urzua/`'s settled shape but nothing in the write path generates it. Adopt creates no
+directory. Greenfield creates each selected type's directory with an empty `.gitkeep`, so the directory the
+config declares is in a fresh clone (git does not track an empty directory) and `doctor` and `check` hold on a
+repository with no record yet; a directory that already exists is kept as it is, and a dry run creates none.
+`new` still creates a type's directory when it is missing.
 
 **Why templates leave the corpus.** This is the load-bearing reason, and it comes from this
 repository. `docs/adr/_template.md` and `docs/rfc/_template.md` are git-tracked, sit inside the
@@ -156,16 +158,24 @@ adopter turns on later also judge the files of a linked worktree of the reposito
 ## Proposed rules
 
 `init` proposes each shipped rule at `warn`, except a rule that cannot examine anything on the corpus it
-just adopted: a rule that needs options it cannot supply, a rule that needs declared `relation_pairs`,
+just adopted or on the one greenfield writes: a rule that needs options it cannot supply, a rule that needs declared `relation_pairs`,
 a rule that resolves identity on a corpus where no type has a prefix, a rule that reads a per-type
 declaration `init` does not write, and `header.scaffold-mismatch` (`MILE-103`), which asks whether a
 record was written with `urzua new` and which no record of a just-adopted corpus was, so it would warn
 on the first record each author adds by hand; an adopter turns it on once they use `new`. Unlike the
 others it is named in `init`, not derived from the rule table, and no notice lists it. The last group is not a fixed list: it is every rule whose entry in the
-rule table carries a `reads_declaration` (`required_fields`, `known_fields`, `pointer_fields`,
-`revision_log.version_bump`, `statuses.blocked` or `statuses.progress`, `statuses.delivery.items`, `sections.required`, and the three section-structure keys `sections.unique_headings`, `sections.no_skipped_levels` and `sections.order`), so a
-rule added later with a `reads_declaration` is withheld without touching `init`. `init` writes
-`required_fields: []` and infers none of those declarations (`ADR-33`). A `rule-applicability` notice
+rule table carries a `reads_declaration` (`required_fields`, `known_fields`, `required_fields` or `known_fields`
+for the field-hygiene rules, `pointer_fields` or `narrative_fields`, a supersession field and a locator field
+listed in `known_fields`, `revision_log`, `revision_log.version_bump`, `statuses.values`, `statuses.require`,
+`statuses.forbid`, `statuses.transitions`, `statuses.delivery`, `statuses.blocked` or `statuses.progress`, `statuses.delivery.items`, `sections.required`, and the three section-structure keys `sections.unique_headings`, `sections.no_skipped_levels` and `sections.order`), so a
+rule added later with a `reads_declaration` is withheld without touching `init`. The annotation is audited
+on the output: `init_integration.rs` and `init_greenfield_integration.rs` each run `check` on a proposed
+config and fail when a proposed rule reports `ran` over zero records. Adopt writes
+`required_fields: []` and infers none of those declarations (`ADR-33`); greenfield writes the declarations
+its profiles carry (fields, status values and transitions, and for `spec` the revision log and its
+`version_bump`), so it proposes the rules that read those, and withholds the rest. Greenfield also withholds
+`type.no-declared-spec`, which would warn about the `spec` pointer of every type it just wrote while no spec
+exists yet; the notice names it, and the rule is enabled once a type declares `spec: SPEC-N`. A `rule-applicability` notice
 (severity `info`) lists the withheld rules, grouped by declaration, so the adopter knows what to declare on
 a record type before enabling the rule.
 
@@ -203,7 +213,8 @@ The real, shipped shape (`InitReport`/ADR-46):
 ```
 
 Greenfield mode adds `templates`, a list of `{type, path, state}` where `state` is `written`, `kept` or
-`would-write`; it is absent in adopt. A greenfield `proposed` entry carries its profile's `prefix`, and
+`would-write`, and `directories`, a list of `{type, path, state}` for each type's record directory with the same
+three states; both are absent in adopt. A greenfield `proposed` entry carries its profile's `prefix`, and
 its `record_count` counts the record-shaped files already in its directory.
 
 `config_yaml` (the full rendered config) is present only when `dry_run: true` -- there's nothing
@@ -232,11 +243,14 @@ Criterion 2 is the one to hold. The moment `init` moves a file it becomes a migr
 migration without a reverse-reference scan is the documented data-loss shape.
 
 3. A `urzua init --types adr,rfc,spec` run produces a config `check` accepts, with record-shaped files
-   outside the selected directories reported rather than errored.
+   outside the selected directories reported rather than errored. On an empty repository `init`, `doctor`
+   and `check` each exit 0 and `check` reports no finding (an `ok` run over no record, with an `empty-corpus`
+   notice).
 4. A greenfield re-run that would write the config that exists exits 0 and changes nothing.
 
 Criteria 3 and 4 are enforced by `init_greenfield_integration.rs`
 (`the_written_config_passes_check_and_new_writes_a_stable_id_for_every_type`,
+`on_an_empty_repository_init_doctor_and_check_all_pass_with_zero_findings`,
 `record_shaped_files_outside_the_selected_types_are_reported_not_errored` and
 `a_rerun_with_the_same_selection_is_a_no_op_and_a_different_one_is_refused`).
 
@@ -322,3 +336,4 @@ None open. The four questions `MILE-114` carried are decided or recorded:
 > | 2026-11-14 | Bumped to `0.27`. `## Proposed rules`'s statement of the `authority` block `init` writes now includes `waivable: never`, which `init` has written since 2026-11-09 (the `0.22` row recorded the config change but left this sentence stale). **Why:** the docs-versus-binary review of 2026-11-14 found the sentence disagreeing with `init`'s output. | **substantive** |
 > | 2026-11-14 | Bumped to `0.28`. `## Proposed rules` names `header.scaffold-mismatch` as a rule `init` does not propose: it judges a record against what `urzua new` writes, which no record of a corpus just adopted was, so proposing it would warn on every hand-added record. `init`'s output for an existing corpus is unchanged from before the rule existed. **Why:** `MILE-103`; `init` proposes every shipped rule at `warn` unless one of the listed reasons applies, and a new opt-in rule would otherwise have been proposed. | **structural** |
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/init.rs` 15df5856d881 -> 795a4f0f1c3e. Reason: Read the diff of each re-pinned file against main and the claim still holds. rust/crates/urzua-cli/src/commands/init.rs: proposed_rules_mapping skips header.scaffold-mismatch (a new early continue with a comment) and a unit test asserts adopt does not propose it; nothing else changed. rust/crates/urzua-cli/tests/suggested_action_integration.rs#rules_lists_each_variant_with_its_action_or_its_exemption_reason: the expected number of shipped rules is 74, not 73, because the rule table gained header.scaffold-mismatch; the assertions are otherwise unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-14 | Bumped to `0.29`. Greenfield creates each selected type's directory with a `.gitkeep` and reports `directories`; it proposes the rules that read the declarations its profiles write (including `revision-log.version-bump-required` with the `spec` profile) and withholds `type.no-declared-spec`. Every rule that reads a per-type declaration, now audited over all rules, is withheld from adopt: `header.required-fields`, `pointer.resolution`, the field-hygiene, status, supersession, locator, revision-log and waiver rules join the earlier ones. Criterion 3 states the empty-repository case. **Why:** the first-run review, findings 6.1, 6.2 and 6.5: `init`'s output failed `doctor` and `check` on an empty repository, fifteen adopted rules reported `ran` over zero records, and the `spec` profile's version bump was withheld though declared. | **substantive** |
