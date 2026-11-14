@@ -687,6 +687,13 @@ rules:
     extension_prefixes:
       condition: "ext-"
   header.pointer-field-clean: warn
+  # A record a pull request adds has the header `urzua new` writes (MILE-103): the
+  # same keys in the same order, only the null fields filled in. Only on a --base
+  # run; scripts/replay-header-comparator.py replays it over past heads. At info: it
+  # measures, and does not gate. At warn it would block about 12% of this repository's
+  # record pull requests (milestones created Done, bugs filed Fixed), which is how
+  # its agents legitimately work (MILE-103).
+  header.scaffold-mismatch: info
   type.no-declared-spec: warn
   type.dir-matches-nothing: warn
   identity.collision: error

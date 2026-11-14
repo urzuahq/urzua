@@ -4,7 +4,7 @@ Version: '0.31'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/commands/new.rs@sha256:92c75a760cc18b234040a3136cf0b886739e1016fe992fc78a074778b8616be5, code:rust/crates/urzua-core/src/new_record.rs@sha256:4f85670917b92d9e09fca2a839bfb9e6035e439dd7bf8081b6b03849c496578d, test:rust/crates/urzua-cli/tests/new_integration.rs@sha256:c319a5750aa11e1bd2b6be9fc6a2d707f34150c514d49c35290ad353f0ef61f7
+Realized-by: code:rust/crates/urzua-cli/src/commands/new.rs@sha256:2254e1c8067c6198a48545c2ef33e89a032d73355e3c72291926ac61be2aeece, code:rust/crates/urzua-core/src/new_record.rs@sha256:4f85670917b92d9e09fca2a839bfb9e6035e439dd7bf8081b6b03849c496578d, test:rust/crates/urzua-cli/tests/new_integration.rs@sha256:c319a5750aa11e1bd2b6be9fc6a2d707f34150c514d49c35290ad353f0ef61f7
 Author: beauwilliams
 Subject: '`urzua new` -- generating a record''s initial content with a real stable ID assigned.'
 Implements: ADR-27
@@ -173,6 +173,22 @@ fields, a first revision-log row laid out by the log's own header (`ADR-94`) and
 the template's body. `ScaffoldSpec::plain` builds the spec `new` uses, with none of them, so `new`'s
 output is unchanged.
 
+## Comparing a record with the header `new` writes (`MILE-103`)
+
+`scaffold_record` is pure, so the header `new` would write for a record can be recomputed after the
+fact, and the opt-in `header.scaffold-mismatch` rule (`SPEC-2`) does: under `check --base` it
+re-renders the header of each added record from the run's configuration and the type's template, with
+the record's own number, title, `Stable-Id`, author and date, and compares the fields `new` decides (which
+exist, their order, and the value each starts at). A field `new` leaves null may be filled in or left
+out; nothing else may differ. `new` carries no stamp or marker for this (a stamp is forgeable and changes the
+record), and nothing here changes what `new` writes.
+
+`scripts/replay-header-comparator.py` runs that rule at every commit of the pull requests merged in
+a window, with the rule declared for the replay and the configuration of each commit, and counts the
+records that differed from the scaffold and that a header rule also rejected: the measure of whether
+records are still hand-authored. `scripts/time-new-vs-hand.py` times `new` against hand-authoring, in
+steps and in seconds, for each record type.
+
 ## What's deliberately not built
 
 - **Any header shape other than YAML frontmatter.** The `blockquote` and `bold-list` shapes were
@@ -235,5 +251,4 @@ output is unchanged.
 > | 2026-11-13 | Bumped to `0.29`. Evidence pins re-baselined for this change (the `Re-baselined` row above); the specification text is unchanged. **Why:** a revision-log entry that adds a structural change bumps `Version`. | **structural** |
 > | 2026-11-14 | Bumped to `0.30`. What `new` prints to stderr for a missing type directory or a missing `extra_dirs` entry is also a `notices` entry (subject `numbering`, info), so stdout carries it. **Why:** the external review's finding 5.4; `ADR-46` item 8. | **substantive** |
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/new.rs` 8cb79491eccb -> 2254e1c8067c. Reason: Read the diff since the old pin and the claim still holds. new.rs: read_type_filenames takes the notices list and records a missing type directory or extra_dirs entry as an info notice beside the existing stderr line; numbering, template, identity and write logic are unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
-> | 2026-11-14 | Bumped to `0.31`. The unknown-record-type error points at `record_types:` in the configuration instead of a TOML table. **Why:** the first-run review, finding 6.6 (the `extra_dirs` notice in the JSON is the `0.30` row's). | **substantive** |
-> | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/new.rs` 2254e1c8067c -> 92c75a760cc1. Reason: Read the diff of each pinned file against main and the claim still holds. new.rs: only the unknown-record-type error wording changed (`record_types:` in YAML wording); numbering, notices and writing are unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-14 | Bumped to `0.31`. New section "Comparing a record with the header `new` writes": the opt-in `header.scaffold-mismatch` rule recomputes the header `new` would have written through the unchanged, pure `scaffold_record` and compares an added record with it, and two scripts (`replay-header-comparator.py`, `time-new-vs-hand.py`) measure whether `new` is the path taken and the faster one. `new`'s output is unchanged and carries no provenance stamp. **Why:** `MILE-103`, the maintainer's decision of 2026-11-13: a comparator and a replay, not a stamp. | **structural** |

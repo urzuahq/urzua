@@ -1229,6 +1229,28 @@ pub const RULE_TABLE: &[RuleDef] = &[
         },
     },
     RuleDef {
+        id: RULE_HEADER_SCAFFOLD_MISMATCH,
+        description: "A record a `--base` diff adds whose header is not the one `urzua new` would have written for it (`MILE-103`, `SPEC-12`): it re-renders the header through the same pure scaffold `urzua new` uses, from the configuration of the run (so, at the creation commit, that commit's) and the type's template, taking the record's own number, title, `Stable-Id`, author and date, and compares what `new` decides. A field the scaffold leaves null may be filled in or left out; a field added, a field `new` fills (the `Stable-Id`, author, date) missing, the fields reordered, or a value `new` wrote (the initial status, the starting version) changed, is reported. `urzua-record.sh finish` applies a stricter form of this in shell, to what an agent may do; this rule judges what was merged, so a pull request sees it before merge, and it is what `scripts/replay-header-comparator.py` replays over past pull-request heads to measure whether records are still hand-authored. A file moved under a new name (its `Stable-Id` was a deleted record's at the merge base) is not a creation and is not examined. The finding is a warning whose path out is creating the record with `urzua new`, or a waiver when the difference is deliberate (a record created and then decided in the same pull request). Judges the changed set: `not-applicable` on a run with no `--base`. Opt-in: off unless declared in `rules`.",
+        scope: Scope::Records,
+        anchor: Anchor::Record,
+        judges: Judges::ChangedSet,
+        needs_identity_index: false,
+        requires_relation_pairs: false,
+        requires_acyclic_pair: false,
+        requires_override_log: false,
+        requires_authority: false,
+        reads_declaration: None,
+        header_none: HeaderNone::Exempt("reads a header only on a --base run, of the records the diff adds; a header_shape: none type is out of scope there"),
+        options: &[],
+        population: PopulationUnit::Record,
+        actions: &[
+            VariantAction::new("scaffold-mismatch", ActionDecl::Exempt("the fix is to recreate the record with `urzua new` and move its body across, or a waiver for a deliberate difference; neither is a single field edit")),
+        ],
+        phase: Phase::Main,
+        companion: None,
+        run: |c| header_scaffold_mismatch(c.records, c.config, c.added_paths, c.renamed_paths, c.template_texts),
+    },
+    RuleDef {
         id: RULE_IDENTITY_OPEN_PR_COLLISION,
         description: "A record a `--base` diff adds shares its type and number with a file on a fetched pull-request head ref under a different `Stable-Id` (`ADR-93`, `MILE-89`): two branches filed the same number from one `main`, and each looks valid alone. The refs are the ones `urzua new` fetches into `refs/urzua/pr/<segment>/*` with `new.check_open_prs`; `check` never fetches, so with none present the rule notices how to fetch them and its population counts zero refs, never a clean run over nothing. A head whose file for that id carries the record's own `Stable-Id` is the same record and is not a collision, so a pull request is not flagged against itself nor against its own merged copy. Plain git cannot tell an open pull request from a closed one, so a closed, unmerged head can still hold a number a new record legitimately took: the finding is a warning, which still gates under `fail_on: warning`, and the path out is a waiver whose `Reason` names that pull request, or renaming the file and its H1 to the next free number (the one `urzua new` would take; `urzua migrate ids` cannot renumber). Judges the changed set: `not-applicable` on a run with no `--base`. Opt-in.",
         scope: Scope::Records,
@@ -2522,6 +2544,7 @@ mod tests {
             judged(Judges::ChangedSet),
             vec![
                 RULE_REVISION_LOG_VERSION_BUMP_REQUIRED,
+                RULE_HEADER_SCAFFOLD_MISMATCH,
                 RULE_IDENTITY_OPEN_PR_COLLISION,
                 RULE_STATUS_TRANSITION_ALLOWED
             ]

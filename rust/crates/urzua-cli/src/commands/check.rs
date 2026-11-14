@@ -94,6 +94,9 @@ struct Context<'a> {
     changed_paths: Option<Vec<PathBuf>>,
     /// The changed paths that did not exist at the merge base; `None` without `--base`.
     added_paths: Option<Vec<PathBuf>>,
+    /// The added paths that are a rename (`header.scaffold-mismatch`); empty
+    /// unless that rule is enabled.
+    renamed_paths: HashSet<PathBuf>,
     /// The fetched pull-request refs' holders of the ids this diff adds
     /// (`identity.open-pr-collision`); empty unless that rule is enabled.
     pull_ref_claims: rules::PullRefClaims,
@@ -265,14 +268,22 @@ pub(crate) fn load_template_texts(
     config: &Config,
 ) -> Result<HashMap<String, String>, String> {
     let mut texts = HashMap::new();
-    if config
-        .rules
-        .get(rules::RULE_SECTION_ORDER)
-        .is_none_or(|s| s.level == urzua_core::config::RuleLevel::Off)
-    {
+    let enabled = |rule: &str| enabled_setting(config, rule).is_some();
+    // `header.scaffold-mismatch` re-renders each type's scaffold, which reads the
+    // template's header; `section.order` reads the type's sections from it.
+    let scaffold = enabled(rules::RULE_HEADER_SCAFFOLD_MISMATCH);
+    if !scaffold && !enabled(rules::RULE_SECTION_ORDER) {
         return Ok(texts);
     }
-    for (record_type, _) in rules::types_reading_a_template_order(config) {
+    let wanted: Vec<String> = if scaffold {
+        config.record_types.keys().cloned().collect()
+    } else {
+        rules::types_reading_a_template_order(config)
+            .into_iter()
+            .map(|(record_type, _)| record_type)
+            .collect()
+    };
+    for record_type in wanted {
         let path = repo_root
             .join(".urzua/templates")
             .join(format!("{record_type}.md"));
@@ -283,8 +294,7 @@ pub(crate) fn load_template_texts(
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
             Err(e) => {
                 return Err(format!(
-                    "{}: template '{}' could not be read: {e}",
-                    rules::RULE_SECTION_ORDER,
+                    "template '{}' could not be read: {e}",
                     path.display()
                 ))
             }
@@ -333,6 +343,7 @@ impl<'a> Context<'a> {
             added_row_days: &self.added_row_days,
             changed_paths: self.changed_paths.as_deref(),
             added_paths: self.added_paths.as_deref(),
+            renamed_paths: &self.renamed_paths,
             pull_ref_claims: &self.pull_ref_claims,
             committed_statuses: self.committed_statuses.as_ref(),
             deleted_records: &self.deleted_records,
@@ -1520,6 +1531,7 @@ struct DiffInputs {
     base_drift: HashMap<PathBuf, HashSet<String>>,
     added_row_days: HashMap<PathBuf, rules::RowWindows>,
     added_paths: Option<Vec<PathBuf>>,
+    renamed_paths: HashSet<PathBuf>,
     pull_ref_claims: rules::PullRefClaims,
     templates: urzua_core::new_record::TemplateValues,
     template_texts: HashMap<String, String>,
@@ -1740,6 +1752,7 @@ fn read_diff_inputs(
         added
     });
     let pull_ref_claims = load_pull_ref_claims(session, added_paths.as_deref(), notices);
+    let renamed_paths = load_renamed_paths(session, changes, notices);
     let templates = load_templates(repo_root, config, notices)?;
     let template_texts = load_template_texts(repo_root, config)?;
     // The diff rules judge the changed set itself; `None` without `--base`.
@@ -1777,6 +1790,7 @@ fn read_diff_inputs(
         base_drift,
         added_row_days,
         added_paths,
+        renamed_paths,
         pull_ref_claims,
         templates,
         template_texts,
@@ -2184,6 +2198,7 @@ fn load_context<'a>(
                 .collect(),
             changed_paths: diff.changed_paths,
             added_paths: diff.added_paths,
+            renamed_paths: diff.renamed_paths,
             pull_ref_claims: diff.pull_ref_claims,
             committed_statuses: diff.committed_statuses,
             deleted_records: diff.deleted_records,
@@ -2202,6 +2217,63 @@ fn load_context<'a>(
         },
         notices,
     ))
+}
+
+/// The added records that are a rename, not a creation (`header.scaffold-mismatch`,
+/// `MILE-103`): a record added at a new path whose `Stable-Id` a record deleted
+/// by the same diff carried at the merge base. Read only while the rule is
+/// enabled; a deleted copy that cannot be read is disclosed and its record then
+/// judged as a creation, the stricter reading.
+fn load_renamed_paths(
+    session: &Session,
+    changes: Option<&urzua_io::GitChanges>,
+    notices: &mut Vec<Notice>,
+) -> HashSet<PathBuf> {
+    let (Some(changes), Some(_)) = (
+        changes,
+        enabled_setting(&session.config, rules::RULE_HEADER_SCAFFOLD_MISMATCH),
+    ) else {
+        return HashSet::new();
+    };
+    let mut deleted: Vec<&PathBuf> = changes
+        .deleted
+        .iter()
+        .filter(|p| p.extension().is_some_and(|e| e.eq_ignore_ascii_case("md")))
+        .collect();
+    deleted.sort();
+    let mut gone: HashSet<String> = HashSet::new();
+    for path in deleted {
+        match urzua_io::read_at_commit(&session.repo_root, &changes.merge_base, path) {
+            Ok(text) => {
+                let header = urzua_core::header::parse(&text);
+                if let Some(id) = header.get_reserved("Stable-Id") {
+                    if !id.trim().is_empty() {
+                        gone.insert(id.trim().to_string());
+                    }
+                }
+            }
+            Err(e) => notices.push(Notice {
+                severity: NoticeSeverity::Warning,
+                subject: rules::RULE_HEADER_SCAFFOLD_MISMATCH.to_string(),
+                message: format!(
+                    "could not read {} at the merge base ({e}), so a record renamed from it is judged as a new one",
+                    path.display()
+                ),
+                detail: None,
+            }),
+        }
+    }
+    session
+        .records
+        .iter()
+        .filter(|r| changes.added.contains(&r.path))
+        .filter(|r| {
+            r.header
+                .get_reserved("Stable-Id")
+                .is_some_and(|id| gone.contains(id.trim()))
+        })
+        .map(|r| r.path.clone())
+        .collect()
 }
 
 /// The refs `identity.open-pr-collision` compares against (`ADR-93` clause 7): read
