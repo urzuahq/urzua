@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5Q0XVK27P5T8FN72BN
-Version: '0.48'
+Version: '0.49'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -222,8 +222,12 @@ Every one of the following is a hard gate — none are optional, none are defaul
 - **The report names the identity.** An apply report carries `identity`: `name`, `source`
   (`gh-verified`, `asserted` or `git-config`), `actor` (`agent`, `human` or `unspecified`), and
   `replaced_by` and `verified_login` when they apply. Detect mode carries none.
-- **`--actor agent|human`** states who ran the command and is recorded in the row; a run without it
-  records `unspecified`, and any other value is `not-run`. It is the caller's claim and not proof, with the
+- **`--actor agent|human`** states who ran the command and is recorded in the row. With `--apply` it is
+  required when the resolved identity is `gh-verified` (`fix --apply`, `fix --rebaseline --apply`, and
+  `reverify --apply`, `ADR-101`: people own decisions): a verified login is a person's, so a row with no
+  actor would read as that person's own attestation of what an agent may have run, and the run is `not-run`
+  (exit 2) naming the flag, with nothing written. Under an `asserted` or `git-config` identity a run without
+  it still records `unspecified`, and any other value is `not-run`. It is the caller's claim and not proof, with the
   standing of `--by` (a verified login names the account whose token ran the command, not whether a
   person or an agent held it: `RFC-2`, `BUG-16`). An agent passes `--actor agent` (`AGENTS.md`); the lifecycle
   commands `ADR-89` section 1 adds (`MILE-199`) are to pass it when built.
@@ -521,3 +525,4 @@ asserted by test, not assumed by convention.
 > | 2026-11-09 | Bumped to `0.46`. `reverify` under `drift: acknowledge` does not refuse a record whose only drift is in acknowledging categories because `embodiment.consistency` reports it past `drift_grace_days`, and the acknowledging `Re-verified` row dates the acknowledgement for unpinned locators. **Why:** `ADR-97` drift-policy amendment, consistency fix: `acknowledge` worked only inside the grace window. | **substantive** |
 > | 2026-11-09 | Bumped to `0.47`. The acknowledging `Re-verified` row names each acknowledged locator and clears only those, the date has day granularity, and only a row in the tool's exact shape acknowledges anything. **Why:** `ADR-97` item 6: a row cleared every unpinned locator of its category, and any text containing the words cleared them. | **substantive** |
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: unspecified): re-pinned `rust/crates/urzua-cli/src/commands/fix.rs` 9e52be4749a2 -> 5d6f30edea8f. Reason: merge of origin/main into the MILE-207 branch: the pinned files differ from main's pins only by this branch's path-scoped source read (scoped sources in discovery.rs, check.rs, back_pointer.rs, runner.rs, table.rs, report.rs, fix.rs) and the 'not judged' notice wording; each record's own claim is untouched **Why:** the pinned evidence changed and the attesting actor re-verified that the claim still holds. | **structural** |
+> | 2026-11-14 | Bumped to `0.49`. `fix --apply`, `fix --rebaseline --apply` and `reverify --apply` require `--actor agent` or `--actor human` when the attestation identity is `gh-verified`; without it the run is `not-run` and writes nothing, so a row can no longer record `actor: unspecified` under a verified login. **Why:** the external review found 208 re-pin rows attributing an agent's re-verification to the maintainer; `ADR-101` (people own decisions). | **substantive** |

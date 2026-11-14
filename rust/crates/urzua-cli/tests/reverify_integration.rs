@@ -839,3 +839,47 @@ fn reverify_discloses_the_lines_a_back_pointer_ignore_marker_excused() {
         "{parsed}"
     );
 }
+
+/// ADR-101 (people own decisions): under a `gh-verified` identity `reverify
+/// --apply` without `--actor` is refused, so a row never reads as a person's
+/// own attestation of what an agent ran; with it the row records the actor.
+#[test]
+fn a_gh_verified_apply_without_actor_is_refused_and_with_it_records_the_actor() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = fixture("gh-actor", &config(RULE, ""), 1);
+    let before = read(&dir, &path(1));
+    let stub = common::TempDir::new("urzua-reverify-stub-gh");
+    std::fs::write(stub.join("gh"), "#!/bin/sh\necho gh-login\n").unwrap();
+    std::fs::set_permissions(stub.join("gh"), std::fs::Permissions::from_mode(0o755)).unwrap();
+    let path_env = format!(
+        "{}:{}",
+        stub.display(),
+        std::env::var("PATH").unwrap_or_default()
+    );
+    let run = |extra: &[&str]| {
+        let mut args = vec!["reverify", "--apply", "--ids"];
+        let p1 = path(1);
+        args.push(&p1);
+        args.extend(["--reason", "read the locators"]);
+        args.extend(extra);
+        common::urzua()
+            .args(args)
+            .env("PATH", &path_env)
+            .current_dir(&dir)
+            .output()
+            .unwrap()
+    };
+    let out = run(&[]);
+    assert_eq!(out.status.code(), Some(2), "{out:?}");
+    let v = json(&out);
+    assert_eq!(v["status"], "not-run", "{v}");
+    assert!(v["error"].as_str().unwrap().contains("--actor"), "{v}");
+    assert_eq!(read(&dir, &path(1)), before, "nothing is written");
+    let out = run(&["--actor", "human"]);
+    assert_eq!(out.status.code(), Some(0), "{out:?}");
+    assert!(
+        read(&dir, &path(1)).contains("identity: gh-verified, actor: human"),
+        "{}",
+        read(&dir, &path(1))
+    );
+}

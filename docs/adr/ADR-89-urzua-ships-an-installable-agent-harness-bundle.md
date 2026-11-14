@@ -831,6 +831,38 @@ rest of the checks. A case-only difference between the base's and the head's sta
 
 The Decision is otherwise unchanged. The Status of this ADR stays Accepted.
 
+## Amendment (2026-11-14, leaving a gate)
+
+Status of this amendment: decided by the orchestrator on 2026-11-14, pending maintainer review. It extends what
+`diff.decider-required` and the editor hook count as a gated move; the rest of section 4 is unchanged.
+
+**The problem.** The deletions amendment gates `git rm` of an Accepted record because Accepted-to-gone is a stronger
+move than Superseded. Three other edits reach the same outcome and were not gated: writing the file empty,
+stripping its header (so it has no `Status`), and moving it from a gate status to a status no gate names (Accepted to
+Proposed, an un-accept). `header.required-fields` and `status.transition-allowed` catch some of these only as
+ordinary, waivable findings, and an un-accept in one pull request followed by a delete of the now-Proposed record in a
+second walked around the deletion gate.
+
+**The decision.** A changed record whose `Status` at the merge base is one a gate names, and whose `Status` now is
+missing, blank or not a status that same gate names, is a gated move like a deletion ("Status moved from 'Accepted'
+to 'Proposed', out of the gate's statuses", or "Status was 'Accepted' and is now missing or blank"). It is judged
+like any other gated move: the same decider group, `decider_table`, `waivable` and `require_evidence` apply, and it
+is reported as the variant `gated-departure-without-decider`. The editor hook's `acceptance` guardrail refuses the
+same edit from an agent (a write that leaves the file empty or without a readable `Status`, or moves it out of a
+gated status) and a person is not refused. A move to another status the same gate names (Accepted to Rejected) is
+the ordinary gated move and is unchanged. Gates still name only `to` statuses; there is no `from` reading, the base
+copy's status is read to learn which gate the record leaves. A record whose base copy cannot be read, or that was
+new in the pull request, has no base status and is not a departure. The post-command check, which reports and
+never blocks, is not extended.
+
+Related, outside this section: the attestation row of section 5 records `actor: unspecified` when `--actor` is not
+given. Under a `gh-verified` identity `fix --apply`, `fix --rebaseline --apply` and `reverify --apply` now refuse
+to run without `--actor agent` or `--actor human` (`SPEC-8`, justified by `ADR-101`: a verified login is a person's,
+so a row must not read as that person's own attestation when an agent ran the command). The `asserted` and
+`git-config` identities are unchanged.
+
+The Decision is otherwise unchanged. The Status of this ADR stays Accepted.
+
 ## References
 
 - `ADR-69`, `ADR-70`, `ADR-71`: the hook, drafting commands and layered gate this extends; `ADR-70` gains an
@@ -875,3 +907,4 @@ The Decision is otherwise unchanged. The Status of this ADR stays Accepted.
 > | 2026-11-09 | Added an `## Amendment (2026-11-09, rename pairing)`, first decided by the orchestrator, accepted by the maintainer on 2026-11-10: a record the base lacks is paired with a deleted record of the same `Stable-Id` only when the record id (type and number) is also the same, so a new Accepted record copying a deleted record's `Stable-Id` is a gated move; a slug rename still pairs, a renumber is new; the deleted copy is parsed with the type's declared document model; `status.transition-allowed` uses the same pairing. A slug rename that keeps the record id pairs even when its body changes, like an in-place edit; a case-only file rename reads as new and is gated. States that the merge-queue run passes no pull request number (the pull request run judged the change) and that an actors API outage passes the gate unless `require_evidence` is on. `Status` stays Accepted. **Why:** the seventh review reproduced a non-decider accepting a brand-new ADR with no finding. | **substantive** |
 > | 2026-11-10 | Rename-pairing amendment accepted. **Why:** Maintainer decision, 2026-11-10. | **substantive** |
 > | 2026-11-10 | Added an `## Amendment (2026-11-10, deletions)`, accepted by the maintainer on 2026-11-10: a record the diff deletes while its base `Status` is one a gate names is a gated move (`gated-deletion-without-decider`), judged like any other and reported by the post-command check; a rename pair is exempt; under `base`/`both` the base revision's type declaration also decides which deleted files are records of a gated type; gate statuses compare case-insensitively after trim and the status field is read case-insensitively for the gate. `Status` stays Accepted. **Why:** Maintainer decision, 2026-11-10, on the review that found a non-decider deleting an Accepted ADR with an ok check, and a lower-case `accepted` passing the gate. | **substantive** |
+> | 2026-11-14 | Added an `## Amendment (2026-11-14, leaving a gate)`, decided by the orchestrator on 2026-11-14, pending maintainer review: blanking an Accepted (gated) record, stripping its header, or moving it from a gate status to a status that gate does not name (an un-accept) is a gated move like deletion (`gated-departure-without-decider`), in `diff.decider-required` and in the editor hook; and, under a `gh-verified` identity, `fix --apply`, `fix --rebaseline --apply` and `reverify --apply` require `--actor`. The Decision is unchanged. `Status` stays Accepted. **Why:** the external review found blanking or un-accepting an Accepted ADR passing both gates while deletion is gated, and 208 re-pin rows attributing an agent's re-verification to the maintainer. | **substantive** |

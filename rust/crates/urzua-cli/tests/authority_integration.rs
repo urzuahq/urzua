@@ -232,6 +232,45 @@ fn an_agent_moving_a_record_to_an_accepting_status_is_denied() {
     assert_eq!(std::fs::read_to_string(dir.join(PATH_1)).unwrap(), PROPOSED);
 }
 
+/// An Accepted record on disk, so an edit to it starts from a gate status.
+fn accepted_on_disk(name: &str) -> common::TempDir {
+    let dir = fixture(name, &config());
+    std::fs::write(dir.join(PATH_1), ACCEPTED).unwrap();
+    dir
+}
+
+#[test]
+fn an_agent_blanking_stripping_or_un_accepting_an_accepted_record_is_denied() {
+    // ADR-89 amendment of 2026-11-14: leaving a gate has a deletion's outcome.
+    let stripped = "# ADR-1: T\n\nprose\n";
+    for (label, content) in [
+        ("blank", ""),
+        ("stripped header", stripped),
+        ("un-accept", PROPOSED),
+    ] {
+        let dir = accepted_on_disk(&format!("leave-{}", label.replace(' ', "-")));
+        let (code, v) = run_edit(&dir, PATH_1, content, "agent", &[]);
+        assert_eq!(code, 1, "{label}: {v}");
+        assert_eq!(v["verdict"], "block", "{label}: {v}");
+        let message = v["message"].as_str().unwrap();
+        assert!(
+            message.contains("acceptance") && message.contains("maintainers"),
+            "{label}: {message}"
+        );
+        assert_eq!(std::fs::read_to_string(dir.join(PATH_1)).unwrap(), ACCEPTED);
+    }
+}
+
+#[test]
+fn a_human_actor_blanking_or_un_accepting_an_accepted_record_is_not_denied() {
+    for (label, content) in [("blank", ""), ("un-accept", PROPOSED)] {
+        let dir = accepted_on_disk(&format!("human-leave-{label}"));
+        let (code, v) = run_edit(&dir, PATH_1, content, "human", &[]);
+        assert_eq!(code, 0, "{label}: {v}");
+        assert_ne!(v["verdict"], "block", "{label}: {v}");
+    }
+}
+
 #[test]
 fn a_human_actor_moving_a_record_to_an_accepting_status_is_not_denied() {
     let dir = fixture("human-move", &config());
