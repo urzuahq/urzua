@@ -1,6 +1,7 @@
 ---
 Stable-Id: 01M7BEQXWQ185DXQ4Y2HM09E5X
-Status: Proposed
+Status: Accepted
+Accepted-on: 2026-11-14
 Date: 2026-11-13
 Author: beauwilliams
 Deciders: beauwilliams
@@ -14,7 +15,7 @@ Non-reference-ids: BUG-104
 
 `RFC-41` proposed `code.dangling-bug-reference`, the mirror of `embodiment.locator-exists`: a source comment that cites a record id (`BUG-104`, `ADR-57`) is a claim that the record exists, and nothing checked it. The incident was real: a record was deleted and renumbered, and two comments citing the deleted id outlived it until a human ran `grep`. The rule is built (`MILE-108`). `RFC-41` left four questions open, and `docs/rfc/README.md` makes building part of an RFC a decision that needs its own record. They are settled here.
 
-Decided by the maintainer on 2026-11-13 (configurable comment leaders); the rest proposed by the orchestrator, pending maintainer review.
+Decided by the maintainer: the configurable comment leaders on 2026-11-13, and the four further settlements, accepted as written, on 2026-11-14.
 
 ## Options considered
 
@@ -31,7 +32,7 @@ Decided by the maintainer on 2026-11-13 (configurable comment leaders); the rest
 
 ## Decision
 
-In the context of source comments that cite records, facing a citation that silently outlives the record it names, the maintainer decided on 2026-11-13 that **comment leaders are declared per extension, falling back to the built-in leader set when none is declared**, and it is proposed, pending the maintainer's review, that **`code.dangling-bug-reference` also reads an id in a string literal or a doc-comment example after a leader like any other, with `ignore_marker` as the escape; skips an id inside a URL; leaves prose and `.md` files out of scope unless `extensions` declares them; and judges existence only**, to achieve a check that names no language and changes nothing for a repository that has not declared it, accepting that a string literal after a leader is a false positive until the line carries the marker.
+In the context of source comments that cite records, facing a citation that silently outlives the record it names, the maintainer decided on 2026-11-13 that **comment leaders are declared per extension, falling back to the built-in leader set when none is declared**, and on 2026-11-14 that **`code.dangling-bug-reference` also reads an id in a string literal or a doc-comment example after a leader like any other, with `ignore_marker` as the escape; skips an id inside a URL; leaves prose and `.md` files out of scope unless `extensions` declares them; and judges existence only**, to achieve a check that names no language and changes nothing for a repository that has not declared it, accepting that a string literal after a leader is a false positive until the line carries the marker.
 
 1. **Leaders.** `code_comment_prefixes` is a map from an extension of the rule's `extensions` to a list of leaders (`rs: ["//"]`, `sql: ["--"]`). A leader that opens a line or follows whitespace starts a comment, and the longest leader at a position wins. An extension with no entry, and a rule with no option, read the leaders the back-pointer rules read. A key that is not one of the rule's `extensions`, an empty list, or a blank, whitespace-holding or repeated leader is a load error (`ADR-64`: structured config, no string mini-language, no silent no-op).
 2. **String literals and doc examples.** Read. The test `a_string_literal_after_a_leader_and_a_doc_example_are_read_and_the_marker_excuses_them` pins it.
@@ -49,7 +50,7 @@ Easy. The rule and its options are opt-in; removing the option or the rule chang
 - A repository declares the leaders of its languages once, or takes the built-in set.
 - `ignore_marker` lines are counted in the population's `excused_lines` and disclosed, and a marker on a line citing nothing is itself a finding, so the escape cannot rot silently.
 - The built-in leader set stays the single reading of "a comment" for the back-pointer rules, so declaring leaders for this rule changes no back-pointer evidence.
-- `MILE-108` stays open until this record is Accepted.
+- `MILE-108` can compute Done now that this record is Accepted.
 
 ## References
 
@@ -64,3 +65,4 @@ Easy. The rule and its options are opt-in; removing the option or the rule chang
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-13 | Drafted as Proposed. The configurable comment leaders are the maintainer's decision of 2026-11-13; the other settlements (string literals read with `ignore_marker`, prose and non-declared files out of scope, existence only, URL words skipped) are proposed by the orchestrator, pending the maintainer's review. **Why:** `RFC-41`'s open questions had to be settled in an ADR before `code.dangling-bug-reference` ships (`docs/rfc/README.md`). | **structural** |
+> | 2026-11-14 | Accepted by the maintainer on 2026-11-14; the four proposed settlements are accepted as written. **Why:** the maintainer reviewed the settlements `RFC-41` left open and accepted them in full, with the configurable leaders decided earlier. | **substantive** |
