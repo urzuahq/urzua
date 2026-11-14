@@ -57,6 +57,9 @@ If your PR is something a person installing `urzua` would care about — a new c
 change, a bug fix — add a changeset: a markdown fragment in `.changeset/` describing it, written now
 while the change is fresh rather than reconstructed later at release time (ADR-29).
 
+A release deletes every fragment, so no record may cite a `.changeset/` file as evidence. A Done item
+that says "a changeset is added" is waived as a `process-outcome` instead; the release notes carry it.
+
 ```markdown
 ---
 default: minor

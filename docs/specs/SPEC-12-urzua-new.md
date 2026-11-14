@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5C0WX34AQKF79DQDS5
-Version: '0.29'
+Version: '0.30'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/commands/new.rs@sha256:8cb79491eccb0c34eba66c37899fc3cb0860427e67bd83a3fd6ee3e551bb8d4d, code:rust/crates/urzua-core/src/new_record.rs@sha256:4f85670917b92d9e09fca2a839bfb9e6035e439dd7bf8081b6b03849c496578d, test:rust/crates/urzua-cli/tests/new_integration.rs@sha256:c319a5750aa11e1bd2b6be9fc6a2d707f34150c514d49c35290ad353f0ef61f7
+Realized-by: code:rust/crates/urzua-cli/src/commands/new.rs@sha256:2254e1c8067c6198a48545c2ef33e89a032d73355e3c72291926ac61be2aeece, code:rust/crates/urzua-core/src/new_record.rs@sha256:4f85670917b92d9e09fca2a839bfb9e6035e439dd7bf8081b6b03849c496578d, test:rust/crates/urzua-cli/tests/new_integration.rs@sha256:c319a5750aa11e1bd2b6be9fc6a2d707f34150c514d49c35290ad353f0ef61f7
 Author: beauwilliams
 Subject: '`urzua new` -- generating a record''s initial content with a real stable ID assigned.'
 Implements: ADR-27
@@ -71,7 +71,7 @@ without an edit:
 
 ## Display-number assignment
 
-A type whose directory does not exist yet is numbered from 1 and the directory is created when the record is written; `new` says so on stderr.
+A type whose directory does not exist yet is numbered from 1 and the directory is created when the record is written; `new` says so in a `notices` entry (subject `numbering`) and on stderr. The same holds for a declared `extra_dirs` entry that does not exist, and the identity and fetch notices are in `notices` as before.
 
 Scans the type's directory for the highest existing numeric prefix and takes the next integer —
 **never reused**, even if a number was deleted, since a cross-reference elsewhere may still assume
@@ -233,3 +233,5 @@ output is unchanged.
 > | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/new.rs` ade841f31f8d -> 8cb79491eccb, `rust/crates/urzua-core/src/new_record.rs` 40f0fce95cd0 -> eab8490554bb. Reason: Re-pinned after PR4 of MILE-205 (urzua waive --apply), the stated delta being: new.rs: scan_pull_requests and write_new_file become pub(crate) so waive reuses them; no behaviour change; new_record.rs: ScaffoldSpec gains omit_fields and the YAML renderer drops those fields; new passes none, so its output is unchanged. The claim holds as the changed code does not alter what this record states. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/new_record.rs` eab8490554bb -> 4f85670917b9. Reason: Read the diff of each re-pinned file against main and the claim still holds. new_record.rs: one doc comment names PREFIX-999 where it named ADR-999; no code changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-13 | Bumped to `0.29`. Evidence pins re-baselined for this change (the `Re-baselined` row above); the specification text is unchanged. **Why:** a revision-log entry that adds a structural change bumps `Version`. | **structural** |
+> | 2026-11-14 | Bumped to `0.30`. What `new` prints to stderr for a missing type directory or a missing `extra_dirs` entry is also a `notices` entry (subject `numbering`, info), so stdout carries it. **Why:** the external review's finding 5.4; `ADR-46` item 8. | **substantive** |
+> | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/new.rs` 8cb79491eccb -> 2254e1c8067c. Reason: Read the diff since the old pin and the claim still holds. new.rs: read_type_filenames takes the notices list and records a missing type directory or extra_dirs entry as an info notice beside the existing stderr line; numbering, template, identity and write logic are unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |

@@ -122,10 +122,10 @@ field is left for you. If `.urzua/templates/<type>.md` exists, its body (title a
 appended. A type with `header_shape: none` is refused, since it has nowhere to store a stable id.
 
 Output: `status`, `path`, `display_number`, `stable_id`, `pull_refs` (whether the open pull request
-fetch ran, and which numbers it skipped and who held them) and `skipped`, always present and empty
+fetch ran, and which numbers it skipped and who held them), `skipped` and `notices` (when present: the identity used in place of `--by`, a failed fetch, a type directory that does not exist yet; whatever `new` prints to stderr is also a notice). `skipped` is always present and empty
 when nothing was skipped: one `{number, reason}` per number, with `reason` `local`, `worktree <path>`
 or `open-pr <ref>`. When the type's directory does not exist yet, `new` numbers from 1 and creates it,
-saying so on stderr. It resolves an identity with `gh api user` first (see [What uses the
+saying so on stderr and in a `notices` entry. It resolves an identity with `gh api user` first (see [What uses the
 network](#what-uses-the-network)).
 
 ## fix
@@ -213,7 +213,7 @@ more finding per draft saying it is not in effect, until they do. The command re
 
 Output: `status` (`ok`, `partial-failure` or `not-run`), `mode`, `pending_value`, `pending_source`,
 `drafts` (each with `path`, `stable_id`, `rule`, `scope`, `findings` and `written`; `stable_id` is
-`null` in a preview), `skipped` and `unmatched_filters`. A `skipped` entry is `{rule, file, reason}`
+`null` in a preview), `skipped`, `unmatched_filters` and `notices` (when present: the identity used in place of `--by`, and what numbering reported; the same text is on stderr, but the JSON is the contract). A `skipped` entry is `{rule, file, reason}`
 (plus `waiver` when one exists) for a finding that gets no draft; `reason` is one of
 `already-waived` (a waiver for the same rule and file exists and has not expired, but is not yet
 filled in), `expired`, `unwaivable`, `no-file`, `matches-nothing`, `waiver-record`,
@@ -313,7 +313,7 @@ urzua rules
 ```
 
 Every rule this build ships, each with `id`, `description`, `scope`, `judges`, `population_unit`,
-`spec` and `actions`. It reads no config: it says what the binary supports, not what your repository
+`spec` and `actions`, and a top-level `status` of `ok` like every other command's report. It reads no config: it says what the binary supports, not what your repository
 enabled. Use [`explain --rule`](#explain) for one rule's options and your current level.
 
 ## migrate
