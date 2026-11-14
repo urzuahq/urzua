@@ -129,7 +129,7 @@ fn could_not_start(message: &str) -> ExitCode {
     let _ = writeln!(
         std::io::stderr().lock(),
         "{}",
-        serde_json::to_string(&report).unwrap_or_default()
+        serde_json::to_string(&crate::report_value(&report)).unwrap_or_default()
     );
     ExitCode::from(2)
 }
@@ -208,7 +208,7 @@ impl Server {
             .and_then(|export| Ok((export, graph::build(self.config.clone())?)));
         let (export, graph) = match built {
             Ok(both) => both,
-            Err(failure) => return outcome::<Value>(Err(failure)),
+            Err(failure) => return outcome::<CouldNotRun>(Err(failure)),
         };
         let Some(record) = export
             .records
@@ -216,7 +216,7 @@ impl Server {
             .find(|r| r.id.as_deref() == Some(id.as_str()))
         else {
             let message = format!("no record has the id `{id}`; urzua_list_records lists the ids");
-            return outcome::<Value>(Err(message.into()));
+            return outcome::<CouldNotRun>(Err(message.into()));
         };
         let edges: Vec<_> = graph
             .edges
@@ -231,6 +231,8 @@ impl Server {
                 "record": record,
                 "edges": edges,
                 "notices": notices,
+                "next_action": null,
+                "next_action_reason": null,
             }),
             is_error: false,
         }
@@ -245,14 +247,14 @@ fn text(args: &Map<String, Value>, key: &str) -> String {
 }
 
 /// A report, or the could-not-run shape with `isError` (`ADR-46`).
-fn outcome<R: serde::Serialize>(built: Result<R, Failure>) -> ToolResult {
+fn outcome<R: urzua_core::report::Report>(built: Result<R, Failure>) -> ToolResult {
     match built {
         Ok(report) => ToolResult {
-            report: serde_json::to_value(report).unwrap_or(Value::Null),
+            report: crate::report_value(&report),
             is_error: false,
         },
         Err(failure) => ToolResult {
-            report: serde_json::to_value(CouldNotRun::from(failure)).unwrap_or(Value::Null),
+            report: crate::report_value(&CouldNotRun::from(failure)),
             is_error: true,
         },
     }

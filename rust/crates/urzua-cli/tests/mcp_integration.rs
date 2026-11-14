@@ -842,3 +842,34 @@ fn graph_returns_the_cli_graph_report() {
     let extra = call_one(&dir, "urzua_get_graph", json!({"id": "ADR-1"}));
     assert_eq!(extra["error"]["code"], -32602);
 }
+
+/// MILE-72: every tool's report carries `next_action` and `next_action_reason`,
+/// both present and `null` together, since the tools return the same reports.
+#[test]
+fn every_tool_result_carries_both_next_action_keys() {
+    let dir = fixture("next-action");
+    let calls = [
+        ("urzua_check", json!({})),
+        ("urzua_list_records", json!({})),
+        ("urzua_show_record", json!({"id": "ADR-3"})),
+        (
+            "urzua_get_findings_for_path",
+            json!({"path": "docs/adr/ADR-1-a.md"}),
+        ),
+        ("urzua_get_graph", json!({})),
+        ("urzua_show_record", json!({"id": "ADR-999"})),
+    ];
+    for (tool, arguments) in calls {
+        let reply = call_one(&dir, tool, arguments.clone());
+        let report = &reply["result"]["structuredContent"];
+        for key in ["next_action", "next_action_reason"] {
+            assert!(
+                report.get(key).is_some_and(Value::is_null),
+                "{tool} {arguments}: {key} missing or not null in {report}"
+            );
+        }
+        let text: Value =
+            serde_json::from_str(reply["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+        assert_eq!(&text, report, "{tool}: text and structured content agree");
+    }
+}
