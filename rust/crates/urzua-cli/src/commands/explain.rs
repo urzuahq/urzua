@@ -115,7 +115,10 @@ fn run_rule(config_path: Option<PathBuf>, id: &str) -> Result<ExitCode, Failure>
         status: ReportStatus::Ok,
         rule: RuleExplanation {
             facts,
-            level: setting.map_or("off", |s| s.level.as_str()),
+            level: setting.map_or_else(
+                || urzua_core::rules::default_on(def.id).map_or("off", |d| d.level.as_str()),
+                |s| s.level.as_str(),
+            ),
             severity_floor,
             waivable,
             options,

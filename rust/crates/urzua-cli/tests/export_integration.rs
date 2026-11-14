@@ -184,10 +184,7 @@ fn export_json_refuses_a_record_symlinked_outside_the_repository() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert_eq!(output.status.code(), Some(2), "{stdout}");
     assert!(!stdout.contains("secret contents"), "{stdout}");
-    assert!(
-        stdout.contains("resolves outside the repository"),
-        "{stdout}"
-    );
+    assert!(stdout.contains("regular file at its own path"), "{stdout}");
 }
 
 fn sections_repo(name: &str) -> common::TempDir {

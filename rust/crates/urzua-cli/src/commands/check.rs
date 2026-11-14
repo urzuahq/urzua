@@ -351,6 +351,7 @@ impl<'a> Context<'a> {
             base_authority: &self.base_authority,
             refs_snapshot: &self.refs_snapshot,
             tracked_paths: &s.discovered.paths,
+            escaping_records: &s.escaping_records,
             live_paths: &self.live_paths,
             may_exist,
             dir_exists,
@@ -419,7 +420,7 @@ fn validate_selection(
                 "urzua check --rules: '{id}' is not a rule this build ships (`urzua rules` lists them)"
             ));
         }
-        if !config.rules.contains_key(id) {
+        if !config.rules.contains_key(id) && urzua_core::rules::default_on(id).is_none() {
             return Err(format!(
                 "urzua check --rules: '{id}' is not declared in the configuration; --rules narrows the declared rules and never enables one"
             ));

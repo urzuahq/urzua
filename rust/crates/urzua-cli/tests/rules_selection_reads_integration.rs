@@ -67,6 +67,11 @@ fn a_selection_that_leaves_the_back_pointer_rules_out_does_not_run_them() {
         .iter()
         .map(|r| r["rule"].as_str().unwrap())
         .collect();
-    assert_eq!(executed, ["header.required-fields"], "{report}");
+    // The refusal that cannot be turned off runs under every selection.
+    assert_eq!(
+        executed,
+        ["header.required-fields", "identity.record-symlink-escapes"],
+        "{report}"
+    );
     assert_eq!(report["status"], "ok", "{report}");
 }

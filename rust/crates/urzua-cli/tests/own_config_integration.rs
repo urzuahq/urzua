@@ -13,7 +13,8 @@ fn own_config() -> String {
 }
 
 /// MILE-80: the repository's config declares a level for every rule the build
-/// ships, including the ones it declares `off`, so none is merely absent.
+/// ships, including the ones it declares `off`, so none is merely absent. A rule
+/// that is on by default is the exception.
 #[test]
 fn own_config_declares_a_level_for_every_shipped_rule() {
     let config = urzua_core::config::parse(&own_config()).expect("repository config parses");
@@ -21,6 +22,8 @@ fn own_config_declares_a_level_for_every_shipped_rule() {
         .iter()
         .copied()
         .filter(|id| !config.rules.contains_key(*id))
+        // A rule that is on for every configuration needs no declaration.
+        .filter(|id| urzua_core::rules::default_on(id).is_none())
         .collect();
     assert!(
         undeclared.is_empty(),

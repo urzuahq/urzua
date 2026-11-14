@@ -167,6 +167,47 @@ pub(crate) fn resolved_model(
     )
 }
 
+/// The tracked record files that are not a regular file at their own path:
+/// a symlink, or a file behind a symlinked directory (`ADR-89` amendment of
+/// 2026-11-14). The shared guard: a record must be read where it is tracked,
+/// whatever command is reading, because a link lets the content a gate judges
+/// live at a path no gate names (a link to a file outside the repository, to a
+/// file no record type governs, or to a sibling that is not itself a record).
+/// Aliases have no use a record needs, so none is allowed. A path that does not
+/// resolve (a removed or dangling record) or resolves to a directory is left to
+/// the loader's own errors.
+pub(crate) fn escaping_records(
+    repo_root: &Path,
+    paths: &[PathBuf],
+    config: &Config,
+) -> Vec<urzua_core::rules::EscapingRecord> {
+    let Ok(root) = repo_root.canonicalize() else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for rel in paths {
+        if !is_governed(config, rel) {
+            continue;
+        }
+        let Ok(real) = repo_root.join(rel).canonicalize() else {
+            continue;
+        };
+        if real.is_dir() || real == root.join(rel) {
+            continue;
+        }
+        let shown = real
+            .strip_prefix(&root)
+            .map_or_else(|_| real.display().to_string(), |r| r.display().to_string());
+        out.push(urzua_core::rules::EscapingRecord {
+            path: rel.clone(),
+            reason: format!(
+                "that points to {shown} instead of being a regular file at its own path (a record is read where it is tracked, never through a link)"
+            ),
+        });
+    }
+    out
+}
+
 pub(crate) fn load_records(
     repo_root: &Path,
     discovered: &[PathBuf],

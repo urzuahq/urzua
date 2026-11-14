@@ -1,0 +1,20 @@
+id: a-record-symlinked-out-of-its-directory-is-refused
+corpus: corpus-d
+invocation: [check]
+bugs: [BUG-195]
+# A tracked record that is a symlink to a file outside its type's directory is
+# never read. The finding is on for every configuration (corpus-d declares no
+# entry for the rule) and names the link; with the rule written `off` the
+# configuration does not load.
+commits:
+  - write:
+      elsewhere.md: "---\nStatus: Accepted\n---\n# 99: Elsewhere\n"
+    symlink:
+      records/ADR-0099-link.md: ../elsewhere.md
+expect_exit: 1
+expect_findings:
+  - rule: identity.record-symlink-escapes
+    file: records/ADR-0099-link.md
+    severity: error
+    message_contains: "regular file at its own path"
+    no_suggested_action: true

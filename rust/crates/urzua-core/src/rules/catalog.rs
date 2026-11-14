@@ -7,6 +7,7 @@ pub const RULE_TYPE_DIR_MATCHES_NOTHING: &str = "type.dir-matches-nothing";
 pub const RULE_TYPE_RECORD_OUTSIDE_DECLARED_DIR: &str = "type.record-outside-declared-dir";
 pub const RULE_HEADER_SCAFFOLD_MISMATCH: &str = "header.scaffold-mismatch";
 pub const RULE_IDENTITY_COLLISION: &str = "identity.collision";
+pub const RULE_IDENTITY_RECORD_SYMLINK_ESCAPES: &str = "identity.record-symlink-escapes";
 pub const RULE_IDENTITY_OPEN_PR_COLLISION: &str = "identity.open-pr-collision";
 pub const RULE_CONFIG_POINTER_DECLARATION_MISSING: &str = "config.pointer-declaration-missing";
 pub const RULE_CONFIG_POINTER_FIELD_NOT_KNOWN: &str = "config.pointer-field-not-known";
