@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5FRHCY6MQ6VB26JKFC
-Version: '0.23'
+Version: '0.24'
 Date: 2026-09-08
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:.urzua/config.yaml@sha256:0a95e3c395a6330ad120f9a00cdbf77ebd414633f8521f6a91c064d0f24a5710, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs@sha256:dc29b51bde5a2ba79d95c5e0a09466a54e816e8e2cc4a86a80e4459be477a447
+Realized-by: code:.urzua/config.yaml@sha256:07c90d29e11fe82096e4d8c75730b313d3ddcdcec997268f7ddb045ccdc054cf, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs@sha256:dc29b51bde5a2ba79d95c5e0a09466a54e816e8e2cc4a86a80e4459be477a447
 Author: beauwilliams
 Subject: 'The `rfc` record type -- schema, required fields, and lifecycle for proposals.'
 Parent: —
@@ -136,3 +136,5 @@ ADR's own `Deciders` field records.
 > | 2026-11-13 | Bumped to `0.22`. Evidence pins re-baselined for this change (the `Re-baselined` row above); the specification text is unchanged. **Why:** a revision-log entry that adds a structural change bumps `Version`. | **structural** |
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` 08ab457062ac -> 0a95e3c395a6. Reason: Pinned file(s) changed by the symlinked-record refusal: config.yaml: declares identity.record-symlink-escapes: error. The record's claim is unaffected by these changes. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-14 | Bumped to `0.23`. A pinned evidence file was re-baselined for the symlinked-record refusal (`ADR-89` amendment of 2026-11-14); this spec's text is unchanged. | **structural** |
+> | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` 0a95e3c395a6 -> 07c90d29e11f. Reason: Pinned file(s) changed by the engine review fixes: config.yaml: declares embodiment.pin-stale: warn. The record's claim is unaffected by these changes. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-14 | Bumped to `0.24`. A pinned evidence file was re-baselined for the engine review fixes; this spec's text is unchanged. | **structural** |

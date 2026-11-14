@@ -48,6 +48,17 @@
       "status": "ran"
     },
     {
+      "rule": "embodiment.pin-stale",
+      "population": {
+        "unit": "record",
+        "eligible": 13,
+        "examined": 2,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
       "rule": "embodiment.locator-exists",
       "population": {
         "unit": "field",

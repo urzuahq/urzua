@@ -2,7 +2,7 @@
 Stable-Id: 01M7A8QGWXMR8WYFDC36XW8XEF
 Status: Draft
 Date: 2026-11-13
-Version: '0.4'
+Version: '0.5'
 Author: beauwilliams
 Subject: '`urzua mcp` -- a read-only MCP server over stdio that serves the reports urzua already builds.'
 Implements: ADR-99
@@ -24,7 +24,8 @@ urzua mcp [--root DIR] [--config FILE]
 ```
 
 - The process serves until stdin closes, then exits `0`. It exits `2` when it could not start (no configuration, an unreadable
-  configuration); the failure is one JSON notice on stderr and nothing is written to stdout.
+  configuration, a usage error such as an unknown flag or `--as-of`); the failure is one JSON notice on stderr and
+  nothing is written to stdout.
 - The root is `--root` when given, else the repository holding the directory the server was started in, found as every
   command finds it. The engine reads no agent-vendor environment variable; a client that starts servers from another
   directory passes `--root`.
@@ -146,3 +147,4 @@ The server is registered by a person in a user-owned file, with the snippet docu
 > | 2026-11-13 | Bumped to `0.2`. `urzua mcp` is built with `urzua_check` and `urzua_list_records` (`rust/crates/urzua-mcp`, `commands/mcp.rs`); the other three tools, the harness interaction tests and the registration docs follow. A listing leaves out `sections` and `preamble` as well as `raw_text`; `paths` may not leave the repository. **Why:** the server core of `MILE-29`. | **substantive** |
 > | 2026-11-13 | Bumped to `0.3`. A request line is capped at 1 MiB and a non-UTF-8 line is answered, both without ending the session; `id` null is refused and a message without an `id` never runs a tool; the read-only guarantee no longer says the server spawns no process (it runs read-only `git`, which may refresh its own index) and states what the source scan covers. **Why:** the review of the server core. | **substantive** |
 > | 2026-11-13 | Bumped to `0.4`. `urzua_show_record`, `urzua_get_findings_for_path` and `urzua_get_graph` are built; the last two are renamed from `urzua_findings_for_path` and `urzua_graph` so each name carries a read word the editor hook recognises; the harness interaction tests and the registration documentation exist. **Why:** the second change of `MILE-29`; the hook test showed the first names were judged as edits. | **substantive** |
+> | 2026-11-14 | Bumped to `0.5`. A usage error of `urzua mcp` (an unknown flag or argument, `--as-of`) is one JSON object on stderr and nothing on stdout, as the command section already said. **Why:** an external review found the refusal printed on stdout, where a client expects frames only. | **substantive** |

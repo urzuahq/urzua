@@ -804,6 +804,9 @@ rules:
   section.shape: off
   diff.source-and-records-mixed: off
   embodiment.locator-exists: error
+  # A pinned file that changed since it was pinned, on any record (maintainer
+  # decision, 2026-11-14: on by default; declared here like every shipped rule).
+  embodiment.pin-stale: warn
   # Advisory (MILE-46, ADR-87): several ADRs citing one rule module is expected now that
   # the rule engine is split into modules (MILE-131), so the nudge is reported and counted
   # but never fails `fail_on: warning`. `scope: changed` (ADR-90) keeps it to the moment a

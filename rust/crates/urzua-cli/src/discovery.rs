@@ -1051,7 +1051,7 @@ impl<'a> DriftJudge<'a> {
         let audit_time = self
             .audit_field
             .and_then(|f| record.header.get(f))
-            .and_then(|v| rules::date_unix(v).ok());
+            .and_then(|v| rules::audit_date_at(v, self.now_unix).ok());
         self.acknowledged_until = self.acknowledged_through(record);
         for ((_, realized_by_value), reference) in claims.iter().zip(references) {
             let reference_commit = match reference {

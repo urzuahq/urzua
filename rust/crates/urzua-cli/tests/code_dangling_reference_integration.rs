@@ -459,3 +459,33 @@ fn a_string_literal_after_a_leader_and_a_doc_example_are_read_and_the_marker_exc
     assert_eq!(lines, vec![1, 2, 4], "{}", report(&out));
     assert_eq!(population(&out)["excused_lines"], 1);
 }
+
+#[test]
+fn a_source_file_that_is_not_utf8_is_named_in_a_warning_notice_not_only_counted() {
+    let dir = repo("non-utf8", &rule(""), &[("src/lib.rs", "// per ADR-2\n")]);
+    // A Latin-1 byte makes the file invalid UTF-8: it cannot be read for citations.
+    std::fs::write(dir.join("src/legacy.rs"), b"// caf\xe9 BUG-9 was deleted\n").unwrap();
+    git(&dir, &["add", "-A"]);
+    git(&dir, &["commit", "-q", "-m", "legacy"]);
+    let out = run_urzua(&dir, &["check"]);
+    let p = population(&out);
+    assert_eq!(p["unreadable"], 1, "{p}");
+    let notices = report(&out)["notices"].as_array().unwrap().clone();
+    let notice = notices
+        .iter()
+        .find(|n| {
+            n["subject"] == "code.dangling-bug-reference"
+                && n["message"].as_str().unwrap().contains("UTF-8")
+        })
+        .unwrap_or_else(|| panic!("no notice: {}", report(&out)));
+    assert_eq!(notice["severity"], "warning", "{notice}");
+    assert!(
+        notice["message"]
+            .as_str()
+            .unwrap()
+            .contains("src/legacy.rs"),
+        "{notice}"
+    );
+    // The readable file is still judged.
+    assert_eq!(p["examined"], 1, "{p}");
+}

@@ -913,3 +913,53 @@ fn check_tool_carries_a_runnable_next_action_when_a_finding_offers_one() {
         "{report}"
     );
 }
+
+/// Runs `urzua <args>` with an empty stdin and returns the exit code, stdout and
+/// stderr, for the invocations that never start the server.
+fn refused(dir: &Path, args: &[&str]) -> (Option<i32>, String, String) {
+    let out = common::urzua()
+        .args(args)
+        .current_dir(dir)
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    (
+        out.status.code(),
+        String::from_utf8_lossy(&out.stdout).into_owned(),
+        String::from_utf8_lossy(&out.stderr).into_owned(),
+    )
+}
+
+#[test]
+fn a_usage_error_of_urzua_mcp_is_json_on_stderr_and_nothing_on_stdout() {
+    // SPEC-26: stdout carries frames only; a start failure is one JSON object on stderr.
+    let dir = fixture("usage-errors");
+    for args in [
+        &["mcp", "--bogus"][..],
+        &["--bogus", "mcp"][..],
+        &["mcp", "extra-positional"][..],
+        &["--config", ".urzua/config.yaml", "mcp", "--nope"][..],
+        &["--as-of", "2026-01-01", "mcp"][..],
+        &["--as-of=not-a-date", "mcp"][..],
+    ] {
+        let (code, stdout, stderr) = refused(&dir, args);
+        assert_eq!(code, Some(2), "{args:?}: {stderr}");
+        assert_eq!(stdout, "", "{args:?} wrote to stdout: {stdout}");
+        let report: Value = serde_json::from_str(stderr.trim())
+            .unwrap_or_else(|e| panic!("{args:?}: stderr is not one JSON object ({e}): {stderr}"));
+        assert_eq!(report["status"], "not-run", "{args:?}: {report}");
+        assert!(
+            report["error"].as_str().is_some_and(|e| !e.is_empty()),
+            "{report}"
+        );
+    }
+}
+
+#[test]
+fn a_usage_error_of_another_command_still_prints_its_report_on_stdout() {
+    let dir = fixture("usage-errors-other");
+    let (code, stdout, _) = refused(&dir, &["check", "--bogus"]);
+    assert_eq!(code, Some(2));
+    let report: Value = serde_json::from_str(stdout.trim()).unwrap();
+    assert_eq!(report["status"], "not-run", "{report}");
+}

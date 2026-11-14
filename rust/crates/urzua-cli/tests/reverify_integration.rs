@@ -839,3 +839,26 @@ fn reverify_discloses_the_lines_a_back_pointer_ignore_marker_excused() {
         "{parsed}"
     );
 }
+
+#[test]
+fn apply_renews_a_record_that_starts_with_a_byte_order_mark() {
+    // The loader reads a record with a leading byte-order mark, so `--apply`
+    // must write the anchor into its front matter rather than refuse it.
+    let dir = fixture("bom", &config(RULE, ""), 1);
+    let p1 = path(1);
+    std::fs::write(
+        dir.join(&p1),
+        format!("\u{feff}{}", record(1, UNPINNED, "")),
+    )
+    .unwrap();
+    commit_all(&dir, 40);
+    let out = run_urzua(
+        &dir,
+        &apply_args(&p1, "Read src/a.rs and t.rs; both still meet it."),
+    );
+    let parsed = json(&out);
+    assert_eq!(parsed["status"], "applied", "{parsed} {out:?}");
+    let text = read(&dir, &p1);
+    assert!(text.starts_with('\u{feff}'), "the mark is kept: {text:?}");
+    assert!(stamped_today(&text), "{text}");
+}

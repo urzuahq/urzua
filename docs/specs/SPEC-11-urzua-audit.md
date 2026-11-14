@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5C6BXVCRM0Y2JS1DT5
-Version: '0.15'
+Version: '0.16'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/commands/audit.rs@sha256:7f54effa99c27c74c39869d05b39f69b13b2c030c24d2bd56db72fde59e86817, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs@sha256:dc29b51bde5a2ba79d95c5e0a09466a54e816e8e2cc4a86a80e4459be477a447, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:bc2e870defc676cbc3c053ab78b577276cf7696b10c6ef586be3ee37548abf64
+Realized-by: code:rust/crates/urzua-cli/src/commands/audit.rs@sha256:7f54effa99c27c74c39869d05b39f69b13b2c030c24d2bd56db72fde59e86817, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs@sha256:dc29b51bde5a2ba79d95c5e0a09466a54e816e8e2cc4a86a80e4459be477a447, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:b634f975169a99a3298a4e45d0a0dc0c900bb8d634223fd046e943e83392beb0
 Author: beauwilliams
 Subject: '`urzua audit` -- a deprecated alias of `urzua check` over the configured rules, with no rule set of its own.'
 Implements: ADR-30
@@ -90,3 +90,5 @@ warning. The only difference between an `audit` report and the `check` report is
 > | 2026-11-13 | Bumped to `0.14`. Evidence pins re-baselined for this change (the `Re-baselined` row above); the specification text is unchanged. **Why:** a revision-log entry that adds a structural change bumps `Version`. | **structural** |
 > | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/check_integration.rs` a60c9c61b94c -> bc2e870defc6. Reason: Read the diff of each re-pinned file against main and the claim still holds. check_integration.rs: the ADR-0001 waiver fixture's H1 gains the citation-fixture marker text and every_header_reading_rule_reports_a_header_none_type_as_out_of_scope declares the new rule's required options; no assertion changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-13 | Bumped to `0.15`. Evidence pins re-baselined for this change (the `Re-baselined` row above); the specification text is unchanged. **Why:** a revision-log entry that adds a structural change bumps `Version`. | **structural** |
+> | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/check_integration.rs` bc2e870defc6 -> b634f975169a. Reason: Pinned file(s) changed by the engine review fixes: check_integration.rs: the fix fixtures now create the file their record cites. The record's claim is unaffected by these changes. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-14 | Bumped to `0.16`. A pinned evidence file was re-baselined for the engine review fixes; this spec's text is unchanged. | **structural** |

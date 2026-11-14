@@ -823,13 +823,41 @@ fn command_name(command: &Command) -> &'static str {
 /// Parses the command line and fixes the evaluation date; the error is the
 /// exit a refused invocation has already printed.
 fn parse_cli() -> Result<Cli, ExitCode> {
+    // `urzua mcp` serves JSON-RPC frames on stdout, so a refused invocation of it
+    // is one JSON object on stderr and nothing on stdout (`SPEC-26`).
+    let serving = names_mcp(std::env::args().skip(1));
+    let refuse = |message: String| {
+        if serving {
+            commands::mcp::could_not_start(&message)
+        } else {
+            emit(&CouldNotRun::from(message))
+        }
+    };
     let cli = match Cli::try_parse() {
         Ok(cli) => cli,
         Err(e) if matches!(e.kind(), ErrorKind::DisplayHelp | ErrorKind::DisplayVersion) => {
             e.exit()
         }
-        Err(e) => return Err(emit(&CouldNotRun::from(e.to_string()))),
+        Err(e) => return Err(refuse(e.to_string())),
     };
-    fix_evaluation_date(&cli).map_err(|message| emit(&CouldNotRun::from(message)))?;
+    fix_evaluation_date(&cli).map_err(refuse)?;
     Ok(cli)
+}
+
+/// Whether the first word of the command line that is not a flag (or a flag's
+/// value) is `mcp`: the subcommand, read before clap has accepted the line, so
+/// a line clap refuses can still be answered the way `mcp` answers.
+fn names_mcp(args: impl Iterator<Item = String>) -> bool {
+    let mut args = args;
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--config" | "--as-of" => {
+                args.next();
+            }
+            "--" => return false,
+            flag if flag.starts_with('-') => {}
+            word => return word == "mcp",
+        }
+    }
+    false
 }

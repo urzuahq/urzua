@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5QF32RM76Y50THPQEG
-Version: '0.29'
+Version: '0.30'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-core/src/status_model.rs@sha256:31006f883b8cbd8da18dae10dfe146e2ed0e0963008224f63c60de0cdae73f23, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs@sha256:dc29b51bde5a2ba79d95c5e0a09466a54e816e8e2cc4a86a80e4459be477a447, test:rust/crates/urzua-cli/tests/status_delivery_integration.rs@sha256:3e956fb6227ce9dd6f5fcc614a871d8c20ace9a4ba0169eaf3fee431b4e176a9
+Realized-by: code:rust/crates/urzua-core/src/status_model.rs@sha256:31006f883b8cbd8da18dae10dfe146e2ed0e0963008224f63c60de0cdae73f23, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs@sha256:dc29b51bde5a2ba79d95c5e0a09466a54e816e8e2cc4a86a80e4459be477a447, test:rust/crates/urzua-cli/tests/status_delivery_integration.rs@sha256:e58c438b6b9119889c8e2ef1024487a5a9beffc2469b3ba18098f7fc123567fd
 Author: beauwilliams
 Subject: 'The `milestone` record type -- this project''s own planned-work backlog as a checkable corpus.'
 Implements: ADR-34
@@ -342,3 +342,5 @@ to another record — nothing to check for resolution, no cycle risk, no new rul
 > | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: unspecified): re-pinned `rust/crates/urzua-core/src/status_model.rs` 00ed614a24d4 -> 31006f883b8c. Reason: Read the diff of the pinned file since the previous pin. status_model.rs: only one unit test was added (a_type_with_no_values_retains_no_claim); no code outside the test module changed. The claim this record evidences still holds. **Why:** the pinned evidence changed and the attesting actor re-verified that the claim still holds. | **structural** |
 > | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/record_types_own_config_integration.rs` 44fea1626a54 -> dc29b51bde5a. Reason: Read the diff of each pinned test file since the previous pin. The repo() fixture helper now also copies the repository's .urzua/templates into the fixture, because the own config declares sections.order from templates; no assertion or test body changed; the claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-13 | Bumped to `0.29`. Evidence pins re-baselined for this change (the `Re-baselined` row above); the specification text is unchanged. **Why:** a revision-log entry that adds a structural change bumps `Version`. | **structural** |
+> | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/status_delivery_integration.rs` 3e956fb6227c -> e58c438b6b91. Reason: Pinned file(s) changed by the engine review fixes: status_delivery_integration.rs: a test cites files that exist. The record's claim is unaffected by these changes. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-14 | Bumped to `0.30`. A pinned evidence file was re-baselined for the engine review fixes; this spec's text is unchanged. | **structural** |

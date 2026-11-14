@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5Q0XVK27P5T8FN72BN
-Version: '0.48'
+Version: '0.49'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/commands/fix.rs@sha256:5d6f30edea8f0eac7caa98a0f3a136aad77b5ebf4e493d7fe9a22cfb9492b6b5, code:rust/crates/urzua-core/src/fix.rs@sha256:b5bfb2aa1386ccffba13be9f41ccdeffd829b864f682467c858ccde77d37c95c, test:rust/crates/urzua-cli/tests/fix_paths_integration.rs@sha256:73cb06a1782f02abeaf6c0795632ed1d1939633d72f67033247120656c6927d2, test:rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs@sha256:27c91b75ad614811aa87db203bafedcadf05c64de434957d0859e2af55659bf0, test:rust/crates/urzua-cli/tests/fix_drift_integration.rs@sha256:ff69343ca324400bde79c266372f9a213728d4d4ef8202beca6e12e54aa35352
+Realized-by: code:rust/crates/urzua-cli/src/commands/fix.rs@sha256:275bd2ab6f1639cc7eb7c05989a55d086c80a075b5ad9ffd8812af1d30e24116, code:rust/crates/urzua-core/src/fix.rs@sha256:4a03c290767b1f296c1561ecf2f1dfde2efeb42a21a4b0ffaf3036813b6a5c1d, test:rust/crates/urzua-cli/tests/fix_paths_integration.rs@sha256:73cb06a1782f02abeaf6c0795632ed1d1939633d72f67033247120656c6927d2, test:rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs@sha256:97cb9a46d8886622fde83d0eaf43968e3e096f55aa40b5be4a260371c54c1faf, test:rust/crates/urzua-cli/tests/fix_drift_integration.rs@sha256:ff69343ca324400bde79c266372f9a213728d4d4ef8202beca6e12e54aa35352
 Author: beauwilliams
 Subject: '`urzua fix` -- detecting and applying Embodiment corrections computed from evidence.'
 Implements: ADR-15, ADR-18, ADR-19, ADR-20
@@ -280,12 +280,13 @@ the same `PATHS` scoping.
 - **Detect** (`--rebaseline`, read-only): `rebaselines` lists each record with a pinned locator whose
   current content hash differs, as `record`, `field`, `line` and `pins`, each pin carrying `locator`,
   `recorded_hash` and `current_hash`. Status is `repairs-available` while any is listed. A locator
-  whose file cannot be read is not a stale pin (`embodiment.locator-exists` reports it).
+  whose file cannot be read is not a stale pin (`embodiment.locator-exists` reports it); `check` reports the same stale pins on every record, with no `--rebaseline`, as `embodiment.pin-stale` (`SPEC-2`).
 - **Apply** (`--rebaseline --apply`): the gates of Tier 1 apply hold unchanged (`--ids` or `--force`,
   never implied; an `--ids` entry matching nothing fails; identity as above; lock; re-read before
   write; a missing revision log refuses that record). `--reason <text>` is required too: one line
   without `|` or a line break (`\n` or `\r`), because an attestation with no reason is the rubber stamp
-  `RFC-2` set out to prevent. The pin hashes are computed after the lock is taken, so evidence edited
+  `RFC-2` set out to prevent. The reason must also say something a reviewer can check: at least 3 words (runs of
+  letters or digits) and 12 characters, so `x`, `ok` and `...` are refused (exit 2, nothing written). The pin hashes are computed after the lock is taken, so evidence edited
   while the command started is pinned as it is then.
 - **What is written.** For each chosen record, every stale pin on the `Realized-by` line becomes the
   current hash and nothing else on the line, in the file or in any other record, moves. One
@@ -521,3 +522,5 @@ asserted by test, not assumed by convention.
 > | 2026-11-09 | Bumped to `0.46`. `reverify` under `drift: acknowledge` does not refuse a record whose only drift is in acknowledging categories because `embodiment.consistency` reports it past `drift_grace_days`, and the acknowledging `Re-verified` row dates the acknowledgement for unpinned locators. **Why:** `ADR-97` drift-policy amendment, consistency fix: `acknowledge` worked only inside the grace window. | **substantive** |
 > | 2026-11-09 | Bumped to `0.47`. The acknowledging `Re-verified` row names each acknowledged locator and clears only those, the date has day granularity, and only a row in the tool's exact shape acknowledges anything. **Why:** `ADR-97` item 6: a row cleared every unpinned locator of its category, and any text containing the words cleared them. | **substantive** |
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: unspecified): re-pinned `rust/crates/urzua-cli/src/commands/fix.rs` 9e52be4749a2 -> 5d6f30edea8f. Reason: merge of origin/main into the MILE-207 branch: the pinned files differ from main's pins only by this branch's path-scoped source read (scoped sources in discovery.rs, check.rs, back_pointer.rs, runner.rs, table.rs, report.rs, fix.rs) and the 'not judged' notice wording; each record's own claim is untouched **Why:** the pinned evidence changed and the attesting actor re-verified that the claim still holds. | **structural** |
+> | 2026-11-14 | Bumped to `0.49`. `fix` (Tier 1 `Embodiment` and the `Status` repair) counts only the `Realized-by` locators that resolve (the test `embodiment.locator-exists` applies: tracked, present, a scope that resolves): a locator naming a file that is not there is no evidence, so it neither lifts a computed tier nor is written as `Verified`, `Implemented` or `Done`; a repair that lowers a claim names the locators it did not count in its `evidence`. `fix --rebaseline --apply` refuses a `--reason` of fewer than 3 words or 12 characters. **Why:** an external review found `fix --apply` writing `Verified` from a locator to a file that did not exist. | **substantive** |
+> | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/fix.rs` 5d6f30edea8f -> 275bd2ab6f16, `rust/crates/urzua-core/src/fix.rs` b5bfb2aa1386 -> 4a03c290767b, `rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs` 27c91b75ad61 -> 97cb9a46d888. Reason: Pinned file(s) changed by the engine review fixes: cli fix.rs: fix --rebaseline --apply refuses a reason under 3 words or 12 characters (reason_says_something); core fix.rs: Embodiment and Status count only locators that resolve, and detect_rebaselines puts a header-less type out of scope; fix_rebaseline_integration.rs: reasons are now real sentences and a test covers a thin reason. The record's claim is unaffected by these changes. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |

@@ -101,6 +101,91 @@ pub(crate) fn compute_embodiment<'a>(
     })
 }
 
+/// [`parse_realized_by`] over only the locators that resolve: each entry is held
+/// to [`locator_defect`], the test `embodiment.locator-exists` applies, so a
+/// locator naming a file that is not there is no evidence. Returns the
+/// resolving ones and the paths that were left out. A tier computed from the
+/// first never rests on a file that does not exist.
+pub(crate) fn resolving_realized_by(
+    value: &str,
+    field: &str,
+    env: &LocatorEnv<'_>,
+) -> (RealizedBy, Vec<String>) {
+    let mut result = RealizedBy::default();
+    let mut unresolved = Vec::new();
+    for entry in crate::locator::realized_by_locators(value) {
+        let path = match &entry.parsed {
+            Ok(l) => l.path.clone(),
+            Err(_) => normalize_locator(&entry.raw),
+        };
+        if locator_defect(&entry, field, env).is_some() {
+            unresolved.push(path);
+            continue;
+        }
+        match entry.category.as_str() {
+            "spec" => result.spec.push(path),
+            "code" => result.code.push(path),
+            "test" => result.test.push(path),
+            _ => {}
+        }
+    }
+    (result, unresolved)
+}
+
+/// `embodiment.pin-stale`: a record whose `@sha256` pinned evidence no longer
+/// hashes to its pin. Judged on every record that carries evidence, not only
+/// those that state an `Embodiment`, so a bug or a milestone that names code or a
+/// test is held to its pin as an ADR is. A pin on a file that cannot be read is
+/// not a confirmed mismatch (`embodiment.locator-exists` reports it). One finding
+/// per record, naming each stale pin; its action is the re-pin that attests it.
+pub fn embodiment_pin_stale(scan: &StalePinScan) -> (RuleExecution, Vec<Finding>) {
+    const RULE_ID: &str = RULE_EMBODIMENT_PIN_STALE;
+    let Some(population) = scan.population else {
+        return not_applicable(RULE_ID);
+    };
+    let findings = scan
+        .found
+        .iter()
+        .map(|rebaseline| {
+            let pins: Vec<String> = rebaseline
+                .pins
+                .iter()
+                .map(|p| {
+                    format!(
+                        "{} (pinned {}, now {})",
+                        p.locator,
+                        &p.recorded_hash[..p.recorded_hash.len().min(12)],
+                        &p.current_hash[..p.current_hash.len().min(12)]
+                    )
+                })
+                .collect();
+            Finding::new(
+                RULE_ID,
+                FindingSeverity::Warning,
+                rebaseline.record.clone(),
+                ActionSource::new("pin-stale").argv([
+                    "urzua",
+                    "fix",
+                    "--rebaseline",
+                    "--apply",
+                    "--ids",
+                    &rebaseline.record.display().to_string(),
+                ]),
+                format!(
+                    "{} pinned evidence changed since it was pinned: {}; read the change, then re-pin with `urzua fix --rebaseline --apply --ids {} --reason <why the evidence still holds>`",
+                    rebaseline.pins.len(),
+                    pins.join(", "),
+                    rebaseline.record.display()
+                ),
+            )
+        })
+        .collect();
+    (
+        RuleExecution::ran(RULE_ID, population, Vec::new()),
+        findings,
+    )
+}
+
 /// The field name `record`'s own type uses for `role` (`RFC-42`/`ADR-61`),
 /// or the role's pre-`RFC-42` default if the type isn't configured at all.
 pub fn relation_field_name<'a>(
@@ -566,6 +651,26 @@ pub fn embodiment_consistency(
     back_pointed: &BackPointerEvidence,
     claim_age_days: &HashMap<PathBuf, u64>,
 ) -> (RuleExecution, Vec<Finding>) {
+    embodiment_consistency_at(
+        records,
+        config,
+        (drifted, fresh_drift),
+        back_pointed,
+        claim_age_days,
+        i64::MAX,
+    )
+}
+
+/// [`embodiment_consistency`] as of `now_unix`, the clock a last-audit date is
+/// judged against: a date after it is reported and ignored.
+pub fn embodiment_consistency_at(
+    records: &[Record],
+    config: &Config,
+    (drifted, fresh_drift): (&HashSet<PathBuf>, &HashSet<PathBuf>),
+    back_pointed: &BackPointerEvidence,
+    claim_age_days: &HashMap<PathBuf, u64>,
+    now_unix: i64,
+) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_EMBODIMENT_CONSISTENCY;
     let mut findings = Vec::new();
     let judge = ConsistencyJudge {
@@ -581,6 +686,7 @@ pub fn embodiment_consistency(
             .get(RULE_ID)
             .and_then(|s| s.drift_audit_field.as_deref())
             .map(str::trim),
+        now_unix,
     };
 
     // The candidate is the *pair*: the rule needs both fields, so a record
@@ -633,6 +739,7 @@ pub fn held_back_drift_that_would_report(
         max_age: None,
         sticky: sticky_states(config),
         audit_field: None,
+        now_unix: i64::MAX,
     };
     declared_slots_for_roles(
         records,
@@ -670,6 +777,8 @@ struct ConsistencyJudge<'a> {
     max_age: Option<u32>,
     sticky: HashSet<&'a str>,
     audit_field: Option<&'a str>,
+    /// The clock a last-audit date is judged against.
+    now_unix: i64,
 }
 
 impl ConsistencyJudge<'_> {
@@ -749,7 +858,7 @@ impl ConsistencyJudge<'_> {
     fn audit_date_finding(&self, record: &Record) -> Option<Finding> {
         let field = self.audit_field?;
         let value = declared_value(record, field).ok()?;
-        let problem = date_unix(value).err()?;
+        let problem = audit_date_at(value, self.now_unix).err()?;
         Some(Finding::new(
             RULE_EMBODIMENT_CONSISTENCY,
             FindingSeverity::Warning,

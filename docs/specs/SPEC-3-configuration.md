@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.143'
+Version: '0.144'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:00380806bfa0efa2b631ea3dad824e1f785b0237f7dda5302cdf1097f4da5421, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:d6dcb432d05a03f8593ee899b9427365680ad3f24b158d98cd0964d2b15d78b9, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:3c8aa671582772499ab7345cdbfb5a4dc2c50462882851fb20f853992acfd57c
@@ -355,7 +355,8 @@ Two details carry weight:
     `section.required` reports a missing section; `section.shape` checks the shape of a present one.
     Both are opt-in and a type that declares no `required` has nothing eligible. Their population
     unit is `section`: one `(record, required section)` slot, so a record missing a section is
-    counted. A heading inside a fenced code block is not a section. A requirement is at the `##`
+    counted. A heading inside a fenced code block or an HTML comment (`<!-- ... -->`, on one line or
+    several) is not a section. A requirement is at the `##`
     level unless it declares otherwise (see `level` and `under`).
     - `y-statement` reads one block and requires `In the context of`, `facing`, `we decided`,
       `to achieve` and `accepting` in it, matched case-insensitively on word boundaries (the phrase
@@ -1617,10 +1618,11 @@ A repository declares which rules run and at what level. A rule that is not name
 (`ADR-53`), and appears in `rules_executed` as `not-enabled` rather than being omitted (`ADR-7`) --
 "off" and "ran clean" must stay distinguishable.
 
-One rule runs without being named: `identity.record-symlink-escapes` is on for every configuration at `error`
-(`SPEC-2`, "Rules that are on by default"). A declared level other than `off` stands, and declaring it `off` is a
-config load error naming the rule, so a refusal cannot be switched off in silence. `urzua init` writes no entry
-for it.
+Two rules run without being named (`SPEC-2`, "Rules that are on by default"). `identity.record-symlink-escapes` is
+on for every configuration at `error`; declaring it `off` is a config load error naming the rule, so a refusal
+cannot be switched off in silence. `embodiment.pin-stale` is on for every configuration at `warn` (maintainer
+decision, 2026-11-14: on by default); a repository declares another level, or `off`, under `rules:`. A declared
+level other than `off` stands for both. `urzua init` writes no entry for either.
 
 ```yaml
 rules:
@@ -1689,8 +1691,9 @@ rules:
   that carries a `YYYY-MM-DD` date in that field is held back while that date is newer than the
   window, in place of the cited file's last commit, so the window counts from the day the evidence
   was last audited. A record without the field, or with a blank one, counts from the file's last
-  commit as before; a malformed date is a warning from `embodiment.consistency` naming the value
-  and falls back the same way. A blank name, an undeclared field, or the option without
+  commit as before; a malformed date, or one after today (UTC), is a warning from
+  `embodiment.consistency` naming the value and falls back the same way (a date written forward would hold
+  drift back for ever). A blank name, an undeclared field, or the option without
   `drift_grace_days` is a load error.
 - `claim_max_age_days` (whole days): a warning when the commit that last touched the record's
   `Realized-by` line is older than the limit, whether or not the evidence changed. Age is counted in
@@ -2580,3 +2583,4 @@ proves this configuration produces the three findings.
 > | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` ad8c3554a542 -> d07f1b749110, `rust/crates/urzua-cli/tests/own_config_integration.rs` e60116ae0a70 -> d6dcb432d05a. Reason: Read the diff of each re-pinned file against main and the claim still holds. own_config_integration.rs: adds the test the_own_config_reports_a_dangling_citation_in_rust_and_scripts_and_nothing_else; no existing test changed; config.rs: RuleSetting gains the optional extensions field, RULE_OPTIONS gains the extensions entry, validate_extensions refuses an entry that is not a bare extension, the optional code_comment_prefixes field with validate_code_comment_prefixes and its applicability check, validate_ignore_markers applies the generic marker guard to code.dangling-bug-reference, and the external_ids doc comment names PREFIX-LOW..HIGH instead of a sample range; no existing option, parse or default changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-14 | Bumped to `0.143`. Documents that `identity.record-symlink-escapes` is on for every configuration and that declaring it `off` is a load error. **Why:** `ADR-89` amendment of 2026-11-14. | **substantive** |
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` d07f1b749110 -> 00380806bfa0. Reason: Pinned file(s) changed by the symlinked-record refusal: config.rs: a rule that cannot be turned off, declared `off`, is a load error (RuleCannotBeOff, validate_default_on_rules). The record's claim is unaffected by these changes. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-14 | Bumped to `0.144`. Documents that `embodiment.pin-stale` is on by default (maintainer decision, 2026-11-14: on by default), that a last-audit date after today is reported and ignored, and that a heading inside an HTML comment is not a section. **Why:** external review items 1.2, 1.5 and 1.7. | **substantive** |

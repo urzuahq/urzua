@@ -89,9 +89,12 @@ backlog, and moves to `warning` when it is clean.
 ## The stale-pin step
 
 If your records pin evidence with `@sha256:` locators (see [Waivers and
-drift](waivers-and-drift.md)), add a step that fails when any pin is stale. A stale pin also shows up
-as drift in `check`, but this step names each stale pin and the commands to fix it, and fails on a
-pin that cannot be read at all.
+drift](waivers-and-drift.md)), add a step that fails when any pin is stale. `check` already reports a
+stale pin on any record, whatever the record states, as the warning `embodiment.pin-stale`, which is
+on by default (a repository sets another level, or `off`, under `rules:`); a record that states an
+`Embodiment` also shows drift. A warning blocks only under `fail_on: warning`, so this step is how
+a repository with the default `fail_on` makes a stale pin fail the job. It names each stale pin and
+the commands to fix it, and fails on a pin that cannot be read at all.
 
 ```yaml
       - name: no stale evidence pins

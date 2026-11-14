@@ -175,6 +175,12 @@ Change a pinned file and `check` fails the record:
 stated Embodiment 'Verified' disagrees with 'Drift detected', computed from Realized-by
 ```
 
+A record that states no `Embodiment`, such as a bug or a milestone that pins code, is reported by
+`embodiment.pin-stale` instead, a warning that is on by default for every configuration (set another
+level or `off` under `rules:`) and whose suggested action is the re-pin below. When you upgrade to a
+build that has it, a repository whose pins went stale unseen shows those warnings at once; clear them
+with the re-pin below, or waive a record you have chosen to leave.
+
 Read the diff of the changed file, decide whether the claim still holds, and if it does re-pin:
 
 ```sh

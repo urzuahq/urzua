@@ -83,4 +83,5 @@ pub const RULE_EMBODIMENT_LOCATOR_ON_BACK_POINTER_PATH: &str =
 pub const RULE_CODE_DANGLING_BUG_REFERENCE: &str = "code.dangling-bug-reference";
 
 pub const RULE_EMBODIMENT_CLAIM_EXPIRED: &str = "embodiment.claim-expired";
+pub const RULE_EMBODIMENT_PIN_STALE: &str = "embodiment.pin-stale";
 pub const RULE_EMBODIMENT_CLAIM_RENEWAL_UNATTESTED: &str = "embodiment.claim-renewal-unattested";

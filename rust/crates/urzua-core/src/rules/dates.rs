@@ -45,6 +45,18 @@ pub fn date_unix(value: &str) -> Result<i64, &'static str> {
     Ok((era * 146_097 + doe - 719_468) * 86_400)
 }
 
+/// A last-audit date as `drift_audit_field` reads it: a real date that is not
+/// after `now_unix`'s UTC day. A date written forward would put the end of the
+/// grace window out of reach and hold drift back for ever, so it is reported and
+/// ignored, as a malformed one is (`MILE-166`).
+pub fn audit_date_at(value: &str, now_unix: i64) -> Result<i64, &'static str> {
+    let unix = date_unix(value)?;
+    if unix.div_euclid(86_400) > now_unix.div_euclid(86_400) {
+        return Err("is in the future (a date written forward would hold drift back for ever)");
+    }
+    Ok(unix)
+}
+
 /// `date.field-valid` (`MILE-137`): every declared date field that carries a
 /// value must hold a real `YYYY-MM-DD` date. Blank, placeholder and pending
 /// values are not date values and are not examined.

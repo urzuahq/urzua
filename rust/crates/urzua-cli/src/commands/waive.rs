@@ -430,8 +430,8 @@ fn write_drafts(
 }
 
 /// The record text: the type's scaffold with the finding's rule and scope, the
-/// pending `Reason`, the findings as the body and a revision-log row. `Expires`,
-/// `Category` and `Justified-by` stay as the template leaves them.
+/// pending `Reason`, the findings as the body and a revision-log row. `Expires` and
+/// every other optional template key the draft does not fill are left out.
 fn scaffold(
     ctx: &Ctx,
     group: &Group,
@@ -453,10 +453,12 @@ fn scaffold(
         waive::REASON_FIELD,
         waive::REASON_FIELD,
     );
+    let omit = omitted_fields(ctx);
+    let omit: Vec<&str> = omit.iter().map(String::as_str).collect();
     let content = urzua_core::new_record::scaffold_record(
         &urzua_core::new_record::ScaffoldSpec {
             stable_id: stable_id.as_str(),
-            omit_fields: &[waive::EXPIRES_FIELD],
+            omit_fields: &omit,
             reason: Some(&ctx.pending.value),
             header_fields: &fields,
             extra_body: Some(&body),
@@ -466,6 +468,37 @@ fn scaffold(
         ctx.template.as_deref(),
     );
     (content, stable_id.as_str().to_string())
+}
+
+/// The header keys a draft leaves out: `Expires`, and every other key the
+/// template lists that the type does not require and the draft does not fill
+/// (`Category`, `Justified-by`). Written as `null` they would stand for a value
+/// nobody gave, and a `null` pointer value fails `header.pointer-field-clean`; the
+/// person who makes the waiver permanent adds the keys they need.
+fn omitted_fields(ctx: &Ctx) -> Vec<String> {
+    let mut omit = vec![waive::EXPIRES_FIELD.to_string()];
+    let required: Vec<&str> = ctx
+        .session
+        .config
+        .record_types
+        .get(&ctx.type_name)
+        .map(|t| t.required_fields.iter().map(String::as_str).collect())
+        .unwrap_or_default();
+    let filled = [RULE_FIELD, SCOPE_FIELD, waive::REASON_FIELD, OWNER_FIELD];
+    for field in ctx
+        .template
+        .as_deref()
+        .map(urzua_core::new_record::template_header_fields)
+        .unwrap_or_default()
+    {
+        if !required.contains(&field.as_str())
+            && !filled.contains(&field.as_str())
+            && !omit.contains(&field)
+        {
+            omit.push(field);
+        }
+    }
+    omit
 }
 
 /// The finding messages, verbatim, one list item each.
