@@ -1201,7 +1201,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         requires_override_log: false,
         requires_authority: false,
         reads_declaration: None,
-        header_none: HeaderNone::OutOfScope,
+        header_none: HeaderNone::Exempt("reads a header only on a --base run, of the records the diff adds; a header_shape: none type is out of scope there"),
         options: &[],
         population: PopulationUnit::Record,
         actions: &[

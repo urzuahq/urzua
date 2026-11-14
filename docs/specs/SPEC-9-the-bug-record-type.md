@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5RYJF3MHRJT1RSA1K9
-Version: '0.21'
+Version: '0.22'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:.urzua/config.yaml@sha256:ddff3b920ab0a590217f445ce9deb02b023ca25feee89ee854df593e7eace971, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs@sha256:dc29b51bde5a2ba79d95c5e0a09466a54e816e8e2cc4a86a80e4459be477a447, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:d6dcb432d05a03f8593ee899b9427365680ad3f24b158d98cd0964d2b15d78b9
+Realized-by: code:.urzua/config.yaml@sha256:7b42a98a69e48f8b8c53d99363fdf875aa66eeb0f6046b6de90749211a0b87d0, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs@sha256:dc29b51bde5a2ba79d95c5e0a09466a54e816e8e2cc4a86a80e4459be477a447, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:d6dcb432d05a03f8593ee899b9427365680ad3f24b158d98cd0964d2b15d78b9
 Author: beauwilliams
 Subject: 'The `bug` record type -- real, already-found defects and a Status that follows the test evidence in Realized-by.'
 Implements: ADR-35
@@ -155,3 +155,5 @@ something broke, or it doesn't exist yet.
 > | 2026-11-13 | Bumped to `0.20`. Evidence pins re-baselined for this change (the `Re-baselined` row above); the specification text is unchanged. **Why:** a revision-log entry that adds a structural change bumps `Version`. | **structural** |
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` 08ab457062ac -> ddff3b920ab0. Reason: Read the diff of each pinned file since the previous pin. .urzua/config.yaml: one line is added to the milestone type's waiver_categories, declaring the scope-changed-by-decision category (no cite, no expiry); no other key changed, so the record_types::milestone section differs only by that entry. AGENTS.md: one paragraph is added under 'A record's Status: who sets it' about quoting maintainer decisions and waiving a changed Done-when item; no other line changed. The claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-14 | Bumped to `0.21`. Evidence pins re-baselined for the `scope-changed-by-decision` waiver category added to `.urzua/config.yaml` (the `Re-baselined` row above); the specification text is unchanged. **Why:** a revision-log entry that adds a structural change asks for a version bump (`revision-log.version-bump-required`). | **structural** |
+> | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` ddff3b920ab0 -> 7b42a98a69e4. Reason: Read the diff of each re-pinned file against main and the claim still holds. .urzua/config.yaml: one more rule declared, header.scaffold-mismatch: warn, under a three-line comment; no other entry changed. rust/crates/urzua-core/src/rules/table.rs: one RuleDef entry added for header.scaffold-mismatch, and the changed-set rule list in its test names it. rust/crates/urzua-cli/src/commands/check.rs: Context and DiffInputs carry renamed_paths, load_renamed_paths is new, and load_template_texts also reads templates while header.scaffold-mismatch is enabled (its read error no longer starts with the section.order rule id). **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-14 | Bumped to `0.22`. Evidence pins re-baselined for this change (the `Re-baselined` row above); the specification text is unchanged. **Why:** a revision-log entry that adds a structural change bumps `Version`. | **structural** |
