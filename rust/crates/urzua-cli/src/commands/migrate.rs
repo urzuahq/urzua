@@ -300,6 +300,7 @@ fn run_config_inner(config_path: Option<PathBuf>) -> Result<ExitCode, Failure> {
     let path = config_path.unwrap_or_else(|| default_config_path(&repo_root));
     let content = std::fs::read_to_string(&path)
         .map_err(|e| format!("could not read config at {}: {e}", path.display()))?;
+    let content = urzua_core::config::strip_bom(&content).to_string();
     let doc: yaml_serde::Value =
         yaml_serde::from_str(&content).map_err(|e| format!("could not parse config: {e}"))?;
     let found = doc

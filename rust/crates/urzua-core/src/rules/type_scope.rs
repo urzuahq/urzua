@@ -250,7 +250,7 @@ pub fn type_no_declared_spec(
                     config_path.to_path_buf(),
                     ActionSource::new("no-declared-spec"),
                     format!(
-                        "record type '{type_name}' has no declared spec -- add `spec = \"SPEC-N\"` once one exists, or leave undeclared if ADR-41's editorial judgment says one isn't warranted"
+                        "record type '{type_name}' has no declared spec -- add `spec: SPEC-N` under the type once one exists, or leave undeclared if ADR-41's editorial judgment says one isn't warranted"
                     ),
                 ));
             }
@@ -315,6 +315,28 @@ pub fn config_scope_matches_nothing(
         RuleExecution::ran(RULE_ID, population, Vec::new()),
         findings,
     )
+}
+
+/// `config.scope-matches-nothing` as `check` runs it: the rules whose candidates
+/// the configuration could not reach, and the section rules enabled with no type
+/// declaring the key they read (they have no candidates at all, so no
+/// out-of-scope count can show it).
+pub fn config_scope_matches_nothing_in(
+    config: &Config,
+    executed: &[RuleExecution],
+    config_path: &std::path::Path,
+) -> (RuleExecution, Vec<Finding>) {
+    let (execution, mut findings) = config_scope_matches_nothing(executed, config_path);
+    for (rule, declaration) in section_rules_reading_nothing_declared(config, executed) {
+        findings.push(Finding::new(
+            RULE_CONFIG_SCOPE_MATCHES_NOTHING,
+            FindingSeverity::Warning,
+            config_path.to_path_buf(),
+            ActionSource::new("scope-matches-nothing").key_path(["rules", rule]),
+            undeclared_section_key_message(rule, declaration),
+        ));
+    }
+    (execution, findings)
 }
 
 #[cfg(test)]

@@ -88,3 +88,39 @@ fn init_withholds_every_rule_that_reads_a_declaration() {
         "expected at least five declaration-reading rules, saw {seen}"
     );
 }
+
+/// Review finding 6.2: every rule adopt proposes examines a record of the corpus
+/// it was proposed for. Fifteen proposed rules reported `ran` over zero records
+/// (`header.required-fields`, `pointer.resolution`, `status.delivery-agreement`,
+/// `waiver.matches-nothing` among them) because each reads a declaration adopt
+/// never writes. Two types so a per-type reading cannot hide a gap.
+#[test]
+fn every_rule_adopt_proposes_examines_a_record() {
+    let dir = adopt_repo("zero-examined");
+    std::fs::create_dir_all(dir.path().join("docs/rfc")).unwrap();
+    for n in 1..=2 {
+        std::fs::write(
+            dir.path().join(format!("docs/rfc/RFC-000{n}-y.md")),
+            "---\nStatus: Draft\n---\n# RFC\n",
+        )
+        .unwrap();
+    }
+    common::git(&dir, &["add", "-A"]);
+    common::git(&dir, &["commit", "-q", "-m", "more"]);
+    init(dir.path());
+    common::git(&dir, &["add", "-A"]);
+    let out = common::urzua()
+        .arg("check")
+        .current_dir(dir.path())
+        .output()
+        .unwrap();
+    let report: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    let idle: Vec<String> = report["rules_executed"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|r| r["status"] == "ran" && r["population"]["examined"] == 0)
+        .map(|r| r["rule"].as_str().unwrap().to_string())
+        .collect();
+    assert!(idle.is_empty(), "ran over zero records: {idle:?}");
+}

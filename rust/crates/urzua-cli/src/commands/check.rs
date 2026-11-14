@@ -590,7 +590,7 @@ pub(crate) fn execute(
         &executions,
         &why_deferred(&scope, base.as_deref()),
     ));
-    notices.extend(excused_line_notices(&executions));
+    notices.extend(execution_notices(&session.config, &executions));
     scope_findings(session, &scope, &mut findings);
     let waivers = effective_waivers(session, &context, &mut notices);
     let today = urzua_io::today();
@@ -719,7 +719,7 @@ fn resolve_drift_baseline(
         return Ok(None);
     }
     let git_ref = baseline.git_ref.trim().to_string();
-    match urzua_io::resolve_commit(&session.repo_root, &git_ref) {
+    match urzua_io::resolve_baseline_commit(&session.repo_root, &git_ref) {
         Ok(commit) => Ok(Some((git_ref, commit))),
         Err(e) => Err(format!(
             "{}.drift_baseline.ref: {e}; fix the ref or remove drift_baseline (a shallow clone may lack the commit: fetch full history)",
@@ -2610,6 +2610,35 @@ fn run_after_scoping(
     }
 }
 
+/// What the rules' own executions say beyond their findings: the lines an
+/// `ignore_marker` excused, and a section rule that reads a key no type declares.
+fn execution_notices(
+    config: &urzua_core::config::Config,
+    executions: &[RuleExecution],
+) -> Vec<Notice> {
+    let mut notices = excused_line_notices(executions);
+    notices.extend(undeclared_section_key_notices(config, executions));
+    notices
+}
+
+/// A section rule enabled with no type declaring the key it reads passes
+/// silently; this says so, one warning per rule (SPEC-2, `BUG-73`'s class). The
+/// same fact is a `config.scope-matches-nothing` finding when that rule is on.
+fn undeclared_section_key_notices(
+    config: &urzua_core::config::Config,
+    executions: &[RuleExecution],
+) -> Vec<Notice> {
+    rules::section_rules_reading_nothing_declared(config, executions)
+        .into_iter()
+        .map(|(rule, declaration)| Notice {
+            severity: NoticeSeverity::Warning,
+            subject: "rule-reads-nothing-declared".to_string(),
+            message: rules::undeclared_section_key_message(rule, declaration),
+            detail: None,
+        })
+        .collect()
+}
+
 /// The status and the examined count, with the notice that explains an empty
 /// diff. A diff in which no governed record changed and nothing reaches one
 /// was asked about nothing and found nothing: `ok`, not `not-run`.
@@ -2637,15 +2666,62 @@ fn status_and_examined(
             base.unwrap_or_default(),
         ));
     }
+    let empty_corpus = examined == 0 && corpus_has_no_record_yet(session);
+    if empty_corpus {
+        notices.push(empty_corpus_notice());
+    }
     let active = findings.iter().filter(|f| f.waived.is_none());
     let blocking = active.clone().any(|f| f.severity == FindingSeverity::Error);
-    let status = derive_status(blocking, empty_diff, examined, executions, active.count());
+    let status = derive_status(
+        blocking,
+        empty_diff || empty_corpus,
+        examined,
+        executions,
+        active.count(),
+    );
     // With nothing examined and an argument that selected nothing, that
     // argument's own notice is the reason; a second one would say it twice.
     if status == urzua_core::report::ReportStatus::NotRun && !(examined == 0 && has_unmatched) {
         notices.push(not_run_reason(examined));
     }
     (status, examined)
+}
+
+/// Whether every declared record directory is there and holds no record yet: the
+/// state `urzua init` leaves a new repository in. A directory that is missing, or
+/// one holding a file the type could not read as a record (a prefix that matches
+/// no filename), is not this state: those still report `not-run`, so a
+/// misdeclared type is never read as an empty one.
+fn corpus_has_no_record_yet(session: &Session) -> bool {
+    let types = &session.config.record_types;
+    if types.is_empty() || !session.records.is_empty() {
+        return false;
+    }
+    let hidden = |p: &std::path::Path| {
+        p.file_name()
+            .and_then(|n| n.to_str())
+            .is_some_and(|n| n.starts_with('.'))
+    };
+    types
+        .values()
+        .all(|rt| rt.all_dirs().all(|d| session.repo_root.join(d).is_dir()))
+        && !session
+            .discovered
+            .paths
+            .iter()
+            .any(|p| !hidden(p) && types.values().any(|rt| rt.owns_dir(p.parent())))
+}
+
+fn empty_corpus_notice() -> Notice {
+    Notice {
+        severity: NoticeSeverity::Info,
+        subject: "empty-corpus".to_string(),
+        message: "no record exists yet under any declared record type directory, so no record was examined; \
+                  `ok` here means the configuration loads and every declared directory is there, not that a record \
+                  was judged. `urzua new` writes the first record"
+            .to_string(),
+        detail: None,
+    }
 }
 
 /// `blocking` is true exactly when the run exits 1 (the flag wins over the

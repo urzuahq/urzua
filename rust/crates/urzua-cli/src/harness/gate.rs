@@ -572,7 +572,8 @@ pub(super) struct RawGates {
 }
 
 pub(super) fn raw_gates(config_text: &str) -> Option<RawGates> {
-    let value: yaml_serde::Value = yaml_serde::from_str(config_text).ok()?;
+    let value: yaml_serde::Value =
+        yaml_serde::from_str(urzua_core::config::strip_bom(config_text)).ok()?;
     let guardrail = |name: &str| -> bool {
         let Some(g) = value
             .get("harness")

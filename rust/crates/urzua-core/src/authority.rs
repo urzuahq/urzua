@@ -185,7 +185,7 @@ impl BaseAuthority {
         let Some(text) = text else {
             return Ok(BaseAuthority::Absent);
         };
-        let value: yaml_serde::Value = yaml_serde::from_str(text)
+        let value: yaml_serde::Value = yaml_serde::from_str(crate::config::strip_bom(text))
             .map_err(|e| format!("the base revision's config does not parse as YAML: {e}"))?;
         match value.as_mapping().and_then(|m| m.get("authority")) {
             None => Ok(BaseAuthority::Absent),
