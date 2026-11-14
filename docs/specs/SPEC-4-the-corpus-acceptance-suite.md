@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5N2PD9ZYBJPZHN05W7
-Version: '0.23'
+Version: '0.24'
 Date: 2026-08-20
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/tests/acceptance.rs@sha256:1aa59966db6609eb5bf3356206b7e3ec907ba8b9adccc39ef6be34d0a3235706, test:rust/crates/urzua-cli/tests/acceptance_property.rs@sha256:776f499ed6f76ab895ab380e38f62e1bacba4613b5dcd49074f31b99662d248e
+Realized-by: code:rust/crates/urzua-cli/tests/acceptance.rs@sha256:f96453567b7c7ed3556b43fc6dda49dec2972eb14169939f09a5ea68ca2563a1, test:rust/crates/urzua-cli/tests/acceptance_property.rs@sha256:776f499ed6f76ab895ab380e38f62e1bacba4613b5dcd49074f31b99662d248e
 Author: beauwilliams
 Subject: 'The corpus acceptance suite -- documented bug classes `check` must reproduce against real corpora.'
 Parent: SPEC-1
@@ -280,10 +280,12 @@ built, and where it differs from the sketch:
   the same non-empty set of rules), and `message_contains` on a finding matcher. Cases run on a few
   threads and an identical read-only run over `@repo` is made once.
 - **A population that a release empties.** `empty_population_ok_without` (a list of `rule`, `under`,
-  `extension`) lets a rule of `expect_rules_ran` run over an empty population when no `*.<extension>`
-  file sits directly under `<under>`; the rule must still run, and while such a file exists the
-  population must be non-empty. The claim rule reads `.changeset/*.md`, which `knope prepare-release`
-  deletes. `URZUA_ACCEPTANCE_REPO` points the `@repo` cases at another checkout, which
+  `extension` and an optional `with_key`) lets a rule of `expect_rules_ran` run over an empty
+  population when no `*.<extension>` file sits directly under `<under>` that the rule would examine;
+  with `with_key`, only a file whose frontmatter lists a non-empty value under that key is one. The
+  rule must still run, and while such a file exists the population must be non-empty. The claim rule
+  examines one claim per id a changeset lists under `closes`, so its case declares `with_key: closes`:
+  `knope prepare-release` deletes the fragments, and a fragment with `closes: []` adds no claim. `URZUA_ACCEPTANCE_REPO` points the `@repo` cases at another checkout, which
   `release_tree_integration` uses to run two own-corpus cases over a fragment-deleted worktree.
 - **Corpora.** `corpus-d` plants one irregularity per field-quality and structural rule (blank,
   pending, untrimmed and case-variant fields, an undeclared status, a body bullet standing in for a
@@ -493,5 +495,6 @@ own-corpus case lacks the flag. A case over a fixture corpus needs none.
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/acceptance.rs` ae174f312e28 -> 6bc5217cec95. Reason: Read the diff of acceptance.rs against main: repo_root now honours URZUA_ACCEPTANCE_REPO, a case gains the optional empty_population_ok_without list (rule, directory, extension) that lets an expect_rules_ran rule run over an empty population only when no file of that extension sits under the directory, and the non-empty check consults it. No other runner behaviour changed, so each claim this record makes about the runner still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-14 | Bumped to `0.22`. Added the `bugs:` case field and the "Bug coverage gate": every Fixed bug record is tagged by a case, listed in one of four shrink-only lane gap files, or listed in a ledger of bugs no corpus run can show, and the lists cannot grow against the merge base without a label. **Why:** `MILE-101`'s remaining half is "every documented bug reproduces", and nothing linked a bug record to a case, so the count of reproduced bugs was a hand classification; the gate makes the gap a number that only falls. | **substantive** |
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/acceptance.rs` 6bc5217cec95 -> e037aece9053. Reason: Read the diff of acceptance.rs since the pin: Case gained an optional bugs list (tags read by acceptance_bug_gate.rs, never by the runner), a doc paragraph, and bug_tag_problem, which fails a case whose tag is not BUG-<number> or that is a known_gap. How a case is run, mutation-proven, sharded or gated is unchanged, so the claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
-> | 2026-11-14 | Bumped to `0.23`. A case's `commits` may create symlinks (`symlink`), and a mutation of a rule that is on by default and cannot be turned off is proven by the config refusing `off` instead of being a harness failure; `corpus-d` gains the case for `identity.record-symlink-escapes`. **Why:** `ADR-89` amendment of 2026-11-14 added that rule. | **structural** |
-> | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/acceptance.rs` e037aece9053 -> 1aa59966db66. Reason: Pinned file(s) changed by the symlinked-record refusal: acceptance.rs: a case's commits may create symlinks, and a rule that cannot be turned off is proven by the config refusing `off`. The record's claim is unaffected by these changes. (Re-applied after merging main.) **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/acceptance.rs` e037aece9053 -> 88011c208cad. Reason: Read the diff of acceptance.rs against the previous commit: a case's empty_population_ok_without entry gains an optional with_key, and the runner now moves the directory scan into acceptance/population.rs, where a file counts as part of the population only when its frontmatter lists a non-empty value under that key (so a fragment with closes: [] is not one). Case behaviour with no with_key is unchanged. No other runner behaviour changed, so each claim this record makes about the runner still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-14 | Bumped to `0.24`. A case's `commits` may create symlinks (`symlink`), and a mutation of a rule that is on by default and cannot be turned off is proven by the config refusing `off` instead of being a harness failure; `corpus-d` gains the case for `identity.record-symlink-escapes`. **Why:** `ADR-89` amendment of 2026-11-14 added that rule. | **structural** |
+> | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/acceptance.rs` 88011c208cad -> f96453567b7c. Reason: Pinned file(s) changed by the symlinked-record refusal: acceptance.rs: a case's commits may create symlinks, and a rule that cannot be turned off is proven by the config refusing `off`. The record's claim is unaffected by these changes. (Re-applied after merging main.) **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
