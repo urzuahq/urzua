@@ -24,7 +24,7 @@ fail=0
 # every subsequent release from a version that was never published.
 #
 # Only checked while fragments are pending. `publish-release` merges to main
-# before `knope release` tags, so a legitimate window exists where the manifest
+# before the release job tags, so a legitimate window exists where the manifest
 # leads the tag -- and that window always has an empty changeset directory.
 pending=$(find "$changeset_dir" -maxdepth 1 -name '*.md' 2>/dev/null | wc -l | tr -d ' ')
 version=$(sed -n 's/^version = "\(.*\)"$/\1/p' "$manifest" | head -1)

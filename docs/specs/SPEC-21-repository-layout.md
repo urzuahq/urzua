@@ -3,7 +3,7 @@ Version: '0.7'
 Date: 2026-09-19
 Status: Accepted
 Embodiment: Verified
-Realized-by: code:Makefile@sha256:ccc04e61c2e32aad9ccd10166a12df24d31e8ccb1b24233f01c566d7058f382a
+Realized-by: code:Makefile@sha256:bb5eb60733742d3bb67a0088e7622811f8f76c8bddc71f620fa9e9ae3d12045b
 Author: beauwilliams
 Stable-Id: 01M2VNAMK7V28A67T84JZ5NZPP
 Subject: 'What each top-level directory holds, and the rules the root obeys -- the living counterpart to ADR-4''s decision to organize by language.'
@@ -95,3 +95,4 @@ the speculative reservation this spec exists to stop accumulating.
 > | 2026-11-10 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.github/workflows/checks.yml` a201f4e57f5f -> ad6ab57882df. Reason: checks.yml gained one additive, report-only step in the build job (no stale evidence pins: runs fix --rebaseline without --apply and fails unless the report status is ok); no existing step changed, so the claim still holds **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-10 | Bumped to `0.6`. The re-baseline row above records a structural change, which requires a version bump; the Decision and the pinned claim are unchanged. **Why:** the new stale-pin guard step changed the pinned `checks.yml`, so this record was re-pinned in the same pull request. | **structural** |
 > | 2026-11-13 | Bumped to `0.7`. Layout table amended to match the tree: added `.claude/`; the `scripts/` row names `generate-rule-table.py`; the `.github/` row lists `actions/`, `ISSUE_TEMPLATE/`, `PULL_REQUEST_TEMPLATE.md` and `scripts/`. Success criterion 1 is now enforced by `layout_table_integration.rs`, and its `Verifies: SPEC-21` back-pointer replaces the workflow file in `Realized-by`; the test compares against the entries git sees (tracked or untracked, gitignored excepted), so a developer's ignored `.DS_Store` or `.idea/` does not fail it. **Why:** a re-read found the table behind the repository again; the criterion existed but nothing ran it. | **substantive** |
+> | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `Makefile` ccc04e61c2e3 -> bb5eb6073374. Reason: checks.yml gained two additive steps running release-notes.test.sh and create-release.test.sh, and the Makefile gained a release-notes target that the ci target now depends on; neither changes anything this record cites **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |

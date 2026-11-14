@@ -2,7 +2,7 @@
 Stable-Id: 01M2MQK9NYKNJV8C0ZVW411T4W
 Status: Accepted
 Embodiment: Implemented
-Realized-by: code:knope.toml@sha256:08a547f0466a1644c3fdf68782538ef13af3535220f7028d460a1b0b25f08f8e
+Realized-by: code:knope.toml@sha256:a0daf73a621a5ddd0e1e9735e6a324179ec9754573ebc4146e7631f25b1d9bc4
 Date: 2026-09-16
 Accepted-on: 2026-09-16
 Author: beauwilliams
@@ -102,3 +102,4 @@ format changes; `.changeset/*.md` fragments and `CHANGELOG.md` are unaffected.
 > | 2026-09-16 | Initial decision. **Why:** an undecided default sat beside a decided mechanism and contradicted it, and the first commit to expose that cut an unintended release. Removing the second trigger costs nothing here -- no release has ever been computed from a commit prefix except the mistaken one. | **structural** |
 > | 2026-11-04 | Backfilled `Accepted-on` from git history, commit befa27e42. | **structural** |
 > | 2026-11-08 | Pinned (attested by beauwilliams, identity: gh-verified, actor: agent): 1 locators pinned, 1 file-level, 0 scoped. Evidence: knope.toml@sha256:08a547f0466a Reason: Pinned the files as they are now after checking each against the record it evidences: header.rs still parses the declared YAML frontmatter shape (ADR-17), fix.rs still has detect_repairs (ADR-19), urzua-id still builds ULID stable ids (ADR-21), main.rs still prints JSON with no --format flag on check (ADR-23), urzua-io still resolves the attesting identity in the ADR-31 order, scripts/generate-dashboard.py still generates the static dashboard (ADR-37), report.rs still defines Report and Notice and main.rs still emits them (ADR-46), publish-release.yml still verifies the tree it ships through checks.yml (ADR-47), knope.toml still releases from changesets (ADR-48), and ci.yml still gates changesets on .github/release-paths (ADR-49). **Why:** a claim is renewed only over pinned code and test evidence. | **structural** |
+> | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `knope.toml` 08a547f0466a -> a0daf73a621a. Reason: publish-release.yml no longer runs knope release: its release job tags the verified commit and creates the GitHub Release through create-release.sh with a body capped under the API limit, and a workflow_dispatch recover job finishes a publish for an existing tag; knope.toml gained a comment only; knope-pin.test.sh no longer lists publish-release.yml as a knope user; checks.yml gained two additive test steps. What this record cites still holds, except that ADR-45 line 58 still says publish-release runs knope release, which is flagged for the maintainer to amend **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |

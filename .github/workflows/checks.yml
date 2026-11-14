@@ -108,6 +108,12 @@ jobs:
       - name: release invariants planted-violation cases
         working-directory: .
         run: .github/scripts/release-invariants.test.sh
+      - name: release notes stay under the Releases API limit
+        working-directory: .
+        run: .github/scripts/release-notes.test.sh
+      - name: release creation is idempotent and never touches a tag
+        working-directory: .
+        run: .github/scripts/create-release.test.sh
       - name: release invariants on this ref
         working-directory: .
         run: |

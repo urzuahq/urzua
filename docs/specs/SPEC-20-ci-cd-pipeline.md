@@ -2,9 +2,9 @@
 Stable-Id: 01M25Z28TWN477D6XASYT4TKW7
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:.github/workflows/ci.yml@sha256:a2b83039753098dd01df37de8b7a526422e290f9fb11ed400ced6a92849ca4ea, code:.github/workflows/checks.yml@sha256:ad6ab57882dfac0d3a819e549bccd9ba6f81abafe0699d09d26f828a5714398b, code:.github/workflows/prepare-release.yml@sha256:0e4d28280d1a77819841035b7ed7da5ee570cf96e80875d2f1e8cc83d7596b8d, code:.github/workflows/publish-release.yml@sha256:530bdeeececf77737d4d162e8aba4c8685bcc73834140675ed8565e3a04aef25, code:.github/actions/install-knope/action.yml@sha256:7890ed184b08dbc99d465a61b46f6bef28ea8fd37a2eba69f05484c44ee3826b, test:.github/scripts/knope-pin.test.sh@sha256:2c13f4fc3ca389b738f6f0a913e45696023f38236868bae27d5a9a352ad40a8d, test:.github/scripts/release-guard.test.sh@sha256:5fca6fe029d9bc486b023e4a401d0ae297f0e4e57ed9bb7a4f54fe62f9ceb82f, test:.github/scripts/release-invariants.test.sh@sha256:8fc2b5758338aef9953492f6d1977d9799c662f05589bf1d9064e6e5129b1381, test:.github/scripts/test-no-leak.test.sh@sha256:36c44d3cd4c56c6483e31d10e31ce44b29db039518446a3f305a1f1f4a2bce9d, test:.github/actions/urzua-gate/test.sh@sha256:41938df777f1c21826b2ace086817f00e23a9fff71bf1de07c49f4cb897d6325
+Realized-by: code:.github/workflows/ci.yml@sha256:a2b83039753098dd01df37de8b7a526422e290f9fb11ed400ced6a92849ca4ea, code:.github/workflows/checks.yml@sha256:f414bb932992d1e2a414bc8f7d41b8f29812fd8e8c504d84cdbad825c51b8a75, code:.github/workflows/prepare-release.yml@sha256:0e4d28280d1a77819841035b7ed7da5ee570cf96e80875d2f1e8cc83d7596b8d, code:.github/workflows/publish-release.yml@sha256:5aaa0797cb94173cbbb2de30c7d2a3c3160476c9a54b2763fae8b76ed1c5fe0e, code:.github/actions/install-knope/action.yml@sha256:7890ed184b08dbc99d465a61b46f6bef28ea8fd37a2eba69f05484c44ee3826b, test:.github/scripts/knope-pin.test.sh@sha256:473344fb0a0c70196460083997f062a6fd8ff7d12f3bd7fbc54b9ab21a11c2f6, test:.github/scripts/release-guard.test.sh@sha256:5fca6fe029d9bc486b023e4a401d0ae297f0e4e57ed9bb7a4f54fe62f9ceb82f, test:.github/scripts/release-invariants.test.sh@sha256:8fc2b5758338aef9953492f6d1977d9799c662f05589bf1d9064e6e5129b1381, test:.github/scripts/test-no-leak.test.sh@sha256:36c44d3cd4c56c6483e31d10e31ce44b29db039518446a3f305a1f1f4a2bce9d, test:.github/actions/urzua-gate/test.sh@sha256:41938df777f1c21826b2ace086817f00e23a9fff71bf1de07c49f4cb897d6325, code:.github/scripts/create-release.sh, code:.github/scripts/release-notes.sh, test:.github/scripts/create-release.test.sh, test:.github/scripts/release-notes.test.sh
 Date: 2026-09-10
-Version: '0.19'
+Version: '0.20'
 Author: beauwilliams
 Subject: 'This repo''s own CI/CD pipeline -- gating, release cutting, and distribution, as one buildable reference.'
 Implements: ADR-13, ADR-45
@@ -161,7 +161,7 @@ runs.
   by the `no-changeset` label: it consumes fragments, it doesn't add one.
 - **`publish-release.yml`** runs when that specific PR (head branch `release`) merges into `main`,
   and owns the entire publish — tag, GitHub Release, binaries, upload. Detailed below.
-- **One knope pin.** `prepare-release.yml`, `publish-release.yml` and `checks.yml` install knope through the
+- **One knope pin.** `prepare-release.yml` and `checks.yml` install knope through the
   `.github/actions/install-knope` composite action, the only place the version, URL and checksum are
   written. `knope-pin.test.sh` fails when any workflow carries a download of its own or stops using the
   action, and `knope-closes-compat.test.sh` reads the pin from the action, so a knope upgrade is one file
@@ -169,13 +169,13 @@ runs.
 
 ## `publish-release.yml` — the whole publish, in one workflow
 
-Four jobs in sequence. **One workflow rather than two deliberately** (`BUG-28`): the tag is pushed
+Five jobs (`recover` is an alternative entry to `release`). **One workflow rather than two deliberately** (`BUG-28`): the tag is pushed
 with `GITHUB_TOKEN`, and GitHub never triggers a workflow from a `GITHUB_TOKEN` event, so a separate
 tag-triggered build workflow silently never runs — publishing a release with no binaries and no
 error. `release.yml` previously held the last three jobs and is deleted.
 
 - **`verify`**: calls `checks.yml` (`ADR-47`) against the merge commit (`merge_commit_sha`: for a
-  squash merge, the commit created on `main`, which is the commit knope tags below), so the tree being
+  squash merge, the commit created on `main`, which is the commit the `release` job tags below), so the tree being
   released is the tree that was just checked. It runs only for a merged PR whose head branch is `release`
   in this repository. It does not ask whether a `ci` run happened elsewhere: a cross-workflow query
   could only report whether someone approved a held run, and the merge commit's own `ci` run races this
@@ -183,15 +183,27 @@ error. `release.yml` previously held the last three jobs and is deleted.
   switched off here (`comment: "false"`): the event is the merged release PR, whose comment would be
   rewritten for a tree nobody is reviewing, and the job still holds `pull-requests: write` because the
   called job asks for it.
-- **`release`**: runs knope's `release` workflow (just the `Release` step) — tags the now-current
-  version and creates the GitHub Release, with the compiled changelog as its notes since `[github]`
-  config is present. Outputs the resolved tag, read from the same anchored `rust/Cargo.toml` line
-  `knope.toml` itself bumps.
+- **`release`**: runs only for the merged release PR. Tags the verified commit (a lightweight `vX.Y.Z`
+  tag, pushed with `GITHUB_TOKEN`; an existing tag is accepted only on that same commit, so a re-run
+  never moves one) and creates the GitHub Release with `create-release.sh`. It does not run knope's
+  `release` step, which creates the release with the whole changelog section as its body: the Releases
+  API refuses a body over 125000 characters, and that left `v0.4.0` tagged with no release and no
+  binaries. `release-notes.sh` makes the body the version's changelog section when it is at most 60000
+  bytes, and otherwise its first paragraphs plus a link to the section on the tag. A section meant for
+  readers should stay short; the cap is a safety net. Outputs the resolved tag, read from the same
+  anchored `rust/Cargo.toml` line `knope.toml` bumps.
+- **`recover`**: runs only for `workflow_dispatch` on `main`, with a required `tag` input. Finishes a
+  publish that failed after the tag was pushed. It requires the tag to exist, to carry its own
+  version in `rust/Cargo.toml`, and to be an ancestor of `main`; it never creates, moves or deletes a
+  tag and never runs `knope release`. It creates the GitHub Release from `main`'s `CHANGELOG.md` only
+  if no release exists, and `build` and `upload` then run against that tag as they do after a merge,
+  so the archives are built and attested by this workflow, which is what `urzua-gate`'s installer
+  verifies (`--signer-workflow`).
 - **`build`**: cross-compiles for `aarch64-apple-darwin`, `x86_64-apple-darwin` (both from the same
   `macos-14` arm64 runner — a dedicated Intel runner queues indefinitely as GitHub winds down that
   capacity), and `x86_64-unknown-linux-gnu`. Checks out the **tag**, not a branch head, so a push
   landing on `main` mid-publish cannot produce binaries that disagree with their release.
-- **`upload`**: `gh release upload --clobber` against the release `knope release` already created — never
+- **`upload`**: `gh release upload --clobber` against the release the `release` or `recover` job already created — never
   `gh release create`, which would collide with an existing release object. Then **asserts the
   result**: reads the release back and fails if fewer than three archives are attached. A release
   object existing is not the same as a release being installable.
@@ -206,7 +218,9 @@ nothing relies on the pull request's run having happened.
 **If `verify` fails after the release PR has merged**, `main` carries the bumped version (for example
 0.4.0) with no tag. `release-invariants.sh` then fails every later pull request that has pending fragments,
 because the manifest leads the newest tag (`BUG-92`), until the publish run succeeds. Fix the cause, then
-re-run the failed `publish release` workflow run; do not tag by hand.
+re-run the failed `publish release` workflow run; do not tag by hand. If the tag was pushed but the
+release or the archives were not (the `release` job failed after tagging), run `publish release` by
+hand from `main` with the `tag` input instead.
 
 The changeset gate once failed on the release PR because a re-run replayed the **stale `opened` payload**,
 taken before knope's own labelling step (`BUG-34`). The gate now reads the PR's current labels at run time
@@ -221,8 +235,8 @@ replays the original payload.
   the next bump (verified against a live dry run before trusting it).
 - `[github]` config (owner/repo) is required for `CreatePullRequest` and `Release` to reach the
   GitHub API — added by `ADR-45`, absent under the original single-dispatched-job design.
-  `[[workflows]]` declares two named workflows, `prepare-release` and `release`, invoked as `knope
-  prepare-release` / `knope release` respectively.
+  `[[workflows]]` declares two named workflows, `prepare-release` and `release`; CI runs only
+  `knope prepare-release`, and `release` is kept for a maintainer to run by hand.
 - A fragment (`.changeset/*.md`) is the sole release trigger (`ADR-48`) and is real changesets
   format: `default: major | minor | patch`
   frontmatter plus a Markdown body, one per user-visible PR. On a pre-`1.0.0` package, a `major`
@@ -288,3 +302,5 @@ replays the original payload.
 > | 2026-11-09 | Bumped to `0.18`. States that a merge-queue run writes no actors file and that an actors API outage passes the gate unless `require_evidence` is on. **Why:** `ADR-89` amendment (rename pairing); documentation of existing behaviour. | **substantive** |
 > | 2026-11-10 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.github/workflows/checks.yml` a201f4e57f5f -> ad6ab57882df. Reason: checks.yml gained one additive, report-only step in the build job (no stale evidence pins: runs fix --rebaseline without --apply and fails unless the report status is ok); no existing step changed, so the claim still holds **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-10 | Bumped to `0.19`. The re-baseline row above records a structural change, which requires a version bump; the Decision and the pinned claim are unchanged. **Why:** the new stale-pin guard step changed the pinned `checks.yml`, so this record was re-pinned in the same pull request. | **structural** |
+> | 2026-11-14 | Bumped to `0.20`. `publish-release.yml`'s `release` job no longer runs `knope release`: it tags the verified commit and creates the GitHub Release with a body capped at the Releases API limit (`create-release.sh`, `release-notes.sh`); a `recover` job, run by `workflow_dispatch` with a `tag` input, finishes a publish that failed after tagging, then `build` and `upload` run against that tag. `install-knope` is used by two workflows, not three. **Why:** `knope release` created the release with the whole changelog section as its body and the API refused 0.4.0's (422, body over 125000 characters), leaving the tag with no release and no binaries; the pipeline had no way to finish it without moving the tag or building archives by hand. | **substantive** |
+> | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.github/workflows/checks.yml` ad6ab57882df -> f414bb932992, `.github/workflows/publish-release.yml` 530bdeeececf -> 5aaa0797cb94, `.github/scripts/knope-pin.test.sh` 2c13f4fc3ca3 -> 473344fb0a0c. Reason: publish-release.yml no longer runs knope release: its release job tags the verified commit and creates the GitHub Release through create-release.sh with a body capped under the API limit, and a workflow_dispatch recover job finishes a publish for an existing tag; knope.toml gained a comment only; knope-pin.test.sh no longer lists publish-release.yml as a knope user; checks.yml gained two additive test steps. What this record cites still holds, except that ADR-45 line 58 still says publish-release runs knope release, which is flagged for the maintainer to amend **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |

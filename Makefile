@@ -10,7 +10,7 @@ SHELL := /bin/bash
 
 RUST_DIR := rust
 
-.PHONY: help build check test fmt fmt-check lint clean records records-base roadmap rule-table rule-table-check ci test-no-leak release-guard release-invariants knope-pin nextest-pin ci-gate-test knope-closes-compat gate-action-test hooks-install hooks-auto \
+.PHONY: help build check test fmt fmt-check lint clean records records-base roadmap rule-table rule-table-check ci test-no-leak release-guard release-invariants release-notes knope-pin nextest-pin ci-gate-test knope-closes-compat gate-action-test hooks-install hooks-auto \
 	rust-build rust-check rust-test rust-fmt rust-fmt-check rust-lint deny rust-clean
 
 help: ## Show available commands
@@ -33,7 +33,7 @@ clean: rust-clean ## Remove build artifacts
 # changeset gate reads the pull request's labels from the GitHub API; the
 # pinned-release gate downloads a release and verifies its attestation; the
 # gate's --actors file comes from the pull request's reviews. CI runs all three.
-ci: fmt-check lint deny rust-build test-no-leak records records-base rule-table-check release-guard release-invariants knope-pin nextest-pin knope-closes-compat ci-gate-test gate-action-test ## Run the CI checks that can run locally (not the changeset label gate, the pinned-release gate or --actors)
+ci: fmt-check lint deny rust-build test-no-leak records records-base rule-table-check release-guard release-invariants release-notes knope-pin nextest-pin knope-closes-compat ci-gate-test gate-action-test ## Run the CI checks that can run locally (not the changeset label gate, the pinned-release gate or --actors)
 	@echo "make ci: the local checks passed; CI also runs the changeset label gate, the pinned-release gate and the --actors file"
 
 gate-action-test: ## Test the reusable CI gate action's scripts (recorded fixtures, no network)
@@ -134,6 +134,10 @@ knope-pin: ## Fail when a workflow carries its own knope pin instead of the inst
 
 knope-closes-compat: ## Run the pinned knope over a fragment carrying the closes key (skipped, loudly, where knope is not installed; CI installs it)
 	@.github/scripts/knope-closes-compat.test.sh
+
+release-notes: ## Exercise the release body cap and the idempotent release creation (fake gh, no network)
+	@.github/scripts/release-notes.test.sh
+	@.github/scripts/create-release.test.sh
 
 release-invariants: ## Check the release invariants, and exercise their planted-violation cases
 	@.github/scripts/release-invariants.test.sh

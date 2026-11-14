@@ -88,9 +88,11 @@ template = "Opened by knope's prepare-release workflow (ADR-0045). Merging this 
 type = "Command"
 command = "gh pr edit release --add-label no-changeset"
 
-# Tags and creates the GitHub Release once the PR above merges -- run via
-# `knope release` in .github/workflows/publish-release.yml. Assumes the
-# version bump and changelog are already committed on main.
+# Not run by CI. publish-release.yml tags the merged release commit and creates
+# the GitHub Release itself (.github/scripts/create-release.sh), because this
+# step creates the release with the whole changelog section as its body and the
+# Releases API refuses a body over 125000 characters (v0.4.0). Kept for a
+# maintainer who wants knope's own behaviour by hand.
 [[workflows]]
 name = "release"
 

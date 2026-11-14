@@ -9,10 +9,26 @@ name: publish release
 # pushed with GITHUB_TOKEN, and GitHub never triggers a workflow from a
 # GITHUB_TOKEN event -- so a separate tag-triggered build workflow silently
 # never runs, and the release publishes with no binaries and no error.
+#
+# Recovery: a publish that failed after the tag was pushed (the Releases API
+# refused the release body, which left v0.4.0 tagged with no release and no
+# binaries) is finished with workflow_dispatch. It takes an existing tag, never
+# pushes or moves one and never runs `knope release`; it creates the GitHub
+# Release if it is missing and then runs the same build and upload jobs, so the
+# archives carry the same attestations `urzua-gate` verifies against this file.
 on:
   pull_request:
     types: [closed]
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: >-
+          An existing release tag to finish publishing (for example v0.4.0).
+          Run from main. Creates the GitHub Release if missing, then builds and
+          uploads the archives for that tag.
+        required: true
+        type: string
 
 concurrency:
   group: publish-release
@@ -30,7 +46,7 @@ jobs:
   # against the tree it is about to release.
   #
   # Pinned to merge_commit_sha: for a squash merge that is the commit created
-  # on main, which is the commit knope tags below. The PR head is a different
+  # on main, which is the commit the release job tags below. The PR head is a different
   # commit and the default checkout ref is a third -- verifying the released
   # tree means naming it, not inferring it.
   verify:
@@ -49,6 +65,7 @@ jobs:
 
   release:
     needs: verify
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -65,23 +82,10 @@ jobs:
           # The commit `verify` tested, not the default ref.
           ref: ${{ github.event.pull_request.merge_commit_sha }}
 
-      # The pin and its checksum live in one place (.github/actions/install-knope).
-      - uses: ./.github/actions/install-knope
-
-      - name: configure git identity for the release tag
-        run: |
-          git config user.name "urzua-release-bot"
-          git config user.email "urzua-release-bot@users.noreply.github.com"
-
-      - name: tag and create the GitHub Release (ADR-0045)
-        run: knope release --verbose
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-
-      # The tag knope just created, read from the same file and with the
-      # same anchored pattern knope.toml itself bumps -- never re-derived
-      # from a second source that could disagree with it.
-      - name: resolve the tag knope created
+      # The tag is read from the same file and with the same anchored pattern
+      # knope.toml bumps -- never re-derived from a second source that could
+      # disagree with it.
+      - name: resolve the tag to publish
         id: version
         run: |
           set -euo pipefail
@@ -90,11 +94,106 @@ jobs:
             echo "::error::could not read the released version from rust/Cargo.toml"
             exit 1
           fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=v$version" >> "$GITHUB_OUTPUT"
           echo "resolved tag: v$version"
 
+      # knope's `release` step would tag and then create the GitHub Release
+      # itself, with a body it cannot cap: the Releases API refuses a body over
+      # 125000 characters, and that left v0.4.0 tagged with no release. The tag
+      # is pushed here (a lightweight tag on the verified commit, which is what
+      # knope pushed), and the release is created by create-release.sh with a
+      # capped body. A tag that already exists is accepted only on this same
+      # commit, so a re-run completes and never moves a tag.
+      - name: tag the verified commit
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          git config user.name "urzua-release-bot"
+          git config user.email "urzua-release-bot@users.noreply.github.com"
+          head=$(git rev-parse HEAD)
+          remote=$(git ls-remote --tags origin "refs/tags/$TAG" | awk '{print $1}')
+          if [ -z "$remote" ]; then
+            git tag "$TAG" "$head"
+            git push origin "refs/tags/$TAG"
+          elif [ "$remote" = "$head" ]; then
+            echo "$TAG already points at $head"
+          else
+            echo "::error::$TAG already exists on $remote, not the verified commit $head; refusing to move it"
+            exit 1
+          fi
+
+      - name: create the GitHub Release (ADR-0045)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          .github/scripts/create-release.sh "$VERSION" "$TAG" CHANGELOG.md "${{ github.repository }}" "$TAG"
+
+  # Finishes a publish whose release job failed after pushing the tag. Runs only
+  # from main and only for a tag that already exists on a commit main contains.
+  # It checks the tag out to read its version, never writes a tag, and creates
+  # the GitHub Release only when none exists; build and upload then run against
+  # that tag exactly as they do after a merged release PR.
+  recover:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    outputs:
+      tag: ${{ steps.check.outputs.tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: check the tag is an existing release tag
+        id: check
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          if ! printf '%s' "$TAG" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::'$TAG' is not a release tag of the form vX.Y.Z"
+            exit 1
+          fi
+          commit=$(git rev-parse --verify --quiet "refs/tags/$TAG^{commit}") || {
+            echo "::error::tag $TAG does not exist; this workflow never creates one"
+            exit 1
+          }
+          version=$(git show "$TAG:rust/Cargo.toml" | grep -m1 -E '^version = "' | sed 's/^version = "\(.*\)"$/\1/')
+          if [ "v$version" != "$TAG" ]; then
+            echo "::error::$TAG carries rust/Cargo.toml version $version"
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "$commit" HEAD; then
+            echo "::error::$TAG ($commit) is not an ancestor of this branch's head"
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "recovering $TAG at $commit"
+
+      # The notes come from this branch's CHANGELOG.md, so a changelog corrected
+      # after the tag was cut is what the release shows. The link, if the notes
+      # are ever cut, points at this commit, which holds that same text.
+      - name: create the GitHub Release if it is missing
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.check.outputs.version }}
+          TAG: ${{ steps.check.outputs.tag }}
+        run: |
+          .github/scripts/create-release.sh "$VERSION" "$TAG" CHANGELOG.md "${{ github.repository }}" "${{ github.sha }}"
+
+  # Runs after either path: the release job (merged release PR) or the recover
+  # job (workflow_dispatch). Exactly one of them runs, the other is skipped.
   build:
-    needs: release
+    needs: [release, recover]
+    if: ${{ !cancelled() && (needs.release.result == 'success' || needs.recover.result == 'success') }}
     strategy:
       fail-fast: false
       matrix:
@@ -126,7 +225,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          ref: ${{ needs.release.outputs.tag }}
+          ref: ${{ needs.release.outputs.tag || needs.recover.outputs.tag }}
       - name: install target
         run: rustup target add ${{ matrix.target }}
       - name: build
@@ -148,7 +247,8 @@ jobs:
           if-no-files-found: error
 
   upload:
-    needs: [release, build]
+    needs: [release, recover, build]
+    if: ${{ !cancelled() && needs.build.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -157,13 +257,13 @@ jobs:
         with:
           path: dist
           merge-multiple: true
-      # `knope release` above already created this release with real
+      # The release job (or the recover job) already created this release with
       # changelog-sourced notes (ADR-0045) -- upload attaches the archives to
       # it rather than creating a second, conflicting release object.
       - name: upload the built archives to the GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ needs.release.outputs.tag }}
+          TAG: ${{ needs.release.outputs.tag || needs.recover.outputs.tag }}
         run: |
           set -euo pipefail
           gh release upload "$TAG" dist/*.tar.gz --clobber --repo "${{ github.repository }}"
@@ -172,7 +272,7 @@ jobs:
       - name: verify the release actually carries its archives
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ needs.release.outputs.tag }}
+          TAG: ${{ needs.release.outputs.tag || needs.recover.outputs.tag }}
         run: |
           set -euo pipefail
           count=$(gh release view "$TAG" --repo "${{ github.repository }}" --json assets --jq '.assets | length')

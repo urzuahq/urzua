@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# The knope pin is written once. Three workflows install knope (prepare-release,
-# publish-release, checks), and a pin copied into each was checked in only one,
+# The knope pin is written once. Two workflows install knope (prepare-release,
+# checks; publish-release tags and creates the release itself and needs none), and a pin copied into each was checked in only one,
 # so a bump in one file left the publish path on a version the compat test never
 # blessed. The URL and checksum now live in .github/actions/install-knope, every
 # workflow that needs knope uses that action, and this fails when a workflow
@@ -12,7 +12,7 @@ set -uo pipefail
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 action=".github/actions/install-knope/action.yml"
-users=(.github/workflows/prepare-release.yml .github/workflows/publish-release.yml .github/workflows/checks.yml)
+users=(.github/workflows/prepare-release.yml .github/workflows/checks.yml)
 
 # Prints one line per problem found under $1 and returns 1 when there is one.
 verify() {
