@@ -107,6 +107,11 @@ struct EmptyPopulation {
     under: String,
     /// File extension (no dot) of the files that make up the population.
     extension: String,
+    /// A file holding this text is not part of the population: a changeset
+    /// fragment that closes nothing (`closes: []`) is read by the claim rule and
+    /// yields no claim, so it does not make the population non-empty.
+    #[serde(default)]
+    except_containing: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -225,10 +230,14 @@ fn repo_root() -> PathBuf {
 }
 
 /// True when some file with `extension` sits directly under `dir` of `root`.
-fn has_files(root: &Path, dir: &str, extension: &str) -> bool {
+fn has_files(root: &Path, dir: &str, extension: &str, except_containing: Option<&str>) -> bool {
     std::fs::read_dir(root.join(dir)).is_ok_and(|rd| {
-        rd.flatten()
-            .any(|e| e.path().extension().is_some_and(|x| x == extension))
+        rd.flatten().any(|e| {
+            e.path().extension().is_some_and(|x| x == extension)
+                && except_containing.is_none_or(|t| {
+                    !std::fs::read_to_string(e.path()).is_ok_and(|text| text.contains(t))
+                })
+        })
     })
 }
 
@@ -649,10 +658,10 @@ fn evaluate(case: &Case, corpus_dir: &Path, mutate: Option<&str>) -> Result<Vec<
                 .and_then(|e| e.pointer("/population/examined"))
                 .and_then(|n| n.as_u64())
                 .unwrap_or(0);
-            let may_be_empty = case
-                .empty_population_ok_without
-                .iter()
-                .any(|e| e.rule == *rule && !has_files(&cwd, &e.under, &e.extension));
+            let may_be_empty = case.empty_population_ok_without.iter().any(|e| {
+                e.rule == *rule
+                    && !has_files(&cwd, &e.under, &e.extension, e.except_containing.as_deref())
+            });
             if status != Some("ran") || (examined == 0 && !may_be_empty) {
                 unmet.push(format!(
                     "rule {rule} did not run over a non-empty population (status {status:?}, examined {examined})"

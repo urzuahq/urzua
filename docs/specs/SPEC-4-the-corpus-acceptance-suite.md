@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5N2PD9ZYBJPZHN05W7
-Version: '0.21'
+Version: '0.22'
 Date: 2026-08-20
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/tests/acceptance.rs@sha256:6bc5217cec95dff113e43cb87f6b61282599140306dca35aa16cd4cd11aa19ee, test:rust/crates/urzua-cli/tests/acceptance_property.rs@sha256:776f499ed6f76ab895ab380e38f62e1bacba4613b5dcd49074f31b99662d248e
+Realized-by: code:rust/crates/urzua-cli/tests/acceptance.rs@sha256:17625ea56765d64b5018472e845a5ceb7e20f029f6e1b3c837d8eeecdb2f783a, test:rust/crates/urzua-cli/tests/acceptance_property.rs@sha256:776f499ed6f76ab895ab380e38f62e1bacba4613b5dcd49074f31b99662d248e
 Author: beauwilliams
 Subject: 'The corpus acceptance suite -- documented bug classes `check` must reproduce against real corpora.'
 Parent: SPEC-1
@@ -253,8 +253,9 @@ built, and where it differs from the sketch:
   the same non-empty set of rules), and `message_contains` on a finding matcher. Cases run on a few
   threads and an identical read-only run over `@repo` is made once.
 - **A population that a release empties.** `empty_population_ok_without` (a list of `rule`, `under`,
-  `extension`) lets a rule of `expect_rules_ran` run over an empty population when no `*.<extension>`
-  file sits directly under `<under>`; the rule must still run, and while such a file exists the
+  `extension`, and an optional `except_containing`) lets a rule of `expect_rules_ran` run over an empty
+  population when no `*.<extension>` file sits directly under `<under>` (a file holding
+  `except_containing`, such as a fragment with `closes: []`, which yields no claim, does not count); the rule must still run, and while such a file exists the
   population must be non-empty. The claim rule reads `.changeset/*.md`, which `knope prepare-release`
   deletes. `URZUA_ACCEPTANCE_REPO` points the `@repo` cases at another checkout, which
   `release_tree_integration` uses to run two own-corpus cases over a fragment-deleted worktree.
@@ -464,3 +465,5 @@ own-corpus case lacks the flag. A case over a fixture corpus needs none.
 > | 2026-11-09 | Bumped to `0.20`. Re-pin rows in this revision log were reworded to name who re-verified, matching the tool's wording since 2026-11-09; hashes, reasons and dates are unchanged. **Why:** Maintainer decision, 2026-11-09. | **structural** |
 > | 2026-11-14 | Bumped to `0.21`. Documents `empty_population_ok_without` and `URZUA_ACCEPTANCE_REPO`. **Why:** the 0.4.0 release pull request failed `own-config-claim-rules-run`, whose rule examines the changeset fragments the release deletes; the case now accepts an empty population only when no fragment exists, and the release tree is tested before the release. | **structural** |
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/acceptance.rs` ae174f312e28 -> 6bc5217cec95. Reason: Read the diff of acceptance.rs against main: repo_root now honours URZUA_ACCEPTANCE_REPO, a case gains the optional empty_population_ok_without list (rule, directory, extension) that lets an expect_rules_ran rule run over an empty population only when no file of that extension sits under the directory, and the non-empty check consults it. No other runner behaviour changed, so each claim this record makes about the runner still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-14 | Bumped to `0.22`. `empty_population_ok_without` takes an optional `except_containing`; the claim-rule case sets it to `closes: []`. **Why:** the claim rule reads no claim from a changeset fragment that closes nothing, so a tree whose only fragment has `closes: []` has an empty population while a fragment exists, and the case failed on it (this change's own changeset). | **structural** |
+> | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/acceptance.rs` 6bc5217cec95 -> 17625ea56765. Reason: Read the diff of each re-pinned file against main and the claim still holds. rust/crates/urzua-cli/tests/acceptance.rs and the own-config-claim-rules-run case: empty_population_ok_without gains an optional except_containing, so a changeset fragment with closes: [] (which yields no claim) does not make the claim-rule population count as non-empty; entries without it behave as before. docs/specs/SPEC-4: that field is documented and the version bumped. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
