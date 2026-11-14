@@ -667,7 +667,11 @@ fn init_then_check_names_a_pre_existing_blockquote_record_as_an_unsupported_form
     let config = std::fs::read_to_string(&path).unwrap();
     std::fs::write(
         &path,
-        config.replace("required_fields: []", "required_fields: [Status]"),
+        // `header.required-fields` reads the declaration, so adopt withholds it
+        // until `required_fields` exists (`BUG-73`): declare both.
+        config
+            .replace("required_fields: []", "required_fields: [Status]")
+            .replace("rules:\n", "rules:\n  header.required-fields: warn\n"),
     )
     .unwrap();
     let check_output = run_urzua(&dir, &["check", "docs/"]);

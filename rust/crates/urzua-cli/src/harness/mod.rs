@@ -1372,14 +1372,22 @@ fn authority_checks(config: &urzua_core::config::Config) -> Vec<(Level, &'static
         .authority
         .as_ref()
         .is_some_and(|a| a.gates.is_empty());
+    // `urzua init` writes how a later gate is read (`decider_table`, `waivable`)
+    // before any decider or gate exists: a posture, not a gate that was forgotten.
+    let posture_only = config
+        .authority
+        .as_ref()
+        .is_some_and(|a| a.gates.is_empty() && a.deciders.is_empty());
     let mut out = vec![(
-        if declared_empty {
+        if declared_empty && !posture_only {
             Level::Warn
         } else {
             Level::Ok
         },
         "authority-host",
-        if declared_empty {
+        if posture_only {
+            "authority declares how a gate will be read (decider_table, waivable) and no deciders or gates yet, which is what `urzua init` writes: no status move and no path is gated until a gate is added".to_string()
+        } else if declared_empty {
             "authority is declared, no gates: no status move and no path is gated, so diff.decider-required has nothing to judge; add a gate or remove the section".to_string()
         } else {
             "authority is declared. The required status check, branch protection and any CODEOWNERS file are the host's settings, which urzua can neither read nor verify, so it does not claim them. Locally it refuses an agent's edit tools (a Bash command is reported, not stopped); in CI diff.decider-required proves authorship only, so with a single maintainer it cannot tell an agent acting under the maintainer's token from the maintainer (the accepted risk of ADR-89). A distinct agent identity, with CODEOWNERS on the protected paths and branch protection requiring the code owner, is a future option and is not configured here.".to_string()
