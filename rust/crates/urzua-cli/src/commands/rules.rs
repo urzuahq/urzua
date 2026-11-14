@@ -100,6 +100,9 @@ struct RuleEntry {
 
 #[derive(serde::Serialize)]
 struct RulesReport {
+    /// Always `ok`: listing what this build ships cannot find anything wrong,
+    /// and the key is there so every command's report carries a `status`.
+    status: &'static str,
     rules: Vec<RuleEntry>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     notices: Vec<Notice>,
@@ -123,6 +126,7 @@ pub fn run() -> ExitCode {
         })
         .collect();
     crate::emit(&RulesReport {
+        status: "ok",
         rules,
         notices: Vec::new(),
     })
