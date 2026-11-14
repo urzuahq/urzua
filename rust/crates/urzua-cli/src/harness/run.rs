@@ -290,14 +290,24 @@ fn raw_gate_denial(config: Option<&Path>, request: &Request, why: &str) -> Optio
 pub fn run_edit(config: Option<PathBuf>) -> ExitCode {
     let verdict = match read_request() {
         Ok(request) => judge_edit(config, request),
-        Err(why) => unjudged(
-            on_unreadable_request(config.as_deref()),
-            Actor::Agent,
-            None,
-            &why,
-        ),
+        Err(why) => cannot_place(config.as_deref(), Actor::Agent, &why),
     };
     emit(&verdict)
+}
+
+/// The verdict for an edit whose request cannot be placed in a repository (it
+/// cannot be read, or the directory it names cannot be entered), so nothing
+/// about the file is known: an agent's edit is refused where a denying
+/// `acceptance` or `protected-paths` guardrail covers what it cannot judge, as
+/// `adapter_failure` does for an adapter that could not build a request;
+/// otherwise the editor hook's own `on_unjudged` decides.
+fn cannot_place(config: Option<&Path>, actor: Actor, why: &str) -> Verdict {
+    if actor == Actor::Agent {
+        if let Some(verdict) = targeted_denial(config, &Request::default(), why) {
+            return verdict;
+        }
+    }
+    unjudged(on_unreadable_request(config), actor, None, why)
 }
 
 /// The verdict for a call the adapter could not turn into a request: refused
@@ -331,33 +341,58 @@ fn targeted_denial(config: Option<&Path>, request: &Request, why: &str) -> Optio
         None => ["protected-paths", "acceptance"]
             .into_iter()
             .find(|g| matches!(raw_policy(config, &root, g), (true, OnUnjudged::Deny))),
-        Some(_) => request
-            .paths
-            .iter()
-            .find_map(|p| targeted_guardrail(config, &root, Path::new(p))),
+        Some(_) => {
+            // The raw configuration is read once, however many paths the
+            // request names.
+            let covers = TargetedGates::read(config, &root)?;
+            request
+                .paths
+                .iter()
+                .find_map(|p| covers.guardrail(Path::new(p)))
+        }
     };
     guardrail.map(|g| unjudged_as(g, OnUnjudged::Deny, Actor::Agent, path, why))
 }
 
-/// The denying guardrail that covers `path`, read from the raw configuration
-/// (a protected path, the configuration itself, or a record directory of a
-/// gated type), judging the path as written and as it resolves.
-fn targeted_guardrail(config: Option<&Path>, root: &Path, path: &Path) -> Option<&'static str> {
-    let config_path = config
-        .map(Path::to_path_buf)
-        .unwrap_or_else(|| crate::discovery::default_config_path(root));
-    let raw = gate::raw_gates(&std::fs::read_to_string(&config_path).ok()?)?;
-    let config_rel = crate::discovery::relative_to_root(root, &config_path).ok();
-    let lexical = crate::discovery::relative_to_root(root, path).ok();
-    let resolved = resolved_rel(root, path);
-    let mut entries = raw.paths.clone();
-    entries.extend(raw.owned.iter().cloned());
-    let linked = gate::hardlink_aliases(root, path, &entries, &raw.gated_dirs);
-    lexical
-        .iter()
-        .chain(resolved.iter())
-        .chain(linked.iter())
-        .find_map(|rel| raw.covers(rel, config_rel.as_deref()))
+/// The raw gates of the configuration, for naming the denying guardrail that
+/// covers a path: a protected path, the configuration itself, or a record
+/// directory of a gated type.
+struct TargetedGates {
+    root: PathBuf,
+    raw: gate::RawGates,
+    config_rel: Option<PathBuf>,
+    entries: Vec<String>,
+}
+
+impl TargetedGates {
+    fn read(config: Option<&Path>, root: &Path) -> Option<Self> {
+        let config_path = config
+            .map(Path::to_path_buf)
+            .unwrap_or_else(|| crate::discovery::default_config_path(root));
+        let raw = gate::raw_gates(&std::fs::read_to_string(&config_path).ok()?)?;
+        let config_rel = crate::discovery::relative_to_root(root, &config_path).ok();
+        let mut entries = raw.paths.clone();
+        entries.extend(raw.owned.iter().cloned());
+        Some(TargetedGates {
+            root: root.to_path_buf(),
+            raw,
+            config_rel,
+            entries,
+        })
+    }
+
+    /// The denying guardrail that covers `path`, judging the path as written
+    /// and as it resolves.
+    fn guardrail(&self, path: &Path) -> Option<&'static str> {
+        let lexical = crate::discovery::relative_to_root(&self.root, path).ok();
+        let resolved = resolved_rel(&self.root, path);
+        let linked = gate::hardlink_aliases(&self.root, path, &self.entries, &self.raw.gated_dirs);
+        lexical
+            .iter()
+            .chain(resolved.iter())
+            .chain(linked.iter())
+            .find_map(|rel| self.raw.covers(rel, self.config_rel.as_deref()))
+    }
 }
 
 /// A relative path made absolute against `cwd`: the directory it is relative
@@ -446,11 +481,39 @@ pub(super) fn nearest_governed_root(start: &Path) -> Option<PathBuf> {
     governed_roots(start).into_iter().next()
 }
 
+thread_local! {
+    /// What `is_git_root` found for each directory this process asked about: a
+    /// request names many paths under a few directories, and each answer costs
+    /// a git process.
+    static GIT_ROOTS: std::cell::RefCell<std::collections::HashMap<PathBuf, bool>> =
+        std::cell::RefCell::new(std::collections::HashMap::new());
+    /// How many answers were worked out rather than remembered (tests only).
+    #[cfg(test)]
+    static GIT_ROOT_SPAWNS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// Starts the memory of `is_git_root` afresh.
+fn forget_git_roots() {
+    GIT_ROOTS.with(|m| m.borrow_mut().clear());
+}
+
 /// Whether `dir` is the top of a real git working tree: `.git` exists and git
 /// itself accepts it. An empty file or directory named `.git` is not one (git
 /// rejects it, or walks past it to a repository above), so a file an agent can
-/// write cannot make a directory a repository.
+/// write cannot make a directory a repository. Remembered per directory for the
+/// life of one request (`forget_git_roots`).
 fn is_git_root(dir: &Path) -> bool {
+    if let Some(known) = GIT_ROOTS.with(|m| m.borrow().get(dir).copied()) {
+        return known;
+    }
+    #[cfg(test)]
+    GIT_ROOT_SPAWNS.with(|c| c.set(c.get() + 1));
+    let answer = git_accepts(dir);
+    GIT_ROOTS.with(|m| m.borrow_mut().insert(dir.to_path_buf(), answer));
+    answer
+}
+
+fn git_accepts(dir: &Path) -> bool {
     if !dir.join(".git").exists() {
         return false;
     }
@@ -562,15 +625,28 @@ fn resolved_rel(repo_root: &Path, path: &Path) -> Option<PathBuf> {
     full.strip_prefix(&root).ok().map(PathBuf::from)
 }
 
+/// The most paths of one request that are judged. Each costs a search for the
+/// governed repositories that hold it, so a request with more is an edit that
+/// was not judged, as the translator's `MCP_MAX_ITEMS` makes a call with more
+/// files: the first `MAX_PATHS` are judged against the gates and the rest are
+/// refused under `on_unjudged: deny` where a guardrail covers one of them.
+const MAX_PATHS: usize = 512;
+
 fn judge_edit(config: Option<PathBuf>, mut request: Request) -> Verdict {
     let actor = request.actor();
     if let Some(cwd) = &request.cwd {
-        let on = on_unreadable_request(config.as_deref());
-        if std::env::set_current_dir(cwd).is_err() {
-            return unjudged(
-                on,
+        // A directory that cannot be entered (gone, not a directory, not
+        // readable) is replaced by the session's own project directory, where
+        // the adapter names one; with neither, nothing can be placed.
+        let entered = std::env::set_current_dir(cwd).is_ok()
+            || request
+                .project_dir
+                .as_deref()
+                .is_some_and(|d| std::env::set_current_dir(d).is_ok());
+        if !entered {
+            return cannot_place(
+                config.as_deref(),
                 actor,
-                None,
                 &format!("the request's cwd '{cwd}' cannot be entered"),
             );
         }
@@ -578,23 +654,64 @@ fn judge_edit(config: Option<PathBuf>, mut request: Request) -> Verdict {
     let Ok(cwd) = std::env::current_dir() else {
         return judge_edit_in(config, request);
     };
+    // The directories of this process are looked at once each.
+    forget_git_roots();
+    let total = request.paths.len();
+    let overflow = take_overflow(&mut request, &cwd);
+    let verdict = judge_in_roots(config.clone(), request.clone(), &cwd);
+    if overflow.is_empty() || verdict.verdict == "block" {
+        return verdict;
+    }
+    let _ = std::env::set_current_dir(&cwd);
+    let rest = Request {
+        paths: overflow,
+        actor: request.actor.clone(),
+        ..Request::default()
+    };
+    let why = format!(
+        "the request names {total} paths, more than the {MAX_PATHS} it judges in one call; the first {MAX_PATHS} were judged against the gates"
+    );
+    if actor == Actor::Agent {
+        adapter_failure(config.as_deref(), &rest, &why)
+    } else {
+        unjudged(OnUnjudged::Allow, actor, None, &why)
+    }
+}
+
+/// The paths of `request` beyond `MAX_PATHS`, made absolute against `cwd` and
+/// removed from the request (with their proposed contents, when it has one for
+/// each path).
+fn take_overflow(request: &mut Request, cwd: &Path) -> Vec<String> {
+    if request.paths.len() <= MAX_PATHS {
+        return Vec::new();
+    }
+    if request.contents.len() == request.paths.len() {
+        request.contents.truncate(MAX_PATHS);
+    }
+    request
+        .paths
+        .split_off(MAX_PATHS)
+        .iter()
+        .map(|p| absolute(cwd, p).to_string_lossy().to_string())
+        .collect()
+}
+
+/// Judges `request` in every repository that governs it, the process being in `cwd`.
+fn judge_in_roots(config: Option<PathBuf>, mut request: Request, cwd: &Path) -> Verdict {
     // An explicit configuration path names the repository's file itself.
     let roots = if config.is_some() {
         Vec::new()
     } else {
-        judging_roots(&request, &cwd)
+        judging_roots(&request, cwd)
     };
-    let root = roots
-        .first()
-        .cloned()
-        .or_else(|| plain_root(&request, &cwd));
+    let root = roots.first().cloned().or_else(|| plain_root(&request, cwd));
     let Some(first_root) = root else {
         return judge_edit_in(config, request);
     };
     request.paths = request
         .paths
         .iter()
-        .map(|p| absolute(&cwd, p).to_string_lossy().to_string())
+        .map(|p| absolute(cwd, p).to_string_lossy().to_string())
         .collect();
     if roots.is_empty() {
         let _ = std::env::set_current_dir(first_root);
@@ -602,7 +719,7 @@ fn judge_edit(config: Option<PathBuf>, mut request: Request) -> Verdict {
     }
     // The session's repository, when the policy says so, also judges a write
     // that lands outside it (`harness.outside_writes`).
-    if let Some(verdict) = outside::denial(&roots[0], &cwd, &request) {
+    if let Some(verdict) = outside::denial(&roots[0], cwd, &request) {
         return verdict;
     }
     // Every repository judges; a deny from any wins. Otherwise the verdict is
@@ -614,7 +731,7 @@ fn judge_edit(config: Option<PathBuf>, mut request: Request) -> Verdict {
         if verdict.verdict == "block" {
             return verdict;
         }
-        verdicts.push((holds(root, &cwd, &request), verdict));
+        verdicts.push((holds(root, cwd, &request), verdict));
     }
     let at = verdicts.iter().position(|(held, _)| *held).unwrap_or(0);
     verdicts.swap_remove(at).1
@@ -1268,7 +1385,7 @@ fn installed_lock_problems(root: &Path, problems: &mut Vec<Problem>) -> Option<l
 fn version_problem(lock: &lock::Lock, problems: &mut Vec<Problem>) {
     let version = super::engine_version();
     if lock.bundle_version != version {
-        let older = lock.bundle_version.as_str() < version;
+        let older = super::version_is_older(&lock.bundle_version, version);
         problems.push(Problem {
             check: "version",
             message: if older {
@@ -1372,6 +1489,13 @@ fn owned_file_problems(
             Ok(Some(_)) => {}
         }
     }
+}
+
+/// The kill-switch problems of the installed adapters, for `status`.
+pub(super) fn kill_switch_messages(root: &Path, lock: &lock::Lock) -> Vec<String> {
+    let mut problems = Vec::new();
+    kill_switch_problems(root, lock, &mut SettingsDocs::new(), &mut problems);
+    problems.into_iter().map(|p| p.message).collect()
 }
 
 /// A setting that switches every hook off, which no hook entry can show.
@@ -1507,4 +1631,75 @@ fn finish(problems: Vec<Problem>, harness: &urzua_core::harness::HarnessDecl) ->
         .map(|p| serde_json::to_value(p).expect("a problem serializes"))
         .collect();
     v
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A directory under the system temporary directory, removed when dropped.
+    struct Scratch(PathBuf);
+
+    impl Scratch {
+        fn new(name: &str) -> Self {
+            let dir = std::env::temp_dir().join(format!(
+                "urzua-run-unit-{name}-{}-{:?}",
+                std::process::id(),
+                std::thread::current().id()
+            ));
+            let _ = std::fs::remove_dir_all(&dir);
+            std::fs::create_dir_all(&dir).unwrap();
+            Scratch(dir.canonicalize().unwrap())
+        }
+    }
+
+    impl Drop for Scratch {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn spawns() -> usize {
+        GIT_ROOT_SPAWNS.with(std::cell::Cell::get)
+    }
+
+    #[test]
+    fn a_directory_is_asked_of_git_once_however_many_paths_are_under_it() {
+        let repo = Scratch::new("git-root-memo");
+        std::fs::create_dir_all(repo.0.join(".urzua")).unwrap();
+        std::fs::write(repo.0.join(".urzua/config.yaml"), "schema_version: 2\n").unwrap();
+        let init = std::process::Command::new("git")
+            .args(["init", "-q"])
+            .current_dir(&repo.0)
+            .status()
+            .unwrap();
+        assert!(init.success());
+        forget_git_roots();
+        let before = spawns();
+        for n in 0..300 {
+            let file = repo.0.join(format!("notes/n{n}.txt"));
+            assert_eq!(governed_roots(&file), vec![repo.0.clone()]);
+        }
+        // One answer for the repository's directory (the ancestors above it
+        // hold no configuration, so git is not asked about them).
+        assert_eq!(spawns() - before, 1);
+        // A fresh request asks again.
+        forget_git_roots();
+        assert!(is_git_root(&repo.0));
+        assert_eq!(spawns() - before, 2);
+    }
+
+    #[test]
+    fn a_request_beyond_the_path_cap_hands_the_rest_back_as_absolute_paths() {
+        let mut request = Request {
+            paths: (0..MAX_PATHS + 2).map(|n| format!("p{n}")).collect(),
+            ..Request::default()
+        };
+        request.contents = vec![Some("x".into()); MAX_PATHS + 2];
+        let rest = take_overflow(&mut request, Path::new("/work"));
+        assert_eq!(request.paths.len(), MAX_PATHS);
+        assert_eq!(request.contents.len(), MAX_PATHS);
+        assert_eq!(rest, ["/work/p512", "/work/p513"]);
+        assert!(take_overflow(&mut request, Path::new("/work")).is_empty());
+    }
 }

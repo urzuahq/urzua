@@ -768,7 +768,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_EMBODIMENT_BACK_POINTER_RESOLUTION,
-        description: "A source comment line `Implements: ADR-12` (a comment leader such as `//`, `#`, `--` or `*`, then the marker, then comma- or space-separated record ids, each optionally followed by a note, as in `Implements: ADR-1 (why), ADR-2`) in a file under a `back_pointer_paths` entry counts as code-tier realization evidence for the record it cites, in `embodiment.consistency` and `urzua fix` (`MILE-128`, narrowing `RFC-5` section 2), and a back-pointer citing a record that does not exist is reported here. The marker is read at the start of a comment line or in a trailing comment after code (`//`, `#`, `--`, `/*`, `<!--` after whitespace); the marker is case-sensitive; reading continues past a note to the next comma-separated id and stops at a segment that does not open with one; ids are compared numerically. Opt-in and needs `back_pointer_paths` (path prefixes, normalised at config load, no globs); evidence is collected only while this rule is enabled. A declared path covering no tracked file is itself a finding, and a non-text file is counted as unreadable, never as clean. The optional `test_paths` option (path prefixes, each inside a `back_pointer_paths` entry, else a load error, or globs such as `**/*.test.*` matched among the scanned files; a glob that cannot compile is a load error and one matching no scanned file is a finding) declares the test class: a `Verifies: ADR-12` comment in a file under it is test-tier evidence for the record it cites, and is checked for resolution like an `Implements:` one; a `Verifies:` comment elsewhere is not read (`MILE-146`). The optional `ignore_marker` option (`ADR-80`, the boundary rule's option reused) declares text that excuses the whole line it is on, shared with `embodiment.back-pointer-decision-accepted` and the evidence collector (two different values are a load error; a marker empty or inside `Implements:` or `Verifies:` is refused): a back-pointer on a line carrying it is neither reported here nor counted as evidence, the count of excused lines is disclosed in the population's `excused_lines` and in an `info` notice (also from `fix` and `reverify`), and a marker on a line with no back-pointer this rule reads, such as a `Verifies:` line outside `test_paths`, is itself a finding, reported once. Undeclared, nothing changes.",
+        description: "A source comment line `Implements: ADR-12` (a comment leader such as `//`, `#`, `--` or `*`, then the marker, then comma- or space-separated record ids, each optionally followed by a note, as in `Implements: ADR-1 (why), ADR-2`) in a file under a `back_pointer_paths` entry counts as code-tier realization evidence for the record it cites, in `embodiment.consistency` and `urzua fix` (`MILE-128`, narrowing `RFC-5` section 2), and a back-pointer citing a record that does not exist is reported here. The marker is read at the start of a comment line or in a trailing comment after code (`//`, `#`, `--`, `/*`, `<!--` after whitespace); the marker is case-sensitive; reading continues past a note to the next comma-separated id and stops at a segment that does not open with one; ids are compared numerically. Opt-in and needs `back_pointer_paths` (path prefixes, normalised at config load, no globs); evidence is collected only while this rule is enabled. A declared path covering no tracked file is itself a finding, and a non-text file is counted as unreadable, never as clean. The optional `test_paths` option (path prefixes, each inside a `back_pointer_paths` entry, else a load error, or globs such as `**/*.test.*` matched among the scanned files; a glob that cannot compile is a load error and one matching no scanned file is a finding) declares the test class: a `Verifies: ADR-12` comment in a file under it is test-tier evidence for the record it cites, and is checked for resolution like an `Implements:` one; a `Verifies:` comment elsewhere is not read (`MILE-146`). The optional `ignore_marker` option (`ADR-80`, the boundary rule's option reused) declares text that excuses the whole line it is on, shared with `embodiment.back-pointer-decision-accepted` and the evidence collector (two different values are a load error; a marker empty or inside `Implements:` or `Verifies:` is refused): a back-pointer on a line carrying it is neither reported here nor counted as evidence, the count of excused lines is disclosed in the population's `excused_lines` and in an `info` notice (also from `fix` and `reverify`), and a marker on a line with no back-pointer this rule reads, such as a `Verifies:` line outside `test_paths`, is itself a finding, reported once. A path-scoped run (`check <path>`, no `--base`) judges the files under the requested paths, reads besides them only the files whose back-pointers cite a record in scope (the evidence that record's `Embodiment` and `Status` are computed from), and counts every other file in the population's `deferred_by_scope` with an `info` notice, so its findings are a whole-corpus run's restricted to those paths (`MILE-207`). Undeclared, nothing changes.",
         scope: Scope::Files,
         anchor: Anchor::Outside,
         judges: Judges::NotRecordLevel,
@@ -789,25 +789,21 @@ pub const RULE_TABLE: &[RuleDef] = &[
         ],
         phase: Phase::Main,
         companion: None,
-        run: |c| {
-                let (files, paths, tests): (&[_], &[String], &[String]) =
-                    match c.back_pointer_sources {
-                        Some(s) => (&s.files, &s.back_pointer_paths, &s.test_paths),
-                        None => (&[], &[], &[]),
-                    };
-                embodiment_back_pointer_resolution(
-                    files,
-                    paths,
-                    tests,
-                    c.config,
-                    c.config_path,
-                    c.index,
-                )
-            },
+        run: |c| match c.back_pointer_sources {
+            Some(sources) => {
+                embodiment_back_pointer_resolution(sources, c.config, c.config_path, c.index)
+            }
+            None => embodiment_back_pointer_resolution(
+                &BackPointerSources::default(),
+                c.config,
+                c.config_path,
+                c.index,
+            ),
+        },
     },
     RuleDef {
         id: RULE_EMBODIMENT_BACK_POINTER_DECISION_ACCEPTED,
-        description: "A source back-pointer (`Implements: ADR-12`, read exactly as `embodiment.back-pointer-resolution` reads it) citing a record whose `Status` is not one at which implementation is permitted is an error: code that says it implements a decision is landing ahead of that decision (`MILE-133`). Permitted means the cited type's declared `statuses.implementable` (a terminal `success` status is not assumed to permit it); a type that declares none uses the rule's `accepted_statuses`, and with neither the status cannot be judged, which is reported rather than passed. Needs `back_pointer_paths`; `accepted_statuses` is optional. On a `--base` run only back-pointers in files the diff changed are judged (file granularity). A citation of no record is `embodiment.back-pointer-resolution`'s, not this rule's. A declared path covering no tracked file is itself a finding. Mechanical fixes carry no back-pointer and are outside it. It checks the cited record's status, never whether the code matches the decision. The optional `ignore_marker` option (`ADR-80`) declares the text that excuses the whole line it is on, the one marker shared with `embodiment.back-pointer-resolution`, so a back-pointer there is not judged; excused lines are counted in the population's `excused_lines`, and an unused marker is reported by the resolution rule while it is enabled, else here. Undeclared, nothing changes.",
+        description: "A source back-pointer (`Implements: ADR-12`, read exactly as `embodiment.back-pointer-resolution` reads it) citing a record whose `Status` is not one at which implementation is permitted is an error: code that says it implements a decision is landing ahead of that decision (`MILE-133`). Permitted means the cited type's declared `statuses.implementable` (a terminal `success` status is not assumed to permit it); a type that declares none uses the rule's `accepted_statuses`, and with neither the status cannot be judged, which is reported rather than passed. Needs `back_pointer_paths`; `accepted_statuses` is optional. On a `--base` run only back-pointers in files the diff changed are judged (file granularity). A citation of no record is `embodiment.back-pointer-resolution`'s, not this rule's. A declared path covering no tracked file is itself a finding. Mechanical fixes carry no back-pointer and are outside it. It checks the cited record's status, never whether the code matches the decision. The optional `ignore_marker` option (`ADR-80`) declares the text that excuses the whole line it is on, the one marker shared with `embodiment.back-pointer-resolution`, so a back-pointer there is not judged; excused lines are counted in the population's `excused_lines`, and an unused marker is reported by the resolution rule while it is enabled, else here. A path-scoped run (`check <path>`, no `--base`) judges every back-pointer in the files under the requested paths and, in any other file, only those citing a record in scope (a finding about that record); the files it does not read are counted in the population's `deferred_by_scope` with an `info` notice (`MILE-207`). Undeclared, nothing changes.",
         scope: Scope::Files,
         anchor: Anchor::Outside,
         judges: Judges::NotRecordLevel,
@@ -829,27 +825,24 @@ pub const RULE_TABLE: &[RuleDef] = &[
         phase: Phase::Main,
         companion: None,
         run: |c| {
-                let (files, paths): (&[_], &[String]) = match c.decision_gate_sources {
-                    Some(s) => (&s.files, &s.back_pointer_paths),
-                    None => (&[], &[]),
-                };
-                let fallback = c.config
-                    .rule_opts::<DecisionAcceptedOpts>(RULE_EMBODIMENT_BACK_POINTER_DECISION_ACCEPTED)
-                    .accepted_statuses;
-                embodiment_back_pointer_decision_accepted(
-                    files,
-                    paths,
-                    &fallback,
-                    c.changed_paths,
-                    c.config,
-                    c.config_path,
-                    c.index,
-                )
-            },
+            let fallback = c
+                .config
+                .rule_opts::<DecisionAcceptedOpts>(RULE_EMBODIMENT_BACK_POINTER_DECISION_ACCEPTED)
+                .accepted_statuses;
+            let none = BackPointerSources::default();
+            embodiment_back_pointer_decision_accepted(
+                c.decision_gate_sources.unwrap_or(&none),
+                &fallback,
+                c.changed_paths,
+                c.config,
+                c.config_path,
+                c.index,
+            )
+        },
     },
     RuleDef {
         id: RULE_CODE_DANGLING_BUG_REFERENCE,
-        description: "A source comment that cites a record id (a declared type prefix, a hyphen and a number, standing alone: `BUG-12`, `ADR-3`) which resolves to no record is an error, the mirror of `embodiment.locator-exists` (`MILE-108`, `RFC-41`): a locator names a file and this names a record from the file's side. Only existence is judged, never currency, so a citation of a superseded or retired record is not reported; ids are compared numerically. Opt-in, and needs `back_pointer_paths` (path prefixes, normalised at config load, no globs) and `extensions` (file extensions without the dot, such as `rs` or `sh`; both are declared, and the engine compiles in no language): only a tracked file under a path with one of those extensions is read. A comment is read as `embodiment.back-pointer-resolution` reads one by default: a leader (`//`, `///`, `//!`, `#`, `--`, `;`, `/*`, `*`, `<!--`) at the start of a line, or `//`, `#`, `--`, `/*`, `<!--` after whitespace following code, and every id in the rest of the comment counts. The optional `code_comment_prefixes` option declares the leaders per extension instead (a map such as `rs: [\"//\"]`, `sh: [\"#\"]`): a leader opening a line or following whitespace starts a comment, the longest leader at a position wins, an extension with no entry reads the built-in set, and a key that is not one of `extensions`, an empty list, or a blank, whitespace-holding or repeated leader is a load error. The engine reads no syntax beyond a leader, so an id in a string literal or a doc-comment code example after a leader is read, and the declared `ignore_marker` excuses it. An id run into a longer token (`ADR-12-title.md`) is a name, a word holding `://` is a URL, neither is a citation, and prose outside a comment is not read. A citation `embodiment.back-pointer-resolution` judges (an `Implements:` back-pointer, or a `Verifies:` one in its test class) is left to that rule while it is enabled over the file, so one line is not reported twice. The optional `external_ids` option (`citation.resolution`'s) lists ids that share a record prefix but are not records (`RFC-4122`, or a range written `PREFIX-LOW..HIGH`) and are not judged. The optional `ignore_marker` option (`ADR-80`, the boundary rule's option reused, read by this rule alone) declares text that excuses the whole line it is on: the line's citations are neither reported nor counted, the count is disclosed in the population's `excused_lines` and in an `info` notice, and a marker on a line that cites no record is itself a finding (a marker of fewer than three characters, with no letter or digit, or that is or ends a record id is refused at load). A declared path covering no tracked file with a declared extension is itself a finding, and a non-text file is counted as unreadable, never as clean. The population is the source files read, so a run over none is distinguishable from a clean one. Undeclared, nothing is read and nothing changes.",
+        description: "A source comment that cites a record id (a declared type prefix, a hyphen and a number, standing alone: `BUG-12`, `ADR-3`) which resolves to no record is an error, the mirror of `embodiment.locator-exists` (`MILE-108`, `RFC-41`): a locator names a file and this names a record from the file's side. Only existence is judged, never currency, so a citation of a superseded or retired record is not reported; ids are compared numerically. Opt-in, and needs `back_pointer_paths` (path prefixes, normalised at config load, no globs) and `extensions` (file extensions without the dot, such as `rs` or `sh`; both are declared, and the engine compiles in no language): only a tracked file under a path with one of those extensions is read. A comment is read as `embodiment.back-pointer-resolution` reads one by default: a leader (`//`, `///`, `//!`, `#`, `--`, `;`, `/*`, `*`, `<!--`) at the start of a line, or `//`, `#`, `--`, `/*`, `<!--` after whitespace following code, and every id in the rest of the comment counts. The optional `code_comment_prefixes` option declares the leaders per extension instead (a map such as `rs: [\"//\"]`, `sh: [\"#\"]`): a leader opening a line or following whitespace starts a comment, the longest leader at a position wins, an extension with no entry reads the built-in set, and a key that is not one of `extensions`, an empty list, or a blank, whitespace-holding or repeated leader is a load error. The engine reads no syntax beyond a leader, so an id in a string literal or a doc-comment code example after a leader is read, and the declared `ignore_marker` excuses it. An id run into a longer token (`ADR-12-title.md`) is a name, a word holding `://` is a URL, neither is a citation, and prose outside a comment is not read. A citation `embodiment.back-pointer-resolution` judges (an `Implements:` back-pointer, or a `Verifies:` one in its test class) is left to that rule while it is enabled over the file, so one line is not reported twice. The optional `external_ids` option (`citation.resolution`'s) lists ids that share a record prefix but are not records (`RFC-4122`, or a range written `PREFIX-LOW..HIGH`) and are not judged. The optional `ignore_marker` option (`ADR-80`, the boundary rule's option reused, read by this rule alone) declares text that excuses the whole line it is on: the line's citations are neither reported nor counted, the count is disclosed in the population's `excused_lines` and in an `info` notice, and a marker on a line that cites no record is itself a finding (a marker of fewer than three characters, with no letter or digit, or that is or ends a record id is refused at load). A declared path covering no tracked file with a declared extension is itself a finding, and a non-text file is counted as unreadable, never as clean. The population is the source files read, so a run over none is distinguishable from a clean one. A path-scoped run (`check <path>`, no `--base`) reads only the files under the requested paths; the others are counted in the population's `deferred_by_scope` with an `info` notice, and its findings are a whole-corpus run's restricted to those paths (`MILE-207`). Undeclared, nothing is read and nothing changes.",
         scope: Scope::Files,
         anchor: Anchor::Outside,
         judges: Judges::NotRecordLevel,
@@ -870,28 +863,21 @@ pub const RULE_TABLE: &[RuleDef] = &[
         phase: Phase::Main,
         companion: None,
         run: |c| {
-                let (files, paths, extensions): (&[_], &[String], Vec<String>) =
-                    match c.code_citation_sources {
-                        Some(s) => (
-                            &s.files,
-                            &s.back_pointer_paths,
-                            c.config
-                                .rules
-                                .get(RULE_CODE_DANGLING_BUG_REFERENCE)
-                                .and_then(|r| r.extensions.clone())
-                                .unwrap_or_default(),
-                        ),
-                        None => (&[], &[], Vec::new()),
-                    };
-                code_dangling_bug_reference(
-                    files,
-                    paths,
-                    &extensions,
-                    c.config,
-                    c.config_path,
-                    c.index,
-                )
-            },
+            let extensions = c
+                .config
+                .rules
+                .get(RULE_CODE_DANGLING_BUG_REFERENCE)
+                .and_then(|r| r.extensions.clone())
+                .unwrap_or_default();
+            let none = BackPointerSources::default();
+            code_dangling_bug_reference(
+                c.code_citation_sources.unwrap_or(&none),
+                &extensions,
+                c.config,
+                c.config_path,
+                c.index,
+            )
+        },
     },
     RuleDef {
         id: RULE_EMBODIMENT_LOCATOR_EXISTS,

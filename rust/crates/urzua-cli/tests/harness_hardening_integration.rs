@@ -1592,21 +1592,35 @@ fn the_gates_of_a_call_with_hundreds_of_files_are_one_engine_process() {
 }
 
 #[test]
-fn two_thousand_files_with_the_protected_one_last_are_refused_well_inside_the_hook_timeout() {
+fn two_thousand_files_with_the_protected_one_last_cost_one_gates_request_and_one_for_the_overflow()
+{
+    // The cost of a call is the number of engine requests it makes, not the
+    // time they take: one gates request for the files that are read, one
+    // request for the rest, never one per file.
     let dir = fixture("mcp-2200", &config(""));
-    let input = many_files(&dir, 2200, 2199);
-    let started = std::time::Instant::now();
-    let v = translate(&dir, &mcp(&dir, "mcp__x__write_files", input), &ENGINE);
-    let elapsed = started.elapsed();
-    assert_eq!(decision(&v), Some("deny"), "{v}");
-    assert!(
-        elapsed < std::time::Duration::from_secs(20),
-        "one gates process, not one per file: {elapsed:?}"
+    let log = dir.join("requests.log");
+    let v = translate_with(
+        &dir,
+        &mcp(&dir, "mcp__x__write_files", many_files(&dir, 2200, 2199)),
+        &logging_engine(&log),
     );
-    // The protected file inside the files that are read is refused by the gate.
-    let input = many_files(&dir, 2200, 100);
-    let started = std::time::Instant::now();
-    let v = translate(&dir, &mcp(&dir, "mcp__x__write_files", input), &ENGINE);
+    assert_eq!(decision(&v), Some("deny"), "{v}");
+    let requests = logged(&log);
+    assert_eq!(requests.len(), 2, "{} requests", requests.len());
+    assert!(requests[0].contains("gates_only"), "{}", requests[0]);
+    assert!(
+        requests[1].contains("adapter_error") && !requests[1].contains("gates_only"),
+        "the overflow is one request: {}",
+        requests[1]
+    );
+    // The protected file inside the files that are read is refused by the
+    // first request, and nothing else is asked.
+    let log = dir.join("requests-inside.log");
+    let v = translate_with(
+        &dir,
+        &mcp(&dir, "mcp__x__write_files", many_files(&dir, 2200, 100)),
+        &logging_engine(&log),
+    );
     assert_eq!(decision(&v), Some("deny"), "{v}");
     assert!(
         v["hookSpecificOutput"]["permissionDecisionReason"]
@@ -1615,7 +1629,9 @@ fn two_thousand_files_with_the_protected_one_last_are_refused_well_inside_the_ho
             .contains("protected"),
         "{v}"
     );
-    assert!(started.elapsed() < std::time::Duration::from_secs(20));
+    let requests = logged(&log);
+    assert_eq!(requests.len(), 1, "{} requests", requests.len());
+    assert!(requests[0].contains("gates_only"), "{}", requests[0]);
 }
 
 #[test]
@@ -1882,4 +1898,309 @@ fn a_planted_write_named_urzua_mcp_tool_is_judged_as_a_write() {
         );
         assert_eq!(decision(&v), Some("deny"), "{tool}: {v}");
     }
+}
+
+// ================================================================ review 7
+// The harness findings of an external review: a request the engine cannot
+// parse, an MCP decoy content key, a working directory that cannot be entered,
+// the kill switch in `status`, and the cost of judging a call with many paths.
+
+/// `urzua harness run edit` with `raw` on stdin, from `dir`.
+fn run_edit_raw(dir: &Path, raw: &str) -> (i32, serde_json::Value) {
+    let mut c = urzua();
+    c.args(["harness", "run", "edit"]).current_dir(dir);
+    let out = run_with_stdin(&mut c, raw);
+    (out.status.code().unwrap(), json(&out))
+}
+
+/// A copy of the translator installed in `dir` (`<dir>/.claude/hooks/`), so its
+/// project directory is `dir`.
+fn install_translator(dir: &Path) -> PathBuf {
+    let hooks = dir.join(".claude/hooks");
+    std::fs::create_dir_all(&hooks).unwrap();
+    let script = hooks.join("urzua-claude-code.py");
+    std::fs::copy(translator(), &script).unwrap();
+    script
+}
+
+/// The installed translator run with `payload`, from `process_cwd`.
+fn translate_installed(script: &Path, process_cwd: &Path, payload: &str) -> serde_json::Value {
+    let mut c = Command::new("python3");
+    c.arg("-I")
+        .arg(script)
+        .args(["edit", "--"])
+        .args(ENGINE)
+        .current_dir(process_cwd)
+        .env("URZUA_BIN", env!("CARGO_BIN_EXE_urzua"));
+    let out = run_with_stdin(&mut c, payload);
+    assert_eq!(out.status.code(), Some(0), "{out:?}");
+    if out.stdout.is_empty() {
+        return serde_json::Value::Null;
+    }
+    json(&out)
+}
+
+#[test]
+fn a_request_the_engine_cannot_parse_is_refused_where_a_gate_denies_and_allowed_loudly_otherwise() {
+    // A lone surrogate escape is valid for the translator's JSON and not for the
+    // engine's: the request cannot be read, so nothing was judged.
+    let raw = |dir: &Path| {
+        format!(
+            "{{\"event\":\"edit\",\"tool\":\"Write\",\"paths\":[\"{}\"],\"content\":\"x\\udfff\",\"actor\":\"agent\",\"cwd\":\"{}\"}}",
+            dir.join("notes.txt").to_string_lossy(),
+            dir.to_string_lossy()
+        )
+    };
+    let dir = fixture("surrogate-closed", &config(""));
+    let (code, v) = run_edit_raw(&dir, &raw(&dir));
+    assert_eq!((code, v["verdict"].as_str()), (1, Some("block")), "{v}");
+    assert!(
+        v["message"].as_str().unwrap().contains("on_unjudged"),
+        "{v}"
+    );
+    // Where the configuration allows an unjudged edit, it is allowed, loudly.
+    let dir = fixture("surrogate-open", &config(", on_unjudged: allow"));
+    let (code, v) = run_edit_raw(&dir, &raw(&dir));
+    assert_eq!(
+        (code, v["verdict"].as_str()),
+        (0, Some("allow-unjudged")),
+        "{v}"
+    );
+    // No denying gate: the editor hook's own policy stands (allow by default).
+    let off = format!("{TYPES}harness:\n  guardrails:\n    editor-hook: {{enabled: true}}\n");
+    let dir = fixture("surrogate-off", &off);
+    let (code, v) = run_edit_raw(&dir, &raw(&dir));
+    assert_eq!(
+        (code, v["verdict"].as_str()),
+        (0, Some("allow-unjudged")),
+        "{v}"
+    );
+}
+
+#[test]
+fn a_lone_surrogate_in_a_tool_input_is_refused_by_the_translator_where_a_gate_denies() {
+    let payload = |dir: &Path| {
+        format!(
+            "{{\"tool_name\":\"Write\",\"cwd\":\"{}\",\"tool_input\":{{\"file_path\":\"{}\",\"content\":\"x\\udfff\"}}}}",
+            dir.to_string_lossy(),
+            dir.join("notes.txt").to_string_lossy()
+        )
+    };
+    let dir = fixture("surrogate-translated", &config(""));
+    let v = translate(&dir, &payload(&dir), &ENGINE);
+    assert_eq!(decision(&v), Some("deny"), "{v}");
+    let open = fixture("surrogate-translated-open", &config(", on_unjudged: allow"));
+    let v = translate(&open, &payload(&open), &ENGINE);
+    assert_eq!(decision(&v), None, "{v}");
+    assert!(
+        v["systemMessage"].as_str().unwrap().contains("NOT judge"),
+        "{v}"
+    );
+}
+
+#[test]
+fn an_mcp_call_with_more_than_one_candidate_content_string_is_unplaceable() {
+    let dir = fixture("mcp-decoy", &config(""));
+    let abs = |f: &str| dir.join(f).to_string_lossy().to_string();
+    // The accepted status is in the string a server may write; the one the
+    // translator would judge is harmless.
+    for (first, second) in [("content", "text"), ("text", "content"), ("body", "data")] {
+        let mut input = serde_json::Map::new();
+        input.insert("path".into(), abs(PATH_1).into());
+        input.insert(first.into(), PROPOSED.into());
+        input.insert(second.into(), ACCEPTED.into());
+        let v = denied_mcp(&dir, "mcp__x__write_file", input.into());
+        let reason = v["hookSpecificOutput"]["permissionDecisionReason"]
+            .as_str()
+            .unwrap();
+        assert!(reason.contains("NOT judge"), "{first}/{second}: {reason}");
+    }
+    // The same string twice is one candidate: judged as the whole-file write.
+    let v = translate(
+        &dir,
+        &mcp(
+            &dir,
+            "mcp__x__write_file",
+            serde_json::json!({"path": abs(PATH_1), "content": ACCEPTED, "text": ACCEPTED}),
+        ),
+        &ENGINE,
+    );
+    assert_eq!(decision(&v), Some("deny"), "judged as the gated write: {v}");
+    assert!(
+        v["hookSpecificOutput"]["permissionDecisionReason"]
+            .as_str()
+            .unwrap()
+            .contains("refused"),
+        "{v}"
+    );
+    // Not a gated target: allowed with a notice. Where unjudged edits are
+    // allowed, a gated one is too.
+    let v = translate(
+        &dir,
+        &mcp(
+            &dir,
+            "mcp__x__write_file",
+            serde_json::json!({"path": abs("notes.txt"), "content": "a", "text": "b"}),
+        ),
+        &ENGINE,
+    );
+    assert_eq!(decision(&v), None, "{v}");
+    let open = fixture("mcp-decoy-open", &config(", on_unjudged: allow"));
+    let v = translate(
+        &open,
+        &mcp(
+            &open,
+            "mcp__x__write_file",
+            serde_json::json!({"path": open.join(PATH_1).to_string_lossy(), "content": PROPOSED, "text": ACCEPTED}),
+        ),
+        &ENGINE,
+    );
+    assert_eq!(decision(&v), None, "{v}");
+}
+
+#[test]
+fn a_cwd_that_cannot_be_entered_is_replaced_by_the_project_directory_or_refused_under_deny() {
+    let dir = fixture("bad-cwd", &config(""));
+    let elsewhere = common::TempDir::new("urzua-hardening-bad-cwd-elsewhere");
+    let protected = dir
+        .join(".claude/settings.json")
+        .to_string_lossy()
+        .to_string();
+    let request = |cwd: &str, project_dir: Option<&Path>, path: &str| {
+        let mut r = serde_json::json!({
+            "event": "edit", "tool": "Write", "paths": [path], "content": "{}\n",
+            "actor": "agent", "cwd": cwd,
+        });
+        if let Some(p) = project_dir {
+            r["project_dir"] = p.to_string_lossy().to_string().into();
+        }
+        r.to_string()
+    };
+    // With the project directory, the edit is judged there: the gate refuses.
+    let (code, v) = run_edit_raw(
+        &elsewhere,
+        &request("/nonexistent-urzua-cwd", Some(&dir), &protected),
+    );
+    assert_eq!(code, 1, "{v}");
+    assert!(v["message"].as_str().unwrap().contains("refused"), "{v}");
+    // A relative path is the project directory's file, not the process's.
+    let (code, v) = run_edit_raw(
+        &elsewhere,
+        &request(
+            "/nonexistent-urzua-cwd",
+            Some(&dir),
+            ".claude/settings.json",
+        ),
+    );
+    assert_eq!(code, 1, "{v}");
+    // With neither, the edit was not judged: refused where a gate denies.
+    let (code, v) = run_edit_raw(&dir, &request("/nonexistent-urzua-cwd", None, "notes.txt"));
+    assert_eq!(code, 1, "{v}");
+    assert!(
+        v["message"].as_str().unwrap().contains("cannot be entered"),
+        "{v}"
+    );
+    // Allowed loudly where the configuration allows an unjudged edit.
+    let open = fixture("bad-cwd-open", &config(", on_unjudged: allow"));
+    let (code, v) = run_edit_raw(&open, &request("/nonexistent-urzua-cwd", None, "notes.txt"));
+    assert_eq!(
+        (code, v["verdict"].as_str()),
+        (0, Some("allow-unjudged")),
+        "{v}"
+    );
+}
+
+#[test]
+fn the_translator_runs_the_engine_in_the_project_directory_when_the_payload_cwd_is_unusable() {
+    let dir = fixture("bad-cwd-translated", &config(""));
+    let script = install_translator(&dir);
+    let elsewhere = common::TempDir::new("urzua-hardening-bad-cwd-translated-elsewhere");
+    for cwd in [
+        serde_json::json!("/nonexistent-urzua-cwd"),
+        serde_json::json!(dir.join("notes.txt").to_string_lossy()),
+    ] {
+        let payload = serde_json::json!({
+            "tool_name": "Write", "cwd": cwd,
+            "tool_input": {"file_path": ".claude/settings.json", "content": "{}\n"},
+        })
+        .to_string();
+        let v = translate_installed(&script, &elsewhere, &payload);
+        assert_eq!(decision(&v), Some("deny"), "{cwd}: {v}");
+    }
+    // The engine cannot run and the cwd is unusable: the configuration text is
+    // read from the project directory, so a denying gate still refuses.
+    let payload = serde_json::json!({
+        "tool_name": "Write", "cwd": "/nonexistent-urzua-cwd",
+        "tool_input": {"file_path": "notes.txt", "content": "x"},
+    })
+    .to_string();
+    let mut c = Command::new("python3");
+    c.arg("-I")
+        .arg(&script)
+        .args(["edit", "--", "urzua-no-such-binary"])
+        .current_dir(&elsewhere);
+    let out = run_with_stdin(&mut c, &payload);
+    let v = json(&out);
+    assert_eq!(decision(&v), Some("deny"), "{v}");
+    // An open configuration allows it with a notice.
+    let open = fixture("bad-cwd-translated-open", &config(", on_unjudged: allow"));
+    let script = install_translator(&open);
+    let v = translate_installed(&script, &elsewhere, &payload);
+    assert_eq!(decision(&v), None, "{v}");
+}
+
+/// A request naming `count` ungated files and, as the last, `last`.
+fn engine_paths(dir: &Path, count: usize, last: &str) -> String {
+    let mut paths: Vec<String> = (0..count - 1)
+        .map(|n| {
+            dir.join(format!("notes/n{n}.txt"))
+                .to_string_lossy()
+                .to_string()
+        })
+        .collect();
+    paths.push(dir.join(last).to_string_lossy().to_string());
+    serde_json::json!({
+        "event": "edit", "tool": "x", "paths": paths, "content": "x", "actor": "agent",
+        "cwd": dir.to_string_lossy(), "gates_only": true,
+    })
+    .to_string()
+}
+
+#[test]
+fn the_engine_judges_a_capped_number_of_paths_and_refuses_the_overflow_under_deny() {
+    let dir = fixture("engine-cap", &config(""));
+    // The protected path is inside the cap: the gate refuses it.
+    let (code, v) = run_edit_raw(&dir, &engine_paths(&dir, 512, PROTECTED));
+    assert_eq!(code, 1, "{v}");
+    assert!(v["message"].as_str().unwrap().contains("refused"), "{v}");
+    // Beyond the cap it is not judged by the gates, so the call is an edit that
+    // was not judged and the denying guardrail that covers it refuses.
+    let (code, v) = run_edit_raw(&dir, &engine_paths(&dir, 513, PROTECTED));
+    assert_eq!(code, 1, "{v}");
+    assert!(
+        v["message"].as_str().unwrap().contains("more than the 512"),
+        "{v}"
+    );
+    // Within the cap and ungated: judged, allowed.
+    let (code, v) = run_edit_raw(&dir, &engine_paths(&dir, 512, "notes/last.txt"));
+    assert_eq!((code, v["verdict"].as_str()), (0, Some("allow")), "{v}");
+    // Over the cap and ungated: allowed, loudly.
+    let (code, v) = run_edit_raw(&dir, &engine_paths(&dir, 600, "notes/last.txt"));
+    assert_eq!(
+        (code, v["verdict"].as_str()),
+        (0, Some("allow-unjudged")),
+        "{v}"
+    );
+    assert!(
+        v["message"].as_str().unwrap().contains("more than the 512"),
+        "{v}"
+    );
+    // Where unjudged edits are allowed, the overflow is allowed, loudly.
+    let open = fixture("engine-cap-open", &config(", on_unjudged: allow"));
+    let (code, v) = run_edit_raw(&open, &engine_paths(&open, 513, PROTECTED));
+    assert_eq!(
+        (code, v["verdict"].as_str()),
+        (0, Some("allow-unjudged")),
+        "{v}"
+    );
 }
