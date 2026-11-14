@@ -175,7 +175,8 @@ conversation history. If you're doing multi-step work worth remembering:
   `Verified`/`Drift detected`/etc. yourself and skip the command that exists to get it right.
 - **`urzua new`'s assigned display number is provisional, not reserved.** It scans the working tree and
   every local branch and remote-tracking ref (MILE-89), skipping past numbers found there and naming
-  the claiming refs on stderr. It is blind to refs never fetched into this clone, so `git fetch` first
+  them, with the reason, in the `skipped` list of its JSON (never on stderr). It is blind
+  to refs never fetched into this clone, so `git fetch` first
   and, before opening a PR, manually check other open PRs for the same type/number — e.g. `gh
   pr list --search "in:title <TYPE>-<N>"` or `git log --all --oneline -- 'docs/<type>/<TYPE>-<N>-*'`
   — a collision found this way is expected and cheap to rename, not a bug in the tool.
@@ -242,6 +243,12 @@ bug follows the fixed-in-PR convention. The same rule covers any other field who
 decision was reached on someone's behalf (`Supersedes / Superseded-by`, a vacated-number tombstone,
 closing a cross-reference) and is not covered by the exceptions above. Distinct from the rule above
 this one: that one guards an already-decided record's content; this one guards the decision itself.
+
+A revision row, amendment or acceptance row that says the maintainer decided or accepted something
+quotes the maintainer's instruction, or cites the PR or review where they gave it. An unquoted
+"maintainer decision, <date>" cannot be checked later, and a scope change recorded that way narrows
+a Done means without evidence. When the maintainer changes an item's scope, keep the item's original
+text and waive it with the decision quoted (`ADR-96`, item waivers; `ADR-101`, nothing is `Done` without evidence); never rewrite the item to fit what was built.
 
 ## Who accepts a record, and the accepted risk
 

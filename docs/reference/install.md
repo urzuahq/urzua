@@ -60,7 +60,12 @@ There is no Windows build.
   detection, `check --base` and `new` all read git.
 - `git` must be on `PATH`.
 - `refs refresh` needs `curl`, and reads `GITHUB_TOKEN` or `GH_TOKEN` when set. It is the only
-  command that uses the network.
+  command whose job is to use the network.
+- `gh` is optional. `new`, `waive` and the `--apply` modes of `fix` and `reverify` ask it who is
+  logged in (`gh api user`) and fall back to `--by` and `git config user.name` when it is absent or
+  not logged in. `new` with `new.check_open_prs: true` also runs `git fetch`. Everything else,
+  including every `check`, makes no network call. See [what uses the
+  network](commands.md#what-uses-the-network).
 - The agent harness hooks need `python3` (see [the agent harness](agent-harness.md)).
 
 ## Telemetry

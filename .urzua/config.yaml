@@ -374,6 +374,7 @@ record_types:
             - {name: superseded-by-decision, cite: required}
             - {name: deferred-to, cite: required, expires: required}
             - {name: process-outcome}
+            - {name: scope-changed-by-decision}
           # An item still holding the milestone template's placeholder text is
           # unfilled: it never resolves and `status.done-items-shape` reports it
           # (ADR-96, amendment of 2026-11-08).
