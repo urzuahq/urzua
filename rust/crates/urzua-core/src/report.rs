@@ -854,13 +854,16 @@ pub struct CheckReport {
     /// unless that option is declared and the rule ran.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub baseline: Option<BaselineInfo>,
+    /// True exactly when the run exits 1: an unwaived error, or under
+    /// `fail_on: warning` an unwaived warning. A reader with no exit code (the
+    /// MCP server's client) branches on it.
     pub blocking: bool,
     pub findings: Vec<Finding>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub notices: Vec<Notice>,
     /// The exit threshold in force (`fail_on` / `--fail-on`). Never
-    /// serialized: stdout is the same whatever the threshold, only the exit
-    /// code moves.
+    /// serialized: it moves the exit code, and `blocking` with it, and nothing
+    /// else on stdout.
     #[serde(skip)]
     pub fail_on: crate::config::FailOn,
 }
@@ -1410,6 +1413,12 @@ pub struct WaiveReport {
     /// says which were written.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+    /// What the run said beyond its drafts: the identity it used in place of
+    /// `--by`, and what numbering reported (a failed pull-request fetch, a
+    /// missing directory). The same text is on stderr; stderr is not the
+    /// contract (`ADR-46`).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub notices: Vec<Notice>,
 }
 
 /// One waiver the command drafts (or wrote), for one rule in one file.
@@ -1434,7 +1443,7 @@ pub struct WaiveFindings {
 
 impl Report for WaiveReport {
     fn notices(&self) -> &[Notice] {
-        &[]
+        &self.notices
     }
     /// 0 when it ran, 1 after a partial write, 2 when nothing could be written.
     fn exit_code(&self) -> ExitCode {

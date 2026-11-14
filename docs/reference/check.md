@@ -43,10 +43,13 @@ are likewise counted as `deferred_by_scope` when there is no diff.
 |---|---|
 | 0 | Ran, and nothing blocks. Findings below the `fail_on` threshold, `info` findings and waived findings do not block. |
 | 1 | Ran, and at least one unwaived finding is at or above the threshold. `"blocking": true`. |
-| 2 | Could not run: no config, an unparseable config, not a git repository, an unknown rule in `--rules`, a bad `--base`. The report has `"status": "not-run"` and an `error`. |
+| 2 | Could not run: no config, an unparseable config, not a git repository, an unknown rule in `--rules`, a bad `--base`. The report has `"status": "not-run"` and an `error`. A run that read the repository and established nothing (a path argument that names no record, a `--rules` selection that no rule can answer) is `not-run` too, with a warning notice that says why in place of an `error`. |
 
 The threshold is `fail_on` in the config (`error` by default; `warning` makes unwaived warnings
-block too), and `--fail-on error|warning` overrides it for one run without changing the JSON.
+block too), and `--fail-on error|warning` overrides it for one run. The threshold moves the exit code and
+`blocking` with it and nothing else: `blocking` is `true` exactly when the run exits 1, so under
+`fail_on: warning` an unwaived warning gives `"blocking": true`, and the same run under `--fail-on error`
+gives `false` and exit 0.
 
 ## `check --base <ref>`
 
@@ -122,21 +125,21 @@ change that did not touch it.
 
 | Field | Meaning |
 |---|---|
-| `status` | `ok` (no findings), `findings-present`, or `not-run` (could not run; see `error`). Branch on this, and on `blocking`. |
-| `error` | Present only when `status` is `not-run`: why. |
+| `status` | `ok` (no findings), `findings-present`, or `not-run` (could not run; see `error`, or the warning notice when there is no `error`). Branch on this, and on `blocking`. |
+| `error` | Present when `status` is `not-run` because the run could not start: why. A run that started and established nothing has no `error`; its reason is a warning notice (subject `scope` for a path argument that matched no record, `not-run` for the rest). |
 | `as_of` | The date comparisons were made against: `date`, and `source` (`clock`, or the `--as-of` flag). |
 | `files_examined` | How many record files the run loaded. |
 | `records_read_by_any_rule` | How many distinct records at least one rule examined. |
-| `rules_executed` | One entry per rule this build ships, each with its `status`, so a check that found nothing is distinguishable from a check that ran on nothing. |
+| `rules_executed` | One entry per rule this build ships (a rule that judges a second population, such as `citation.resolution` with `non_reference_field`, has a second entry, so the list can be longer than the rule count), each with its `status`, so a check that found nothing is distinguishable from a check that ran on nothing. |
 | `rules_executed[].status` | `ran`; `not-enabled` (the rule is off or not declared); `not-applicable` (enabled but the run cannot supply what it judges, for example a diff rule without `--base`). |
 | `rules_executed[].population` | For a rule that ran: its `unit` (`record`, `field`, `section`, `record-type`, ...), how many things were `eligible`, how many `examined`, how many were `out_of_scope` and how many `unreadable`. `eligible` greater than `examined` means the rule could not look at some, and the difference is not a pass. `deferred_by_scope`, present only when non-zero, counts candidates left unjudged on purpose by a path-scoped run or a `scope: changed` rule; it is part of the difference, with a notice saying why. |
 | `rules_selected` | The ids from `--rules`, or `null`. |
-| `scope` | What was selected. `source` is `tracked-sweep`, `argv` (a file named directly), `git-diff` (`--base`) or `stdin`. `base` is the ref for `git-diff`, else `null`. `record_types`, `include_untracked` and `untracked_included` are always present. A `git-diff` run adds `changed_paths`, `dependents` and `whole_corpus_reason`. |
-| `blocking` | `true` when the run exits 1. |
+| `scope` | What was selected. `source` is `tracked-sweep` (including a tracked record named directly), `argv` (a named file outside the tracked set that git does not list), `git-diff` (`--base`) or `stdin`. `base` is the ref for `git-diff`, else `null`. `record_types`, `include_untracked` and `untracked_included` are always present. A `git-diff` run adds `changed_paths`, `dependents` and `whole_corpus_reason`. |
+| `blocking` | `true` exactly when the run exits 1: an unwaived error, or under `fail_on: warning` (or `--fail-on warning`) an unwaived warning. A client with no exit code, such as the MCP server's, reads this. |
 | `next_action` | One command to run next, as a bare string such as `urzua fix --apply`, or `null` when nothing is better than reading the findings. On every urzua command's JSON, not only `check`'s ([command reference](commands.md)). It runs as printed: unwaived error and warning findings that offer a `run-command` pick it, `urzua fix --apply --ids <their records>` before `urzua index --apply`. The command resolves who is applying from `gh` or `git config user.name`; where neither is set it exits 2 asking for `--by`, so append `--by <name>`. |
 | `next_action_reason` | Why, from counts: `repairs 3 of 5 findings`. `null` exactly when `next_action` is. |
 | `findings` | The findings, below. |
-| `notices` | Present when the run has something to say that is not a finding (an untracked record skipped, an empty diff, a section alias in use, ...). Each has `severity`, `subject`, `message` and sometimes `detail`. A notice never changes the exit code. |
+| `notices` | Present when the run has something to say that is not a finding (an untracked record skipped, an empty diff, a path argument that matches no record, a section alias in use, ...). Each has `severity`, `subject`, `message` and sometimes `detail`. A notice never changes the exit code. |
 
 ### A finding
 

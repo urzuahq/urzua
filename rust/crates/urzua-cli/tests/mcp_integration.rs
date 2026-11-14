@@ -316,6 +316,49 @@ fn list_records_filters_generically_and_says_when_a_filter_matched_nothing() {
     );
 }
 
+/// 4.3: a `not-run` check report is an error result, as its exit 2 is a failure.
+#[test]
+fn a_not_run_check_report_is_an_error_result_observed_failing() {
+    let dir = fixture("not-run-error");
+    let reply = call_one(
+        &dir,
+        "urzua_check",
+        json!({"paths": [".urzua/config.yaml"]}),
+    );
+    let result = &reply["result"];
+    assert_eq!(result["structuredContent"]["status"], "not-run", "{result}");
+    assert_eq!(result["isError"], true, "{result}");
+    let ok = call_one(&dir, "urzua_check", json!({}));
+    assert_eq!(ok["result"]["isError"], false);
+}
+
+/// 4.4: a listing names records; the whole-corpus roadmap is `urzua roadmap`'s.
+#[test]
+fn a_filtered_listing_does_not_carry_the_whole_corpus_roadmap_observed_failing() {
+    let dir = fixture("no-roadmap");
+    let config = CONFIG.replace(
+        "record_types:",
+        "roadmap:\n  pairs: [supersession]\nrelation_pairs:\n  - {name: supersession, forward: Supersedes, inverse: Superseded-by, reciprocity: none, cross_type: false, acyclic: true}\nrecord_types:",
+    );
+    std::fs::write(dir.join(".urzua/config.yaml"), config).unwrap();
+    let cli = common::urzua()
+        .args(["export", "--format", "json"])
+        .current_dir(&dir)
+        .output()
+        .unwrap();
+    let cli: Value = serde_json::from_slice(&cli.stdout).unwrap();
+    assert!(
+        cli.get("roadmap").is_some(),
+        "the fixture declares a roadmap: {cli}"
+    );
+    for args in [json!({}), json!({"type": "adr", "status": ["Rejected"]})] {
+        let reply = call_one(&dir, "urzua_list_records", args);
+        let report = &reply["result"]["structuredContent"];
+        assert!(report.get("roadmap").is_none(), "{report}");
+        assert!(report.get("records").is_some());
+    }
+}
+
 #[test]
 fn check_returns_the_cli_report_as_structured_content_and_identical_text() {
     let dir = fixture("check");

@@ -25,6 +25,9 @@
 //! config does not turn on is listed, ADR-7, so each new rule adds one) and the
 //! two `scope` fields of `discovery.include_untracked` (MILE-206, off and zero).
 //! Every rule the config enables, and every other byte, is compared as is.
+//! One golden value was changed on purpose: `check-base.json`'s `blocking` is `true`,
+//! because the run exits 1 under `fail_on: warning` and `blocking` now says so
+//! (SPEC-2, version 0.162).
 //!
 //! A golden changes only when the output of an undeclared config changes on
 //! purpose, with the spec row that says so. To see what the current build says,
