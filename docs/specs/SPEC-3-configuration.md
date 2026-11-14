@@ -1,9 +1,9 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.144'
+Version: '0.145'
 Date: 2026-08-20
 Status: Shipped
-Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:00380806bfa0efa2b631ea3dad824e1f785b0237f7dda5302cdf1097f4da5421, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:09c2431a269316741c35b51dabd5766ecd3d50fab2b98069314bb1bc8857767d, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:255395e7d2caa34947cef28f463e2ec050e3eba798a4dc7573a3cad946fee1ae
+Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:6e7b740a88d538d69ec97a77972ac114a726f2ed0a3980a205351a11e0abb5d9, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:09c2431a269316741c35b51dabd5766ecd3d50fab2b98069314bb1bc8857767d, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:255395e7d2caa34947cef28f463e2ec050e3eba798a4dc7573a3cad946fee1ae
 Embodiment: Verified
 Author: beauwilliams
 Subject: '`.urzua/config.yaml` -- the schema for record types, required/known fields, and per-type behavior.'
@@ -32,6 +32,12 @@ Phase C, against the second codebase, and cannot be tested before then.
 `.urzua/config.yaml`, written by `urzua init` (SPEC-5); `--config` overrides. The nearest
 `.urzua/` at or above the cwd wins, so the tool works from a subdirectory of a monorepo without
 arguments.
+
+The file is read as UTF-8 YAML. A leading byte order mark is skipped, as it is in every record. A key
+written twice under `rules:` or `record_types:` is a load error naming the key and the section, never
+last-one-wins: a merge that left `header.required-fields: error` and then `off` would otherwise disable the
+rule while `doctor` reported the config as parsing. (Other mappings keep their struct rules: a repeated
+field of a declaration is already a parse error.)
 
 The config sits in a directory rather than at the root because it is not the only thing the tool
 owns: templates live beside it at `.urzua/templates/`, and derived state at `.urzua/cache/`, which
@@ -1717,13 +1723,17 @@ and drift that predates it stops gating while drift introduced since it still do
 rules:
   embodiment.consistency:
     level: warn
-    drift_baseline: {ref: v0.3.0}   # a branch, tag or commit
+    drift_baseline: {ref: v0.3.0}   # a tag or a commit sha
 ```
 
-- `ref` (required, one key): a git ref. A blank ref, one that starts with `-`, one that holds whitespace, an unknown
-  key beside it, or the value written as a bare string is a load error. Whether the ref resolves is judged when
-  `check` runs, because a configuration cannot see the repository: a ref that names no commit stops the run (exit
-  2) and names the option and the ref. It is never read as "no pre-existing drift", which would put the whole
+- `ref` (required, one key): a git tag or a commit sha. A blank ref, one that starts with `-`, one that holds
+  whitespace, an unknown key beside it, or the value written as a bare string is a load error. Whether the ref
+  resolves is judged when `check` runs, because a configuration cannot see the repository: a ref that names no
+  commit stops the run (exit 2) and names the option and the ref. So does a ref that names a place that moves: a
+  branch, a remote-tracking branch, `HEAD` or an expression built on it (`HEAD~3`), or any spelling that is
+  neither a tag nor a commit sha. A baseline that followed a branch would hold out every drift already merged
+  into it, so `introduced` would read `0` while the notice said drift since the baseline is reported (the
+  first-run review, finding 1.4; `ADR-91` amendment of 2026-11-14). It is never read as "no pre-existing drift", which would put the whole
   backlog back on the gate. A shallow clone that lacks the commit fails the same way.
 - Drift is judged as it stood at the ref. A record is pre-existing when it existed at the ref, every locator that
   drifts now is the same locator (same category, spelling and pin) that its copy at the ref cited and had
@@ -2580,6 +2590,7 @@ proves this configuration produces the three findings.
 > | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` ad8c3554a542 -> d07f1b749110, `rust/crates/urzua-cli/tests/own_config_integration.rs` e60116ae0a70 -> d6dcb432d05a. Reason: Read the diff of each re-pinned file against main and the claim still holds. own_config_integration.rs: adds the test the_own_config_reports_a_dangling_citation_in_rust_and_scripts_and_nothing_else; no existing test changed; config.rs: RuleSetting gains the optional extensions field, RULE_OPTIONS gains the extensions entry, validate_extensions refuses an entry that is not a bare extension, the optional code_comment_prefixes field with validate_code_comment_prefixes and its applicability check, validate_ignore_markers applies the generic marker guard to code.dangling-bug-reference, and the external_ids doc comment names PREFIX-LOW..HIGH instead of a sample range; no existing option, parse or default changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/field_levels_integration.rs` 3c8aa6715827 -> 255395e7d2ca. Reason: without_the_option_every_finding_takes_the_rule_level now also asserts that both blank fields are reported, so an empty findings list no longer passes; unchanged behaviour **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-14 | Bumped to `0.143`. The test files this spec's evidence pins were hardened (exact exit codes, isolated git, visible root skips); the pins are re-baselined in the row above and the specified behaviour is unchanged. **Why:** the review's test findings; a re-baseline row is structural, so the version moves with it. | **structural** |
-> | 2026-11-14 | Bumped to `0.144`. Documents that `identity.record-symlink-escapes` is on for every configuration and that declaring it `off` is a load error. **Why:** `ADR-89` amendment of 2026-11-14. | **substantive** |
-> | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` d07f1b749110 -> 00380806bfa0. Reason: Pinned file(s) changed by the symlinked-record refusal: config.rs: a rule that cannot be turned off, declared `off`, is a load error (RuleCannotBeOff, validate_default_on_rules). The record's claim is unaffected by these changes. (Re-applied after merging main.) **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
-> | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/own_config_integration.rs` d6dcb432d05a -> 09c2431a2693. Reason: Pinned file(s) changed by the symlinked-record refusal: own_config_integration.rs: a revision row appended by an earlier re-pin in this change. The record's claim is unaffected by these changes. (Re-applied after the follow-up review and merging main.) **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-14 | Bumped to `0.144`. `## Resolution` states that a leading byte order mark is skipped and that a key repeated under `rules:` or `record_types:` is a load error naming the key. `drift_baseline`'s `ref` is a tag or a commit sha; a branch, `HEAD` or any ref that is neither is refused when `check` runs, with the reason. **Why:** the first-run review, findings 6.3, 6.6 and 1.4: a duplicate rule key disabled a rule silently, a BOM made the config unreadable, and a baseline on a branch hid all merged drift; the ref rule is the `ADR-91` amendment of 2026-11-14, decided by the orchestrator, pending maintainer review. | **substantive** |
+> | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` d07f1b749110 -> 9b216fd928bd. Reason: Read the diff of each pinned file against main and the claim still holds. config.rs: strip_bom, read_in_window skips a BOM, unique_map refuses a repeated key under rules and record_types, and new unit tests; no other parsing or validation changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-14 | Bumped to `0.145`. Documents that `identity.record-symlink-escapes` is on for every configuration and that declaring it `off` is a load error. **Why:** `ADR-89` amendment of 2026-11-14. | **substantive** |
+> | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 9b216fd928bd -> 6e7b740a88d5, `rust/crates/urzua-cli/tests/own_config_integration.rs` d6dcb432d05a -> 09c2431a2693. Reason: Pinned file(s) changed by the symlinked-record refusal: config.rs: a rule that cannot be turned off, declared `off`, is a load error (RuleCannotBeOff, validate_default_on_rules); own_config_integration.rs: a revision row appended by an earlier re-pin in this change. The record's claim is unaffected by these changes. (Re-applied after merging main.) **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |

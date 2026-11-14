@@ -39,7 +39,9 @@ urzua init --types adr,rfc,spec --dir docs
 ```
 
 `--types` takes any of `adr`, `rfc`, `spec` and `prd`; `--dir` is the layout root (default `docs`),
-so each type lives in `docs/<type>`. The directories are created by the first `urzua new <type>`.
+so each type lives in `docs/<type>`. `init` creates each directory with an empty `.gitkeep` so it exists
+in a fresh clone; on a repository with no record yet, `urzua doctor` and `urzua check` then pass (`check`
+is `ok` with an `empty-corpus` notice, since no record was examined).
 Then continue from step 6 below.
 
 ## 2. Preview the config
@@ -85,7 +87,9 @@ exists and exits 2. Run it again with `--dry-run` at any time to see what a fres
 propose.
 
 The starter config has every record type with `required_fields: []`, and each shipped rule that can
-examine your corpus set to `warn`. A rule `init` withheld is simply absent. Commit the file.
+examine your corpus set to `warn`. A rule that reads something `init` does not write (a field list,
+status rules, a revision log, a waiver type) is withheld and named in a `rule-applicability` notice with
+what to declare, so a rule is never on while it examines nothing. Commit the file.
 
 ## 4. Run the first check
 

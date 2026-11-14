@@ -2,7 +2,7 @@
 Stable-Id: 01M2WCN7XW36XM92HNEQJEBE23
 Status: Fixed
 Found-in: "Round 6 of the 0.4.0 release review"
-Realized-by: test:rust/crates/urzua-cli/src/commands/init.rs#a_detected_prefix_is_written_so_the_proposed_rules_can_read_an_identity@sha256:bad1824d5f9aa45b8cba8a1fa643d18dc75b6b02c4c130e9420bfffb6ef9f6fc, test:rust/crates/urzua-cli/src/commands/init.rs#a_corpus_with_no_prefix_is_not_offered_rules_that_cannot_fire@sha256:6ef287fc50cfbda3aa575acd67bf498224f3de1aa280abe5348f1221bec10f1e
+Realized-by: test:rust/crates/urzua-cli/src/commands/init.rs#a_detected_prefix_is_written_so_the_proposed_rules_can_read_an_identity@sha256:bad1824d5f9aa45b8cba8a1fa643d18dc75b6b02c4c130e9420bfffb6ef9f6fc, test:rust/crates/urzua-cli/src/commands/init.rs#a_corpus_with_no_prefix_is_not_offered_rules_that_cannot_fire@sha256:4ae5d14d012a51fd22eda16f0777961109a6d4e0fbbfcbfd3f5d71c80b374236
 ---
 # 61 — init writes no prefix so the rules it proposes examine zero records on the corpus it adopted
 
@@ -43,3 +43,4 @@ applies to a rule whose shape assumption it cannot satisfy, and was not extended
 > |---|---|---|
 > | 2026-11-05 | `Regression-test` moved into `Realized-by` as 2 `test:` locators and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |
 > | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/init.rs#a_detected_prefix_is_written_so_the_proposed_rules_can_read_an_identity` (lines 945-961) 72f13d1a7e48 -> bad1824d5f9a, `rust/crates/urzua-cli/src/commands/init.rs#a_corpus_with_no_prefix_is_not_offered_rules_that_cannot_fire` (lines 991-1023) ff03c4b54c4a -> 6ef287fc50cf. Reason: the pinned test span's only change is the added `exclude_files: vec![]` fixture field; the behaviour this record relies on is unchanged **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/init.rs#a_corpus_with_no_prefix_is_not_offered_rules_that_cannot_fire` (lines 1138-1170) 6ef287fc50cf -> 4ae5d14d012a. Reason: Read the diff of each pinned file against main and the claim still holds. the test now asserts header.case-variant-key is still proposed instead of header.required-fields, which adopt withholds; its other assertions are unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |

@@ -5,7 +5,8 @@ Urzua reads one file, `.urzua/config.yaml`, found by walking up from the current
 
 An unknown key in the keys listed here is a load error: the command exits 2 with a `not-run` report
 naming it. A repository's config is therefore either understood in full or refused, never partly
-ignored. `urzua doctor` reports the same problems on demand.
+ignored. A key written twice under `rules:` or `record_types:` is refused the same way, naming the key.
+A leading byte order mark is skipped. `urzua doctor` reports the same problems on demand.
 
 This page lists every top-level key and every key of a record type. For the full semantics of a key,
 the build-level specification is [`SPEC-3`](../specs/SPEC-3-configuration.md).

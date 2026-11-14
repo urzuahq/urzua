@@ -19,14 +19,16 @@ pub struct Config {
     pub schema_version: u32,
     /// A `BTreeMap`, not a `HashMap`: iterated by several rules and by
     /// discovery, and `HashMap` iteration order is randomized per process,
-    /// which several call sites' own results must not depend on.
+    /// which several call sites' own results must not depend on. A repeated
+    /// key is a load error, never last-one-wins.
+    #[serde(deserialize_with = "unique_record_types")]
     pub record_types: BTreeMap<String, RecordTypeConfig>,
     /// Every rule a repository has turned on, and at what level. Absent or
     /// empty means no rule runs: governance is declared, never inherited
     /// (ADR-53). A `BTreeMap` for the same reason as `record_types`: `parse`
     /// below reports the first unrecognized name it finds, and that should
     /// not depend on `HashMap`'s randomized order.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "unique_rules")]
     pub rules: BTreeMap<String, RuleSetting>,
     /// Declared inverse relation-field pairs (`RFC-47`, `MILE-122`); see
     /// `RelationPair`. Absent means none declared.
@@ -100,6 +102,60 @@ pub struct Config {
         skip_serializing_if = "Option::is_none"
     )]
     pub authority: Option<crate::authority::AuthorityDecl>,
+}
+
+/// A map whose keys are all distinct. A repeated key is a load error naming the
+/// key and the section: serde's own map handling keeps the last, so a merge that
+/// left `header.required-fields: error` and then `off` disabled the rule while
+/// the config parsed.
+fn unique_map<'de, D, V>(
+    deserializer: D,
+    section: &'static str,
+) -> Result<BTreeMap<String, V>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    V: Deserialize<'de>,
+{
+    struct Unique<V>(&'static str, std::marker::PhantomData<V>);
+
+    impl<'de, V: Deserialize<'de>> serde::de::Visitor<'de> for Unique<V> {
+        type Value = BTreeMap<String, V>;
+
+        fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "a map under `{}:`", self.0)
+        }
+
+        fn visit_map<A: serde::de::MapAccess<'de>>(
+            self,
+            mut map: A,
+        ) -> Result<Self::Value, A::Error> {
+            let mut out = BTreeMap::new();
+            while let Some(key) = map.next_key::<String>()? {
+                if out.contains_key(&key) {
+                    return Err(serde::de::Error::custom(format!(
+                        "'{key}' appears twice under `{}:` -- a repeated key keeps only the last one, so merge the entries into one",
+                        self.0
+                    )));
+                }
+                out.insert(key, map.next_value::<V>()?);
+            }
+            Ok(out)
+        }
+    }
+
+    deserializer.deserialize_map(Unique(section, std::marker::PhantomData))
+}
+
+fn unique_rules<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<BTreeMap<String, RuleSetting>, D::Error> {
+    unique_map(deserializer, "rules")
+}
+
+fn unique_record_types<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<BTreeMap<String, RecordTypeConfig>, D::Error> {
+    unique_map(deserializer, "record_types")
 }
 
 /// The `new` key (`ADR-93`, `SPEC-3`). Structured (`ADR-64`): booleans, numbers
@@ -2569,6 +2625,13 @@ pub(crate) fn published_path_problem(entry: &str) -> Option<&'static str> {
 /// every other key without building a value for it, so a config that reads
 /// today (an unquoted integer beyond `u64` read as a string, say) is read
 /// exactly as it was, and only a config that needs the upgrade is parsed whole.
+/// `text` without a leading byte order mark. An editor on some platforms writes
+/// one, YAML reads it as part of the first line, and the config was then refused
+/// as "more than one document" though every record reader already skips it.
+pub fn strip_bom(text: &str) -> &str {
+    text.strip_prefix('\u{feff}').unwrap_or(text)
+}
+
 fn declared_version(content: &str) -> Result<Option<u64>, ConfigError> {
     #[derive(Deserialize)]
     struct VersionProbe {
@@ -2584,6 +2647,7 @@ fn declared_version(content: &str) -> Result<Option<u64>, ConfigError> {
 /// A config that declares no integer `schema_version` falls through to the
 /// typed parse, whose error names the field.
 fn read_in_window(content: &str) -> Result<Config, ConfigError> {
+    let content = strip_bom(content);
     let Some(found) = declared_version(content)? else {
         return Ok(yaml_serde::from_str(content)?);
     };
@@ -4683,6 +4747,56 @@ mod tests {
     #[test]
     fn parse_accepts_a_declared_model_instead_of_rejecting_the_keys() {
         parse(&model_cfg("    sections: {from: headings}\n")).unwrap();
+    }
+
+    /// 6.3: a repeated key under `rules:` was last-one-wins, so a merge that left
+    /// `header.required-fields: error` and then `off` silently disabled the rule
+    /// while doctor said the config parsed.
+    #[test]
+    fn a_duplicate_key_under_rules_is_a_load_error_naming_the_key() {
+        let yaml = model_cfg("")
+            + "rules:\n  header.required-fields: error\n  header.required-fields: off\n";
+        let e = parse(&yaml).unwrap_err().to_string();
+        assert!(
+            e.contains("header.required-fields") && e.contains("rules") && e.contains("twice"),
+            "{e}"
+        );
+    }
+
+    #[test]
+    fn a_duplicate_key_under_record_types_is_a_load_error_naming_the_key() {
+        let yaml = "schema_version: 2\nrecord_types:\n  adr:\n    dir: docs/adr\n    required_fields: []\n  adr:\n    dir: docs/other\n    required_fields: []\n";
+        let e = parse(yaml).unwrap_err().to_string();
+        assert!(
+            e.contains("adr") && e.contains("record_types") && e.contains("twice"),
+            "{e}"
+        );
+    }
+
+    #[test]
+    fn distinct_keys_under_rules_and_record_types_still_load() {
+        let yaml =
+            model_cfg("") + "rules:\n  header.required-fields: error\n  field.quality: warn\n";
+        let c = parse(&yaml).unwrap();
+        assert_eq!(c.rules.len(), 2);
+    }
+
+    /// 6.6: an editor that writes a BOM made the config unreadable ("more than one
+    /// document"), though every record reader already strips one.
+    #[test]
+    fn a_config_with_a_leading_byte_order_mark_loads_as_without_one() {
+        let plain = model_cfg("");
+        let bom = format!("\u{feff}{plain}");
+        let with = parse(&bom).unwrap();
+        let without = parse(&plain).unwrap();
+        assert_eq!(
+            with.record_types["adr"].dir,
+            without.record_types["adr"].dir
+        );
+        // A previous-version config goes through the upgrade path, which reads
+        // the text a second time.
+        let upgraded = parse("\u{feff}schema_version: 1\nrecord_types: {}\n").unwrap();
+        assert!(upgraded.upgraded_from.is_some());
     }
 
     #[test]

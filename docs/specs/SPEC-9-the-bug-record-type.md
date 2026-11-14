@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5RYJF3MHRJT1RSA1K9
-Version: '0.22'
+Version: '0.23'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -159,3 +159,4 @@ something broke, or it doesn't exist yet.
 > | 2026-11-14 | Bumped to `0.22`. Evidence pins re-baselined for this change (the `Re-baselined` row above); the specification text is unchanged. **Why:** a revision-log entry that adds a structural change bumps `Version`. | **structural** |
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` 7b42a98a69e4 -> 6ed60a01c6e8. Reason: Read the diff of .urzua/config.yaml against the pinned text and the claim still holds. The only change since the previous pin is the comment above header.scaffold-mismatch (it now says why the rule is at info) and its level, warn to info; no other entry changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/own_config_integration.rs` d6dcb432d05a -> 09c2431a2693. Reason: Pinned file(s) changed by the symlinked-record refusal: own_config_integration.rs: a revision row appended by an earlier re-pin in this change. The record's claim is unaffected by these changes. (Re-applied after the follow-up review and merging main.) **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-14 | Bumped to `0.23`. A pinned evidence file was re-baselined for the symlinked-record refusal (`ADR-89` amendment of 2026-11-14); this spec's text is unchanged. | **structural** |

@@ -208,6 +208,67 @@ fn a_baseline_ref_that_names_no_commit_stops_the_run() {
     );
 }
 
+/// The commit the fixture's baseline tag names, full and abbreviated.
+fn tagged_commit(dir: &Path) -> String {
+    let out = Command::new("git")
+        .args(["rev-parse", "adoption^{commit}"])
+        .current_dir(dir)
+        .output()
+        .expect("git should run");
+    String::from_utf8_lossy(&out.stdout).trim().to_string()
+}
+
+fn refusal_text(out: &std::process::Output) -> String {
+    String::from_utf8_lossy(&out.stdout).to_string() + &String::from_utf8_lossy(&out.stderr)
+}
+
+/// 1.4: a branch moves with every commit, so a baseline that follows it holds out
+/// every drift already merged and reads "introduced: 0" while saying drift since
+/// the baseline is reported. A branch or `HEAD` is refused, not read.
+#[test]
+fn a_baseline_ref_that_is_a_branch_or_head_is_refused() {
+    for (name, bad) in [
+        ("branch", "baseline-branch"),
+        ("head", "HEAD"),
+        ("head-ancestor", "HEAD~1"),
+        ("full-branch-ref", "refs/heads/baseline-branch"),
+    ] {
+        let dir = repo(name, &format!("    drift_baseline: {{ref: {bad}}}"));
+        git(&dir, &["branch", "baseline-branch"]);
+        let out = run(&dir, &["check"]);
+        assert_eq!(out.status.code(), Some(2), "{bad}: {out:?}");
+        let text = refusal_text(&out);
+        assert!(
+            text.contains("drift_baseline") && text.contains(bad) && text.contains("tag"),
+            "{bad}: {text}"
+        );
+    }
+}
+
+/// A tag and a commit sha, full or abbreviated, stay valid: they name one point.
+#[test]
+fn a_baseline_ref_that_is_a_tag_or_a_commit_sha_is_accepted() {
+    for name in ["tag", "full-tag-ref", "sha", "short-sha"] {
+        let dir = repo(name, BASELINE);
+        let sha = tagged_commit(&dir);
+        let good = match name {
+            "tag" => "adoption".to_string(),
+            "full-tag-ref" => "refs/tags/adoption".to_string(),
+            "sha" => sha.clone(),
+            _ => sha[..10].to_string(),
+        };
+        std::fs::write(
+            dir.join(".urzua/config.yaml"),
+            config(&format!("    drift_baseline: {{ref: {good}}}")),
+        )
+        .unwrap();
+        let out = run(&dir, &["check"]);
+        let parsed = json(&out);
+        assert_eq!(parsed["baseline"]["pre_existing"], 1, "{good}: {parsed}");
+        assert_eq!(out.status.code(), Some(1), "{good}: {parsed}");
+    }
+}
+
 #[test]
 fn a_blank_or_option_like_ref_is_a_config_error() {
     for (name, bad) in [("blank", "\"\""), ("dash", "--all")] {

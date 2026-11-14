@@ -183,6 +183,45 @@ pub fn section_order(
     )
 }
 
+/// The section rules that ran though no record type declares the `sections` key
+/// they read, with that declaration (`BUG-73`'s class, seen from `check`): the
+/// rule examined no record however the records are edited, and a clean result
+/// from it says nothing. SPEC-2 promises this is reported.
+pub fn section_rules_reading_nothing_declared(
+    config: &Config,
+    executed: &[RuleExecution],
+) -> Vec<(&'static str, Declaration)> {
+    let decls: Vec<SectionsDecl> = config
+        .record_types
+        .iter()
+        .filter_map(|(name, rt)| declared_model(name, rt).ok().flatten()?.sections)
+        .collect();
+    executed
+        .iter()
+        .filter(|e| e.status == RuleStatus::Ran)
+        .filter_map(|e| {
+            let def = rule_def(&e.rule)?;
+            let declaration = def.reads_declaration?;
+            let declared = match declaration {
+                Declaration::SectionsRequired => decls.iter().any(|d| !d.required.is_empty()),
+                Declaration::UniqueHeadings => decls.iter().any(|d| d.unique_headings),
+                Declaration::NoSkippedLevels => decls.iter().any(|d| d.no_skipped_levels),
+                Declaration::SectionOrder => decls.iter().any(|d| d.order.is_some()),
+                _ => return None,
+            };
+            (!declared).then_some((def.id, declaration))
+        })
+        .collect()
+}
+
+/// The sentence both reports of it use.
+pub fn undeclared_section_key_message(rule: &str, declaration: Declaration) -> String {
+    format!(
+        "'{rule}' is enabled, but no record type declares `{}`, so it examines no record however the records are edited; declare the key on a type or turn the rule off",
+        declaration.key()
+    )
+}
+
 /// The types whose `sections.order` reads a template, with the `depth` the
 /// template is read to: the types for which the caller must load
 /// `.urzua/templates/<type>.md`.
