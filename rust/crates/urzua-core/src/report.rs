@@ -659,6 +659,15 @@ impl Population {
         self
     }
 
+    /// This population with `n` more candidates, present and not read because
+    /// the run's path scope did not need them (`MILE-207`): eligible, counted
+    /// as deferred, never examined.
+    pub fn with_deferred_by_scope(mut self, n: usize) -> Self {
+        self.eligible += n;
+        self.deferred_by_scope += n;
+        self
+    }
+
     pub fn of(unit: PopulationUnit, eligible: usize, examined: usize) -> Self {
         Population::detailed(unit, eligible, examined, 0, 0)
     }
@@ -936,6 +945,132 @@ impl Notice {
 pub trait Report: serde::Serialize {
     fn notices(&self) -> &[Notice];
     fn exit_code(&self) -> ExitCode;
+    /// The one command worth running next, given the whole report (`MILE-72`).
+    /// Only `check`/`audit` and `fix` derive one; every other report has none.
+    fn next_action(&self) -> Option<NextAction> {
+        None
+    }
+}
+
+/// A report's top-level `next_action` and `next_action_reason` (`MILE-72`):
+/// a bare runnable command and the counts that justify it. Both keys are on
+/// every command's output, `null` together when there is nothing better than
+/// reading the findings.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NextAction {
+    pub command: String,
+    pub reason: String,
+}
+
+/// The tools a finding's `run-command` action can lead to, in the order
+/// `next_action` prefers them: the first one any unwaived blocking finding
+/// offers wins, so a run with fix-able and index-able findings says
+/// `urzua fix --apply ...`. A finding's `argv` selects its entry by prefix.
+/// `urzua refs refresh` is not here: no rule offers it as an action
+/// (`ADR-73`: it needs the network and may not apply to a typo).
+const NEXT_ACTION_ORDER: [(&[&str], &str); 2] = [
+    (&["urzua", "fix"], "repairs"),
+    (&["urzua", "index"], "regenerates the index for"),
+];
+
+/// A word of a command as a shell reads it back unchanged: bare when it is
+/// made of safe characters, single-quoted otherwise.
+fn shell_word(word: &str) -> String {
+    let safe = !word.is_empty()
+        && word
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || "-_./=:@+#,".contains(c));
+    if safe {
+        word.to_string()
+    } else {
+        format!("'{}'", word.replace('\'', "'\\''"))
+    }
+}
+
+/// The runnable command that does everything the chosen tool's findings
+/// offer: `fix` findings each name `--ids <record>`, so the command takes the
+/// union of the records, in first-seen order; any other tool's findings carry
+/// the same argv, so the first stands for all. `None` when a record path
+/// holds a comma, which `--ids` could not carry.
+fn union_command(tool: &[&str], argvs: &[&Vec<String>]) -> Option<String> {
+    let words: Vec<String> = if tool == ["urzua", "fix"] {
+        let mut ids: Vec<&str> = Vec::new();
+        for argv in argvs {
+            let at = argv.iter().position(|w| w == "--ids")?;
+            let id = argv.get(at + 1)?.as_str();
+            if id.is_empty() || id.contains(',') {
+                return None;
+            }
+            if !ids.contains(&id) {
+                ids.push(id);
+            }
+        }
+        let mut words: Vec<String> = ["urzua", "fix", "--apply", "--ids"]
+            .iter()
+            .map(|w| w.to_string())
+            .collect();
+        words.push(ids.join(","));
+        words
+    } else {
+        argvs.first()?.to_vec()
+    };
+    Some(
+        words
+            .iter()
+            .map(|w| shell_word(w))
+            .collect::<Vec<_>>()
+            .join(" "),
+    )
+}
+
+/// `check`'s `next_action` (`MILE-72`): over the unwaived error and warning
+/// findings (info and waived ones never count), the first tool in
+/// [`NEXT_ACTION_ORDER`] that at least one of them offers as a `run-command`
+/// `suggested_action`, as one runnable command built from those findings'
+/// own `argv` (no placeholder, no flag the findings did not name). `None`
+/// when no finding offers one, so a corpus whose blockers all need a human
+/// reads as `null`.
+pub fn next_action_for_findings(findings: &[Finding]) -> Option<NextAction> {
+    let blocking: Vec<&Finding> = findings
+        .iter()
+        .filter(|f| f.waived.is_none() && f.severity != FindingSeverity::Info)
+        .collect();
+    for (prefix, verb) in NEXT_ACTION_ORDER {
+        let argvs: Vec<&Vec<String>> = blocking
+            .iter()
+            .filter_map(|f| f.suggested_action.as_ref())
+            .filter(|a| a.kind == ActionKind::RunCommand)
+            .filter_map(|a| a.target.argv.as_ref())
+            .filter(|argv| {
+                argv.iter()
+                    .map(String::as_str)
+                    .take(prefix.len())
+                    .eq(prefix.iter().copied())
+            })
+            .collect();
+        if argvs.is_empty() {
+            continue;
+        }
+        let command = union_command(prefix, &argvs)?;
+        let noun = if blocking.len() == 1 {
+            "finding"
+        } else {
+            "findings"
+        };
+        return Some(NextAction {
+            command,
+            reason: format!("{verb} {} of {} {noun}", argvs.len(), blocking.len()),
+        });
+    }
+    None
+}
+
+fn plural(n: usize, noun: &str) -> String {
+    if n == 1 {
+        format!("1 {noun}")
+    } else {
+        format!("{n} {noun}s")
+    }
 }
 
 impl Report for CheckReport {
@@ -944,6 +1079,12 @@ impl Report for CheckReport {
     }
     fn exit_code(&self) -> ExitCode {
         ExitCode::from(CheckReport::exit_code(self) as u8)
+    }
+    fn next_action(&self) -> Option<NextAction> {
+        if self.status == ReportStatus::NotRun {
+            return None;
+        }
+        next_action_for_findings(&self.findings)
     }
 }
 
@@ -1419,6 +1560,38 @@ impl Report for FixReport {
             FixStatus::Ok | FixStatus::RepairsAvailable | FixStatus::Applied => ExitCode::from(0),
         }
     }
+    fn next_action(&self) -> Option<NextAction> {
+        match self.status {
+            FixStatus::RepairsAvailable if !self.repairs.is_empty() => {
+                let mut ids: Vec<String> = Vec::new();
+                for repair in &self.repairs {
+                    let id = repair.record.display().to_string();
+                    if id.contains(',') {
+                        return None;
+                    }
+                    if !ids.contains(&id) {
+                        ids.push(id);
+                    }
+                }
+                let words = ["urzua", "fix", "--apply", "--ids"]
+                    .iter()
+                    .map(|w| w.to_string())
+                    .chain(std::iter::once(ids.join(",")));
+                Some(NextAction {
+                    command: words.map(|w| shell_word(&w)).collect::<Vec<_>>().join(" "),
+                    reason: format!("writes {}", plural(self.repairs.len(), "repair")),
+                })
+            }
+            FixStatus::Applied => Some(NextAction {
+                command: "urzua check".to_string(),
+                reason: format!(
+                    "re-checks the corpus after {}",
+                    plural(self.repairs.len() + self.rebaselines.len(), "write")
+                ),
+            }),
+            _ => None,
+        }
+    }
 }
 
 /// `urzua index`'s report (`MILE-152`): each declared index artifact, and
@@ -1630,6 +1803,17 @@ mod tests {
 
     /// Additive on the wire: absent when zero, so a rule that does not declare
     /// the option reports byte for byte what it did before.
+    #[test]
+    fn files_a_path_scope_did_not_read_are_eligible_and_deferred_never_examined() {
+        let p = census(PopulationUnit::File, vec![1, 2], |_| Outcome::Examined)
+            .with_deferred_by_scope(3);
+        assert_eq!(
+            (p.eligible(), p.examined(), p.deferred_by_scope()),
+            (5, 2, 3)
+        );
+        assert_eq!(p.out_of_scope(), 0);
+    }
+
     #[test]
     fn deferred_by_scope_is_serialized_only_when_it_is_non_zero() {
         let none = census(PopulationUnit::Field, vec![Outcome::Examined], |o| *o);
@@ -1917,5 +2101,64 @@ mod tests {
             Report::exit_code(&with_notices)
         );
         assert_eq!(Report::exit_code(&with_notices), ExitCode::from(2));
+    }
+
+    fn finding_offering(
+        severity: FindingSeverity,
+        waived: Option<&str>,
+        argv: Option<&[&str]>,
+    ) -> Finding {
+        let mut f = Finding::new("r", severity, "a.md", ActionSource::new("v"), "m");
+        f.waived = waived.map(str::to_string);
+        f.suggested_action = argv.map(|argv| SuggestedAction {
+            kind: ActionKind::RunCommand,
+            op: None,
+            target: ActionTarget {
+                argv: Some(argv.iter().map(|s| s.to_string()).collect()),
+                ..Default::default()
+            },
+            value: None,
+        });
+        f
+    }
+
+    #[test]
+    fn next_action_prefers_fix_then_index_and_unions_the_records_it_names() {
+        let fix1 = ["urzua", "fix", "--apply", "--ids", "docs/adr/ADR-1-a.md"];
+        let fix2 = ["urzua", "fix", "--apply", "--ids", "docs/adr/ADR-2 b.md"];
+        let index = ["urzua", "index", "--apply"];
+        let all = [
+            finding_offering(FindingSeverity::Error, None, Some(&index)),
+            finding_offering(FindingSeverity::Error, None, Some(&fix1)),
+            finding_offering(FindingSeverity::Warning, None, Some(&fix2)),
+            finding_offering(FindingSeverity::Error, None, Some(&fix1)),
+            finding_offering(FindingSeverity::Error, None, None),
+        ];
+        let n = next_action_for_findings(&all).unwrap();
+        assert_eq!(
+            n.command,
+            "urzua fix --apply --ids 'docs/adr/ADR-1-a.md,docs/adr/ADR-2 b.md'"
+        );
+        assert_eq!(n.reason, "repairs 3 of 5 findings");
+        let n = next_action_for_findings(&all[..1]).unwrap();
+        assert_eq!(n.command, "urzua index --apply");
+        assert_eq!(n.reason, "regenerates the index for 1 of 1 finding");
+    }
+
+    #[test]
+    fn a_fix_finding_naming_a_record_with_a_comma_gives_no_next_action() {
+        let fix = ["urzua", "fix", "--apply", "--ids", "docs/a,b.md"];
+        let f = finding_offering(FindingSeverity::Error, None, Some(&fix));
+        assert_eq!(next_action_for_findings(&[f]), None);
+    }
+
+    #[test]
+    fn next_action_ignores_waived_and_info_findings_and_is_none_without_a_run_command() {
+        let fix = ["urzua", "fix", "--apply", "--ids", "ADR-1"];
+        let waived = finding_offering(FindingSeverity::Error, Some("WAIVER-1"), Some(&fix));
+        let info = finding_offering(FindingSeverity::Info, None, Some(&fix));
+        let human = finding_offering(FindingSeverity::Error, None, None);
+        assert_eq!(next_action_for_findings(&[waived, info, human]), None);
+        assert_eq!(next_action_for_findings(&[]), None);
     }
 }

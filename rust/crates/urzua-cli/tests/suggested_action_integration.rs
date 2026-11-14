@@ -778,3 +778,97 @@ fn the_editor_hook_output_is_not_wired_to_findings() {
     assert!(!text.contains("suggested_action"), "{text}");
     assert!(!text.contains("\"findings\""), "{text}");
 }
+
+// ------------------------------------------------- next_action is runnable (MILE-72)
+
+/// Runs a `next_action` string as a person would: through a shell, `urzua`
+/// resolved on `PATH`, no gh and no flag the string does not carry.
+fn run_next_action(dir: &std::path::Path, command: &str) -> std::process::Output {
+    let bin = std::path::Path::new(env!("CARGO_TARGET_TMPDIR"))
+        .join(format!("next-action-bin-{}", std::process::id()));
+    std::fs::create_dir_all(&bin).unwrap();
+    let link = bin.join("urzua");
+    let _ = std::fs::remove_file(&link);
+    std::os::unix::fs::symlink(env!("CARGO_BIN_EXE_urzua"), &link).unwrap();
+    let path = std::env::join_paths([bin, common::stub_gh_dir().to_path_buf()])
+        .map(|mut p| {
+            p.push(":");
+            p.push(std::env::var_os("PATH").unwrap_or_default());
+            p
+        })
+        .unwrap();
+    std::process::Command::new("sh")
+        .arg("-c")
+        .arg(command)
+        .env("PATH", path)
+        .current_dir(dir)
+        .output()
+        .expect("sh should run")
+}
+
+fn json_of(out: &std::process::Output) -> serde_json::Value {
+    serde_json::from_slice(&out.stdout)
+        .unwrap_or_else(|e| panic!("stdout is not JSON ({e}): {out:?}"))
+}
+
+fn urzua_json(dir: &std::path::Path, args: &[&str]) -> serde_json::Value {
+    let out = common::urzua()
+        .args(args)
+        .current_dir(dir)
+        .output()
+        .unwrap();
+    json_of(&out)
+}
+
+#[test]
+fn the_next_action_of_a_check_runs_and_the_index_one_follows() {
+    let dir = command_repo("next-check");
+    let report = urzua_json(&dir, &["check"]);
+    let next = report["next_action"].as_str().expect("a next_action");
+    assert!(
+        next.starts_with("urzua fix --apply --ids "),
+        "fix is preferred and names its records: {next}"
+    );
+    assert!(!next.contains('<'), "no placeholder: {next}");
+    let out = run_next_action(&dir, next);
+    assert_ne!(out.status.code(), Some(2), "not-run: {out:?}");
+    assert_eq!(json_of(&out)["status"], "applied", "{out:?}");
+
+    // Nothing `fix` writes is left; the stale index is what remains.
+    let report = urzua_json(&dir, &["check"]);
+    let next = report["next_action"]
+        .as_str()
+        .expect("an index next_action");
+    assert_eq!(next, "urzua index --apply", "{report}");
+    let out = run_next_action(&dir, next);
+    assert_ne!(out.status.code(), Some(2), "not-run: {out:?}");
+    let after = urzua_json(&dir, &["check"]);
+    assert!(
+        after["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|f| f["rule"] != "index.freshness"),
+        "the index finding is gone: {after}"
+    );
+}
+
+#[test]
+fn the_next_action_of_a_fix_detect_run_runs() {
+    let dir = command_repo("next-fix");
+    let detect = urzua_json(&dir, &["fix"]);
+    assert_eq!(detect["status"], "repairs-available", "{detect}");
+    let next = detect["next_action"].as_str().expect("a next_action");
+    assert!(next.starts_with("urzua fix --apply --ids "), "{next}");
+    let out = run_next_action(&dir, next);
+    assert_ne!(out.status.code(), Some(2), "not-run: {out:?}");
+    let applied = json_of(&out);
+    assert_eq!(applied["status"], "applied", "{applied}");
+    // After an apply the next step is a check, which also runs.
+    let check = applied["next_action"]
+        .as_str()
+        .expect("a check next_action");
+    assert_eq!(check, "urzua check");
+    let out = run_next_action(&dir, check);
+    assert_ne!(out.status.code(), Some(2), "not-run: {out:?}");
+}

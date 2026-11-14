@@ -53,12 +53,51 @@ pub(crate) fn emit<T: Report>(report: &T) -> ExitCode {
     // end the run quietly, not panic (MILE-176). The reader leaving is not an
     // error of ours, so the write result is dropped and the exit code stays
     // the report's.
-    let _ = writeln!(
-        std::io::stdout().lock(),
-        "{}",
-        serde_json::to_string_pretty(report).unwrap()
-    );
-    report.exit_code()
+    let (text, code) = match serde_json::to_string_pretty(&with_next_action(report)) {
+        Ok(text) => (text, report.exit_code()),
+        // A report that cannot be written as a JSON object (the two keys are
+        // appended to it) is a could-not-run, never a panic.
+        Err(e) => (
+            serde_json::to_string_pretty(&CouldNotRun::from(format!(
+                "could not serialise the report: {e}"
+            )))
+            .unwrap_or_default(),
+            ExitCode::from(2),
+        ),
+    };
+    let _ = writeln!(std::io::stdout().lock(), "{text}");
+    code
+}
+
+/// A report with the two `MILE-72` keys after its own, always present and
+/// `null` when the report has no next action. Serialised straight from the
+/// report, never through a `Value`, so the report's own key order (and its
+/// hand-ordered maps) is untouched. `flatten` is safe here where `ADR-46`
+/// ruled it out for an envelope: no report declares either key itself.
+#[derive(serde::Serialize)]
+struct WithNextAction<'a, T: serde::Serialize> {
+    #[serde(flatten)]
+    report: &'a T,
+    next_action: Option<String>,
+    next_action_reason: Option<String>,
+}
+
+fn with_next_action<T: urzua_core::report::Report>(report: &T) -> WithNextAction<'_, T> {
+    let next = report.next_action();
+    WithNextAction {
+        report,
+        next_action: next.as_ref().map(|n| n.command.clone()),
+        next_action_reason: next.map(|n| n.reason),
+    }
+}
+
+/// A report as JSON with the two `MILE-72` keys. The one serialisation every
+/// command and `urzua mcp` goes through.
+pub(crate) fn report_value<T: urzua_core::report::Report>(
+    report: &T,
+) -> Result<serde_json::Value, String> {
+    serde_json::to_value(with_next_action(report))
+        .map_err(|e| format!("could not serialise the report: {e}"))
 }
 
 /// The evaluation date this run compared against, for a report's `as_of`.
@@ -524,7 +563,7 @@ enum ExportFormat {
 fn install_panic_hook() {
     std::panic::set_hook(Box::new(|info| {
         use std::io::Write;
-        let out = serde_json::json!({ "status": "not-run", "panic": info.to_string() });
+        let out = serde_json::json!({ "status": "not-run", "panic": info.to_string(), "next_action": null, "next_action_reason": null });
         // write_all + let-ignore, never println!/a panicking macro here -- a
         // broken pipe during the hook itself would double-panic and abort
         // with no output at all, defeating the hook's entire purpose.
