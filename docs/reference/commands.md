@@ -75,7 +75,7 @@ urzua new <record-type> [<title>] [--by <name>]
 
 Creates a record of a type declared in the config, with a stable id assigned. It never asks you to
 choose a number: it takes one past the highest in the type's directories, skipping numbers used on
-any local branch or remote-tracking ref (it names the skipped numbers on stderr; run `git fetch`
+any local branch or remote-tracking ref (it lists the skipped numbers in `skipped`; run `git fetch`
 first, since refs never fetched are invisible). With `new.check_open_prs: true` in the config it also
 fetches pull request head refs so numbers taken by open pull requests are skipped.
 
@@ -85,7 +85,7 @@ field is left for you. If `.urzua/templates/<type>.md` exists, its body (title a
 appended. A type with `header_shape: none` is refused, since it has nowhere to store a stable id.
 
 Output: `status`, `path`, `display_number`, `stable_id`, `pull_refs` (whether the open pull request
-fetch ran and which numbers it skipped) and `skipped`.
+fetch ran and which numbers it skipped), `skipped` and `notices` (when present: the identity used in place of `--by`, a failed fetch, a type directory that does not exist yet). Whatever `new` prints to stderr is also a notice.
 
 ## fix
 
@@ -165,7 +165,7 @@ where a draft would take effect on its own (the waiver type must require `Reason
 
 Output: `status`, `mode`, `pending_value`, `pending_source`, `drafts` (each with `path`, `rule`,
 `scope`, `findings` and `written`), `skipped` (a finding that gets no draft, with a `reason` such as
-`already-waived`, `expired` or `unwaivable`) and `unmatched_filters`. Exit 0 whenever it ran. See
+`already-waived`, `expired` or `unwaivable`), `unmatched_filters` and `notices` (when present: the identity used in place of `--by`, and what numbering reported; the same text is on stderr, but the JSON is the contract). Exit 0 whenever it ran. See
 [Waivers and drift](waivers-and-drift.md).
 
 ## doctor
@@ -254,7 +254,7 @@ urzua rules
 ```
 
 Every rule this build ships, each with `id`, `description`, `scope`, `judges`, `population_unit`,
-`spec` and `actions`. It reads no config: it says what the binary supports, not what your repository
+`spec` and `actions`, and a top-level `status` of `ok` like every other command's report. It reads no config: it says what the binary supports, not what your repository
 enabled. Use [`explain --rule`](#explain) for one rule's options and your current level.
 
 ## migrate

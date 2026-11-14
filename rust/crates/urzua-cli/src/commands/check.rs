@@ -573,6 +573,7 @@ pub(crate) fn execute(
         (base.is_some(), selection.as_deref()),
     ));
     notices.extend(extra_notices);
+    notices.extend(unmatched_path_notices(session, &scope));
     let (mut executions, mut findings) = run_rules(&context);
     notices.extend(scope_changed_notices(
         &executions,
@@ -598,9 +599,8 @@ pub(crate) fn execute(
         &mut notices,
         base.as_deref(),
     );
-    let blocking = findings
-        .iter()
-        .any(|f| f.waived.is_none() && f.severity == FindingSeverity::Error);
+    let fail_on = fail_on.unwrap_or(context.fail_on);
+    let blocking = gate_blocking(&findings, fail_on);
     // Counted over the same set `files_examined` counts (`BUG-40`). Rules run
     // over the whole corpus because a reference resolves against records outside
     // the scope (`BUG-67`); what is *reported on* is the scope.
@@ -620,8 +620,7 @@ pub(crate) fn execute(
         blocking,
         findings,
         notices,
-        // The flag wins over the configuration; either only moves the exit code.
-        fail_on: fail_on.unwrap_or(context.fail_on),
+        fail_on,
     })
 }
 
@@ -2568,7 +2567,65 @@ fn status_and_examined(
     let active = findings.iter().filter(|f| f.waived.is_none());
     let blocking = active.clone().any(|f| f.severity == FindingSeverity::Error);
     let status = derive_status(blocking, empty_diff, examined, executions, active.count());
+    if status == urzua_core::report::ReportStatus::NotRun {
+        notices.push(not_run_reason(examined));
+    }
     (status, examined)
+}
+
+/// `blocking` is true exactly when the run exits 1 (the flag wins over the
+/// configuration), so a reader with no exit code, an MCP client, branches on it
+/// under any threshold: an unwaived warning blocks under `fail_on: warning`.
+fn gate_blocking(findings: &[Finding], fail_on: urzua_core::config::FailOn) -> bool {
+    findings.iter().any(|f| {
+        f.waived.is_none()
+            && (f.severity == FindingSeverity::Error
+                || (fail_on == urzua_core::config::FailOn::Warning
+                    && f.severity == FindingSeverity::Warning))
+    })
+}
+
+/// Why a full report is `not-run`: a report that established nothing says so in
+/// the JSON, not only in its exit code (`ADR-46`). The unmatched-argument
+/// notices name which argument; this one names what the run lacked.
+fn not_run_reason(examined: usize) -> Notice {
+    let message = if examined == 0 {
+        "no record was examined, so nothing was established: no record is in scope (a path argument matched no record, or the configuration declares no record to read)"
+    } else {
+        "no rule looked at a record, so nothing was established: every rule in the run was disabled, not selected or not applicable to this run (see rules_executed)"
+    };
+    Notice {
+        severity: NoticeSeverity::Warning,
+        subject: "not-run".to_string(),
+        message: message.to_string(),
+        detail: None,
+    }
+}
+
+/// A path argument that selects no record is reported, whether or not another
+/// argument matched: a declared input that matches nothing is never dropped in
+/// silence (`ADR-23`). A diff run narrows by the diff as well, so this reads the
+/// parsed records the argument could name, before any narrowing.
+fn unmatched_path_notices(session: &Session, scope: &ReportScope) -> Vec<Notice> {
+    scope
+        .requested
+        .iter()
+        .filter(|requested| {
+            !session
+                .records
+                .iter()
+                .any(|record| record.path.starts_with(requested))
+        })
+        .map(|requested| Notice {
+            severity: NoticeSeverity::Warning,
+            subject: "scope".to_string(),
+            message: format!(
+                "the path argument '{}' matches no record: it is not a governed record file or a directory holding one, so it selects nothing",
+                requested.display()
+            ),
+            detail: None,
+        })
+        .collect()
 }
 
 fn empty_diff_notice(reached_before_narrowing: usize, changed_paths: usize, base: &str) -> Notice {

@@ -12,7 +12,8 @@ use std::process::ExitCode;
 
 use urzua_core::config::RecordTypeConfig;
 use urzua_core::report::{
-    CouldNotRun, Failure, ReportStatus, WaiveDraft, WaiveFindings, WaiveReport, WaiveStatus,
+    CouldNotRun, Failure, Notice, NoticeSeverity, ReportStatus, WaiveDraft, WaiveFindings,
+    WaiveReport, WaiveStatus,
 };
 use urzua_core::waive::{self, Filters, Group, PendingChoice, SkipReason};
 use urzua_core::waiver::SuppressionType;
@@ -71,6 +72,8 @@ struct Ctx {
     template: Option<String>,
     author: String,
     owner: bool,
+    /// The identity substitution `resolve_identity` reports, as a notice.
+    notices: Vec<Notice>,
 }
 
 fn type_config(ctx: &Ctx) -> &RecordTypeConfig {
@@ -102,12 +105,13 @@ fn execute(config_path: Option<PathBuf>, args: WaiveArgs) -> Result<WaiveReport,
         &filters,
     );
     let mut skipped = plan.skipped;
+    let mut notices = ctx.notices.clone();
     let mut drafts = Vec::new();
     let mut error = None;
     if !plan.groups.is_empty() {
         // Held to the end of the run, as `new` holds it: numbering and writing
         // happen under the lock.
-        let (_lock, mut numbering) = number(&ctx, apply)?;
+        let (_lock, mut numbering) = number(&ctx, apply, &mut notices)?;
         let (groups, resolved) = settle(&ctx, &numbering, config_path, plan.groups)?;
         skipped.extend(resolved);
         let mut built = build(&ctx, &numbering, &groups)?;
@@ -125,6 +129,7 @@ fn execute(config_path: Option<PathBuf>, args: WaiveArgs) -> Result<WaiveReport,
         skipped,
         unmatched_filters: plan.unmatched,
         error,
+        notices,
     })
 }
 
@@ -154,6 +159,7 @@ fn waiver_records(ctx: &Ctx) -> std::collections::HashSet<PathBuf> {
 fn number(
     ctx: &Ctx,
     apply: bool,
+    report_notices: &mut Vec<Notice>,
 ) -> Result<(Option<super::new_refs::NumberingLock>, Numbered), Failure> {
     let session = &ctx.session;
     let mut pull = disabled_pull_report();
@@ -179,6 +185,7 @@ fn number(
     for n in &notices {
         eprintln!("urzua: {}", n.message);
     }
+    report_notices.extend(notices);
     Ok((lock, numbering))
 }
 
@@ -201,8 +208,15 @@ fn open_ctx(config_path: Option<PathBuf>, by: Option<String>) -> Result<Ctx, Fai
     let pending = waive::choose_pending(&st)?;
     let identity = urzua_io::resolve_identity(by.as_deref(), &session.repo_root)
         .map_err(|e| format!("could not resolve an identity: {e}"))?;
+    let mut notices = Vec::new();
     if let Some(warning) = identity.warning {
         eprintln!("urzua: {warning}");
+        notices.push(Notice {
+            severity: NoticeSeverity::Warning,
+            subject: crate::NOTICE_IDENTITY.to_string(),
+            message: warning,
+            detail: None,
+        });
     }
     let owner = owner_declared(type_config, template.as_deref());
     Ok(Ctx {
@@ -213,6 +227,7 @@ fn open_ctx(config_path: Option<PathBuf>, by: Option<String>) -> Result<Ctx, Fai
         template,
         author: identity.name,
         owner,
+        notices,
     })
 }
 
@@ -394,7 +409,7 @@ fn write_all(
         built,
         &mut |b| write_new_file(root, &dir, &root.join(&b.path), &b.content),
         &mut |from| {
-            *numbering = number(ctx, false)?.1;
+            *numbering = number(ctx, false, &mut Vec::new())?.1;
             build(ctx, numbering, &groups[from..])
         },
     )

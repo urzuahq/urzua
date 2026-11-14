@@ -1410,6 +1410,12 @@ pub struct WaiveReport {
     /// says which were written.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+    /// What the run said beyond its drafts: the identity it used in place of
+    /// `--by`, and what numbering reported (a failed pull-request fetch, a
+    /// missing directory). The same text is on stderr; stderr is not the
+    /// contract (`ADR-46`).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub notices: Vec<Notice>,
 }
 
 /// One waiver the command drafts (or wrote), for one rule in one file.
@@ -1434,7 +1440,7 @@ pub struct WaiveFindings {
 
 impl Report for WaiveReport {
     fn notices(&self) -> &[Notice] {
-        &[]
+        &self.notices
     }
     /// 0 when it ran, 1 after a partial write, 2 when nothing could be written.
     fn exit_code(&self) -> ExitCode {
