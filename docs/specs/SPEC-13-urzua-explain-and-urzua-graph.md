@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5DB4YPSWZ6MQV85PQ7
-Version: '0.18'
+Version: '0.19'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -171,3 +171,4 @@ Both are stdout-JSON-always (ADR-23) and never write. `graph` reads `pointer_fie
 > | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/explain.rs` 58f30c13d91f -> b9d38e5af3c0, `rust/crates/urzua-cli/src/commands/graph.rs` 379b00875a63 -> 1f510a65fa59. Reason: Read the diff of explain.rs and graph.rs against main. Each run_inner became a pub(crate) build() that returns the report, and run() prints it with the same emit(); the report, its fields and the output are unchanged, and the MCP server calls build(), so the claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-13 | Bumped to `0.18`. `explain` and `graph` each build their report in a `build()` function that `run()` prints and the MCP server (`SPEC-26`) also calls; the report and its output are unchanged; the evidence pin is re-baselined in the row above. **Why:** `MILE-29`. | **substantive** |
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/explain.rs` b9d38e5af3c0 -> 418e543d4466. Reason: Pinned file(s) changed by the symlinked-record refusal: explain.rs: `explain --rule` reports the default level of a rule that is on by default and undeclared. The record's claim is unaffected by these changes. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-14 | Bumped to `0.19`. A pinned evidence file was re-baselined for the symlinked-record refusal (`ADR-89` amendment of 2026-11-14); this spec's text is unchanged. | **structural** |
