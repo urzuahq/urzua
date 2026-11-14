@@ -1365,3 +1365,63 @@ fn no_engine_source_file_names_an_agent_vendor_and_the_bundle_is_the_one_exclusi
     let adapter = std::fs::read_to_string(bundle.join("claude-code/adapter.json")).unwrap();
     assert!(adapter.contains("claude-code"));
 }
+
+/// A repo-local `.urzua/bin/urzua` that records each run in `ran` and passes the
+/// call to this build's binary: the way an adopter pins the binary it trusts.
+fn repo_local_binary(dir: &Path) -> PathBuf {
+    use std::os::unix::fs::PermissionsExt;
+    let bin = dir.join(".urzua/bin/urzua");
+    std::fs::create_dir_all(bin.parent().unwrap()).unwrap();
+    let ran = dir.join("ran");
+    std::fs::write(
+        &bin,
+        format!(
+            "#!/bin/sh\necho \"$1\" >> \"{}\"\nexec \"{}\" \"$@\"\n",
+            ran.display(),
+            env!("CARGO_BIN_EXE_urzua")
+        ),
+    )
+    .unwrap();
+    std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(0o755)).unwrap();
+    ran
+}
+
+/// The adopter switchover, item 6: a binary the repository carries at
+/// `.urzua/bin/urzua` is found by the editor-hook translator with no
+/// `URZUA_BIN` and no `urzua` on `PATH`.
+#[test]
+fn the_translator_finds_a_repo_local_binary_when_nothing_else_names_one() {
+    let dir = fixture("local-bin-translator", &config(""));
+    install(&dir);
+    let ran = repo_local_binary(&dir);
+    let cmd = hook_command(&dir, "edit");
+    let wrong = RECORD.replace("Not started", "Verified");
+    let only_python = path_with(&["python3", "git", "sh"]);
+    let mut c = Command::new(which("sh"));
+    c.args(["-c", &cmd])
+        .current_dir(&dir)
+        .env("PATH", &*only_python)
+        .env_remove("URZUA_BIN");
+    let out = run_with_stdin(&mut c, &payload(&dir, &wrong));
+    assert_eq!(out.status.code(), Some(0), "{out:?}");
+    let v = json(&out);
+    assert_eq!(v["hookSpecificOutput"]["permissionDecision"], "deny", "{v}");
+    assert!(ran.exists(), "the repo-local binary was never run");
+}
+
+/// The record scripts look there too, ahead of `PATH`.
+#[test]
+fn the_record_script_finds_a_repo_local_binary_ahead_of_path() {
+    let dir = fixture("local-bin-record", &config(""));
+    install(&dir);
+    let ran = repo_local_binary(&dir);
+    let out = Command::new("bash")
+        .args([".claude/hooks/urzua-record.sh", "new", "adr", "A title"])
+        .current_dir(&dir)
+        .env_remove("URZUA_BIN")
+        .env_remove("URZUA")
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "{out:?}");
+    assert!(ran.exists(), "the repo-local binary was never run: {out:?}");
+}

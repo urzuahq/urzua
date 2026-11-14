@@ -537,3 +537,82 @@ fn a_marker_on_a_verifies_line_in_a_file_that_is_not_a_test_file_excuses_nothing
         .unwrap()
         .contains("suppresses nothing"));
 }
+
+/// An id followed by a colon (`ADR-1: note`) is read as the id, so the comment
+/// is evidence for it and a dangling one is reported once (the adopter
+/// switchover, item 1).
+#[test]
+fn an_id_followed_by_a_colon_is_read_as_a_back_pointer() {
+    let cited = repo(
+        "colon-cited",
+        true,
+        "// Implements: ADR-1: the why\nfn a() {}\n",
+    );
+    let out = run_urzua(&cited, &["check"]);
+    assert!(
+        findings(&out, "embodiment.consistency").is_empty(),
+        "{}",
+        String::from_utf8_lossy(&out.stdout)
+    );
+
+    let dangling = repo(
+        "colon-dangling",
+        true,
+        "// Implements: ADR-9: the why\nfn a() {}\n",
+    );
+    let config = std::fs::read_to_string(dangling.join(".urzua/config.yaml")).unwrap();
+    std::fs::write(
+        dangling.join(".urzua/config.yaml"),
+        config.replace(
+            "rules:\n",
+            "rules:\n  code.dangling-bug-reference:\n    level: error\n    \
+             back_pointer_paths: [\"src\"]\n    extensions: [\"rs\"]\n",
+        ),
+    )
+    .unwrap();
+    let out = run_urzua(&dangling, &["check"]);
+    let resolution = findings(&out, "embodiment.back-pointer-resolution");
+    assert_eq!(
+        resolution.len(),
+        1,
+        "{}",
+        String::from_utf8_lossy(&out.stdout)
+    );
+    assert!(resolution[0]["message"].as_str().unwrap().contains("ADR-9"));
+    // The same line is not reported a second time by the comment-citation rule.
+    assert!(
+        findings(&out, "code.dangling-bug-reference").is_empty(),
+        "{}",
+        String::from_utf8_lossy(&out.stdout)
+    );
+}
+
+/// A marker that names an id in a form the scanner cannot read is reported,
+/// never skipped (ADR-101: no silent no-ops).
+#[test]
+fn a_marker_naming_an_id_it_cannot_read_is_reported_not_skipped() {
+    let dir = repo("unread", true, "// Implements: (ADR-1)\nfn a() {}\n");
+    let out = run_urzua(&dir, &["check"]);
+    let unread: Vec<_> = findings(&out, "embodiment.back-pointer-resolution")
+        .into_iter()
+        .filter(|f| {
+            f["message"]
+                .as_str()
+                .unwrap()
+                .contains("reads no record id")
+        })
+        .collect();
+    assert_eq!(unread.len(), 1, "{}", String::from_utf8_lossy(&out.stdout));
+    assert_eq!(unread[0]["file"], "src/lib.rs");
+    assert_eq!(unread[0]["line"], 1);
+    assert!(unread[0]["message"].as_str().unwrap().contains("ADR-1"));
+
+    // A marker with no id-shaped text at all is prose, not an unread pointer.
+    let prose = repo(
+        "unread-prose",
+        true,
+        "// Implements: the trait\nfn a() {}\n",
+    );
+    let out = run_urzua(&prose, &["check"]);
+    assert!(findings(&out, "embodiment.back-pointer-resolution").is_empty());
+}

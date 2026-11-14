@@ -73,6 +73,83 @@ pub fn scan_marker(
     out
 }
 
+/// A marker line that reads no identifier although its text names one in a
+/// form the scanner does not read (`Implements: (ADR-1)`): no evidence and no
+/// citation check, so it is reported rather than skipped.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnreadMarker {
+    pub file: PathBuf,
+    pub line: usize,
+    pub marker: &'static str,
+    /// The first id-shaped token in the marker's text.
+    pub id: String,
+}
+
+/// Every line of `content` carrying `marker` whose text reads no identifier but
+/// holds an id-shaped token (a declared prefix, a hyphen and a number, bounded
+/// by anything that is not a letter, digit, hyphen or underscore). A marker
+/// with no id-shaped text at all is prose and is not reported.
+pub fn scan_unread_markers(
+    path: &std::path::Path,
+    content: &str,
+    prefixes: &[String],
+    marker: &'static str,
+) -> Vec<UnreadMarker> {
+    let mut out = Vec::new();
+    for (i, line) in content.lines().enumerate() {
+        let Some(rest) = marker_rest(line, marker) else {
+            continue;
+        };
+        if !cited_ids(rest, prefixes).is_empty() {
+            continue;
+        }
+        let shaped = rest
+            .split(|c: char| !(c.is_ascii_alphanumeric() || c == '-' || c == '_'))
+            .find(|t| is_record_id(t, prefixes));
+        if let Some(id) = shaped {
+            out.push(UnreadMarker {
+                file: path.to_path_buf(),
+                line: i + 1,
+                marker,
+                id: id.to_string(),
+            });
+        }
+    }
+    out
+}
+
+/// The finding for a marker that names an id it cannot read.
+fn unread_finding(rule: &str, variant: &'static str, unread: UnreadMarker) -> Finding {
+    Finding::new(
+        rule.to_string(),
+        FindingSeverity::Error,
+        unread.file,
+        ActionSource::new(variant),
+        format!(
+            "the '{marker}' marker reads no record id: it names {id} in a form that is not read, \
+             so the comment is no evidence and cites no checked record; write the id first, as \
+             '{marker} {id}'",
+            marker = unread.marker,
+            id = unread.id
+        ),
+    )
+    .at(unread.line)
+}
+
+/// The unread-marker findings of one file, for the markers it is read under.
+fn unread_marker_findings(
+    (rule, variant): (&str, &'static str),
+    path: &std::path::Path,
+    content: &str,
+    (prefixes, markers): (&[String], &[&'static str]),
+) -> Vec<Finding> {
+    markers
+        .iter()
+        .flat_map(|m| scan_unread_markers(path, content, prefixes, m))
+        .map(|u| unread_finding(rule, variant, u))
+        .collect()
+}
+
 /// A record id cited in a source comment, wherever in the comment it stands.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CommentCitation {
@@ -387,9 +464,13 @@ fn cited_ids(rest: &str, prefixes: &[String]) -> Vec<String> {
                     depth += paren_delta(word);
                 } else {
                     let word = word.strip_suffix('.').unwrap_or(word);
+                    // `ADR-1:` reads as the id; what follows the colon is a note.
+                    let colon = word.strip_suffix(':').filter(|w| is_record_id(w, prefixes));
+                    let word = colon.unwrap_or(word);
                     if is_record_id(word, prefixes) {
                         ids.push(word.to_string());
                         segment_start = false;
+                        in_note = colon.is_some();
                     } else if segment_start {
                         return ids;
                     } else {
@@ -665,6 +746,17 @@ pub fn embodiment_back_pointer_resolution(
                 (&prefixes, marker, read),
             ));
         }
+        let read: &[&'static str] = if is_test_file(&file.path, test_paths) {
+            &[MARKER_IMPLEMENTS, MARKER_VERIFIES]
+        } else {
+            &[MARKER_IMPLEMENTS]
+        };
+        findings.extend(unread_marker_findings(
+            (RULE_ID, "back-pointer-unread"),
+            &file.path,
+            content,
+            (&prefixes, read),
+        ));
         for pointer in implements.kept.into_iter().chain(verifies.kept) {
             if !index.contains_key(&crate::values::RecordId::new(&pointer.id)) {
                 findings.push(unresolved_finding(pointer));
@@ -809,6 +901,14 @@ pub fn embodiment_back_pointer_decision_accepted(
                 (&prefixes, marker, &[MARKER_IMPLEMENTS]),
             ));
         }
+        if reports_unused && whole_file {
+            findings.extend(unread_marker_findings(
+                (RULE_ID, "decision-pointer-unread"),
+                &file.path,
+                content,
+                (&prefixes, &[MARKER_IMPLEMENTS]),
+            ));
+        }
         findings.extend(decision_findings(
             scanned.kept,
             (whole_file, scoped),
@@ -864,6 +964,48 @@ mod tests {
         .into_iter()
         .map(|b| (b.line, b.id))
         .collect()
+    }
+
+    #[test]
+    fn an_id_followed_by_a_colon_is_read_and_the_rest_is_a_note() {
+        let got = |t: &str| ids(t).into_iter().map(|(_, i)| i).collect::<Vec<_>>();
+        assert_eq!(got("// @I ADR-550: a note\n"), ["ADR-550"]);
+        let verifies = scan_marker(
+            std::path::Path::new("t.rs"),
+            &expand("// @V ADR-550: a note\n"),
+            &prefixes(),
+            MARKER_VERIFIES,
+        );
+        assert_eq!(verifies.len(), 1);
+        assert_eq!(got("// @I ADR-1: why, ADR-2\n"), ["ADR-1", "ADR-2"]);
+        // The note after the colon names no further id.
+        assert_eq!(got("// @I ADR-1: see ADR-2\n"), ["ADR-1"]);
+        assert_eq!(got("// @I ADR-1: (a, b), RFC-3: x\n"), ["ADR-1", "RFC-3"]);
+        assert!(got("// @I (ADR-1)\n").is_empty());
+    }
+
+    #[test]
+    fn a_marker_naming_an_id_in_an_unread_form_is_an_unread_marker() {
+        let unread = |t: &str| {
+            scan_unread_markers(
+                std::path::Path::new("a.rs"),
+                &expand(t),
+                &prefixes(),
+                MARKER_IMPLEMENTS,
+            )
+            .into_iter()
+            .map(|u| (u.line, u.id))
+            .collect::<Vec<_>>()
+        };
+        assert_eq!(unread("// @I (ADR-1)\n"), [(1, "ADR-1".to_string())]);
+        assert_eq!(
+            unread("x\n// @I see ADR-4 here\n"),
+            [(2, "ADR-4".to_string())]
+        );
+        assert!(unread("// @I ADR-1\n").is_empty());
+        assert!(unread("// @I ADR-1: note\n").is_empty());
+        assert!(unread("// @I the trait\n").is_empty());
+        assert!(unread("// see (ADR-1)\n").is_empty());
     }
 
     fn sources(files: Vec<SourceFile>, paths: &[&str], tests: &[&str]) -> BackPointerSources {

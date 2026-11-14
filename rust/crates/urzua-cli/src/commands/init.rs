@@ -1266,6 +1266,9 @@ mod tests {
             "statuses.delivery",
             "waiver.matches-nothing",
             "role: suppression",
+            // The form `waive --from-report` accepts, and the directory need not exist.
+            "effective_requires: [Reason, Expires]",
+            "its directory need not exist",
             "revision-log.change-class-required",
             "revision_log",
         ] {

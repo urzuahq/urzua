@@ -158,7 +158,7 @@ impl Declaration {
             Declaration::StatusForbid => "statuses.forbid",
             Declaration::StatusTransitions => "statuses.transitions",
             Declaration::StatusDelivery => "statuses.delivery",
-            Declaration::WaiverType => "a record type with `role: suppression`",
+            Declaration::WaiverType => "a record type with `role: suppression` and `effective_requires: [Reason, Expires]` (or `permanent`), the form `waive --from-report` accepts; its directory need not exist until the first waiver",
         }
     }
 }
@@ -824,6 +824,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("back-pointer-unresolved", ActionDecl::Exempt("the edit is to a source file comment, and no action kind addresses a non-record file yet")),
             VariantAction::new("back-pointer-uncovered-path", ActionDecl::CONFIG_SET),
             VariantAction::new("back-pointer-uncovered-test-path", ActionDecl::CONFIG_SET),
+            VariantAction::new("back-pointer-unread", ActionDecl::Exempt("the edit rewrites a marker in a source file comment, and no action kind addresses a non-record file yet")),
             VariantAction::new("back-pointer-marker-unused", ActionDecl::Exempt("the edit removes a marker from a source file comment, and no action kind addresses a non-record file yet")),
         ],
         phase: Phase::Main,
@@ -859,6 +860,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("decision-not-implementable", ActionDecl::Exempt("the edit is to a source file comment or to the cited record, and no action kind addresses a non-record file yet")),
             VariantAction::new("decision-unjudgeable", ActionDecl::Exempt("the edit is to a type or rule declaration that depends on which statuses permit implementation, a policy choice with no single target")),
             VariantAction::new("decision-uncovered-path", ActionDecl::CONFIG_SET),
+            VariantAction::new("decision-pointer-unread", ActionDecl::Exempt("the edit rewrites a marker in a source file comment, and no action kind addresses a non-record file yet")),
             VariantAction::new("decision-marker-unused", ActionDecl::Exempt("the edit removes a marker from a source file comment, and no action kind addresses a non-record file yet")),
         ],
         phase: Phase::Main,
