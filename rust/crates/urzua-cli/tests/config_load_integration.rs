@@ -115,7 +115,7 @@ fn a_message_about_the_config_is_written_in_yaml_not_toml() {
 }
 
 /// `new` named a missing `extra_dirs` entry on stderr only, which an agent
-/// parsing stdout never saw.
+/// parsing stdout never saw; the notice is in the JSON now (main's `numbering`).
 #[test]
 fn new_reports_a_missing_extra_dir_in_the_json() {
     let config = CONFIG.replace(
@@ -134,9 +134,10 @@ fn new_reports_a_missing_extra_dir_in_the_json() {
         .as_array()
         .unwrap()
         .iter()
-        .find(|n| n["subject"] == "new.extra-dir-missing")
+        .find(|n| {
+            n["subject"] == "numbering" && n["message"].as_str().unwrap().contains("extra_dirs")
+        })
         .unwrap_or_else(|| panic!("no notice: {report}"));
-    assert_eq!(notice["severity"], "warning");
     assert!(
         notice["message"].as_str().unwrap().contains("docs/old-adr"),
         "{notice}"

@@ -110,7 +110,7 @@ fn fix_leaves_a_sticky_state_alone() {
 fn a_sticky_state_that_evidence_computes_is_refused_at_load() {
     let dir = repo("bad", "    sticky_states: [Deprecated, Verified]\n");
     let out = run_urzua(&dir, &["check"]);
-    assert!(!out.status.success());
+    assert_eq!(out.status.code(), Some(2));
     let text =
         String::from_utf8_lossy(&out.stdout).to_string() + &String::from_utf8_lossy(&out.stderr);
     assert!(text.contains("sticky_states"), "{text}");

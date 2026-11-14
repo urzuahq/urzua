@@ -142,7 +142,7 @@ fn two_types_declaring_the_role_are_refused_at_load() {
         .current_dir(&dir)
         .output()
         .unwrap();
-    assert!(!out.status.success());
+    assert_eq!(out.status.code(), Some(2));
     let text =
         String::from_utf8_lossy(&out.stdout).to_string() + &String::from_utf8_lossy(&out.stderr);
     assert!(text.contains("suppression"), "{text}");
@@ -294,7 +294,7 @@ fn effective_requires_on_a_type_without_the_role_is_refused_at_load() {
         .current_dir(&dir)
         .output()
         .unwrap();
-    assert!(!out.status.success());
+    assert_eq!(out.status.code(), Some(2));
     let text = String::from_utf8_lossy(&out.stdout).to_string();
     assert!(text.contains("effective_requires"), "{text}");
 }

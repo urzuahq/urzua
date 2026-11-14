@@ -2,7 +2,7 @@
 Stable-Id: 01M2YN698JZ9AMBY8JNYNYNGZX
 Status: Fixed
 Found-in: "Round 8 of the 0.4.0 review"
-Realized-by: test:rust/crates/urzua-cli/tests/check_integration.rs#an_unreadable_tracked_record_stops_the_run_rather_than_shrinking_the_corpus@sha256:bac9769e5929c7b0401600db6e1d2752f8d357c98f5c846ff1f62db08e4b6db8
+Realized-by: test:rust/crates/urzua-cli/tests/check_integration.rs#an_unreadable_tracked_record_stops_the_run_rather_than_shrinking_the_corpus@sha256:bc921659e25ae12d31295958aab14190b2bb89d0bdc74adedb39062c4ac8fd6b
 ---
 # 76 — An unreadable tracked record drops out of the corpus and check reports ok
 
@@ -46,3 +46,4 @@ numbers have never been compared.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |
+> | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/check_integration.rs#an_unreadable_tracked_record_stops_the_run_rather_than_shrinking_the_corpus` (lines 2025-2049) bac9769e5929 -> bc921659e25a. Reason: an_unreadable_tracked_record_stops_the_run_rather_than_shrinking_the_corpus now asserts the exact exit code 2 instead of not 0; the behaviour it pins is unchanged **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |

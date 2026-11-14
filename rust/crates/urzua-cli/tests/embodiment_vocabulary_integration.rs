@@ -191,7 +191,7 @@ fn a_bad_declaration_is_refused_at_load() {
     ] {
         let dir = repo(name, decl);
         let out = run_urzua(&dir, &["check"]);
-        assert!(!out.status.success());
+        assert_eq!(out.status.code(), Some(2));
         let text = String::from_utf8_lossy(&out.stdout).to_string()
             + &String::from_utf8_lossy(&out.stderr);
         assert!(text.contains("embodiment") && text.contains(needle), "{name}: {text}");
@@ -211,7 +211,7 @@ fn a_sticky_state_naming_a_declared_state_is_refused() {
     )
     .unwrap();
     let out = run_urzua(&dir, &["check"]);
-    assert!(!out.status.success());
+    assert_eq!(out.status.code(), Some(2));
     let text =
         String::from_utf8_lossy(&out.stdout).to_string() + &String::from_utf8_lossy(&out.stderr);
     assert!(
@@ -321,7 +321,7 @@ fn a_delivery_tier_in_the_built_in_vocabulary_is_refused_under_a_renamed_one() {
     )
     .unwrap();
     let out = run_urzua(&dir, &["check"]);
-    assert!(!out.status.success());
+    assert_eq!(out.status.code(), Some(2));
     let text =
         String::from_utf8_lossy(&out.stdout).to_string() + &String::from_utf8_lossy(&out.stderr);
     assert!(
@@ -362,7 +362,7 @@ fn a_declaration_missing_a_key_is_refused_not_defaulted() {
     ] {
         let dir = repo(name, decl);
         let out = run_urzua(&dir, &["check"]);
-        assert!(!out.status.success(), "{name}: loaded");
+        assert_eq!(out.status.code(), Some(2), "{name}: loaded");
         let text = String::from_utf8_lossy(&out.stdout).to_string()
             + &String::from_utf8_lossy(&out.stderr);
         assert!(text.contains(needle), "{name}: {text}");

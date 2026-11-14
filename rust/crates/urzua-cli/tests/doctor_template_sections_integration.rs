@@ -228,3 +228,25 @@ fn doctor_and_section_required_agree_on_a_marker_in_prose_a_fence_and_the_header
         assert_eq!(missing, !met, "{name} section.required: {report}");
     }
 }
+
+/// Review finding 8.5: a template that cannot be read is an error, not an agreeing one. Bytes
+/// that are not UTF-8 make the read fail for any user, root included.
+#[test]
+fn a_template_that_cannot_be_read_is_an_error_not_ok() {
+    let dir = repo("unreadable", REQUIRED, &[]);
+    std::fs::write(
+        dir.join(".urzua/templates/adr.md"),
+        [0xff_u8, 0xfe, 0x00, 0x80],
+    )
+    .unwrap();
+    let checks = template_checks(&doctor(&dir));
+    assert_eq!(checks.len(), 1, "{checks:?}");
+    assert_eq!(checks[0]["status"], "error", "{checks:?}");
+    assert!(
+        checks[0]["message"]
+            .as_str()
+            .unwrap()
+            .contains("could not read"),
+        "{checks:?}"
+    );
+}

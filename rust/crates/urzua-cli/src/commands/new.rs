@@ -385,24 +385,36 @@ fn read_type_filenames(
                     .filter_map(|e| e.file_name().into_string().ok()),
             ),
             Err(e) if index > 0 && e.kind() == std::io::ErrorKind::NotFound => {
-                notices.push(Notice {
-                    severity: NoticeSeverity::Warning,
-                    subject: NOTICE_EXTRA_DIR.to_string(),
-                    message: format!(
-                        "extra_dirs entry '{declared_dir}' of record type '{record_type}' does not exist; numbering without it"
-                    ),
-                    detail: None,
-                });
+                let message = format!(
+                    "extra_dirs entry '{declared_dir}' of record type '{record_type}' does not exist; numbering without it"
+                );
+                eprintln!("urzua: {message}");
+                notices.push(directory_notice(message));
             }
             // The first record of a type: its directory does not exist yet and
             // is created when the record is written.
-            Err(e) if index == 0 && e.kind() == std::io::ErrorKind::NotFound => eprintln!(
-                "urzua: {declared_dir} does not exist yet; creating it for the first {record_type} record"
-            ),
+            Err(e) if index == 0 && e.kind() == std::io::ErrorKind::NotFound => {
+                let message = format!(
+                    "{declared_dir} does not exist yet; creating it for the first {record_type} record"
+                );
+                eprintln!("urzua: {message}");
+                notices.push(directory_notice(message));
+            }
             Err(e) => return Err(format!("could not read {}: {e}", dir.display())),
         }
     }
     Ok(filenames)
+}
+
+/// What numbering says about a directory it found missing: on stderr and, as
+/// the contract requires, in the report (`ADR-46`).
+fn directory_notice(message: String) -> Notice {
+    Notice {
+        severity: NoticeSeverity::Info,
+        subject: "numbering".to_string(),
+        message,
+        detail: None,
+    }
 }
 
 /// The type's declared identity pattern, when it has one, decides which
@@ -597,9 +609,6 @@ fn assign_display_number(
 
 /// Subject of the notices about the pull-request refs, the lock and the worktrees.
 const NOTICE_PULL_REFS: &str = "new.pull-refs";
-
-/// A declared `extra_dirs` entry that is not on disk: numbering went without it.
-const NOTICE_EXTRA_DIR: &str = "new.extra-dir-missing";
 
 /// Subject of the notice that numbering used the working tree alone.
 const NOTICE_NUMBERING: &str = "new.numbering";

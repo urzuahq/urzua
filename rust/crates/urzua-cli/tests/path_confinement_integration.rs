@@ -64,7 +64,7 @@ fn index_apply_does_not_create_a_file_through_a_symlinked_directory() {
         !outside.join("idx.md").exists(),
         "wrote outside the repository: {parsed}"
     );
-    assert_ne!(out.status.code(), Some(0), "{parsed}");
+    assert_eq!(out.status.code(), Some(1), "{parsed}");
     assert!(
         parsed.to_string().contains("outside the repository"),
         "{parsed}"
@@ -113,7 +113,7 @@ fn new_does_not_write_a_record_through_a_symlinked_record_directory() {
     )
     .unwrap();
     let (out, parsed) = run(&dir, &["new", "adr", "Escapes", "--by", "t"]);
-    assert_ne!(out.status.code(), Some(0), "{parsed}");
+    assert_eq!(out.status.code(), Some(2), "{parsed}");
     assert!(
         parsed.to_string().contains("outside the repository"),
         "{parsed}"
