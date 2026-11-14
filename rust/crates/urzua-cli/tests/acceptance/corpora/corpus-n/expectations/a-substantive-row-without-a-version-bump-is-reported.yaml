@@ -1,4 +1,5 @@
 id: a-substantive-row-without-a-version-bump-is-reported
+bugs: [BUG-51]
 corpus: corpus-n
 # Two records change after the base commit. Both add a substantive revision row;
 # SPEC-1 leaves Version at 0.1 and SPEC-2 raises it to 0.2. The rule judges the

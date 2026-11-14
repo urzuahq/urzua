@@ -1,4 +1,5 @@
 id: record-in-a-subdirectory-is-not-silently-ungoverned
+bugs: [BUG-62]
 corpus: corpus-d
 invocation: [check]
 expect_exit: 1

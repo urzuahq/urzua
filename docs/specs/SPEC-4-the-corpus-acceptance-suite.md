@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5N2PD9ZYBJPZHN05W7
-Version: '0.22'
+Version: '0.23'
 Date: 2026-08-20
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/tests/acceptance.rs@sha256:17625ea56765d64b5018472e845a5ceb7e20f029f6e1b3c837d8eeecdb2f783a, test:rust/crates/urzua-cli/tests/acceptance_property.rs@sha256:776f499ed6f76ab895ab380e38f62e1bacba4613b5dcd49074f31b99662d248e
+Realized-by: code:rust/crates/urzua-cli/tests/acceptance.rs@sha256:e037aece905395b03fe586d5e9fb2b06c3b17977c7d0c473be4403cac8c77a23, test:rust/crates/urzua-cli/tests/acceptance_property.rs@sha256:776f499ed6f76ab895ab380e38f62e1bacba4613b5dcd49074f31b99662d248e
 Author: beauwilliams
 Subject: 'The corpus acceptance suite -- documented bug classes `check` must reproduce against real corpora.'
 Parent: SPEC-1
@@ -209,6 +209,10 @@ built, and where it differs from the sketch:
 - `known_gap: {ref, reason}` marks a case whose expectation is the correct behaviour that does not
   hold yet. It still runs; failing is the expected outcome and is reported `KNOWN-GAP`. Passing fails
   the suite until the marker is removed, so a gap cannot go stale and a fix flips the case visibly.
+- `bugs: [BUG-n]` lists the bug records a case reproduces. The runner reads nothing from it; the bug
+  coverage gate below does. A case lists a bug only when it fails on a build that has the bug: for a
+  bug whose fix is a rule, that is the mutation proof (the case fails with the rule off); for any other
+  bug, the case is run red against the fix's absence and the PR body says how.
 - **Private corpora.** `URZUA_ACCEPTANCE_EXTRA` is a `:`-separated list of directories, each either one
   corpus (it has `expectations/`) or a root of corpus directories, laid out as above. They run in
   addition to the checked-in ones. Unset, the runner prints a one-line skip note rather than staying
@@ -244,6 +248,28 @@ built, and where it differs from the sketch:
   rule table, so the entry is deleted in the same change that earns or removes it. A name-filtered run
   does not run the gate, for the same reason it does not report coverage. `acceptance_coverage_gate.rs`
   tests the gate, including that a new rule without a failing case fails it.
+- **Bug coverage gate.** `tests/acceptance_bug_gate.rs` holds every Fixed record under `docs/bugs/` to
+  the suite (decided 2026-11-14, MILE-101). It runs no corpus and no binary, so it is fast and exact: it
+  reads the bug records, the case files and three committed lists. A Fixed bug is tagged by at least
+  one case's `bugs:`, or it is on exactly one of two lists. A **lane gap file**
+  (`tests/acceptance/bug-gaps-<lane>.yaml`, one per lane: `a` for `new`, `init` and `doctor`; `b` for
+  `claim_paths`, scope, waivers and config; `c` for silent zeros, the examined population, `header: none`
+  and `fix`; `d` for filename, title, locator, drift, section and field bugs) holds a corpus-shaped bug
+  whose case is still to be written. The gap files only shrink: a bug may sit in one only if
+  `tests/acceptance/bug-gap-ceilings.tsv` lists it under the same lane, the ceiling holds the bugs
+  that had no case when the gate was introduced, and a line whose bug has left every gap file is stale
+  and is deleted in the same change. A bug fixed after that has to be tagged or ledgered. The
+  **ledger** (`tests/acceptance/bug-ledger.yaml`) holds a bug no corpus run can show, a release or CI
+  workflow, a refactor with identical output, a comment, a performance change or documentation wording,
+  with a one-line reason saying why no case can reproduce it; its `Realized-by` is the evidence instead.
+  The gate also fails when a case tags an unknown bug or one that is not Fixed, when a bug is both
+  tagged and listed, and when an entry has no reason. **The lists cannot grow.** The gate compares the
+  gap files, the ceiling and the ledger with the merge base's copies (`HEAD` against
+  `URZUA_BUG_GATE_BASE`, default `origin/main`) and fails on any entry the change adds. The override
+  is explicit: `URZUA_BUG_LISTS_MAY_GROW=1`, which CI sets for a pull request carrying the
+  `bug-lists-grow` label. A base that has none of the files is the change that introduces them. In CI
+  (`CI` set) a base that cannot be read fails the gate rather than skipping it.
+  `acceptance_bug_gate.rs` tests each of these with a planted case.
 - **Scratch names.** A case's temporary repository and its mutated config are named by process, corpus
   and case id. Cases run on several threads, and two corpora (a private one merged in through
   `URZUA_ACCEPTANCE_EXTRA`, say) may each declare a case with one id, so a name keyed on the id alone would
@@ -465,5 +491,6 @@ own-corpus case lacks the flag. A case over a fixture corpus needs none.
 > | 2026-11-09 | Bumped to `0.20`. Re-pin rows in this revision log were reworded to name who re-verified, matching the tool's wording since 2026-11-09; hashes, reasons and dates are unchanged. **Why:** Maintainer decision, 2026-11-09. | **structural** |
 > | 2026-11-14 | Bumped to `0.21`. Documents `empty_population_ok_without` and `URZUA_ACCEPTANCE_REPO`. **Why:** the 0.4.0 release pull request failed `own-config-claim-rules-run`, whose rule examines the changeset fragments the release deletes; the case now accepts an empty population only when no fragment exists, and the release tree is tested before the release. | **structural** |
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/acceptance.rs` ae174f312e28 -> 6bc5217cec95. Reason: Read the diff of acceptance.rs against main: repo_root now honours URZUA_ACCEPTANCE_REPO, a case gains the optional empty_population_ok_without list (rule, directory, extension) that lets an expect_rules_ran rule run over an empty population only when no file of that extension sits under the directory, and the non-empty check consults it. No other runner behaviour changed, so each claim this record makes about the runner still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
-> | 2026-11-14 | Bumped to `0.22`. `empty_population_ok_without` takes an optional `except_containing`; the claim-rule case sets it to `closes: []`. **Why:** the claim rule reads no claim from a changeset fragment that closes nothing, so a tree whose only fragment has `closes: []` has an empty population while a fragment exists, and the case failed on it (this change's own changeset). | **structural** |
-> | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/acceptance.rs` 6bc5217cec95 -> 17625ea56765. Reason: Read the diff of each re-pinned file against main and the claim still holds. rust/crates/urzua-cli/tests/acceptance.rs and the own-config-claim-rules-run case: empty_population_ok_without gains an optional except_containing, so a changeset fragment with closes: [] (which yields no claim) does not make the claim-rule population count as non-empty; entries without it behave as before. docs/specs/SPEC-4: that field is documented and the version bumped. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-14 | Bumped to `0.22`. Added the `bugs:` case field and the "Bug coverage gate": every Fixed bug record is tagged by a case, listed in one of four shrink-only lane gap files, or listed in a ledger of bugs no corpus run can show, and the lists cannot grow against the merge base without a label. **Why:** `MILE-101`'s remaining half is "every documented bug reproduces", and nothing linked a bug record to a case, so the count of reproduced bugs was a hand classification; the gate makes the gap a number that only falls. | **substantive** |
+> | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/acceptance.rs` 6bc5217cec95 -> e037aece9053. Reason: Read the diff of acceptance.rs since the pin: Case gained an optional bugs list (tags read by acceptance_bug_gate.rs, never by the runner), a doc paragraph, and bug_tag_problem, which fails a case whose tag is not BUG-<number> or that is a known_gap. How a case is run, mutation-proven, sharded or gated is unchanged, so the claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-14 | Bumped to `0.23`. `empty_population_ok_without` takes an optional `except_containing`; the claim-rule case sets it to `closes: []`. **Why:** the claim rule reads no claim from a changeset fragment that closes nothing, so a tree whose only fragment has `closes: []` has an empty population while a fragment exists, and the case failed on it (this change's own changeset). | **structural** |

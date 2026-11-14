@@ -1,0 +1,34 @@
+# Lane C (silent zeros, the examined population, header-none and fix): Fixed bugs that are corpus-shaped and have no case
+# yet (SPEC-4, "Bug coverage gate"). The lane's PR writes a case that reproduces
+# the bug, tags it `bugs: [BUG-n]`, runs it red against a build without the fix,
+# and deletes the entry here and in `bug-gap-ceilings.tsv`. The list only
+# shrinks; an entry can never be added.
+- BUG-19  # Five CLI commands hand-roll their own JSON shape instead of one shared contract
+- BUG-40  # records_examined cannot distinguish nothing-to-check from checked-nothing, and is not one unit
+- BUG-76  # An unreadable tracked record drops out of the corpus and check reports ok
+- BUG-77  # check and audit report ok when no rule examined anything
+- BUG-78  # header.field-set-consistency counts a record whose header never parsed as examined
+- BUG-81  # A config-scoped rule's examined count satisfies the guard that a record was examined
+- BUG-82  # Every missing file was treated as a staged deletion so an unstaged rm shrinks the corpus in silence
+- BUG-83  # A rule that examines path names was marked as examining records so it alone certifies the corpus
+- BUG-84  # audit is unsatisfiable on a clean corpus with no relationships
+- BUG-87  # A record whose path git quotes is dropped from the corpus and no rule reports it
+- BUG-94  # The census reports that a rule was handed nothing and the gate does not read it
+- BUG-95  # field.quality changed records_examined to a field count while the field is documented as record-shaped
+- BUG-118  # urzua fix ignores a type's relation_fields override for Embodiment and Realized-by
+- BUG-119  # urzua explain and graph ignore a type's relation_fields override for Realized-by and supersession
+- BUG-120  # compute_drifted_records matches the pre-RFC-42 Realized-by literal instead of the declared embodiment_locator field
+- BUG-124  # config.known-fields-declaration-missing flags a header-shape-none type that structurally cannot declare known_fields
+- BUG-125  # a field rule's silence about an unreadable header depends on a separate opt-in rule being enabled to disclose it
+- BUG-128  # config.header-none-has-no-required-fields doesn't cover pointer/narrative/relation/known fields
+- BUG-129  # parse_realized_by truncates a locator path at a literal comma before checking for the category delimiter
+- BUG-131  # the identity index's silent first-seen-wins resolution has no disclosure when identity.collision is disabled
+- BUG-137  # migrate schema-report fails to gate on ADR-50's header-shape-none types
+- BUG-142  # field.quality, field.pending, and header.required-fields misclassify header-shape-none slots as unreadable
+- BUG-147  # four more rules misclassify header-shape-none slots as unreadable instead of out of scope
+- BUG-152  # nine more rules misclassify header-shape-none slots as unreadable or absent instead of out of scope
+- BUG-164  # fix --apply and migrate ids --apply rewrite the whole file with LF endings and a forced trailing newline
+- BUG-165  # fix --apply appends its revision-log row with a hardcoded blockquote prefix, detaching it from a plain table
+- BUG-166  # fix --apply --ids with an entry that matches no repair returns ok and writes nothing
+- BUG-169  # graph and explain report ok with no disclosure of what they examined, so an unreadable header drops its edges silently
+- BUG-192  # urzua fix --apply on a record whose Embodiment is null, ~ or empty writes the computed value at column 0 of the line

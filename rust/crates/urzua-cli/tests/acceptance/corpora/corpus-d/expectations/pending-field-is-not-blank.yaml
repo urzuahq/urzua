@@ -1,4 +1,5 @@
 id: pending-field-is-not-blank
+bugs: [BUG-38]
 corpus: corpus-d
 invocation: [check]
 expect_exit: 1
@@ -7,3 +8,7 @@ expect_findings:
     file: records/ADR-0004-pending-author.md
     severity: error
     message_contains: "'Author' is marked pending"
+# BUG-38: a deliberately pending field is the pending rule's finding and is not
+# also read as a forgotten one by field.quality.
+expect_no_findings:
+  - {rule: field.quality, file: records/ADR-0004-pending-author.md}
