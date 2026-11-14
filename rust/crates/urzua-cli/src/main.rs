@@ -139,8 +139,8 @@ struct Cli {
 
     /// Evaluate every date comparison (waiver expiry, claim age, status
     /// expiry) as of this UTC date, `YYYY-MM-DD`, instead of today. Echoed in
-    /// the report's `as_of`. Accepted by the read-only modes of `check`, `fix`
-    /// and `reverify` (and `audit`); refused with `--apply`, where it would
+    /// the report's `as_of`. Accepted by the read-only modes of `check`, `fix`,
+    /// `reverify` and `waive` (and `audit`); refused with `--apply`, where it would
     /// write a revision row with a false date, and by commands that compare
     /// no dates.
     #[arg(long, global = true, value_name = "YYYY-MM-DD")]
@@ -155,7 +155,7 @@ enum Command {
     /// Create a record with a stable ID assigned. Never asks you to pick a number.
     ///
     /// The number skips past any already used on a local branch or remote-tracking ref
-    /// (named on stderr). Refs never fetched into this clone are invisible: `git fetch` first.
+    /// (named in the JSON `skipped` field; stderr stays empty). Refs never fetched into this clone are invisible: `git fetch` first.
     New {
         /// Record type, as configured in .urzua/config.yaml (e.g. adr, rfc, spec).
         record_type: String,

@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5AJB7EBVDWVSMCSYZQ
-Version: '0.42'
+Version: '0.43'
 Date: 2026-07-29
 Status: Shipped
 Embodiment: Verified
@@ -44,7 +44,7 @@ because you cannot sell a decision graph you have never run against a real corpu
 > | **SPEC-11** | `urzua audit` — a deprecated alias of `check` (`ADR-79`) | Accepted |
 > | **SPEC-12** | `urzua new` | Accepted |
 > | **SPEC-13** | `urzua explain` / `urzua graph` | Accepted |
-> | **SPEC-14** | `urzua migrate ids` / `urzua migrate schema` / `urzua migrate config` | Accepted |
+> | **SPEC-14** | `urzua migrate ids` / `urzua migrate filenames` / `urzua migrate schema` / `urzua migrate config` | Accepted |
 > | **SPEC-15** | `urzua doctor` | Accepted |
 > | **SPEC-25** | `urzua waive --from-report` | Draft |
 > | **SPEC-26** | `urzua mcp` | Draft |
@@ -110,8 +110,8 @@ stdout, stdout carrying protocol frames only, each tool returning a report this 
 ### `urzua waive --from-report`
 **Specified in full by SPEC-25.** Drafts one pending waiver per rule and file for the current findings
 (`ADR-91`): a `Reason` holding the type's pending value and no `Expires`, so a draft suppresses nothing until
-a person fills it in. Today it previews only (JSON on stdout, exit 0 when it ran, 2 when it could not);
-writing the drafts is the next change.
+a person fills it in. It previews without `--apply` and writes the drafts as waiver records with it (JSON on
+stdout; exit 0 when it ran, 2 when it could not, 1 when an `--apply` wrote some drafts and then failed).
 
 ### `urzua check [paths...]`
 **Specified in full by SPEC-2.** The validator. Exit non-zero on error; stdout is always the JSON
@@ -190,10 +190,11 @@ commit, never a flaky run.
   declared `issue_refs` is exit `2` with `status: not-run` and the reason in `error`, and the
   existing snapshot is left as it was.
 
-### `urzua migrate ids` / `urzua migrate schema` / `urzua migrate config`
-**Specified in full by SPEC-14.** Backfills stable identifiers onto existing records, previews
-what a newly-required field would break before it's added to config, and rewrites a config from the
-previous schema version to the current one.
+### `urzua migrate ids` / `urzua migrate filenames` / `urzua migrate schema` / `urzua migrate config`
+**Specified in full by SPEC-14.** Backfills stable identifiers onto existing records, renames record files
+to the type's declared filename convention and rewrites the citations of the renamed paths (a dry run
+unless `--apply`), previews what a newly-required field would break before it's added to config, and
+rewrites a config from the previous schema version to the current one.
 
 ### `urzua export --format json`
 Every record of every configured type as plain JSON data, so tooling reads records through the one
@@ -404,3 +405,4 @@ None. Every question this spec carried has been answered or routed:
 > | 2026-11-13 | Bumped to `0.41`. `urzua mcp` serves all five tools (`SPEC-26`). **Why:** `MILE-29`. | **substantive** |
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/main.rs#emit` (lines 44-69) 29d071bbb823 -> 660eb5588313. Reason: Read the diff of rust/crates/urzua-cli/src/main.rs against main. emit now serializes through a private WithNextAction wrapper that appends next_action and next_action_reason after the report's own keys, and falls back to a could-not-run JSON with exit 2 when a report cannot serialize as an object; report_value (used by urzua mcp) is added; the panic hook JSON gains both keys as null (MILE-72). emit still writes one JSON document and otherwise returns the report's exit code, so the claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-14 | Bumped to `0.42`. The `emit` pin was re-baselined for the `next_action` keys every command's JSON now carries (`SPEC-2` 0.160, `MILE-72`); this spec states no output key list, so nothing it says changes. **Why:** `MILE-72` -- the re-pin row above is structural and `revision-log.version-bump-required` asks for a bump. | **structural** |
+> | 2026-11-14 | Bumped to `0.43`. `## Commands` describes `urzua waive --from-report` as it ships (it writes the drafts with `--apply`, and exits 1 on a partial failure) and lists `urzua migrate filenames` (`SPEC-14`); the `urzua new` help text no longer says the skipped numbers are named on stderr (the `Command` pin is re-baselined in the row below). **Why:** the docs-versus-binary review of 2026-11-14 found the `waive` paragraph saying `--apply` was the next change and the command list missing `migrate filenames`. | **substantive** |

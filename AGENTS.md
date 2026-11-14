@@ -175,7 +175,8 @@ conversation history. If you're doing multi-step work worth remembering:
   `Verified`/`Drift detected`/etc. yourself and skip the command that exists to get it right.
 - **`urzua new`'s assigned display number is provisional, not reserved.** It scans the working tree and
   every local branch and remote-tracking ref (MILE-89), skipping past numbers found there and naming
-  the claiming refs on stderr. It is blind to refs never fetched into this clone, so `git fetch` first
+  them, with the reason, in the `skipped` list of its JSON (stderr stays empty of them). It is blind
+  to refs never fetched into this clone, so `git fetch` first
   and, before opening a PR, manually check other open PRs for the same type/number — e.g. `gh
   pr list --search "in:title <TYPE>-<N>"` or `git log --all --oneline -- 'docs/<type>/<TYPE>-<N>-*'`
   — a collision found this way is expected and cheap to rename, not a bug in the tool.

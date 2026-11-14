@@ -31,6 +31,17 @@ know how many there are.
 A type whose records carry no header at all can be declared `header_shape: none`. Such a type has
 nowhere to store a stable ID, so `urzua new` refuses it.
 
+A repository with no records yet does not need this walkthrough. Choose record types from the
+built-in profiles instead, and `init` writes them into the config with a starter template for each:
+
+```sh
+urzua init --types adr,rfc,spec --dir docs
+```
+
+`--types` takes any of `adr`, `rfc`, `spec` and `prd`; `--dir` is the layout root (default `docs`),
+so each type lives in `docs/<type>`. The directories are created by the first `urzua new <type>`.
+Then continue from step 6 below.
+
 ## 2. Preview the config
 
 From the repository root:
@@ -85,8 +96,19 @@ urzua check
 Expect findings, and expect most of them to be about naming rather than content. For example, urzua
 identifies a record from its file name using the pattern `TYPE-NNNN-slug.md`, so a directory of
 `0001-use-postgres.md` files produces a `filename.identity-pattern` finding listing the rename to
-make for each file. Rename the files with `git mv` and update links to them; urzua does not rename
-anything for you.
+make for each file. `urzua migrate filenames` makes those renames for you: it renames every record file
+to the type's declared filename convention, keeping its number and slug, and rewrites the citations of
+the renamed paths. It is a dry run until you add `--apply`.
+
+```sh
+urzua migrate filenames          # lists renames, rewritten citations, and anything it leaves alone
+urzua migrate filenames --apply  # renames and rewrites; nothing is staged, so `git add` the result
+```
+
+Give every record a stable ID first (step 5), so a diff can pair each rename with the old file. A
+citation in a file that is not markdown is listed under `unrewritten` rather than edited, and an
+evidence pin the rewrite made stale is listed under `stale_pins` for `fix --rebaseline` to re-pin.
+`init` itself never renames anything; `check` never writes.
 
 `check` exits 0 when nothing blocks. By default a finding blocks only at severity `error`; set
 `fail_on: warning` in the config to make warnings block too. See [`check`](check.md).
@@ -101,7 +123,8 @@ Work through the findings in this order:
 
 For findings you cannot fix today, file a [waiver](waivers-and-drift.md) with a reason and an expiry
 date rather than turning the rule off. `urzua waive --from-report` previews the waivers it would
-draft for you.
+draft for you, and `urzua waive --from-report --apply` writes them as waiver records with a pending
+reason; each suppresses nothing until a person fills in the reason and the date.
 
 ## 5. Give every record a stable ID
 
@@ -136,7 +159,7 @@ urzua new adr "Use S3 for blobs"
 ```
 
 This picks the next number (skipping numbers used on other local branches and on remote-tracking
-refs, which it names on stderr), writes the file with a fresh `Stable-Id`, today's date and the
+refs, which it lists in the `skipped` field of its JSON), writes the file with a fresh `Stable-Id`, today's date and the
 author filled in, and prints its path. Put a template at `.urzua/templates/<type>.md` to give
 new records of a type your own sections.
 
