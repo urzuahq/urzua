@@ -442,7 +442,7 @@ fn two_different_markers_on_the_two_rules_are_a_load_error_naming_both() {
         "// Implements: ADR-1\n",
     );
     let out = run_urzua(&dir, &["check"]);
-    assert_ne!(out.status.code(), Some(0));
+    assert_eq!(out.status.code(), Some(2));
     let text = format!(
         "{}{}",
         String::from_utf8_lossy(&out.stdout),

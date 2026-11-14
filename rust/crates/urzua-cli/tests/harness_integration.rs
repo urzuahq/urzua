@@ -468,7 +468,7 @@ fn status_reports_a_missing_a_modified_and_an_out_of_date_file_and_exits_1() {
     // but this binary's bundle differs.
     let older = format!("{original}# older bundle\n");
     std::fs::write(dir.join(TRANSLATOR), &older).unwrap();
-    let hash = format!("sha256:{}", urzua_io::sha256_hex_of_str(&older));
+    let hash = format!("sha256:{}", independent_sha256(&older));
     let lock = read(&dir, LOCK);
     let lock = replace_hash(&lock, TRANSLATOR, &hash);
     std::fs::write(dir.join(LOCK), lock).unwrap();
@@ -485,6 +485,36 @@ fn status_reports_a_missing_a_modified_and_an_out_of_date_file_and_exits_1() {
         v["notices"].to_string().contains("settings.local.json"),
         "{v}"
     );
+}
+
+/// The SHA-256 of `text` computed by the system's own tool, not by the code under test: a lock
+/// hash the engine also produced would agree with itself whatever it did.
+fn independent_sha256(text: &str) -> String {
+    for tool in [&["sha256sum"][..], &["shasum", "-a", "256"][..]] {
+        let Ok(mut child) = Command::new(tool[0])
+            .args(&tool[1..])
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .spawn()
+        else {
+            continue;
+        };
+        child
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(text.as_bytes())
+            .unwrap();
+        let out = child.wait_with_output().unwrap();
+        if out.status.success() {
+            return String::from_utf8_lossy(&out.stdout)
+                .split_whitespace()
+                .next()
+                .unwrap()
+                .to_string();
+        }
+    }
+    panic!("neither sha256sum nor shasum is available to compute the expected hash");
 }
 
 fn replace_hash(lock: &str, path: &str, hash: &str) -> String {
@@ -504,7 +534,7 @@ fn update_rewrites_an_unmodified_file_and_reports_a_modified_one_unless_forced()
     let lock = replace_hash(
         &read(&dir, LOCK),
         TRANSLATOR,
-        &format!("sha256:{}", urzua_io::sha256_hex_of_str(&older)),
+        &format!("sha256:{}", independent_sha256(&older)),
     );
     std::fs::write(dir.join(LOCK), lock).unwrap();
     let (code, v) = harness(&dir, &["update", "--dry-run"]);

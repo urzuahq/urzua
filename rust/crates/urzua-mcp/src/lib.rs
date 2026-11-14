@@ -317,9 +317,11 @@ fn error(id: Value, code: i64, message: &str) -> Value {
 mod tests {
     use super::*;
 
-    struct Fake;
-
-    static CALLS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    /// A host that counts its own calls, so no test sees another test's.
+    #[derive(Default)]
+    struct Fake {
+        calls: usize,
+    }
 
     static TOOLS: &[ToolSpec] = &[ToolSpec {
         name: "fake_list",
@@ -351,7 +353,7 @@ mod tests {
             TOOLS
         }
         fn call(&mut self, _: &str, args: &Map<String, Value>) -> Result<ToolResult, String> {
-            CALLS.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            self.calls += 1;
             Ok(ToolResult {
                 report: json!({"status": "ok", "got": args.len()}),
                 is_error: false,
@@ -360,7 +362,7 @@ mod tests {
     }
 
     fn ask(line: &str) -> Option<Value> {
-        handle_line(&mut Fake, "9.9.9", line)
+        handle_line(&mut Fake::default(), "9.9.9", line)
     }
 
     fn err_code(line: &str) -> i64 {
@@ -449,7 +451,7 @@ mod tests {
     fn serve_writes_one_frame_per_line_and_nothing_else() {
         let input = "\n{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\"}\nnot json\n{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}\n";
         let mut out = Vec::new();
-        serve(&mut Fake, "1", input.as_bytes(), &mut out).unwrap();
+        serve(&mut Fake::default(), "1", input.as_bytes(), &mut out).unwrap();
         let text = String::from_utf8(out).unwrap();
         let lines: Vec<&str> = text.lines().collect();
         assert_eq!(lines.len(), 2);
@@ -461,7 +463,7 @@ mod tests {
 
     fn serve_bytes(input: &[u8]) -> Vec<Value> {
         let mut out = Vec::new();
-        serve(&mut Fake, "1", input, &mut out).unwrap();
+        serve(&mut Fake::default(), "1", input, &mut out).unwrap();
         String::from_utf8(out)
             .unwrap()
             .lines()
@@ -526,10 +528,14 @@ mod tests {
 
     #[test]
     fn a_tool_call_without_an_id_is_a_notification_and_never_runs() {
-        let before = CALLS.load(std::sync::atomic::Ordering::SeqCst);
+        let mut host = Fake::default();
         let line = r#"{"jsonrpc":"2.0","method":"tools/call","params":{"name":"fake_list","arguments":{"must":"x"}}}"#;
-        assert!(ask(line).is_none());
-        assert_eq!(CALLS.load(std::sync::atomic::Ordering::SeqCst), before);
+        assert!(handle_line(&mut host, "9.9.9", line).is_none());
+        assert_eq!(host.calls, 0, "a call with no id never reaches the host");
+        // The same call with an id does reach it, so the count above can move.
+        let with_id = line.replace(r#""method""#, r#""id":1,"method""#);
+        assert!(handle_line(&mut host, "9.9.9", &with_id).is_some());
+        assert_eq!(host.calls, 1);
     }
 
     #[test]

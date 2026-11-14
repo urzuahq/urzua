@@ -228,7 +228,7 @@ fn a_delivery_declaration_naming_a_status_outside_the_type_is_refused_at_load() 
     ] {
         let dir = repo("bad", &config(&bad, ""));
         let out = run_urzua(&dir, &["check"]);
-        assert!(!out.status.success(), "{what}");
+        assert_eq!(out.status.code(), Some(2), "{what}");
         let text = String::from_utf8_lossy(&out.stdout).to_string()
             + &String::from_utf8_lossy(&out.stderr);
         assert!(text.contains(what), "{what}: {text}");

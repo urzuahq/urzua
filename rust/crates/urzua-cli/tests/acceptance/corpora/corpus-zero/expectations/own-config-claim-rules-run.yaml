@@ -10,3 +10,8 @@ expect_json:
   - {at: /blocking, equals: false}
 expect_rules_ran:
   - claim.status-agreement
+# The claim rule's population is the changeset fragments, which the release
+# deletes: on the release tree it runs over none. While any fragment exists the
+# population must still be non-empty.
+empty_population_ok_without:
+  - {rule: claim.status-agreement, under: .changeset, extension: md}

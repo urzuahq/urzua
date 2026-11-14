@@ -600,7 +600,7 @@ fn assert_load_error(name: &str, config: &str, needle: &str) {
         .current_dir(&dir)
         .output()
         .unwrap();
-    assert_ne!(out.status.code(), Some(0));
+    assert_eq!(out.status.code(), Some(2));
     let text = format!(
         "{}{}",
         String::from_utf8_lossy(&out.stdout),
