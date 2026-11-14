@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5AJB7EBVDWVSMCSYZQ
-Version: '0.42'
+Version: '0.43'
 Date: 2026-07-29
 Status: Shipped
 Embodiment: Verified
@@ -79,8 +79,8 @@ Phase 1 is done when, and only when:
    the real bar.** A tool that runs *alongside* the thing it was meant to replace has not replaced
    it.
 1. It runs green in **at least two** real target codebases, with different primary languages, via
-   pre-push hook and CI, with zero host-repo runtime added to either. -- `MILE-99` (the hook),
-   `MILE-100` (the second codebase).
+   pre-push hook and CI, with zero host-repo runtime added to either. -- `MILE-99` (the pre-push hook of this repository only),
+   `MILE-100` (the second codebase, with its own hook and CI).
 2. It reproduces **every documented bug** in the acceptance suite against real corpora. Not synthetic
    tests only -- fixtures engineered to exhibit the same variance a real corpus does. -- `MILE-101`.
 3. `urzua new` is what people and agents actually invoke, because hand-authoring is now the slower
@@ -404,3 +404,4 @@ None. Every question this spec carried has been answered or routed:
 > | 2026-11-13 | Bumped to `0.41`. `urzua mcp` serves all five tools (`SPEC-26`). **Why:** `MILE-29`. | **substantive** |
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/main.rs#emit` (lines 44-69) 29d071bbb823 -> 660eb5588313. Reason: Read the diff of rust/crates/urzua-cli/src/main.rs against main. emit now serializes through a private WithNextAction wrapper that appends next_action and next_action_reason after the report's own keys, and falls back to a could-not-run JSON with exit 2 when a report cannot serialize as an object; report_value (used by urzua mcp) is added; the panic hook JSON gains both keys as null (MILE-72). emit still writes one JSON document and otherwise returns the report's exit code, so the claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-14 | Bumped to `0.42`. The `emit` pin was re-baselined for the `next_action` keys every command's JSON now carries (`SPEC-2` 0.160, `MILE-72`); this spec states no output key list, so nothing it says changes. **Why:** `MILE-72` -- the re-pin row above is structural and `revision-log.version-bump-required` asks for a bump. | **structural** |
+> | 2026-11-14 | Bumped to `0.43`. Success criterion 1 cites `MILE-99` for this repository's pre-push hook only and `MILE-100` for the second codebase's hook and CI. The criterion's wording is unchanged. **Why:** an external review (finding 9.4) found the citation implying `MILE-99` covers a hook in two codebases; it covers one. | **substantive** |
