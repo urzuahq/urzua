@@ -10,8 +10,8 @@ Two flags are accepted by every command:
   the current directory.
 - `--as-of <YYYY-MM-DD>` evaluates every date comparison (waiver expiry, claim age, status expiry) as
   of that UTC date instead of today, and echoes it in the report's `as_of`. It is accepted by the
-  read-only modes of `check`, `audit`, `fix` and `reverify`; it is refused with `--apply`, where it would write
-  a revision row with a false date, and by commands that compare no dates.
+  read-only modes of `check`, `audit`, `fix`, `reverify` and `waive`; it is refused with `--apply`, where it
+  would write a revision row with a false date, and by commands that compare no dates.
 
 Every command prints one JSON object to stdout. Where a command has a `status`, it is one of the
 values listed for it. Exit code 0 means the command ran and nothing blocks, 1 means it ran and found
@@ -19,21 +19,42 @@ something blocking, and 2 means it could not run (the report then has `"status":
 `error`). `urzua --help` lists the commands and `urzua <command> --help` lists the flags; the pages
 below were written from that output.
 
+Every report also carries `next_action` and `next_action_reason`, on every command and on a `not-run`
+report. `next_action` is one command to run next, as a bare string such as `urzua fix --apply`, or
+`null` when nothing is better than reading the findings; `next_action_reason` says why, from counts,
+and is `null` exactly when `next_action` is. [`check`](check.md) describes how it is chosen.
+
+### What uses the network
+
+Almost nothing. `check`, `fix` and `reverify` without `--apply`, `explain`, `graph`, `roadmap`,
+`rules`, `doctor`, `export`, `index`, `migrate`, `mcp`, `init` and `harness` make no network call.
+Four commands do:
+
+- `urzua refs refresh` fetches issue and pull request numbers from the GitHub REST API (with `curl`).
+  It is the only command whose job is to reach the network.
+- `urzua new`, `urzua waive` (with or without `--apply`) and `fix --apply` and `reverify --apply`
+  (including `fix --rebaseline --apply`) resolve who is acting by running `gh api user`, which asks
+  GitHub for the logged-in login. A missing, logged-out or slow `gh` (it is given five seconds) is
+  not an error: the command falls back to `--by`, then to `git config user.name`. A verified `gh`
+  login takes precedence over `--by`.
+- `urzua new` with `new.check_open_prs: true` runs `git fetch` against the configured remote to read
+  pull request head refs.
+
 | Command | Does what | Writes? |
 |---|---|---|
-| [`init`](#init) | Propose and write the config for an existing corpus | `.urzua/config.yaml` |
+| [`init`](#init) | Propose and write the config, for an existing corpus or from built-in profiles | `.urzua/config.yaml`, templates |
 | [`check`](#check) | Validate the records | no |
 | [`new`](#new) | Create a record with a stable ID | a new record |
 | [`fix`](#fix) | Detect, and with `--apply` repair, derived fields and stale pins | with `--apply` |
 | [`reverify`](#reverify) | Renew an expired evidence claim | with `--apply` |
-| [`waive`](#waive) | Preview waiver drafts for the current findings | no |
+| [`waive`](#waive) | Draft waivers for the current findings | with `--apply` |
 | [`mcp`](#mcp) | Serve the corpus to an agent over MCP, read-only | no |
 | [`doctor`](#doctor) | Report the health of the config and its wiring | no |
 | [`explain`](#explain) | Which records govern a path, or what a rule is | no |
 | [`graph`](#graph) | The record relationship graph | no |
 | [`roadmap`](#roadmap) | The order of work, computed from the records | no |
 | [`rules`](#rules) | Every rule this build ships | no |
-| [`migrate`](#migrate) | Backfill stable ids, upgrade the config, preview a new required field | with `--apply` or `config` |
+| [`migrate`](#migrate) | Backfill stable ids, rename files to the filename convention, upgrade the config, preview a new required field | with `--apply` or `config` |
 | [`export`](#export) | Emit the records as JSON | no |
 | [`index`](#index) | Regenerate declared index files | with `--apply` |
 | [`refs`](#refs) | Refresh the issue and pull request number snapshot | the snapshot file |
@@ -44,18 +65,33 @@ below were written from that output.
 ## init
 
 ```text
-urzua init [--dry-run] [--config <path>]
+urzua init [--dry-run] [--types <name>,...] [--dir <dir>] [--config <path>]
 ```
 
-Adopts an existing corpus: proposes one record type per directory of numbered records and writes
-`.urzua/config.yaml`. It never moves or rewrites a record, never overwrites an existing config (it
-reports what exists and exits 2), and is idempotent. With `--dry-run` it prints the config it would
-write and writes nothing; it still runs when a config exists, with a notice saying so.
+Two modes. **Adopt** (the default) proposes one record type per directory of numbered records and
+writes `.urzua/config.yaml`. It never moves or rewrites a record. **Greenfield**, for a repository with
+no records yet, is selected by `--types`: a comma-separated list of built-in profiles (`adr`, `rfc`,
+`spec`, `prd`), each written out into the config as an ordinary, editable `record_types` entry with
+its statuses and required fields, plus a starter template at `.urzua/templates/<type>.md` that `new`
+fills in. `--dir` is the layout root for `--types` (default `docs`): each type lives in
+`<dir>/<type>`. It must be a relative path inside the repository. On a terminal, in a repository with
+no record directory, plain `init` asks which types to govern; with no terminal it refuses rather than
+block on a prompt. An unknown or repeated type name, or `--dir` without `--types` when adopt would run,
+exits 2 and writes nothing. Greenfield does not create the type directories: `urzua new` creates one
+when it writes the first record.
+
+Both modes never overwrite an existing config (they report what exists and exit 2), except that a
+greenfield re-run whose `--types` and `--dir` would write exactly the config that exists is a no-op
+(exit 0, `written: false`; a missing template is still written; an existing template is kept). With
+`--dry-run` it prints the config it would write and writes nothing; it still runs when a config exists,
+with a notice saying so.
 
 Output: `status`, `dry_run`, `config_path`, `proposed` (each with `name`, `dir`, `record_count`,
-`prefix`, `header_shape`), `written`, `config_yaml` (the file as one string) and `notices`.
-Back-filling stable ids is a separate step: [`migrate ids`](#migrate). See [Adopt an existing
-corpus](adopt.md).
+`prefix`, `header_shape`), `written`, `config_yaml` (the file as one string) and `notices`. Greenfield
+adds `templates`, each `{type, path, state}` with `state` `written`, `kept` or `would-write`; adopt has
+no such key. The starter config sets `authority: {decider_table: base, waivable: never}` and
+`harness: {outside_writes: shared}`. Back-filling stable ids is a separate step: [`migrate
+ids`](#migrate). See [Adopt an existing corpus](adopt.md).
 
 ## check
 
@@ -75,8 +111,9 @@ urzua new <record-type> [<title>] [--by <name>]
 
 Creates a record of a type declared in the config, with a stable id assigned. It never asks you to
 choose a number: it takes one past the highest in the type's directories, skipping numbers used on
-any local branch or remote-tracking ref (it names the skipped numbers on stderr; run `git fetch`
-first, since refs never fetched are invisible). With `new.check_open_prs: true` in the config it also
+any local branch or remote-tracking ref (it lists the skipped numbers, with the reason, in the `skipped`
+field of its JSON and writes nothing about them to stderr; run `git fetch` first, since refs never
+fetched are invisible). With `new.check_open_prs: true` in the config it also
 fetches pull request head refs so numbers taken by open pull requests are skipped.
 
 The header is built from the type's `required_fields`, with the `Stable-Id`, the date, the author
@@ -85,7 +122,11 @@ field is left for you. If `.urzua/templates/<type>.md` exists, its body (title a
 appended. A type with `header_shape: none` is refused, since it has nowhere to store a stable id.
 
 Output: `status`, `path`, `display_number`, `stable_id`, `pull_refs` (whether the open pull request
-fetch ran and which numbers it skipped) and `skipped`.
+fetch ran, and which numbers it skipped and who held them) and `skipped`, always present and empty
+when nothing was skipped: one `{number, reason}` per number, with `reason` `local`, `worktree <path>`
+or `open-pr <ref>`. When the type's directory does not exist yet, `new` numbers from 1 and creates it,
+saying so on stderr. It resolves an identity with `gh api user` first (see [What uses the
+network](#what-uses-the-network)).
 
 ## fix
 
@@ -147,26 +188,39 @@ Output keys include `status` (`repairs-available`, `applied`, `not-run`, ...), `
 ## waive
 
 ```text
-urzua waive --from-report [--rule <id>,...] [--path <path>]... [--by <name>]
+urzua waive --from-report [--rule <id>,...] [--path <path>]... [--by <name>] [--apply]
 ```
 
 Drafts one waiver per rule and file for the current unwaived findings, in your repository's own
-waiver format. **This build previews only: it writes nothing.** `--apply`, which writes the drafts,
-is not accepted yet; passing it is a usage error. Its `mode` is always `dry-run`.
+waiver format. Without `--apply` it previews and writes nothing (`mode` is `dry-run`). With `--apply`
+it writes each draft as a new record the way `new` does: numbered past the highest id, a fresh
+`Stable-Id`, today's date, and under the same numbering lock (`mode` is `apply`). A second `--apply`
+writes nothing, because the findings its drafts name are then `already-waived`. The written files are
+untracked: `git add` them, or `check` will not read them. `--as-of` is refused with `--apply`.
 
 `--from-report` is required and selects the source: a `check` run in process over the whole corpus.
 `--rule` narrows to the named rules (a rule id this build does not ship exits 2). `--path` narrows to
-a file or a directory (a path, not a glob; repeatable). `--by` names who ran it.
+a file or a directory (a path, not a glob; repeatable). `--by` names who ran it in each draft's
+revision log; it defaults to the git identity.
 
 A draft has `Rule` and `Scope` copied from the finding and a pending `Reason`, with no `Expires`, so
-it suppresses nothing until a person fills in the reason and the date. The command refuses to run
-where a draft would take effect on its own (the waiver type must require `Reason`, and either declare
-`permanent` or require `Expires`).
+it suppresses nothing until a person fills in the reason and the date: once the files are tracked,
+`check` reports the original finding as before and, where `waiver.matches-nothing` is enabled, one
+more finding per draft saying it is not in effect, until they do. The command refuses to run
+(exit 2, nothing written) where a draft would take effect on its own: the waiver type must list
+`Reason` in `effective_requires`, and either declare `permanent` or list `Expires` in
+`effective_requires` too.
 
-Output: `status`, `mode`, `pending_value`, `pending_source`, `drafts` (each with `path`, `rule`,
-`scope`, `findings` and `written`), `skipped` (a finding that gets no draft, with a `reason` such as
-`already-waived`, `expired` or `unwaivable`) and `unmatched_filters`. Exit 0 whenever it ran. See
-[Waivers and drift](waivers-and-drift.md).
+Output: `status` (`ok`, `partial-failure` or `not-run`), `mode`, `pending_value`, `pending_source`,
+`drafts` (each with `path`, `stable_id`, `rule`, `scope`, `findings` and `written`; `stable_id` is
+`null` in a preview), `skipped` and `unmatched_filters`. A `skipped` entry is `{rule, file, reason}`
+(plus `waiver` when one exists) for a finding that gets no draft; `reason` is one of
+`already-waived` (a waiver for the same rule and file exists and has not expired, but is not yet
+filled in), `expired`, `unwaivable`, `no-file`, `matches-nothing`, `waiver-record`,
+`resolved-by-drafts` or `resolved-by-own-draft`. A finding that a filled-in, unexpired waiver already
+covers is not a candidate and is not listed. Exit 0 whenever it ran; 2 when it could not run, or an
+`--apply` failed before writing any draft; 1 when an `--apply` failed after writing some
+(`partial-failure`). See [Waivers and drift](waivers-and-drift.md).
 
 ## doctor
 
@@ -180,6 +234,11 @@ exists, whether a CI workflow invokes `urzua check` or the gate action, whether 
 pre-push hooks run it, and the harness and authority declarations.
 
 Output: `status` (`ok`, `warn` or `error`) and `checks`, each with `check`, `status` and `message`.
+The `check` ids include `config-exists`, `config-parses`, `record-type-dir`, `ci-wired`, `hook-wired`,
+`authority-host` (whether the declared authority gates anything), `authority-decider-table`,
+`authority-waivable`, `harness-config` (the declared harness, and any key of it this build does not
+recognize) and `template-sections` (whether a type's starter template has a heading for each section
+the type requires).
 Exit 0 for `ok` and `warn`, 1 for `error`, 2 when there is no config to read.
 
 ## explain
@@ -261,6 +320,7 @@ enabled. Use [`explain --rule`](#explain) for one rule's options and your curren
 
 ```text
 urzua migrate ids [--apply]
+urzua migrate filenames [--apply]
 urzua migrate config
 urzua migrate schema --report --field <name>
 ```
@@ -268,6 +328,18 @@ urzua migrate schema --report --field <name>
 - **`ids`** backfills a `Stable-Id` into every record lacking one, keeping the file name's number as
   the display number so existing references keep resolving. A dry run unless `--apply`. Output:
   `status`, `apply`, `missing` (the records that lack one).
+- **`filenames`** renames every record file whose name does not match its type's filename convention
+  (the type's `identity.pattern`, else `TYPE-NNNN-slug.md`) and rewrites the citations of the renamed
+  paths, so a corpus named `0001-use-postgres.md` becomes `ADR-0001-use-postgres.md`. The number and
+  slug are kept, so a record's `Stable-Id` and id do not change. A dry run unless `--apply`. Output:
+  `status`, `apply`, `renames` (`record_type`, `from`, `to`), `rewrites` (`file`, `line`, `from`, `to`),
+  `unrewritten` (a citation in a tracked file that is not markdown, which it reports and does not edit),
+  `stale_pins` (evidence pins whose file the rewrite changed; `fix --rebaseline` re-pins them),
+  `skipped` (a file it leaves alone, with a `reason` such as `no-number`, `pattern-rejects`,
+  `target-exists` or `number-collision`) and `notices`. Run `migrate ids --apply` first: without a
+  `Stable-Id` a diff cannot pair a rename with the old file, and the command says so in a
+  `stable-id-missing` notice. It uses the filesystem, not `git mv`, so nothing is staged; a second
+  applied run finds nothing to rename.
 - **`config`** rewrites the config from the previous schema version to the current one, in place,
   keeping comments, and reports every key it added, changed, renamed, moved or dropped. When the
   config is current it reports `outcome: nothing-to-do`. A version outside what this build reads is
@@ -303,8 +375,8 @@ urzua refs refresh
 
 Fetches every issue and pull request number of the declared repository from the GitHub REST API and
 rewrites the snapshot file that `citation.issue-exists` checks citations against. It is the only
-command that uses the network (`check` never does). It reads `GITHUB_TOKEN` or `GH_TOKEN` when set
-and needs `curl`. A failed fetch writes nothing and exits 2. Commit the snapshot afterwards.
+command whose job is to reach the network (`check` never does; [which commands do](#what-uses-the-network)).
+It reads `GITHUB_TOKEN` or `GH_TOKEN` when set and needs `curl`. A failed fetch writes nothing and exits 2. Commit the snapshot afterwards.
 
 ## harness
 
