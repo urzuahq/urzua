@@ -175,7 +175,7 @@ conversation history. If you're doing multi-step work worth remembering:
   `Verified`/`Drift detected`/etc. yourself and skip the command that exists to get it right.
 - **`urzua new`'s assigned display number is provisional, not reserved.** It scans the working tree and
   every local branch and remote-tracking ref (MILE-89), skipping past numbers found there and naming
-  them, with the reason, in the `skipped` list of its JSON (stderr stays empty of them). It is blind
+  them, with the reason, in the `skipped` list of its JSON (never on stderr). It is blind
   to refs never fetched into this clone, so `git fetch` first
   and, before opening a PR, manually check other open PRs for the same type/number — e.g. `gh
   pr list --search "in:title <TYPE>-<N>"` or `git log --all --oneline -- 'docs/<type>/<TYPE>-<N>-*'`
@@ -274,7 +274,9 @@ never accept a record or touch a guardrail rests on this file and on the person 
 - what the editor hook cannot read: a hard link is resolved on Unix only (elsewhere a write is judged by its
   own name), names are not Unicode-normalised, an MCP tool whose input has no string a path can be read from
   is not an edit it can see, an MCP tool that applies a patch or runs a shell command is an unparsed route, a change made before `session-start` took the protected baseline is not
-  reported, the agent's user-level and local settings are neither protected nor read, and a link swapped
+  reported, the agent's user-level settings (outside the repository) are neither protected nor read, the
+  project's `.claude/settings.local.json` is protected as a path under `.claude` but neither read nor wired by
+  the install (a hook entry or `disableAllHooks` set only there is not seen by `status`), and a link swapped
   between the judgement and the write is not seen;
 - a Bash command that writes what the edit tools cannot: `.urzua/cache`, `.urzua/harness.lock`, the override
   log, `.git/hooks` and `.git/config`. Nothing reports it;

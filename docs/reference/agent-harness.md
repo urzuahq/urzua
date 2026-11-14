@@ -53,7 +53,7 @@ run twice produces identical bytes. Commit all of it. With no `harness` key and 
 
 | Command | Does |
 |---|---|
-| `urzua harness status` | Compares the lock with the files, the hook entries, the instructions block and the binary. Reports what is missing, modified or out of date. Exit 1 on any. |
+| `urzua harness status` | Compares the lock with the files, the hook entries, the instructions block and the binary. Reports what is missing, modified or out of date, and a setting that switches every hook off (`disableAllHooks`). Exit 1 on any. |
 | `urzua harness update [--force] [--dry-run]` | Rewrites the files whose hash still matches the lock. A file a person changed is reported and left alone unless `--force`. Run it after upgrading urzua. |
 | `urzua harness uninstall [--dry-run]` | Removes the files whose hash matches the lock, takes the hook entries and the block out of the shared files, reports what a person changed and leaves it, and deletes the lock last. |
 
