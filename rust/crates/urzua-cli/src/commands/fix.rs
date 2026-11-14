@@ -443,7 +443,7 @@ pub(crate) fn back_pointer_evidence(
     records: &[urzua_core::record::Record],
 ) -> Result<urzua_core::rules::BackPointerEvidence, String> {
     Ok(
-        match crate::discovery::read_back_pointer_sources(repo_root, discovered, config)? {
+        match crate::discovery::read_back_pointer_sources(repo_root, discovered, config, None)? {
             Some(sources) => {
                 let (index, _) = urzua_core::rules::build_index_reporting_collisions(records);
                 urzua_core::rules::back_pointer_evidence(

@@ -1668,30 +1668,6 @@ pub(crate) fn compute_claim_measures(
     out
 }
 
-/// Reads every tracked file under one of the declared path prefixes, for the
-/// rules that scan paths (`boundary.published-path-reference`,
-/// `embodiment.back-pointer-resolution`); `rule` names the caller in an I/O
-/// error. Kept in the CLI because `urzua-core` is pure (ADR-5).
-///
-/// Nothing is skipped silently. A file that is not valid UTF-8, a symlink or
-/// anything else that is not a regular file is handed over with no content, so
-/// the rule counts it as unreadable instead of clean. A tracked file that is
-/// gone from disk (a staged deletion, or one deleted and not yet staged) is
-/// not published and is left out. Any other I/O failure aborts the run: a file
-/// the rule could not read is a file it did not check.
-pub(crate) fn read_files_under(
-    repo_root: &std::path::Path,
-    discovered: &urzua_io::DiscoveredFiles,
-    prefixes: &[String],
-    rule: &str,
-) -> Result<Vec<rules::PublishedFile>, String> {
-    read_files_where(repo_root, discovered, rule, |path| {
-        prefixes
-            .iter()
-            .any(|entry| rules::path_is_published(path, entry))
-    })
-}
-
 /// [`read_files_under`] for entries that are a prefix or a glob (`MILE-158`):
 /// the boundary rule's paths.
 pub(crate) fn read_files_matching(
@@ -1713,7 +1689,35 @@ fn read_files_where(
     rule: &str,
     wanted: impl Fn(&std::path::Path) -> bool,
 ) -> Result<Vec<rules::PublishedFile>, String> {
+    Ok(read_files_for_scope(repo_root, discovered, rule, wanted, None)?.0)
+}
+
+/// What a path-scoped read keeps (`MILE-207`): the files under a requested
+/// path, and the others whose back-pointer comments cite a record in scope.
+pub(crate) struct ScopeNeed<'a> {
+    pub scoped: &'a rules::ScopedRead,
+    /// The identifiers of the records in scope, as the index keys them.
+    pub ids: &'a HashSet<urzua_core::values::RecordId>,
+    pub prefixes: &'a [String],
+    /// Read the files under a requested path (the rule judges them).
+    pub reported: bool,
+    /// Read the other files citing a record in scope (evidence, decisions).
+    pub cited: bool,
+}
+
+/// [`read_files_where`] with an optional scope. Without one every wanted file
+/// is read. With one, a file that exists is read, kept when `need` wants it,
+/// and otherwise left out and returned among the unread paths, so a population
+/// can still count it and a declared path still sees it covered.
+fn read_files_for_scope(
+    repo_root: &std::path::Path,
+    discovered: &urzua_io::DiscoveredFiles,
+    rule: &str,
+    wanted: impl Fn(&std::path::Path) -> bool,
+    need: Option<&ScopeNeed>,
+) -> Result<(Vec<rules::PublishedFile>, Vec<PathBuf>), String> {
     let mut out = Vec::new();
+    let mut unread = Vec::new();
     for path in &discovered.paths {
         if discovered.staged_deletions.contains(path) || !wanted(path) {
             continue;
@@ -1733,12 +1737,26 @@ fn read_files_where(
         } else {
             None
         };
+        if let Some(need) = need {
+            let keep = if need.scoped.reports(path) {
+                need.reported
+            } else {
+                need.cited
+                    && content
+                        .as_deref()
+                        .is_some_and(|t| rules::cites_any_record(t, need.prefixes, need.ids))
+            };
+            if !keep {
+                unread.push(path.clone());
+                continue;
+            }
+        }
         out.push(rules::PublishedFile {
             path: path.clone(),
             content,
         });
     }
-    Ok(out)
+    Ok((out, unread))
 }
 
 pub(crate) use rules::BackPointerSources;
@@ -1750,12 +1768,14 @@ pub(crate) fn read_back_pointer_sources(
     repo_root: &Path,
     discovered: &urzua_io::DiscoveredFiles,
     config: &Config,
+    need: Option<&ScopeNeed>,
 ) -> Result<Option<BackPointerSources>, String> {
     read_sources_for_rule(
         repo_root,
         discovered,
         config,
         rules::RULE_EMBODIMENT_BACK_POINTER_RESOLUTION,
+        need,
     )
 }
 
@@ -1765,12 +1785,14 @@ pub(crate) fn read_decision_gate_sources(
     repo_root: &Path,
     discovered: &urzua_io::DiscoveredFiles,
     config: &Config,
+    need: Option<&ScopeNeed>,
 ) -> Result<Option<BackPointerSources>, String> {
     read_sources_for_rule(
         repo_root,
         discovered,
         config,
         rules::RULE_EMBODIMENT_BACK_POINTER_DECISION_ACCEPTED,
+        need,
     )
 }
 
@@ -1781,6 +1803,7 @@ pub(crate) fn read_code_citation_sources(
     repo_root: &Path,
     discovered: &urzua_io::DiscoveredFiles,
     config: &Config,
+    scoped: Option<&rules::ScopedRead>,
 ) -> Result<Option<BackPointerSources>, String> {
     const RULE: &str = rules::RULE_CODE_DANGLING_BUG_REFERENCE;
     let Some(setting) = config
@@ -1793,17 +1816,37 @@ pub(crate) fn read_code_citation_sources(
     let (Some(paths), Some(extensions)) = (&setting.back_pointer_paths, &setting.extensions) else {
         return Ok(None);
     };
-    let files = read_files_where(repo_root, discovered, RULE, |path| {
-        paths.iter().any(|e| rules::path_is_published(path, e))
-            && path
-                .extension()
-                .and_then(|e| e.to_str())
-                .is_some_and(|e| extensions.iter().any(|x| x == e))
-    })?;
+    // This rule judges each comment in the files it reads and no evidence comes
+    // of them, so a path scope reads only the files under a requested path.
+    let (ids, prefixes) = (HashSet::new(), Vec::new());
+    let need = scoped.map(|scoped| ScopeNeed {
+        scoped,
+        ids: &ids,
+        prefixes: &prefixes,
+        reported: true,
+        cited: false,
+    });
+    let (files, unread) = read_files_for_scope(
+        repo_root,
+        discovered,
+        RULE,
+        |path| {
+            paths.iter().any(|e| rules::path_is_published(path, e))
+                && path
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .is_some_and(|e| extensions.iter().any(|x| x == e))
+        },
+        need.as_ref(),
+    )?;
     Ok(Some(BackPointerSources {
         files,
         back_pointer_paths: paths.clone(),
         test_paths: Vec::new(),
+        scoped: scoped.map(|s| rules::ScopedRead {
+            unread,
+            ..s.clone()
+        }),
     }))
 }
 
@@ -1812,6 +1855,7 @@ fn read_sources_for_rule(
     discovered: &urzua_io::DiscoveredFiles,
     config: &Config,
     rule: &str,
+    need: Option<&ScopeNeed>,
 ) -> Result<Option<BackPointerSources>, String> {
     let Some(source_paths) = config
         .rules
@@ -1826,11 +1870,25 @@ fn read_sources_for_rule(
         .get(rule)
         .and_then(|s| s.test_paths.clone())
         .unwrap_or_default();
-    let files = read_files_under(repo_root, discovered, &source_paths, rule)?;
+    let (files, unread) = read_files_for_scope(
+        repo_root,
+        discovered,
+        rule,
+        |path| {
+            source_paths
+                .iter()
+                .any(|entry| rules::path_is_published(path, entry))
+        },
+        need,
+    )?;
     Ok(Some(BackPointerSources {
         files,
         back_pointer_paths: source_paths,
         test_paths,
+        scoped: need.map(|n| rules::ScopedRead {
+            unread,
+            ..n.scoped.clone()
+        }),
     }))
 }
 

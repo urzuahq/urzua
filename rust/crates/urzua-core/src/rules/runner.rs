@@ -4,10 +4,43 @@ use std::path::Path;
 
 /// Source files a back-pointer rule scans, with the `back_pointer_paths` that
 /// select them and the declared test class (a subset of those paths).
+#[derive(Default)]
 pub struct BackPointerSources {
     pub files: Vec<PublishedFile>,
     pub back_pointer_paths: Vec<String>,
     pub test_paths: Vec<String>,
+    /// `Some` on a path-scoped run (`MILE-207`): what it left unread, and the
+    /// scope it reads for. `None` reads every file, as a whole-corpus run does.
+    pub scoped: Option<ScopedRead>,
+}
+
+/// What a path-scoped run reads of the source files and for whom (`MILE-207`).
+/// A file is read when it lies under a requested path (the run reports on it),
+/// or when a comment in it cites a record the run reports on (evidence and
+/// decision findings about that record). Every other tracked file under the
+/// declared paths is `unread`: counted in the rule's population, never dropped.
+#[derive(Debug, Clone, Default)]
+pub struct ScopedRead {
+    /// The requested path prefixes, relative to the repository root.
+    pub paths: Vec<PathBuf>,
+    /// The records the run reports on.
+    pub records: HashSet<PathBuf>,
+    /// Tracked files under the declared paths that were not read.
+    pub unread: Vec<PathBuf>,
+}
+
+impl ScopedRead {
+    /// Whether the run reports on `file`: it lies under a requested path.
+    pub fn reports(&self, file: &Path) -> bool {
+        self.paths.iter().any(|p| file.starts_with(p))
+    }
+}
+
+impl BackPointerSources {
+    /// The tracked files a path scope left unread; empty on a whole-corpus run.
+    pub fn unread(&self) -> &[PathBuf] {
+        self.scoped.as_ref().map_or(&[], |s| s.unread.as_slice())
+    }
 }
 
 /// What a rule in a later [`Phase`] reads of the run so far. Empty while the
