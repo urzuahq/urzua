@@ -39,7 +39,7 @@ The editor hook today is a `jq`, `bash` and `python3` chain with several paths t
 - `SPEC-3` documents `harness` (including `instructions_file`) and `SPEC-19` the bundle, each with a revision row. — evidence: spec:docs/specs/SPEC-3-configuration.md, spec:docs/specs/SPEC-19-repository-agent-guardrails.md
 - A new spec records the neutral request, verdict and adapter layout. — evidence: spec:docs/specs/SPEC-24-the-harness-request-verdict-and-adapter-layout.md
 - `make rule-table-check` passes. — evidence: code:scripts/generate-rule-table.py@sha256:f5c69a4acb163e956b54dc91daccb2f0f75731e9d74926e9cbe69c3c32d36923, spec:docs/specs/SPEC-2-urzua-check.md
-- A minor changeset names the new commands. — waived: process-outcome -- a changeset is a release input that the release consumes into CHANGELOG.md and deletes, so no file can evidence it after the release; the PR that delivered this milestone added it and the release notes carry it
+- A minor changeset names the new commands. — waived: process-outcome -- a changeset fragment is consumed by the release, and no durable file evidences it before CHANGELOG.md is written; the PR that delivered this milestone added it and the release notes carry it
 
 > **Revision log**
 >

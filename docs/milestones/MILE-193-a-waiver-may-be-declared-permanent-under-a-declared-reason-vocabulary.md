@@ -34,7 +34,7 @@ The suppression type can declare `permanent` (`ADR-86`): per rule, a waiver with
 - The waiver template gains `Category`. — evidence: code:.urzua/templates/waiver.md@sha256:467151f95034a3a2e2f15c0c1040543378181dc35a6363c5d09220077a6d1540
 - The waiver template gains `Justified-by`. — evidence: code:.urzua/templates/waiver.md@sha256:467151f95034a3a2e2f15c0c1040543378181dc35a6363c5d09220077a6d1540, test:rust/crates/urzua-cli/tests/own_config_integration.rs#new_waiver_scaffolds_justified_by_from_the_repositorys_own_template@sha256:efd089addcc4f51495bf701ddfa5202849575fb19e50bc7875c4a578c2e0aae1
 - `SPEC-2`, `SPEC-3` and `SPEC-10` document it with revision rows, and `SPEC-10`'s "no relationship fields" statement is amended for `Justified-by`. — evidence: spec:docs/specs/SPEC-2-urzua-check.md, spec:docs/specs/SPEC-3-configuration.md, spec:docs/specs/SPEC-10-the-waiver-record-type.md
-- A changeset (minor) is added. — waived: process-outcome -- a changeset is a release input that the release consumes into CHANGELOG.md and deletes, so no file can evidence it after the release; the PR that delivered this milestone added it and the release notes carry it
+- A changeset (minor) is added. — waived: process-outcome -- a changeset fragment is consumed by the release, and no durable file evidences it before CHANGELOG.md is written; the PR that delivered this milestone added it and the release notes carry it
 
 > **Revision log**
 >

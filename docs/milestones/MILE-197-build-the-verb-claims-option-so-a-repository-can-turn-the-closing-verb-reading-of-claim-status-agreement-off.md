@@ -42,7 +42,7 @@ for prose, which is what the Phase 1 adopters do, so it sits with them.
 - `urzua check` and `urzua check --base origin/main` report 0 unwaived errors or warnings. — evidence: code:Makefile@sha256:ccc04e61c2e32aad9ccd10166a12df24d31e8ccb1b24233f01c566d7058f382a, code:.github/workflows/checks.yml@sha256:ad6ab57882dfac0d3a819e549bccd9ba6f81abafe0699d09d26f828a5714398b
 - `SPEC-3` documents the option, default and load error, and `SPEC-2` the rule description and notice, each with a revision row. — evidence: spec:docs/specs/SPEC-3-configuration.md, spec:docs/specs/SPEC-2-urzua-check.md
 - `make rule-table-check` passes. — evidence: code:scripts/generate-rule-table.py@sha256:f5c69a4acb163e956b54dc91daccb2f0f75731e9d74926e9cbe69c3c32d36923, spec:docs/specs/SPEC-2-urzua-check.md
-- A minor changeset is added. — waived: process-outcome -- a changeset is a release input that the release consumes into CHANGELOG.md and deletes, so no file can evidence it after the release; the PR that delivered this milestone added it and the release notes carry it
+- A minor changeset is added. — waived: process-outcome -- a changeset fragment is consumed by the release, and no durable file evidences it before CHANGELOG.md is written; the PR that delivered this milestone added it and the release notes carry it
 - With `verb_claims: false` and `strict` off, the run carries a notice that fragments without the key carry no claim, with a test. — evidence: test:rust/crates/urzua-cli/tests/claim_field_integration.rs#verb_claims_false_without_strict_carries_a_notice_observed_failing@sha256:20e8656d01102147a426dea66ba75f54b91680cee93f528cdfd5bd35a2aadb21
 
 Removing the reading from the engine is not part of this milestone; it stays a separate later decision.

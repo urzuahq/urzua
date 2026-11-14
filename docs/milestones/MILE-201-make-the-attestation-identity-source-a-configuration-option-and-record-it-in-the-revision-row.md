@@ -32,7 +32,7 @@ Add the top-level `attestation` configuration (`identity: gh-verified | asserted
 - A re-pin or a recompute in the PR that merges this milestone is written under the attestation setting. — waived: process-outcome -- a fact about the merging pull request, not about a file; the tool-authored rows it wrote carry the identity and actor in their text, as in the revision rows of SPEC-24 and MILE-199
 - `urzua check` and `urzua check --base origin/main` report 0 unwaived errors or warnings. — evidence: code:Makefile@sha256:ccc04e61c2e32aad9ccd10166a12df24d31e8ccb1b24233f01c566d7058f382a, code:.github/workflows/checks.yml@sha256:ad6ab57882dfac0d3a819e549bccd9ba6f81abafe0699d09d26f828a5714398b
 - `SPEC-3` and `SPEC-8` document the option, its values, the row text and the load errors with revision rows. — evidence: spec:docs/specs/SPEC-3-configuration.md, spec:docs/specs/SPEC-8-urzua-fix.md
-- A minor changeset names the option. — waived: process-outcome -- a changeset is a release input that the release consumes into CHANGELOG.md and deletes, so no file can evidence it after the release; the PR that delivered this milestone added it and the release notes carry it
+- A minor changeset names the option. — waived: process-outcome -- a changeset fragment is consumed by the release, and no durable file evidences it before CHANGELOG.md is written; the PR that delivered this milestone added it and the release notes carry it
 
 > **Revision log**
 >

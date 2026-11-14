@@ -42,7 +42,7 @@ An agent edit that sets `Status: Accepted`, `Deciders` and `Accepted-on` on a Pr
 - `urzua doctor` states that the required status check and branch protection are the host's and are not verified, and names a distinct agent identity plus `CODEOWNERS` as a future option and not as configured. — evidence: code:rust/crates/urzua-cli/src/harness/mod.rs@sha256:7daf4bd4b53329a4601fa54cfe7c33bdbd1f0b081c64ceab40420bc609b845a3
 - `SPEC-2`, `SPEC-3` and `SPEC-19` document the rule, `--actors` and the table with revision rows. — evidence: spec:docs/specs/SPEC-2-urzua-check.md, spec:docs/specs/SPEC-3-configuration.md, spec:docs/specs/SPEC-19-repository-agent-guardrails.md
 - `make rule-table-check` passes. — evidence: code:scripts/generate-rule-table.py@sha256:f5c69a4acb163e956b54dc91daccb2f0f75731e9d74926e9cbe69c3c32d36923, spec:docs/specs/SPEC-2-urzua-check.md
-- A minor changeset names `--actors`. — waived: process-outcome -- a changeset is a release input that the release consumes into CHANGELOG.md and deletes, so no file can evidence it after the release; the PR that delivered this milestone added it and the release notes carry it
+- A minor changeset names `--actors`. — waived: process-outcome -- a changeset fragment is consumed by the release, and no durable file evidences it before CHANGELOG.md is written; the PR that delivered this milestone added it and the release notes carry it
 
 > **Revision log**
 >
