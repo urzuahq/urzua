@@ -11,4 +11,4 @@ filled in or left out. The header is re-rendered from the
 run's own configuration and the type's template, with the record's own number, title, `Stable-Id`,
 author and date, so a pull request sees a hand-written header before it merges. A record renamed from a
 deleted one is not examined, and a run with no `--base` reports the rule `not-applicable`. The rule is
-off unless `rules` declares it, so a repository that does not is unchanged.
+off unless `rules` declares it, so a repository that does not is unchanged. `urzua init` does not propose it, since no record of a corpus just adopted was written with `urzua new`.
