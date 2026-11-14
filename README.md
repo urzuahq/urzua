@@ -293,8 +293,7 @@ ecosystem built.
 | [RFC-9](docs/rfc/RFC-9-agentic-repair-tier.md) | A second repair tier for the prose the mechanical tier permanently can't fix. The agent never writes; every hunk is mechanically re-verified before a human sees it. | MILE-13 |
 
 Agent-facing surface: `urzua mcp` is a read-only MCP server over stdio (`ADR-99`, `SPEC-26`); five read-only tools
-(`docs/reference/mcp.md`). Also unbuilt: a guarded edit command on `fix --apply`'s write path (MILE-79), and a `next_action` on every command's
-output (MILE-72, MILE-44).
+(`docs/reference/mcp.md`). Also unbuilt: a guarded edit command on `fix --apply`'s write path (MILE-79).
 
 **Out of scope permanently:** diff review, risk scoring, reviewer routing, a model anywhere in the
 mechanical tier, telemetry, and any hosted dependency. SPEC-1's "mechanical, offline, and

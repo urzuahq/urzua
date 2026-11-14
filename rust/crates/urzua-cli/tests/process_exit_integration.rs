@@ -65,6 +65,15 @@ fn a_panic_exits_2_with_a_not_run_result() {
             .is_some_and(|p| p.contains("URZUA_TEST_PANIC set")),
         "the report names the panic: {report}"
     );
+    // MILE-72: the not-run shape carries the two keys like every report.
+    assert!(report["next_action"].is_null(), "{report}");
+    assert!(report["next_action_reason"].is_null(), "{report}");
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(text.contains("\"next_action\":null"), "present: {text}");
+    assert!(
+        text.contains("\"next_action_reason\":null"),
+        "present: {text}"
+    );
 }
 
 #[test]

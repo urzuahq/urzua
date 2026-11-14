@@ -159,5 +159,7 @@
         "message": "ADR-3: type 'adr' declares no status vocabulary, so it is read as open"
       }
     ]
-  }
+  },
+  "next_action": null,
+  "next_action_reason": null
 }

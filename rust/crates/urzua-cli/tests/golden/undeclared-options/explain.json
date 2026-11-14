@@ -8,5 +8,7 @@
     "examined": 13,
     "out_of_scope": 0,
     "unreadable": 0
-  }
+  },
+  "next_action": null,
+  "next_action_reason": null
 }
