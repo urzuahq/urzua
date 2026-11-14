@@ -60,11 +60,22 @@ A level is `off`, `info`, `warn` or `error`. `off` is permitted and is reported 
 `rules_executed` as not enabled, never omitted. A rule that is absent does not run.
 
 Options belong to one rule each, and an option on a rule that does not take it is a load error, so a
-setting is never silently ignored. Two options are general:
+setting is never silently ignored. `level` is the one option every rule takes: it is the rule's
+severity ceiling.
 
-- `scope: changed` makes a rule judge only the records a `check --base` diff adds or changes. It is
-  accepted only by rules whose verdict on a record depends on that record alone.
-- `level` is always the rule's severity ceiling.
+`scope: changed` is not general. It makes a rule judge only the records a `check --base` diff adds or
+changes, and four of the 73 rules accept it:
+
+- `embodiment.locator-promotion-candidate`
+- `embodiment.locator-on-back-pointer-path`
+- `embodiment.claim-expired`
+- `embodiment.claim-renewal-unattested`
+
+On any other rule it is a load error (`rule '<id>' does not take the option 'scope'`). The only value
+is `changed`; omit the option to judge every record. On a plain `check` there is no diff, so such a
+rule runs and examines nothing; `check --stdin-path` treats the proposed record as the changed one.
+The candidates it skips are counted in the rule's population as `deferred_by_scope`, with one `info`
+notice. `urzua explain --rule <id>` shows whether a rule has the option.
 
 To see what a rule judges, its options and their current values, ask the binary:
 
@@ -141,6 +152,14 @@ sections:
 `exempt_statuses` lists statuses whose records are eligible but not examined. `items` (default
 `false`) turns on item reading for the done-items rules; see `SPEC-3`. `section.required` and
 `section.shape` read this.
+
+Three more keys switch on structure rules for a type, each off by default:
+
+| Key | Read by | What it does |
+|---|---|---|
+| `unique_headings: true` | `section.duplicate` | The same heading text twice at one level under one parent is an error. |
+| `no_skipped_levels: true` | `section.level-skipped` | A section nested more than one level below the one above it is an error. Needs `depth` of at least 2. |
+| `order: {from: template}` | `section.order` | A record's sections must follow the order of the headings in `.urzua/templates/<type>.md`. `template` is the only source. |
 
 ### `revision_log`
 

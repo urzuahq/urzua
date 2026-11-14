@@ -1,7 +1,7 @@
 # Urzua
 
 [![ci](https://github.com/urzuahq/urzua/actions/workflows/ci.yml/badge.svg)](https://github.com/urzuahq/urzua/actions/workflows/ci.yml)
-[![release](https://github.com/urzuahq/urzua/actions/workflows/release.yml/badge.svg)](https://github.com/urzuahq/urzua/actions/workflows/release.yml)
+[![release](https://github.com/urzuahq/urzua/actions/workflows/publish-release.yml/badge.svg)](https://github.com/urzuahq/urzua/actions/workflows/publish-release.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/urzuahq/urzua?utm_source=oss&utm_medium=github&utm_campaign=urzuahq%2Furzua&labelColor=171717&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews)](https://coderabbit.ai)
 
@@ -11,7 +11,7 @@ The mission and the principles every decision is judged against are recorded in 
 
 **Your agent just wrote a record of a decision it made. Is it structured data, or prose that happens to have a `Status:` line at the top?**
 
-Urzua is a machine-native engine for structured records: decision logs, specs, incident reviews, a project's own backlog, and any record type with a lifecycle and relationships to other records. Every command returns a `status` and a list of typed `findings`: `"status": "findings-present"` is a value an agent branches on, `findings[]` is a list it loops over and filters by `severity`. Nothing needs interpreting first, and there's no guessing whether "3 issues" means stop or continue.
+Urzua is a machine-native engine for structured records: decision logs, specs, incident reviews, a project's own backlog, and any record type with a lifecycle and relationships to other records. Every command returns a `status` and a list of typed `findings`: `"status": "findings-present"` is a value an agent branches on, `findings[]` is a list it loops over and filters by `severity`, and `next_action` is the one command to run next (or `null`). Nothing needs interpreting first, and there's no guessing whether "3 issues" means stop or continue.
 
 That same contract is what lets other tooling compose on top of it: a harness that chains `check` into `fix` into a PR comment, a CI gate that reads `status` and nothing else, an agent that treats Urzua as one step inside a longer plan. None of them re-interpret what happened; they read the same fields Urzua already computed.
 
@@ -28,7 +28,7 @@ A record's header is YAML frontmatter: real structured data, deserialized rather
 Status: Accepted
 Embodiment: Verified
 Realized-by: "code:rust/crates/urzua-core/src/header.rs, test:rust/crates/urzua-core/src/header.rs"
-Derives-from: RFC-10 (Accepted)
+Derives-from: RFC-10
 ---
 # 16 — A header shape, declared per profile
 
@@ -169,7 +169,7 @@ starter template each; on a terminal, plain `init` asks):
 /path/to/urzua/rust/target/release/urzua init --types adr,rfc,spec --dir docs
 ```
 
-`init` reads your existing directories and header conventions and proposes a config. It never renumbers, never rewrites, never moves a file. Nothing about your corpus changes until you accept what it found. Confirm this yourself rather than trust it: `make ci` in this repo runs the same `urzua check docs/` against Urzua's own corpus, and [`ci.yml`](.github/workflows/ci.yml) runs it on every push and pull request.
+`init` reads your existing directories and header conventions and proposes a config. It never renumbers, never rewrites, never moves a file. Nothing about your corpus changes until you accept what it found. When you want the file names to follow the type's convention, `urzua migrate filenames` renames them and rewrites the citations of the renamed paths (a dry run until `--apply`). Confirm this yourself rather than trust it: `make ci` in this repo runs the same `urzua check docs/` against Urzua's own corpus, and [`ci.yml`](.github/workflows/ci.yml) runs it on every push and pull request.
 
 ## The schema is declared, not assumed
 
@@ -236,7 +236,7 @@ The chain above is one path through this repo's own graph, documented here becau
 | `check` | Real: full rule set above, always JSON on stdout (ADR-23) |
 | `explain <path>` | Real: every record whose `Realized-by` names this file as evidence (ADR-24) |
 | `graph` | Real: the full `Implements`/`Derives-from`/`Supersedes` relationship graph, as data, dangling edges flagged (ADR-24) |
-| `init` | Adopt mode only: proposes config from an existing corpus, never moves files |
+| `init` | Real: adopt mode proposes config from an existing corpus and never moves files; greenfield mode (`--types adr,rfc,spec,prd`, `--dir`) writes built-in profiles into the config with a starter template each |
 | `fix` | Detect mode (Embodiment, Tier 1) and apply mode, both real |
 | `migrate ids` | Real: backfills a collision-free stable ID ([ULID](docs/adr/ADR-21-ulid-as-the-stable-id-encoding.md)) into every record lacking one |
 | `migrate filenames` | Real: renames record files to the filename convention the type declares and rewrites citations of the renamed paths; dry-run unless `--apply` |
@@ -246,7 +246,8 @@ The chain above is one path through this repo's own graph, documented here becau
 | `new <type> [title]` | Real: fills a checked-in template (or synthesizes YAML frontmatter if none exists) with a fresh stable ID, never asking for a number ([ADR-27](docs/adr/ADR-27-urzua-new-fills-the-template-in-not-the-decision.md)) |
 | `audit` | Deprecated alias of `check` over the configured rules, with a deprecation notice; removed in the next release ([ADR-79](docs/adr/ADR-79-audit-folds-into-check-and-the-command-surface-keeps-one-read-only-validator.md)). `check --rules <id>,...` selects declared rules |
 | `export --format json` | Real: every record as plain JSON data |
-| `waive --from-report` | Preview only: drafts one pending waiver per rule and file for the current findings and writes nothing; `--apply` is not accepted yet |
+| `waive --from-report` | Real: previews, and with `--apply` writes, one pending waiver per rule and file for the current findings; a draft suppresses nothing until a person fills in the reason and the date |
+| `mcp` | Real: a read-only MCP server over stdio, five tools ([`docs/reference/mcp.md`](docs/reference/mcp.md)) |
 | `reverify` | Real: renews an expired evidence claim, or pins unpinned locators with `--pin-only`; read-only without `--apply` |
 | `fix --rebaseline` | Real: lists, and with `--apply` re-pins, stale `@sha256:` evidence pins |
 | `harness` | Real: `install`, `status`, `update`, `uninstall`, `adapters` and `run` for the agent harness |
@@ -284,13 +285,20 @@ framing; the second half is this engine.
 deferred ecosystem of tools built *around* the engine. The engine stays complete with none of that
 ecosystem built.
 
-**Designed, not built.** All `Draft`, none decided, each with a milestone holding the decision open:
+**Built since these RFCs were written.** [RFC-7](docs/rfc/RFC-7-agent-enforcement-harness-not-just-agent-instructions.md)
+argued that enforcement must fire independent of an agent's compliance, because an `AGENTS.md`,
+`CLAUDE.md` or Cursor rule is a request, not a guarantee. Its parts are decided in
+[ADR-69](docs/adr/ADR-69-a-record-edit-is-judged-by-urzua-before-it-is-written-and-the-harness-hook-only-relays-the-verdict.md),
+`ADR-70`, `ADR-71` and `ADR-78` and built (MILE-12, Done): the editor hook, drafting commands, the
+layered gate, the override log, and the `authority` table that reserves `Accepted` for a named person
+(`ADR-89`, MILE-200). The RFC itself is still `Draft`. See [the agent harness](docs/reference/agent-harness.md).
 
-| RFC | Proposes | Milestone |
+**Designed, not built.** Each is `Draft`, with a milestone holding the decision open:
+
+| RFC | Proposes | State |
 |---|---|---|
-| [RFC-7](docs/rfc/RFC-7-agent-enforcement-harness-not-just-agent-instructions.md) | Enforcement that fires independent of an agent's compliance. An `AGENTS.md`, `CLAUDE.md`, or Cursor rule is a request, not a guarantee — including this repo's own. | MILE-12 |
-| [RFC-12](docs/rfc/RFC-12-the-decision-before-implementation-gate.md) | Code back-pointing at a record that isn't accepted cannot merge. Refuses the merge, never the edit: implementing while a decision is pending is often what reveals the decision was wrong. | MILE-14 |
-| [RFC-9](docs/rfc/RFC-9-agentic-repair-tier.md) | A second repair tier for the prose the mechanical tier permanently can't fix. The agent never writes; every hunk is mechanically re-verified before a human sees it. | MILE-13 |
+| [RFC-12](docs/rfc/RFC-12-the-decision-before-implementation-gate.md) | Code back-pointing at a record that isn't accepted cannot merge. Refuses the merge, never the edit: implementing while a decision is pending is often what reveals the decision was wrong. | Partly built: this repository's own gate holds a source change until a decision, fix or link changes. No ADR yet decides the RFC itself (MILE-14, in progress). |
+| [RFC-9](docs/rfc/RFC-9-agentic-repair-tier.md) | A second repair tier for the prose the mechanical tier permanently can't fix. The agent never writes; every hunk is mechanically re-verified before a human sees it. | Not started, and blocked on the maintainer's answer to the RFC's question 2 (MILE-13, COND-1). |
 
 Agent-facing surface: `urzua mcp` is a read-only MCP server over stdio (`ADR-99`, `SPEC-26`); five read-only tools
 (`docs/reference/mcp.md`). Also unbuilt: a guarded edit command on `fix --apply`'s write path (MILE-79).
@@ -301,15 +309,20 @@ deterministic" is a boundary, not a stage to grow out of.
 
 **Unproven, stated plainly:**
 
-- **One corpus — its own.** "Config-driven, not hardcoded" is a design claim until the engine runs
-  green on a second real corpus with no escape hatches (MILE-51).
+- **One corpus in daily use — its own.** "Config-driven, not hardcoded" has been run against a
+  third-party ADR corpus (MILE-51, Done: it found the gaps that became the declared document model),
+  but no other repository has switched to urzua yet. Running green in a second real codebase
+  (MILE-100) and replacing a hand-written linter outright (MILE-102) are Planned; the corpus
+  acceptance suite (MILE-101) is in progress.
   [BUG-8](docs/bugs/BUG-8-readme-overstates-pointer-field-genericity-implements-derives-from-parent-blocked-on-are-hardcoded-not-config-declared.md)
   is what that gap looked like the last time it reached this README.
-- **Acceptance is a convention, not a mechanism.** `Status: Accepted` is an `AGENTS.md` rule agents
-  are asked to respect, with no enforcement behind it
-  ([BUG-16](docs/bugs/BUG-16-none-of-fix-s-identity-resolution-tiers-are-a-real-attestation.md),
-  [RFC-25](docs/rfc/RFC-25-realized-by-s-identity-is-attribution-not-attestation.md), MILE-18,
-  MILE-19). That is RFC-7's own argument, not yet applied here.
+- **Acceptance is enforced, with a ceiling.** A repository that declares `authority` has the harness
+  refuse an agent's move of a record to a status reserved for a person, and `diff.decider-required`
+  fails the CI gate when the pull request's author and approvers, as GitHub reports them, are not in
+  the decider group. Under a shared token that proves who authored and approved the change, not who
+  typed it; a distinct agent identity is a future option, not configured
+  ([RFC-25](docs/rfc/RFC-25-realized-by-s-identity-is-attribution-not-attestation.md), MILE-18,
+  MILE-19).
 
 ## Maintenance
 
@@ -326,7 +339,11 @@ See [`CONTRIBUTING.md`](CONTRIBUTING.md).
 ## Telemetry
 
 Urzua collects nothing and phones home never. It reads the files you point it at and writes to
-stdout/stderr and the paths you configure. No network calls, no analytics, no crash reporting.
+stdout/stderr and the paths you configure. No analytics and no crash reporting. `check` makes no
+network call. The commands that do are `refs refresh` (the GitHub API, with `curl`); `new`, `waive`
+and the `--apply` modes of `fix` and `reverify`, which ask `gh api user` who is acting and fall back to
+`--by` and `git config user.name`; and `new` with `new.check_open_prs`, which runs `git fetch`
+([the list](docs/reference/commands.md#what-uses-the-network)).
 
 ## License
 
