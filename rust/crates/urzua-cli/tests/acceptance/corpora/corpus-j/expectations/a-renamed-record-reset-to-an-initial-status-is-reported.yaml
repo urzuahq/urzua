@@ -1,4 +1,5 @@
 id: a-renamed-record-reset-to-an-initial-status-is-reported
+bugs: [BUG-191]
 corpus: corpus-j
 # Renaming and resetting the status must not evade the rule: the base's record
 # with this Stable-Id was Accepted, and Accepted to Proposed is not an edge.
