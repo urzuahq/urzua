@@ -1,4 +1,5 @@
 id: a-renamed-record-keeps-its-committed-status
+bugs: [BUG-191]
 corpus: corpus-j
 # The diff reports a rename as a deletion plus an addition, so the new path has
 # no base copy. The base's record with the same Stable-Id is its committed side:

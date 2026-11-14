@@ -1,0 +1,38 @@
+# Lane D (filename and title, locator, drift, sections and fields): Fixed bugs that are corpus-shaped and have no case
+# yet (SPEC-4, "Bug coverage gate"). The lane's PR writes a case that reproduces
+# the bug, tags it `bugs: [BUG-n]`, runs it red against a build without the fix,
+# and deletes the entry here and in `bug-gap-ceilings.tsv`. The list only
+# shrinks; an entry can never be added.
+- BUG-2  # record_id hardcoded a 4-digit numeric prefix, bounding every type at 9999 records
+- BUG-5  # field_state's placeholder tokens missed this project's own retired conventions
+- BUG-11  # urzua graph reports false dangling edges due to missing ID normalization
+- BUG-17  # Amends has no reciprocal field or reciprocity check, unlike Supersedes / Superseded-by
+- BUG-22  # field.quality passes a record made entirely of unedited template text
+- BUG-23  # filename.title-consistency reports "no H1 title found" when an H1 exists without a number
+- BUG-25  # scope.source emits a Rust Debug-formatted enum variant instead of SPEC-2's declared contract values
+- BUG-29  # filename.title-consistency hardcodes line 1, so every finding points past the frontmatter
+- BUG-30  # filename.title-consistency matches an H1 inside a fenced code block and fabricates a mismatch
+- BUG-32  # The H1 number extraction smashes separators out of the leading token
+- BUG-42  # urzua audit bypasses the rules table entirely
+- BUG-50  # A record with no revision log silently leaves revision-log.change-class-required's scope
+- BUG-55  # embodiment.locator-exists reports an untracked path as "not in the working tree"
+- BUG-57  # A Fixed bug can declare Regression-test: not yet written and nothing objects
+- BUG-64  # An empty H1 line abandons the title scan instead of skipping it
+- BUG-65  # field.pending's vocabulary is compiled in so the corpus's own commonest way of saying pending reads as a real value
+- BUG-97  # a field name with a non-ascii letter is compared by ascii folding so a declared field reports undeclared
+- BUG-109  # Status is read as a hardcoded universal field by two rules instead of the type-declared vocabulary ADR-53 requires
+- BUG-110  # Status is a hardcoded field name literal in three rules instead of adopter-declared vocabulary
+- BUG-136  # supersession_reciprocity blames the citer for the target's own unreadable header
+- BUG-148  # header.pointer-field-clean rejects the no-value placeholder mixed with a real reference
+- BUG-172  # pointer.target-status cannot distinguish lineage fields from dependency fields
+- BUG-175  # embodiment.locator-exists reports dot and dotdot spelled locators of tracked files as not in the working tree
+- BUG-176  # whether a directory is a legal Realized-by locator is undecided and locator-exists rejects it as not in the working tree
+- BUG-179  # Drift grace window contradicts a record that states Drift detected
+- BUG-180  # A --base run reports unchanged source files as out of scope so config.scope-matches-nothing warns on every pull request
+- BUG-181  # A wrapped phrase in a blockquoted section keeps its quote marker so section.shape y-statement misses it
+- BUG-183  # Filename.identity-pattern suggests a rename for a non-record file and counts it in the census
+- BUG-184  # The bold-list header reader ends the header at a wrapped value
+- BUG-185  # Config.scope-matches-nothing reports its file as an absolute path
+- BUG-186  # A declared external id is reported by config.scope-matches-nothing as a misconfiguration
+- BUG-187  # Records exempted by exempt_statuses still trigger config.scope-matches-nothing
+- BUG-190  # An illustrative citation of an id from another corpus silently starts resolving to an unrelated real record once that id exists

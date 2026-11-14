@@ -1,4 +1,5 @@
 id: a-locator-naming-a-file-that-is-not-there-is-reported
+bugs: [BUG-49]
 corpus: corpus-t
 invocation: [check]
 # ADR-2 cites code:src/stream.rs, and the file does not exist in the working tree;
