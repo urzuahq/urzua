@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5AJB7EBVDWVSMCSYZQ
-Version: '0.45'
+Version: '0.46'
 Date: 2026-07-29
 Status: Shipped
 Embodiment: Verified
@@ -411,3 +411,4 @@ None. Every question this spec carried has been answered or routed:
 > | 2026-11-14 | Bumped to `0.44`. Success criterion 1 cites `MILE-99` for this repository's pre-push hook only and `MILE-100` for the second codebase's hook and CI. The criterion's wording is unchanged. **Why:** an external review (finding 9.4) found the citation implying `MILE-99` covers a hook in two codebases; it covers one. | **substantive** |
 > | 2026-11-14 | Bumped to `0.45`. The Purpose and success criterion 1 now name the two codebases: this repository (Rust) and the adopter (a primary language other than Rust), each via pre-push hook and CI; they no longer say "two adopters" or "at least two" targets. **Why:** maintainer decision of 2026-11-14, asked whether Phase 1 needs two real adopters or this repository plus the adopter: "Own repo + adopter". This records the reading `MILE-100` took on 2026-11-13 as a decision. | **substantive** |
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/export_integration.rs` 05e83d290448 -> 58ac0e2a0da0. Reason: export_integration.rs: export_json_refuses_a_record_symlinked_outside_the_repository now asserts exit code 2 instead of not 0; unchanged behaviour **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-14 | Bumped to `0.46`. The test files this spec's evidence pins were hardened (exact exit codes, isolated git, visible root skips); the pins are re-baselined in the row above and the specified behaviour is unchanged. **Why:** the review's test findings; a re-baseline row is structural, so the version moves with it. | **structural** |
