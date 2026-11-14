@@ -20,7 +20,7 @@ jobs:
           fetch-depth: 0   # drift reads history; a shallow checkout fails with that reason
       - uses: urzuahq/urzua/.github/actions/urzua-gate@<sha>
         with:
-          version: v0.3.0                      # an exact release tag
+          version: v0.4.2                      # an exact release tag
           base-ref: ${{ github.base_ref }}     # empty outside pull requests
 ```
 
@@ -67,7 +67,7 @@ posted on every run.
 
 | Input | Default | Meaning |
 |---|---|---|
-| `version` | none | The exact release tag to install, such as `v0.3.0`. Not a branch and not `latest`. Ignored when `binary` is set. |
+| `version` | none | The exact release tag to install, such as `v0.4.2`. Not a branch and not `latest`. Ignored when `binary` is set. |
 | `sha256` | none | Optional sha256 of the release archive for this platform, checked in addition to the attestation. |
 | `repository` | `urzuahq/urzua` | The repository the release and its attestation come from. |
 | `binary` | none | Path to an already-built `urzua`, used instead of installing a release. |
