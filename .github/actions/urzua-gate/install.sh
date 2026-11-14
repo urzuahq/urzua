@@ -29,8 +29,8 @@ fi
 case "$os/$arch" in
   Linux/X64 | Linux/x86_64) target="x86_64-unknown-linux-gnu" ;;
   macOS/ARM64 | Darwin/arm64) target="aarch64-apple-darwin" ;;
-  macOS/X64 | Darwin/x86_64) target="x86_64-apple-darwin" ;;
-  *) fail "no published urzua build for $os/$arch (published: x86_64 Linux, arm64 and x86_64 macOS)" ;;
+  macOS/X64 | Darwin/x86_64) fail "there is no Intel Mac build of urzua (published: x86_64 Linux and Apple Silicon macOS); install it from source with cargo install" ;;
+  *) fail "no published urzua build for $os/$arch (published: x86_64 Linux and Apple Silicon macOS)" ;;
 esac
 
 sha256_of() {
