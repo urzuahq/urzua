@@ -39,6 +39,8 @@
 mod common;
 #[path = "acceptance/coverage_gate.rs"]
 mod coverage_gate;
+#[path = "acceptance/population.rs"]
+mod population;
 #[path = "acceptance/sharding.rs"]
 mod sharding;
 
@@ -94,9 +96,13 @@ struct Case {
     expect_rules_ran: Vec<String>,
     /// For a rule of `expect_rules_ran` whose population is the files of one
     /// directory (the claim rule reads `.changeset/*.md`, which a release
-    /// deletes): the population may be empty when no such file exists. The rule
-    /// must still run. While any such file exists the population must be
-    /// non-empty, so the assertion keeps its meaning on every normal tree.
+    /// deletes): the population may be empty when no file the rule examines
+    /// exists. The rule must still run. While any such file exists the
+    /// population must be non-empty, so the assertion keeps its meaning on every
+    /// normal tree. `with_key` narrows "file the rule examines" to a file whose
+    /// frontmatter lists at least one value under that key, because the claim
+    /// rule examines the ids a fragment closes and a `closes: []` fragment adds
+    /// none.
     #[serde(default)]
     empty_population_ok_without: Vec<EmptyPopulation>,
     /// Rules this case proves, beyond those it names in `expect_findings` and
@@ -117,11 +123,9 @@ struct EmptyPopulation {
     under: String,
     /// File extension (no dot) of the files that make up the population.
     extension: String,
-    /// A file holding this text is not part of the population: a changeset
-    /// fragment that closes nothing (`closes: []`) is read by the claim rule and
-    /// yields no claim, so it does not make the population non-empty.
-    #[serde(default)]
-    except_containing: Option<String>,
+    /// Frontmatter key a file must list a non-empty value under to be part of
+    /// the population. Absent: any file of the extension is.
+    with_key: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -237,18 +241,6 @@ fn repo_root() -> PathBuf {
         Ok(v) if !v.trim().is_empty() => PathBuf::from(v),
         _ => Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.."),
     }
-}
-
-/// True when some file with `extension` sits directly under `dir` of `root`.
-fn has_files(root: &Path, dir: &str, extension: &str, except_containing: Option<&str>) -> bool {
-    std::fs::read_dir(root.join(dir)).is_ok_and(|rd| {
-        rd.flatten().any(|e| {
-            e.path().extension().is_some_and(|x| x == extension)
-                && except_containing.is_none_or(|t| {
-                    !std::fs::read_to_string(e.path()).is_ok_and(|text| text.contains(t))
-                })
-        })
-    })
 }
 
 fn git(dir: &Path, args: &[&str]) -> Result<(), String> {
@@ -670,7 +662,12 @@ fn evaluate(case: &Case, corpus_dir: &Path, mutate: Option<&str>) -> Result<Vec<
                 .unwrap_or(0);
             let may_be_empty = case.empty_population_ok_without.iter().any(|e| {
                 e.rule == *rule
-                    && !has_files(&cwd, &e.under, &e.extension, e.except_containing.as_deref())
+                    && !population::population_exists(
+                        &cwd,
+                        &e.under,
+                        &e.extension,
+                        e.with_key.as_deref(),
+                    )
             });
             if status != Some("ran") || (examined == 0 && !may_be_empty) {
                 unmet.push(format!(

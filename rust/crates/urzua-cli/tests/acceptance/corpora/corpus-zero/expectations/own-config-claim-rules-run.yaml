@@ -10,9 +10,10 @@ expect_json:
   - {at: /blocking, equals: false}
 expect_rules_ran:
   - claim.status-agreement
-# The claim rule's population is the changeset fragments, which the release
-# deletes: on the release tree it runs over none, and a fragment that closes
-# nothing (`closes: []`) yields no claim. While any fragment that closes
-# something exists the population must still be non-empty.
+# The claim rule examines one claim per id a changeset fragment lists under
+# `closes`, so a fragment that closes nothing (`closes: []`) adds none, and the
+# release deletes the rest: on the release tree, or on a pull request whose only
+# fragment closes nothing, it runs over none. While any fragment lists a closed
+# id the population must still be non-empty.
 empty_population_ok_without:
-  - {rule: claim.status-agreement, under: .changeset, extension: md, except_containing: "closes: []"}
+  - {rule: claim.status-agreement, under: .changeset, extension: md, with_key: closes}
