@@ -22,13 +22,13 @@ use std::collections::BTreeSet;
 /// marker's lines are disclosed in the population's `excused_lines`, and one
 /// that excuses nothing is a finding.
 pub fn code_dangling_bug_reference(
-    files: &[SourceFile],
-    source_paths: &[String],
+    sources: &BackPointerSources,
     extensions: &[String],
     config: &Config,
     config_path: &std::path::Path,
     index: &RecordIndex,
 ) -> (RuleExecution, Vec<Finding>) {
+    let (files, source_paths) = (&sources.files[..], &sources.back_pointer_paths[..]);
     const RULE_ID: &str = RULE_CODE_DANGLING_BUG_REFERENCE;
     let prefixes = declared_prefixes(config);
     let setting = config.rules.get(RULE_ID);
@@ -78,7 +78,7 @@ pub fn code_dangling_bug_reference(
     findings.extend(uncovered_source_paths(
         RULE_ID,
         "dangling-reference-uncovered-path",
-        files,
+        (files, sources.unread()),
         source_paths,
         config_path,
     ));
@@ -86,7 +86,9 @@ pub fn code_dangling_bug_reference(
     (
         RuleExecution::ran(
             RULE_ID,
-            population.with_excused_lines(excused_lines),
+            population
+                .with_excused_lines(excused_lines)
+                .with_deferred_by_scope(sources.unread().len()),
             Vec::new(),
         ),
         findings,
