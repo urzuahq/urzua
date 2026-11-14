@@ -1,0 +1,12 @@
+id: fields-in-another-order-are-reported
+corpus: corpus-ai
+# The same fields as the scaffold, Author and Date swapped.
+commits:
+  - write:
+      records/ADR-0003-new.md: "---\nStable-Id: 01M8SCAFFB0000000000000003\nStatus: Proposed\nAuthor: dee\nDate: 2026-11-14\nDeciders: bo\n---\n# ADR-0003 — New\n\nBody.\n"
+invocation: [check, --base, base]
+expect_exit: 1
+expect_findings:
+  - rule: header.scaffold-mismatch
+    file: records/ADR-0003-new.md
+    message_contains: "another order"

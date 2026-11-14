@@ -1,0 +1,12 @@
+id: a-record-written-by-urzua-new-is-clean
+corpus: corpus-ai
+# The scaffold's own header, with the null field filled: nothing differs.
+commits:
+  - write:
+      records/ADR-0003-new.md: "---\nStable-Id: 01M8SCAFFB0000000000000003\nStatus: Proposed\nDate: 2026-11-14\nAuthor: dee\nDeciders: bo\n---\n# ADR-0003 — New\n\nBody.\n"
+invocation: [check, --base, base]
+expect_exit: 0
+expect_rules_ran:
+  - header.scaffold-mismatch
+expect_no_findings:
+  - {rule: header.scaffold-mismatch}

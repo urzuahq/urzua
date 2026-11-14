@@ -1,0 +1,12 @@
+id: a-status-set-by-hand-is-reported
+corpus: corpus-ai
+# urzua new writes the initial status; Accepted is a decision made by hand.
+commits:
+  - write:
+      records/ADR-0003-new.md: "---\nStable-Id: 01M8SCAFFB0000000000000003\nStatus: Accepted\nDate: 2026-11-14\nAuthor: dee\nDeciders: bo\n---\n# ADR-0003 — New\n\nBody.\n"
+invocation: [check, --base, base]
+expect_exit: 1
+expect_findings:
+  - rule: header.scaffold-mismatch
+    file: records/ADR-0003-new.md
+    message_contains: "'Status' is 'Accepted' where urzua new writes 'Proposed'"

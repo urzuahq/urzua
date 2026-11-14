@@ -1,9 +1,9 @@
 ---
 Stable-Id: 01M6R3NK5GM1RYRRX2XVMZ0ZAK
-Version: '0.163'
+Version: '0.164'
 Date: 2026-08-20
 Status: Shipped
-Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs@sha256:fe2fce22eac3fc032e8026c9f5b10a0d02cb31de78aecfda203ca25d1cef3a93, code:rust/crates/urzua-core/src/rules.rs@sha256:ef12b204f3781fc85f8e19d00cce3e74d83954dc0cfa298eb6e53f3a86a23063, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:3441046fd3446240de4164e0cc9dc8d73b8e9c05893d6c43b227b109c4216b5f, test:rust/crates/urzua-cli/tests/fail_on_integration.rs@sha256:2232e4cec5c3987d9f082f2a42b70838ac88fa82377b1cd4eb409aa9c513c201
+Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs@sha256:e19975ed21dec118ed5885a6aa8bb3a3a96f6408733a9d42d8e89a01c911c4fe, code:rust/crates/urzua-core/src/rules.rs@sha256:e1551e6e17cb2f63337a99043385521554d023e1ca118304dd789983c2c78fdb, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:3441046fd3446240de4164e0cc9dc8d73b8e9c05893d6c43b227b109c4216b5f, test:rust/crates/urzua-cli/tests/fail_on_integration.rs@sha256:2232e4cec5c3987d9f082f2a42b70838ac88fa82377b1cd4eb409aa9c513c201
 Embodiment: Verified
 Author: beauwilliams
 Subject: '`urzua check` -- discovery, rule execution, and the JSON output contract.'
@@ -345,6 +345,7 @@ which stays only for what genuinely isn't built yet.
 | `narrative-field.stale` | A type's config-declared `narrative_fields` pointer (e.g. a milestone's `Blocked-on`) resolves to a target whose `Status` has reached a terminal state (e.g. a cited bug is now `Fixed`) — a signal to re-examine (ADR-42, generalized beyond `Blocked-on` by MILE-90/ADR-44). `terminal_statuses` is declared per repository. |
 | `type.dir-matches-nothing` | A type's declared `dir` does not exist at all (`BUG-56`'s hazard for `dir`, no load-time guard). An existing, empty directory is a legitimate declared-but-unused state and is not flagged. Also reports a type’s `exclude_files` entry that names no tracked file directly in its `dir` (`MILE-150`), so a stale exclusion is visible. Reports each `extra_dirs` entry that does not exist (`MILE-130`). Reports each status a type's `sections.exempt_statuses` lists that none of the type's records holds (`MILE-7`), so an exemption that sets nothing aside is visible rather than silent. |
 | `identity.collision` | Two records resolving to the same identifier — a corpus error the index cannot represent, reported rather than papered over (`BUG-79`). |
+| `header.scaffold-mismatch` | A record a `--base` diff adds whose header is not the one `urzua new` would have written for it (`MILE-103`, `SPEC-12`): it re-renders the header through the same pure scaffold `urzua new` uses, from the configuration of the run (so, at the creation commit, that commit's) and the type's template, taking the record's own number, title, `Stable-Id`, author and date, and compares what `new` decides. A field the scaffold leaves null may be filled in or left out; a field added, a field `new` fills (the `Stable-Id`, author, date) missing, the fields reordered, or a value `new` wrote (the initial status, the starting version) changed, is reported. `urzua-record.sh finish` applies a stricter form of this in shell, to what an agent may do; this rule judges what was merged, so a pull request sees it before merge, and it is what `scripts/replay-header-comparator.py` replays over past pull-request heads to measure whether records are still hand-authored. A file moved under a new name (its `Stable-Id` was a deleted record's at the merge base) is not a creation and is not examined. The finding is a warning whose path out is creating the record with `urzua new`, or a waiver when the difference is deliberate (a record created and then decided in the same pull request). Judges the changed set: `not-applicable` on a run with no `--base`. Opt-in: off unless declared in `rules`. |
 | `identity.open-pr-collision` | A record a `--base` diff adds shares its type and number with a file on a fetched pull-request head ref under a different `Stable-Id` (`ADR-93`, `MILE-89`): two branches filed the same number from one `main`, and each looks valid alone. The refs are the ones `urzua new` fetches into `refs/urzua/pr/<segment>/*` with `new.check_open_prs`; `check` never fetches, so with none present the rule notices how to fetch them and its population counts zero refs, never a clean run over nothing. A head whose file for that id carries the record's own `Stable-Id` is the same record and is not a collision, so a pull request is not flagged against itself nor against its own merged copy. Plain git cannot tell an open pull request from a closed one, so a closed, unmerged head can still hold a number a new record legitimately took: the finding is a warning, which still gates under `fail_on: warning`, and the path out is a waiver whose `Reason` names that pull request, or renaming the file and its H1 to the next free number (the one `urzua new` would take; `urzua migrate ids` cannot renumber). Judges the changed set: `not-applicable` on a run with no `--base`. Opt-in. |
 | `type.record-outside-declared-dir` | A record-shaped tracked path that no type's `dir` claimed (`BUG-62`) — a config written before `RFC-35` silently loses coverage on upgrade otherwise. |
 | `type.no-declared-spec` | Which configured types currently have no `spec` pointer declared at all (ADR-41/ADR-43) — a signal to review, never a mandate; a type can permanently have none declared. |
@@ -867,6 +868,7 @@ declares `known_fields` keeps the `append` variant.
 | `type.dir-matches-nothing` | `dir-missing` | `edit-config` `set` |
 | `type.dir-matches-nothing` | `exempt-status-matches-nothing` | `edit-config` `set` |
 | `identity.collision` | `identifier-collision` | exempt: the fix is a renumber, and no action kind addresses a rename yet (`urzua migrate ids` exists) |
+| `header.scaffold-mismatch` | `scaffold-mismatch` | exempt: the fix is to recreate the record with `urzua new` and move its body across, or a waiver for a deliberate difference; neither is a single field edit |
 | `identity.open-pr-collision` | `open-pr-collision` | exempt: the fix is to rename the file and its H1 to the next free number, or a waiver naming a closed pull request; neither is a field edit |
 | `type.record-outside-declared-dir` | `record-outside-declared-dir` | exempt: the fix is a move, and no action kind addresses a move yet |
 | `type.no-declared-spec` | `no-declared-spec` | exempt: a signal to review, never a mandate |
@@ -997,6 +999,38 @@ declaration. Selection narrows what runs and never enables anything (`ADR-53`).
 - Combines with a path argument, `--base` and `--stdin-path`; the selection applies to the rules, the
   scope to the records.
 - `urzua audit` has no selection of its own (`SPEC-11`).
+
+### The header `urzua new` would have written: `header.scaffold-mismatch` (`MILE-103`)
+
+An opt-in rule, declared in `rules`, that compares the header of each record a `--base` diff adds
+with the header `urzua new` would have written for it, so a pull request sees a hand-written header
+before it merges. It is how `SPEC-1`'s fourth success criterion ("`urzua new` is what people actually
+invoke") is measured and kept true.
+
+- **The comparison.** The rule calls the same pure `new_record::scaffold_record` that `urzua new` calls
+  (`SPEC-12`), from the configuration the run reads and the type's `.urzua/templates/<type>.md`, with
+  the values only an author chooses taken from the record itself: its number, title, `Stable-Id`,
+  author and date. What remains is what `new` decides: which fields exist, in which order, and the
+  value each starts at. A field the scaffold leaves null may be filled in or left out (a record that
+  drops an optional placeholder it did not fill is still the record `new` wrote). A field added, a field
+  `new` fills (the `Stable-Id`, author, date) missing or blank, the fields reordered, and a value `new`
+  wrote (the initial status, the starting version) changed, is reported. `.claude/hooks/urzua-record.sh
+  finish` applies a stricter form of this to what an agent may do (it refuses a removed field too); the
+  rule judges what was merged, here before merge.
+- **The configuration is the run's own.** At the commit that created the record the run reads that
+  commit's configuration, so the header is compared with what `new` wrote then, not with what the
+  current configuration would write now. `scripts/replay-header-comparator.py` replays the rule over
+  past pull-request heads that way.
+- **Only creations.** A record added at a new path whose `Stable-Id` a deleted record carried at the
+  merge base is a rename and is not examined (it is counted `absent`). A record whose file name carries
+  no number is `out_of_scope` (`filename.identity-pattern` reports it); one with no readable header is
+  `unreadable`.
+- **Level.** The finding is a warning (the declared level replaces it), with the single variant
+  `scaffold-mismatch`, which offers no action: the path out is creating the record with `urzua new`, or a
+  waiver for a deliberate difference. A record created and then moved to a decided state in the same
+  pull request differs by design and needs the waiver.
+- **Without `--base` the rule is `not-applicable`.** Nothing is "newly added" on a whole-repository run.
+  It is `not-enabled` unless the repository declares it, and a repository that does not is unchanged.
 
 ## The roadmap output (`urzua roadmap`)
 
@@ -1364,3 +1398,5 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/check.rs` 762c7c56bdb5 -> fe2fce22eac3, `rust/crates/urzua-cli/tests/fail_on_integration.rs` 4b1707f3b18a -> 2232e4cec5c3. Reason: Read the diff of each pinned file since the old pin and the claim still holds. check.rs: blocking comes from the fail_on threshold (gate_blocking), a path argument that selects no record adds a warning notice, last in the notices (unmatched_path_notices), and a not-run full report adds a reason notice unless that notice already says why (not_run_reason); session open, scope, rule running, waivers and status derivation are unchanged. fail_on_integration.rs: the config_fail_on_warning test keeps its name and now expects blocking true beside exit 1 with the JSON otherwise equal to the default run; the other fail_on tests are unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/check_integration.rs` bc2e870defc6 -> 3441046fd344. Reason: check_integration.rs changed by test hardening only: the three tests that need chmod to deny access now start with common::permission_test_can_run, so they skip loudly as root and fail in CI instead of passing silently, and 3 not-exit-0 assertions now pin the exact exit code; no assertion of the recorded behaviour was weakened **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-14 | Bumped to `0.163`. The test file this spec's evidence pins was hardened (exact exit codes, visible root skips); the pin is re-baselined in the row above and the specified behaviour is unchanged. **Why:** the review's test findings; a re-baseline row is structural, so the version moves with it. | **structural** |
+> | 2026-11-14 | Bumped to `0.164`. `header.scaffold-mismatch` added to the generated rule table, with the section "The header `urzua new` would have written": an opt-in rule that, under `--base`, compares each added record's header with what `urzua new` would have written (the same `scaffold_record`, the run's configuration and the type's template, the record's own number, title, id, author and date), reporting a field added, a field `new` fills missing, the fields reordered or a scaffolded value changed (a null field filled in or left out is not a difference), as a warning, and leaving a renamed record unexamined. `check` loads each type's template text while the rule is enabled. **Why:** `MILE-103`, the instrument for the Phase 1 exit criterion that records are created through `urzua new`. | **structural** |
+> | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/check.rs` fe2fce22eac3 -> e19975ed21de, `rust/crates/urzua-core/src/rules.rs` ef12b204f378 -> e1551e6e17cb. Reason: Read the diff of each re-pinned file against main and the claim still holds. .urzua/config.yaml: one rule declared, header.scaffold-mismatch: info, under a five-line comment; no other entry changed. rust/crates/urzua-core/src/rules/table.rs: one RuleDef added for header.scaffold-mismatch (header_none Exempt) and the changed-set rule list in its test names it. rust/crates/urzua-core/src/rules.rs, catalog.rs, runner.rs: the new module, its id constant, and renamed_paths on RuleCtx. rust/crates/urzua-cli/src/commands/check.rs: renamed_paths on Context and DiffInputs, load_renamed_paths is new, load_template_texts also reads templates for the new rule. rust/crates/urzua-cli/src/commands/init.rs: adopt does not propose the rule. suggested_action_integration.rs rules_lists_each_variant: expected rule count 74. docs/specs/SPEC-12-urzua-new.md: a new section and a 0.31 row. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |

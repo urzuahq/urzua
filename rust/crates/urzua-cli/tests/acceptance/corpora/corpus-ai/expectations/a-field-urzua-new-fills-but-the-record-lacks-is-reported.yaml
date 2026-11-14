@@ -1,0 +1,12 @@
+id: a-field-urzua-new-fills-but-the-record-lacks-is-reported
+corpus: corpus-ai
+# Hand-authored without Author, a field urzua new fills in from the identity it resolves.
+commits:
+  - write:
+      records/ADR-0003-new.md: "---\nStable-Id: 01M8SCAFFB0000000000000003\nStatus: Proposed\nDate: 2026-11-14\nDeciders: bo\n---\n# ADR-0003 — New\n\nBody.\n"
+invocation: [check, --base, base]
+expect_exit: 1
+expect_findings:
+  - rule: header.scaffold-mismatch
+    file: records/ADR-0003-new.md
+    message_contains: "'Author' is missing"

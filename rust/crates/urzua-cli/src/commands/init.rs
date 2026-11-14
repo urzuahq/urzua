@@ -599,6 +599,13 @@ pub(crate) fn proposed_rules_mapping(
         if urzua_core::rules::rule_def(id).is_some_and(|d| d.requires_relation_pairs) {
             continue;
         }
+        // It asks whether each new record was written with `urzua new`, which no
+        // record of a corpus just adopted was, so proposing it would warn on the
+        // first record every author adds by hand. Turning it on is the adopter's
+        // call, once they use `new` (`MILE-103`).
+        if *id == urzua_core::rules::RULE_HEADER_SCAFFOLD_MISMATCH {
+            continue;
+        }
         // The override log is declared, never inferred (`MILE-188`).
         if urzua_core::rules::rule_def(id).is_some_and(|d| d.requires_override_log) {
             continue;
@@ -1194,6 +1201,23 @@ mod tests {
             yaml.contains("header.required-fields"),
             "rules that read no declaration are still proposed: {yaml}"
         );
+    }
+
+    /// `MILE-103`: the comparator judges a record against `urzua new`, so adopt
+    /// mode, whose corpus was not written with `new`, does not propose it.
+    #[test]
+    fn the_scaffold_comparator_is_not_proposed_by_adopt() {
+        let proposed = vec![ProposedRecordType {
+            name: "adr".to_string(),
+            dir: "docs/adr".to_string(),
+            record_count: 3,
+            prefix: Some("ADR".to_string()),
+            header_shape: HeaderShape::YamlFrontmatter,
+            exclude_files: vec![],
+        }];
+        let yaml = render_config_yaml(&proposed);
+        assert!(!yaml.contains("header.scaffold-mismatch"), "{yaml}");
+        assert!(yaml.contains("identity.open-pr-collision"), "{yaml}");
     }
 
     #[test]
