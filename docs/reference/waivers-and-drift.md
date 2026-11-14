@@ -22,7 +22,7 @@ record_types:
     prefix: WAIVER
     required_fields: [Rule, Scope, Reason]
     known_fields: [Expires, Stable-Id]
-    effective_requires: [Reason]
+    effective_requires: [Reason, Expires]
     header_shape: yaml-frontmatter
 rules:
   waiver.matches-nothing: warn
@@ -63,29 +63,37 @@ Notes that save time:
 - **A waiver that does nothing is reported.** With `waiver.matches-nothing` enabled, a waiver that has
   expired, is not in effect, or no longer matches a finding is a finding on the waiver record, naming
   the rule and scope it claimed.
-- **`effective_requires: [Reason]`** makes a waiver take effect only once `Reason` holds a real value:
-  not blank, not a placeholder such as `TBD`, and not a value the type declares `pending`.
-- **A waiver with no `Expires` is permanent.** Declare `permanent` on the waiver type to say, per
-  rule, which categories of reason may be permanent and whether each must cite a record; once
-  declared, a permanent waiver for any other rule has no effect. See `SPEC-10`.
+- **`effective_requires: [Reason, Expires]`** makes a waiver take effect only once every listed field
+  holds a real value: not blank, not a placeholder such as `TBD`, and not a value the type declares
+  `pending`. With `Expires` listed, a waiver with no date takes no effect, which is what you want
+  unless you declare `permanent`. `waive --from-report` refuses to run unless the type lists `Expires`
+  here or declares `permanent`, because a draft given only a `Reason` would otherwise become a
+  permanent waiver.
+- **A waiver with no `Expires` is permanent, where the type allows it.** Declare `permanent` on the
+  waiver type to say, per rule, which categories of reason may be permanent and whether each must cite
+  a record; once declared, a permanent waiver for any other rule has no effect. See `SPEC-10`.
 - **Some rules cannot be waived.** `urzua explain --rule <id>` shows `waivable`. A repository that
   declares `authority` with `waivable: never` cannot waive `diff.decider-required`.
 
 ### Draft waivers for an existing backlog
 
-When you adopt urzua on a corpus that already has findings, `waive --from-report` previews one
-waiver per rule and file:
+When you adopt urzua on a corpus that already has findings, `waive --from-report` drafts one
+waiver per rule and file. Run it first as a preview, then with `--apply` to write the files:
 
 ```sh
-urzua waive --from-report                          # every unwaived finding at or above fail_on
+urzua waive --from-report                          # preview: every unwaived finding at or above fail_on
 urzua waive --from-report --rule header.required-fields --path docs/adr
+urzua waive --from-report --apply                  # write the drafts as waiver records
+git add docs/waiver                                # untracked waivers are not read
 ```
 
 Each draft has `Rule` and `Scope` filled in and a pending `Reason` with no `Expires`, so it
-suppresses nothing until a person writes the reason and the date. The current build only previews:
-the output lists the files it would write with `"written": false`, and `--apply` is not available
-yet. Create the files yourself from the preview, with `urzua new waiver` and your own reason and
-expiry. A finding that already has a live waiver is listed under `skipped` with `already-waived`.
+suppresses nothing until a person writes the reason and the date. The preview lists the files it would
+write with `"written": false`; `--apply` writes them (`"written": true`), each with a fresh
+`Stable-Id`. Nothing is hidden by the tool: until you fill a draft in, `check` still reports the
+original finding. A second `--apply` writes nothing. A finding whose rule and file already have a
+waiver that is not yet filled in, or has expired, is listed under `skipped` (`already-waived` or
+`expired`); one that a filled-in waiver covers is not listed at all.
 
 ## Drift
 
