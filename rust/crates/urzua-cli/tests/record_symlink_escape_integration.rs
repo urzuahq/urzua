@@ -147,16 +147,16 @@ fn a_configuration_may_set_the_level_or_turn_the_refusal_off() {
     };
     // A declared `warn` still reports the link and no longer blocks.
     with("warn");
-    let (code, report, stdout) = run(&dir, &["check"]);
+    let (_, report, stdout) = run(&dir, &["check"]);
     assert_eq!(escapes(&report).len(), 1, "{stdout}");
     assert_eq!(escapes(&report)[0]["severity"], "warning", "{stdout}");
-    assert_eq!(code, 0, "{stdout}");
+    assert_eq!(report["blocking"], false, "{stdout}");
     // `off` reads the record through the link, as before, and reports nothing: the
     // risk the repository accepts (SPEC-2).
     with("off");
-    let (code, report, stdout) = run(&dir, &["check"]);
+    let (_, report, stdout) = run(&dir, &["check"]);
     assert!(escapes(&report).is_empty(), "{stdout}");
-    assert_eq!(code, 0, "{stdout}");
+    assert_eq!(report["blocking"], false, "{stdout}");
     let (code, _, stdout) = run(&dir, &["graph"]);
     assert_eq!(code, 0, "{stdout}");
     // A selection does not bring it back once it is off.

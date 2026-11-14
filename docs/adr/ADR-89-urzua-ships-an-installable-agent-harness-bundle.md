@@ -831,44 +831,35 @@ rest of the checks. A case-only difference between the base's and the head's sta
 
 The Decision is otherwise unchanged. The Status of this ADR stays Accepted.
 
-## Amendment (2026-11-14, symlinked records)
+## Amendment (2026-11-14, leaving a gate)
 
-Status of this amendment: decided by the orchestrator on 2026-11-14, pending maintainer review. It closes a
-route around the status gate; the rest of section 4 is unchanged.
+Status of this amendment: decided by the orchestrator on 2026-11-14, pending maintainer review. It extends what
+`diff.decider-required` and the editor hook count as a gated move; the rest of section 4 is unchanged.
 
-**The problem.** The gate judges a record by the path it is tracked at. A tracked record file that is a
-symlink was read through the link. A non-decider could land an Accepted record in two pull requests: the first
-moves a Proposed record out of the governed directory (`git mv docs/adr/ADR-1-a.md notes/x.md`) and leaves a
-symlink in its place, which changes no `Status`; the second sets `Status: Accepted` in `notes/x.md`, a path no
-record type governs and no gate names, while the link at `docs/adr/ADR-1-a.md` now reads as an Accepted record.
-Neither change is a gated move. Separately, a link to a file outside the repository was read and, by
-`urzua export`, published.
+**The problem.** The deletions amendment gates `git rm` of an Accepted record because Accepted-to-gone is a stronger
+move than Superseded. Three other edits reach the same outcome and were not gated: writing the file empty,
+stripping its header (so it has no `Status`), and moving it from a gate status to a status no gate names (Accepted to
+Proposed, an un-accept). `header.required-fields` and `status.transition-allowed` catch some of these only as
+ordinary, waivable findings, and an un-accept in one pull request followed by a delete of the now-Proposed record in a
+second walked around the deletion gate.
 
-**The decision.** A tracked record file that is a symlink, or sits behind a symlinked directory, is refused by
-every command and never read (`identity.record-symlink-escapes`, `SPEC-2`). A record is read where it is tracked,
-never through a link.
+**The decision.** A changed record whose `Status` at the merge base is one a gate names, and whose `Status` now is
+missing, blank or not a status that same gate names, is a gated move like a deletion ("Status moved from 'Accepted'
+to 'Proposed', out of the gate's statuses", or "Status was 'Accepted' and is now missing or blank"). It is judged
+like any other gated move: the same decider group, `decider_table`, `waivable` and `require_evidence` apply, and it
+is reported as the variant `gated-departure-without-decider`. The editor hook's `acceptance` guardrail refuses the
+same edit from an agent (a write that leaves the file empty or without a readable `Status`, or moves it out of a
+gated status) and a person is not refused. A move to another status the same gate names (Accepted to Rejected) is
+the ordinary gated move and is unchanged. Gates still name only `to` statuses; there is no `from` reading, the base
+copy's status is read to learn which gate the record leaves. A record whose base copy cannot be read, or that was
+new in the pull request, has no base status and is not a departure. The post-command check, which reports and
+never blocks, is not extended. The same holds for Accepted to Superseded (or any other status) by a non-decider: it is gated whenever the gate does not name the new status; this repository's gates name Superseded, so it is judged as an ordinary move here.
 
-- `check`, `check --base`, `audit` and the MCP check tool report it as a blocking finding (an error) that names
-  the link and where it points. It is reported on a path-scoped or `--base` run too, and no waiver excuses it.
-  Every other command that loads the corpus (`fix`, `reverify`, `waive`, `migrate`, `export`, `graph`, `index`,
-  `roadmap`, `explain`) stops with exit 2 naming the file, instead of shrinking the corpus without saying so.
-- No link is allowed, an alias to a sibling record included. A first version of this amendment let a link to a
-  file in the same type directory through; a review showed that moving a record to `docs/adr/draft.txt`, a name no
-  type governs, and leaving `ADR-1-a.md` linked to it, hides the record just as well. A record has no use for an
-  alias. A link that does not resolve, or resolves to a directory, keeps the loader's own "could not read" error.
-- The rule is on for every configuration, and a configuration sets its level or turns it `off` under `rules:` like
-  any rule (maintainer principle, 2026-11-14: everything is a config); an earlier version made `off` a load error.
-  **Turning it off accepts the route above:** records are then read through links as before and nothing is reported.
-  `urzua init` does not write an entry for it, and this repository's configuration does not declare it. Unless
-  declared `off` it runs under every `--rules` selection and so appears in the `rules_executed` of a narrowed run.
-- **Why a default-on rule departs from opt-in configuration.** `ADR-53` makes a rule opt-in because a rule is a
-  repository's policy about its records, and a repository may decline a policy. This is not a policy: it is a
-  refusal that keeps the engine from reading a record where the gates do not look, a security property of the
-  tool and not a style rule, so it is on unless a repository says otherwise, and the risk of saying so is written next to the rule.
-- The two-pull-request route is closed at its first step: the pull request that leaves the symlink behind carries
-  the blocking finding, and the second pull request, had the first merged, carries it too, because the finding
-  does not depend on what the second changes. The diff gate does not need to resolve a changed path back to the
-  record that links to it.
+Related, outside this section: the attestation row of section 5 records `actor: unspecified` when `--actor` is not
+given. Under a `gh-verified` identity `fix --apply`, `fix --rebaseline --apply` and `reverify --apply` now refuse
+to run without `--actor agent` or `--actor human` (`SPEC-8`, justified by `ADR-101`: a verified login is a person's,
+so a row must not read as that person's own attestation when an agent ran the command). The `asserted` and
+`git-config` identities are unchanged.
 
 The Decision is otherwise unchanged. The Status of this ADR stays Accepted.
 
@@ -916,4 +907,4 @@ The Decision is otherwise unchanged. The Status of this ADR stays Accepted.
 > | 2026-11-09 | Added an `## Amendment (2026-11-09, rename pairing)`, first decided by the orchestrator, accepted by the maintainer on 2026-11-10: a record the base lacks is paired with a deleted record of the same `Stable-Id` only when the record id (type and number) is also the same, so a new Accepted record copying a deleted record's `Stable-Id` is a gated move; a slug rename still pairs, a renumber is new; the deleted copy is parsed with the type's declared document model; `status.transition-allowed` uses the same pairing. A slug rename that keeps the record id pairs even when its body changes, like an in-place edit; a case-only file rename reads as new and is gated. States that the merge-queue run passes no pull request number (the pull request run judged the change) and that an actors API outage passes the gate unless `require_evidence` is on. `Status` stays Accepted. **Why:** the seventh review reproduced a non-decider accepting a brand-new ADR with no finding. | **substantive** |
 > | 2026-11-10 | Rename-pairing amendment accepted. **Why:** Maintainer decision, 2026-11-10. | **substantive** |
 > | 2026-11-10 | Added an `## Amendment (2026-11-10, deletions)`, accepted by the maintainer on 2026-11-10: a record the diff deletes while its base `Status` is one a gate names is a gated move (`gated-deletion-without-decider`), judged like any other and reported by the post-command check; a rename pair is exempt; under `base`/`both` the base revision's type declaration also decides which deleted files are records of a gated type; gate statuses compare case-insensitively after trim and the status field is read case-insensitively for the gate. `Status` stays Accepted. **Why:** Maintainer decision, 2026-11-10, on the review that found a non-decider deleting an Accepted ADR with an ok check, and a lower-case `accepted` passing the gate. | **substantive** |
-> | 2026-11-14 | Added an `## Amendment (2026-11-14, symlinked records)`, decided by the orchestrator on 2026-11-14, pending maintainer review: a tracked record file that is a symlink resolving outside the repository or outside its type's directory is refused by every command and reported by `check` as the blocking, unwaivable finding `identity.record-symlink-escapes`, on for every configuration and not switchable off; this closes the two-pull-request route (move a record out of the governed tree leaving a symlink, then accept the moved copy). `Status` stays Accepted. **Why:** an external review reproduced a non-decider landing an Accepted record through a symlink. | **substantive** |
+> | 2026-11-14 | Added an `## Amendment (2026-11-14, leaving a gate)`, decided by the orchestrator on 2026-11-14, pending maintainer review: blanking an Accepted (gated) record, stripping its header, or moving it from a gate status to a status that gate does not name (an un-accept) is a gated move like deletion (`gated-departure-without-decider`), in `diff.decider-required` and in the editor hook; and, under a `gh-verified` identity, `fix --apply`, `fix --rebaseline --apply` and `reverify --apply` require `--actor`. The Decision is unchanged. `Status` stays Accepted. **Why:** the external review found blanking or un-accepting an Accepted ADR passing both gates while deletion is gated, and 208 re-pin rows attributing an agent's re-verification to the maintainer. | **substantive** |

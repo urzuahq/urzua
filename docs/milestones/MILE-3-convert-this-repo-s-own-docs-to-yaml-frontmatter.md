@@ -5,7 +5,7 @@ Phase: '0'
 Track: header-format
 Implements: ADR-33
 Blocked-on: —
-Realized-by: code:.urzua/config.yaml@sha256:e544107a6abb54527dc5c7df8a73d144a287f4379eace12faee92b45bfb53d40, code:.github/workflows/checks.yml@sha256:0a3547c3f12a51cefe3dcc88696bacc8f9911356a4c6e61c56f8ef25e434e493
+Realized-by: code:.urzua/config.yaml@sha256:e544107a6abb54527dc5c7df8a73d144a287f4379eace12faee92b45bfb53d40, code:.github/workflows/checks.yml@sha256:e166badec9b1eac84bcd921aaf137fc7552a48d8a35b96a4c36fac4bd2b3cb84
 ---
 # 3 — Convert this repo's own docs to yaml-frontmatter
 
@@ -22,7 +22,7 @@ The actual dogfooding step ADR-33 named as the real forcing function for this wo
 ## Done means
 
 - Every record type configured in this repository's `.urzua/config.yaml` declares `header_shape: yaml-frontmatter`. — evidence: code:.urzua/config.yaml@sha256:e544107a6abb54527dc5c7df8a73d144a287f4379eace12faee92b45bfb53d40
-- Every ADR, RFC, spec, milestone and bug record parses under it, and `urzua check` over this repository reports no unreadable header. — evidence: code:.github/workflows/checks.yml@sha256:0a3547c3f12a51cefe3dcc88696bacc8f9911356a4c6e61c56f8ef25e434e493
+- Every ADR, RFC, spec, milestone and bug record parses under it, and `urzua check` over this repository reports no unreadable header. — evidence: code:.github/workflows/checks.yml@sha256:e166badec9b1eac84bcd921aaf137fc7552a48d8a35b96a4c36fac4bd2b3cb84
 - The conversion was a one-time pass that shipped no tool, and nothing below the header changed. — waived: process-outcome -- a property of the one-time conversion of 2026-09-08, verified at the time by a before/after field-set comparison against every file (see the revision log); the scratch tool was never committed, so no file can evidence it now
 
 > **Revision log**
@@ -51,3 +51,4 @@ The actual dogfooding step ADR-33 named as the real forcing function for this wo
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.github/workflows/checks.yml` ad6ab57882df -> 0a3547c3f12a. Reason: Read the diff of checks.yml since the pin: the only change is one env entry on the test job, URZUA_BUG_LISTS_MAY_GROW, set from the bug-lists-grow pull request label for acceptance_bug_gate.rs; no step, job, trigger or ordering changed, so the claim about the workflow still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` ddff3b920ab0 -> 6ed60a01c6e8. Reason: Read the diff of each re-pinned file against main and the claim still holds. .urzua/config.yaml: one rule declared, header.scaffold-mismatch: info, under a five-line comment; no other entry changed. rust/crates/urzua-cli/tests/acceptance.rs and the claim-rule case: empty_population_ok_without gains an optional except_containing so a fragment with closes: [] does not count; entries without it behave as before. The remaining pinned files (rules.rs, catalog.rs, runner.rs, table.rs, check.rs, init.rs, suggested_action_integration.rs, SPEC-12) changed as stated in the earlier re-pin rows of this change. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` 6ed60a01c6e8 -> e544107a6abb. Reason: Read the diff of each pinned file against main and the claim still holds. config.yaml: only the waiver type gained two known_fields, Variant and Key-path, with a comment; no other key changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.github/workflows/checks.yml` 0a3547c3f12a -> e166badec9b1. Reason: checks.yml: the stale-pin step's suggested re-pin command now includes --actor (agent or human), required under a gh-verified identity; the rest of the workflow this record cites is unchanged **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
