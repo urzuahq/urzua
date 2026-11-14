@@ -96,6 +96,14 @@ pub enum Declaration {
     BlockedOrProgress,
     /// `statuses.delivery.items` (`ADR-96`).
     DeliveryItems,
+    /// `sections.unique_headings` (`MILE-104`).
+    UniqueHeadings,
+    /// `sections.no_skipped_levels` (`MILE-104`).
+    NoSkippedLevels,
+    /// `sections.order` (`MILE-104`).
+    SectionOrder,
+    /// `sections.required`, read by `section.required` and `section.shape`.
+    SectionsRequired,
 }
 
 impl Declaration {
@@ -108,6 +116,10 @@ impl Declaration {
             Declaration::VersionBump => "revision_log.version_bump",
             Declaration::BlockedOrProgress => "statuses.blocked or statuses.progress",
             Declaration::DeliveryItems => "statuses.delivery.items",
+            Declaration::UniqueHeadings => "sections.unique_headings",
+            Declaration::NoSkippedLevels => "sections.no_skipped_levels",
+            Declaration::SectionOrder => "sections.order",
+            Declaration::SectionsRequired => "sections.required",
         }
     }
 }
@@ -1905,7 +1917,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         requires_acyclic_pair: false,
         requires_override_log: false,
         requires_authority: false,
-        reads_declaration: None,
+        reads_declaration: Some(Declaration::SectionsRequired),
         header_none: HeaderNone::Exempt("reads body sections; the header only for exempt_statuses, which a header-less type declaring them is counted out of scope for (unit-tested)"),
         options: &[],
         population: PopulationUnit::Section,
@@ -1929,7 +1941,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         requires_acyclic_pair: false,
         requires_override_log: false,
         requires_authority: false,
-        reads_declaration: None,
+        reads_declaration: Some(Declaration::SectionsRequired),
         header_none: HeaderNone::Exempt("reads body sections, as section.required does"),
         options: &[],
         population: PopulationUnit::Section,
@@ -1953,7 +1965,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         requires_acyclic_pair: false,
         requires_override_log: false,
         requires_authority: false,
-        reads_declaration: None,
+        reads_declaration: Some(Declaration::UniqueHeadings),
         header_none: HeaderNone::Exempt("reads body sections only; the header is read for its extent"),
         options: &[],
         population: PopulationUnit::Record,
@@ -1977,7 +1989,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         requires_acyclic_pair: false,
         requires_override_log: false,
         requires_authority: false,
-        reads_declaration: None,
+        reads_declaration: Some(Declaration::NoSkippedLevels),
         header_none: HeaderNone::Exempt("reads body sections only; the header is read for its extent"),
         options: &[],
         population: PopulationUnit::Record,
@@ -2001,7 +2013,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         requires_acyclic_pair: false,
         requires_override_log: false,
         requires_authority: false,
-        reads_declaration: None,
+        reads_declaration: Some(Declaration::SectionOrder),
         header_none: HeaderNone::Exempt("reads body sections only; the header is read for its extent"),
         options: &[],
         population: PopulationUnit::Record,
@@ -2393,6 +2405,11 @@ mod tests {
                 (RULE_HEADER_POINTER_FIELD_CLEAN, Declaration::PointerFields),
                 (RULE_STATUS_DONE_ITEMS_SHAPE, Declaration::DeliveryItems),
                 (RULE_STATUS_WAIVED_ITEM_STALE, Declaration::DeliveryItems),
+                (RULE_SECTION_REQUIRED, Declaration::SectionsRequired),
+                (RULE_SECTION_SHAPE, Declaration::SectionsRequired),
+                (RULE_SECTION_DUPLICATE, Declaration::UniqueHeadings),
+                (RULE_SECTION_LEVEL_SKIPPED, Declaration::NoSkippedLevels),
+                (RULE_SECTION_ORDER, Declaration::SectionOrder),
             ]
         );
     }

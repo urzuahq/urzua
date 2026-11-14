@@ -42,11 +42,6 @@ rules:
   status.transition-allowed: warn
   status.unreachable-state: warn
   status.delivery-agreement: warn
-  section.required: warn
-  section.shape: warn
-  section.duplicate: warn
-  section.level-skipped: warn
-  section.order: warn
   config.scope-matches-nothing: warn
   waiver.matches-nothing: warn
 authority:

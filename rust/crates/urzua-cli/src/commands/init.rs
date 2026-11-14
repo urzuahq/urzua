@@ -1209,6 +1209,15 @@ mod tests {
             "known_fields",
             "header.pointer-field-clean",
             "pointer_fields",
+            "section.duplicate",
+            "sections.unique_headings",
+            "section.level-skipped",
+            "sections.no_skipped_levels",
+            "section.order",
+            "sections.order",
+            "section.required",
+            "section.shape",
+            "sections.required",
         ] {
             assert!(message.contains(needle), "{needle} missing from: {message}");
         }
