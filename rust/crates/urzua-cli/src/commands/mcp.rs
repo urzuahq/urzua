@@ -129,7 +129,9 @@ fn could_not_start(message: &str) -> ExitCode {
     let _ = writeln!(
         std::io::stderr().lock(),
         "{}",
-        serde_json::to_string(&report).unwrap_or_default()
+        crate::report_value(&report)
+            .map(|v| v.to_string())
+            .unwrap_or_default()
     );
     ExitCode::from(2)
 }
@@ -208,7 +210,7 @@ impl Server {
             .and_then(|export| Ok((export, graph::build(self.config.clone())?)));
         let (export, graph) = match built {
             Ok(both) => both,
-            Err(failure) => return outcome::<Value>(Err(failure)),
+            Err(failure) => return outcome::<CouldNotRun>(Err(failure)),
         };
         let Some(record) = export
             .records
@@ -216,7 +218,7 @@ impl Server {
             .find(|r| r.id.as_deref() == Some(id.as_str()))
         else {
             let message = format!("no record has the id `{id}`; urzua_list_records lists the ids");
-            return outcome::<Value>(Err(message.into()));
+            return outcome::<CouldNotRun>(Err(message.into()));
         };
         let edges: Vec<_> = graph
             .edges
@@ -231,6 +233,8 @@ impl Server {
                 "record": record,
                 "edges": edges,
                 "notices": notices,
+                "next_action": null,
+                "next_action_reason": null,
             }),
             is_error: false,
         }
@@ -245,14 +249,22 @@ fn text(args: &Map<String, Value>, key: &str) -> String {
 }
 
 /// A report, or the could-not-run shape with `isError` (`ADR-46`).
-fn outcome<R: serde::Serialize>(built: Result<R, Failure>) -> ToolResult {
-    match built {
-        Ok(report) => ToolResult {
-            report: serde_json::to_value(report).unwrap_or(Value::Null),
-            is_error: false,
-        },
-        Err(failure) => ToolResult {
-            report: serde_json::to_value(CouldNotRun::from(failure)).unwrap_or(Value::Null),
+fn outcome<R: urzua_core::report::Report>(built: Result<R, Failure>) -> ToolResult {
+    let (value, is_error) = match built {
+        Ok(report) => (crate::report_value(&report), false),
+        Err(failure) => (crate::report_value(&CouldNotRun::from(failure)), true),
+    };
+    match value {
+        Ok(report) => ToolResult { report, is_error },
+        // A report that is not a JSON object cannot carry the two next-action
+        // keys: a could-not-run, as for `emit`.
+        Err(message) => ToolResult {
+            report: serde_json::json!({
+                "status": "not-run",
+                "error": message,
+                "next_action": null,
+                "next_action_reason": null,
+            }),
             is_error: true,
         },
     }

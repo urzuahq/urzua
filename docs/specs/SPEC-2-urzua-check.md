@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5GM1RYRRX2XVMZ0ZAK
-Version: '0.159'
+Version: '0.160'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs@sha256:0278cd25032de4631d40c6b5a55c8e1ec23d3786724548df9b33e64c7782ddbb, code:rust/crates/urzua-core/src/rules.rs@sha256:ef12b204f3781fc85f8e19d00cce3e74d83954dc0cfa298eb6e53f3a86a23063, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:bc2e870defc676cbc3c053ab78b577276cf7696b10c6ef586be3ee37548abf64, test:rust/crates/urzua-cli/tests/fail_on_integration.rs@sha256:4b1707f3b18aed7b018f8b80c55f1e2091ae19148f3de6c95435a8f5fee4cab7
@@ -693,6 +693,43 @@ Every finding's `file` is relative to the repository root, including a finding a
 (`.urzua/config.yaml`), so a report compares and baselines across checkouts (`BUG-185`). A `--config`
 outside the repository has no relative form and is named as given.
 
+### Next action (`MILE-72`)
+
+Maintainer decision, 2026-11-14. Every command's JSON, not only `check`'s, carries two top-level keys
+beside `status`: `next_action`, a bare runnable command string (`urzua fix --apply`, never a sentence
+and never a `suggested_action` object), and `next_action_reason`, a short sentence built only from
+counts and the command's verb. Both are always present, and both are `null` together or both strings:
+there is no `next_action` without its reason. `null` means nothing is better than reading the findings.
+They are additive; no existing key moves. `ADR-73` keeps `next_action` a string and distinct from
+`suggested_action`, which is per finding; this derives from the findings' `run-command` actions and
+does not replace them. `urzua mcp` tools return the same reports and so carry the same keys.
+
+- `check` and `audit` (the same report). Over the unwaived findings of severity `error` or `warning`
+  (a waived finding and an `info` finding never count), the tool is the first of the following that
+  at least one of them offers as a `run-command` `suggested_action` whose `argv` begins with the
+  tool's words: `urzua fix`, then `urzua index`. The command is built from those findings' own `argv`,
+  so it runs as printed, with no placeholder and no flag the findings did not name: for `fix`, the
+  union of the records their `--ids` name, in first-seen order, as `urzua fix --apply --ids a.md,b.md`
+  (`fix --apply` refuses to run with neither `--ids` nor `--force`); for `index`, `urzua index --apply`.
+  A word with a character outside letters, digits and `-_./=:@+#,` is single-quoted for a shell. When
+  several findings offer different tools, the earlier tool wins and the others are not mentioned; when
+  several offer the same tool, they share one command, and the reason counts them. The command takes no
+  `--by`: it resolves an identity from `gh` or `git config user.name`, as `ADR-73` states. A
+  consumer with neither (no `gh` login and no `user.name`) finds the printed command exiting 2 and
+  asking for `--by`, and appends `--by <name>` itself; the field does not add it. The reason is `<verb> N of M finding(s)`,
+  `N` the findings that offer the chosen tool, `M` all unwaived error and warning findings, the verb
+  `repairs` (`fix`) or `regenerates the index for` (`index`). Both are `null` when no such finding offers
+  a `run-command`, which includes the case where the only blocker needs a human, when a record path
+  holds a comma (`--ids` could not carry it), and on a `not-run` report. `urzua refs refresh` is not
+  suggested: no rule offers it as an action (`ADR-73`), so there is nothing to build it from; it can
+  join the order when a finding offers it.
+- `fix`. A detect run that lists repairs says `urzua fix --apply --ids <the records of the repairs>`, reason `writes N repair(s)`. A run
+  that applied writes says `urzua check`, reason `re-checks the corpus after N write(s)`. Every other
+  `fix` status is `null`.
+- Every other command (`graph`, `explain`, `export`, `index`, `rules`, `doctor`, `new`, `init`,
+  `waive`, `reverify`, `migrate`, `roadmap`, `refs`, the harness commands) and every `not-run`
+  report, including a panic, emit both keys as `null` until a later decision gives them a derivation.
+
 ### Suggested action
 
 `ADR-73` decides this field; this section reproduces its vocabulary. A finding may carry one
@@ -1286,3 +1323,4 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/check.rs` 212c34e908d4 -> b356257bf05a. Reason: check.rs: `hold_out_baseline` passes the config to `apply_drift_baseline`; nothing else changed in this step. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-13 | Bumped to `0.159`. `code.dangling-bug-reference` added to the generated rule table: an opt-in rule reporting a source comment that cites a record id resolving to no record, over the tracked files under its `back_pointer_paths` with one of its declared `extensions`; comment leaders per extension from `code_comment_prefixes`, the back-pointer rules' set when undeclared; existence only; an id inside a URL is not read; a back-pointer `embodiment.back-pointer-resolution` judges is left to that rule; `external_ids` and `ignore_marker` as for `citation.resolution` and the boundary rule. Its findings are kept under `check <path>` scoping. **Why:** `MILE-108`, `RFC-41`, `ADR-100` -- the mirror of `embodiment.locator-exists`, a citation that outlives the record it names. | **substantive** |
 > | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/check.rs` b356257bf05a -> 0278cd25032d, `rust/crates/urzua-core/src/rules.rs` b16f2783f10f -> ef12b204f378, `rust/crates/urzua-cli/tests/check_integration.rs` a60c9c61b94c -> bc2e870defc6. Reason: Read the diff of each re-pinned file against main and the claim still holds. check.rs: SourceInputs and Context gain code_citation_sources, read through read_source_inputs only when code.dangling-bug-reference is selected and handed to the rule context; no other stage changed; check_integration.rs: the ADR-0001 waiver fixture's H1 gains the citation-fixture marker text and every_header_reading_rule_reports_a_header_none_type_as_out_of_scope declares the new rule's required options; no assertion changed; rules.rs: declares the code_citation module and re-exports it; nothing else changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-14 | Bumped to `0.160`. Every command's JSON gains the top-level keys `next_action` (a bare command string or `null`) and `next_action_reason` (a count-and-verb sentence or `null`, a string exactly when `next_action` is), always present; `check` and `audit` derive them from the unwaived findings' `run-command` actions, as one runnable command (`urzua fix --apply --ids ...`, then `urzua index --apply`), `fix` suggests `urzua fix --apply --ids ...` after a detect run and `urzua check` after an apply, and every other command emits both as `null`. `urzua mcp` carries them through the shared reports. Maintainer decision, 2026-11-14. **Why:** `MILE-72` -- an agent still had to reason from a findings list to a plan; the name, the string shape and the separate `suggested_action` are `ADR-73`'s, the reason key, the priority order and the per-command scope are the maintainer's. Additive to every command's JSON. | **substantive** |

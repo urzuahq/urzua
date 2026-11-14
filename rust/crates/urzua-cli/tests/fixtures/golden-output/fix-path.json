@@ -10,6 +10,8 @@
       "source": "clock"
     },
     "failed": [],
+    "next_action": null,
+    "next_action_reason": null,
     "population": {
       "eligible": 1,
       "examined": 0,

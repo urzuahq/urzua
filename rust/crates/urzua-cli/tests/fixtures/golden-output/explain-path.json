@@ -17,6 +17,8 @@
         "via": "code"
       }
     ],
+    "next_action": null,
+    "next_action_reason": null,
     "path": "src/a.rs",
     "population": {
       "eligible": 4,
