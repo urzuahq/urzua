@@ -373,7 +373,7 @@ fn a_permanent_declaration_that_is_not_well_formed_is_refused_at_load() {
             .current_dir(&dir)
             .output()
             .unwrap();
-        assert!(!out.status.success(), "case {i}:\n{permanent}");
+        assert_eq!(out.status.code(), Some(2), "case {i}:\n{permanent}");
         let text = String::from_utf8_lossy(&out.stdout).to_string()
             + &String::from_utf8_lossy(&out.stderr);
         assert!(

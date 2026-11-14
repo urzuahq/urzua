@@ -182,7 +182,7 @@ fn export_json_refuses_a_record_symlinked_outside_the_repository() {
     git(&dir, &["commit", "-q", "-m", "link"]);
     let output = run_urzua(&dir, &["export", "--format", "json"]);
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert_ne!(output.status.code(), Some(0), "{stdout}");
+    assert_eq!(output.status.code(), Some(2), "{stdout}");
     assert!(!stdout.contains("secret contents"), "{stdout}");
     assert!(
         stdout.contains("resolves outside the repository"),

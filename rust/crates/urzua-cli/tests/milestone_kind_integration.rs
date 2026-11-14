@@ -417,7 +417,7 @@ fn invalid_kind_declarations_are_refused_at_load() {
             String::from_utf8_lossy(&out.stdout),
             String::from_utf8_lossy(&out.stderr)
         );
-        assert_ne!(out.status.code(), Some(0), "{want}: {text}");
+        assert_eq!(out.status.code(), Some(2), "{want}: {text}");
         assert!(text.contains(want), "wanted {want:?}: {text}");
     }
 }
