@@ -9,7 +9,7 @@
       "source": "clock"
     },
     "failed": [],
-    "next_action": "urzua fix --apply",
+    "next_action": "urzua fix --apply --ids docs/adr/ADR-3-third.md",
     "next_action_reason": "writes 1 repair",
     "population": {
       "eligible": 4,

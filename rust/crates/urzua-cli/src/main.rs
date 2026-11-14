@@ -52,12 +52,20 @@ pub(crate) fn emit<T: Report>(report: &T) -> ExitCode {
     // end the run quietly, not panic (MILE-176). The reader leaving is not an
     // error of ours, so the write result is dropped and the exit code stays
     // the report's.
-    let _ = writeln!(
-        std::io::stdout().lock(),
-        "{}",
-        serde_json::to_string_pretty(&with_next_action(report)).unwrap()
-    );
-    report.exit_code()
+    let (text, code) = match serde_json::to_string_pretty(&with_next_action(report)) {
+        Ok(text) => (text, report.exit_code()),
+        // A report that cannot be written as a JSON object (the two keys are
+        // appended to it) is a could-not-run, never a panic.
+        Err(e) => (
+            serde_json::to_string_pretty(&CouldNotRun::from(format!(
+                "could not serialise the report: {e}"
+            )))
+            .unwrap_or_default(),
+            ExitCode::from(2),
+        ),
+    };
+    let _ = writeln!(std::io::stdout().lock(), "{text}");
+    code
 }
 
 /// A report with the two `MILE-72` keys after its own, always present and
@@ -84,8 +92,11 @@ fn with_next_action<T: urzua_core::report::Report>(report: &T) -> WithNextAction
 
 /// A report as JSON with the two `MILE-72` keys. The one serialisation every
 /// command and `urzua mcp` goes through.
-pub(crate) fn report_value<T: urzua_core::report::Report>(report: &T) -> serde_json::Value {
-    serde_json::to_value(with_next_action(report)).expect("a report serializes")
+pub(crate) fn report_value<T: urzua_core::report::Report>(
+    report: &T,
+) -> Result<serde_json::Value, String> {
+    serde_json::to_value(with_next_action(report))
+        .map_err(|e| format!("could not serialise the report: {e}"))
 }
 
 /// The evaluation date this run compared against, for a report's `as_of`.

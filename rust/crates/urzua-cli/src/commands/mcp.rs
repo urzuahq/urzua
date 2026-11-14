@@ -129,7 +129,9 @@ fn could_not_start(message: &str) -> ExitCode {
     let _ = writeln!(
         std::io::stderr().lock(),
         "{}",
-        serde_json::to_string(&crate::report_value(&report)).unwrap_or_default()
+        crate::report_value(&report)
+            .map(|v| v.to_string())
+            .unwrap_or_default()
     );
     ExitCode::from(2)
 }
@@ -248,13 +250,21 @@ fn text(args: &Map<String, Value>, key: &str) -> String {
 
 /// A report, or the could-not-run shape with `isError` (`ADR-46`).
 fn outcome<R: urzua_core::report::Report>(built: Result<R, Failure>) -> ToolResult {
-    match built {
-        Ok(report) => ToolResult {
-            report: crate::report_value(&report),
-            is_error: false,
-        },
-        Err(failure) => ToolResult {
-            report: crate::report_value(&CouldNotRun::from(failure)),
+    let (value, is_error) = match built {
+        Ok(report) => (crate::report_value(&report), false),
+        Err(failure) => (crate::report_value(&CouldNotRun::from(failure)), true),
+    };
+    match value {
+        Ok(report) => ToolResult { report, is_error },
+        // A report that is not a JSON object cannot carry the two next-action
+        // keys: a could-not-run, as for `emit`.
+        Err(message) => ToolResult {
+            report: serde_json::json!({
+                "status": "not-run",
+                "error": message,
+                "next_action": null,
+                "next_action_reason": null,
+            }),
             is_error: true,
         },
     }

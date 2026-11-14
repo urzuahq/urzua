@@ -873,3 +873,43 @@ fn every_tool_result_carries_both_next_action_keys() {
         assert_eq!(&text, report, "{tool}: text and structured content agree");
     }
 }
+
+/// MILE-72: a non-null `next_action` reaches an agent through the tool, and it
+/// is the same command `check` prints.
+#[test]
+fn check_tool_carries_a_runnable_next_action_when_a_finding_offers_one() {
+    let dir = common::TempDir::new("urzua-mcp-next-action-set");
+    for sub in ["docs/adr", ".urzua", "src"] {
+        std::fs::create_dir_all(dir.join(sub)).unwrap();
+    }
+    git(&dir, &["init", "-q"]);
+    git(&dir, &["config", "user.email", "test@example.com"]);
+    git(&dir, &["config", "user.name", "test"]);
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2\nrules: {embodiment.consistency: error}\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n    known_fields: [\"Embodiment\", \"Realized-by\"]\n",
+    )
+    .unwrap();
+    std::fs::write(dir.join("src/a.rs"), "fn a() {}\n").unwrap();
+    std::fs::write(
+        dir.join("docs/adr/ADR-1-a.md"),
+        "---\nEmbodiment: Implemented\nRealized-by: code:src/a.rs\n---\n# ADR-1: A\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Initial. | **structural** |\n",
+    )
+    .unwrap();
+    git(&dir, &["add", "-A"]);
+    git(&dir, &["commit", "-q", "-m", "fixture"]);
+    std::fs::write(dir.join("src/a.rs"), "fn a() { let _ = 1; }\n").unwrap();
+    git(&dir, &["add", "-A"]);
+    git(&dir, &["commit", "-q", "-m", "drift"]);
+    settle(&dir);
+    let reply = call_one(&dir, "urzua_check", json!({}));
+    let report = &reply["result"]["structuredContent"];
+    assert_eq!(
+        report["next_action"], "urzua fix --apply --ids docs/adr/ADR-1-a.md",
+        "{report}"
+    );
+    assert_eq!(
+        report["next_action_reason"], "repairs 1 of 1 finding",
+        "{report}"
+    );
+}

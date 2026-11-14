@@ -65,7 +65,10 @@ fn a_mixed_fixable_and_judgment_check_suggests_urzua_fix() {
     let dir = fixture("mixed", true, true);
     let v = run(&dir, &["check"]);
     let (action, reason) = pair(&v);
-    assert_eq!(action, "urzua fix --apply", "{v}");
+    assert_eq!(
+        action, "urzua fix --apply --ids docs/adr/ADR-1-first.md",
+        "{v}"
+    );
     assert_eq!(reason, "repairs 1 of 2 findings", "{v}");
 }
 
@@ -97,7 +100,11 @@ fn a_clean_check_has_a_null_pair() {
 fn audit_derives_the_same_action_as_check() {
     let dir = fixture("audit", true, true);
     let v = run(&dir, &["audit"]);
-    assert_eq!(pair(&v).0, "urzua fix --apply", "{v}");
+    assert_eq!(
+        pair(&v).0,
+        "urzua fix --apply --ids docs/adr/ADR-1-first.md",
+        "{v}"
+    );
 }
 
 #[test]
@@ -105,7 +112,11 @@ fn fix_suggests_applying_then_checking() {
     let dir = fixture("fix", true, false);
     let detect = run(&dir, &["fix"]);
     assert_eq!(detect["status"], "repairs-available", "{detect}");
-    assert_eq!(pair(&detect).0, "urzua fix --apply", "{detect}");
+    assert_eq!(
+        pair(&detect).0,
+        "urzua fix --apply --ids docs/adr/ADR-1-first.md",
+        "{detect}"
+    );
     assert_eq!(pair(&detect).1, "writes 1 repair", "{detect}");
     let applied = run(&dir, &["fix", "--apply", "--force", "--by", "me"]);
     assert_eq!(applied["status"], "applied", "{applied}");
@@ -149,4 +160,71 @@ fn every_other_command_and_a_could_not_run_emit_both_keys_as_null() {
         pair(&v),
         (&serde_json::Value::Null, &serde_json::Value::Null)
     );
+}
+
+/// The guard that lets `emit` flatten a report next to the two keys
+/// (ADR-46's amendment of 2026-11-14): a report that declared either key
+/// itself would print it twice. Every command's raw stdout has each key
+/// exactly once at the top level.
+#[test]
+fn every_report_prints_each_next_action_key_exactly_once() {
+    let dir = fixture("once", true, true);
+    let runs: &[&[&str]] = &[
+        &["check"],
+        &["audit"],
+        &["fix"],
+        &["fix", "--rebaseline"],
+        &["graph"],
+        &["rules"],
+        &["doctor"],
+        &["export", "--format", "json"],
+        &["explain", "docs/adr/ADR-1-first.md"],
+        &["explain", "--rule", "header.required-fields"],
+        &["index"],
+        &["roadmap"],
+        &["reverify"],
+        &["migrate", "ids"],
+        &["migrate", "filenames"],
+        &["check", "--rules", "no.such-rule"],
+    ];
+    for args in runs {
+        let out = common::urzua()
+            .args(*args)
+            .current_dir(&dir)
+            .output()
+            .expect("urzua binary should run");
+        let text = String::from_utf8(out.stdout).unwrap();
+        for key in ["next_action", "next_action_reason"] {
+            let needle = format!("\n  \"{key}\":");
+            assert_eq!(text.matches(&needle).count(), 1, "{args:?} {key}: {text}");
+        }
+    }
+}
+
+/// No report type may declare either key itself: the two are the wrapper's.
+#[test]
+fn no_report_type_declares_a_next_action_field() {
+    fn scan(dir: &Path, hits: &mut Vec<String>) {
+        for entry in std::fs::read_dir(dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                scan(&path, hits);
+            } else if path.extension().is_some_and(|e| e == "rs")
+                && path.file_name().is_some_and(|n| n != "main.rs")
+            {
+                for (n, line) in std::fs::read_to_string(&path).unwrap().lines().enumerate() {
+                    let t = line.trim_start().trim_start_matches("pub ");
+                    if t.starts_with("next_action:") || t.starts_with("next_action_reason:") {
+                        hits.push(format!("{}:{}", path.display(), n + 1));
+                    }
+                }
+            }
+        }
+    }
+    let crates = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+    let mut hits = Vec::new();
+    for member in ["urzua-core", "urzua-cli", "urzua-mcp", "urzua-io"] {
+        scan(&crates.join(member).join("src"), &mut hits);
+    }
+    assert!(hits.is_empty(), "a report declares its own key: {hits:?}");
 }

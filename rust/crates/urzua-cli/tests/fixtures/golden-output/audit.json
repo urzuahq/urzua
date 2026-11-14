@@ -76,7 +76,7 @@
         }
       }
     ],
-    "next_action": "urzua fix --apply",
+    "next_action": "urzua fix --apply --ids docs/adr/ADR-3-third.md",
     "next_action_reason": "repairs 1 of 4 findings",
     "notices": [
       {
