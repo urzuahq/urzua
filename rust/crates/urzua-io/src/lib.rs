@@ -1435,6 +1435,57 @@ pub fn resolve_commit(repo_root: &Path, rev: &str) -> Result<String, String> {
     }
 }
 
+/// Whether git has the ref `full` (`refs/tags/v1`, `refs/heads/main`).
+fn ref_exists(repo_root: &Path, full: &str) -> Result<bool, String> {
+    let output = GitRun::new()
+        .args(["show-ref", "--verify", "--quiet", "--end-of-options"])
+        .arg(full)
+        .cwd(repo_root)
+        .output()
+        .map_err(|e| format!("could not run git show-ref: {}", e.into_io()))?;
+    Ok(output.status.success())
+}
+
+/// A hexadecimal object name abbreviated or not, which git reads as a commit
+/// when nothing else answers to the spelling.
+fn looks_like_commit_sha(rev: &str) -> bool {
+    (7..=40).contains(&rev.len()) && rev.bytes().all(|b| b.is_ascii_hexdigit())
+}
+
+/// The full commit id a drift baseline's `rev` names (`MILE-49`, the `ADR-91`
+/// amendment of 2026-11-14): a tag or a commit sha, which each name one point in
+/// history. A branch, a remote-tracking branch and `HEAD` (with or without an
+/// ancestry suffix) move with every commit, so a baseline that followed one would
+/// hold out every drift already merged; they are refused with the reason, never
+/// read. `Err` also says why git could not resolve a ref that names nothing.
+pub fn resolve_baseline_commit(repo_root: &Path, rev: &str) -> Result<String, String> {
+    let commit = resolve_commit(repo_root, rev)?;
+    let tag = rev.strip_prefix("refs/tags/").unwrap_or(rev);
+    if ref_exists(repo_root, &format!("refs/tags/{tag}"))? {
+        return Ok(commit);
+    }
+    let names_a_branch = ref_exists(repo_root, &format!("refs/heads/{rev}"))?
+        || ref_exists(repo_root, &format!("refs/remotes/{rev}"))?
+        || ref_exists(repo_root, rev)?;
+    if looks_like_commit_sha(rev) && !names_a_branch {
+        return Ok(commit);
+    }
+    let what = if rev == "@"
+        || rev.starts_with("HEAD")
+        || rev.starts_with("@~")
+        || rev.starts_with("@^")
+    {
+        "HEAD, which moves with every commit"
+    } else if names_a_branch {
+        "a branch, which moves with every commit"
+    } else {
+        "neither a tag nor a commit sha, so it can name a place that moves"
+    };
+    Err(format!(
+        "'{rev}' is {what}, so a baseline that followed it would hold out every drift already merged; use a tag or a commit sha"
+    ))
+}
+
 /// Whether the repository is a shallow clone, which hides the history the
 /// drift computation reads (`MILE-159`). `Err` when git cannot say.
 pub fn is_shallow_repository(repo_root: &Path) -> Result<bool, String> {

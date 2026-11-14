@@ -32,7 +32,9 @@ pub(crate) fn any_rule_looked(executed: &[urzua_core::report::RuleExecution]) ->
 /// - `blocking` settles the question first: a blocking finding is something
 ///   established, so it must never read `not-run` beside `blocking: true`.
 /// - `empty_diff`: the run was asked about nothing (no governed record changed
-///   and nothing reaches one). If a rule looked it is `ok`, never `not-run`.
+///   and nothing reaches one), or the corpus holds no record yet under
+///   directories that are all there. If a rule looked it is `ok`, never
+///   `not-run`; the caller says which in a notice.
 /// - otherwise a run that examined no record, or in which no rule looked,
 ///   established nothing: `not-run` (ADR-55).
 /// - otherwise the verdict is the unwaived findings.

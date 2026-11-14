@@ -324,7 +324,8 @@ fn init_without_a_readme_writes_no_exclude_files() {
 
 /// Adopter S3: the header warning must state what `check` does. With the
 /// `required_fields: []` init writes, `check` is silent about an old-form
-/// header, so the warning says so and names the config that makes it report.
+/// header, so the warning says so and names the config that makes it report: the declaration, and the rule that reads it
+/// (`header.required-fields` is withheld until `required_fields` exists, `BUG-73`).
 #[test]
 fn the_old_form_warning_says_check_is_silent_until_required_fields_is_declared() {
     let dir = readme_and_old_form_repo("init-old-form-warning");
@@ -346,7 +347,8 @@ fn the_old_form_warning_says_check_is_silent_until_required_fields_is_declared()
     let path = dir.join(".urzua/config.yaml");
     let config = std::fs::read_to_string(&path)
         .unwrap()
-        .replace("required_fields: []", "required_fields: [Status]");
+        .replace("required_fields: []", "required_fields: [Status]")
+        .replace("rules:\n", "rules:\n  header.required-fields: warn\n");
     std::fs::write(&path, config).unwrap();
     let loud = json(&run_urzua(&dir, &["check"]));
     assert!(

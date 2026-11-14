@@ -174,7 +174,7 @@ pub(crate) fn lookup_record_type<'a>(
 ) -> Result<&'a urzua_core::config::RecordTypeConfig, String> {
     let Some(type_config) = config.record_types.get(record_type) else {
         return Err(format!(
-            "unrecognized record type '{record_type}' -- see [record_types] in {}",
+            "unrecognized record type '{record_type}' -- see `record_types:` in {}",
             config_path.display()
         ));
     };
@@ -207,7 +207,7 @@ pub(crate) fn number_record(
     pull: &mut PullRefsReport,
     notices: &mut Vec<Notice>,
 ) -> Result<Numbered, String> {
-    let filenames = read_type_filenames(repo_root, type_config, record_type)?;
+    let filenames = read_type_filenames(repo_root, type_config, record_type, notices)?;
     let (declared, compiled) = compile_declared_identity(record_type, type_config)?;
     let (display_number, skipped) = number_for_new_record(
         repo_root,
@@ -373,6 +373,7 @@ fn read_type_filenames(
     repo_root: &std::path::Path,
     type_config: &urzua_core::config::RecordTypeConfig,
     record_type: &str,
+    notices: &mut Vec<Notice>,
 ) -> Result<Vec<String>, String> {
     let mut filenames: Vec<String> = Vec::new();
     for (index, declared_dir) in type_config.all_dirs().enumerate() {
@@ -383,9 +384,16 @@ fn read_type_filenames(
                     .filter_map(|e| e.ok())
                     .filter_map(|e| e.file_name().into_string().ok()),
             ),
-            Err(e) if index > 0 && e.kind() == std::io::ErrorKind::NotFound => eprintln!(
-                "urzua: extra_dirs entry '{declared_dir}' of record type '{record_type}' does not exist; numbering without it"
-            ),
+            Err(e) if index > 0 && e.kind() == std::io::ErrorKind::NotFound => {
+                notices.push(Notice {
+                    severity: NoticeSeverity::Warning,
+                    subject: NOTICE_EXTRA_DIR.to_string(),
+                    message: format!(
+                        "extra_dirs entry '{declared_dir}' of record type '{record_type}' does not exist; numbering without it"
+                    ),
+                    detail: None,
+                });
+            }
             // The first record of a type: its directory does not exist yet and
             // is created when the record is written.
             Err(e) if index == 0 && e.kind() == std::io::ErrorKind::NotFound => eprintln!(
@@ -589,6 +597,9 @@ fn assign_display_number(
 
 /// Subject of the notices about the pull-request refs, the lock and the worktrees.
 const NOTICE_PULL_REFS: &str = "new.pull-refs";
+
+/// A declared `extra_dirs` entry that is not on disk: numbering went without it.
+const NOTICE_EXTRA_DIR: &str = "new.extra-dir-missing";
 
 /// Subject of the notice that numbering used the working tree alone.
 const NOTICE_NUMBERING: &str = "new.numbering";

@@ -104,6 +104,34 @@ pub enum Declaration {
     SectionOrder,
     /// `sections.required`, read by `section.required` and `section.shape`.
     SectionsRequired,
+    /// `required_fields` or `known_fields`: the declared fields the
+    /// field-hygiene rules read (`BUG-73`).
+    DeclaredFields,
+    /// `pointer_fields` or `narrative_fields`, read by `pointer.resolution` and
+    /// `relation.target-status-undeclared`.
+    PointerOrNarrativeFields,
+    /// A supersession field (default `Supersedes / Superseded-by`) that the type
+    /// lists in `required_fields` or `known_fields`.
+    SupersessionField,
+    /// A locator field (default `Realized-by`) that the type lists in
+    /// `required_fields` or `known_fields`.
+    LocatorField,
+    /// `revision_log`, read by `revision-log.change-class-required`.
+    RevisionLog,
+    /// `statuses.values`, read by `status.undeclared-value`.
+    StatusValues,
+    /// `statuses.require`, read by `status.required-field-missing`.
+    StatusRequire,
+    /// `statuses.forbid`, read by `status.forbidden-field-present`.
+    StatusForbid,
+    /// `statuses.transitions`, read by `status.unreachable-state` and
+    /// `status.transition-allowed`.
+    StatusTransitions,
+    /// `statuses.delivery`, read by `status.delivery-agreement`.
+    StatusDelivery,
+    /// A record type declaring `role: suppression`, which
+    /// `waiver.matches-nothing` reads the records of.
+    WaiverType,
 }
 
 impl Declaration {
@@ -120,6 +148,17 @@ impl Declaration {
             Declaration::NoSkippedLevels => "sections.no_skipped_levels",
             Declaration::SectionOrder => "sections.order",
             Declaration::SectionsRequired => "sections.required",
+            Declaration::DeclaredFields => "required_fields or known_fields",
+            Declaration::PointerOrNarrativeFields => "pointer_fields or narrative_fields",
+            Declaration::SupersessionField => "a supersession field in known_fields",
+            Declaration::LocatorField => "a locator field (Realized-by) in known_fields",
+            Declaration::RevisionLog => "revision_log",
+            Declaration::StatusValues => "statuses.values",
+            Declaration::StatusRequire => "statuses.require",
+            Declaration::StatusForbid => "statuses.forbid",
+            Declaration::StatusTransitions => "statuses.transitions",
+            Declaration::StatusDelivery => "statuses.delivery",
+            Declaration::WaiverType => "a record type with `role: suppression`",
         }
     }
 }
@@ -244,7 +283,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         requires_acyclic_pair: false,
         requires_override_log: false,
         requires_authority: false,
-        reads_declaration: None,
+        reads_declaration: Some(Declaration::RequiredFields),
         header_none: HeaderNone::OutOfScope,
         options: &[],
         population: PopulationUnit::Field,
@@ -270,7 +309,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         requires_acyclic_pair: false,
         requires_override_log: false,
         requires_authority: false,
-        reads_declaration: None,
+        reads_declaration: Some(Declaration::PointerOrNarrativeFields),
         header_none: HeaderNone::OutOfScope,
         options: &[],
         population: PopulationUnit::Field,
@@ -427,7 +466,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         requires_acyclic_pair: false,
         requires_override_log: false,
         requires_authority: false,
-        reads_declaration: None,
+        reads_declaration: Some(Declaration::SupersessionField),
         header_none: HeaderNone::OutOfScope,
         options: &[],
         population: PopulationUnit::Field,
@@ -576,7 +615,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         requires_acyclic_pair: false,
         requires_override_log: false,
         requires_authority: false,
-        reads_declaration: None,
+        reads_declaration: Some(Declaration::PointerOrNarrativeFields),
         header_none: HeaderNone::OutOfScope,
         options: &[],
         population: PopulationUnit::Field,
@@ -599,7 +638,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         requires_acyclic_pair: false,
         requires_override_log: false,
         requires_authority: false,
-        reads_declaration: None,
+        reads_declaration: Some(Declaration::RevisionLog),
         header_none: HeaderNone::Exempt("reads body text only"),
         options: &[],
         population: PopulationUnit::Record,
@@ -955,7 +994,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         requires_acyclic_pair: false,
         requires_override_log: false,
         requires_authority: false,
-        reads_declaration: None,
+        reads_declaration: Some(Declaration::LocatorField),
         header_none: HeaderNone::OutOfScope,
         options: &["scope"],
         population: PopulationUnit::Field,
@@ -1013,7 +1052,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         requires_acyclic_pair: false,
         requires_override_log: false,
         requires_authority: false,
-        reads_declaration: None,
+        reads_declaration: Some(Declaration::DeclaredFields),
         header_none: HeaderNone::OutOfScope,
         options: &[],
         population: PopulationUnit::Field,
@@ -1037,7 +1076,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         requires_acyclic_pair: false,
         requires_override_log: false,
         requires_authority: false,
-        reads_declaration: None,
+        reads_declaration: Some(Declaration::DeclaredFields),
         header_none: HeaderNone::OutOfScope,
         options: &[],
         population: PopulationUnit::Field,
@@ -1059,7 +1098,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         requires_acyclic_pair: false,
         requires_override_log: false,
         requires_authority: false,
-        reads_declaration: None,
+        reads_declaration: Some(Declaration::DeclaredFields),
         header_none: HeaderNone::OutOfScope,
         options: &[],
         population: PopulationUnit::Field,
@@ -1509,7 +1548,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         requires_acyclic_pair: false,
         requires_override_log: false,
         requires_authority: false,
-        reads_declaration: None,
+        reads_declaration: Some(Declaration::StatusValues),
         header_none: HeaderNone::OutOfScope,
         options: &[],
         population: PopulationUnit::Record,
@@ -1533,7 +1572,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         requires_acyclic_pair: false,
         requires_override_log: false,
         requires_authority: false,
-        reads_declaration: None,
+        reads_declaration: Some(Declaration::StatusRequire),
         header_none: HeaderNone::OutOfScope,
         options: &["field_levels"],
         population: PopulationUnit::Record,
@@ -1557,7 +1596,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         requires_acyclic_pair: false,
         requires_override_log: false,
         requires_authority: false,
-        reads_declaration: None,
+        reads_declaration: Some(Declaration::StatusForbid),
         header_none: HeaderNone::OutOfScope,
         options: &[],
         population: PopulationUnit::Record,
@@ -1581,7 +1620,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         requires_acyclic_pair: false,
         requires_override_log: false,
         requires_authority: false,
-        reads_declaration: None,
+        reads_declaration: Some(Declaration::StatusTransitions),
         header_none: HeaderNone::OutOfScope,
         options: &[],
         population: PopulationUnit::Record,
@@ -1605,7 +1644,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         requires_acyclic_pair: false,
         requires_override_log: false,
         requires_authority: false,
-        reads_declaration: None,
+        reads_declaration: Some(Declaration::StatusTransitions),
         header_none: HeaderNone::Exempt("judges the configuration, never a record's header"),
         options: &[],
         population: PopulationUnit::RecordType,
@@ -1629,7 +1668,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         requires_acyclic_pair: false,
         requires_override_log: false,
         requires_authority: false,
-        reads_declaration: None,
+        reads_declaration: Some(Declaration::StatusDelivery),
         header_none: HeaderNone::OutOfScope,
         options: &[],
         population: PopulationUnit::Record,
@@ -1894,7 +1933,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_SECTION_REQUIRED,
-        description: "Each `##` section a type's declared `sections.required` names is present in every record of that type (`MILE-4`, `RFC-17`), under its `name` or one of its declared `aliases` (`MILE-165`; `check` discloses each alias in use as an info notice), or, for a `y-statement` declaring `preamble: true` and a `marker`, in the text before the first `##`. A type that declares none is out of scope; a record whose status is in the declaration's `exempt_statuses` (a record that made no decision, `MILE-7`) is counted eligible and unexamined, not asked for the sections, and not out of scope, so `config.scope-matches-nothing` does not read a declared exemption as a misconfiguration (`BUG-187`). A required section may declare `level` and `under` to be a `###` (or deeper) heading nested under a named `##`, which needs the type's `sections.depth` to reach it (`MILE-98`). Presence only: it never judges what a section says.",
+        description: "Each `##` section a type's declared `sections.required` names is present in every record of that type (`MILE-4`, `RFC-17`), under its `name` or one of its declared `aliases` (`MILE-165`; `check` discloses each alias in use as an info notice), or, for a `y-statement` declaring `preamble: true` and a `marker`, in the text before the first `##`. A type that declares none is out of scope, and the rule enabled with no type declaring any is disclosed in a `rule-reads-nothing-declared` warning notice and, when `config.scope-matches-nothing` is on, is that rule's finding; a record whose status is in the declaration's `exempt_statuses` (a record that made no decision, `MILE-7`) is counted eligible and unexamined, not asked for the sections, and not out of scope, so `config.scope-matches-nothing` does not read a declared exemption as a misconfiguration (`BUG-187`). A required section may declare `level` and `under` to be a `###` (or deeper) heading nested under a named `##`, which needs the type's `sections.depth` to reach it (`MILE-98`). Presence only: it never judges what a section says.",
         scope: Scope::Records,
         anchor: Anchor::Record,
         judges: Judges::OneRecord,
@@ -1918,7 +1957,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_SECTION_SHAPE,
-        description: "A required section that declares a `shape` has that shape (`MILE-5`, `MILE-121`): `y-statement` needs its TL;DR block to carry the five phrases `In the context of`, `facing`, `we decided`, `to achieve`, `accepting`, word-boundary matched, and reports a marker with no block as its own error; `table-min-rows` needs a table with at least `min_rows` data rows. A section found under an alias is checked too, and a `preamble: true` Y-statement is judged from the text before the first `##`. A missing section is `section.required`'s to report, not this rule's. Shape only, never meaning.",
+        description: "A required section that declares a `shape` has that shape (`MILE-5`, `MILE-121`): `y-statement` needs its TL;DR block to carry the five phrases `In the context of`, `facing`, `we decided`, `to achieve`, `accepting`, word-boundary matched, and reports a marker with no block as its own error; `table-min-rows` needs a table with at least `min_rows` data rows. A section found under an alias is checked too, and a `preamble: true` Y-statement is judged from the text before the first `##`. A missing section is `section.required`'s to report, not this rule's. Shape only, never meaning. Enabled with no type declaring `sections.required`, it is disclosed like `section.required`.",
         scope: Scope::Records,
         anchor: Anchor::Record,
         judges: Judges::OneRecord,
@@ -1942,7 +1981,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_SECTION_DUPLICATE,
-        description: "A heading appears once among its siblings (`MILE-104`): the same heading text twice at one level under one parent is an error naming both lines, so two `## Open questions` in one record are caught while the same `### Pros` under two different options are not. Headings are compared as exact text, whitespace trimmed and case-sensitive (`## Context` and `## context` are different). Opt-in per type through `sections.unique_headings: true`; a type that does not declare it is out of scope, and a rule enabled with no declaring type is reported by `config.scope-matches-nothing`. The sections are read down to the type's `sections.depth`, and a heading inside a fenced code block is not one. A record's `exempt_statuses` do not set it aside: a duplicated section is a broken document whatever was decided. The population's unit is the record.",
+        description: "A heading appears once among its siblings (`MILE-104`): the same heading text twice at one level under one parent is an error naming both lines, so two `## Open questions` in one record are caught while the same `### Pros` under two different options are not. Headings are compared as exact text, whitespace trimmed and case-sensitive (`## Context` and `## context` are different). Opt-in per type through `sections.unique_headings: true`; a type that does not declare it is out of scope, and a rule enabled with no declaring type is disclosed in a `rule-reads-nothing-declared` warning notice and, when `config.scope-matches-nothing` is on, is that rule's finding. The sections are read down to the type's `sections.depth`, and a heading inside a fenced code block is not one. A record's `exempt_statuses` do not set it aside: a duplicated section is a broken document whatever was decided. The population's unit is the record.",
         scope: Scope::Records,
         anchor: Anchor::Record,
         judges: Judges::OneRecord,
@@ -1966,7 +2005,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_SECTION_LEVEL_SKIPPED,
-        description: "A heading level is not skipped (`MILE-104`): a section nested more than one level deeper than the section above it, or deeper than `##` with no section above it (an `###` before any `##`), is an error. Defined against the type's `sections.depth` (`MILE-98`), which says where the section tree starts and how far it reads: a heading deeper than the depth is body text and is never read as a skip. Opt-in per type through `sections.no_skipped_levels: true`, which needs a `depth` of at least 2 (at depth 1 only `##` is a section and no level can be skipped; the config does not load otherwise). The population's unit is the record.",
+        description: "A heading level is not skipped (`MILE-104`): a section nested more than one level deeper than the section above it, or deeper than `##` with no section above it (an `###` before any `##`), is an error. Defined against the type's `sections.depth` (`MILE-98`), which says where the section tree starts and how far it reads: a heading deeper than the depth is body text and is never read as a skip. Opt-in per type through `sections.no_skipped_levels: true`, which needs a `depth` of at least 2 (at depth 1 only `##` is a section and no level can be skipped; the config does not load otherwise). Enabled with no type declaring it, it is disclosed in a `rule-reads-nothing-declared` warning notice and, when `config.scope-matches-nothing` is on, is that rule's finding. The population's unit is the record.",
         scope: Scope::Records,
         anchor: Anchor::Record,
         judges: Judges::OneRecord,
@@ -1990,7 +2029,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_SECTION_ORDER,
-        description: "A record's sections follow the order its type's template gives them (`MILE-104`). Opt-in per type through `sections.order: {from: template}`, which reads the headings of `.urzua/templates/<type>.md` down to the type's `sections.depth`. Order is judged among siblings sharing a parent: a section the template places before one the record already showed is an error on that section's line, naming both. A section the template does not name is ignored and a template section the record lacks is not reported (`section.required` owns presence). Order matching is by heading text alone and ignores `sections.required` aliases. A declared order whose template is missing or holds no sections reads nothing: each record of the type is an error saying so and is counted eligible and unexamined, so a deleted template fails a run rather than switching the rule off. The population's unit is the record.",
+        description: "A record's sections follow the order its type's template gives them (`MILE-104`). Opt-in per type through `sections.order: {from: template}` (enabled with no type declaring it, the rule is disclosed in a `rule-reads-nothing-declared` warning notice and, when `config.scope-matches-nothing` is on, is that rule's finding), which reads the headings of `.urzua/templates/<type>.md` down to the type's `sections.depth`. Order is judged among siblings sharing a parent: a section the template places before one the record already showed is an error on that section's line, naming both. A section the template does not name is ignored and a template section the record lacks is not reported (`section.required` owns presence). Order matching is by heading text alone and ignores `sections.required` aliases. A declared order whose template is missing or holds no sections reads nothing: each record of the type is an error saying so and is counted eligible and unexamined, so a deleted template fails a run rather than switching the rule off. The population's unit is the record.",
         scope: Scope::Records,
         anchor: Anchor::Record,
         judges: Judges::OneRecord,
@@ -2201,7 +2240,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_CONFIG_SCOPE_MATCHES_NOTHING,
-        description: "Judges the run itself, not the corpus: whether the configuration's declared rules reached what they were handed, from the other rules' own executions (`MILE-106`).",
+        description: "Judges the run itself, not the corpus: whether the configuration's declared rules reached what they were handed, from the other rules' own executions (`MILE-106`). It also reports a section rule that is enabled while no record type declares the `sections` key it reads (`sections.required`, `sections.unique_headings`, `sections.no_skipped_levels` or `sections.order`): such a rule has no candidate to count out of scope, so no run could show it (`BUG-73`'s class).",
         scope: Scope::Run,
         anchor: Anchor::Config,
         judges: Judges::NotRecordLevel,
@@ -2219,7 +2258,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         ],
         phase: Phase::AfterRules,
         companion: None,
-        run: |c| config_scope_matches_nothing(c.run.executions, c.config_path),
+        run: |c| config_scope_matches_nothing_in(c.config, c.run.executions, c.config_path),
     },
     RuleDef {
         id: RULE_WAIVER_MATCHES_NOTHING,
@@ -2232,7 +2271,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         requires_acyclic_pair: false,
         requires_override_log: false,
         requires_authority: false,
-        reads_declaration: None,
+        reads_declaration: Some(Declaration::WaiverType),
         header_none: HeaderNone::Exempt("judges waiver records against the run's findings, not a configured header"),
         options: &[],
         population: PopulationUnit::Record,
@@ -2377,18 +2416,60 @@ mod tests {
         assert_eq!(
             reads,
             vec![
+                (RULE_HEADER_REQUIRED_FIELDS, Declaration::RequiredFields),
+                (
+                    RULE_POINTER_RESOLUTION,
+                    Declaration::PointerOrNarrativeFields
+                ),
                 (RULE_FIELD_QUALITY, Declaration::RequiredFields),
                 (RULE_FIELD_PENDING, Declaration::RequiredFields),
+                (
+                    RULE_RELATION_SUPERSESSION_RECIPROCITY,
+                    Declaration::SupersessionField
+                ),
                 (
                     RULE_SEQUENCE_STATUS_AGREEMENT,
                     Declaration::BlockedOrProgress
                 ),
                 (
+                    RULE_RELATION_TARGET_STATUS_UNDECLARED,
+                    Declaration::PointerOrNarrativeFields
+                ),
+                (
+                    RULE_REVISION_LOG_CHANGE_CLASS_REQUIRED,
+                    Declaration::RevisionLog
+                ),
+                (
                     RULE_REVISION_LOG_VERSION_BUMP_REQUIRED,
                     Declaration::VersionBump
                 ),
+                (
+                    RULE_EMBODIMENT_LOCATOR_PROMOTION_CANDIDATE,
+                    Declaration::LocatorField
+                ),
                 (RULE_HEADER_FIELD_SET_CONSISTENCY, Declaration::KnownFields),
+                (RULE_FIELD_UNTRIMMED_VALUE, Declaration::DeclaredFields),
+                (
+                    RULE_FIELD_LEADING_RESERVED_INDICATOR,
+                    Declaration::DeclaredFields
+                ),
+                (RULE_HEADER_FIELD_CASE_MISMATCH, Declaration::DeclaredFields),
                 (RULE_HEADER_POINTER_FIELD_CLEAN, Declaration::PointerFields),
+                (RULE_STATUS_UNDECLARED_VALUE, Declaration::StatusValues),
+                (
+                    RULE_STATUS_REQUIRED_FIELD_MISSING,
+                    Declaration::StatusRequire
+                ),
+                (
+                    RULE_STATUS_FORBIDDEN_FIELD_PRESENT,
+                    Declaration::StatusForbid
+                ),
+                (
+                    RULE_STATUS_TRANSITION_ALLOWED,
+                    Declaration::StatusTransitions
+                ),
+                (RULE_STATUS_UNREACHABLE, Declaration::StatusTransitions),
+                (RULE_STATUS_DELIVERY_AGREEMENT, Declaration::StatusDelivery),
                 (RULE_STATUS_DONE_ITEMS_SHAPE, Declaration::DeliveryItems),
                 (RULE_STATUS_WAIVED_ITEM_STALE, Declaration::DeliveryItems),
                 (RULE_SECTION_REQUIRED, Declaration::SectionsRequired),
@@ -2396,6 +2477,7 @@ mod tests {
                 (RULE_SECTION_DUPLICATE, Declaration::UniqueHeadings),
                 (RULE_SECTION_LEVEL_SKIPPED, Declaration::NoSkippedLevels),
                 (RULE_SECTION_ORDER, Declaration::SectionOrder),
+                (RULE_WAIVER_MATCHES_NOTHING, Declaration::WaiverType),
             ]
         );
     }

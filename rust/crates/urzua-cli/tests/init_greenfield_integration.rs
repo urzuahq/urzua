@@ -112,9 +112,9 @@ fn the_profiles_are_materialized_as_visible_rules_in_the_config() {
     assert_eq!(list(&transitions("spec"), "Accepted"), ["Shipped"]);
 }
 
-/// MILE-114 Done: the config greenfield init writes passes `check` (over the
-/// records `new` scaffolds from its profiles; `check` over an empty corpus is
-/// `not-run`), and every shipped type's `new` writes the Stable-Id it requires.
+/// MILE-114 Done: the config greenfield init writes passes `check` with no finding,
+/// over the records `new` scaffolds from its profiles, and every shipped type's
+/// `new` writes the Stable-Id it requires.
 #[test]
 fn the_written_config_passes_check_and_new_writes_a_stable_id_for_every_type() {
     let dir = repo("check");
@@ -133,23 +133,194 @@ fn the_written_config_passes_check_and_new_writes_a_stable_id_for_every_type() {
         );
         let text = std::fs::read_dir(dir.path().join(format!("docs/{t}")))
             .unwrap()
-            .map(|e| std::fs::read_to_string(e.unwrap().path()).unwrap())
+            .filter_map(|e| {
+                let path = e.unwrap().path();
+                (path.extension().is_some_and(|x| x == "md")).then_some(path)
+            })
+            .map(|p| std::fs::read_to_string(p).unwrap())
             .next()
             .unwrap();
         assert!(text.contains("Stable-Id: "), "{t}: {text}");
     }
     common::git(&dir, &["add", "-A"]);
-    let check = common::urzua()
-        .arg("check")
-        .current_dir(dir.path())
-        .output()
-        .unwrap();
+    // The scaffolded records hold the template's blank `Deciders` and `Owner`,
+    // which `field.quality` reports as warnings; none blocks.
+    let (code, report, _) = run(dir.path(), &["check"]);
+    assert_eq!(code, Some(0), "{report}");
+    assert_eq!(report["blocking"], false, "{report}");
+}
+
+/// Review finding 6.1 and 9.5: on an empty repository `init`, `doctor` and `check`
+/// each pass, and `check` finds nothing. `check` over no record is `ok` with a
+/// notice saying nothing was examined, never `not-run`, which is for a run that
+/// could not look.
+#[test]
+fn on_an_empty_repository_init_doctor_and_check_all_pass_with_zero_findings() {
+    let dir = repo("empty");
+    let (code, init, _) = run(dir.path(), &["init", "--types", "adr,rfc"]);
+    assert_eq!(code, Some(0), "{init}");
+    common::git(&dir, &["add", "-A"]);
+
+    let (code, doctor, _) = run(dir.path(), &["doctor"]);
+    assert_eq!(code, Some(0), "{doctor}");
+    let errors: Vec<&serde_json::Value> = doctor["checks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|c| c["status"] == "error")
+        .collect();
+    assert!(errors.is_empty(), "{errors:?}");
+    // The authority block init wrote is a posture, not a forgotten gate.
+    let authority = doctor["checks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["check"] == "authority-host")
+        .expect("an authority-host check");
+    assert_eq!(authority["status"], "ok", "{authority}");
+
+    let (code, check, _) = run(dir.path(), &["check"]);
+    assert_eq!(code, Some(0), "{check}");
+    assert_eq!(check["status"], "ok", "{check}");
+    assert_eq!(check["findings"], serde_json::json!([]), "{check}");
+    assert_eq!(check["files_examined"], 0, "{check}");
+    // Distinguishable from a pass over records: the notice says nothing was read.
+    let notice = check["notices"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|n| n["subject"] == "empty-corpus")
+        .unwrap_or_else(|| panic!("no empty-corpus notice: {check}"));
+    assert!(notice["message"]
+        .as_str()
+        .unwrap()
+        .contains("no record exists yet"));
+}
+
+/// The directories `init` creates carry a `.gitkeep`, so a clone of the commit
+/// still has them and `doctor` and `check` pass there too.
+#[test]
+fn the_declared_directories_exist_in_a_clone_of_the_first_commit() {
+    let dir = repo("clone-source");
+    let (_, init, _) = run(dir.path(), &["init", "--types", "adr,rfc"]);
+    let states: Vec<(String, String)> = init["directories"]
+        .as_array()
+        .unwrap_or_else(|| panic!("no directories in the report: {init}"))
+        .iter()
+        .map(|d| {
+            (
+                d["path"].as_str().unwrap().to_string(),
+                d["state"].as_str().unwrap().to_string(),
+            )
+        })
+        .collect();
     assert_eq!(
-        check.status.code(),
-        Some(0),
-        "{}",
-        String::from_utf8_lossy(&check.stdout)
+        states,
+        [
+            ("docs/adr".to_string(), "written".to_string()),
+            ("docs/rfc".to_string(), "written".to_string())
+        ]
     );
+    assert!(dir.path().join("docs/adr/.gitkeep").is_file());
+    common::git(&dir, &["add", "-A"]);
+    common::git(&dir, &["commit", "-q", "-m", "init urzua"]);
+
+    let clone = common::TempDir::new("urzua-greenfield-clone");
+    let target = clone.path().join("copy");
+    let source = dir.path().to_string_lossy().to_string();
+    common::git(&clone, &["clone", "-q", &source, "copy"]);
+    let (code, doctor, _) = run(&target, &["doctor"]);
+    assert_eq!(code, Some(0), "{doctor}");
+    let (code, check, _) = run(&target, &["check"]);
+    assert_eq!(code, Some(0), "{check}");
+    assert_eq!(check["findings"], serde_json::json!([]), "{check}");
+}
+
+#[test]
+fn a_directory_that_exists_is_kept_and_a_dry_run_creates_none() {
+    let dir = repo("dirs");
+    write(dir.path(), "docs/adr/notes.txt", "mine\n");
+    let (_, dry, _) = run(dir.path(), &["init", "--types", "adr,rfc", "--dry-run"]);
+    let state = |report: &serde_json::Value, ty: &str| -> String {
+        report["directories"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|d| d["type"] == ty)
+            .unwrap_or_else(|| panic!("{ty} absent: {report}"))["state"]
+            .as_str()
+            .unwrap()
+            .to_string()
+    };
+    assert_eq!(state(&dry, "adr"), "kept");
+    assert_eq!(state(&dry, "rfc"), "would-write");
+    assert!(!dir.path().join("docs/rfc").exists());
+    let (_, real, _) = run(dir.path(), &["init", "--types", "adr,rfc"]);
+    assert_eq!(state(&real, "adr"), "kept");
+    assert_eq!(state(&real, "rfc"), "written");
+    assert!(!dir.path().join("docs/adr/.gitkeep").exists());
+    assert!(dir.path().join("docs/rfc/.gitkeep").is_file());
+}
+
+/// Review finding 6.5: the `spec` profile declares `revision_log.version_bump`, so
+/// `revision-log.version-bump-required` has a declaration to read and is proposed;
+/// a selection with no versioned type still names it as withheld.
+#[test]
+fn the_spec_profile_proposes_the_version_bump_rule_and_other_selections_withhold_it() {
+    const RULE: &str = "revision-log.version-bump-required";
+    let with = repo("bump-spec");
+    let (_, report, _) = run(with.path(), &["init", "--types", "spec"]);
+    assert!(
+        config(with.path()).contains(RULE),
+        "{}",
+        config(with.path())
+    );
+    let withheld = |report: &serde_json::Value| -> String {
+        report["notices"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|n| n["subject"] == "rule-applicability")
+            .map(|n| n["message"].as_str().unwrap().to_string())
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    assert!(!withheld(&report).contains(RULE), "{}", withheld(&report));
+
+    let without = repo("bump-adr");
+    let (_, report, _) = run(without.path(), &["init", "--types", "adr"]);
+    assert!(!config(without.path()).contains(RULE));
+    let text = withheld(&report);
+    assert!(
+        text.contains(RULE) && text.contains("revision_log.version_bump"),
+        "{text}"
+    );
+}
+
+/// Review finding 6.2: every rule greenfield proposes examines a record of the
+/// corpus it was written for. Four types with one scaffolded record each.
+#[test]
+fn every_rule_greenfield_proposes_examines_a_record() {
+    let dir = repo("zero-examined");
+    run(dir.path(), &["init", "--types", "adr,rfc,spec,prd"]);
+    for t in ["adr", "rfc", "spec", "prd"] {
+        let new = common::urzua()
+            .args(["new", t, "First thing", "--by", "tester"])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+        assert_eq!(new.status.code(), Some(0), "{t}");
+    }
+    common::git(&dir, &["add", "-A"]);
+    let (_, report, _) = run(dir.path(), &["check"]);
+    let idle: Vec<String> = report["rules_executed"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|r| r["status"] == "ran" && r["population"]["examined"] == 0)
+        .map(|r| r["rule"].as_str().unwrap().to_string())
+        .collect();
+    assert!(idle.is_empty(), "ran over zero records: {idle:?}");
 }
 
 #[test]
@@ -256,8 +427,14 @@ fn greenfield_touches_only_the_urzua_directory() {
         .output()
         .unwrap();
     let status = String::from_utf8_lossy(&out.stdout).to_string();
+    // The config, the templates, and each record directory's `.gitkeep`.
     for line in status.lines() {
-        assert!(line.starts_with("?? .urzua/"), "{status}");
+        assert!(
+            line.starts_with("?? .urzua/")
+                || line == "?? docs/adr/.gitkeep"
+                || line == "?? docs/rfc/.gitkeep",
+            "{status}"
+        );
     }
 }
 
