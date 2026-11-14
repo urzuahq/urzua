@@ -52,6 +52,11 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 COMPARATOR = "header.scaffold-mismatch"
+# What counts as a header finding. `status.*` is in because `urzua new` writes the
+# initial `Status`, so a record filed already decided (`status.transition-allowed`,
+# `status.initial`) is a header the scaffold would not have written, reported by a
+# rule on the field the scaffold set; `field.*` and `date.*` read the same header's
+# fields. `header.*` is the header rules proper.
 DEFAULT_HEADER_PREFIXES = ("header.", "field.", "date.", "status.")
 PR_SUBJECT = re.compile(r"#(\d+)\)\s*$")
 RULES_KEY = re.compile(r"^rules:\s*(#.*)?$")
@@ -276,11 +281,16 @@ def judge(report, prefixes):
     files = {}
     for finding in report.get("findings", []):
         rule = finding.get("rule", "")
-        if finding.get("waived"):
-            continue
         entry = files.setdefault(
-            finding["file"], {"differences": [], "header_findings": []}
+            finding["file"], {"differences": [], "header_findings": [], "waived": []}
         )
+        if finding.get("waived"):
+            # An exception a waiver record grants is not a finding. It is listed by id,
+            # for a record the comparator reported, so the count can be checked against
+            # what was excused (`waived_exceptions`).
+            if rule == COMPARATOR or header_rule(rule, prefixes):
+                entry["waived"].append({"rule": rule, "waiver": finding["waived"]})
+            continue
         if rule == COMPARATOR:
             entry["differences"].append(finding.get("message", ""))
         elif header_rule(rule, prefixes):
@@ -403,6 +413,7 @@ def main():
     jobs = []
     seen = set()
     pr_commits = {}
+    waived_seen = set()
     pr_final = {}
     missing_heads = []
     for n in sorted(pulls):
@@ -449,6 +460,8 @@ def main():
             for path, seen_here in judge(result, prefixes).items():
                 if not seen_here["differences"]:
                     continue
+                for w in seen_here["waived"]:
+                    waived_seen.add((json.dumps(w["waiver"], sort_keys=True), w["rule"], path))
                 pair = pairs.setdefault(
                     (n, path),
                     {
@@ -480,6 +493,8 @@ def main():
         merged_records_examined += result.get("examined", 0)
         for path, seen_here in judge(result, prefixes).items():
             if seen_here["differences"]:
+                for w in seen_here["waived"]:
+                    waived_seen.add((json.dumps(w["waiver"], sort_keys=True), w["rule"], path))
                 merged_rows.append(
                     {
                         "pr": n,
@@ -523,6 +538,10 @@ def main():
         "window": {"since": args.since, "until": args.until, "main_ref": args.main_ref},
         "binary": binary,
         "header_rule_prefixes": list(prefixes),
+        "waived_exceptions": [
+            {"waiver": json.loads(w), "rule": r, "file": f}
+            for w, r, f in sorted(waived_seen)
+        ],
         "record_dirs": dirs,
         "merged_commits": len(merged),
         "merged_pull_requests": len(pulls),
