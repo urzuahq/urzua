@@ -853,7 +853,7 @@ gated status) and a person is not refused. A move to another status the same gat
 the ordinary gated move and is unchanged. Gates still name only `to` statuses; there is no `from` reading, the base
 copy's status is read to learn which gate the record leaves. A record whose base copy cannot be read, or that was
 new in the pull request, has no base status and is not a departure. The post-command check, which reports and
-never blocks, is not extended.
+never blocks, is not extended. The same holds for Accepted to Superseded (or any other status) by a non-decider: it is gated whenever the gate does not name the new status; this repository's gates name Superseded, so it is judged as an ordinary move here.
 
 Related, outside this section: the attestation row of section 5 records `actor: unspecified` when `--actor` is not
 given. Under a `gh-verified` identity `fix --apply`, `fix --rebaseline --apply` and `reverify --apply` now refuse
