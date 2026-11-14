@@ -659,6 +659,15 @@ impl Population {
         self
     }
 
+    /// This population with `n` more candidates, present and not read because
+    /// the run's path scope did not need them (`MILE-207`): eligible, counted
+    /// as deferred, never examined.
+    pub fn with_deferred_by_scope(mut self, n: usize) -> Self {
+        self.eligible += n;
+        self.deferred_by_scope += n;
+        self
+    }
+
     pub fn of(unit: PopulationUnit, eligible: usize, examined: usize) -> Self {
         Population::detailed(unit, eligible, examined, 0, 0)
     }

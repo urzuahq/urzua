@@ -1,0 +1,1122 @@
+{
+  "status": "ok",
+  "as_of": {
+    "date": "2026-11-14",
+    "source": "clock"
+  },
+  "files_examined": 593,
+  "records_read_by_any_rule": 593,
+  "rules_executed": [
+    {
+      "rule": "header.required-fields",
+      "population": {
+        "unit": "field",
+        "eligible": 2330,
+        "examined": 2330,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "pointer.resolution",
+      "population": {
+        "unit": "field",
+        "eligible": 1520,
+        "examined": 304,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "pointer.target-status",
+      "population": {
+        "unit": "field",
+        "eligible": 1173,
+        "examined": 228,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "field.quality",
+      "population": {
+        "unit": "field",
+        "eligible": 2330,
+        "examined": 2330,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "field.pending",
+      "population": {
+        "unit": "field",
+        "eligible": 2330,
+        "examined": 2322,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "claim.status-agreement",
+      "population": {
+        "unit": "claim",
+        "eligible": 202,
+        "examined": 202,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "filename.title-consistency",
+      "population": {
+        "unit": "record",
+        "eligible": 593,
+        "examined": 593,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "relation.supersession-reciprocity",
+      "population": {
+        "unit": "field",
+        "eligible": 149,
+        "examined": 106,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "relation.pair-reciprocity",
+      "population": {
+        "unit": "field",
+        "eligible": 98,
+        "examined": 3,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "relation.cross-type-disallowed",
+      "status": "not-enabled"
+    },
+    {
+      "rule": "sequence.cycle",
+      "population": {
+        "unit": "field",
+        "eligible": 432,
+        "examined": 28,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "sequence.unresolved-blocker",
+      "population": {
+        "unit": "field",
+        "eligible": 432,
+        "examined": 28,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "sequence.status-agreement",
+      "population": {
+        "unit": "record",
+        "eligible": 216,
+        "examined": 216,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "relation.target-status-undeclared",
+      "population": {
+        "unit": "field",
+        "eligible": 1520,
+        "examined": 304,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "revision-log.change-class-required",
+      "population": {
+        "unit": "record",
+        "eligible": 593,
+        "examined": 593,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "revision-log.version-bump-required",
+      "status": "not-applicable"
+    },
+    {
+      "rule": "embodiment.consistency",
+      "population": {
+        "unit": "field",
+        "eligible": 125,
+        "examined": 66,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "embodiment.claim-expired",
+      "population": {
+        "unit": "record",
+        "eligible": 521,
+        "examined": 365,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "embodiment.claim-renewal-unattested",
+      "status": "not-applicable"
+    },
+    {
+      "rule": "embodiment.requires-accepted-status",
+      "population": {
+        "unit": "record",
+        "eligible": 125,
+        "examined": 82,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "embodiment.back-pointer-resolution",
+      "population": {
+        "unit": "file",
+        "eligible": 700,
+        "examined": 700,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "embodiment.back-pointer-decision-accepted",
+      "population": {
+        "unit": "file",
+        "eligible": 700,
+        "examined": 700,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "code.dangling-bug-reference",
+      "population": {
+        "unit": "file",
+        "eligible": 248,
+        "examined": 248,
+        "out_of_scope": 0,
+        "unreadable": 0,
+        "excused_lines": 2
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "embodiment.locator-exists",
+      "population": {
+        "unit": "field",
+        "eligible": 521,
+        "examined": 377,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "embodiment.locator-promotion-candidate",
+      "population": {
+        "unit": "field",
+        "eligible": 521,
+        "examined": 0,
+        "out_of_scope": 0,
+        "unreadable": 0,
+        "deferred_by_scope": 377
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "header.field-set-consistency",
+      "population": {
+        "unit": "record",
+        "eligible": 593,
+        "examined": 593,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "field.untrimmed-value",
+      "population": {
+        "unit": "field",
+        "eligible": 6028,
+        "examined": 3598,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "field.leading-reserved-indicator",
+      "population": {
+        "unit": "field",
+        "eligible": 6028,
+        "examined": 3598,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "header.field-case-mismatch",
+      "population": {
+        "unit": "field",
+        "eligible": 6028,
+        "examined": 3598,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "header.case-variant-key",
+      "population": {
+        "unit": "record",
+        "eligible": 593,
+        "examined": 593,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "narrative-field.stale",
+      "population": {
+        "unit": "field",
+        "eligible": 396,
+        "examined": 6,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "type.dir-matches-nothing",
+      "population": {
+        "unit": "record-type",
+        "eligible": 7,
+        "examined": 7,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "identity.collision",
+      "population": {
+        "unit": "record",
+        "eligible": 593,
+        "examined": 593,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "identity.open-pr-collision",
+      "status": "not-applicable"
+    },
+    {
+      "rule": "type.record-outside-declared-dir",
+      "population": {
+        "unit": "path",
+        "eligible": 595,
+        "examined": 595,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "type.no-declared-spec",
+      "population": {
+        "unit": "record-type",
+        "eligible": 7,
+        "examined": 7,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "header.pointer-field-clean",
+      "population": {
+        "unit": "field",
+        "eligible": 1124,
+        "examined": 335,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "config.companion-declaration-missing",
+      "population": {
+        "unit": "record-type",
+        "eligible": 7,
+        "examined": 7,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "config.pointer-declaration-missing",
+      "population": {
+        "unit": "record-type",
+        "eligible": 7,
+        "examined": 7,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "config.pointer-field-not-known",
+      "population": {
+        "unit": "record-type",
+        "eligible": 7,
+        "examined": 7,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "config.pointer-narrative-overlap",
+      "population": {
+        "unit": "record-type",
+        "eligible": 7,
+        "examined": 7,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "config.header-none-has-no-required-fields",
+      "population": {
+        "unit": "record-type",
+        "eligible": 7,
+        "examined": 7,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "config.relation-field-not-known",
+      "population": {
+        "unit": "record-type",
+        "eligible": 7,
+        "examined": 7,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "config.known-fields-declaration-missing",
+      "population": {
+        "unit": "record-type",
+        "eligible": 7,
+        "examined": 7,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "config.schema-version-outdated",
+      "population": {
+        "unit": "config-file",
+        "eligible": 1,
+        "examined": 1,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "filename.identity-pattern",
+      "population": {
+        "unit": "record",
+        "eligible": 593,
+        "examined": 593,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "status.undeclared-value",
+      "population": {
+        "unit": "record",
+        "eligible": 576,
+        "examined": 576,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "status.required-field-missing",
+      "population": {
+        "unit": "record",
+        "eligible": 180,
+        "examined": 180,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "status.forbidden-field-present",
+      "population": {
+        "unit": "record",
+        "eligible": 155,
+        "examined": 155,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "status.transition-allowed",
+      "population": {
+        "unit": "record",
+        "eligible": 576,
+        "examined": 0,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "not-applicable"
+    },
+    {
+      "rule": "status.unreachable-state",
+      "population": {
+        "unit": "record-type",
+        "eligible": 7,
+        "examined": 6,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "status.delivery-agreement",
+      "population": {
+        "unit": "record",
+        "eligible": 396,
+        "examined": 396,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "status.done-items-shape",
+      "population": {
+        "unit": "record",
+        "eligible": 216,
+        "examined": 216,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "status.waived-item-stale",
+      "population": {
+        "unit": "record",
+        "eligible": 216,
+        "examined": 216,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "date.field-valid",
+      "population": {
+        "unit": "field",
+        "eligible": 323,
+        "examined": 298,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "date.field-order",
+      "population": {
+        "unit": "field",
+        "eligible": 149,
+        "examined": 124,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "citation.resolution",
+      "population": {
+        "unit": "citation",
+        "eligible": 7343,
+        "examined": 7286,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "citation.resolution",
+      "population": {
+        "unit": "field-entry",
+        "eligible": 22,
+        "examined": 22,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "citation.path-exists",
+      "population": {
+        "unit": "citation",
+        "eligible": 118,
+        "examined": 118,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "citation.issue-exists",
+      "population": {
+        "unit": "citation",
+        "eligible": 28,
+        "examined": 28,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "boundary.published-path-reference",
+      "population": {
+        "unit": "file",
+        "eligible": 20,
+        "examined": 9,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "section.required",
+      "population": {
+        "unit": "section",
+        "eligible": 874,
+        "examined": 868,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "section.shape",
+      "status": "not-enabled"
+    },
+    {
+      "rule": "section.duplicate",
+      "population": {
+        "unit": "record",
+        "eligible": 576,
+        "examined": 576,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "section.level-skipped",
+      "population": {
+        "unit": "record",
+        "eligible": 576,
+        "examined": 576,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "section.order",
+      "population": {
+        "unit": "record",
+        "eligible": 576,
+        "examined": 576,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "index.freshness",
+      "population": {
+        "unit": "file",
+        "eligible": 2,
+        "examined": 2,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "diff.source-requires-record",
+      "status": "not-applicable"
+    },
+    {
+      "rule": "diff.source-and-records-mixed",
+      "status": "not-enabled"
+    },
+    {
+      "rule": "diff.decider-required",
+      "status": "not-applicable"
+    },
+    {
+      "rule": "override.unreviewed",
+      "population": {
+        "unit": "entry",
+        "eligible": 0,
+        "examined": 0,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "embodiment.locator-on-back-pointer-path",
+      "population": {
+        "unit": "field",
+        "eligible": 521,
+        "examined": 0,
+        "out_of_scope": 0,
+        "unreadable": 0,
+        "deferred_by_scope": 365
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "config.scope-matches-nothing",
+      "population": {
+        "unit": "rule",
+        "eligible": 63,
+        "examined": 63,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
+      "rule": "waiver.matches-nothing",
+      "population": {
+        "unit": "record",
+        "eligible": 17,
+        "examined": 17,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    }
+  ],
+  "rules_selected": null,
+  "scope": {
+    "source": "tracked-sweep",
+    "base": null,
+    "record_types": [
+      "adr",
+      "bug",
+      "condition",
+      "milestone",
+      "rfc",
+      "spec",
+      "waiver"
+    ],
+    "include_untracked": true,
+    "untracked_included": 0
+  },
+  "blocking": false,
+  "findings": [
+    {
+      "rule": "type.dir-matches-nothing",
+      "severity": "warning",
+      "file": ".urzua/config.yaml",
+      "line": null,
+      "message": "record type 'milestone' declares `sections.exempt_statuses` entry 'WontDo', but no 'milestone' record has that status -- the exemption sets nothing aside; remove it or correct the status",
+      "waived": "docs/waiver/WAIVER-0052-the-milestone-type-s-wontdo-exemption-matches-no-record-yet.md",
+      "suggested_action": {
+        "kind": "edit-config",
+        "op": "set",
+        "target": {
+          "file": ".urzua/config.yaml",
+          "key_path": [
+            "record_types",
+            "milestone",
+            "sections",
+            "exempt_statuses"
+          ]
+        }
+      }
+    },
+    {
+      "rule": "status.delivery-agreement",
+      "severity": "error",
+      "file": "docs/bugs/BUG-10-parent-field-defaults-to-spec-1-across-most-specs-without-a-real-relationship.md",
+      "line": null,
+      "message": "Status is 'Fixed', but the evidence computes to 'Not started', from no evidence (the record has no Realized-by field and no back-pointer cites it): add the evidence that delivered it",
+      "waived": "docs/waiver/WAIVER-0035-bug-10-needs-no-test-its-fix-is-to-records-and-a-template.md"
+    },
+    {
+      "rule": "status.delivery-agreement",
+      "severity": "error",
+      "file": "docs/bugs/BUG-105-the-declared-field-slot-list-is-rebuilt-independently-by-four-or-more-rules.md",
+      "line": null,
+      "message": "Status is 'Fixed', but the evidence computes to 'Not started', from no evidence (the record has no Realized-by field and no back-pointer cites it): add the evidence that delivered it",
+      "waived": "docs/waiver/WAIVER-0049-bug-105-needs-no-test-its-fix-is-a-refactor-with-no-single-covering-test.md"
+    },
+    {
+      "rule": "status.delivery-agreement",
+      "severity": "error",
+      "file": "docs/bugs/BUG-107-comments-narrate-bug-ticket-history-and-use-temporal-language-against-the-comment-convention.md",
+      "line": null,
+      "message": "Status is 'Fixed', but the evidence computes to 'Not started', from no evidence (the record has no Realized-by field and no back-pointer cites it): add the evidence that delivered it",
+      "waived": "docs/waiver/WAIVER-0040-bug-107-needs-no-test-its-fix-rewords-comments.md"
+    },
+    {
+      "rule": "status.delivery-agreement",
+      "severity": "error",
+      "file": "docs/bugs/BUG-115-compute-drifted-records-runs-unconditionally-even-when-embodiment-consistency-is-off.md",
+      "line": null,
+      "message": "Status is 'Fixed', but the evidence computes to 'Not started', from no evidence (the record has no Realized-by field and no back-pointer cites it): add the evidence that delivered it",
+      "waived": "docs/waiver/WAIVER-0042-bug-115-needs-no-test-its-fix-only-avoids-unused-git-work.md"
+    },
+    {
+      "rule": "status.delivery-agreement",
+      "severity": "error",
+      "file": "docs/bugs/BUG-116-identity-collision-rebuilds-the-shared-record-index-independently.md",
+      "line": null,
+      "message": "Status is 'Fixed', but the evidence computes to 'Not started', from no evidence (the record has no Realized-by field and no back-pointer cites it): add the evidence that delivered it",
+      "waived": "docs/waiver/WAIVER-0043-bug-116-needs-no-test-its-fix-only-avoids-a-second-index-traversal.md"
+    },
+    {
+      "rule": "status.delivery-agreement",
+      "severity": "error",
+      "file": "docs/bugs/BUG-122-census-records-clones-and-sorts-a-pathbuf-per-examined-slot-instead-of-per-record.md",
+      "line": null,
+      "message": "Status is 'Fixed', but the evidence computes to 'Not started', from no evidence (the record has no Realized-by field and no back-pointer cites it): add the evidence that delivered it",
+      "waived": "docs/waiver/WAIVER-0044-bug-122-needs-no-test-its-fix-only-removes-redundant-allocation.md"
+    },
+    {
+      "rule": "status.delivery-agreement",
+      "severity": "error",
+      "file": "docs/bugs/BUG-134-declared-slots-for-roles-and-declared-cross-record-value-rebuild-a-type-s-declared-field-set-per-record-instead-of-using-the-cached-by-type-map.md",
+      "line": null,
+      "message": "Status is 'Fixed', but the evidence computes to 'Not started', from no evidence (the record has no Realized-by field and no back-pointer cites it): add the evidence that delivered it",
+      "waived": "docs/waiver/WAIVER-0045-bug-134-needs-no-test-its-fix-only-reuses-a-cached-field-set.md"
+    },
+    {
+      "rule": "status.delivery-agreement",
+      "severity": "error",
+      "file": "docs/bugs/BUG-14-knope-s-preparerelease-bumps-cargo-toml-but-never-regenerates-the-workspace-cargo-lock.md",
+      "line": null,
+      "message": "Status is 'Fixed', but the evidence computes to 'Not started', from no evidence (the record has no Realized-by field and no back-pointer cites it): add the evidence that delivered it",
+      "waived": "docs/waiver/WAIVER-0036-bug-14-needs-no-test-its-fix-is-release-workflow-configuration.md"
+    },
+    {
+      "rule": "status.delivery-agreement",
+      "severity": "error",
+      "file": "docs/bugs/BUG-143-relation-target-status-undeclared-rebuilds-declared-fields-per-reference-instead-of-reusing-the-cache.md",
+      "line": null,
+      "message": "Status is 'Fixed', but the evidence computes to 'Not started', from no evidence (the record has no Realized-by field and no back-pointer cites it): add the evidence that delivered it",
+      "waived": "docs/waiver/WAIVER-0046-bug-143-needs-no-test-its-fix-only-reuses-a-cached-field-set.md"
+    },
+    {
+      "rule": "status.delivery-agreement",
+      "severity": "error",
+      "file": "docs/bugs/BUG-146-init-silently-swallows-a-yaml-serialization-error-into-an-empty-config-body.md",
+      "line": null,
+      "message": "Status is 'Fixed', but the evidence computes to 'Not started', from no evidence (the record has no Realized-by field and no back-pointer cites it): add the evidence that delivered it",
+      "waived": "docs/waiver/WAIVER-0050-bug-146-needs-no-test-its-failure-cannot-occur-on-any-reachable-input.md"
+    },
+    {
+      "rule": "status.delivery-agreement",
+      "severity": "error",
+      "file": "docs/bugs/BUG-15-ci-yml-s-changeset-gate-evaluates-a-stale-pre-label-event-payload-since-labeled-isn-t-a-trigger-type.md",
+      "line": null,
+      "message": "Status is 'Fixed', but the evidence computes to 'Not started', from no evidence (the record has no Realized-by field and no back-pointer cites it): add the evidence that delivered it",
+      "waived": "docs/waiver/WAIVER-0037-bug-15-needs-no-test-its-fix-is-a-ci-workflow-trigger.md"
+    },
+    {
+      "rule": "status.delivery-agreement",
+      "severity": "error",
+      "file": "docs/bugs/BUG-189-the-changeset-required-job-fails-with-no-merge-base-on-a-pr-branch-containing-a-merge-commit.md",
+      "line": null,
+      "message": "Status is 'Fixed', but the evidence computes to 'Not started', from no evidence (the record has no Realized-by field and no back-pointer cites it): add the evidence that delivered it",
+      "waived": "docs/waiver/WAIVER-0041-bug-189-needs-no-test-its-fix-is-a-ci-workflow-fetch.md"
+    },
+    {
+      "rule": "status.delivery-agreement",
+      "severity": "error",
+      "file": "docs/bugs/BUG-21-spec-2-documents-an-illustrative-shape-that-doesnt-match-what-check-ships.md",
+      "line": null,
+      "message": "Status is 'Fixed', but the evidence computes to 'Not started', from no evidence (the record has no Realized-by field and no back-pointer cites it): add the evidence that delivered it",
+      "waived": "docs/waiver/WAIVER-0038-bug-21-needs-no-test-its-fix-is-a-documentation-correction.md"
+    },
+    {
+      "rule": "status.delivery-agreement",
+      "severity": "error",
+      "file": "docs/bugs/BUG-26-five-specs-are-marked-draft-while-their-subject-is-built-and-shipped.md",
+      "line": null,
+      "message": "Status is 'Fixed', but the evidence computes to 'Not started', from no evidence (the record has no Realized-by field and no back-pointer cites it): add the evidence that delivered it",
+      "waived": "docs/waiver/WAIVER-0039-bug-26-needs-no-test-its-fix-is-to-spec-records.md"
+    },
+    {
+      "rule": "status.delivery-agreement",
+      "severity": "error",
+      "file": "docs/bugs/BUG-43-init-drops-the-outer-record-type-when-a-subdirectory-also-holds-records.md",
+      "line": null,
+      "message": "Status is 'Fixed', but the evidence computes to 'Not started', from no evidence (the record has no Realized-by field and no back-pointer cites it): add the evidence that delivered it",
+      "waived": "docs/waiver/WAIVER-0047-bug-43-needs-no-test-its-test-was-deleted-when-rfc-35-replaced-the-heuristic.md"
+    },
+    {
+      "rule": "status.delivery-agreement",
+      "severity": "error",
+      "file": "docs/bugs/BUG-54-one-stray-record-shaped-file-collapses-every-sibling-record-type-into-its-parent.md",
+      "line": null,
+      "message": "Status is 'Fixed', but the evidence computes to 'Not started', from no evidence (the record has no Realized-by field and no back-pointer cites it): add the evidence that delivered it",
+      "waived": "docs/waiver/WAIVER-0048-bug-54-needs-no-test-its-test-was-deleted-when-rfc-35-replaced-the-heuristic.md"
+    }
+  ],
+  "notices": [
+    {
+      "severity": "info",
+      "subject": "claim.status-agreement",
+      "message": "the closing-verb reading is off (`verb_claims: false`): only `closes` is read for claims and no prose is"
+    },
+    {
+      "severity": "info",
+      "subject": "section.required",
+      "message": "16 bug record(s) satisfy required section `## What was wrong` through its alias `## What is wrong`: docs/bugs/BUG-39-narrative-field-stale-silently-misses-a-reference-with-punctuation-attached.md, docs/bugs/BUG-40-records-examined-cannot-distinguish-nothing-to-check-from-checked-nothing-and-is-not-one-unit.md, docs/bugs/BUG-41-companion-field-pairs-are-checked-for-one-pair-and-hardcoded-to-it.md, docs/bugs/BUG-42-urzua-audit-bypasses-the-rules-table-entirely.md, docs/bugs/BUG-43-init-drops-the-outer-record-type-when-a-subdirectory-also-holds-records.md, docs/bugs/BUG-44-a-rule-s-required-options-are-unvalidated-so-an-incomplete-rule-inverts-or-never-fires.md, docs/bugs/BUG-45-claim-status-agreement-matches-a-verb-inside-another-word-and-claims-every-reference-on-the-line.md, docs/bugs/BUG-46-every-malformed-rule-setting-collapses-to-one-opaque-untagged-enum-message.md, docs/bugs/BUG-47-init-and-doctor-have-no-legacy-toml-guard-so-the-documented-upgrade-path-orphans-a-config.md, docs/bugs/BUG-49-a-realized-by-locator-can-point-at-a-file-that-does-not-exist-and-nothing-checks.md, docs/bugs/BUG-50-a-record-with-no-revision-log-silently-leaves-revision-log-change-class-required-s-scope.md, docs/bugs/BUG-51-a-substantive-revision-log-entry-does-not-require-the-version-bump-spec-18-mandates.md, docs/bugs/BUG-52-spec-2-enumerates-the-rule-set-and-nothing-checks-it-against-all-rules.md, docs/bugs/BUG-53-a-date-named-file-hijacks-urzua-new-s-numbering-permanently.md, docs/bugs/BUG-54-one-stray-record-shaped-file-collapses-every-sibling-record-type-into-its-parent.md, docs/bugs/BUG-59-the-engine-hardcodes-this-repository-s-record-types-and-status-vocabulary.md"
+    },
+    {
+      "severity": "info",
+      "subject": "section.required",
+      "message": "2 bug record(s) satisfy required section `## What was wrong` through its alias `## What was suspected`: docs/bugs/BUG-127-resolve-argv-overrides-silently-drops-a-symlink-to-a-real-file-since-it-never-follows-the-link.md, docs/bugs/BUG-130-duplicate-keys-exact-match-extends-adr-57-s-declared-vocabulary-decision-to-a-type-declaring-no-vocabulary-at-all.md"
+    },
+    {
+      "severity": "info",
+      "subject": "section.required",
+      "message": "1 bug record(s) satisfy required section `## What was wrong` through its alias `## What`: docs/bugs/BUG-38-field-quality-conflates-a-forgotten-field-with-a-deliberately-pending-one.md"
+    },
+    {
+      "severity": "info",
+      "subject": "docs/milestones/MILE-111-disclose-declared-not-voted-exclusion-distinctly-from-ordinary-absence.md",
+      "message": "Done means item 4 \"A real-corpus `check` diff confirmed no unintended finding-count change (this repository has no unreadable headers or undeclared-target references).\" is waived: process-outcome -- a one-time comparison of this repository's findings before and after #110, which cannot be re-run because the corpus and configuration have changed since; reproduced on 2026-11-07 by running the binaries built from #110 and from its parent over the parent's tree, which gave the same 70 findings"
+    },
+    {
+      "severity": "info",
+      "subject": "docs/milestones/MILE-111-disclose-declared-not-voted-exclusion-distinctly-from-ordinary-absence.md",
+      "message": "Done means item 6 \"The `AGENTS.md` \"A narrower rule population is usually policy, not a regression\" section is removed in the same change, so a structural fix supersedes the prose stopgap.\" is waived: process-outcome -- a removal leaves no file to locate; a search of `AGENTS.md` for that section finds nothing at the time of this migration"
+    },
+    {
+      "severity": "info",
+      "subject": "docs/milestones/MILE-112-sweep-the-codebase-for-duplicated-logic-before-0-4-0-per-spec-22-s-extract-on-second-occurrence-rule.md",
+      "message": "Done means item 1 \"The sweep ran over `rules.rs`, `config.rs`, `check.rs`, `discovery.rs`, `graph.rs` and `property.rs`, applying `SPEC-22`'s extract-on-second-occurrence rule.\" is waived: process-outcome -- a one-time audit act; its result is the Outcome section of this record and the three bug records below"
+    },
+    {
+      "severity": "info",
+      "subject": "docs/milestones/MILE-112-sweep-the-codebase-for-duplicated-logic-before-0-4-0-per-spec-22-s-extract-on-second-occurrence-rule.md",
+      "message": "Done means item 5 \"The test suite is unchanged by the sweep: it gained one test and no test was changed or removed.\" is waived: process-outcome -- a fact about the history of #124, which no test can assert; checked on 2026-11-07 against `git show 2eecdb1d`, whose test module gains `filename_title_consistency_reads_the_number_past_a_hyphenated_prefix` and has no removed or altered line"
+    },
+    {
+      "severity": "info",
+      "subject": "docs/milestones/MILE-118-re-examine-the-no-external-adopters-yet-premise-now-that-a-first-real-adopter-corpus-is-the-phase-0-target.md",
+      "message": "Done means item 3 \"A grep for the premise's wording lists only places with an outcome.\" is waived: process-outcome -- a search result, not a file; at the time of this migration the wording appears only in the seven noted places and in the records that cite the decided expiry (ADR-77, RFC-49)"
+    },
+    {
+      "severity": "info",
+      "subject": "docs/milestones/MILE-131-split-the-rule-engine-s-rules-module-into-one-module-per-rule-family.md",
+      "message": "Done means item 3 \"`urzua check` output on this repository is byte-identical before and after the split.\" is waived: process-outcome -- a one-time comparison on this repository at #152, which cannot be re-run on the pre-split binary because the corpus and configuration have changed since; reproduced on 2026-11-07 by running the binaries built from #152 and from its parent over the tree of #152, whose outputs were byte-identical (33561 bytes)"
+    },
+    {
+      "severity": "info",
+      "subject": "docs/milestones/MILE-143-check-that-cited-paths-and-issue-or-pr-numbers-exist.md",
+      "message": "Done means item 3 \"A run without a token reports `not-run` with the reason.\" is waived: not-applicable -- the shipped design reads a committed snapshot, so check needs no token; the equivalent is that a missing or unreadable snapshot is a finding and never a pass (next item), and only the refresh command uses a token"
+    },
+    {
+      "severity": "info",
+      "subject": "docs/milestones/MILE-169-field-pending-defers-a-pending-value-until-the-status-that-requires-the-field.md",
+      "message": "Done means item 6 \"This repository's `bug` type declares `require: [{when: [Fixed], fields: [Regression-test]}]`.\" is waived: superseded-by-decision (ADR-84) -- ADR-84 retired the bug `Regression-test` field, so the `bug` type declares no `require` entry; the `adr` type's `require` on `Deciders` is what exercises the option here"
+    },
+    {
+      "severity": "info",
+      "subject": "docs/milestones/MILE-175-test-fixtures-build-recordtypeconfig-through-default.md",
+      "message": "Done means item 3 \"The stale comment is corrected.\" is waived: not-applicable -- the stale \"two seed rules\" comment was already gone when the milestone was built (the file was reorganised by MILE-171), so there is nothing to correct"
+    },
+    {
+      "severity": "info",
+      "subject": "docs/milestones/MILE-182-urzua-roadmap-computes-waves-the-ready-set-and-the-critical-path-from-records.md",
+      "message": "Done means item 9 \"The hand-built Phase 0 roadmap page, where one exists, is retired in favour of a page generated from that output.\" is waived: not-applicable -- no hand-built Phase 0 roadmap page is committed in this repository, so there is none to retire"
+    },
+    {
+      "severity": "info",
+      "subject": "docs/milestones/MILE-189-an-opt-in-warning-flags-a-realized-by-locator-on-a-file-under-back-pointer-paths-and-nudges-toward-an-implements-or-verifies-comment.md",
+      "message": "Done means item 6 \"What the rule reports on this corpus is recorded in the pull request and acted on or left as findings by decision, not hidden by widening a list.\" is waived: process-outcome -- a record in the pull request of what was reported and decided; the 2026-11-05 revision rows of this milestone record the 308 findings and that the rule is enabled at level info rather than hidden"
+    },
+    {
+      "severity": "info",
+      "subject": "docs/milestones/MILE-190-fold-audit-into-check-check-rules-rules-selected-in-the-report-and-audit-as-a-deprecated-alias-of-check.md",
+      "message": "Done means item 10 \"`SPEC-8` describes the new flag, the report field and the alias.\" is waived: not-applicable -- SPEC-8 documents `urzua fix` and has never mentioned `check --rules`, `rules_selected` or `audit`; the delivering change (revision row of 2026-11-05) updated SPEC-1, SPEC-2 and SPEC-11, so naming SPEC-8 here was an error in the item"
+    },
+    {
+      "severity": "info",
+      "subject": "docs/milestones/MILE-199-generate-a-drafting-command-for-every-record-type-and-add-the-lifecycle-commands-amend-repin-and-done.md",
+      "message": "Done means item 10 \"At least one record in the PR that merges this milestone is filed through `/bug`, `/condition`, `/waiver`, `/amend` or `/done`, with `urzua check` reporting it clean and its examined count above zero.\" is waived: process-outcome -- a fact about the merging pull request (reviewed as #375), not about any file; its 2026-11-06 revision row records this milestone being marked finished by `/done` in that change"
+    },
+    {
+      "severity": "info",
+      "subject": "docs/milestones/MILE-201-make-the-attestation-identity-source-a-configuration-option-and-record-it-in-the-revision-row.md",
+      "message": "Done means item 11 \"A re-pin or a recompute in the PR that merges this milestone is written under the attestation setting.\" is waived: process-outcome -- a fact about the merging pull request, not about a file; the tool-authored rows it wrote carry the identity and actor in their text, as in the revision rows of SPEC-24 and MILE-199"
+    },
+    {
+      "severity": "info",
+      "subject": "docs/milestones/MILE-205-build-urzua-waive-from-report-draft-pending-waivers-from-the-current-findings.md",
+      "message": "Done means item 17 \"The command is exercised in this repository: `urzua waive --from-report` on a scratch copy with a planted finding drafts a waiver, and `urzua check` and `check --base origin/main` show 0 unwaived findings on the merged tree.\" is waived: process-outcome -- a manual run on a scratch copy of this repository for #494 (a planted `index.freshness` finding drafted as a waiver, written by `--apply`, reported by `check` with `waiver-ineffective`, and a second `--apply` writing nothing), recorded in this record's PR4 revision row; no file can evidence the run itself"
+    },
+    {
+      "severity": "info",
+      "subject": "docs/milestones/MILE-206-build-the-opt-in-discovery-include-untracked-option-and-the-untracked-records-notice.md",
+      "message": "Done means item 17 \"A reviewer confirms the `ADR-56` amendment still matches the built behavior.\" is waived: process-outcome -- a reviewer's reading of the built behavior against the amendment is a result no file can evidence; the reading is recorded in the review of the merging pull request"
+    },
+    {
+      "severity": "info",
+      "subject": "docs/milestones/MILE-215-migrate-the-milestone-corpus-to-done-means-items-and-switch-evidence-per-item-on.md",
+      "message": "Done means item 3 \"Each migration PR lists its reopens and its waivers with the item and the reason, and for each `deferred-to` whether the target's own items cover the deferred one, and a reviewer has read each.\" is waived: process-outcome -- the lists are in the bodies of the migration PRs #413 to #417, each read by an independent reviewer before it merged; a review is not a file"
+    },
+    {
+      "severity": "info",
+      "subject": "docs/milestones/MILE-3-convert-this-repo-s-own-docs-to-yaml-frontmatter.md",
+      "message": "Done means item 3 \"The conversion was a one-time pass that shipped no tool, and nothing below the header changed.\" is waived: process-outcome -- a property of the one-time conversion of 2026-09-08, verified at the time by a before/after field-set comparison against every file (see the revision log); the scratch tool was never committed, so no file can evidence it now"
+    },
+    {
+      "severity": "info",
+      "subject": "docs/milestones/MILE-40-cut-a-release-consuming-the-13-pending-changesets.md",
+      "message": "Done means item 1 \"A release past `v0.1.0` was cut that consumed the pending `.changeset/*.md` fragments, bumped `rust/Cargo.toml`'s version and compiled `CHANGELOG.md` entries for the work shipped since (`CHANGELOG.md` carries `0.2.0`, `0.2.1` and `0.3.0`).\" is waived: process-outcome -- the release is a historical event recorded by the tags `v0.2.0`, `v0.2.1` and `v0.3.0`, not by a file: `CHANGELOG.md` and `rust/Cargo.toml` are rewritten by every later release, so a pin on either goes stale at each one"
+    },
+    {
+      "severity": "info",
+      "subject": "docs/milestones/MILE-51-validate-one-config-against-a-second-real-corpus-with-zero-escape-hatch.md",
+      "message": "Done means item 1 \"`urzua init` and `urzua check` have been run against a second, independently-authored corpus that this project did not write.\" is waived: process-outcome -- the runs against a third-party ADR corpus (2026-09-16 and 2026-09-17, then again on 2026-11-04) are recorded in this record's Result sections and revision log; that corpus is not vendored here, so no file can evidence the run itself"
+    },
+    {
+      "severity": "info",
+      "subject": "docs/milestones/MILE-66-trust-a-verified-gh-login-over-by-for-identity-resolution.md",
+      "message": "Done means item 4 \"An explicit `--by` is used only when neither the verified login nor `git config user.name` is available.\" is waived: superseded-by-decision (ADR-31) -- the ADR-31 amendment of 2026-09-10 ranks an explicit --by above git config user.name, and resolve_identity_prefers_explicit_by_over_git_config tests that order"
+    },
+    {
+      "severity": "info",
+      "subject": "docs/milestones/MILE-75-header-sub-format-consistency-within-a-record-type.md",
+      "message": "Done means item 1 \"A type's records agree on one header layout and `check` reports one that does not (the `header_layout` option and `header.layout-consistency` rule of `ADR-38`).\" is waived: not-applicable -- MILE-85 deleted the option, the rule and the sub-formats together with the shapes they policed, so no layout can differ; the criterion holds by construction (items 2 and 3)"
+    },
+    {
+      "severity": "info",
+      "subject": "docs/milestones/MILE-8-add-the-milestone-record-type.md",
+      "message": "Done means item 4 \"Adding it needed no change to urzua-core.\" is waived: process-outcome -- a property of the change that added the type (commit 784fa758: a config declaration, a template and a spec, with two unrelated core defects fixed beside it), which no file can evidence now"
+    },
+    {
+      "severity": "info",
+      "subject": "docs/milestones/MILE-9-add-the-bug-record-type.md",
+      "message": "Done means item 2 \"The `bug` type requires `Regression-test`.\" is waived: superseded-by-decision (ADR-84) -- `ADR-84` retired the `Regression-test` field: its values moved into `Realized-by` as `test:` locators and a bug's `Status` now follows that evidence (`SPEC-9` 0.8)"
+    },
+    {
+      "severity": "info",
+      "subject": "docs/milestones/MILE-9-add-the-bug-record-type.md",
+      "message": "Done means item 5 \"Adding it needed no change to urzua-core.\" is waived: process-outcome -- a property of the change that added the type (commit 784fa758: a config declaration, a template and a spec, with two unrelated core defects fixed beside it), which no file can evidence now"
+    },
+    {
+      "severity": "info",
+      "subject": "status.waived-item-stale",
+      "message": "25 waived Done means item(s) by category: not-applicable 5, process-outcome 17, superseded-by-decision 3"
+    },
+    {
+      "severity": "info",
+      "subject": "citation.resolution",
+      "message": "2 record(s) declare non-reference ids that now match a real record; the declaration still applies: docs/adr/ADR-18-embodiment-mvp-categorized-locators-not-a-full-claim-graph.md declares ADR-72; docs/rfc/RFC-5-embodiment-realized-by-claim-graph.md declares ADR-72"
+    },
+    {
+      "severity": "info",
+      "subject": "citation.issue-exists",
+      "message": "citations were checked against .urzua/known-refs.json, generated 2026-11-04 for urzuahq/urzua (1 issues, 261 pull requests); run `urzua refs refresh` to update it"
+    },
+    {
+      "severity": "info",
+      "subject": "embodiment.locator-promotion-candidate",
+      "message": "scope: changed -- 377 slots not judged (no --base); this rule judges only the records a --base diff adds or changes"
+    },
+    {
+      "severity": "info",
+      "subject": "embodiment.locator-on-back-pointer-path",
+      "message": "scope: changed -- 365 slots not judged (no --base); this rule judges only the records a --base diff adds or changes"
+    },
+    {
+      "severity": "info",
+      "subject": "code.dangling-bug-reference",
+      "message": "ignore_marker -- 2 lines excused from this rule; a line carrying the declared marker is neither reported nor counted as evidence"
+    },
+    {
+      "severity": "info",
+      "subject": "permanent-waivers",
+      "message": "16 permanent waivers in effect (behaviour-preserving-refactor: 2, docs-or-workflow-only: 6, performance-only: 5, test-removed-by-decision: 2, unreachable-failure: 1)"
+    }
+  ]
+}

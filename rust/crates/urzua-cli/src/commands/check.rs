@@ -578,6 +578,7 @@ pub(crate) fn execute(
         &executions,
         &why_deferred(&scope, base.as_deref()),
     ));
+    notices.extend(source_scope_notices(&executions));
     notices.extend(excused_line_notices(&executions));
     scope_findings(session, &scope, &mut findings);
     let waivers = effective_waivers(session, &context, &mut notices);
@@ -897,6 +898,7 @@ fn excused_line_notices(executions: &[RuleExecution]) -> Vec<Notice> {
 fn scope_changed_notices(executions: &[RuleExecution], why: &str) -> Vec<Notice> {
     executions
         .iter()
+        .filter(|e| !rules::PATH_SCOPED_SOURCE_RULES.contains(&e.rule.as_str()))
         .filter_map(|e| {
             let deferred = e.population.as_ref()?.deferred_by_scope();
             (deferred > 0).then(|| Notice {
@@ -905,6 +907,32 @@ fn scope_changed_notices(executions: &[RuleExecution], why: &str) -> Vec<Notice>
                 message: format!(
                     "scope: changed -- {deferred} slot{} not judged ({why}); this rule judges only the records a --base diff adds or changes",
                     if deferred == 1 { "" } else { "s" }
+                ),
+                detail: None,
+            })
+        })
+        .collect()
+}
+
+/// One info notice per source-reading rule that a path scope left files unread
+/// for (`MILE-207`): how many of the files under its declared paths it did not
+/// read, and why, so a rule that read little is not read as one that found
+/// little.
+fn source_scope_notices(executions: &[RuleExecution]) -> Vec<Notice> {
+    executions
+        .iter()
+        .filter(|e| rules::PATH_SCOPED_SOURCE_RULES.contains(&e.rule.as_str()))
+        .filter_map(|e| {
+            let p = e.population.as_ref()?;
+            let (deferred, eligible) = (p.deferred_by_scope(), p.eligible());
+            (deferred > 0).then(|| Notice {
+                severity: NoticeSeverity::Info,
+                subject: e.rule.clone(),
+                message: format!(
+                    "path scope -- {deferred} of {eligible} source file{} under back_pointer_paths not read: \
+                     this run judges the files under the requested paths, and the source comments that cite a record in scope; \
+                     a run with no path argument reads them all",
+                    if eligible == 1 { "" } else { "s" }
                 ),
                 detail: None,
             })
@@ -1276,6 +1304,7 @@ struct SourceInputs {
 /// Stage 2a: read the source files the rules are handed.
 fn read_source_inputs(
     session: &Session,
+    scope: &ReportScope,
     selection: Option<&[String]>,
     notices: &mut Vec<Notice>,
 ) -> Result<SourceInputs, String> {
@@ -1326,6 +1355,22 @@ fn read_source_inputs(
     let index_artifacts = read_index_artifacts(repo_root, &index_specs)?;
     let override_log = crate::discovery::read_override_log(repo_root, config)?;
 
+    // A path-scoped run reads the source files under the requested paths and
+    // those that cite a record in scope, not every file (`MILE-207`).
+    let scoped = path_scoped_read(scope);
+    let ids = scope_record_ids(session, scope);
+    let prefixes = rules::declared_prefixes(config);
+    let need = |reported: bool| {
+        scoped
+            .as_ref()
+            .map(|scoped| crate::discovery::ScopeNeed {
+                scoped,
+                ids: &ids,
+                prefixes: &prefixes,
+                reported,
+                cited: true,
+            })
+    };
     // The back-pointer evidence also feeds `embodiment.consistency` and
     // `status.delivery-agreement` (`back_pointed`).
     let back_pointer_sources = if wanted(&[
@@ -1333,18 +1378,34 @@ fn read_source_inputs(
         rules::RULE_EMBODIMENT_CONSISTENCY,
         rules::RULE_STATUS_DELIVERY_AGREEMENT,
     ]) {
-        crate::discovery::read_back_pointer_sources(repo_root, discovered, config)?
+        let reported = wanted(&[rules::RULE_EMBODIMENT_BACK_POINTER_RESOLUTION]);
+        crate::discovery::read_back_pointer_sources(
+            repo_root,
+            discovered,
+            config,
+            need(reported).as_ref(),
+        )?
     } else {
         None
     };
     let decision_gate_sources = if wanted(&[rules::RULE_EMBODIMENT_BACK_POINTER_DECISION_ACCEPTED])
     {
-        crate::discovery::read_decision_gate_sources(repo_root, discovered, config)?
+        crate::discovery::read_decision_gate_sources(
+            repo_root,
+            discovered,
+            config,
+            need(true).as_ref(),
+        )?
     } else {
         None
     };
     let code_citation_sources = if wanted(&[rules::RULE_CODE_DANGLING_BUG_REFERENCE]) {
-        crate::discovery::read_code_citation_sources(repo_root, discovered, config)?
+        crate::discovery::read_code_citation_sources(
+            repo_root,
+            discovered,
+            config,
+            scoped.as_ref(),
+        )?
     } else {
         None
     };
@@ -1359,6 +1420,33 @@ fn read_source_inputs(
         decision_gate_sources,
         code_citation_sources,
     })
+}
+
+/// What a path-scoped run reads source files for (`MILE-207`), or `None` for a
+/// run that reads them all: a whole-corpus run, and a `--base` run, whose
+/// reading scope is the corpus whatever it reports on.
+fn path_scoped_read(scope: &ReportScope) -> Option<rules::ScopedRead> {
+    (!scope.requested.is_empty() && scope.diff.is_none()).then(|| rules::ScopedRead {
+        paths: scope.requested.clone(),
+        records: scope.in_scope.clone(),
+        unread: Vec::new(),
+    })
+}
+
+/// The identifiers, as the record index keys them, of the records in scope.
+fn scope_record_ids(
+    session: &Session,
+    scope: &ReportScope,
+) -> HashSet<urzua_core::values::RecordId> {
+    if scope.requested.is_empty() || scope.diff.is_some() {
+        return HashSet::new();
+    }
+    let (index, _) = rules::build_index_reporting_collisions(&session.records);
+    index
+        .into_iter()
+        .filter(|(_, record)| scope.in_scope.contains(&record.path))
+        .map(|(id, _)| id)
+        .collect()
 }
 
 /// Stage 2b: the index every reference resolves against, with the notices that
@@ -2004,7 +2092,7 @@ fn load_context<'a>(
     let (repo_root, config, discovered) =
         (&session.repo_root, &session.config, &session.discovered);
     let mut notices: Vec<Notice> = Vec::new();
-    let sources = read_source_inputs(session, selection, &mut notices)?;
+    let sources = read_source_inputs(session, scope, selection, &mut notices)?;
     // One blame per file for the whole run, shared by drift, claim ages and
     // claim measures.
     let blame = urzua_io::BlameCache::new(repo_root);

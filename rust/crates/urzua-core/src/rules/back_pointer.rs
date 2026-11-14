@@ -1,5 +1,13 @@
 use super::*;
 
+/// The rules that read source files and, on a path-scoped run, read only the
+/// ones the run needs (`MILE-207`).
+pub const PATH_SCOPED_SOURCE_RULES: [&str; 3] = [
+    RULE_EMBODIMENT_BACK_POINTER_RESOLUTION,
+    RULE_EMBODIMENT_BACK_POINTER_DECISION_ACCEPTED,
+    RULE_CODE_DANGLING_BUG_REFERENCE,
+];
+
 /// One `Implements:` comment back-pointer: the file and 1-indexed line it was
 /// written on, and the record identifier it cites, as written (`MILE-128`).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -440,6 +448,28 @@ impl BackPointerEvidence {
     }
 }
 
+/// Whether any `Implements:` or `Verifies:` comment in `content` cites a record
+/// in `ids` (`MILE-207`). It reads the lines that carry a marker the way the
+/// scans do, and nothing else, so a file it rejects holds no back-pointer to
+/// those records under either marker, in any class of file: a path-scoped run
+/// reads only the files this accepts, apart from those under a requested path.
+pub fn cites_any_record(
+    content: &str,
+    prefixes: &[String],
+    ids: &HashSet<crate::values::RecordId>,
+) -> bool {
+    content.lines().any(|line| {
+        [MARKER_IMPLEMENTS, MARKER_VERIFIES].iter().any(|marker| {
+            line.contains(marker)
+                && marker_rest(line, marker).is_some_and(|rest| {
+                    cited_ids(rest, prefixes)
+                        .iter()
+                        .any(|id| ids.contains(&crate::values::RecordId::new(id)))
+                })
+        })
+    })
+}
+
 /// The records that at least one back-pointer in `files` (those under a
 /// `source_paths` entry) cites, resolved through `index`, split by tier. A
 /// `Verifies:` comment counts only in a file under a `test_paths` entry; an
@@ -511,7 +541,7 @@ pub(super) fn is_test_file(path: &std::path::Path, test_paths: &[String]) -> boo
 pub(super) fn uncovered_source_paths(
     rule: &str,
     variant: &'static str,
-    files: &[SourceFile],
+    (files, unread): (&[SourceFile], &[PathBuf]),
     source_paths: &[String],
     config_path: &std::path::Path,
 ) -> Vec<Finding> {
@@ -519,7 +549,7 @@ pub(super) fn uncovered_source_paths(
         rule,
         variant,
         config_path,
-        files,
+        (files, unread),
         source_paths,
         ("source path", "back_pointer_paths"),
         None,
@@ -532,20 +562,24 @@ fn uncovered_paths(
     rule: &str,
     variant: &'static str,
     config_path: &std::path::Path,
-    files: &[SourceFile],
+    (files, unread): (&[SourceFile], &[PathBuf]),
     paths: &[String],
     (label, option): (&str, &str),
     scanned: Option<&[String]>,
 ) -> Vec<Finding> {
     // A test-path glob can match a file the scan never reads, so it must match
     // a file under a scanned path to count as covering anything (`MILE-160`).
+    // A file a path scope left unread is still a tracked file the declared
+    // path covers (`MILE-207`).
+    let covers = |path: &std::path::Path, entry: &str| {
+        path_matches_entry(path, entry)
+            && scanned.is_none_or(|s| s.iter().any(|b| path_is_published(path, b)))
+    };
     paths
         .iter()
         .filter(|entry| {
-            !files.iter().any(|f| {
-                path_matches_entry(&f.path, entry)
-                    && scanned.is_none_or(|s| s.iter().any(|b| path_is_published(&f.path, b)))
-            })
+            !files.iter().any(|f| covers(&f.path, entry))
+                && !unread.iter().any(|p| covers(p, entry))
         })
         .map(|entry| {
             Finding::new(
@@ -570,13 +604,13 @@ fn uncovered_paths(
 /// declared path covering no file fails closed, as a prohibition does
 /// elsewhere, because an empty set of files reads exactly like a clean one.
 pub fn embodiment_back_pointer_resolution(
-    files: &[SourceFile],
-    source_paths: &[String],
-    test_paths: &[String],
+    sources: &BackPointerSources,
     config: &Config,
     config_path: &std::path::Path,
     index: &RecordIndex,
 ) -> (RuleExecution, Vec<Finding>) {
+    let (files, source_paths, test_paths) =
+        (&sources.files[..], &sources.back_pointer_paths[..], &sources.test_paths[..]);
     const RULE_ID: &str = RULE_EMBODIMENT_BACK_POINTER_RESOLUTION;
     let prefixes = declared_prefixes(config);
     let mut findings = Vec::new();
@@ -584,7 +618,14 @@ pub fn embodiment_back_pointer_resolution(
     let ignore = ignore.as_deref();
     let mut excused_lines = 0;
 
-    let population = census(PopulationUnit::File, files.iter().collect(), |file| {
+    // A path-scoped run judges the files under the requested paths; a file it
+    // read only for the evidence it gives a record in scope is counted as
+    // deferred, with the files it did not read (`MILE-207`).
+    let (reported, held): (Vec<&SourceFile>, Vec<&SourceFile>) = files
+        .iter()
+        .partition(|f| sources.scoped.as_ref().is_none_or(|s| s.reports(&f.path)));
+    let deferred = held.len() + sources.unread().len();
+    let population = census(PopulationUnit::File, reported, |file| {
         if !source_paths
             .iter()
             .any(|e| path_is_published(&file.path, e))
@@ -629,10 +670,11 @@ pub fn embodiment_back_pointer_resolution(
         Outcome::Examined
     });
 
+    let held_and_unread = (files, sources.unread());
     findings.extend(uncovered_source_paths(
         RULE_ID,
         "back-pointer-uncovered-path",
-        files,
+        held_and_unread,
         source_paths,
         config_path,
     ));
@@ -640,7 +682,7 @@ pub fn embodiment_back_pointer_resolution(
         RULE_ID,
         "back-pointer-uncovered-test-path",
         config_path,
-        files,
+        held_and_unread,
         test_paths,
         ("test path", "test_paths"),
         Some(source_paths),
@@ -649,7 +691,9 @@ pub fn embodiment_back_pointer_resolution(
     (
         RuleExecution::ran(
             RULE_ID,
-            population.with_excused_lines(excused_lines),
+            population
+                .with_excused_lines(excused_lines)
+                .with_deferred_by_scope(deferred),
             Vec::new(),
         ),
         findings,
@@ -668,14 +712,15 @@ pub fn embodiment_back_pointer_resolution(
 /// back-pointers in files the diff changed are judged. File granularity: a
 /// changed file's untouched back-pointers are judged too.
 pub fn embodiment_back_pointer_decision_accepted(
-    files: &[SourceFile],
-    source_paths: &[String],
+    sources: &BackPointerSources,
     accepted_fallback: &[String],
     changed: Option<&[PathBuf]>,
     config: &Config,
     config_path: &std::path::Path,
     index: &RecordIndex,
 ) -> (RuleExecution, Vec<Finding>) {
+    let (files, source_paths) = (&sources.files[..], &sources.back_pointer_paths[..]);
+    let scoped = sources.scoped.as_ref();
     const RULE_ID: &str = RULE_EMBODIMENT_BACK_POINTER_DECISION_ACCEPTED;
     let prefixes = declared_prefixes(config);
     let declared = super::status::statuses_by_type(config);
@@ -722,8 +767,14 @@ pub fn embodiment_back_pointer_decision_accepted(
         };
         let scanned =
             scan_marker_excusing(&file.path, content, &prefixes, MARKER_IMPLEMENTS, ignore);
-        excused_lines += scanned.excused.len();
-        if let Some(marker) = ignore.filter(|_| reports_unused) {
+        // A path scope judges every back-pointer in a file under a requested
+        // path, and in any other file only those citing a record in scope
+        // (`MILE-207`).
+        let whole_file = scoped.is_none_or(|s| s.reports(&file.path));
+        if whole_file {
+            excused_lines += scanned.excused.len();
+        }
+        if let Some(marker) = ignore.filter(|_| reports_unused && whole_file) {
             unused.extend(unused_marker_findings(
                 (RULE_ID, "decision-marker-unused"),
                 file,
@@ -736,6 +787,9 @@ pub fn embodiment_back_pointer_decision_accepted(
             let Some(target) = index.get(&crate::values::RecordId::new(&pointer.id)) else {
                 continue;
             };
+            if !whole_file && scoped.is_some_and(|s| !s.records.contains(&target.path)) {
+                continue;
+            }
             if let Some((variant, message)) =
                 decision_verdict(&pointer, target, config, (&declared, accepted_fallback))
             {
@@ -749,7 +803,7 @@ pub fn embodiment_back_pointer_decision_accepted(
     findings.extend(uncovered_source_paths(
         RULE_ID,
         "decision-uncovered-path",
-        files,
+        (files, sources.unread()),
         source_paths,
         config_path,
     ));
@@ -757,7 +811,9 @@ pub fn embodiment_back_pointer_decision_accepted(
     (
         RuleExecution::ran(
             RULE_ID,
-            population.with_excused_lines(excused_lines),
+            population
+                .with_excused_lines(excused_lines)
+                .with_deferred_by_scope(sources.unread().len()),
             Vec::new(),
         ),
         findings,
