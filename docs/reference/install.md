@@ -39,8 +39,9 @@ urzua --version
 
 ## A release archive
 
-Releases are published at <https://github.com/urzuahq/urzua/releases> for three targets:
-`x86_64-unknown-linux-gnu`, `x86_64-apple-darwin` and `aarch64-apple-darwin`. Each archive is named
+Releases are published at <https://github.com/urzuahq/urzua/releases> for two targets:
+`x86_64-unknown-linux-gnu` and `aarch64-apple-darwin` (Apple Silicon). There is no Intel Mac build; on an
+Intel Mac, build from source with `cargo install`. Each archive is named
 `urzua-<target>.tar.gz` and holds `urzua-<target>/urzua`. Each is built by the repository's release
 workflow with a build provenance attestation, which you can check with the GitHub CLI:
 

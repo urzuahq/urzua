@@ -4,6 +4,18 @@ All notable changes to `urzua` are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/). Written for the person installing it — what changed
 for you — not a commit dump.
 
+## 0.4.2 (2026-11-14)
+
+### Fixes
+
+- 0.4.1's macOS binaries could not be built because the CI runner image it used was retired, so no binaries were attached. 0.4.2 publishes the same changes with Linux and Apple Silicon macOS binaries; install 0.4.2. Intel Macs build from source with `cargo install`.
+
+## 0.4.1 (2026-11-14)
+
+### Fixes
+
+- The 0.4.0 tag was created but its GitHub Release and binaries were not published, because the release notes exceeded GitHub's size limit. 0.4.1 publishes the same changes, so install 0.4.1 rather than 0.4.0. See the 0.4.0 entry in CHANGELOG.md for everything that changed since 0.3.0.
+
 ## 0.4.0 (2026-11-14)
 
 ### Breaking Changes

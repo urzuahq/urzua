@@ -2,9 +2,9 @@
 Stable-Id: 01M25Z28TWN477D6XASYT4TKW7
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:.github/workflows/ci.yml@sha256:a2b83039753098dd01df37de8b7a526422e290f9fb11ed400ced6a92849ca4ea, code:.github/workflows/checks.yml@sha256:0a3547c3f12a51cefe3dcc88696bacc8f9911356a4c6e61c56f8ef25e434e493, code:.github/workflows/prepare-release.yml@sha256:0e4d28280d1a77819841035b7ed7da5ee570cf96e80875d2f1e8cc83d7596b8d, code:.github/workflows/publish-release.yml@sha256:530bdeeececf77737d4d162e8aba4c8685bcc73834140675ed8565e3a04aef25, code:.github/actions/install-knope/action.yml@sha256:7890ed184b08dbc99d465a61b46f6bef28ea8fd37a2eba69f05484c44ee3826b, test:.github/scripts/knope-pin.test.sh@sha256:2c13f4fc3ca389b738f6f0a913e45696023f38236868bae27d5a9a352ad40a8d, test:.github/scripts/release-guard.test.sh@sha256:5fca6fe029d9bc486b023e4a401d0ae297f0e4e57ed9bb7a4f54fe62f9ceb82f, test:.github/scripts/release-invariants.test.sh@sha256:8fc2b5758338aef9953492f6d1977d9799c662f05589bf1d9064e6e5129b1381, test:.github/scripts/test-no-leak.test.sh@sha256:36c44d3cd4c56c6483e31d10e31ce44b29db039518446a3f305a1f1f4a2bce9d, test:.github/actions/urzua-gate/test.sh@sha256:41938df777f1c21826b2ace086817f00e23a9fff71bf1de07c49f4cb897d6325
+Realized-by: code:.github/workflows/ci.yml@sha256:a2b83039753098dd01df37de8b7a526422e290f9fb11ed400ced6a92849ca4ea, code:.github/workflows/checks.yml@sha256:0a3547c3f12a51cefe3dcc88696bacc8f9911356a4c6e61c56f8ef25e434e493, code:.github/workflows/prepare-release.yml@sha256:0e4d28280d1a77819841035b7ed7da5ee570cf96e80875d2f1e8cc83d7596b8d, code:.github/workflows/publish-release.yml@sha256:0a1fc6e498fb769a9b8c19a0abb651746f0806e5882a9e6ae3e610efb67fba30, code:.github/actions/install-knope/action.yml@sha256:7890ed184b08dbc99d465a61b46f6bef28ea8fd37a2eba69f05484c44ee3826b, test:.github/scripts/knope-pin.test.sh@sha256:2c13f4fc3ca389b738f6f0a913e45696023f38236868bae27d5a9a352ad40a8d, test:.github/scripts/release-guard.test.sh@sha256:5fca6fe029d9bc486b023e4a401d0ae297f0e4e57ed9bb7a4f54fe62f9ceb82f, test:.github/scripts/release-invariants.test.sh@sha256:8fc2b5758338aef9953492f6d1977d9799c662f05589bf1d9064e6e5129b1381, test:.github/scripts/test-no-leak.test.sh@sha256:36c44d3cd4c56c6483e31d10e31ce44b29db039518446a3f305a1f1f4a2bce9d, test:.github/actions/urzua-gate/test.sh@sha256:41938df777f1c21826b2ace086817f00e23a9fff71bf1de07c49f4cb897d6325
 Date: 2026-09-10
-Version: '0.20'
+Version: '0.21'
 Author: beauwilliams
 Subject: 'This repo''s own CI/CD pipeline -- gating, release cutting, and distribution, as one buildable reference.'
 Implements: ADR-13, ADR-45
@@ -187,13 +187,12 @@ error. `release.yml` previously held the last three jobs and is deleted.
   version and creates the GitHub Release, with the compiled changelog as its notes since `[github]`
   config is present. Outputs the resolved tag, read from the same anchored `rust/Cargo.toml` line
   `knope.toml` itself bumps.
-- **`build`**: cross-compiles for `aarch64-apple-darwin`, `x86_64-apple-darwin` (both from the same
-  `macos-14` arm64 runner — a dedicated Intel runner queues indefinitely as GitHub winds down that
-  capacity), and `x86_64-unknown-linux-gnu`. Checks out the **tag**, not a branch head, so a push
+- **`build`**: builds `aarch64-apple-darwin` (on `macos-latest`) and `x86_64-unknown-linux-gnu`; there is no
+  Intel Mac build. Checks out the **tag**, not a branch head, so a push
   landing on `main` mid-publish cannot produce binaries that disagree with their release.
 - **`upload`**: `gh release upload --clobber` against the release `knope release` already created — never
   `gh release create`, which would collide with an existing release object. Then **asserts the
-  result**: reads the release back and fails if fewer than three archives are attached. A release
+  result**: reads the release back and fails if fewer than two archives are attached. A release
   object existing is not the same as a release being installable.
 - GitHub Release binaries only (`ADR-13`) — not published to crates.io; `Cargo.lock` is committed for
   this reason (a binary, not a library other crates depend on).
@@ -289,3 +288,5 @@ replays the original payload.
 > | 2026-11-10 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.github/workflows/checks.yml` a201f4e57f5f -> ad6ab57882df. Reason: checks.yml gained one additive, report-only step in the build job (no stale evidence pins: runs fix --rebaseline without --apply and fails unless the report status is ok); no existing step changed, so the claim still holds **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-10 | Bumped to `0.19`. The re-baseline row above records a structural change, which requires a version bump; the Decision and the pinned claim are unchanged. **Why:** the new stale-pin guard step changed the pinned `checks.yml`, so this record was re-pinned in the same pull request. | **structural** |
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.github/workflows/checks.yml` ad6ab57882df -> 0a3547c3f12a. Reason: Read the diff of checks.yml since the pin: the only change is one env entry on the test job, URZUA_BUG_LISTS_MAY_GROW, set from the bug-lists-grow pull request label for acceptance_bug_gate.rs; no step, job, trigger or ordering changed, so the claim about the workflow still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-14 | Bumped to `0.21`. The `build` job names `macos-latest` instead of `macos-14` for the macOS target, sets `MACOSX_DEPLOYMENT_TARGET=11.0` for it, and drops the `x86_64-apple-darwin` build (maintainer decision, 2026-11-14); a release carries two archives. **Why:** GitHub retired the `macos-14` image and pinned images get retired; the deployment target, not the runner, decides which macOS versions the binary supports, so the `0.4.1` macOS builds were cancelled at start and no binaries were attached; the cross-compile of `x86_64-apple-darwin` from the arm64 runner is unchanged. | **substantive** |
+> | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.github/workflows/publish-release.yml` 530bdeeececf -> 0a1fc6e498fb. Reason: the macOS build runner image changed from macos-14, which GitHub retired, to macos-latest, with MACOSX_DEPLOYMENT_TARGET 11.0 set for the macOS build; the Intel Mac build was dropped so a release carries two archives; install.sh now fails clearly on an Intel Mac; nothing else changed **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
