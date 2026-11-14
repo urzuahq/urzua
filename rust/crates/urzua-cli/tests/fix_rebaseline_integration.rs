@@ -285,6 +285,8 @@ fn an_authenticated_gh_login_is_recorded_over_by_and_the_override_is_disclosed()
             A,
             "--by",
             "ana",
+            "--actor",
+            "agent",
             "--reason",
             "r",
         ],
@@ -294,7 +296,7 @@ fn an_authenticated_gh_login_is_recorded_over_by_and_the_override_is_disclosed()
     assert_eq!(parsed["status"], "applied", "{parsed}");
     let a = std::fs::read_to_string(dir.join(A)).unwrap();
     assert!(
-        a.contains("(attested by gh-login, identity: gh-verified, actor: unspecified)"),
+        a.contains("(attested by gh-login, identity: gh-verified, actor: agent)"),
         "{a}"
     );
     assert!(!a.contains("attested by ana"), "{a}");
