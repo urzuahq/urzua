@@ -2,7 +2,7 @@
 Stable-Id: 01M7A3B7TD1N87WAEFWDMB5CTJ
 Status: Draft
 Date: 2026-11-13
-Version: '0.3'
+Version: '0.4'
 Author: beauwilliams
 Subject: '`urzua waive --from-report` -- drafting one waiver per rule and file from the current findings.'
 Implements: ADR-91
@@ -37,7 +37,7 @@ urzua waive --from-report [--apply] [--rule ID[,ID]]... [--path PATH]... [--by N
   carries an `Owner` header, set to that name, only when the waiver template lists `Owner` and the
   type declares it.
 
-Exit `0` whenever the command ran, with or without drafts; `2` when it could not run, or an `--apply` failed before writing any draft; `1` when an `--apply` failed after writing some (`partial-failure`, as for `fix`, `index`, `reverify` and `migrate`). Whether the repository is clean is still `check`'s answer. Stdout is one JSON document; notices go to stderr.
+Exit `0` whenever the command ran, with or without drafts; `2` when it could not run, or an `--apply` failed before writing any draft; `1` when an `--apply` failed after writing some (`partial-failure`, as for `fix`, `index`, `reverify` and `migrate`). Whether the repository is clean is still `check`'s answer. Stdout is one JSON document. The notices the run prints to stderr (the identity used in place of `--by`, what numbering reported) are also the report's `notices`, so stdout alone carries them.
 
 ## Which findings are drafted
 
@@ -135,3 +135,4 @@ entry is `null` for `no-file`; `waiver` is present only for `already-waived` and
 > | 2026-11-13 | Initial spec: the preview of `urzua waive --from-report` as built (eligibility, grouping, the pending value, refusals, the JSON report); `--apply` is not built. **Why:** `MILE-205`, plan PR3, maintainer decisions of 2026-11-13. | **structural** |
 > | 2026-11-13 | `--apply` documented: the numbering lock, one numbering, retaken numbers, write errors (exit 2, `error`), idempotence, check-after-apply; `Expires` omitted from drafts; skip reasons `resolved-by-own-draft` and `waiver-record`, and `resolved-by-drafts` judged again on the kept set. **Why:** `MILE-205`, plan PR4. | **substantive** |
 > | 2026-11-13 | An `--apply` that fails after writing some drafts reports `partial-failure` with exit 1, and `not-run` with exit 2 only when none was written; the numbering limit without `new.check_open_prs` is stated. Version `0.2` -> `0.3`. **Why:** review of the `--apply` change: the same outcome is `partial-failure` in `fix`, `index`, `reverify` and `migrate`. | **substantive** |
+> | 2026-11-14 | `WaiveReport` gains `notices` (present when non-empty): the identity substitution and numbering's notices, which were on stderr only. Version `0.3` -> `0.4`. **Why:** the external review's finding 5.4; `ADR-46` item 8 puts anything that can be structured in the JSON. | **substantive** |
