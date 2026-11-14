@@ -230,6 +230,31 @@ pub enum Phase {
     AfterScoping,
 }
 
+/// A rule that runs for every configuration, declared or not (maintainer
+/// decision, 2026-11-14). The runner runs one at `level` when the configuration
+/// declares none; a declared level stands, except `off` on a rule that
+/// `can_turn_off` is false for, which is a load error: that rule is a refusal,
+/// not a preference.
+pub struct DefaultOn {
+    pub id: &'static str,
+    pub level: crate::config::RuleLevel,
+    pub can_turn_off: bool,
+}
+
+/// Every rule that is on by default. Their executions do not count as a rule
+/// having looked at a corpus the repository chose to govern (`any_rule_looked`):
+/// a configuration that declares no rule still reports `not-run`.
+pub const DEFAULT_ON_RULES: &[DefaultOn] = &[DefaultOn {
+    id: RULE_IDENTITY_RECORD_SYMLINK_ESCAPES,
+    level: crate::config::RuleLevel::Error,
+    can_turn_off: false,
+}];
+
+/// The default-on entry for `id`, if it has one.
+pub fn default_on(id: &str) -> Option<&'static DefaultOn> {
+    DEFAULT_ON_RULES.iter().find(|d| d.id == id)
+}
+
 /// Every rule this build ships, in the order `check` runs them and lists them
 /// in `rules_executed`.
 pub const RULE_TABLE: &[RuleDef] = &[
@@ -1202,6 +1227,28 @@ pub const RULE_TABLE: &[RuleDef] = &[
         run: |c| {
             identity_collision(c.records, c.collisions)
         },
+    },
+    RuleDef {
+        id: RULE_IDENTITY_RECORD_SYMLINK_ESCAPES,
+        description: "A tracked record file that is a symlink resolving outside the repository, or outside its record type's directory, is refused and never read, by every command (`ADR-89` amendment of 2026-11-14). Without it a record could be moved out of the governed tree and a symlink left in its place, so a later edit to the moved copy changes the record's status where no gate on the governed path sees it, and a link to a file outside the repository would be read and published. A link to another file directly in the same type directory is a plain alias and is not refused. The finding is an error that no waiver excuses, names the link and where it resolves, and is reported on a scoped or `--base` run too. Maintainer decision, 2026-11-14: on for every configuration and cannot be turned off, so a configuration that declares it `off` is a load error.",
+        scope: Scope::Files,
+        anchor: Anchor::Outside,
+        judges: Judges::NotRecordLevel,
+        needs_identity_index: false,
+        requires_relation_pairs: false,
+        requires_acyclic_pair: false,
+        requires_override_log: false,
+        requires_authority: false,
+        reads_declaration: None,
+        header_none: HeaderNone::Exempt("judges where a tracked path resolves, not a header"),
+        options: &[],
+        population: PopulationUnit::Path,
+        actions: &[
+            VariantAction::new("record-symlink-escapes", ActionDecl::Exempt("the fix is to replace the link with the record file or remove it; neither is a field edit")).floored(FindingSeverity::Error).unwaivable(),
+        ],
+        phase: Phase::Main,
+        companion: None,
+        run: |c| identity_record_symlink_escapes(c.config, c.tracked_paths, c.escaping_records),
     },
     RuleDef {
         id: RULE_IDENTITY_OPEN_PR_COLLISION,

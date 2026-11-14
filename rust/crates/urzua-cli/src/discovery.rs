@@ -167,6 +167,62 @@ pub(crate) fn resolved_model(
     )
 }
 
+/// The tracked record files whose real location is outside the repository or
+/// outside the directory of the type that governs them (`ADR-89` amendment of
+/// 2026-11-14). The shared guard: a symlinked record must not be read, whatever
+/// command is reading, because its content would either leave the repository or
+/// sit at a path no gate judges as a record. A path that does not resolve (a
+/// removed or dangling record) or resolves to a directory is left to the
+/// loader's own errors.
+pub(crate) fn escaping_records(
+    repo_root: &Path,
+    paths: &[PathBuf],
+    config: &Config,
+) -> Vec<urzua_core::rules::EscapingRecord> {
+    let Ok(root) = repo_root.canonicalize() else {
+        return Vec::new();
+    };
+    let mut real_dirs: HashMap<String, Option<PathBuf>> = HashMap::new();
+    let mut out = Vec::new();
+    for rel in paths {
+        let types: Vec<&urzua_core::config::RecordTypeConfig> = config
+            .record_types
+            .values()
+            .filter(|t| type_governs(t, rel))
+            .collect();
+        if types.is_empty() {
+            continue;
+        }
+        let Ok(real) = repo_root.join(rel).canonicalize() else {
+            continue;
+        };
+        if real.is_dir() {
+            continue;
+        }
+        let inside_a_type_dir = types.iter().any(|t| {
+            t.all_dirs().any(|dir| {
+                let canonical = real_dirs
+                    .entry(dir.to_string())
+                    .or_insert_with(|| repo_root.join(dir).canonicalize().ok());
+                canonical.as_deref() == real.parent()
+            })
+        });
+        if real.starts_with(&root) && inside_a_type_dir {
+            continue;
+        }
+        let shown = real
+            .strip_prefix(&root)
+            .map_or_else(|_| real.display().to_string(), |r| r.display().to_string());
+        out.push(urzua_core::rules::EscapingRecord {
+            path: rel.clone(),
+            reason: format!(
+                "that resolves outside the repository or its record type's directory (it points to {shown})"
+            ),
+        });
+    }
+    out
+}
+
 pub(crate) fn load_records(
     repo_root: &Path,
     discovered: &[PathBuf],

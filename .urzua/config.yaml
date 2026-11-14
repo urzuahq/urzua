@@ -689,6 +689,7 @@ rules:
   type.no-declared-spec: warn
   type.dir-matches-nothing: warn
   identity.collision: error
+  identity.record-symlink-escapes: error
   # An added record that shares a number with a fetched pull request (ADR-93). A
   # warning, because plain git cannot tell a closed pull request from an open one.
   identity.open-pr-collision: warn

@@ -118,6 +118,9 @@ pub struct RuleCtx<'a> {
     pub refs_snapshot: &'a Result<crate::refs_snapshot::RefsSnapshot, String>,
     /// Every discovered path, staged deletions included.
     pub tracked_paths: &'a [PathBuf],
+    /// Tracked record files that are symlinks out of their governed tree;
+    /// never loaded (`identity.record-symlink-escapes`).
+    pub escaping_records: &'a [EscapingRecord],
     /// Discovered paths less staged deletions.
     pub live_paths: &'a [PathBuf],
     /// False only on a definite absence: an unreadable path counts as present,
@@ -144,7 +147,14 @@ pub fn gate_and_run(
 ) -> (RuleExecution, Vec<Finding>) {
     use crate::config::RuleLevel;
 
-    match config.rules.get(id).map(|s| s.level) {
+    // A rule on for every configuration runs at its default level when the
+    // repository declares none (`DEFAULT_ON_RULES`).
+    let declared = config
+        .rules
+        .get(id)
+        .map(|s| s.level)
+        .or_else(|| super::default_on(id).map(|d| d.level));
+    match declared {
         None | Some(RuleLevel::Off) => (RuleExecution::not_enabled(id), Vec::new()),
         Some(level) => {
             let severity = level

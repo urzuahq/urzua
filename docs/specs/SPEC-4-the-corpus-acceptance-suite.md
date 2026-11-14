@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5N2PD9ZYBJPZHN05W7
-Version: '0.20'
+Version: '0.21'
 Date: 2026-08-20
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/tests/acceptance.rs@sha256:ae174f312e2879a85ee1f4c35178007a41e9d818994602af0401ec15c6e829a6, test:rust/crates/urzua-cli/tests/acceptance_property.rs@sha256:776f499ed6f76ab895ab380e38f62e1bacba4613b5dcd49074f31b99662d248e
+Realized-by: code:rust/crates/urzua-cli/tests/acceptance.rs@sha256:5c39217d549eda5d5e4d40a5df43cc482d6c47a0aecd896517b0eedacd8dc801, test:rust/crates/urzua-cli/tests/acceptance_property.rs@sha256:776f499ed6f76ab895ab380e38f62e1bacba4613b5dcd49074f31b99662d248e
 Author: beauwilliams
 Subject: 'The corpus acceptance suite -- documented bug classes `check` must reproduce against real corpora.'
 Parent: SPEC-1
@@ -221,7 +221,8 @@ built, and where it differs from the sketch:
   each of those rules set to `off` in the config the case runs under (after `setup`, so an `init`ed
   config is mutated too) and the case must then fail. This is "a case that passes against a build with
   the rule removed is not a case", executed on every run. A mutation that makes the config invalid
-  (exit 2) is a harness failure, not a proof. A case that asserts something no single rule produces
+  (exit 2) is a harness failure, not a proof, except for a rule that is on by default and cannot be
+  turned off (`SPEC-2`, "Rules that are on by default"): there the config refusing `off` is how the case fails. A case that asserts something no single rule produces
   (a positive control, a config error, `init` output) gives `mutation_exempt` a reason instead; a case
   with neither is rejected. `expect_rules_ran` asserts the same thing for each rule it lists (status
   `ran` over a non-empty population), so only its first rule is switched off; the others count once that
@@ -273,8 +274,8 @@ built, and where it differs from the sketch:
 
 ### Added by the rest of MILE-170
 
-- **Commits, `--base` and shallow runs.** A case may list `commits`, each writing, renaming or removing
-  files and committing; the fixture commit is tagged `base`, so `check --base base` gives the changed-path
+- **Commits, `--base` and shallow runs.** A case may list `commits`, each writing, renaming, removing or
+  symlinking (`symlink`, path to target) files and committing; the fixture commit is tagged `base`, so `check --base base` gives the changed-path
   rules a diff. `shallow: true` runs the case in a `--depth 1` clone made after the commits.
   `expect_notices` matches the report's notices by `subject` and `message_contains`. Git history is part
   of the fixture, so a case's commits are written in its own file, not in the corpus.
@@ -456,3 +457,5 @@ own-corpus case lacks the flag. A case over a fixture corpus needs none.
 > | 2026-11-08 | Bumped to `0.18`. Added the "CI shard protocol" section: `URZUA_ACCEPTANCE_SHARD`, `URZUA_ACCEPTANCE_PROVEN_OUT` and `URZUA_ACCEPTANCE_MERGE`, how the cases are dealt, what a shard file holds, and what makes the merge refuse a set. **Why:** the protocol was built by `ADR-98` and described only in `SPEC-20` and an ADR, while this spec, which owns the runner and its coverage gate, did not say that the gate is now judged over merged shard files. No behaviour of the runner changed. | **substantive** |
 > | 2026-11-09 | Bumped to `0.19`. Added "Cases over this repository's own corpus pin the evaluation date": every `corpus: "@repo"` case passes `--as-of 2026-11-09`, and a test enforces it. **Why:** a review found those cases, and the integration tests over the repository root, would fail on 2026-12-23, when the first claim expires, with no code change; claim expiry is the records gate's job under the real clock. | **substantive** |
 > | 2026-11-09 | Bumped to `0.20`. Re-pin rows in this revision log were reworded to name who re-verified, matching the tool's wording since 2026-11-09; hashes, reasons and dates are unchanged. **Why:** Maintainer decision, 2026-11-09. | **structural** |
+> | 2026-11-14 | Bumped to `0.21`. A case's `commits` may create symlinks (`symlink`), and a mutation of a rule that is on by default and cannot be turned off is proven by the config refusing `off` instead of being a harness failure; `corpus-d` gains the case for `identity.record-symlink-escapes`. **Why:** `ADR-89` amendment of 2026-11-14 added that rule. | **structural** |
+> | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/acceptance.rs` ae174f312e28 -> 5c39217d549e. Reason: Pinned file(s) changed by the symlinked-record refusal: acceptance.rs: a case's commits may create symlinks, and a rule that cannot be turned off is proven by the config refusing `off`. The record's claim is unaffected by these changes. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |

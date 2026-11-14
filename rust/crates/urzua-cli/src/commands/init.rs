@@ -589,6 +589,11 @@ pub(crate) fn proposed_rules_mapping(
     // without being blocked on it, and promoting a rule is the adopter's call.
     let mut rules = Mapping::new();
     for id in urzua_core::rules::ALL_RULES {
+        // A rule that is on for every configuration needs no entry; proposing
+        // one at `warn` would only invite lowering it.
+        if urzua_core::rules::default_on(id).is_some() {
+            continue;
+        }
         // Adopt mode has nothing to say about a rule's options, and a rule
         // declared without the options it requires will not load.
         if urzua_core::config::rule_requires_options(id) {

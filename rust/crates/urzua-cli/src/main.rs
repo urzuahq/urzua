@@ -36,6 +36,7 @@ pub(crate) const NOTICE_PERMANENT_WAIVERS: &str = "permanent-waivers";
 /// the header shapes (`BUG-151`).
 /// `check` notice that tracked records are missing from the working tree.
 pub(crate) const NOTICE_MISSING_RECORD: &str = "missing-record";
+pub(crate) const NOTICE_ESCAPING_RECORDS: &str = "escaping-records";
 pub(crate) const NOTICE_HEADER_SHAPE: &str = "header-shape";
 /// `init` warning that a proposed config leaves a command's rule set entirely
 /// undeclared (`BUG-99`).

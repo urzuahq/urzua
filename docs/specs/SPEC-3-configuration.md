@@ -1,9 +1,9 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.142'
+Version: '0.143'
 Date: 2026-08-20
 Status: Shipped
-Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:d07f1b749110be985c4adcea8991a4266443afdc83897e26e23e3a66dfe1adcd, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:d6dcb432d05a03f8593ee899b9427365680ad3f24b158d98cd0964d2b15d78b9, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:3c8aa671582772499ab7345cdbfb5a4dc2c50462882851fb20f853992acfd57c
+Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:00380806bfa0efa2b631ea3dad824e1f785b0237f7dda5302cdf1097f4da5421, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:d6dcb432d05a03f8593ee899b9427365680ad3f24b158d98cd0964d2b15d78b9, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:3c8aa671582772499ab7345cdbfb5a4dc2c50462882851fb20f853992acfd57c
 Embodiment: Verified
 Author: beauwilliams
 Subject: '`.urzua/config.yaml` -- the schema for record types, required/known fields, and per-type behavior.'
@@ -1617,6 +1617,11 @@ A repository declares which rules run and at what level. A rule that is not name
 (`ADR-53`), and appears in `rules_executed` as `not-enabled` rather than being omitted (`ADR-7`) --
 "off" and "ran clean" must stay distinguishable.
 
+One rule runs without being named: `identity.record-symlink-escapes` is on for every configuration at `error`
+(`SPEC-2`, "Rules that are on by default"). A declared level other than `off` stands, and declaring it `off` is a
+config load error naming the rule, so a refusal cannot be switched off in silence. `urzua init` writes no entry
+for it.
+
 ```yaml
 rules:
   header.required-fields: error
@@ -2573,3 +2578,5 @@ proves this configuration produces the three findings.
 > | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/own_config_integration.rs` 5ca7a48405d4 -> e60116ae0a70. Reason: own_config_integration.rs: rustfmt wrapped one assert in the test added by this change; formatting only, no behaviour change. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-13 | Bumped to `0.142`. Documents `code.dangling-bug-reference` and its `extensions` and `code_comment_prefixes` options: bare file extensions required beside `back_pointer_paths`, comment leaders declared per extension with the back-pointer rules' set as the default, an id inside a URL not read; a dot, a glob or a blank entry, or a malformed leader declaration, is refused at load; `external_ids` and `ignore_marker` are the options of `citation.resolution` and the boundary rule, the marker read by this rule alone. **Why:** `MILE-108`, `RFC-41`, `ADR-100` -- the opt-in rule that checks source comments cite records that exist. | **substantive** |
 > | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` ad8c3554a542 -> d07f1b749110, `rust/crates/urzua-cli/tests/own_config_integration.rs` e60116ae0a70 -> d6dcb432d05a. Reason: Read the diff of each re-pinned file against main and the claim still holds. own_config_integration.rs: adds the test the_own_config_reports_a_dangling_citation_in_rust_and_scripts_and_nothing_else; no existing test changed; config.rs: RuleSetting gains the optional extensions field, RULE_OPTIONS gains the extensions entry, validate_extensions refuses an entry that is not a bare extension, the optional code_comment_prefixes field with validate_code_comment_prefixes and its applicability check, validate_ignore_markers applies the generic marker guard to code.dangling-bug-reference, and the external_ids doc comment names PREFIX-LOW..HIGH instead of a sample range; no existing option, parse or default changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-14 | Bumped to `0.143`. Documents that `identity.record-symlink-escapes` is on for every configuration and that declaring it `off` is a load error. **Why:** `ADR-89` amendment of 2026-11-14. | **substantive** |
+> | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` d07f1b749110 -> 00380806bfa0. Reason: Pinned file(s) changed by the symlinked-record refusal: config.rs: a rule that cannot be turned off, declared `off`, is a load error (RuleCannotBeOff, validate_default_on_rules). The record's claim is unaffected by these changes. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |

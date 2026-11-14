@@ -1,0 +1,250 @@
+//! A tracked record file that is a symlink resolving outside the repository, or
+//! outside its record type's directory, is refused by every corpus command
+//! (ADR-89 amendment, 2026-11-14; SPEC-2 `identity.record-symlink-escapes`).
+//! The reviewer's two-PR attack is reproduced end to end: the first PR moves a
+//! decision record out of the governed tree and leaves a symlink in its place,
+//! the second flips the moved copy to `Accepted`, which no gate on the governed
+//! path would otherwise see.
+
+mod common;
+
+use std::path::Path;
+use std::process::Command;
+
+const RULE: &str = "identity.record-symlink-escapes";
+const PROPOSED: &str = "---\nStatus: Proposed\n---\n# ADR-1: T\n\nprose\n";
+const ACCEPTED: &str = "---\nStatus: Accepted\n---\n# ADR-1: T\n\nprose\n";
+const PATH_1: &str = "docs/adr/ADR-1-a.md";
+
+/// No `identity.record-symlink-escapes` entry under `rules:`: the refusal is on
+/// for every configuration.
+const CONFIG: &str = "schema_version: 2\noverride_log: .urzua/override-log.md\nrules:\n  diff.decider-required: error\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\"]\n    statuses:\n      values: [Proposed, Accepted, Rejected]\nauthority:\n  deciders:\n    maintainers: {logins: [Alice]}\n  gates:\n    - {type: adr, to: [Accepted, Rejected], by: maintainers}\n";
+
+fn git(dir: &Path, args: &[&str]) {
+    let out = Command::new("git")
+        .args(args)
+        .current_dir(dir)
+        .output()
+        .expect("git should run");
+    assert!(
+        out.status.success(),
+        "git {args:?} failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
+
+fn fixture(name: &str) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-symlink-escape-{name}"));
+    for d in ["docs/adr", ".urzua", "notes"] {
+        std::fs::create_dir_all(dir.join(d)).unwrap();
+    }
+    git(&dir, &["init", "-q"]);
+    git(&dir, &["config", "user.email", "t@example.com"]);
+    git(&dir, &["config", "user.name", "t"]);
+    std::fs::write(dir.join(".urzua/config.yaml"), CONFIG).unwrap();
+    std::fs::write(dir.join(PATH_1), PROPOSED).unwrap();
+    git(&dir, &["add", "-A"]);
+    git(&dir, &["commit", "-q", "-m", "base"]);
+    git(&dir, &["tag", "base"]);
+    dir
+}
+
+fn run(dir: &Path, args: &[&str]) -> (i32, serde_json::Value, String) {
+    let out = common::urzua()
+        .args(args)
+        .current_dir(dir)
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+    let json = serde_json::from_str(&stdout).unwrap_or(serde_json::Value::Null);
+    (out.status.code().unwrap_or(-1), json, stdout)
+}
+
+fn escapes(report: &serde_json::Value) -> Vec<&serde_json::Value> {
+    report["findings"]
+        .as_array()
+        .map(|f| f.iter().filter(|f| f["rule"] == RULE).collect())
+        .unwrap_or_default()
+}
+
+fn commit_all(dir: &Path, message: &str) {
+    git(dir, &["add", "-A"]);
+    git(dir, &["commit", "-q", "-m", message]);
+}
+
+fn actors(dir: &Path, login: &str) -> String {
+    let path = dir.join("actors.json");
+    std::fs::write(
+        &path,
+        serde_json::json!({"schema": 1, "pr_author": login, "approvers": []}).to_string(),
+    )
+    .unwrap();
+    path.to_string_lossy().to_string()
+}
+
+/// Moves the record out of the governed tree and leaves a symlink in its place.
+fn move_out_and_link(dir: &Path) {
+    git(dir, &["mv", PATH_1, "notes/x.md"]);
+    std::os::unix::fs::symlink("../../notes/x.md", dir.join(PATH_1)).unwrap();
+}
+
+#[test]
+fn a_record_symlinked_outside_the_repository_is_a_blocking_finding_naming_the_file() {
+    let dir = fixture("outside");
+    let secret = common::TempFile::new("urzua-symlink-secret");
+    std::fs::write(
+        &secret,
+        "---\nStatus: Accepted\n---\n# 9: secret contents\n",
+    )
+    .unwrap();
+    std::os::unix::fs::symlink(&secret, dir.join("docs/adr/ADR-9-link.md")).unwrap();
+    commit_all(&dir, "link");
+    let (code, report, stdout) = run(&dir, &["check"]);
+    let found = escapes(&report);
+    assert_eq!(found.len(), 1, "{stdout}");
+    assert_eq!(found[0]["file"], "docs/adr/ADR-9-link.md");
+    assert_eq!(found[0]["severity"], "error");
+    assert_eq!(code, 1, "{stdout}");
+    assert_eq!(report["blocking"], true, "{stdout}");
+    assert!(!stdout.contains("secret contents"), "{stdout}");
+}
+
+#[test]
+fn a_record_symlinked_inside_the_repository_but_outside_its_type_directory_is_refused() {
+    let dir = fixture("outside-tree");
+    std::fs::write(dir.join("notes/y.md"), PROPOSED).unwrap();
+    std::os::unix::fs::symlink("../../notes/y.md", dir.join("docs/adr/ADR-2-b.md")).unwrap();
+    commit_all(&dir, "link");
+    let (code, report, stdout) = run(&dir, &["check"]);
+    let found = escapes(&report);
+    assert_eq!(found.len(), 1, "{stdout}");
+    assert_eq!(found[0]["file"], "docs/adr/ADR-2-b.md");
+    assert_eq!(code, 1, "{stdout}");
+}
+
+#[test]
+fn a_symlink_that_stays_inside_its_type_directory_is_not_refused() {
+    let dir = fixture("inside-tree");
+    std::os::unix::fs::symlink("ADR-1-a.md", dir.join("docs/adr/ADR-3-alias.md")).unwrap();
+    commit_all(&dir, "alias");
+    let (_, report, stdout) = run(&dir, &["check"]);
+    assert!(escapes(&report).is_empty(), "{stdout}");
+}
+
+#[test]
+fn the_refusal_cannot_be_turned_off_and_a_rule_entry_does_not_lower_it() {
+    let dir = fixture("off");
+    std::fs::write(dir.join("notes/y.md"), PROPOSED).unwrap();
+    std::os::unix::fs::symlink("../../notes/y.md", dir.join("docs/adr/ADR-2-b.md")).unwrap();
+    let config = CONFIG.replace("rules:\n", &format!("rules:\n  {RULE}: off\n"));
+    std::fs::write(dir.join(".urzua/config.yaml"), config).unwrap();
+    commit_all(&dir, "link");
+    let (code, report, stdout) = run(&dir, &["check"]);
+    assert_eq!(code, 2, "{stdout}");
+    let error = report["error"].as_str().unwrap_or_default();
+    assert!(
+        error.contains(RULE) && error.contains("cannot be turned off"),
+        "{stdout}"
+    );
+}
+
+#[test]
+fn every_other_corpus_command_refuses_the_escaping_record_naming_it() {
+    let dir = fixture("commands");
+    let secret = common::TempFile::new("urzua-symlink-secret-cmds");
+    std::fs::write(
+        &secret,
+        "---\nStatus: Accepted\n---\n# 9: secret contents\n",
+    )
+    .unwrap();
+    std::os::unix::fs::symlink(&secret, dir.join("docs/adr/ADR-9-link.md")).unwrap();
+    commit_all(&dir, "link");
+    for args in [
+        &["graph"][..],
+        &["export", "--format", "json"][..],
+        &["fix"][..],
+        &["explain", "docs/adr/ADR-1-a.md"][..],
+        &["migrate", "ids"][..],
+    ] {
+        let (code, _, stdout) = run(&dir, args);
+        assert_eq!(code, 2, "{args:?}: {stdout}");
+        assert!(
+            stdout.contains("docs/adr/ADR-9-link.md")
+                && stdout.contains("resolves outside the repository"),
+            "{args:?}: {stdout}"
+        );
+        assert!(!stdout.contains("secret contents"), "{args:?}: {stdout}");
+    }
+}
+
+#[test]
+fn audit_is_check_and_reports_the_finding_too() {
+    let dir = fixture("audit");
+    std::fs::write(dir.join("notes/y.md"), PROPOSED).unwrap();
+    std::os::unix::fs::symlink("../../notes/y.md", dir.join("docs/adr/ADR-2-b.md")).unwrap();
+    commit_all(&dir, "link");
+    let (code, report, stdout) = run(&dir, &["audit"]);
+    assert_eq!(escapes(&report).len(), 1, "{stdout}");
+    assert_eq!(code, 1, "{stdout}");
+}
+
+#[test]
+fn a_rule_selection_that_leaves_the_refusal_out_warns_that_the_record_was_not_read() {
+    let dir = fixture("selection");
+    std::fs::write(dir.join("notes/y.md"), PROPOSED).unwrap();
+    std::os::unix::fs::symlink("../../notes/y.md", dir.join("docs/adr/ADR-2-b.md")).unwrap();
+    commit_all(&dir, "link");
+    let (_, report, stdout) = run(&dir, &["check", "--rules", "diff.decider-required"]);
+    assert!(escapes(&report).is_empty(), "{stdout}");
+    let notice = report["notices"]
+        .as_array()
+        .and_then(|n| n.iter().find(|n| n["subject"] == "escaping-records"))
+        .unwrap_or_else(|| panic!("no escaping-records notice: {stdout}"));
+    assert_eq!(notice["severity"], "warning", "{stdout}");
+    assert!(
+        notice["message"]
+            .as_str()
+            .unwrap()
+            .contains("docs/adr/ADR-2-b.md"),
+        "{stdout}"
+    );
+    // Naming the rule needs no declaration, and then it reports the finding.
+    let (code, report, stdout) = run(&dir, &["check", "--rules", RULE]);
+    assert_eq!(escapes(&report).len(), 1, "{stdout}");
+    assert_eq!(code, 1, "{stdout}");
+}
+
+#[test]
+fn the_two_pr_symlink_attack_is_blocked_at_both_steps() {
+    let dir = fixture("attack");
+    let mallory = actors(&dir, "mallory");
+
+    // PR 1: the record leaves the governed tree and a symlink stands in for it.
+    move_out_and_link(&dir);
+    commit_all(&dir, "pr1");
+    let (code, report, stdout) = run(&dir, &["check", "--base", "base", "--actors", &mallory]);
+    assert_eq!(escapes(&report).len(), 1, "{stdout}");
+    assert_eq!(escapes(&report)[0]["file"], PATH_1);
+    assert_eq!(code, 1, "PR 1 must block: {stdout}");
+    git(&dir, &["tag", "after-pr1"]);
+
+    // PR 2 (had PR 1 merged): the moved copy becomes Accepted by a non-decider.
+    std::fs::write(dir.join("notes/x.md"), ACCEPTED).unwrap();
+    commit_all(&dir, "pr2");
+    let (code, report, stdout) = run(
+        &dir,
+        &["check", "--base", "after-pr1", "--actors", &mallory],
+    );
+    assert_eq!(escapes(&report).len(), 1, "{stdout}");
+    assert_eq!(code, 1, "PR 2 must block: {stdout}");
+}
+
+#[test]
+fn an_honest_move_with_no_symlink_left_behind_is_not_refused() {
+    let dir = fixture("honest-move");
+    git(&dir, &["rm", "-q", PATH_1]);
+    std::fs::write(dir.join("notes/x.md"), PROPOSED).unwrap();
+    commit_all(&dir, "move");
+    let (_, report, stdout) = run(&dir, &["check"]);
+    assert!(escapes(&report).is_empty(), "{stdout}");
+}

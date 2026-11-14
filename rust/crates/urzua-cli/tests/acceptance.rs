@@ -110,6 +110,9 @@ struct Commit {
     rename: Vec<Rename>,
     #[serde(default)]
     remove: Vec<String>,
+    /// Symlinks to create, path to link target (as written in the link).
+    #[serde(default)]
+    symlink: std::collections::BTreeMap<String, String>,
 }
 
 #[derive(Deserialize)]
@@ -442,6 +445,11 @@ fn evaluate(case: &Case, corpus_dir: &Path, mutate: Option<&str>) -> Result<Vec<
                 std::fs::create_dir_all(to.parent().unwrap()).map_err(|e| e.to_string())?;
                 std::fs::write(&to, text).map_err(|e| e.to_string())?;
             }
+            for (p, target) in &c.symlink {
+                let to = t.join(p);
+                std::fs::create_dir_all(to.parent().unwrap()).map_err(|e| e.to_string())?;
+                std::os::unix::fs::symlink(target, &to).map_err(|e| e.to_string())?;
+            }
             git(&t, &["add", "-A"])?;
             git(&t, &["commit", "-q", "-m", &format!("change {}", n + 1)])?;
         }
@@ -526,7 +534,12 @@ fn evaluate(case: &Case, corpus_dir: &Path, mutate: Option<&str>) -> Result<Vec<
     };
     drop(temp);
     drop(mutated_config);
-    if mutate.is_some() && out.0 == Some(2) && case.expect_exit != 2 {
+    // A rule that is on for every configuration cannot be switched off: the
+    // config load refusing `off` is how its case fails without it.
+    let cannot_be_off = mutate
+        .and_then(urzua_core::rules::default_on)
+        .is_some_and(|d| !d.can_turn_off);
+    if mutate.is_some() && out.0 == Some(2) && case.expect_exit != 2 && !cannot_be_off {
         return Err(format!(
             "switching {} off made the config invalid (exit 2); the mutation proves nothing",
             mutate.unwrap_or_default()

@@ -45,17 +45,40 @@ pub(crate) struct Session {
     pub config: Config,
     pub discovered: DiscoveredFiles,
     pub records: Vec<Record>,
+    /// Tracked record files that are symlinks out of their governed tree. They
+    /// are in `discovered` but never loaded; `check` reports each as a finding
+    /// and every other command refuses (`refusing_escaping_records`).
+    pub escaping_records: Vec<urzua_core::rules::EscapingRecord>,
     pub full_text: std::collections::HashMap<PathBuf, String>,
 }
 
 impl Session {
+    /// For every command that reads or writes records: a record that is a
+    /// symlink out of its governed tree stops the run (exit 2), naming it.
+    /// `check` alone keeps it and reports a finding (`open_with`).
     pub fn open(config_path: Option<PathBuf>) -> Result<Self, Failure> {
-        Self::open_with(&[], config_path, |_, _, _| Ok(()))
+        Self::open_with(&[], config_path, |_, _, _| Ok(()))?.refusing_escaping_records()
+    }
+
+    /// Stops the run when a tracked record resolves outside the repository or
+    /// its record type's directory: the file is never read, and the refusal
+    /// names it rather than letting the corpus shrink in silence.
+    pub fn refusing_escaping_records(self) -> Result<Self, Failure> {
+        match self.escaping_records.first() {
+            Some(e) => Err(format!(
+                "{} is a symlink {}; urzua refuses to read it",
+                e.path.display(),
+                e.reason
+            )
+            .into()),
+            None => Ok(self),
+        }
     }
 
     /// `adjust` runs after discovery and before records load, for the command
-    /// that narrows or refuses the discovered set (`check`'s argv overrides,
-    /// `export`'s escaping-symlink refusal).
+    /// that narrows or refuses the discovered set (`check`'s argv overrides).
+    /// The result keeps `escaping_records`; a command that is not `check` calls
+    /// `refusing_escaping_records`.
     pub fn open_with(
         root_hint: &[PathBuf],
         config_path: Option<PathBuf>,
@@ -99,18 +122,23 @@ impl Session {
             discovered.staged_deletions.insert(p.clone());
             discovered.unstaged_deletions.insert(p);
         }
-        let (records, full_text) = load_records(
-            &repo_root,
-            &discovered.paths,
-            &discovered.staged_deletions,
-            &config,
-        )?;
+        let escaping_records =
+            crate::discovery::escaping_records(&repo_root, &discovered.paths, &config);
+        let readable: Vec<PathBuf> = discovered
+            .paths
+            .iter()
+            .filter(|p| !escaping_records.iter().any(|e| &e.path == *p))
+            .cloned()
+            .collect();
+        let (records, full_text) =
+            load_records(&repo_root, &readable, &discovered.staged_deletions, &config)?;
         Ok(Session {
             repo_root,
             config_path,
             config,
             discovered,
             records,
+            escaping_records,
             full_text,
         })
     }

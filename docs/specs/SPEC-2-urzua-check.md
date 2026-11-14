@@ -1,9 +1,9 @@
 ---
 Stable-Id: 01M6R3NK5GM1RYRRX2XVMZ0ZAK
-Version: '0.159'
+Version: '0.160'
 Date: 2026-08-20
 Status: Shipped
-Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs@sha256:0278cd25032de4631d40c6b5a55c8e1ec23d3786724548df9b33e64c7782ddbb, code:rust/crates/urzua-core/src/rules.rs@sha256:ef12b204f3781fc85f8e19d00cce3e74d83954dc0cfa298eb6e53f3a86a23063, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:bc2e870defc676cbc3c053ab78b577276cf7696b10c6ef586be3ee37548abf64, test:rust/crates/urzua-cli/tests/fail_on_integration.rs@sha256:4b1707f3b18aed7b018f8b80c55f1e2091ae19148f3de6c95435a8f5fee4cab7
+Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs@sha256:c2f138da00a752556fdfd9769e77ffd2574b3d45545e01c716380c5dca5e1625, code:rust/crates/urzua-core/src/rules.rs@sha256:ef12b204f3781fc85f8e19d00cce3e74d83954dc0cfa298eb6e53f3a86a23063, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:bc2e870defc676cbc3c053ab78b577276cf7696b10c6ef586be3ee37548abf64, test:rust/crates/urzua-cli/tests/fail_on_integration.rs@sha256:4b1707f3b18aed7b018f8b80c55f1e2091ae19148f3de6c95435a8f5fee4cab7
 Embodiment: Verified
 Author: beauwilliams
 Subject: '`urzua check` -- discovery, rule execution, and the JSON output contract.'
@@ -284,6 +284,15 @@ not a reading scope, exactly as a path argument is (`BUG-60`):
 A `null` base is not "no scope" — a full sweep legitimately has one. Any consumer keying "did this
 run" on a missing base is reading the wrong field, and the sources exist so it does not have to.
 
+**Symlinked records** (`ADR-89` amendment of 2026-11-14): a tracked record file whose real location is outside
+the repository, or outside the directory of the type that governs it, is never read. `check`, `check --base`,
+`audit` and the MCP check tool report it as the blocking finding `identity.record-symlink-escapes`, which names the
+link and where it points, and every other command that loads the corpus (`fix`, `reverify`, `waive`, `migrate`,
+`export`, `graph`, `index`, `roadmap`, `explain`) exits 2 with an `error` naming it. A link to another file directly
+in the same type directory is an alias and is read. A link that does not resolve, or resolves to a directory, keeps
+the loader's "could not read" error. Without this a record could be moved out of the governed tree and a symlink
+left in its place, so that a later edit to the moved copy changed the record's status at a path no gate names.
+
 **No git repository**: there is no fallback. A directory walk has the failure mode above, so discovery is
 the tracked set or nothing. Outside a git repository, every command that reads one (`check`, `audit`,
 `explain`, `graph`, `export`, `fix`, `index`, `refs`, `migrate`, `init`, `doctor`, `new`) exits 2 with
@@ -300,6 +309,18 @@ Status applicability is part of the declaration rather than an `if` inside each 
 legitimately hold a number without stating a decision — a tombstone (RFC-13) — and a check that
 presupposes a decision is not wrong, it is *scoped*. A corpus that cannot express that forces its
 records to invent content or its linters to be switched off.
+
+### Rules that are on by default
+
+A rule normally runs only when the repository declares it under `rules:`. A rule listed in `DEFAULT_ON_RULES`
+(`urzua_core::rules`) runs for every configuration at its default level whether or not it is declared; a declared
+level other than `off` stands. `identity.record-symlink-escapes` (default `error`) is the one that cannot be turned
+off: declaring it `off` is a config load error (exit 2) naming the rule, `check --rules` accepts it without a
+declaration and `urzua init` writes no entry for it, and no waiver excuses its finding. A `--rules` selection that
+leaves it out does not run it; when a record was refused the report then carries the warning notice
+`escaping-records` naming the records, so a narrowed run is never read as a corpus without them.
+An execution of a default-on rule does not count as a rule having looked at the corpus for `status`: a configuration
+that declares no rule still reports `not-run` (`ADR-55`).
 
 ### Shipped, by actual rule id
 
@@ -345,6 +366,7 @@ which stays only for what genuinely isn't built yet.
 | `narrative-field.stale` | A type's config-declared `narrative_fields` pointer (e.g. a milestone's `Blocked-on`) resolves to a target whose `Status` has reached a terminal state (e.g. a cited bug is now `Fixed`) — a signal to re-examine (ADR-42, generalized beyond `Blocked-on` by MILE-90/ADR-44). `terminal_statuses` is declared per repository. |
 | `type.dir-matches-nothing` | A type's declared `dir` does not exist at all (`BUG-56`'s hazard for `dir`, no load-time guard). An existing, empty directory is a legitimate declared-but-unused state and is not flagged. Also reports a type’s `exclude_files` entry that names no tracked file directly in its `dir` (`MILE-150`), so a stale exclusion is visible. Reports each `extra_dirs` entry that does not exist (`MILE-130`). Reports each status a type's `sections.exempt_statuses` lists that none of the type's records holds (`MILE-7`), so an exemption that sets nothing aside is visible rather than silent. |
 | `identity.collision` | Two records resolving to the same identifier — a corpus error the index cannot represent, reported rather than papered over (`BUG-79`). |
+| `identity.record-symlink-escapes` | A tracked record file that is a symlink resolving outside the repository, or outside its record type's directory, is refused and never read, by every command (`ADR-89` amendment of 2026-11-14). Without it a record could be moved out of the governed tree and a symlink left in its place, so a later edit to the moved copy changes the record's status where no gate on the governed path sees it, and a link to a file outside the repository would be read and published. A link to another file directly in the same type directory is a plain alias and is not refused. The finding is an error that no waiver excuses, names the link and where it resolves, and is reported on a scoped or `--base` run too. Maintainer decision, 2026-11-14: on for every configuration and cannot be turned off, so a configuration that declares it `off` is a load error. |
 | `identity.open-pr-collision` | A record a `--base` diff adds shares its type and number with a file on a fetched pull-request head ref under a different `Stable-Id` (`ADR-93`, `MILE-89`): two branches filed the same number from one `main`, and each looks valid alone. The refs are the ones `urzua new` fetches into `refs/urzua/pr/<segment>/*` with `new.check_open_prs`; `check` never fetches, so with none present the rule notices how to fetch them and its population counts zero refs, never a clean run over nothing. A head whose file for that id carries the record's own `Stable-Id` is the same record and is not a collision, so a pull request is not flagged against itself nor against its own merged copy. Plain git cannot tell an open pull request from a closed one, so a closed, unmerged head can still hold a number a new record legitimately took: the finding is a warning, which still gates under `fail_on: warning`, and the path out is a waiver whose `Reason` names that pull request, or renaming the file and its H1 to the next free number (the one `urzua new` would take; `urzua migrate ids` cannot renumber). Judges the changed set: `not-applicable` on a run with no `--base`. Opt-in. |
 | `type.record-outside-declared-dir` | A record-shaped tracked path that no type's `dir` claimed (`BUG-62`) — a config written before `RFC-35` silently loses coverage on upgrade otherwise. |
 | `type.no-declared-spec` | Which configured types currently have no `spec` pointer declared at all (ADR-41/ADR-43) — a signal to review, never a mandate; a type can permanently have none declared. |
@@ -830,6 +852,7 @@ declares `known_fields` keeps the `append` variant.
 | `type.dir-matches-nothing` | `dir-missing` | `edit-config` `set` |
 | `type.dir-matches-nothing` | `exempt-status-matches-nothing` | `edit-config` `set` |
 | `identity.collision` | `identifier-collision` | exempt: the fix is a renumber, and no action kind addresses a rename yet (`urzua migrate ids` exists) |
+| `identity.record-symlink-escapes` | `record-symlink-escapes` | exempt: the fix is to replace the link with the record file or remove it; neither is a field edit; severity floor `error`; not waivable by a rule-level waiver |
 | `identity.open-pr-collision` | `open-pr-collision` | exempt: the fix is to rename the file and its H1 to the next free number, or a waiver naming a closed pull request; neither is a field edit |
 | `type.record-outside-declared-dir` | `record-outside-declared-dir` | exempt: the fix is a move, and no action kind addresses a move yet |
 | `type.no-declared-spec` | `no-declared-spec` | exempt: a signal to review, never a mandate |
@@ -923,7 +946,7 @@ declaration. Selection narrows what runs and never enables anything (`ADR-53`).
   waiver only when its rule ran over the whole corpus, so under a selection that leaves the rule out the
   waiver is eligible and not examined, never reported unmatched.
 - **A mistake in the command is exit 2, not a finding.** An empty id (`a,,b`), an id this build does not
-  ship, and an id the configuration does not declare are each `not-run` with an `error` naming the id.
+  ship, and an id the configuration does not declare (a rule on by default needs no declaration) are each `not-run` with an `error` naming the id.
 - Combines with a path argument, `--base` and `--stdin-path`; the selection applies to the rules, the
   scope to the records.
 - `urzua audit` has no selection of its own (`SPEC-11`).
@@ -1017,7 +1040,7 @@ judge the same records (`sequence.cycle`, `sequence.unresolved-blocker`) are unc
 |---|---|
 | 0 | no findings at or above the configured blocking severity; an `info` finding never counts, under either `fail_on` |
 | 1 | blocking findings; under `fail_on: warning` (or `--fail-on warning`), also any unwaived warning (`SPEC-3`) |
-| 2 | the check could not run — bad config, unreadable path, explicit paths matching zero files |
+| 2 | the check could not run — bad config, unreadable path, explicit paths matching zero files; for a command other than `check`, a tracked record symlinked outside the repository or its type's directory |
 
 `--fail-on error|warning` overrides the configuration's `fail_on` for one run. It moves only the exit
 code: `blocking` and the rest of the report are unchanged.
@@ -1286,3 +1309,6 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/check.rs` 212c34e908d4 -> b356257bf05a. Reason: check.rs: `hold_out_baseline` passes the config to `apply_drift_baseline`; nothing else changed in this step. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-13 | Bumped to `0.159`. `code.dangling-bug-reference` added to the generated rule table: an opt-in rule reporting a source comment that cites a record id resolving to no record, over the tracked files under its `back_pointer_paths` with one of its declared `extensions`; comment leaders per extension from `code_comment_prefixes`, the back-pointer rules' set when undeclared; existence only; an id inside a URL is not read; a back-pointer `embodiment.back-pointer-resolution` judges is left to that rule; `external_ids` and `ignore_marker` as for `citation.resolution` and the boundary rule. Its findings are kept under `check <path>` scoping. **Why:** `MILE-108`, `RFC-41`, `ADR-100` -- the mirror of `embodiment.locator-exists`, a citation that outlives the record it names. | **substantive** |
 > | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/check.rs` b356257bf05a -> 0278cd25032d, `rust/crates/urzua-core/src/rules.rs` b16f2783f10f -> ef12b204f378, `rust/crates/urzua-cli/tests/check_integration.rs` a60c9c61b94c -> bc2e870defc6. Reason: Read the diff of each re-pinned file against main and the claim still holds. check.rs: SourceInputs and Context gain code_citation_sources, read through read_source_inputs only when code.dangling-bug-reference is selected and handed to the rule context; no other stage changed; check_integration.rs: the ADR-0001 waiver fixture's H1 gains the citation-fixture marker text and every_header_reading_rule_reports_a_header_none_type_as_out_of_scope declares the new rule's required options; no assertion changed; rules.rs: declares the code_citation module and re-exports it; nothing else changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-14 | Bumped to `0.160`. Added the rule `identity.record-symlink-escapes` to the generated rule table and a section on rules that are on by default: a tracked record file symlinked outside the repository or its type's directory is never read; `check` reports a blocking, unwaivable finding, every other corpus command exits 2 naming it, and the rule is on for every configuration and cannot be turned off. **Why:** `ADR-89` amendment of 2026-11-14 (decided by the orchestrator, pending maintainer review); an external review reproduced a non-decider landing an Accepted record through a symlink. | **substantive** |
+> | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/check.rs` 0278cd25032d -> 6fa32613abc7. Reason: Pinned file(s) changed by the symlinked-record refusal: check.rs: hands the session's escaping_records to the rule context. The record's claim is unaffected by these changes. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/check.rs` 6fa32613abc7 -> c2f138da00a7. Reason: Pinned file(s) changed again in the symlinked-record refusal (follow-up to the earlier re-pin in this change): check.rs: a --rules selection that leaves out identity.record-symlink-escapes adds the escaping-records warning notice when a record was refused. The record's claim is unaffected by these changes. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |

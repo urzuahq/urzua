@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5AJB7EBVDWVSMCSYZQ
-Version: '0.41'
+Version: '0.42'
 Date: 2026-07-29
 Status: Shipped
 Embodiment: Verified
@@ -249,8 +249,9 @@ codebase's own code can structure into JSON, including genuine errors (ADR-26's 
 
 Prints one `ExportReport` object (exit 0; exit 2 with a `CouldNotRun` object if the corpus cannot be
 read, as for `graph`). Because `raw_text` publishes file contents, a tracked file in a record
-directory whose real path resolves outside the repository (a symlink) makes the export exit 2 with a
-`CouldNotRun` naming it, rather than reading it:
+directory whose real path resolves outside the repository or its record type's directory (a symlink) makes the
+export exit 2 with a `CouldNotRun` naming it, rather than reading it; the guard is the shared one every corpus
+command applies (`SPEC-2`, "Symlinked records"):
 
 | Field | Type | Meaning |
 |---|---|---|
@@ -402,3 +403,4 @@ None. Every question this spec carried has been answered or routed:
 > | 2026-11-13 | Bumped to `0.40`. `## Commands` describes `urzua init` as it now ships: adopt, and greenfield type selection with `--types`, `--dir`, built-in profiles and starter templates (`SPEC-5`, `MILE-114`), replacing the sentence that called them target design. **Why:** `MILE-114` built them. | **substantive** |
 > | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/main.rs#Command` (lines 114-388) 9abff7e3a62a -> 01c366f162d3. Reason: Read the diff of main.rs (and the Command enum in SPEC-1's pin) against main: the Init command gained the --types and --dir options with their help text and reaches init::run through a new dispatch_init; the Mcp command main added is untouched. No other command or option changed. The claim each record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-13 | Bumped to `0.41`. `urzua mcp` serves all five tools (`SPEC-26`). **Why:** `MILE-29`. | **substantive** |
+> | 2026-11-14 | Bumped to `0.42`. The export's refusal of a record symlinked outside the repository is the guard every corpus command now applies, and it also covers a link to a file outside the record type's directory. **Why:** `ADR-89` amendment of 2026-11-14. | **substantive** |

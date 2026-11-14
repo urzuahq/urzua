@@ -831,6 +831,38 @@ rest of the checks. A case-only difference between the base's and the head's sta
 
 The Decision is otherwise unchanged. The Status of this ADR stays Accepted.
 
+## Amendment (2026-11-14, symlinked records)
+
+Status of this amendment: decided by the orchestrator on 2026-11-14, pending maintainer review. It closes a
+route around the status gate; the rest of section 4 is unchanged.
+
+**The problem.** The gate judges a record by the path it is tracked at. A tracked record file that is a
+symlink was read through the link. A non-decider could land an Accepted record in two pull requests: the first
+moves a Proposed record out of the governed directory (`git mv docs/adr/ADR-1-a.md notes/x.md`) and leaves a
+symlink in its place, which changes no `Status`; the second sets `Status: Accepted` in `notes/x.md`, a path no
+record type governs and no gate names, while the link at `docs/adr/ADR-1-a.md` now reads as an Accepted record.
+Neither change is a gated move. Separately, a link to a file outside the repository was read and, by
+`urzua export`, published.
+
+**The decision.** A tracked record file whose real location is outside the repository, or outside the directory
+of the record type that governs it, is refused by every command and never read (`identity.record-symlink-escapes`,
+`SPEC-2`).
+
+- `check`, `check --base`, `audit` and the MCP check tool report it as a blocking finding (an error) that names
+  the link and where it points. It is reported on a path-scoped or `--base` run too, and no waiver excuses it.
+  Every other command that loads the corpus (`fix`, `reverify`, `waive`, `migrate`, `export`, `graph`, `index`,
+  `roadmap`, `explain`) stops with exit 2 naming the file, instead of shrinking the corpus without saying so.
+- A link to another file directly in the same type directory is a plain alias and is not refused. A link that
+  does not resolve, or resolves to a directory, keeps the loader's own "could not read" error.
+- The rule is on for every configuration and cannot be turned off: `identity.record-symlink-escapes: off` is a
+  config load error. A declared level above `off` stands. `urzua init` does not write an entry for it.
+- The two-pull-request route is closed at its first step: the pull request that leaves the symlink behind carries
+  the blocking finding, and the second pull request, had the first merged, carries it too, because the finding
+  does not depend on what the second changes. The diff gate does not need to resolve a changed path back to the
+  record that links to it.
+
+The Decision is otherwise unchanged. The Status of this ADR stays Accepted.
+
 ## References
 
 - `ADR-69`, `ADR-70`, `ADR-71`: the hook, drafting commands and layered gate this extends; `ADR-70` gains an
@@ -875,3 +907,4 @@ The Decision is otherwise unchanged. The Status of this ADR stays Accepted.
 > | 2026-11-09 | Added an `## Amendment (2026-11-09, rename pairing)`, first decided by the orchestrator, accepted by the maintainer on 2026-11-10: a record the base lacks is paired with a deleted record of the same `Stable-Id` only when the record id (type and number) is also the same, so a new Accepted record copying a deleted record's `Stable-Id` is a gated move; a slug rename still pairs, a renumber is new; the deleted copy is parsed with the type's declared document model; `status.transition-allowed` uses the same pairing. A slug rename that keeps the record id pairs even when its body changes, like an in-place edit; a case-only file rename reads as new and is gated. States that the merge-queue run passes no pull request number (the pull request run judged the change) and that an actors API outage passes the gate unless `require_evidence` is on. `Status` stays Accepted. **Why:** the seventh review reproduced a non-decider accepting a brand-new ADR with no finding. | **substantive** |
 > | 2026-11-10 | Rename-pairing amendment accepted. **Why:** Maintainer decision, 2026-11-10. | **substantive** |
 > | 2026-11-10 | Added an `## Amendment (2026-11-10, deletions)`, accepted by the maintainer on 2026-11-10: a record the diff deletes while its base `Status` is one a gate names is a gated move (`gated-deletion-without-decider`), judged like any other and reported by the post-command check; a rename pair is exempt; under `base`/`both` the base revision's type declaration also decides which deleted files are records of a gated type; gate statuses compare case-insensitively after trim and the status field is read case-insensitively for the gate. `Status` stays Accepted. **Why:** Maintainer decision, 2026-11-10, on the review that found a non-decider deleting an Accepted ADR with an ok check, and a lower-case `accepted` passing the gate. | **substantive** |
+> | 2026-11-14 | Added an `## Amendment (2026-11-14, symlinked records)`, decided by the orchestrator on 2026-11-14, pending maintainer review: a tracked record file that is a symlink resolving outside the repository or outside its type's directory is refused by every command and reported by `check` as the blocking, unwaivable finding `identity.record-symlink-escapes`, on for every configuration and not switchable off; this closes the two-pull-request route (move a record out of the governed tree leaving a symlink, then accept the moved copy). `Status` stays Accepted. **Why:** an external review reproduced a non-decider landing an Accepted record through a symlink. | **substantive** |

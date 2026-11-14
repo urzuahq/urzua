@@ -1634,6 +1634,8 @@ pub enum ConfigError {
     SchemaVersionOutOfWindow(crate::schema_version::SchemaVersionError),
     #[error("could not upgrade the schema_version {from} config: {reason}")]
     UpgradeFailed { from: u32, reason: String },
+    #[error("rule '{rule}' is on for every configuration and cannot be turned off; remove `{rule}: off` from `rules:`")]
+    RuleCannotBeOff { rule: String },
     #[error("unknown rule '{found}' under `rules:` -- this build ships: {}", known.join(", "))]
     UnknownRule { found: String, known: Vec<String> },
     #[error("rule '{rule}' does not take the option '{option}'")]
@@ -2818,6 +2820,7 @@ pub fn parse_with_document_models(
     validate_companion_fields(&config)?;
     validate_record_types(&config)?;
     validate_rule_names(&config)?;
+    validate_default_on_rules(&config)?;
     validate_index_options(&config)?;
     validate_issue_refs_options(&config)?;
     validate_rule_settings(&config)?;
@@ -3002,6 +3005,24 @@ fn validate_rule_names(config: &Config) -> Result<(), ConfigError> {
             return Err(ConfigError::UnknownRule {
                 found: name.clone(),
                 known,
+            });
+        }
+    }
+    Ok(())
+}
+
+/// A rule that is on for every configuration (`DEFAULT_ON_RULES`) and cannot be
+/// turned off must not be declared `off`: that would be a refusal silently
+/// switched off. A declared level above `off` stands.
+fn validate_default_on_rules(config: &Config) -> Result<(), ConfigError> {
+    for default in crate::rules::DEFAULT_ON_RULES {
+        let declared_off = config
+            .rules
+            .get(default.id)
+            .is_some_and(|s| s.level == RuleLevel::Off);
+        if declared_off && !default.can_turn_off {
+            return Err(ConfigError::RuleCannotBeOff {
+                rule: default.id.to_string(),
             });
         }
     }

@@ -340,6 +340,7 @@ impl<'a> Context<'a> {
             base_authority: &self.base_authority,
             refs_snapshot: &self.refs_snapshot,
             tracked_paths: &s.discovered.paths,
+            escaping_records: &s.escaping_records,
             live_paths: &self.live_paths,
             may_exist,
             dir_exists,
@@ -408,7 +409,7 @@ fn validate_selection(
                 "urzua check --rules: '{id}' is not a rule this build ships (`urzua rules` lists them)"
             ));
         }
-        if !config.rules.contains_key(id) {
+        if !config.rules.contains_key(id) && urzua_core::rules::default_on(id).is_none() {
             return Err(format!(
                 "urzua check --rules: '{id}' is not declared in the configuration; --rules narrows the declared rules and never enables one"
             ));
@@ -641,6 +642,7 @@ fn session_notices(
         &context.back_pointed,
     ));
     notices.extend(harness_key_notices(session.config.harness.as_ref()));
+    notices.extend(unreported_escaping_notices(session, selection));
     notices.extend(decider_gate_notices(
         &session.config,
         context,
@@ -648,6 +650,36 @@ fn session_notices(
         selection,
     ));
     notices
+}
+
+/// A `--rules` selection that leaves out `identity.record-symlink-escapes` does
+/// not run it, yet the records it refused were not read either: the run says so
+/// in one warning rather than reading as a corpus without them.
+fn unreported_escaping_notices(session: &Session, selection: Option<&[String]>) -> Vec<Notice> {
+    let left_out = selection.is_some_and(|s| {
+        !s.iter()
+            .any(|r| r == rules::RULE_IDENTITY_RECORD_SYMLINK_ESCAPES)
+    });
+    if !left_out || session.escaping_records.is_empty() {
+        return Vec::new();
+    }
+    let mut paths: Vec<String> = session
+        .escaping_records
+        .iter()
+        .map(|e| e.path.display().to_string())
+        .collect();
+    paths.sort();
+    vec![Notice {
+        subject: crate::NOTICE_ESCAPING_RECORDS.to_string(),
+        severity: NoticeSeverity::Warning,
+        message: format!(
+            "{} tracked record(s) are symlinks out of their record type's directory and were not read, and the selection leaves out {}, so nothing is reported on them: {}; run `urzua check` without the selection, or include the rule",
+            paths.len(),
+            rules::RULE_IDENTITY_RECORD_SYMLINK_ESCAPES,
+            paths.join(", ")
+        ),
+        detail: None,
+    }]
 }
 
 /// Holds the drift a `drift_baseline` names out of `context` and discloses it
