@@ -1,6 +1,7 @@
 ---
 Stable-Id: 01M7BS20RZ12YZE0M0K7RAY6WK
-Status: Proposed
+Status: Accepted
+Accepted-on: 2026-11-14
 Date: 2026-11-14
 Author: beauwilliams
 Deciders: beauwilliams
@@ -102,3 +103,4 @@ holding a proposal to a principle that has since moved, which the amendment requ
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-14 | Drafted as Proposed. **Why:** Approved by the maintainer in conversation on 2026-11-14; Status moves to Accepted in a follow-up the maintainer approves. | **substantive** |
+> | 2026-11-14 | Status changed from Proposed to Accepted. **Why:** Accepted by the maintainer on 2026-11-14. | **substantive** |
