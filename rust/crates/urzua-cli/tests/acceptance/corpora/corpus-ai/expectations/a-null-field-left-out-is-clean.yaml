@@ -1,0 +1,13 @@
+id: a-null-field-left-out-is-clean
+corpus: corpus-ai
+# Deciders is null in the scaffold; a record that drops it, having nothing to put
+# there, is still the record urzua new wrote.
+commits:
+  - write:
+      records/ADR-0003-new.md: "---\nStable-Id: 01M8SCAFFB0000000000000003\nStatus: Proposed\nDate: 2026-11-14\nAuthor: dee\n---\n# ADR-0003 \u2014 New\n\nBody.\n"
+invocation: [check, --base, base]
+expect_exit: 0
+expect_rules_ran:
+  - header.scaffold-mismatch
+expect_no_findings:
+  - {rule: header.scaffold-mismatch}

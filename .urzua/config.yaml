@@ -686,6 +686,10 @@ rules:
     extension_prefixes:
       condition: "ext-"
   header.pointer-field-clean: warn
+  # A record a pull request adds has the header `urzua new` writes (MILE-103): the
+  # same keys in the same order, only the null fields filled in. A warning, and only
+  # on a --base run; scripts/replay-header-comparator.py replays it over past heads.
+  header.scaffold-mismatch: warn
   type.no-declared-spec: warn
   type.dir-matches-nothing: warn
   identity.collision: error

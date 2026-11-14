@@ -1,0 +1,12 @@
+id: a-field-urzua-new-does-not-write-is-reported
+corpus: corpus-ai
+# A field the type neither requires nor lists in its template.
+commits:
+  - write:
+      records/ADR-0003-new.md: "---\nStable-Id: 01M8SCAFFB0000000000000003\nStatus: Proposed\nDate: 2026-11-14\nAuthor: dee\nDeciders: bo\nTags: x\n---\n# ADR-0003 — New\n\nBody.\n"
+invocation: [check, --base, base]
+expect_exit: 1
+expect_findings:
+  - rule: header.scaffold-mismatch
+    file: records/ADR-0003-new.md
+    message_contains: "'Tags' is not a field urzua new writes"

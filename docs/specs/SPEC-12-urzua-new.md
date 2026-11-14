@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5C0WX34AQKF79DQDS5
-Version: '0.29'
+Version: '0.30'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -173,6 +173,22 @@ fields, a first revision-log row laid out by the log's own header (`ADR-94`) and
 the template's body. `ScaffoldSpec::plain` builds the spec `new` uses, with none of them, so `new`'s
 output is unchanged.
 
+## Comparing a record with the header `new` writes (`MILE-103`)
+
+`scaffold_record` is pure, so the header `new` would write for a record can be recomputed after the
+fact, and the opt-in `header.scaffold-mismatch` rule (`SPEC-2`) does: under `check --base` it
+re-renders the header of each added record from the run's configuration and the type's template, with
+the record's own number, title, `Stable-Id`, author and date, and compares the fields `new` decides (which
+exist, their order, and the value each starts at). A field `new` leaves null may be filled in or left
+out; nothing else may differ. `new` carries no stamp or marker for this (a stamp is forgeable and changes the
+record), and nothing here changes what `new` writes.
+
+`scripts/replay-header-comparator.py` runs that rule at every commit of the pull requests merged in
+a window, with the rule declared for the replay and the configuration of each commit, and counts the
+records that differed from the scaffold and that a header rule also rejected: the measure of whether
+records are still hand-authored. `scripts/time-new-vs-hand.py` times `new` against hand-authoring, in
+steps and in seconds, for each record type.
+
 ## What's deliberately not built
 
 - **Any header shape other than YAML frontmatter.** The `blockquote` and `bold-list` shapes were
@@ -233,3 +249,4 @@ output is unchanged.
 > | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/new.rs` ade841f31f8d -> 8cb79491eccb, `rust/crates/urzua-core/src/new_record.rs` 40f0fce95cd0 -> eab8490554bb. Reason: Re-pinned after PR4 of MILE-205 (urzua waive --apply), the stated delta being: new.rs: scan_pull_requests and write_new_file become pub(crate) so waive reuses them; no behaviour change; new_record.rs: ScaffoldSpec gains omit_fields and the YAML renderer drops those fields; new passes none, so its output is unchanged. The claim holds as the changed code does not alter what this record states. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/new_record.rs` eab8490554bb -> 4f85670917b9. Reason: Read the diff of each re-pinned file against main and the claim still holds. new_record.rs: one doc comment names PREFIX-999 where it named ADR-999; no code changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-13 | Bumped to `0.29`. Evidence pins re-baselined for this change (the `Re-baselined` row above); the specification text is unchanged. **Why:** a revision-log entry that adds a structural change bumps `Version`. | **structural** |
+> | 2026-11-14 | Bumped to `0.30`. New section "Comparing a record with the header `new` writes": the opt-in `header.scaffold-mismatch` rule recomputes the header `new` would have written through the unchanged, pure `scaffold_record` and compares an added record with it, and two scripts (`replay-header-comparator.py`, `time-new-vs-hand.py`) measure whether `new` is the path taken and the faster one. `new`'s output is unchanged and carries no provenance stamp. **Why:** `MILE-103`, the maintainer's decision of 2026-11-13: a comparator and a replay, not a stamp. | **structural** |

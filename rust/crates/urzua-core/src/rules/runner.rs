@@ -83,8 +83,8 @@ pub struct RuleCtx<'a> {
     /// `template_placeholders`.
     pub templates: &'a crate::new_record::TemplateValues,
     /// Each type's template text, read by the caller from
-    /// `.urzua/templates/<type>.md`; empty unless `section.order` is enabled
-    /// (`MILE-104`).
+    /// `.urzua/templates/<type>.md`; empty unless `section.order` or
+    /// `header.scaffold-mismatch` is enabled (`MILE-104`, `MILE-103`).
     pub template_texts: &'a HashMap<String, String>,
     /// Resolves a reference to a record; built once for every rule that resolves one.
     pub index: &'a RecordIndex<'a>,
@@ -133,6 +133,10 @@ pub struct RuleCtx<'a> {
     /// The subset of `changed_paths` that did not exist at the merge base; `None`
     /// on a run with no `--base`.
     pub added_paths: Option<&'a [PathBuf]>,
+    /// The subset of `added_paths` that is a rename: a record whose `Stable-Id`
+    /// a deleted record carried at the merge base. Empty unless
+    /// `header.scaffold-mismatch` is enabled on a `--base` run.
+    pub renamed_paths: &'a HashSet<PathBuf>,
     /// What the fetched pull-request refs hold that matters to this diff; empty
     /// unless `identity.open-pr-collision` is enabled on a `--base` run.
     pub pull_ref_claims: &'a PullRefClaims,
