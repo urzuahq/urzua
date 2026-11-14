@@ -1422,6 +1422,14 @@ pub struct WaiveDraft {
     pub stable_id: Option<String>,
     pub rule: String,
     pub scope: String,
+    /// The finding variant the draft's `Variant` names; absent when the draft
+    /// names none (the waiver type does not admit the field).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub variant: Option<String>,
+    /// The key path the draft's `Key-path` names, as path segments; absent when
+    /// the finding has none or the type does not admit the field.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub key_path: Option<Vec<String>>,
     pub findings: WaiveFindings,
     pub written: bool,
 }

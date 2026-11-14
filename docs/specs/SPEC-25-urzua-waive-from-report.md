@@ -2,7 +2,7 @@
 Stable-Id: 01M7A3B7TD1N87WAEFWDMB5CTJ
 Status: Draft
 Date: 2026-11-13
-Version: '0.3'
+Version: '0.4'
 Author: beauwilliams
 Subject: '`urzua waive --from-report` -- drafting one waiver per rule and file from the current findings.'
 Implements: ADR-91
@@ -13,8 +13,8 @@ Parent: SPEC-1
 ## Purpose
 
 `urzua waive --from-report` removes the transcription from adopting urzua on a corpus that already has
-findings: it drafts one waiver per rule and file for the current unwaived findings, in the repository's
-own waiver format, with a pending `Reason` and no `Expires`, `Category` or `Justified-by`. A draft
+findings: it drafts one waiver per rule and file (and per finding variant and key path, below) for the current
+unwaived findings, in the repository's own waiver format, with a pending `Reason` and no `Expires`, `Category` or `Justified-by`. A draft
 suppresses nothing until a person writes the reason and the date, so the command adds no baseline
 file and hides no finding (`ADR-91`, `ADR-11`, `ADR-86`). This spec is the reference for the command as
 built (`MILE-205`).
@@ -43,14 +43,14 @@ Exit `0` whenever the command ran, with or without drafts; `2` when it could not
 
 A finding is a candidate when it is not waived and is at or above the effective `fail_on`. Findings
 below it, including every `info` finding, are neither drafted nor listed. Candidates are grouped by
-rule and file: one draft per group, `Scope` the finding's path exactly as a waiver compares it, never
-`*`. A candidate that is not drafted is listed in `skipped` with a `reason`:
+rule, file, variant and key path: one draft per group, `Scope` the finding's path exactly as a waiver compares it, never
+`*`. A draft carries the `Variant` of the findings it covers, and the `Key-path` when they are at a configuration key, so it excuses those findings and not every finding of the rule in the file (`SPEC-10`, "Narrowing to one finding"; maintainer decision, 2026-11-14). Findings of one rule in one file that differ in variant or key path are therefore separate drafts. Each field is written only where the waiver type lists it in `known_fields` (or declares no closed set): a type with a closed field set that lists neither drafts as before, one per rule and file, and the command says so on stderr, because a draft for the configuration file cannot then satisfy the rule that asks a configuration-scoped waiver to narrow. A candidate that is not drafted is listed in `skipped` with a `reason`:
 
 | `reason` | The finding |
 |---|---|
 | `matches-nothing` | is of `waiver.matches-nothing`: a waiver for a waiver would hide the report that says a waiver does nothing |
 | `no-file` | is tied to no file, so no scope names it |
-| `already-waived` | has a waiver record with the same `Rule` and `Scope` that is not expired (it takes effect, or is still ineffective); `waiver` names it |
+| `already-waived` | has a waiver record that names it (the same `Rule` and `Scope`, and the same `Variant` and `Key-path` when the waiver names them) that is not expired (it takes effect, or is still ineffective); `waiver` names it |
 | `expired` | has such a waiver whose `Expires` has passed or is not a date; `waiver` names it, and it is renewed, not drafted again |
 | `unwaivable` | is of a variant its rule declares unwaivable, which no waiver can cover |
 | `resolved-by-drafts` | disappears when the drafts exist, judged on the tree with the drafts held in memory and judged again on the drafts that remain, so a finding resolved only by a draft that is itself dropped is drafted after all (`ADR-91`, amendment of 2026-11-08) |
@@ -104,12 +104,13 @@ Before `check` runs the command proves a draft would suppress nothing, and refus
 ```json
 {"status":"ok|partial-failure|not-run","mode":"dry-run|apply","pending_value":"Pending","pending_source":"declared|default",
  "drafts":[{"path":"docs/waiver/WAIVER-0053-index-freshness-in-docs-specs-readme-md.md","stable_id":null,"rule":"x.y","scope":"docs/a.md",
+            "variant":"stale-entry","key_path":["record_types","adr","dir"],
             "findings":{"count":2,"lines":["docs/a.md:12 message"]},"written":false}],
  "skipped":[{"rule":"..","file":"..","reason":"already-waived","waiver":"docs/waiver/WAIVER-0007-..md"}],
  "unmatched_filters":[{"kind":"rule|path","value":".."}]}
 ```
 
-An `error` string is added when an `--apply` stopped. `stable_id` is `null` in a dry run and for a draft not written: the id is minted when the record is written. `file` of a skipped
+`variant` and `key_path` (path segments) are present on a draft that names them and absent otherwise. A title that two drafts of one rule and file would share names the variant and key. An `error` string is added when an `--apply` stopped. `stable_id` is `null` in a dry run and for a draft not written: the id is minted when the record is written. `file` of a skipped
 entry is `null` for `no-file`; `waiver` is present only for `already-waived` and `expired`.
 
 ## What's deliberately not built
@@ -135,3 +136,4 @@ entry is `null` for `no-file`; `waiver` is present only for `already-waived` and
 > | 2026-11-13 | Initial spec: the preview of `urzua waive --from-report` as built (eligibility, grouping, the pending value, refusals, the JSON report); `--apply` is not built. **Why:** `MILE-205`, plan PR3, maintainer decisions of 2026-11-13. | **structural** |
 > | 2026-11-13 | `--apply` documented: the numbering lock, one numbering, retaken numbers, write errors (exit 2, `error`), idempotence, check-after-apply; `Expires` omitted from drafts; skip reasons `resolved-by-own-draft` and `waiver-record`, and `resolved-by-drafts` judged again on the kept set. **Why:** `MILE-205`, plan PR4. | **substantive** |
 > | 2026-11-13 | An `--apply` that fails after writing some drafts reports `partial-failure` with exit 1, and `not-run` with exit 2 only when none was written; the numbering limit without `new.check_open_prs` is stated. Version `0.2` -> `0.3`. **Why:** review of the `--apply` change: the same outcome is `partial-failure` in `fix`, `index`, `reverify` and `migrate`. | **substantive** |
+> | 2026-11-14 | Bumped to `0.4`. Drafts are grouped by finding variant and key path as well as rule and file, carry `Variant` and `Key-path` where the waiver type lists them, and a waiver that names a variant or key path skips only the finding it names; the report's drafts gain `variant` and `key_path`. A type that lists neither field drafts as before. Maintainer decision, 2026-11-14. **Why:** the first-run review (finding 1.6): a draft that matched on rule and file alone, scoped to the configuration, would hide every later finding of the rule there. | **substantive** |

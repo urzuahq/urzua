@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5BCRKD027XA81J0Q8Q
-Version: '0.21'
+Version: '0.22'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -32,7 +32,7 @@ record_types:
     identity: {from: filename, pattern: '^(?P<prefix>WAIVER)-(?P<number>\d{4})-(?P<slug>.+)$'}
     required_fields: ["Rule", "Scope", "Reason", "Stable-Id"]
     header_shape: "yaml-frontmatter"
-    known_fields: ["Expires", "Category", "Justified-by"]
+    known_fields: ["Expires", "Category", "Justified-by", "Variant", "Key-path"]
     spec: "SPEC-10"
     pointer_fields: ["Justified-by"]
     narrative_fields: []
@@ -60,6 +60,8 @@ a config written before the declaration keeps working.
 | `Reason` | free text, required | Why this exception is reviewed and accepted, not left to drift — the whole reviewability point of not using an ignore list. |
 | `Expires` | `YYYY-MM-DD`, optional | No expiry means the exception is asserted **structural** (the same shape as SPEC-1's permanent content-scope ceiling). A stated expiry means the waiver **reverts to blocking automatically** once passed — no separate "expired" state anyone has to notice or configure. Where the type declares `permanent`, a waiver without `Expires` takes effect only under the conditions in "Permanent waivers" below. |
 | `Category` | one of the declared vocabulary, required of a waiver without `Expires` once `permanent` lists its rule | Why the exception is permanent, in the repository's own vocabulary (this repository's is in the Schema block). The engine names no category; the field is whichever one the `permanent` entry's `reason_field` names. |
+| `Variant` | a finding's action variant, optional | Narrows the waiver to findings of that variant (`rule-table` and `SPEC-2`'s suggested-action table list each rule's variants; `waive --from-report` drafts write the finding's own). A finding of another variant of the same rule in the same file is not covered. Absent or blank covers every variant, as a waiver written before the field did. Required, with `Key-path` as the alternative, of a waiver scoped to the configuration file (see "Narrowing to one finding"). |
+| `Key-path` | the keys of a finding's `suggested_action.target.key_path`, optional | Narrows the waiver to the finding at that configuration key, for example `[record_types, milestone, sections, exempt_statuses]`. A YAML list; a header reads it as its items joined by commas, and a comma-separated line is read the same, so a key containing a comma cannot be named. A finding with no key path is not covered by a waiver that names one. |
 | `Justified-by` | a record id, a pointer field | The record that justifies a permanent waiver, required by a category declared `cite: required` (here `test-removed-by-decision`, citing the RFC that removed the test). Resolved by `pointer.resolution` like any pointer field, and a cited record that becomes `Superseded` is reported by `pointer.target-status` where that rule lists the field. |
 
 One relationship field (MILE-90/ADR-44, amended by ADR-86): `Justified-by` is declared in
@@ -76,7 +78,7 @@ that isn't already implied by the date.
 ## Matching semantics
 
 A waiver **covers** a finding when `Rule` matches the finding's rule id exactly, and either `Scope`
-is `*` or matches the finding's file path exactly (`urzua-core::waiver::Waiver::covers`). A waiver
+is `*` or matches the finding's file path exactly, and, when the waiver names them, `Variant` equals the finding's action variant and `Key-path` equals its key path (`urzua-core::waiver::Suppression::covers`). A waiver
 with a passed `Expires` is treated as though it doesn't exist (`is_active`) — `Expires` must be a real calendar date (`YYYY-MM-DD`; `2026-99-99` and `2026-02-30` are not) and is
 compared as a date against wall-clock "today," which RFC-15 §1 notes as the first place this
 schema reads real time rather than only corpus content. "Today" is the current date in UTC, whatever
@@ -102,10 +104,16 @@ target finding appears again (failing toward more findings, as for a missing `Ru
 `waiver.matches-nothing` enabled a finding on the waiver names the missing field. The default is
 unchanged.
 
+## Narrowing to one finding
+
+Maintainer decision, 2026-11-14 (the first-run review, finding 1.6): a waiver scoped to `.urzua/config.yaml` matched on rule and file alone, so one written for a single finding (this repository's `WAIVER-0052`, for the milestone type's `WontDo` exemption) also silenced every later `type.dir-matches-nothing` finding in the configuration, a misdeclared directory included, and `waiver.matches-nothing` could not see it because the waiver still matched something. A waiver may therefore name the finding it excuses, by `Variant` and, for a configuration finding, `Key-path`, both already on every finding (`variant` is the rule table's action variant, `key_path` the one `suggested_action.target.key_path` carries). Both are optional on a waiver and a waiver naming neither matches as before, so existing waivers keep working.
+
+For a waiver whose `Scope` is the configuration file, naming one of them is required. A configuration-scoped waiver that names neither stays in effect, so no suppression is withdrawn silently, and `waiver.matches-nothing` reports it (variant `waiver-config-scope-too-broad`, on the waiver's `Variant` field) with the two ways to narrow it. The requirement is for the configuration file only: a waiver scoped to a record, or `*`, is not asked to narrow. The fields are reserved names read by the engine, like `Rule` and `Scope`; a type with a closed field set (`known_fields`) lists them to carry them, and one that does not list them can still write the waivers it wrote before.
+
 ## Drafts
 
 `urzua waive --from-report` (`SPEC-25`, `ADR-91`) drafts waivers for the current findings: one per rule and
-file, with `Rule` and `Scope` copied from the findings, a `Reason` holding the pending value, and
+file, and per finding variant and key path where the type lists `Variant` and `Key-path`, with `Rule`, `Scope`, and those two copied from the findings, a `Reason` holding the pending value, and
 no `Expires` key and `Category` and `Justified-by` left blank (`--apply` writes the drafts). The pending value is the first whole-value entry of the
 type's `statuses.pending` (a waiver has no `Status`, so the type may declare `pending` alone, without
 `values`, `SPEC-3`), else `Pending`. A draft is not in effect: its `Reason` is pending, so its finding is reported
@@ -182,3 +190,4 @@ record is edited later.
 > | 2026-11-13 | Bumped to `0.20`. Adds the `Drafts` section: the waiver `urzua waive --from-report` drafts and the refusals that keep a draft ineffective (`SPEC-25`). **Why:** `MILE-205`, `ADR-91` point 5. | **substantive** |
 > | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/waiver.rs` b8d83e370c42 -> 748f534e72aa. Reason: Read the diff of each re-pinned file against main. waiver.rs: added SuppressionType::field_state, and load_suppressions now calls it; the classification it holds is the code that was inline in load_suppressions, moved unchanged, so which waivers take effect is unchanged. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-13 | Bumped to `0.21`. The `Drafts` section says a draft has no `Expires` key, and that `--apply` writes the drafts. **Why:** `MILE-205`, the `--apply` change. | **structural** |
+> | 2026-11-14 | Bumped to `0.22`. A waiver may name the finding variant (`Variant`) and configuration key path (`Key-path`) it excuses, matched against the finding's action variant and key path; a waiver scoped to the configuration file must name one, or `waiver.matches-nothing` reports it as `waiver-config-scope-too-broad` while it stays in effect; existing waivers are unchanged. Drafts carry both fields where the type lists them. Maintainer decision, 2026-11-14. **Why:** the first-run review (finding 1.6): `WAIVER-0052`, written for one finding, silenced every `type.dir-matches-nothing` finding in the configuration, and nothing could report it. | **substantive** |

@@ -2,7 +2,10 @@
 //! how they group, and what the draft's `Reason` is. Pure: the command runs
 //! `check`, reads the records and writes the files; this module judges.
 //!
-//! One draft per rule and file. A draft suppresses nothing until a person
+//! One draft per rule and file, and per finding variant (and, for a finding that
+//! names a configuration key, per key path) when the waiver type admits
+//! `Variant` and `Key-path`, so a draft excuses the one finding it was drafted
+//! for and not every finding of the rule in that file (`ADR-91`, `SPEC-25`). A draft suppresses nothing until a person
 //! writes the reason and the date, so no finding is hidden by the tool.
 
 use std::collections::{HashMap, HashSet};
@@ -161,13 +164,60 @@ pub struct UnmatchedFilter {
     pub value: String,
 }
 
-/// One draft's worth of findings: one rule in one file.
+/// Which narrowing fields the waiver type admits, so which a draft may carry.
+/// A type with a closed field set that lists neither drafts as before: one per
+/// rule and file, with neither field.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Narrowing {
+    pub variant: bool,
+    pub key_path: bool,
+}
+
+/// One draft's worth of findings: one rule in one file, and one variant and key
+/// path when the draft narrows to them.
 #[derive(Debug, Clone)]
 pub struct Group {
     pub rule: String,
     /// The finding's path exactly as `Suppression::covers` compares it.
     pub scope: String,
+    /// The action variant every finding of the group has, when the draft names it.
+    pub variant: Option<String>,
+    /// The key path every finding of the group is at, when the draft names it.
+    pub key_path: Option<Vec<String>>,
     pub findings: Vec<Finding>,
+}
+
+impl Group {
+    /// Whether `other` is the same draft: rule, file, variant and key path.
+    fn same_draft(&self, other: &Group) -> bool {
+        self.rule == other.rule
+            && self.scope == other.scope
+            && self.variant == other.variant
+            && self.key_path == other.key_path
+    }
+
+    fn sort_key(&self) -> (&str, &str, &Option<String>, &Option<Vec<String>>) {
+        (&self.scope, &self.rule, &self.variant, &self.key_path)
+    }
+
+    /// The draft's title, naming the variant and key when another draft shares
+    /// its rule and file (`siblings`), so two drafts are never told apart only
+    /// by their numbers.
+    pub fn title(&self, siblings: usize) -> String {
+        let mut title = format!("{} in {}", self.rule, self.scope);
+        if siblings > 1 {
+            let detail: Vec<String> = self
+                .variant
+                .iter()
+                .cloned()
+                .chain(self.key_path.iter().map(|k| k.join(".")))
+                .collect();
+            if !detail.is_empty() {
+                title.push_str(&format!(" ({})", detail.join(" at ")));
+            }
+        }
+        title
+    }
 }
 
 impl Group {
@@ -222,7 +272,7 @@ pub fn plan(
     findings: &[Finding],
     fail_on: FailOn,
     (waivers, waiver_records): (&[Suppression], &HashSet<PathBuf>),
-    today: &str,
+    (today, narrowing): (&str, Narrowing),
     filters: &Filters,
 ) -> Plan {
     let pool: Vec<&Finding> = findings
@@ -250,22 +300,25 @@ pub fn plan(
                 }
             }
             None => {
-                let scope = f.file.to_string_lossy().into_owned();
-                match groups
-                    .iter_mut()
-                    .find(|g| g.rule == f.rule && g.scope == scope)
-                {
+                let draft = Group {
+                    rule: f.rule.clone(),
+                    scope: f.file.to_string_lossy().into_owned(),
+                    variant: (narrowing.variant && !f.action_source.variant.is_empty())
+                        .then(|| f.action_source.variant.to_string()),
+                    key_path: narrowing
+                        .key_path
+                        .then(|| crate::waiver::finding_key_path(f).map(<[String]>::to_vec))
+                        .flatten(),
+                    findings: vec![(*f).clone()],
+                };
+                match groups.iter_mut().find(|g| g.same_draft(&draft)) {
                     Some(g) => g.findings.push((*f).clone()),
-                    None => groups.push(Group {
-                        rule: f.rule.clone(),
-                        scope,
-                        findings: vec![(*f).clone()],
-                    }),
+                    None => groups.push(draft),
                 }
             }
         }
     }
-    groups.sort_by(|a, b| (&a.scope, &a.rule).cmp(&(&b.scope, &b.rule)));
+    groups.sort_by(|a, b| a.sort_key().cmp(&b.sort_key()));
     skipped.sort_by(|a, b| (&a.file, &a.rule).cmp(&(&b.file, &b.rule)));
     out.groups = groups;
     out.skipped = skipped;
@@ -312,11 +365,9 @@ fn skip_reason(
     if waiver_records.contains(&f.file) {
         return Some((SkipReason::WaiverRecord, None));
     }
-    let scope = f.file.to_string_lossy();
-    if let Some(w) = waivers
-        .iter()
-        .find(|w| w.rule == f.rule && w.scope == scope)
-    {
+    // A waiver that names a variant or key path excuses that finding and not the
+    // rest of the rule's findings in the file, so it skips only the finding it names.
+    if let Some(w) = waivers.iter().find(|w| w.scope != "*" && w.names(f)) {
         let reason = if w.is_active(today) {
             SkipReason::AlreadyWaived
         } else {
@@ -368,6 +419,8 @@ pub fn drop_resolved(groups: Vec<Group>, after: &[Finding]) -> Dropped {
         let part = |findings: Vec<Finding>| Group {
             rule: g.rule.clone(),
             scope: g.scope.clone(),
+            variant: g.variant.clone(),
+            key_path: g.key_path.clone(),
             findings,
         };
         if !gone.is_empty() {
@@ -397,15 +450,12 @@ pub fn skipped_groups(groups: &[Group], reason: SkipReason) -> Vec<Skipped> {
 /// file, and a new group takes its place in file then rule order.
 pub fn merge_groups(mut kept: Vec<Group>, more: Vec<Group>) -> Vec<Group> {
     for g in more {
-        match kept
-            .iter_mut()
-            .find(|k| k.rule == g.rule && k.scope == g.scope)
-        {
+        match kept.iter_mut().find(|k| k.same_draft(&g)) {
             Some(k) => k.findings.extend(g.findings),
             None => kept.push(g),
         }
     }
-    kept.sort_by(|a, b| (&a.scope, &a.rule).cmp(&(&b.scope, &b.rule)));
+    kept.sort_by(|a, b| a.sort_key().cmp(&b.sort_key()));
     kept
 }
 
@@ -440,6 +490,8 @@ mod tests {
             unmet: Vec::new(),
             unmet_states: Vec::new(),
             permanence: crate::waiver::Permanence::Ungoverned,
+            variant: None,
+            key_path: None,
         }
     }
 
@@ -448,7 +500,7 @@ mod tests {
             findings,
             FailOn::Warning,
             (waivers, &HashSet::new()),
-            "2026-11-13",
+            ("2026-11-13", Narrowing::default()),
             filters,
         )
     }
@@ -504,7 +556,7 @@ mod tests {
             &findings,
             FailOn::Warning,
             (&[], &HashSet::new()),
-            "2026-11-13",
+            ("2026-11-13", Narrowing::default()),
             &Filters::default(),
         );
         assert_eq!(warn.groups.len(), 2);
@@ -512,7 +564,7 @@ mod tests {
             &findings,
             FailOn::Error,
             (&[], &HashSet::new()),
-            "2026-11-13",
+            ("2026-11-13", Narrowing::default()),
             &Filters::default(),
         );
         assert_eq!(err.groups.len(), 1);
@@ -685,6 +737,8 @@ mod tests {
         let g = |rule: &str, scope: &str| Group {
             rule: rule.into(),
             scope: scope.into(),
+            variant: None,
+            key_path: None,
             findings: vec![error(rule, scope)],
         };
         let merged = merge_groups(vec![g("b", "z.md")], vec![g("a", "a.md"), g("b", "z.md")]);
@@ -702,7 +756,7 @@ mod tests {
             &[error("field.pending", "docs/waiver/WAIVER-1-x.md")],
             FailOn::Warning,
             (&[], &records),
-            "2026-11-13",
+            ("2026-11-13", Narrowing::default()),
             &Filters::default(),
         );
         assert!(p.groups.is_empty());
@@ -777,5 +831,112 @@ mod tests {
         // Declaring `permanent` lifts the refusal.
         st.permanent = Some(Vec::new());
         assert!(choose_pending(&st).is_ok());
+    }
+
+    fn config_finding(variant: &'static str, key: &[&str]) -> Finding {
+        Finding::new(
+            "type.dir-matches-nothing",
+            FindingSeverity::Warning,
+            ".urzua/config.yaml",
+            ActionSource::new(variant).key_path(key.iter().copied()),
+            format!("{variant} at {}", key.join(".")),
+        )
+    }
+
+    const BOTH: Narrowing = Narrowing {
+        variant: true,
+        key_path: true,
+    };
+
+    fn narrowed_plan(findings: &[Finding], waivers: &[Suppression], narrowing: Narrowing) -> Plan {
+        plan(
+            findings,
+            FailOn::Warning,
+            (waivers, &HashSet::new()),
+            ("2026-11-13", narrowing),
+            &Filters::default(),
+        )
+    }
+
+    /// `SPEC-25`: with the fields admitted, two findings of one rule in one file
+    /// that differ in variant or key path are two drafts, each naming its own.
+    #[test]
+    fn findings_that_differ_in_variant_or_key_path_are_drafted_apart_when_admitted() {
+        let findings = [
+            config_finding("dir-missing", &["record_types", "a", "dir"]),
+            config_finding("dir-missing", &["record_types", "b", "dir"]),
+            config_finding("extra-dir-missing", &["record_types", "a", "extra_dirs"]),
+        ];
+        let plan = narrowed_plan(&findings, &[], BOTH);
+        let got: Vec<(Option<&str>, Option<String>)> = plan
+            .groups
+            .iter()
+            .map(|g| {
+                (
+                    g.variant.as_deref(),
+                    g.key_path.as_ref().map(|k| k.join(".")),
+                )
+            })
+            .collect();
+        assert_eq!(
+            got,
+            [
+                (Some("dir-missing"), Some("record_types.a.dir".to_string())),
+                (Some("dir-missing"), Some("record_types.b.dir".to_string())),
+                (
+                    Some("extra-dir-missing"),
+                    Some("record_types.a.extra_dirs".to_string())
+                ),
+            ]
+        );
+    }
+
+    /// A type that admits neither field drafts as before: one per rule and file.
+    #[test]
+    fn findings_are_one_draft_per_rule_and_file_when_the_type_admits_neither_field() {
+        let findings = [
+            config_finding("dir-missing", &["record_types", "a", "dir"]),
+            config_finding("extra-dir-missing", &["record_types", "a", "extra_dirs"]),
+        ];
+        let plan = narrowed_plan(&findings, &[], Narrowing::default());
+        assert_eq!(plan.groups.len(), 1, "{:?}", plan.groups);
+        assert!(plan.groups[0].variant.is_none() && plan.groups[0].key_path.is_none());
+    }
+
+    /// An existing waiver that names a variant excuses that finding only, so the
+    /// other findings of the rule in the file are still drafted.
+    #[test]
+    fn a_waiver_naming_a_variant_skips_only_the_finding_it_names() {
+        let mut named = suppression("type.dir-matches-nothing", ".urzua/config.yaml", None);
+        named.variant = Some("dir-missing".into());
+        named.key_path = Some(vec!["record_types".into(), "a".into(), "dir".into()]);
+        let findings = [
+            config_finding("dir-missing", &["record_types", "a", "dir"]),
+            config_finding("dir-missing", &["record_types", "b", "dir"]),
+        ];
+        let plan = narrowed_plan(&findings, &[named], BOTH);
+        assert_eq!(plan.skipped.len(), 1, "{:?}", plan.skipped);
+        assert_eq!(plan.skipped[0].reason, SkipReason::AlreadyWaived);
+        assert_eq!(plan.groups.len(), 1);
+        assert_eq!(
+            plan.groups[0].key_path.as_ref().unwrap().join("."),
+            "record_types.b.dir"
+        );
+    }
+
+    #[test]
+    fn two_drafts_sharing_a_rule_and_file_are_titled_apart() {
+        let findings = [
+            config_finding("dir-missing", &["record_types", "a", "dir"]),
+            config_finding("extra-dir-missing", &["record_types", "a", "extra_dirs"]),
+        ];
+        let plan = narrowed_plan(&findings, &[], BOTH);
+        let titles: Vec<String> = plan.groups.iter().map(|g| g.title(2)).collect();
+        assert_ne!(titles[0], titles[1], "{titles:?}");
+        assert!(titles[0].contains("dir-missing"), "{titles:?}");
+        assert_eq!(
+            plan.groups[0].title(1),
+            "type.dir-matches-nothing in .urzua/config.yaml"
+        );
     }
 }

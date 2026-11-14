@@ -502,6 +502,10 @@ record_types:
       - "Expires"
       - "Category"
       - "Justified-by"
+      # The finding a waiver excuses, narrower than its rule and file
+      # (SPEC-10): required of one scoped to this configuration file.
+      - "Variant"
+      - "Key-path"
     spec: "SPEC-10"
     # The record that justifies a permanent waiver (ADR-86).
     pointer_fields: ["Justified-by"]

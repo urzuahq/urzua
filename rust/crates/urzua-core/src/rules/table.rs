@@ -2223,7 +2223,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_WAIVER_MATCHES_NOTHING,
-        description: "A waiver that does nothing is reported on the waiver record, naming the rule and scope it claimed (`MILE-168`). Four cases: the waiver is expired (its `Expires` has passed or is not a `YYYY-MM-DD` date, so it already covers nothing); it is not in effect (it lacks a field the suppression type's `effective_requires` names, or holds a blank, placeholder or pending value there; or, when the type declares `permanent`, it has no `Expires` and its rule has no `permanent` entry, its category is absent or outside the entry's vocabulary, or a category that requires a citation has none that resolves; either way it suppresses nothing and its finding is reported again, naming the unmet requirement); it names a rule this build does not ship; or it is active, its rule ran, and no finding of that rule falls in its scope. A waiver matching a finding is not reported, and an expired waiver is reported once, as expired; an ineffective one is reported once, as ineffective. The unmatched case is judged only on a whole-corpus run in which the target rule ran: under a path scope or `--base`, or with the target rule off, an absent finding proves nothing, so the waiver is counted as eligible and unexamined (never out of scope). The expired and unknown-rule cases need only the waiver record to have been examined. Opt-in. The population counts waiver records.",
+        description: "A waiver that does nothing is reported on the waiver record, naming the rule and scope it claimed (`MILE-168`). Five cases: the waiver is expired (its `Expires` has passed or is not a `YYYY-MM-DD` date, so it already covers nothing); it is not in effect (it lacks a field the suppression type's `effective_requires` names, or holds a blank, placeholder or pending value there; or, when the type declares `permanent`, it has no `Expires` and its rule has no `permanent` entry, its category is absent or outside the entry's vocabulary, or a category that requires a citation has none that resolves; either way it suppresses nothing and its finding is reported again, naming the unmet requirement); it is scoped to the configuration file and names neither a `Variant` nor a `Key-path`, so it silences every finding of its rule there, present and future (it stays in effect, and the finding asks for the narrowing, `SPEC-10`); it names a rule this build does not ship; or it is active, its rule ran, and no finding of that rule falls in its scope (a waiver naming a `Variant` or `Key-path` is matched against the finding's action variant and key path). A waiver matching a finding is not reported, and an expired waiver is reported once, as expired; an ineffective one is reported once, as ineffective. The unmatched case is judged only on a whole-corpus run in which the target rule ran: under a path scope or `--base`, or with the target rule off, an absent finding proves nothing, so the waiver is counted as eligible and unexamined (never out of scope). The expired and unknown-rule cases need only the waiver record to have been examined. Opt-in. The population counts waiver records.",
         scope: Scope::Run,
         anchor: Anchor::Record,
         judges: Judges::NotRecordLevel,
@@ -2239,6 +2239,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         actions: &[
             VariantAction::new("waiver-expired", ActionDecl::FIELD_SET),
             VariantAction::new("waiver-ineffective", ActionDecl::FIELD_SET),
+            VariantAction::new("waiver-config-scope-too-broad", ActionDecl::FIELD_SET),
             VariantAction::new("waiver-unknown-rule", ActionDecl::FIELD_SET),
             VariantAction::new("waiver-matches-no-finding", ActionDecl::FIELD_SET),
         ],
@@ -2256,7 +2257,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
                     .get(rule)
                     .is_some_and(|s| s.scope.is_some())
             },
-            c.run.today,
+            (c.run.today, c.run.config_file),
         ),
     },
 ];

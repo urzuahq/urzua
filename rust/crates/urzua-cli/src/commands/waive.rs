@@ -14,7 +14,7 @@ use urzua_core::config::RecordTypeConfig;
 use urzua_core::report::{
     CouldNotRun, Failure, ReportStatus, WaiveDraft, WaiveFindings, WaiveReport, WaiveStatus,
 };
-use urzua_core::waive::{self, Filters, Group, PendingChoice, SkipReason};
+use urzua_core::waive::{self, Filters, Group, Narrowing, PendingChoice, SkipReason};
 use urzua_core::waiver::SuppressionType;
 
 use super::check::{self, CheckArgs};
@@ -71,6 +71,8 @@ struct Ctx {
     template: Option<String>,
     author: String,
     owner: bool,
+    /// Which of `Variant` and `Key-path` the waiver type admits, so which a draft carries.
+    narrowing: Narrowing,
 }
 
 fn type_config(ctx: &Ctx) -> &RecordTypeConfig {
@@ -98,7 +100,7 @@ fn execute(config_path: Option<PathBuf>, args: WaiveArgs) -> Result<WaiveReport,
         &report.findings,
         report.fail_on,
         (&waivers, &records),
-        &today,
+        (&today, ctx.narrowing),
         &filters,
     );
     let mut skipped = plan.skipped;
@@ -205,6 +207,20 @@ fn open_ctx(config_path: Option<PathBuf>, by: Option<String>) -> Result<Ctx, Fai
         eprintln!("urzua: {warning}");
     }
     let owner = owner_declared(type_config, template.as_deref());
+    let narrowing = narrowing_admitted(type_config);
+    if narrowing
+        != (Narrowing {
+            variant: true,
+            key_path: true,
+        })
+    {
+        eprintln!(
+            "urzua: the {type_name} type's closed field set (`known_fields`) does not list {}, so drafts do not carry {}; a waiver scoped to the configuration file needs one of them, so add {} to `known_fields`",
+            missing_narrowing_fields(narrowing),
+            if narrowing == Narrowing::default() { "them" } else { "it" },
+            missing_narrowing_fields(narrowing),
+        );
+    }
     Ok(Ctx {
         session,
         type_name,
@@ -213,7 +229,38 @@ fn open_ctx(config_path: Option<PathBuf>, by: Option<String>) -> Result<Ctx, Fai
         template,
         author: identity.name,
         owner,
+        narrowing,
     })
+}
+
+/// A field the type lists in `required_fields` or `known_fields`, or any field
+/// when the type declares no closed set.
+fn admits(type_config: &RecordTypeConfig, field: &str) -> bool {
+    type_config.known_fields.is_none()
+        || type_config
+            .declared_fields()
+            .contains(&urzua_core::values::FieldName::new(field))
+}
+
+/// A draft carries `Variant` and `Key-path` only where the type admits them: a
+/// closed field set that omits one would have `header.field-set-consistency`
+/// report every draft, and an existing waiver type keeps drafting as before.
+fn narrowing_admitted(type_config: &RecordTypeConfig) -> Narrowing {
+    Narrowing {
+        variant: admits(type_config, urzua_core::waiver::VARIANT_FIELD),
+        key_path: admits(type_config, urzua_core::waiver::KEY_PATH_FIELD),
+    }
+}
+
+fn missing_narrowing_fields(narrowing: Narrowing) -> String {
+    let mut names = Vec::new();
+    if !narrowing.variant {
+        names.push(urzua_core::waiver::VARIANT_FIELD);
+    }
+    if !narrowing.key_path {
+        names.push(urzua_core::waiver::KEY_PATH_FIELD);
+    }
+    names.join(" and ")
 }
 
 /// A closed field set that omits a field the draft writes would be reported by
@@ -344,7 +391,12 @@ fn build(ctx: &Ctx, numbering: &Numbered, groups: &[Group]) -> Result<Vec<Built>
     let mut out = Vec::new();
     for (offset, group) in groups.iter().enumerate() {
         let number = numbering.display_number + offset as u32;
-        let title: String = format!("{} in {}", group.rule, group.scope)
+        let siblings = groups
+            .iter()
+            .filter(|g| g.rule == group.rule && g.scope == group.scope)
+            .count();
+        let title: String = group
+            .title(siblings)
             .chars()
             .take(MAX_TITLE_CHARS)
             .collect();
@@ -438,8 +490,15 @@ fn scaffold(
     base: &urzua_core::new_record::ScaffoldSpec,
 ) -> (String, String) {
     let stable_id = urzua_id::StableId::generate();
+    let key_path = group.key_path.as_ref().map(|k| k.join(", "));
     let mut fields: Vec<(&str, &str)> =
         vec![(RULE_FIELD, &group.rule), (SCOPE_FIELD, &group.scope)];
+    if let Some(variant) = &group.variant {
+        fields.push((urzua_core::waiver::VARIANT_FIELD, variant));
+    }
+    if let Some(key_path) = &key_path {
+        fields.push((urzua_core::waiver::KEY_PATH_FIELD, key_path));
+    }
     if ctx.owner {
         fields.push((OWNER_FIELD, &ctx.author));
     }
@@ -484,6 +543,8 @@ fn draft_entry(path: &Path, group: &Group) -> WaiveDraft {
         stable_id: None,
         rule: group.rule.clone(),
         scope: group.scope.clone(),
+        variant: group.variant.clone(),
+        key_path: group.key_path.clone(),
         findings: WaiveFindings {
             count: group.findings.len(),
             lines: group.lines(),
@@ -546,6 +607,8 @@ mod tests {
         let group = Group {
             rule: "r".into(),
             scope: name.into(),
+            variant: None,
+            key_path: None,
             findings: Vec::new(),
         };
         Built {
@@ -645,5 +708,28 @@ mod tests {
         .unwrap_err();
         assert!(err.contains("already exists"));
         assert_eq!(rebuilds, MAX_RETAKES);
+    }
+
+    /// A type with a closed field set drafts with the fields it lists and no others.
+    #[test]
+    fn a_draft_carries_only_the_narrowing_fields_the_type_admits() {
+        let open = RecordTypeConfig::default();
+        assert_eq!(
+            narrowing_admitted(&open),
+            Narrowing {
+                variant: true,
+                key_path: true
+            }
+        );
+        let closed = waiver_type(&["Rule"], Some(&["Expires"]));
+        assert_eq!(narrowing_admitted(&closed), Narrowing::default());
+        let one = waiver_type(&["Rule"], Some(&["Variant"]));
+        assert_eq!(
+            narrowing_admitted(&one),
+            Narrowing {
+                variant: true,
+                key_path: false
+            }
+        );
     }
 }
