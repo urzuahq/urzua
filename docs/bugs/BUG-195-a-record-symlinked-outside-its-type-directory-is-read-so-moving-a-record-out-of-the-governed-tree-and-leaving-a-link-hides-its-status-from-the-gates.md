@@ -16,7 +16,7 @@ The gates judge a record by the path it is tracked at and assumed the file at th
 
 ## References
 
-Fixed by the rule `identity.record-symlink-escapes` (`ADR-89`, amendment of 2026-11-14): on for every configuration and not switchable off, it refuses the record in the shared session load; `check` reports a blocking, unwaivable finding and every other command exits 2 naming the file. The regression tests reproduce the two-pull-request attack end to end (`the_two_pr_symlink_attack_is_blocked_at_both_steps`) and the acceptance case `a-record-symlinked-out-of-its-directory-is-refused` tags this bug.
+Fixed by the rule `identity.record-symlink-escapes` (`ADR-89`, amendment of 2026-11-14): on at `error` for every configuration (a configuration may lower it or turn it `off`, which raises a warning notice on every `check`), it refuses any record that is a link, a same-directory alias or chain included, in the shared session load; `check` reports a blocking, unwaivable finding and every other command exits 2 naming the file. The regression tests reproduce the two-pull-request attack end to end (`the_two_pr_symlink_attack_is_blocked_at_both_steps`) and the acceptance case `a-record-symlinked-out-of-its-directory-is-refused` tags this bug.
 
 > **Revision log**
 >

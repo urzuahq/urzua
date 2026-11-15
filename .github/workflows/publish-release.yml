@@ -100,14 +100,8 @@ jobs:
       matrix:
         include:
           - target: aarch64-apple-darwin
-            os: macos-14
-          # Cross-compiled from the same arm64 runner rather than a
-          # dedicated macos-13 (Intel) runner: those queue for a very long
-          # time or never schedule as GitHub winds down Intel-runner
-          # capacity, and rustc/Xcode already cross-compile this target
-          # cleanly from arm64 without needing real Intel hardware.
-          - target: x86_64-apple-darwin
-            os: macos-14
+            os: macos-latest
+          # No Intel Mac build: Intel Macs build from source with cargo install.
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
     runs-on: ${{ matrix.os }}
@@ -129,7 +123,12 @@ jobs:
           ref: ${{ needs.release.outputs.tag }}
       - name: install target
         run: rustup target add ${{ matrix.target }}
+      # The deployment target, not the runner image, decides which macOS
+      # versions the binary supports. Runner images get retired (macos-14
+      # was), so build on macos-latest and pin the minimum macOS here.
       - name: build
+        env:
+          MACOSX_DEPLOYMENT_TARGET: ${{ contains(matrix.target, 'apple-darwin') && '11.0' || '' }}
         run: cargo build --release --locked --target ${{ matrix.target }} -p urzua-cli
       - name: package
         run: |
@@ -177,7 +176,7 @@ jobs:
           set -euo pipefail
           count=$(gh release view "$TAG" --repo "${{ github.repository }}" --json assets --jq '.assets | length')
           echo "$TAG carries $count asset(s)"
-          if [ "$count" -lt 3 ]; then
-            echo "::error::expected 3 archives on $TAG, found $count"
+          if [ "$count" -lt 2 ]; then
+            echo "::error::expected 2 archives on $TAG, found $count"
             exit 1
           fi

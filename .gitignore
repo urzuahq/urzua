@@ -31,3 +31,7 @@ build.log
 
 # Local build and test output
 *.log
+
+# Python
+__pycache__/
+*.pyc

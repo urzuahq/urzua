@@ -5,12 +5,17 @@ use crate::waiver::{Permanence, Suppression};
 /// anything is reported, so a stale exception does not stay on file hiding that
 /// it is unneeded (and free to cover a future finding by accident).
 ///
-/// Three states, each a finding on the waiver record:
+/// Four states, each a finding on the waiver record:
 ///
 /// - **Expired**: its `Expires` has passed, or is not a real `YYYY-MM-DD`
 ///   date. `apply_suppressions` already ignores it, so its finding resurfaces; this
 ///   names the record that is left behind. Reported once as expired, never
 ///   also as unmatched.
+/// - **Too broad**: it is scoped to the configuration file and names neither a
+///   `Variant` nor a `Key-path`, so it silences every finding of its rule in that
+///   file, present and future, and `waiver.matches-nothing` could never see it
+///   outgrow the finding it was written for (`SPEC-10`). It stays in effect;
+///   the finding is what asks for the narrowing.
 /// - **Unknown rule**: it names a rule this build does not ship, so it can
 ///   never match anything.
 /// - **Unmatched**: it is active, its rule ran in this invocation over the
@@ -29,7 +34,8 @@ use crate::waiver::{Permanence, Suppression};
 /// `defers_to_diff` says whether a rule declared it, and a waiver on such a
 /// rule is eligible and unexamined for the unmatched case, as under `--base`.
 ///
-/// `findings` is every finding before waivers are applied.
+/// `findings` is every finding before waivers are applied; `config_path` is the
+/// configuration file the run read, the scope whose waivers must narrow.
 pub fn waiver_matches_nothing(
     waivers: &[Suppression],
     findings: &[Finding],
@@ -37,10 +43,12 @@ pub fn waiver_matches_nothing(
     whole_corpus: bool,
     reached: impl Fn(&std::path::Path) -> bool,
     defers_to_diff: impl Fn(&str) -> bool,
-    today: &str,
+    (today, config_path): (&str, &std::path::Path),
 ) -> (RuleExecution, Vec<Finding>) {
     let mut out = Vec::new();
+    let config_scope = config_path.to_string_lossy();
     let run = WaiverRun {
+        config_scope: &config_scope,
         findings,
         executed,
         whole_corpus,
@@ -64,6 +72,7 @@ pub fn waiver_matches_nothing(
 
 /// What `waiver.matches-nothing` could see in this invocation.
 struct WaiverRun<'a> {
+    config_scope: &'a str,
     findings: &'a [Finding],
     executed: &'a [RuleExecution],
     whole_corpus: bool,
@@ -151,6 +160,23 @@ impl WaiverRun<'_> {
                 ),
             );
         }
+        if w.scope == self.config_scope && !w.is_narrowed() {
+            if !(self.reached)(&path) {
+                return Outcome::Absent;
+            }
+            return report(
+                "waiver-config-scope-too-broad",
+                crate::waiver::VARIANT_FIELD,
+                format!(
+                    "waiver ({claimed}) is scoped to the configuration file and names neither {} nor {}, so it silences every finding of '{}' there, present and future; name the finding it excuses: {} is its action variant, {} its `suggested_action.target.key_path`",
+                    crate::waiver::VARIANT_FIELD,
+                    crate::waiver::KEY_PATH_FIELD,
+                    w.rule,
+                    crate::waiver::VARIANT_FIELD,
+                    crate::waiver::KEY_PATH_FIELD,
+                ),
+            );
+        }
         if !ALL_RULES.contains(&w.rule.as_str()) {
             if !(self.reached)(&path) {
                 return Outcome::Absent;
@@ -191,6 +217,9 @@ mod tests {
     use super::*;
     use crate::rules::tests::{examined, exec_with};
 
+    const TODAY: &str = "2026-11-04";
+    const CONFIG_FILE: &str = ".urzua/config.yaml";
+
     fn waiver(id: &str, rule: &str, scope: &str, expires: Option<&str>) -> Suppression {
         Suppression {
             id: id.into(),
@@ -200,6 +229,8 @@ mod tests {
             unmet: Vec::new(),
             unmet_states: Vec::new(),
             permanence: crate::waiver::Permanence::Ungoverned,
+            variant: None,
+            key_path: None,
         }
     }
 
@@ -230,7 +261,7 @@ mod tests {
             whole,
             |_| whole,
             |_| false,
-            "2026-11-04",
+            (TODAY, std::path::Path::new(CONFIG_FILE)),
         )
     }
 
@@ -249,7 +280,7 @@ mod tests {
                 true,
                 |_| true,
                 move |rule| scoped && rule == "field.quality",
-                "2026-11-04",
+                (TODAY, std::path::Path::new(CONFIG_FILE)),
             )
         };
         let (exec, f) = judge(true);
@@ -270,7 +301,7 @@ mod tests {
             true,
             |_| true,
             |_| true,
-            "2026-11-04",
+            (TODAY, std::path::Path::new(CONFIG_FILE)),
         );
         assert_eq!(f.len(), 1);
         assert!(f[0].message.contains("expired"));
@@ -373,8 +404,15 @@ mod tests {
             "*",
             Some("2020-01-01"),
         );
-        let (_, f) =
-            waiver_matches_nothing(&[w], &[], &[], false, |_| false, |_| false, "2026-11-04");
+        let (_, f) = waiver_matches_nothing(
+            &[w],
+            &[],
+            &[],
+            false,
+            |_| false,
+            |_| false,
+            (TODAY, std::path::Path::new(CONFIG_FILE)),
+        );
         assert!(f.is_empty());
     }
 
@@ -398,5 +436,63 @@ mod tests {
         assert_eq!(f[0].file, PathBuf::from("docs/waiver/W-1.md"));
         assert!(f[0].message.contains("Reason"), "{}", f[0].message);
         assert_eq!(f[0].action_source.variant, "waiver-ineffective");
+    }
+
+    fn config_run(w: Suppression) -> Vec<Finding> {
+        waiver_matches_nothing(
+            &[w],
+            &[],
+            &[],
+            false,
+            |_| true,
+            |_| false,
+            (TODAY, std::path::Path::new(CONFIG_FILE)),
+        )
+        .1
+    }
+
+    /// `SPEC-10`: a waiver scoped to the configuration file must name the finding
+    /// it excuses, so it cannot silence a later finding of the same rule there.
+    #[test]
+    fn a_config_scoped_waiver_naming_neither_variant_nor_key_path_is_a_finding() {
+        let found = config_run(waiver("W", "type.dir-matches-nothing", CONFIG_FILE, None));
+        assert_eq!(found.len(), 1, "{found:?}");
+        assert_eq!(
+            found[0].action_source.variant,
+            "waiver-config-scope-too-broad"
+        );
+        assert!(found[0].message.contains("Variant") && found[0].message.contains("Key-path"));
+        assert_eq!(found[0].file, std::path::PathBuf::from("W"));
+    }
+
+    #[test]
+    fn a_config_scoped_waiver_naming_a_variant_or_key_path_is_not_too_broad() {
+        for (variant, key_path) in [
+            (Some("dir-missing"), None),
+            (None, Some(vec!["record_types".to_string(), "a".into()])),
+        ] {
+            let mut w = waiver("W", "type.dir-matches-nothing", CONFIG_FILE, None);
+            w.variant = variant.map(str::to_string);
+            w.key_path = key_path;
+            let found = config_run(w);
+            assert!(
+                found
+                    .iter()
+                    .all(|f| f.action_source.variant != "waiver-config-scope-too-broad"),
+                "{found:?}"
+            );
+        }
+    }
+
+    /// Existing waivers keep working: only the configuration scope must narrow.
+    #[test]
+    fn a_waiver_scoped_to_a_record_needs_no_narrowing() {
+        let found = config_run(waiver("W", "field.quality", "docs/adr/ADR-1-x.md", None));
+        assert!(
+            found
+                .iter()
+                .all(|f| f.action_source.variant != "waiver-config-scope-too-broad"),
+            "{found:?}"
+        );
     }
 }

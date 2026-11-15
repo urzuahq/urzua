@@ -1,0 +1,17 @@
+id: a-renamed-record-is-not-a-creation
+corpus: corpus-ai
+# The diff reports a rename as a deletion plus an addition. The legacy header is
+# not what urzua new writes, but the record was not created here: its Stable-Id
+# was a deleted record's at the merge base. A conformant new record in the same
+# commit is what gives the rule something it examines.
+commits:
+  - rename:
+      - {from: records/ADR-0002-legacy.md, to: records/ADR-0002-moved.md}
+    write:
+      records/ADR-0003-new.md: "---\nStable-Id: 01M8SCAFFB0000000000000003\nStatus: Proposed\nDate: 2026-11-14\nAuthor: dee\nDeciders: bo\n---\n# ADR-0003 — New\n\nBody.\n"
+invocation: [check, --base, base]
+expect_exit: 0
+expect_rules_ran:
+  - header.scaffold-mismatch
+expect_no_findings:
+  - {rule: header.scaffold-mismatch}

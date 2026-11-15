@@ -53,6 +53,8 @@ Expires: 2026-12-31
 |---|---|
 | `Rule` | The rule id the waiver covers, matched exactly. |
 | `Scope` | A file path, matched exactly against the finding's file, or `*` for every file the rule examines. |
+| `Variant` | Optional. The finding's action variant (`waive --from-report` writes it): the waiver covers findings of that variant only. Required, or `Key-path`, when `Scope` is `.urzua/config.yaml`. |
+| `Key-path` | Optional. The keys of the finding's `suggested_action.target.key_path`, such as `[record_types, milestone, dir]`: the waiver covers the finding at that configuration key only. |
 | `Reason` | Why the exception is accepted. Free text. |
 | `Expires` | `YYYY-MM-DD`, a real calendar date, compared in UTC. A waiver whose date has passed is treated as if it did not exist, and the finding blocks again. A waiver whose `Expires` is today's date is still in force. |
 
@@ -60,6 +62,10 @@ Notes that save time:
 
 - **The waiver must be tracked.** An untracked waiver file is not read (`check` adds an info notice
   about untracked records), so a finding stays unwaived until you `git add` it.
+- **A waiver scoped to the configuration file must name its finding.** `Scope: .urzua/config.yaml`
+  with neither `Variant` nor `Key-path` covers every finding of the rule in the config, present and
+  future, so it keeps working but `waiver.matches-nothing` reports it. List `Variant` and `Key-path` in
+  the type's `known_fields` to write them.
 - **A waiver that does nothing is reported.** With `waiver.matches-nothing` enabled, a waiver that has
   expired, is not in effect, or no longer matches a finding is a finding on the waiver record, naming
   the rule and scope it claimed.
@@ -87,7 +93,8 @@ urzua waive --from-report --apply                  # write the drafts as waiver 
 git add docs/waiver                                # untracked waivers are not read
 ```
 
-Each draft has `Rule` and `Scope` filled in and a pending `Reason` with no `Expires`, so it
+Each draft has `Rule` and `Scope` filled in (and `Variant`, plus `Key-path` for a configuration
+finding, when the type lists them) and a pending `Reason` with no `Expires`, so it
 suppresses nothing until a person writes the reason and the date. The preview lists the files it would
 write with `"written": false`; `--apply` writes them (`"written": true`), each with a fresh
 `Stable-Id`. Nothing is hidden by the tool: until you fill a draft in, `check` still reports the

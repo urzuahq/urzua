@@ -98,6 +98,48 @@ pub struct Suppression {
     /// Whether the type's `permanent` declaration lets this suppression stand
     /// without an `Expires` (`ADR-86`).
     pub permanence: Permanence,
+    /// The finding variant it covers, when it names one (`Variant`): a finding
+    /// of another variant of the same rule in the same file is not covered.
+    /// `None` is every variant, as before.
+    pub variant: Option<String>,
+    /// The configuration key path it covers, when it names one (`Key-path`):
+    /// the finding's `suggested_action.target.key_path`. `None` is every key.
+    pub key_path: Option<Vec<String>>,
+}
+
+/// The waiver header field naming the finding variant it covers. Reserved like
+/// `Rule` and `Scope`: the engine reads it by name (`SPEC-10`).
+pub const VARIANT_FIELD: &str = "Variant";
+/// The waiver header field naming the configuration key path it covers.
+pub const KEY_PATH_FIELD: &str = "Key-path";
+
+/// The keys a `Key-path` value names: a YAML list or a comma-separated line
+/// (a header value reads a list as its items joined by commas), brackets and
+/// quotes around an item dropped. Blank is no path.
+pub fn parse_key_path(value: &str) -> Option<Vec<String>> {
+    let trimmed = value.trim().trim_start_matches('[').trim_end_matches(']');
+    let keys: Vec<String> = trimmed
+        .split(',')
+        .map(|k| k.trim().trim_matches(['\'', '"']).trim().to_string())
+        .filter(|k| !k.is_empty())
+        .collect();
+    (!keys.is_empty()).then_some(keys)
+}
+
+/// The key path a finding is at: the one its rule computed, else the one its
+/// suggested action targets.
+pub(crate) fn finding_key_path(finding: &Finding) -> Option<&[String]> {
+    finding
+        .action_source
+        .target
+        .key_path
+        .as_deref()
+        .or_else(|| {
+            finding
+                .suggested_action
+                .as_ref()
+                .and_then(|a| a.target.key_path.as_deref())
+        })
 }
 
 // Implements: ADR-86 (a waiver without Expires is governed by the declared `permanent` vocabulary)
@@ -214,16 +256,36 @@ impl Suppression {
         }
     }
 
-    pub fn covers(&self, finding: &Finding) -> bool {
+    /// Whether it names the finding: its rule, a scope holding the finding's
+    /// file, and the variant and key path it narrows to, when it narrows. The
+    /// judgement without expiry, effect or waivability.
+    pub fn names(&self, finding: &Finding) -> bool {
         if self.rule != finding.rule {
             return false;
         }
-        // A variant its rule declares `unwaivable` is cleared by evidence, not
-        // by a rule-level waiver (`ADR-96`).
-        if !crate::rules::finding_is_waivable(finding) {
+        if self.scope != "*" && finding.file.to_string_lossy() != self.scope {
             return false;
         }
-        self.scope == "*" || finding.file.to_string_lossy() == self.scope
+        if let Some(variant) = &self.variant {
+            if finding.action_source.variant != variant {
+                return false;
+            }
+        }
+        match &self.key_path {
+            Some(wanted) => finding_key_path(finding) == Some(wanted.as_slice()),
+            None => true,
+        }
+    }
+
+    /// Whether it narrows to a variant or a key path.
+    pub fn is_narrowed(&self) -> bool {
+        self.variant.is_some() || self.key_path.is_some()
+    }
+
+    pub fn covers(&self, finding: &Finding) -> bool {
+        // A variant its rule declares `unwaivable` is cleared by evidence, not
+        // by a rule-level waiver (`ADR-96`).
+        self.names(finding) && crate::rules::finding_is_waivable(finding)
     }
 }
 
@@ -254,6 +316,18 @@ pub fn load_suppressions(
             let rule = r.header.get_reserved("Rule")?.to_string();
             let scope = r.header.get_reserved("Scope")?.to_string();
             let expires = r.header.get_reserved("Expires").map(|s| s.to_string());
+            // Blank is not narrowing: a template's empty `Variant:` covers
+            // every variant, as a waiver written before the field did.
+            let variant = r
+                .header
+                .get_reserved(VARIANT_FIELD)
+                .map(str::trim)
+                .filter(|v| !v.is_empty())
+                .map(str::to_string);
+            let key_path = r
+                .header
+                .get_reserved(KEY_PATH_FIELD)
+                .and_then(parse_key_path);
             // A prose field is a placeholder only when its whole trimmed value
             // is the template's text for it or a declared pending value; the
             // word "pending" inside a real sentence is a real reason.
@@ -275,6 +349,8 @@ pub fn load_suppressions(
                 unmet,
                 unmet_states,
                 permanence,
+                variant,
+                key_path,
             })
         })
         .collect()
@@ -422,6 +498,8 @@ mod tests {
             unmet: Vec::new(),
             unmet_states: Vec::new(),
             permanence: Permanence::Ungoverned,
+            variant: None,
+            key_path: None,
         };
         assert!(w("2028-02-29").is_active("2028-02-29"));
         assert!(!w("2026-02-29").is_active("2026-01-01"));
@@ -464,6 +542,8 @@ scope: docs/adr/ADR-1-x.md
             unmet: Vec::new(),
             unmet_states: Vec::new(),
             permanence: Permanence::Ungoverned,
+            variant: None,
+            key_path: None,
         };
         assert!(w.is_active("2020-01-01"));
         assert!(w.is_active("2099-01-01"));
@@ -479,6 +559,8 @@ scope: docs/adr/ADR-1-x.md
             unmet: Vec::new(),
             unmet_states: Vec::new(),
             permanence: Permanence::Ungoverned,
+            variant: None,
+            key_path: None,
         };
         assert!(w.is_active("2025-12-31"));
         assert!(!w.is_active("2026-01-02"));
@@ -509,6 +591,8 @@ scope: docs/adr/ADR-1-x.md
                 unmet: Vec::new(),
                 unmet_states: Vec::new(),
                 permanence: Permanence::Ungoverned,
+                variant: None,
+                key_path: None,
             };
             assert!(
                 !w.is_active("2026-09-16"),
@@ -528,6 +612,8 @@ scope: docs/adr/ADR-1-x.md
             unmet: Vec::new(),
             unmet_states: Vec::new(),
             permanence: Permanence::Ungoverned,
+            variant: None,
+            key_path: None,
         }];
         apply_suppressions(&mut findings, &waivers, "2026-09-04");
 
@@ -553,6 +639,8 @@ scope: docs/adr/ADR-1-x.md
             unmet: Vec::new(),
             unmet_states: Vec::new(),
             permanence: Permanence::Ungoverned,
+            variant: None,
+            key_path: None,
         }];
         apply_suppressions(&mut findings, &waivers, "2026-09-04");
 
@@ -575,6 +663,8 @@ scope: docs/adr/ADR-1-x.md
             unmet: Vec::new(),
             unmet_states: Vec::new(),
             permanence: Permanence::Ungoverned,
+            variant: None,
+            key_path: None,
         }];
         apply_suppressions(&mut findings, &waivers, "2026-09-04");
 
@@ -819,5 +909,101 @@ scope: docs/adr/ADR-1-x.md
         let mut findings = vec![finding("field.quality", "docs/adr/0001-x.md")];
         apply_suppressions(&mut findings, &loaded, "2026-11-05");
         assert!(findings[0].waived.is_none());
+    }
+
+    fn config_finding(variant: &'static str, key: &[&str]) -> Finding {
+        Finding::new(
+            "type.dir-matches-nothing",
+            FindingSeverity::Warning,
+            ".urzua/config.yaml",
+            ActionSource::new(variant).key_path(key.iter().copied()),
+            "x",
+        )
+    }
+
+    fn config_waiver(variant: Option<&str>, key_path: Option<&str>) -> Suppression {
+        Suppression {
+            id: "docs/waiver/WAIVER-1-x.md".into(),
+            rule: "type.dir-matches-nothing".into(),
+            scope: ".urzua/config.yaml".into(),
+            expires: None,
+            unmet: Vec::new(),
+            unmet_states: Vec::new(),
+            permanence: Permanence::Ungoverned,
+            variant: variant.map(str::to_string),
+            key_path: key_path.and_then(parse_key_path),
+        }
+    }
+
+    /// `SPEC-10`: a waiver may name the finding variant it excuses, so a finding
+    /// of another variant of the same rule in the same file is no longer hidden.
+    #[test]
+    fn a_waiver_naming_a_variant_covers_only_findings_of_that_variant() {
+        let mut findings = vec![
+            config_finding("exempt-status-matches-nothing", &["a"]),
+            config_finding("dir-missing", &["record_types", "condition", "dir"]),
+        ];
+        apply_suppressions(
+            &mut findings,
+            &[config_waiver(Some("exempt-status-matches-nothing"), None)],
+            "2026-11-14",
+        );
+        assert!(findings[0].waived.is_some());
+        assert!(
+            findings[1].waived.is_none(),
+            "a finding of another variant must not be covered"
+        );
+    }
+
+    #[test]
+    fn a_waiver_naming_a_key_path_covers_only_the_finding_at_that_key_path() {
+        let mut findings = vec![
+            config_finding("dir-missing", &["record_types", "milestone", "dir"]),
+            config_finding("dir-missing", &["record_types", "condition", "dir"]),
+        ];
+        apply_suppressions(
+            &mut findings,
+            &[config_waiver(None, Some("record_types, milestone, dir"))],
+            "2026-11-14",
+        );
+        assert!(findings[0].waived.is_some());
+        assert!(findings[1].waived.is_none());
+    }
+
+    /// A waiver written before the fields existed names neither and still covers
+    /// every finding of its rule in its file.
+    #[test]
+    fn a_waiver_naming_neither_still_covers_every_finding_of_its_rule_and_file() {
+        let mut findings = vec![
+            config_finding("exempt-status-matches-nothing", &["a"]),
+            config_finding("dir-missing", &["record_types", "condition", "dir"]),
+        ];
+        apply_suppressions(&mut findings, &[config_waiver(None, None)], "2026-11-14");
+        assert!(findings.iter().all(|f| f.waived.is_some()));
+    }
+
+    #[test]
+    fn variant_and_key_path_are_read_from_the_header_and_blank_names_nothing() {
+        let read = |extra: &str| {
+            let r = Record::parse(
+                std::path::PathBuf::from("docs/waiver/WAIVER-1-x.md"),
+                "waiver".to_string(),
+                &format!(
+                    "---\nRule: type.dir-matches-nothing\nScope: .urzua/config.yaml\n{extra}---\n"
+                ),
+            );
+            load_suppressions(&[r], &SuppressionType::named("waiver")).remove(0)
+        };
+        let w = read("Variant: dir-missing\nKey-path: [record_types, condition, dir]\n");
+        assert_eq!(w.variant.as_deref(), Some("dir-missing"));
+        assert_eq!(
+            w.key_path.as_deref(),
+            Some(&["record_types".to_string(), "condition".into(), "dir".into()][..])
+        );
+        let w = read("Variant: dir-missing\nKey-path: 'record_types, condition, dir'\n");
+        assert_eq!(w.key_path.as_ref().map(Vec::len), Some(3));
+        let blank = read("Variant:\nKey-path:\n");
+        assert!(!blank.is_narrowed());
+        assert!(!read("").is_narrowed());
     }
 }

@@ -96,6 +96,9 @@ struct Context<'a> {
     changed_paths: Option<Vec<PathBuf>>,
     /// The changed paths that did not exist at the merge base; `None` without `--base`.
     added_paths: Option<Vec<PathBuf>>,
+    /// The added paths that are a rename (`header.scaffold-mismatch`); empty
+    /// unless that rule is enabled.
+    renamed_paths: HashSet<PathBuf>,
     /// The fetched pull-request refs' holders of the ids this diff adds
     /// (`identity.open-pr-collision`); empty unless that rule is enabled.
     pull_ref_claims: rules::PullRefClaims,
@@ -267,14 +270,22 @@ pub(crate) fn load_template_texts(
     config: &Config,
 ) -> Result<HashMap<String, String>, String> {
     let mut texts = HashMap::new();
-    if config
-        .rules
-        .get(rules::RULE_SECTION_ORDER)
-        .is_none_or(|s| s.level == urzua_core::config::RuleLevel::Off)
-    {
+    let enabled = |rule: &str| enabled_setting(config, rule).is_some();
+    // `header.scaffold-mismatch` re-renders each type's scaffold, which reads the
+    // template's header; `section.order` reads the type's sections from it.
+    let scaffold = enabled(rules::RULE_HEADER_SCAFFOLD_MISMATCH);
+    if !scaffold && !enabled(rules::RULE_SECTION_ORDER) {
         return Ok(texts);
     }
-    for (record_type, _) in rules::types_reading_a_template_order(config) {
+    let wanted: Vec<String> = if scaffold {
+        config.record_types.keys().cloned().collect()
+    } else {
+        rules::types_reading_a_template_order(config)
+            .into_iter()
+            .map(|(record_type, _)| record_type)
+            .collect()
+    };
+    for record_type in wanted {
         let path = repo_root
             .join(".urzua/templates")
             .join(format!("{record_type}.md"));
@@ -285,8 +296,7 @@ pub(crate) fn load_template_texts(
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
             Err(e) => {
                 return Err(format!(
-                    "{}: template '{}' could not be read: {e}",
-                    rules::RULE_SECTION_ORDER,
+                    "template '{}' could not be read: {e}",
                     path.display()
                 ))
             }
@@ -335,6 +345,7 @@ impl<'a> Context<'a> {
             added_row_days: &self.added_row_days,
             changed_paths: self.changed_paths.as_deref(),
             added_paths: self.added_paths.as_deref(),
+            renamed_paths: &self.renamed_paths,
             pull_ref_claims: &self.pull_ref_claims,
             committed_statuses: self.committed_statuses.as_ref(),
             deleted_records: &self.deleted_records,
@@ -583,7 +594,7 @@ pub(crate) fn execute(
         &executions,
         &why_deferred(&scope, base.as_deref()),
     ));
-    notices.extend(excused_line_notices(&executions));
+    notices.extend(execution_notices(&session.config, &executions));
     scope_findings(session, &scope, &mut findings);
     let waivers = effective_waivers(session, &context, &mut notices);
     let today = urzua_io::today();
@@ -645,44 +656,29 @@ fn session_notices(
         &context.back_pointed,
     ));
     notices.extend(harness_key_notices(session.config.harness.as_ref()));
-    notices.extend(unreported_escaping_notices(session, selection));
     notices.extend(decider_gate_notices(
         &session.config,
         context,
         (with_base, context.actors.is_some()),
         selection,
     ));
+    notices.extend(symlink_refusal_off_notice(&session.config));
     notices
 }
 
-/// A `--rules` selection that leaves out `identity.record-symlink-escapes` does
-/// not run it, yet the records it refused were not read either: the run says so
-/// in one warning rather than reading as a corpus without them.
-fn unreported_escaping_notices(session: &Session, selection: Option<&[String]>) -> Vec<Notice> {
-    let left_out = selection.is_some_and(|s| {
-        !s.iter()
-            .any(|r| r == rules::RULE_IDENTITY_RECORD_SYMLINK_ESCAPES)
-    });
-    if !left_out || session.escaping_records.is_empty() {
-        return Vec::new();
-    }
-    let mut paths: Vec<String> = session
-        .escaping_records
-        .iter()
-        .map(|e| e.path.display().to_string())
-        .collect();
-    paths.sort();
-    vec![Notice {
-        subject: crate::NOTICE_ESCAPING_RECORDS.to_string(),
+/// A configuration that turns the symlink refusal off is told so on every run:
+/// a record may then be read through a link from where no gate looks (SPEC-2).
+fn symlink_refusal_off_notice(config: &Config) -> Option<Notice> {
+    let id = rules::RULE_IDENTITY_RECORD_SYMLINK_ESCAPES;
+    (rules::effective_level(config, id) == RuleLevel::Off).then(|| Notice {
         severity: NoticeSeverity::Warning,
+        subject: id.to_string(),
         message: format!(
-            "{} tracked record(s) are symlinks out of their record type's directory and were not read, and the selection leaves out {}, so nothing is reported on them: {}; run `urzua check` without the selection, or include the rule",
-            paths.len(),
-            rules::RULE_IDENTITY_RECORD_SYMLINK_ESCAPES,
-            paths.join(", ")
+            "{id} is off: a record file that is a symlink is read through the link, \
+             so its content can live at a path no gate on a record directory sees"
         ),
         detail: None,
-    }]
+    })
 }
 
 /// Holds the drift a `drift_baseline` names out of `context` and discloses it
@@ -743,7 +739,7 @@ fn resolve_drift_baseline(
         return Ok(None);
     }
     let git_ref = baseline.git_ref.trim().to_string();
-    match urzua_io::resolve_commit(&session.repo_root, &git_ref) {
+    match urzua_io::resolve_baseline_commit(&session.repo_root, &git_ref) {
         Ok(commit) => Ok(Some((git_ref, commit))),
         Err(e) => Err(format!(
             "{}.drift_baseline.ref: {e}; fix the ref or remove drift_baseline (a shallow clone may lack the commit: fetch full history)",
@@ -1590,6 +1586,7 @@ struct DiffInputs {
     base_drift: HashMap<PathBuf, HashSet<String>>,
     added_row_days: HashMap<PathBuf, rules::RowWindows>,
     added_paths: Option<Vec<PathBuf>>,
+    renamed_paths: HashSet<PathBuf>,
     pull_ref_claims: rules::PullRefClaims,
     templates: urzua_core::new_record::TemplateValues,
     template_texts: HashMap<String, String>,
@@ -1810,6 +1807,7 @@ fn read_diff_inputs(
         added
     });
     let pull_ref_claims = load_pull_ref_claims(session, added_paths.as_deref(), notices);
+    let renamed_paths = load_renamed_paths(session, changes, notices);
     let templates = load_templates(repo_root, config, notices)?;
     let template_texts = load_template_texts(repo_root, config)?;
     // The diff rules judge the changed set itself; `None` without `--base`.
@@ -1847,6 +1845,7 @@ fn read_diff_inputs(
         base_drift,
         added_row_days,
         added_paths,
+        renamed_paths,
         pull_ref_claims,
         templates,
         template_texts,
@@ -2255,6 +2254,7 @@ fn load_context<'a>(
                 .collect(),
             changed_paths: diff.changed_paths,
             added_paths: diff.added_paths,
+            renamed_paths: diff.renamed_paths,
             pull_ref_claims: diff.pull_ref_claims,
             committed_statuses: diff.committed_statuses,
             deleted_records: diff.deleted_records,
@@ -2273,6 +2273,63 @@ fn load_context<'a>(
         },
         notices,
     ))
+}
+
+/// The added records that are a rename, not a creation (`header.scaffold-mismatch`,
+/// `MILE-103`): a record added at a new path whose `Stable-Id` a record deleted
+/// by the same diff carried at the merge base. Read only while the rule is
+/// enabled; a deleted copy that cannot be read is disclosed and its record then
+/// judged as a creation, the stricter reading.
+fn load_renamed_paths(
+    session: &Session,
+    changes: Option<&urzua_io::GitChanges>,
+    notices: &mut Vec<Notice>,
+) -> HashSet<PathBuf> {
+    let (Some(changes), Some(_)) = (
+        changes,
+        enabled_setting(&session.config, rules::RULE_HEADER_SCAFFOLD_MISMATCH),
+    ) else {
+        return HashSet::new();
+    };
+    let mut deleted: Vec<&PathBuf> = changes
+        .deleted
+        .iter()
+        .filter(|p| p.extension().is_some_and(|e| e.eq_ignore_ascii_case("md")))
+        .collect();
+    deleted.sort();
+    let mut gone: HashSet<String> = HashSet::new();
+    for path in deleted {
+        match urzua_io::read_at_commit(&session.repo_root, &changes.merge_base, path) {
+            Ok(text) => {
+                let header = urzua_core::header::parse(&text);
+                if let Some(id) = header.get_reserved("Stable-Id") {
+                    if !id.trim().is_empty() {
+                        gone.insert(id.trim().to_string());
+                    }
+                }
+            }
+            Err(e) => notices.push(Notice {
+                severity: NoticeSeverity::Warning,
+                subject: rules::RULE_HEADER_SCAFFOLD_MISMATCH.to_string(),
+                message: format!(
+                    "could not read {} at the merge base ({e}), so a record renamed from it is judged as a new one",
+                    path.display()
+                ),
+                detail: None,
+            }),
+        }
+    }
+    session
+        .records
+        .iter()
+        .filter(|r| changes.added.contains(&r.path))
+        .filter(|r| {
+            r.header
+                .get_reserved("Stable-Id")
+                .is_some_and(|id| gone.contains(id.trim()))
+        })
+        .map(|r| r.path.clone())
+        .collect()
 }
 
 /// Reads every pinned locator of every record and keeps the records whose pin
@@ -2612,6 +2669,9 @@ fn run_after_scoping(
     let read_text = |p: &str| texts.get(p);
     let whole_corpus = scope.whole_corpus();
     let reached = |p: &Path| whole_corpus || scope.in_scope.contains(p);
+    let session = &context.session;
+    let config_file = crate::discovery::relative_to_root(&session.repo_root, &session.config_path)
+        .unwrap_or_else(|_| session.config_path.clone());
     let ctx = context.rule_ctx(
         &may_exist,
         &dir_exists,
@@ -2623,6 +2683,7 @@ fn run_after_scoping(
             whole_corpus,
             reached: &reached,
             today,
+            config_file: &config_file,
         },
     );
     let results = run_phase(context, rules::Phase::AfterScoping, &ctx);
@@ -2630,6 +2691,35 @@ fn run_after_scoping(
         executions.push(exec);
         findings.extend(rule_findings);
     }
+}
+
+/// What the rules' own executions say beyond their findings: the lines an
+/// `ignore_marker` excused, and a section rule that reads a key no type declares.
+fn execution_notices(
+    config: &urzua_core::config::Config,
+    executions: &[RuleExecution],
+) -> Vec<Notice> {
+    let mut notices = excused_line_notices(executions);
+    notices.extend(undeclared_section_key_notices(config, executions));
+    notices
+}
+
+/// A section rule enabled with no type declaring the key it reads passes
+/// silently; this says so, one warning per rule (SPEC-2, `BUG-73`'s class). The
+/// same fact is a `config.scope-matches-nothing` finding when that rule is on.
+fn undeclared_section_key_notices(
+    config: &urzua_core::config::Config,
+    executions: &[RuleExecution],
+) -> Vec<Notice> {
+    rules::section_rules_reading_nothing_declared(config, executions)
+        .into_iter()
+        .map(|(rule, declaration)| Notice {
+            severity: NoticeSeverity::Warning,
+            subject: "rule-reads-nothing-declared".to_string(),
+            message: rules::undeclared_section_key_message(rule, declaration),
+            detail: None,
+        })
+        .collect()
 }
 
 /// The status and the examined count, with the notice that explains an empty
@@ -2659,15 +2749,62 @@ fn status_and_examined(
             base.unwrap_or_default(),
         ));
     }
+    let empty_corpus = examined == 0 && corpus_has_no_record_yet(session);
+    if empty_corpus {
+        notices.push(empty_corpus_notice());
+    }
     let active = findings.iter().filter(|f| f.waived.is_none());
     let blocking = active.clone().any(|f| f.severity == FindingSeverity::Error);
-    let status = derive_status(blocking, empty_diff, examined, executions, active.count());
+    let status = derive_status(
+        blocking,
+        empty_diff || empty_corpus,
+        examined,
+        executions,
+        active.count(),
+    );
     // With nothing examined and an argument that selected nothing, that
     // argument's own notice is the reason; a second one would say it twice.
     if status == urzua_core::report::ReportStatus::NotRun && !(examined == 0 && has_unmatched) {
         notices.push(not_run_reason(examined));
     }
     (status, examined)
+}
+
+/// Whether every declared record directory is there and holds no record yet: the
+/// state `urzua init` leaves a new repository in. A directory that is missing, or
+/// one holding a file the type could not read as a record (a prefix that matches
+/// no filename), is not this state: those still report `not-run`, so a
+/// misdeclared type is never read as an empty one.
+fn corpus_has_no_record_yet(session: &Session) -> bool {
+    let types = &session.config.record_types;
+    if types.is_empty() || !session.records.is_empty() {
+        return false;
+    }
+    let hidden = |p: &std::path::Path| {
+        p.file_name()
+            .and_then(|n| n.to_str())
+            .is_some_and(|n| n.starts_with('.'))
+    };
+    types
+        .values()
+        .all(|rt| rt.all_dirs().all(|d| session.repo_root.join(d).is_dir()))
+        && !session
+            .discovered
+            .paths
+            .iter()
+            .any(|p| !hidden(p) && types.values().any(|rt| rt.owns_dir(p.parent())))
+}
+
+fn empty_corpus_notice() -> Notice {
+    Notice {
+        severity: NoticeSeverity::Info,
+        subject: "empty-corpus".to_string(),
+        message: "no record exists yet under any declared record type directory, so no record was examined; \
+                  `ok` here means the configuration loads and every declared directory is there, not that a record \
+                  was judged. `urzua new` writes the first record"
+            .to_string(),
+        detail: None,
+    }
 }
 
 /// `blocking` is true exactly when the run exits 1 (the flag wins over the

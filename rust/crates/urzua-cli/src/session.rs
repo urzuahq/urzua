@@ -60,8 +60,7 @@ impl Session {
         Self::open_with(&[], config_path, |_, _, _| Ok(()))?.refusing_escaping_records()
     }
 
-    /// Stops the run when a tracked record resolves outside the repository or
-    /// its record type's directory: the file is never read, and the refusal
+    /// Stops the run when a tracked record is a link, or sits behind one: the file is never read, and the refusal
     /// names it rather than letting the corpus shrink in silence.
     pub fn refusing_escaping_records(self) -> Result<Self, Failure> {
         match self.escaping_records.first() {
@@ -122,8 +121,17 @@ impl Session {
             discovered.staged_deletions.insert(p.clone());
             discovered.unstaged_deletions.insert(p);
         }
-        let escaping_records =
-            crate::discovery::escaping_records(&repo_root, &discovered.paths, &config);
+        // With the rule `off` the repository has chosen to read a record through a
+        // link (`identity.record-symlink-escapes`, SPEC-2): nothing is refused.
+        let escaping_records = if urzua_core::rules::effective_level(
+            &config,
+            urzua_core::rules::RULE_IDENTITY_RECORD_SYMLINK_ESCAPES,
+        ) == urzua_core::config::RuleLevel::Off
+        {
+            Vec::new()
+        } else {
+            crate::discovery::escaping_records(&repo_root, &discovered.paths, &config)
+        };
         let readable: Vec<PathBuf> = discovered
             .paths
             .iter()

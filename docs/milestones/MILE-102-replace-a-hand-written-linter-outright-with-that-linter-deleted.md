@@ -5,7 +5,7 @@ Phase: '1'
 Track: schema-governance
 Implements: SPEC-1
 Depends-on: MILE-98, MILE-126, MILE-132, MILE-136, MILE-137, MILE-138, MILE-139, MILE-140, MILE-141, MILE-142, MILE-143, MILE-125, COND-5
-Blocked-on: COND-5 -- the 0.4.0 release; its Signal says exactly what counts as met.
+Blocked-on: null
 ---
 # 102 — Replace a hand-written linter outright, with that linter deleted
 
@@ -81,3 +81,4 @@ warning, which the Phase 0 exit forbids.
 > | 2026-11-05 | `Depends-on: MILE-98, MILE-126, MILE-132, MILE-136, MILE-137, MILE-138, MILE-139, MILE-140, MILE-141, MILE-142, MILE-143, MILE-125` added. **Why:** the section 'Blocked on the document model' names `MILE-98`, `MILE-126`, `MILE-132` and the checks filed for the adopter's inventory (`MILE-136` to `MILE-143`) as what gates the switchover (all Done), and `MILE-125` states the adopter replacement needs the declared boundary rule to delete the script that enforces the boundary. Proposed for maintainer review; `Status` unchanged. | **structural** |
 > | 2026-11-07 | Done means rewritten into ADR-96 items with per-item evidence (MILE-215). | **structural** |
 > | 2026-11-14 | `Depends-on` and `Blocked-on` now name `COND-5`, the 0.4.0 release. The fifth Done-means item now says the filename rename ships as `urzua migrate filenames` (`MILE-134`); the header-shape rewrite stays a one-off script, and what the item requires is unchanged. **Why:** an external review (finding 9.4) found `urzua roadmap` reporting this milestone ready though the adopter's switchover needs the release, and the item calling the rename "not a shipped command" after `MILE-134` shipped it. | **substantive** |
+> | 2026-11-14 | `Blocked-on` cleared. **Why:** `COND-5` (the 0.4.x release) is `Met`, by the `v0.4.2` release page; this record's own Done means are unchanged. | **structural** |

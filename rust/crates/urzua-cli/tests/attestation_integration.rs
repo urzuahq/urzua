@@ -172,13 +172,19 @@ fn last_row(dir: &Path) -> String {
 #[test]
 fn an_undeclared_config_keeps_the_gh_login_and_records_it_as_gh_verified() {
     let dir = pinned("default", "");
-    let out = go(&dir, &rebaseline(&["--by", "typed"]), Some("gh-login"));
+    let out = go(
+        &dir,
+        &rebaseline(&["--by", "typed", "--actor", "agent"]),
+        Some("gh-login"),
+    );
     assert_eq!(out.status.code(), Some(0), "{out:?}");
     let v = json(&out);
     assert_eq!(v["status"], "applied", "{v}");
     let row = last_row(&dir);
     assert!(
-        row.contains("Re-baselined (attested by gh-login, identity: gh-verified, actor: unspecified): re-pinned"),
+        row.contains(
+            "Re-baselined (attested by gh-login, identity: gh-verified, actor: agent): re-pinned"
+        ),
         "{row}"
     );
     // Today's notice stays, and the replaced --by is now a field of the report.
@@ -191,7 +197,7 @@ fn an_undeclared_config_keeps_the_gh_login_and_records_it_as_gh_verified() {
     );
     assert_eq!(v["identity"]["name"], "gh-login", "{v}");
     assert_eq!(v["identity"]["source"], "gh-verified", "{v}");
-    assert_eq!(v["identity"]["actor"], "unspecified", "{v}");
+    assert_eq!(v["identity"]["actor"], "agent", "{v}");
     assert_eq!(v["identity"]["replaced_by"], "typed", "{v}");
 }
 
@@ -260,7 +266,7 @@ fn require_verified_without_a_gh_answer_is_not_run_and_writes_nothing() {
 fn require_verified_with_a_gh_answer_applies_as_gh_verified() {
     let strict = "attestation:\n  require_verified: true\n";
     let dir = pinned("strict-ok", strict);
-    let out = go(&dir, &rebaseline(&[]), Some("gh-login"));
+    let out = go(&dir, &rebaseline(&["--actor", "human"]), Some("gh-login"));
     assert_eq!(out.status.code(), Some(0), "{out:?}");
     assert!(last_row(&dir).contains("attested by gh-login, identity: gh-verified"));
 }
@@ -374,4 +380,50 @@ fn require_verified_with_asserted_is_a_load_error() {
         .as_str()
         .unwrap()
         .contains("require_verified"));
+}
+
+// ADR-101 (people own decisions): a gh-verified identity is a person's login,
+// so a write with no `--actor` would read as that person's own attestation
+// even when an agent ran it. It is refused, and writes nothing.
+
+fn assert_refused_for_missing_actor(out: &std::process::Output) {
+    assert_eq!(out.status.code(), Some(2), "{out:?}");
+    let v = json(out);
+    assert_eq!(v["status"], "not-run", "{v}");
+    let err = v["error"].as_str().unwrap();
+    assert!(
+        err.contains("--actor") && err.contains("agent") && err.contains("human"),
+        "{err}"
+    );
+}
+
+#[test]
+fn a_gh_verified_rebaseline_apply_without_actor_is_refused_and_writes_nothing() {
+    let dir = pinned("noactor-rb", "");
+    let before = std::fs::read_to_string(dir.join(RECORD)).unwrap();
+    let out = go(&dir, &rebaseline(&[]), Some("gh-login"));
+    assert_refused_for_missing_actor(&out);
+    assert_eq!(std::fs::read_to_string(dir.join(RECORD)).unwrap(), before);
+}
+
+#[test]
+fn a_gh_verified_fix_apply_without_actor_is_refused_and_writes_nothing() {
+    let dir = drifted("noactor-t1", "");
+    let before = std::fs::read_to_string(dir.join(RECORD)).unwrap();
+    let out = go(&dir, &tier1(&[]), Some("gh-login"));
+    assert_refused_for_missing_actor(&out);
+    assert_eq!(std::fs::read_to_string(dir.join(RECORD)).unwrap(), before);
+}
+
+#[test]
+fn an_asserted_or_git_config_identity_needs_no_actor() {
+    // No gh answer: the identity is `--by` as asserted, not a verified login.
+    let dir = drifted("noactor-asserted", "");
+    let out = go(&dir, &tier1(&["--by", "typed"]), None);
+    assert_eq!(out.status.code(), Some(0), "{out:?}");
+    assert!(
+        last_row(&dir).contains("actor: unspecified"),
+        "{}",
+        last_row(&dir)
+    );
 }

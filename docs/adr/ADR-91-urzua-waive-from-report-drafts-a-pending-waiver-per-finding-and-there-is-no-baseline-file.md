@@ -217,6 +217,16 @@ alone, and no other rule gains one. A baseline for any other rule's findings is 
 `urzua waive --from-report`. A cited file changed since the ref makes the drift of every record citing it
 introduced, which is stricter than blaming only the changed lines.
 
+## Amendment (2026-11-14): a drift baseline is a tag or a commit sha, never a branch
+
+*Status of this amendment: decided by the orchestrator on 2026-11-14, pending maintainer review. `Status` stays `Accepted` and the Decision text above is unchanged.*
+
+The 2026-11-13 amendment above chose a git ref over a list because a ref "names one point in history" and "expires itself". The first-run review (finding 1.4) found that `SPEC-3` also allowed "a branch, tag or commit", and a branch does not name one point: it moves with every commit. With `drift_baseline: {ref: main}`, the drift that `main` already holds is held out on every run, so a record's drift stops being reported the day it merges, the report reads `pre_existing: 121, introduced: 0`, and the notice's claim that drift introduced since the baseline is reported is false. That is the opposite of point 2 of the amendment (the baseline shrinks as records are re-verified) and a second suppression list in everything but name.
+
+The decision: **`drift_baseline.ref` names a tag or a commit sha, and `check` refuses anything that names a place that moves.** A branch, a remote-tracking branch, `HEAD` and an expression built on it (`HEAD~3`) are each refused when `check` runs, with a message naming the option, the ref, why it moves, and the two spellings that are accepted (exit 2, the same could-not-run an unresolvable ref already is). A tag is checked by name (`refs/tags/`), and a hexadecimal object name of 7 to 40 characters is a commit sha unless a branch carries the same name. Nothing else about the baseline changes: the ref is still declared in configuration, still holds no list, and a baseline that holds nothing out is still nudged for removal.
+
+Options not taken: warning when the ref equals `HEAD` (the review's second suggestion) leaves a branch baseline working and quietly wrong one commit later; resolving a branch once and pinning the sha in the configuration would be a list of one that nothing keeps current.
+
 ## Reversibility
 
 Easy for the command, which is additive and writes only ordinary waiver records; removing it leaves every
@@ -272,3 +282,4 @@ the report fields and the choice of `Pending` as the fallback value, which a rep
 > | 2026-11-06 | Status changed from Proposed to Accepted. **Why:** Maintainer decision, 2026-11-06. | **substantive** |
 > | 2026-11-08 | Amended: point 3 skips, and lists in `skipped`, a finding that writing the drafts would itself resolve, judged on the tree with the drafts in memory. **Why:** Maintainer decision, 2026-11-08, after an adoption dry run showed a draft for a finding that exists only because no waiver record does yet. | **substantive** |
 > | 2026-11-13 | Amended: a drift baseline declared as a git ref in configuration is not the baseline file of point 1 (no list, expires itself, generalises `--base`). The Decision text is unchanged; `Status` stays `Accepted`. Decided by the maintainer on 2026-11-13; wording pending maintainer review. **Why:** `MILE-49` asks for a drift baseline, and point 1 rejects a baseline file; the maintainer chose the ref form. | **substantive** |
+> | 2026-11-14 | Amended: a drift baseline's `ref` is a tag or a commit sha, and a branch, `HEAD` or any ref that moves is refused. The Decision text is unchanged; `Status` stays `Accepted`. Decided by the orchestrator on 2026-11-14; wording pending maintainer review. **Why:** the first-run review (finding 1.4): a baseline on `main` held out all merged drift and made the notice's "introduced since" claim false. | **substantive** |

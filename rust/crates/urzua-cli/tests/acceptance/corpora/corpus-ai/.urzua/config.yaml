@@ -1,0 +1,18 @@
+schema_version: 2
+fail_on: warning
+record_types:
+  adr:
+    dir: records
+    prefix: ADR
+    required_fields: [Status, Date, Author]
+    known_fields: [Deciders]
+    header_shape: yaml-frontmatter
+    statuses:
+      values: [Proposed, Accepted]
+      success: [Accepted]
+      initial: [Proposed]
+      transitions:
+        Proposed: [Accepted]
+rules:
+  header.required-fields: error
+  header.scaffold-mismatch: warn

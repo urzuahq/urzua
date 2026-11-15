@@ -13,7 +13,7 @@ description: >-
 #       fetch-depth: 0
 #   - uses: urzuahq/urzua/.github/actions/urzua-gate@<sha>
 #     with:
-#       version: v0.3.0
+#       version: v0.4.2
 #       base-ref: ${{ github.base_ref }}
 #
 # The job needs `pull-requests: write` for the comment. A comment that cannot be
@@ -23,7 +23,7 @@ description: >-
 inputs:
   version:
     description: >-
-      The exact release tag to install (for example v0.3.0). Not a branch and
+      The exact release tag to install (for example v0.4.2). Not a branch and
       not "latest": the gate is only as stable as its pin. Ignored when `binary`
       is set.
     required: false

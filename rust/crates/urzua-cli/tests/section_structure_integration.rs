@@ -429,3 +429,88 @@ fn a_structure_declaration_that_can_never_report_is_refused_at_load() {
         assert!(stderr.contains(needle), "{name}: {stderr}");
     }
 }
+
+const DUPLICATED_SECTION: &str =
+    "---\nStatus: Accepted\n---\n# ADR-1: Doubled\n\n## Context\n\ntext\n\n## Context\n\ntext\n";
+
+/// 6.4: the four section rules enabled at `error` while no type declares the
+/// key each reads passed with `ok`, exit 0 and no notice over a record with a
+/// duplicated heading, and SPEC-2 said `config.scope-matches-nothing` reported it.
+#[test]
+fn section_rules_enabled_with_no_type_declaring_their_key_say_so() {
+    let rules = "{section.duplicate: error, section.level-skipped: error, section.order: error, section.required: error}";
+    let dir = fixture(
+        "undeclared",
+        rules,
+        "",
+        None,
+        &[("ADR-1-doubled.md", DUPLICATED_SECTION)],
+    );
+    let (code, report) = check(&dir);
+    assert_eq!(code, 0, "{report}");
+    let said: Vec<String> = report["notices"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|n| n["subject"] == "rule-reads-nothing-declared")
+        .map(|n| {
+            assert_eq!(n["severity"], "warning", "{n}");
+            n["message"].as_str().unwrap().to_string()
+        })
+        .collect();
+    for (rule, key) in [
+        ("section.duplicate", "sections.unique_headings"),
+        ("section.level-skipped", "sections.no_skipped_levels"),
+        ("section.order", "sections.order"),
+        ("section.required", "sections.required"),
+    ] {
+        assert!(
+            said.iter()
+                .any(|m| m.contains(&format!("'{rule}'")) && m.contains(key)),
+            "no notice for {rule}: {said:?}"
+        );
+    }
+}
+
+/// With `config.scope-matches-nothing` on, the same fact is its finding, which is
+/// what SPEC-2 promised.
+#[test]
+fn config_scope_matches_nothing_reports_a_section_rule_no_type_declares() {
+    let rules = "{section.duplicate: error, config.scope-matches-nothing: warn}";
+    let dir = fixture(
+        "undeclared-finding",
+        rules,
+        "",
+        None,
+        &[("ADR-1-doubled.md", DUPLICATED_SECTION)],
+    );
+    let (_, report) = check(&dir);
+    let found = findings_of(&report, "config.scope-matches-nothing");
+    assert_eq!(found.len(), 1, "{report}");
+    let message = found[0]["message"].as_str().unwrap();
+    assert!(
+        message.contains("'section.duplicate'") && message.contains("sections.unique_headings"),
+        "{message}"
+    );
+    assert_eq!(found[0]["file"], ".urzua/config.yaml");
+}
+
+/// The disclosure is for a rule nobody declared; a declaring type silences it.
+#[test]
+fn a_declaring_type_draws_no_undeclared_key_notice() {
+    let dir = fixture(
+        "declared",
+        "{section.duplicate: error, config.scope-matches-nothing: warn}",
+        "    sections: {from: headings, unique_headings: true}\n",
+        None,
+        &[("ADR-1-doubled.md", DUPLICATED_SECTION)],
+    );
+    let (_, report) = check(&dir);
+    assert!(report["notices"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .all(|n| n["subject"] != "rule-reads-nothing-declared"));
+    assert!(findings_of(&report, "config.scope-matches-nothing").is_empty());
+    assert_eq!(findings_of(&report, "section.duplicate").len(), 1);
+}

@@ -75,14 +75,14 @@
     {
       "file": ".urzua/config.yaml",
       "line": null,
-      "message": "record type 'adr' has no declared spec -- add `spec = \"SPEC-N\"` once one exists, or leave undeclared if ADR-41's editorial judgment says one isn't warranted",
+      "message": "record type 'adr' has no declared spec -- add `spec: SPEC-N` under the type once one exists, or leave undeclared if ADR-41's editorial judgment says one isn't warranted",
       "rule": "type.no-declared-spec",
       "severity": "warning"
     },
     {
       "file": ".urzua/config.yaml",
       "line": null,
-      "message": "record type 'milestone' has no declared spec -- add `spec = \"SPEC-N\"` once one exists, or leave undeclared if ADR-41's editorial judgment says one isn't warranted",
+      "message": "record type 'milestone' has no declared spec -- add `spec: SPEC-N` under the type once one exists, or leave undeclared if ADR-41's editorial judgment says one isn't warranted",
       "rule": "type.no-declared-spec",
       "severity": "warning"
     },

@@ -146,20 +146,21 @@ steps:
       fetch-depth: 0 # drift reads history; a shallow checkout fails with that reason
   - uses: urzuahq/urzua/.github/actions/urzua-gate@<sha>
     with:
-      version: v0.3.0 # an exact release tag
+      version: v0.4.2 # an exact release tag
       base-ref: ${{ github.base_ref }} # empty outside pull requests
 ```
 
-A run that could not run fails the job and is shown as NOT RUN; it is never a pass. Published builds are x86_64 Linux and arm64 and x86_64 macOS.
+A run that could not run fails the job and is shown as NOT RUN; it is never a pass. Published builds are x86_64 Linux and Apple Silicon macOS; Intel Macs build from source with `cargo install`.
 
 ## Adopt without a rewrite
 
+Install a release binary first ([`docs/reference/install.md`](docs/reference/install.md)); nothing needs compiling.
+
 ```sh
-git clone https://github.com/urzuahq/urzua && cd urzua && make build # also wires the git hooks (`urzua doctor` verifies them)
 cd /path/to/your-repo
-/path/to/urzua/rust/target/release/urzua init --dry-run # preview .urzua/config.yaml from what's already there
-/path/to/urzua/rust/target/release/urzua init           # writes it; never moves or rewrites a single record
-/path/to/urzua/rust/target/release/urzua check docs/    # validates against it
+urzua init --dry-run # preview .urzua/config.yaml from what's already there
+urzua init           # writes it; never moves or rewrites a single record
+urzua check docs/    # validates against it
 ```
 
 No records yet? Pick the types from built-in profiles instead (written out into the config, with a
@@ -229,7 +230,7 @@ The chain above is one path through this repo's own graph, documented here becau
 
 ## Status
 
-**Self-hosting.** Real and validated against this repository's own `docs/` on every commit. This table describes `main`; the latest published release is older (see [`docs/reference/install.md`](docs/reference/install.md)). Every command and flag is in [`docs/reference/commands.md`](docs/reference/commands.md).
+**Self-hosting.** Real and validated against this repository's own `docs/` on every commit. This table describes `main`, which can be ahead of the latest published release (see [`docs/reference/install.md`](docs/reference/install.md)). Every command and flag is in [`docs/reference/commands.md`](docs/reference/commands.md).
 
 | Command | State |
 |---|---|

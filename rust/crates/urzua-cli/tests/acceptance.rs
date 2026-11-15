@@ -576,12 +576,7 @@ fn evaluate(case: &Case, corpus_dir: &Path, mutate: Option<&str>) -> Result<Vec<
     };
     drop(temp);
     drop(mutated_config);
-    // A rule that is on for every configuration cannot be switched off: the
-    // config load refusing `off` is how its case fails without it.
-    let cannot_be_off = mutate
-        .and_then(urzua_core::rules::default_on)
-        .is_some_and(|d| !d.can_turn_off);
-    if mutate.is_some() && out.0 == Some(2) && case.expect_exit != 2 && !cannot_be_off {
+    if mutate.is_some() && out.0 == Some(2) && case.expect_exit != 2 {
         return Err(format!(
             "switching {} off made the config invalid (exit 2); the mutation proves nothing",
             mutate.unwrap_or_default()

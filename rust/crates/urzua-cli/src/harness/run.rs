@@ -163,7 +163,9 @@ fn raw_policy(config_path: Option<&Path>, root_hint: &Path, guardrail: &str) -> 
         .unwrap_or_else(|| root_hint.join(".urzua/config.yaml"));
     let declared = std::fs::read_to_string(path)
         .ok()
-        .and_then(|t| yaml_serde::from_str::<yaml_serde::Value>(&t).ok())
+        .and_then(|t| {
+            yaml_serde::from_str::<yaml_serde::Value>(urzua_core::config::strip_bom(&t)).ok()
+        })
         .and_then(|v| v.get("harness")?.get("guardrails")?.get(guardrail).cloned());
     let Some(g) = declared else {
         return (false, OnUnjudged::Allow);

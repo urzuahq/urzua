@@ -20,16 +20,16 @@ jobs:
           fetch-depth: 0   # drift reads history; a shallow checkout fails with that reason
       - uses: urzuahq/urzua/.github/actions/urzua-gate@<sha>
         with:
-          version: v0.3.0                      # an exact release tag
+          version: v0.4.2                      # an exact release tag
           base-ref: ${{ github.base_ref }}     # empty outside pull requests
 ```
 
 Pin the action itself to a commit sha, as you would any third-party action.
 
-**Which version.** `version` must name a release whose config format matches yours. The latest
-published release (`v0.3.0`) reads an older config than `main` does (see [Install](install.md)), so
-for a config written from these pages use the `binary` input until the next release is published:
-build urzua in an earlier step and pass its path.
+**Which version.** `version` must name a release that ships every rule and config key your config
+uses. A config written from these pages can be ahead of the latest release (see [Install](install.md));
+the run then reports `not-run` naming the rule or key the release does not know. Until a release has
+it, use the `binary` input: build urzua in an earlier step and pass its path.
 
 ```yaml
       - run: git clone --depth 1 https://github.com/urzuahq/urzua /tmp/urzua && (cd /tmp/urzua/rust && cargo build --release -p urzua-cli)
@@ -43,8 +43,8 @@ build urzua in an earlier step and pass its path.
 
 1. Installs the pinned release. It downloads `urzua-<target>.tar.gz` from the release, verifies its
    build provenance attestation (and its sha256 when you pass `sha256`), unpacks it, and refuses a
-   binary that does not report the pinned version. Published builds are x86_64 Linux and arm64 and
-   x86_64 macOS.
+   binary that does not report the pinned version. Published builds are x86_64 Linux and Apple Silicon
+   macOS; Intel Macs build from source with `cargo install`.
 2. Checks the checkout has the history drift reads. A shallow checkout fails the job with that
    reason, because drift detection would otherwise read as clean. With `base-ref` it also fetches
    the base branch as `origin/<base-ref>`.
@@ -67,7 +67,7 @@ posted on every run.
 
 | Input | Default | Meaning |
 |---|---|---|
-| `version` | none | The exact release tag to install, such as `v0.3.0`. Not a branch and not `latest`. Ignored when `binary` is set. |
+| `version` | none | The exact release tag to install, such as `v0.4.2`. Not a branch and not `latest`. Ignored when `binary` is set. |
 | `sha256` | none | Optional sha256 of the release archive for this platform, checked in addition to the attestation. |
 | `repository` | `urzuahq/urzua` | The repository the release and its attestation come from. |
 | `binary` | none | Path to an already-built `urzua`, used instead of installing a release. |
@@ -114,7 +114,7 @@ the commands to fix it, and fails on a pin that cannot be read at all.
           echo "no stale evidence pins"
 ```
 
-This step needs a build that has `fix --rebaseline`; the published `v0.3.0` does not, so with `version: v0.3.0` use the `binary` input instead.
+This step needs a build that has `fix --rebaseline`: release `v0.4.2` or later.
 
 `fix --rebaseline` without `--apply` only reads. The step passes only when the report says
 `"status": "ok"`: any other status, a missing key, empty or unparseable output fails it. `urzua` must

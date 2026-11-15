@@ -56,6 +56,9 @@ pub struct RunState<'a> {
     /// Whether a path is inside what the run reports on.
     pub reached: &'a dyn Fn(&Path) -> bool,
     pub today: &'a str,
+    /// The configuration file as a finding on it names it: repository-relative.
+    /// A waiver scoped to it must narrow (`waiver.matches-nothing`, `SPEC-10`).
+    pub config_file: &'a Path,
 }
 
 impl RunState<'_> {
@@ -67,6 +70,7 @@ impl RunState<'_> {
             whole_corpus: false,
             reached: &|_| true,
             today: "",
+            config_file: Path::new(""),
         }
     }
 }
@@ -83,8 +87,8 @@ pub struct RuleCtx<'a> {
     /// `template_placeholders`.
     pub templates: &'a crate::new_record::TemplateValues,
     /// Each type's template text, read by the caller from
-    /// `.urzua/templates/<type>.md`; empty unless `section.order` is enabled
-    /// (`MILE-104`).
+    /// `.urzua/templates/<type>.md`; empty unless `section.order` or
+    /// `header.scaffold-mismatch` is enabled (`MILE-104`, `MILE-103`).
     pub template_texts: &'a HashMap<String, String>,
     /// Resolves a reference to a record; built once for every rule that resolves one.
     pub index: &'a RecordIndex<'a>,
@@ -133,6 +137,10 @@ pub struct RuleCtx<'a> {
     /// The subset of `changed_paths` that did not exist at the merge base; `None`
     /// on a run with no `--base`.
     pub added_paths: Option<&'a [PathBuf]>,
+    /// The subset of `added_paths` that is a rename: a record whose `Stable-Id`
+    /// a deleted record carried at the merge base. Empty unless
+    /// `header.scaffold-mismatch` is enabled on a `--base` run.
+    pub renamed_paths: &'a HashSet<PathBuf>,
     /// What the fetched pull-request refs hold that matters to this diff; empty
     /// unless `identity.open-pr-collision` is enabled on a `--base` run.
     pub pull_ref_claims: &'a PullRefClaims,
@@ -276,7 +284,11 @@ pub fn run_phase_with(
 ) -> Vec<(RuleExecution, Vec<Finding>)> {
     let mut out = Vec::new();
     for d in RULE_TABLE.iter().filter(|d| d.phase == phase) {
-        if plan.selected.is_some_and(|s| !s.contains(d.id)) {
+        // A security refusal runs under any selection unless the configuration
+        // declared it `off`: narrowing a run must not hide it (`DEFAULT_ON_RULES`).
+        let pinned = default_on(d.id).is_some_and(|o| o.under_selection)
+            && effective_level(ctx.config, d.id) != crate::config::RuleLevel::Off;
+        if !pinned && plan.selected.is_some_and(|s| !s.contains(d.id)) {
             continue;
         }
         let can_report_on_a_record =

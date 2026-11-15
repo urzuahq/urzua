@@ -403,7 +403,8 @@ fn check_narrows_by_rules_and_path_and_reports_a_could_not_run_as_an_error_resul
         json!({"rules": ["header.required-fields"], "paths": ["docs/adr/ADR-1-a.md"]}),
     );
     let report = &narrowed["result"]["structuredContent"];
-    assert_eq!(report["rules_executed"].as_array().unwrap().len(), 1);
+    // The selected rule, and the refusal that runs under every selection.
+    assert_eq!(report["rules_executed"].as_array().unwrap().len(), 2);
     assert_eq!(report["findings"].as_array().unwrap().len(), 0);
     let failed = call_one(&dir, "urzua_check", json!({"rules": ["not.a.rule"]}));
     assert_eq!(failed["result"]["isError"], true);

@@ -104,6 +104,34 @@ pub enum Declaration {
     SectionOrder,
     /// `sections.required`, read by `section.required` and `section.shape`.
     SectionsRequired,
+    /// `required_fields` or `known_fields`: the declared fields the
+    /// field-hygiene rules read (`BUG-73`).
+    DeclaredFields,
+    /// `pointer_fields` or `narrative_fields`, read by `pointer.resolution` and
+    /// `relation.target-status-undeclared`.
+    PointerOrNarrativeFields,
+    /// A supersession field (default `Supersedes / Superseded-by`) that the type
+    /// lists in `required_fields` or `known_fields`.
+    SupersessionField,
+    /// A locator field (default `Realized-by`) that the type lists in
+    /// `required_fields` or `known_fields`.
+    LocatorField,
+    /// `revision_log`, read by `revision-log.change-class-required`.
+    RevisionLog,
+    /// `statuses.values`, read by `status.undeclared-value`.
+    StatusValues,
+    /// `statuses.require`, read by `status.required-field-missing`.
+    StatusRequire,
+    /// `statuses.forbid`, read by `status.forbidden-field-present`.
+    StatusForbid,
+    /// `statuses.transitions`, read by `status.unreachable-state` and
+    /// `status.transition-allowed`.
+    StatusTransitions,
+    /// `statuses.delivery`, read by `status.delivery-agreement`.
+    StatusDelivery,
+    /// A record type declaring `role: suppression`, which
+    /// `waiver.matches-nothing` reads the records of.
+    WaiverType,
 }
 
 impl Declaration {
@@ -120,6 +148,17 @@ impl Declaration {
             Declaration::NoSkippedLevels => "sections.no_skipped_levels",
             Declaration::SectionOrder => "sections.order",
             Declaration::SectionsRequired => "sections.required",
+            Declaration::DeclaredFields => "required_fields or known_fields",
+            Declaration::PointerOrNarrativeFields => "pointer_fields or narrative_fields",
+            Declaration::SupersessionField => "a supersession field in known_fields",
+            Declaration::LocatorField => "a locator field (Realized-by) in known_fields",
+            Declaration::RevisionLog => "revision_log",
+            Declaration::StatusValues => "statuses.values",
+            Declaration::StatusRequire => "statuses.require",
+            Declaration::StatusForbid => "statuses.forbid",
+            Declaration::StatusTransitions => "statuses.transitions",
+            Declaration::StatusDelivery => "statuses.delivery",
+            Declaration::WaiverType => "a record type with `role: suppression`",
         }
     }
 }
@@ -232,13 +271,14 @@ pub enum Phase {
 
 /// A rule that runs for every configuration, declared or not (maintainer
 /// decision, 2026-11-14). The runner runs one at `level` when the configuration
-/// declares none; a declared level stands, except `off` on a rule that
-/// `can_turn_off` is false for, which is a load error: that rule is a refusal,
-/// not a preference.
+/// declares none; a declared level, `off` included, stands (a configuration
+/// decides, and the risk of `off` is documented with the rule). A rule with
+/// `under_selection` also runs under every `--rules` selection unless the
+/// configuration declared it `off`.
 pub struct DefaultOn {
     pub id: &'static str,
     pub level: crate::config::RuleLevel,
-    pub can_turn_off: bool,
+    pub under_selection: bool,
 }
 
 /// Every rule that is on by default. Their executions do not count as a rule
@@ -248,12 +288,12 @@ pub const DEFAULT_ON_RULES: &[DefaultOn] = &[
     DefaultOn {
         id: RULE_IDENTITY_RECORD_SYMLINK_ESCAPES,
         level: crate::config::RuleLevel::Error,
-        can_turn_off: false,
+        under_selection: true,
     },
     DefaultOn {
         id: RULE_EMBODIMENT_PIN_STALE,
         level: crate::config::RuleLevel::Warn,
-        can_turn_off: true,
+        under_selection: false,
     },
 ];
 
@@ -276,7 +316,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         requires_acyclic_pair: false,
         requires_override_log: false,
         requires_authority: false,
-        reads_declaration: None,
+        reads_declaration: Some(Declaration::RequiredFields),
         header_none: HeaderNone::OutOfScope,
         options: &[],
         population: PopulationUnit::Field,
@@ -302,7 +342,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         requires_acyclic_pair: false,
         requires_override_log: false,
         requires_authority: false,
-        reads_declaration: None,
+        reads_declaration: Some(Declaration::PointerOrNarrativeFields),
         header_none: HeaderNone::OutOfScope,
         options: &[],
         population: PopulationUnit::Field,
@@ -459,7 +499,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         requires_acyclic_pair: false,
         requires_override_log: false,
         requires_authority: false,
-        reads_declaration: None,
+        reads_declaration: Some(Declaration::SupersessionField),
         header_none: HeaderNone::OutOfScope,
         options: &[],
         population: PopulationUnit::Field,
@@ -608,7 +648,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         requires_acyclic_pair: false,
         requires_override_log: false,
         requires_authority: false,
-        reads_declaration: None,
+        reads_declaration: Some(Declaration::PointerOrNarrativeFields),
         header_none: HeaderNone::OutOfScope,
         options: &[],
         population: PopulationUnit::Field,
@@ -631,7 +671,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         requires_acyclic_pair: false,
         requires_override_log: false,
         requires_authority: false,
-        reads_declaration: None,
+        reads_declaration: Some(Declaration::RevisionLog),
         header_none: HeaderNone::Exempt("reads body text only"),
         options: &[],
         population: PopulationUnit::Record,
@@ -668,7 +708,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_EMBODIMENT_CONSISTENCY,
-        description: "A stated `Embodiment` agrees with the tier its `Realized-by` locators compute to (the tier order of the `embodiment` declaration, by default `test:` outranks `code:` outranks `spec:`); a locator that changed per git history since `Realized-by` was last touched overrides the expected value to the declared drift state unconditionally (RFC-5 tier 1, ADR-18/ADR-32). A record with no `Realized-by` field is judged on the back-pointers that cite it (`MILE-149`); one stating a state the declaration marks `claims_built` that has neither a `Realized-by` field nor a citing back-pointer is reported as a claim with no evidence, computed to the declared no-evidence state (`MILE-161`), and one stating any other value is not judged and stays unexamined. Requires full git history — a shallow checkout makes this rule silently unable to detect anything. Three opt-in refinements, all off by default (`MILE-129`): a locator written `path@sha256:<64 hex>` drifts when the file's content hash differs and not otherwise, in place of the git-history heuristic; the `drift_grace_days` option holds back reporting drift whose locator last changed fewer than that many days ago, and a record in that window agrees with either its tier or a stated drift state (the window never contradicts a record that already says so, and `urzua fix` leaves it alone); `check` discloses what the window holds back in one info notice, `embodiment-drift-in-grace`, for the records the rule would report once the window ends (a record of a type with no `Embodiment`, one stating a sticky state, or one already stating the drift state is not counted), with the count, the earliest date they leave the window and their paths; the optional `drift_audit_field` option names a declared date field (needs `drift_grace_days`): a record carrying a `YYYY-MM-DD` date there has its window counted from that last-audit date instead of from the cited file's last change, and a malformed date is reported and falls back to the file (`MILE-166`); the `claim_max_age_days` option warns when the `Realized-by` line was last touched more than that many days ago. The optional `sticky_states` option lists `Embodiment` values a human sets that no evidence can compute, such as `Deprecated` and `Inactive`: a record stating one is examined and never reported as drift or as an old claim, `urzua fix` leaves it alone, and a listed value that evidence does compute (a state of the `embodiment` declaration) is a load error because it would hide real drift (`MILE-148`). The optional `drift_baseline` option, `{ref: <git ref>}`, separates drift that predates a ref from drift introduced since (`MILE-49`, `ADR-91` amendment of 2026-11-13): a record is pre-existing, and agrees with either its computed tier or a stated drift state so it is not reported and does not gate, only when it existed at the ref and each locator drifting now (same pin) had already drifted there with its file last changed at or before the ref, while any record added after the ref, with a pin edited or renewed since, with a locator whose file changed after it, or one git cannot place, is reported as before; `check` discloses the held-out records in one info notice, `embodiment-drift-baselined` (count and at most 20 paths), and in the report's `baseline` object (`ref`, `commit`, `pre_existing`, `pre_existing_records`, `introduced`), which is absent when no baseline is declared. A ref that names no commit in this repository stops the run (exit 2), never reading as no pre-existing drift; a whole-corpus run whose baseline holds out nothing says so in the info notice `embodiment-drift-baseline-unused`, the nudge to remove it. The ref holds no record list: moving it forward or deleting it retires the baseline. Source back-pointers (see `embodiment.back-pointer-resolution`) are evidence too: an `Implements:` citation is code tier and a `Verifies:` citation in a declared test file is test tier, equal to a `test:` locator (`MILE-146`). A record with `Embodiment` but no `Realized-by` field is judged on back-pointer evidence alone when one cites it, and a record neither cited nor carrying `Realized-by` is not judged (`MILE-149`); a finding names the evidence it computed from. A `drift_audit_field` date after today (UTC) is reported as `last-audit-date-invalid` and ignored, like a malformed one, so a date written forward cannot hold drift back for ever.",
+        description: "A stated `Embodiment` agrees with the tier its `Realized-by` locators compute to (the tier order of the `embodiment` declaration, by default `test:` outranks `code:` outranks `spec:`); a locator that changed per git history since `Realized-by` was last touched overrides the expected value to the declared drift state unconditionally (RFC-5 tier 1, ADR-18/ADR-32). A record with no `Realized-by` field is judged on the back-pointers that cite it (`MILE-149`); one stating a state the declaration marks `claims_built` that has neither a `Realized-by` field nor a citing back-pointer is reported as a claim with no evidence, computed to the declared no-evidence state (`MILE-161`), and one stating any other value is not judged and stays unexamined. Requires full git history — a shallow checkout makes this rule silently unable to detect anything. Three opt-in refinements, all off by default (`MILE-129`): a locator written `path@sha256:<64 hex>` drifts when the file's content hash differs and not otherwise, in place of the git-history heuristic; the `drift_grace_days` option holds back reporting drift whose locator last changed fewer than that many days ago, and a record in that window agrees with either its tier or a stated drift state (the window never contradicts a record that already says so, and `urzua fix` leaves it alone); `check` discloses what the window holds back in one info notice, `embodiment-drift-in-grace`, for the records the rule would report once the window ends (a record of a type with no `Embodiment`, one stating a sticky state, or one already stating the drift state is not counted), with the count, the earliest date they leave the window and their paths; the optional `drift_audit_field` option names a declared date field (needs `drift_grace_days`): a record carrying a `YYYY-MM-DD` date there has its window counted from that last-audit date instead of from the cited file's last change, and a malformed date is reported and falls back to the file (`MILE-166`); the `claim_max_age_days` option warns when the `Realized-by` line was last touched more than that many days ago. The optional `sticky_states` option lists `Embodiment` values a human sets that no evidence can compute, such as `Deprecated` and `Inactive`: a record stating one is examined and never reported as drift or as an old claim, `urzua fix` leaves it alone, and a listed value that evidence does compute (a state of the `embodiment` declaration) is a load error because it would hide real drift (`MILE-148`). The optional `drift_baseline` option, `{ref: <git ref>}`, separates drift that predates a ref from drift introduced since (`MILE-49`, `ADR-91` amendment of 2026-11-13): a record is pre-existing, and agrees with either its computed tier or a stated drift state so it is not reported and does not gate, only when it existed at the ref and each locator drifting now (same pin) had already drifted there with its file last changed at or before the ref, while any record added after the ref, with a pin edited or renewed since, with a locator whose file changed after it, or one git cannot place, is reported as before; `check` discloses the held-out records in one info notice, `embodiment-drift-baselined` (count and at most 20 paths), and in the report's `baseline` object (`ref`, `commit`, `pre_existing`, `pre_existing_records`, `introduced`), which is absent when no baseline is declared. A ref that names no commit in this repository stops the run (exit 2), never reading as no pre-existing drift, and so does one that names a place that moves (a branch, `HEAD`, or anything but a tag or a commit sha; the `ADR-91` amendment of 2026-11-14); a whole-corpus run whose baseline holds out nothing says so in the info notice `embodiment-drift-baseline-unused`, the nudge to remove it. The ref holds no record list: moving it forward or deleting it retires the baseline. Source back-pointers (see `embodiment.back-pointer-resolution`) are evidence too: an `Implements:` citation is code tier and a `Verifies:` citation in a declared test file is test tier, equal to a `test:` locator (`MILE-146`). A record with `Embodiment` but no `Realized-by` field is judged on back-pointer evidence alone when one cites it, and a record neither cited nor carrying `Realized-by` is not judged (`MILE-149`); a finding names the evidence it computed from. A `drift_audit_field` date after today (UTC) is reported as `last-audit-date-invalid` and ignored, like a malformed one, so a date written forward cannot hold drift back for ever.",
         scope: Scope::Records,
         anchor: Anchor::Record,
         judges: Judges::OneRecord,
@@ -1009,7 +1049,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         requires_acyclic_pair: false,
         requires_override_log: false,
         requires_authority: false,
-        reads_declaration: None,
+        reads_declaration: Some(Declaration::LocatorField),
         header_none: HeaderNone::OutOfScope,
         options: &["scope"],
         population: PopulationUnit::Field,
@@ -1067,7 +1107,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         requires_acyclic_pair: false,
         requires_override_log: false,
         requires_authority: false,
-        reads_declaration: None,
+        reads_declaration: Some(Declaration::DeclaredFields),
         header_none: HeaderNone::OutOfScope,
         options: &[],
         population: PopulationUnit::Field,
@@ -1091,7 +1131,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         requires_acyclic_pair: false,
         requires_override_log: false,
         requires_authority: false,
-        reads_declaration: None,
+        reads_declaration: Some(Declaration::DeclaredFields),
         header_none: HeaderNone::OutOfScope,
         options: &[],
         population: PopulationUnit::Field,
@@ -1113,7 +1153,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         requires_acyclic_pair: false,
         requires_override_log: false,
         requires_authority: false,
-        reads_declaration: None,
+        reads_declaration: Some(Declaration::DeclaredFields),
         header_none: HeaderNone::OutOfScope,
         options: &[],
         population: PopulationUnit::Field,
@@ -1246,7 +1286,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_IDENTITY_RECORD_SYMLINK_ESCAPES,
-        description: "A tracked record file that is a symlink resolving outside the repository, or outside its record type's directory, is refused and never read, by every command (`ADR-89` amendment of 2026-11-14). Without it a record could be moved out of the governed tree and a symlink left in its place, so a later edit to the moved copy changes the record's status where no gate on the governed path sees it, and a link to a file outside the repository would be read and published. A link to another file directly in the same type directory is a plain alias and is not refused. The finding is an error that no waiver excuses, names the link and where it resolves, and is reported on a scoped or `--base` run too. Maintainer decision, 2026-11-14: on for every configuration and cannot be turned off, so a configuration that declares it `off` is a load error.",
+        description: "A tracked record file that is a symlink, or sits behind a symlinked directory, is refused and never read, by every command (`ADR-89` amendment of 2026-11-14). Without it a record could be moved out of the governed tree and a symlink left in its place, so a later edit to the moved copy changes the record's status where no gate on the governed path sees it, and a link to a file outside the repository would be read and published. A record is read where it is tracked, never through a link: a link to a sibling record or to a file in the same directory is refused too, because moving a record out of the governed tree under a name no type governs (`ADR-1-a.md` linked to `draft.txt`) would hide it just as well. The finding is an error that no waiver excuses, names the link and where it resolves, and is reported on a scoped or `--base` run too. Maintainer decision, 2026-11-14: on by default, at `error`, for every configuration, and a configuration sets another level or `off` under `rules:`; with `off` a record is read through a link as before and no finding is reported, though every `check` carries a warning notice naming the rule, so a repository that turns it off accepts that a record can be moved where no gate looks. Unless declared `off` it runs under every `--rules` selection and is listed in `rules_executed` of a narrowed run.",
         scope: Scope::Files,
         anchor: Anchor::Outside,
         judges: Judges::NotRecordLevel,
@@ -1260,11 +1300,33 @@ pub const RULE_TABLE: &[RuleDef] = &[
         options: &[],
         population: PopulationUnit::Path,
         actions: &[
-            VariantAction::new("record-symlink-escapes", ActionDecl::Exempt("the fix is to replace the link with the record file or remove it; neither is a field edit")).floored(FindingSeverity::Error).unwaivable(),
+            VariantAction::new("record-symlink-escapes", ActionDecl::Exempt("the fix is to replace the link with the record file or remove it; neither is a field edit")).unwaivable(),
         ],
         phase: Phase::Main,
         companion: None,
         run: |c| identity_record_symlink_escapes(c.config, c.tracked_paths, c.escaping_records),
+    },
+    RuleDef {
+        id: RULE_HEADER_SCAFFOLD_MISMATCH,
+        description: "A record a `--base` diff adds whose header is not the one `urzua new` would have written for it (`MILE-103`, `SPEC-12`): it re-renders the header through the same pure scaffold `urzua new` uses, from the configuration of the run (so, at the creation commit, that commit's) and the type's template, taking the record's own number, title, `Stable-Id`, author and date, and compares what `new` decides. A field the scaffold leaves null may be filled in or left out; a field added, a field `new` fills (the `Stable-Id`, author, date) missing, the fields reordered, or a value `new` wrote (the initial status, the starting version) changed, is reported. `urzua-record.sh finish` applies a stricter form of this in shell, to what an agent may do; this rule judges what was merged, so a pull request sees it before merge, and it is what `scripts/replay-header-comparator.py` replays over past pull-request heads to measure whether records are still hand-authored. A file moved under a new name (its `Stable-Id` was a deleted record's at the merge base) is not a creation and is not examined. The finding is a warning whose path out is creating the record with `urzua new`, or a waiver when the difference is deliberate (a record created and then decided in the same pull request). Judges the changed set: `not-applicable` on a run with no `--base`. Opt-in: off unless declared in `rules`.",
+        scope: Scope::Records,
+        anchor: Anchor::Record,
+        judges: Judges::ChangedSet,
+        needs_identity_index: false,
+        requires_relation_pairs: false,
+        requires_acyclic_pair: false,
+        requires_override_log: false,
+        requires_authority: false,
+        reads_declaration: None,
+        header_none: HeaderNone::Exempt("reads a header only on a --base run, of the records the diff adds; a header_shape: none type is out of scope there"),
+        options: &[],
+        population: PopulationUnit::Record,
+        actions: &[
+            VariantAction::new("scaffold-mismatch", ActionDecl::Exempt("the fix is to recreate the record with `urzua new` and move its body across, or a waiver for a deliberate difference; neither is a single field edit")),
+        ],
+        phase: Phase::Main,
+        companion: None,
+        run: |c| header_scaffold_mismatch(c.records, c.config, c.added_paths, c.renamed_paths, c.template_texts),
     },
     RuleDef {
         id: RULE_IDENTITY_OPEN_PR_COLLISION,
@@ -1586,7 +1648,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         requires_acyclic_pair: false,
         requires_override_log: false,
         requires_authority: false,
-        reads_declaration: None,
+        reads_declaration: Some(Declaration::StatusValues),
         header_none: HeaderNone::OutOfScope,
         options: &[],
         population: PopulationUnit::Record,
@@ -1610,7 +1672,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         requires_acyclic_pair: false,
         requires_override_log: false,
         requires_authority: false,
-        reads_declaration: None,
+        reads_declaration: Some(Declaration::StatusRequire),
         header_none: HeaderNone::OutOfScope,
         options: &["field_levels"],
         population: PopulationUnit::Record,
@@ -1634,7 +1696,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         requires_acyclic_pair: false,
         requires_override_log: false,
         requires_authority: false,
-        reads_declaration: None,
+        reads_declaration: Some(Declaration::StatusForbid),
         header_none: HeaderNone::OutOfScope,
         options: &[],
         population: PopulationUnit::Record,
@@ -1658,7 +1720,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         requires_acyclic_pair: false,
         requires_override_log: false,
         requires_authority: false,
-        reads_declaration: None,
+        reads_declaration: Some(Declaration::StatusTransitions),
         header_none: HeaderNone::OutOfScope,
         options: &[],
         population: PopulationUnit::Record,
@@ -1682,7 +1744,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         requires_acyclic_pair: false,
         requires_override_log: false,
         requires_authority: false,
-        reads_declaration: None,
+        reads_declaration: Some(Declaration::StatusTransitions),
         header_none: HeaderNone::Exempt("judges the configuration, never a record's header"),
         options: &[],
         population: PopulationUnit::RecordType,
@@ -1706,7 +1768,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         requires_acyclic_pair: false,
         requires_override_log: false,
         requires_authority: false,
-        reads_declaration: None,
+        reads_declaration: Some(Declaration::StatusDelivery),
         header_none: HeaderNone::OutOfScope,
         options: &[],
         population: PopulationUnit::Record,
@@ -1971,7 +2033,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_SECTION_REQUIRED,
-        description: "Each `##` section a type's declared `sections.required` names is present in every record of that type (`MILE-4`, `RFC-17`), under its `name` or one of its declared `aliases` (`MILE-165`; `check` discloses each alias in use as an info notice), or, for a `y-statement` declaring `preamble: true` and a `marker`, in the text before the first `##`. A type that declares none is out of scope; a record whose status is in the declaration's `exempt_statuses` (a record that made no decision, `MILE-7`) is counted eligible and unexamined, not asked for the sections, and not out of scope, so `config.scope-matches-nothing` does not read a declared exemption as a misconfiguration (`BUG-187`). A required section may declare `level` and `under` to be a `###` (or deeper) heading nested under a named `##`, which needs the type's `sections.depth` to reach it (`MILE-98`). Presence only: it never judges what a section says. A heading inside a fenced code block or an HTML comment (`<!-- ... -->`) is not a section.",
+        description: "Each `##` section a type's declared `sections.required` names is present in every record of that type (`MILE-4`, `RFC-17`), under its `name` or one of its declared `aliases` (`MILE-165`; `check` discloses each alias in use as an info notice), or, for a `y-statement` declaring `preamble: true` and a `marker`, in the text before the first `##`. A type that declares none is out of scope, and the rule enabled with no type declaring any is disclosed in a `rule-reads-nothing-declared` warning notice and, when `config.scope-matches-nothing` is on, is that rule's finding; a record whose status is in the declaration's `exempt_statuses` (a record that made no decision, `MILE-7`) is counted eligible and unexamined, not asked for the sections, and not out of scope, so `config.scope-matches-nothing` does not read a declared exemption as a misconfiguration (`BUG-187`). A required section may declare `level` and `under` to be a `###` (or deeper) heading nested under a named `##`, which needs the type's `sections.depth` to reach it (`MILE-98`). Presence only: it never judges what a section says. A heading inside a fenced code block or an HTML comment (`<!-- ... -->`) is not a section.",
         scope: Scope::Records,
         anchor: Anchor::Record,
         judges: Judges::OneRecord,
@@ -1995,7 +2057,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_SECTION_SHAPE,
-        description: "A required section that declares a `shape` has that shape (`MILE-5`, `MILE-121`): `y-statement` needs its TL;DR block to carry the five phrases `In the context of`, `facing`, `we decided`, `to achieve`, `accepting`, word-boundary matched, and reports a marker with no block as its own error; `table-min-rows` needs a table with at least `min_rows` data rows. A section found under an alias is checked too, and a `preamble: true` Y-statement is judged from the text before the first `##`. A missing section is `section.required`'s to report, not this rule's. Shape only, never meaning. Sections are read as `section.required` reads them: a heading inside a fenced code block or an HTML comment is not one.",
+        description: "A required section that declares a `shape` has that shape (`MILE-5`, `MILE-121`): `y-statement` needs its TL;DR block to carry the five phrases `In the context of`, `facing`, `we decided`, `to achieve`, `accepting`, word-boundary matched, and reports a marker with no block as its own error; `table-min-rows` needs a table with at least `min_rows` data rows. A section found under an alias is checked too, and a `preamble: true` Y-statement is judged from the text before the first `##`. A missing section is `section.required`'s to report, not this rule's. Shape only, never meaning. Enabled with no type declaring `sections.required`, it is disclosed like `section.required`. Sections are read as `section.required` reads them: a heading inside a fenced code block or an HTML comment is not one.",
         scope: Scope::Records,
         anchor: Anchor::Record,
         judges: Judges::OneRecord,
@@ -2019,7 +2081,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_SECTION_DUPLICATE,
-        description: "A heading appears once among its siblings (`MILE-104`): the same heading text twice at one level under one parent is an error naming both lines, so two `## Open questions` in one record are caught while the same `### Pros` under two different options are not. Headings are compared as exact text, whitespace trimmed and case-sensitive (`## Context` and `## context` are different). Opt-in per type through `sections.unique_headings: true`; a type that does not declare it is out of scope, and a rule enabled with no declaring type is reported by `config.scope-matches-nothing`. The sections are read down to the type's `sections.depth`, and a heading inside a fenced code block is not one. A record's `exempt_statuses` do not set it aside: a duplicated section is a broken document whatever was decided. The population's unit is the record.",
+        description: "A heading appears once among its siblings (`MILE-104`): the same heading text twice at one level under one parent is an error naming both lines, so two `## Open questions` in one record are caught while the same `### Pros` under two different options are not. Headings are compared as exact text, whitespace trimmed and case-sensitive (`## Context` and `## context` are different). Opt-in per type through `sections.unique_headings: true`; a type that does not declare it is out of scope, and a rule enabled with no declaring type is disclosed in a `rule-reads-nothing-declared` warning notice and, when `config.scope-matches-nothing` is on, is that rule's finding. The sections are read down to the type's `sections.depth`, and a heading inside a fenced code block is not one. A record's `exempt_statuses` do not set it aside: a duplicated section is a broken document whatever was decided. The population's unit is the record.",
         scope: Scope::Records,
         anchor: Anchor::Record,
         judges: Judges::OneRecord,
@@ -2043,7 +2105,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_SECTION_LEVEL_SKIPPED,
-        description: "A heading level is not skipped (`MILE-104`): a section nested more than one level deeper than the section above it, or deeper than `##` with no section above it (an `###` before any `##`), is an error. Defined against the type's `sections.depth` (`MILE-98`), which says where the section tree starts and how far it reads: a heading deeper than the depth is body text and is never read as a skip. Opt-in per type through `sections.no_skipped_levels: true`, which needs a `depth` of at least 2 (at depth 1 only `##` is a section and no level can be skipped; the config does not load otherwise). The population's unit is the record.",
+        description: "A heading level is not skipped (`MILE-104`): a section nested more than one level deeper than the section above it, or deeper than `##` with no section above it (an `###` before any `##`), is an error. Defined against the type's `sections.depth` (`MILE-98`), which says where the section tree starts and how far it reads: a heading deeper than the depth is body text and is never read as a skip. Opt-in per type through `sections.no_skipped_levels: true`, which needs a `depth` of at least 2 (at depth 1 only `##` is a section and no level can be skipped; the config does not load otherwise). Enabled with no type declaring it, it is disclosed in a `rule-reads-nothing-declared` warning notice and, when `config.scope-matches-nothing` is on, is that rule's finding. The population's unit is the record.",
         scope: Scope::Records,
         anchor: Anchor::Record,
         judges: Judges::OneRecord,
@@ -2067,7 +2129,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_SECTION_ORDER,
-        description: "A record's sections follow the order its type's template gives them (`MILE-104`). Opt-in per type through `sections.order: {from: template}`, which reads the headings of `.urzua/templates/<type>.md` down to the type's `sections.depth`. Order is judged among siblings sharing a parent: a section the template places before one the record already showed is an error on that section's line, naming both. A section the template does not name is ignored and a template section the record lacks is not reported (`section.required` owns presence). Order matching is by heading text alone and ignores `sections.required` aliases. A declared order whose template is missing or holds no sections reads nothing: each record of the type is an error saying so and is counted eligible and unexamined, so a deleted template fails a run rather than switching the rule off. The population's unit is the record.",
+        description: "A record's sections follow the order its type's template gives them (`MILE-104`). Opt-in per type through `sections.order: {from: template}` (enabled with no type declaring it, the rule is disclosed in a `rule-reads-nothing-declared` warning notice and, when `config.scope-matches-nothing` is on, is that rule's finding), which reads the headings of `.urzua/templates/<type>.md` down to the type's `sections.depth`. Order is judged among siblings sharing a parent: a section the template places before one the record already showed is an error on that section's line, naming both. A section the template does not name is ignored and a template section the record lacks is not reported (`section.required` owns presence). Order matching is by heading text alone and ignores `sections.required` aliases. A declared order whose template is missing or holds no sections reads nothing: each record of the type is an error saying so and is counted eligible and unexamined, so a deleted template fails a run rather than switching the rule off. The population's unit is the record.",
         scope: Scope::Records,
         anchor: Anchor::Record,
         judges: Judges::OneRecord,
@@ -2191,6 +2253,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         actions: &[
             VariantAction::new("gated-move-without-decider", ActionDecl::Exempt("accepting a record is a decider's act; no edit to the record supplies the pull request's author or approval")),
             VariantAction::new("gated-deletion-without-decider", ActionDecl::Exempt("deleting a gated record is a decider's act; no edit to the repository supplies the pull request's author or approval")),
+            VariantAction::new("gated-departure-without-decider", ActionDecl::Exempt("blanking, un-accepting or stripping the header of a gated record is a decider's act; no edit to the record supplies the pull request's author or approval")),
             VariantAction::new("gated-path-without-decider", ActionDecl::Exempt("changing a protected path is a decider's act; no edit to the file supplies the pull request's author or approval")),
         ],
         phase: Phase::Main,
@@ -2278,7 +2341,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_CONFIG_SCOPE_MATCHES_NOTHING,
-        description: "Judges the run itself, not the corpus: whether the configuration's declared rules reached what they were handed, from the other rules' own executions (`MILE-106`).",
+        description: "Judges the run itself, not the corpus: whether the configuration's declared rules reached what they were handed, from the other rules' own executions (`MILE-106`). It also reports a section rule that is enabled while no record type declares the `sections` key it reads (`sections.required`, `sections.unique_headings`, `sections.no_skipped_levels` or `sections.order`): such a rule has no candidate to count out of scope, so no run could show it (`BUG-73`'s class).",
         scope: Scope::Run,
         anchor: Anchor::Config,
         judges: Judges::NotRecordLevel,
@@ -2296,11 +2359,11 @@ pub const RULE_TABLE: &[RuleDef] = &[
         ],
         phase: Phase::AfterRules,
         companion: None,
-        run: |c| config_scope_matches_nothing(c.run.executions, c.config_path),
+        run: |c| config_scope_matches_nothing_in(c.config, c.run.executions, c.config_path),
     },
     RuleDef {
         id: RULE_WAIVER_MATCHES_NOTHING,
-        description: "A waiver that does nothing is reported on the waiver record, naming the rule and scope it claimed (`MILE-168`). Four cases: the waiver is expired (its `Expires` has passed or is not a `YYYY-MM-DD` date, so it already covers nothing); it is not in effect (it lacks a field the suppression type's `effective_requires` names, or holds a blank, placeholder or pending value there; or, when the type declares `permanent`, it has no `Expires` and its rule has no `permanent` entry, its category is absent or outside the entry's vocabulary, or a category that requires a citation has none that resolves; either way it suppresses nothing and its finding is reported again, naming the unmet requirement); it names a rule this build does not ship; or it is active, its rule ran, and no finding of that rule falls in its scope. A waiver matching a finding is not reported, and an expired waiver is reported once, as expired; an ineffective one is reported once, as ineffective. The unmatched case is judged only on a whole-corpus run in which the target rule ran: under a path scope or `--base`, or with the target rule off, an absent finding proves nothing, so the waiver is counted as eligible and unexamined (never out of scope). The expired and unknown-rule cases need only the waiver record to have been examined. Opt-in. The population counts waiver records.",
+        description: "A waiver that does nothing is reported on the waiver record, naming the rule and scope it claimed (`MILE-168`). Five cases: the waiver is expired (its `Expires` has passed or is not a `YYYY-MM-DD` date, so it already covers nothing); it is not in effect (it lacks a field the suppression type's `effective_requires` names, or holds a blank, placeholder or pending value there; or, when the type declares `permanent`, it has no `Expires` and its rule has no `permanent` entry, its category is absent or outside the entry's vocabulary, or a category that requires a citation has none that resolves; either way it suppresses nothing and its finding is reported again, naming the unmet requirement); it is scoped to the configuration file and names neither a `Variant` nor a `Key-path`, so it silences every finding of its rule there, present and future (it stays in effect, and the finding asks for the narrowing, `SPEC-10`); it names a rule this build does not ship; or it is active, its rule ran, and no finding of that rule falls in its scope (a waiver naming a `Variant` or `Key-path` is matched against the finding's action variant and key path). A waiver matching a finding is not reported, and an expired waiver is reported once, as expired; an ineffective one is reported once, as ineffective. The unmatched case is judged only on a whole-corpus run in which the target rule ran: under a path scope or `--base`, or with the target rule off, an absent finding proves nothing, so the waiver is counted as eligible and unexamined (never out of scope). The expired and unknown-rule cases need only the waiver record to have been examined. Opt-in. The population counts waiver records.",
         scope: Scope::Run,
         anchor: Anchor::Record,
         judges: Judges::NotRecordLevel,
@@ -2309,13 +2372,14 @@ pub const RULE_TABLE: &[RuleDef] = &[
         requires_acyclic_pair: false,
         requires_override_log: false,
         requires_authority: false,
-        reads_declaration: None,
+        reads_declaration: Some(Declaration::WaiverType),
         header_none: HeaderNone::Exempt("judges waiver records against the run's findings, not a configured header"),
         options: &[],
         population: PopulationUnit::Record,
         actions: &[
             VariantAction::new("waiver-expired", ActionDecl::FIELD_SET),
             VariantAction::new("waiver-ineffective", ActionDecl::FIELD_SET),
+            VariantAction::new("waiver-config-scope-too-broad", ActionDecl::FIELD_SET),
             VariantAction::new("waiver-unknown-rule", ActionDecl::FIELD_SET),
             VariantAction::new("waiver-matches-no-finding", ActionDecl::FIELD_SET),
         ],
@@ -2333,7 +2397,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
                     .get(rule)
                     .is_some_and(|s| s.scope.is_some())
             },
-            c.run.today,
+            (c.run.today, c.run.config_file),
         ),
     },
 ];
@@ -2454,18 +2518,60 @@ mod tests {
         assert_eq!(
             reads,
             vec![
+                (RULE_HEADER_REQUIRED_FIELDS, Declaration::RequiredFields),
+                (
+                    RULE_POINTER_RESOLUTION,
+                    Declaration::PointerOrNarrativeFields
+                ),
                 (RULE_FIELD_QUALITY, Declaration::RequiredFields),
                 (RULE_FIELD_PENDING, Declaration::RequiredFields),
+                (
+                    RULE_RELATION_SUPERSESSION_RECIPROCITY,
+                    Declaration::SupersessionField
+                ),
                 (
                     RULE_SEQUENCE_STATUS_AGREEMENT,
                     Declaration::BlockedOrProgress
                 ),
                 (
+                    RULE_RELATION_TARGET_STATUS_UNDECLARED,
+                    Declaration::PointerOrNarrativeFields
+                ),
+                (
+                    RULE_REVISION_LOG_CHANGE_CLASS_REQUIRED,
+                    Declaration::RevisionLog
+                ),
+                (
                     RULE_REVISION_LOG_VERSION_BUMP_REQUIRED,
                     Declaration::VersionBump
                 ),
+                (
+                    RULE_EMBODIMENT_LOCATOR_PROMOTION_CANDIDATE,
+                    Declaration::LocatorField
+                ),
                 (RULE_HEADER_FIELD_SET_CONSISTENCY, Declaration::KnownFields),
+                (RULE_FIELD_UNTRIMMED_VALUE, Declaration::DeclaredFields),
+                (
+                    RULE_FIELD_LEADING_RESERVED_INDICATOR,
+                    Declaration::DeclaredFields
+                ),
+                (RULE_HEADER_FIELD_CASE_MISMATCH, Declaration::DeclaredFields),
                 (RULE_HEADER_POINTER_FIELD_CLEAN, Declaration::PointerFields),
+                (RULE_STATUS_UNDECLARED_VALUE, Declaration::StatusValues),
+                (
+                    RULE_STATUS_REQUIRED_FIELD_MISSING,
+                    Declaration::StatusRequire
+                ),
+                (
+                    RULE_STATUS_FORBIDDEN_FIELD_PRESENT,
+                    Declaration::StatusForbid
+                ),
+                (
+                    RULE_STATUS_TRANSITION_ALLOWED,
+                    Declaration::StatusTransitions
+                ),
+                (RULE_STATUS_UNREACHABLE, Declaration::StatusTransitions),
+                (RULE_STATUS_DELIVERY_AGREEMENT, Declaration::StatusDelivery),
                 (RULE_STATUS_DONE_ITEMS_SHAPE, Declaration::DeliveryItems),
                 (RULE_STATUS_WAIVED_ITEM_STALE, Declaration::DeliveryItems),
                 (RULE_SECTION_REQUIRED, Declaration::SectionsRequired),
@@ -2473,6 +2579,7 @@ mod tests {
                 (RULE_SECTION_DUPLICATE, Declaration::UniqueHeadings),
                 (RULE_SECTION_LEVEL_SKIPPED, Declaration::NoSkippedLevels),
                 (RULE_SECTION_ORDER, Declaration::SectionOrder),
+                (RULE_WAIVER_MATCHES_NOTHING, Declaration::WaiverType),
             ]
         );
     }
@@ -2517,6 +2624,7 @@ mod tests {
             judged(Judges::ChangedSet),
             vec![
                 RULE_REVISION_LOG_VERSION_BUMP_REQUIRED,
+                RULE_HEADER_SCAFFOLD_MISMATCH,
                 RULE_IDENTITY_OPEN_PR_COLLISION,
                 RULE_STATUS_TRANSITION_ALLOWED
             ]

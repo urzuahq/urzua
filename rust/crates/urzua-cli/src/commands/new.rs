@@ -174,7 +174,7 @@ pub(crate) fn lookup_record_type<'a>(
 ) -> Result<&'a urzua_core::config::RecordTypeConfig, String> {
     let Some(type_config) = config.record_types.get(record_type) else {
         return Err(format!(
-            "unrecognized record type '{record_type}' -- see [record_types] in {}",
+            "unrecognized record type '{record_type}' -- see `record_types:` in {}",
             config_path.display()
         ));
     };

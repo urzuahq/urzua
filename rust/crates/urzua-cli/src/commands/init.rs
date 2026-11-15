@@ -202,7 +202,7 @@ pub fn infer_header_shapes(
         .map(|(n, what)| format!("{n} {what}"))
         .collect();
         notices.push(Notice::new(NoticeSeverity::Warning, NOTICE_HEADER_SHAPE.to_string(), format!(
-                "yaml-frontmatter is proposed for {}, the only header shape urzua reads; {yaml} record(s) parse under it and {} are not read by any rule until their headers are rewritten as YAML frontmatter; the proposed config declares no `required_fields`, so `check` is silent about them: add `required_fields: [Status]` (or another field every record carries) to this type and `header.required-fields` reports each unreadable record",
+                "yaml-frontmatter is proposed for {}, the only header shape urzua reads; {yaml} record(s) parse under it and {} are not read by any rule until their headers are rewritten as YAML frontmatter; the proposed config declares no `required_fields`, so `check` is silent about them: add `required_fields: [Status]` (or another field every record carries) to this type and enable `header.required-fields` under `rules:`, and it reports each unreadable record",
                 rt.dir,
                 unread.join(", ")
             )));
@@ -604,6 +604,13 @@ pub(crate) fn proposed_rules_mapping(
         if urzua_core::rules::rule_def(id).is_some_and(|d| d.requires_relation_pairs) {
             continue;
         }
+        // It asks whether each new record was written with `urzua new`, which no
+        // record of a corpus just adopted was, so proposing it would warn on the
+        // first record every author adds by hand. Turning it on is the adopter's
+        // call, once they use `new` (`MILE-103`).
+        if *id == urzua_core::rules::RULE_HEADER_SCAFFOLD_MISMATCH {
+            continue;
+        }
         // The override log is declared, never inferred (`MILE-188`).
         if urzua_core::rules::rule_def(id).is_some_and(|d| d.requires_override_log) {
             continue;
@@ -656,6 +663,9 @@ pub(crate) struct InitReport {
     /// The starter templates greenfield mode wrote or kept; absent in adopt.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub(crate) templates: Vec<crate::commands::init_greenfield::TemplateOutcome>,
+    /// The record directories greenfield mode created or kept; absent in adopt.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub(crate) directories: Vec<crate::commands::init_greenfield::DirectoryOutcome>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub(crate) notices: Vec<Notice>,
 }
@@ -918,6 +928,7 @@ fn run_adopt(ctx: &InitContext, dir: Option<&Path>) -> ExitCode {
             written: false,
             config_yaml: Some(rendered),
             templates: Vec::new(),
+            directories: Vec::new(),
             notices,
         });
     }
@@ -934,6 +945,7 @@ fn run_adopt(ctx: &InitContext, dir: Option<&Path>) -> ExitCode {
         written: true,
         config_yaml: None,
         templates: Vec::new(),
+        directories: Vec::new(),
         notices,
     })
 }
@@ -1164,7 +1176,7 @@ mod tests {
             );
         }
         assert!(
-            yaml.contains("header.required-fields"),
+            yaml.contains("header.case-variant-key"),
             "rules that do not read an identity are still proposed: {yaml}"
         );
     }
@@ -1195,10 +1207,39 @@ mod tests {
                 "{rule} reads a declaration init leaves empty, so it would examine zero records: {yaml}"
             );
         }
+        for rule in [
+            "header.required-fields",
+            "pointer.resolution",
+            "status.delivery-agreement",
+            "waiver.matches-nothing",
+            "revision-log.change-class-required",
+        ] {
+            assert!(
+                !yaml.contains(&format!("{rule}:")),
+                "{rule} reads a declaration init does not write: {yaml}"
+            );
+        }
         assert!(
-            yaml.contains("header.required-fields"),
+            yaml.contains("header.case-variant-key"),
             "rules that read no declaration are still proposed: {yaml}"
         );
+    }
+
+    /// `MILE-103`: the comparator judges a record against `urzua new`, so adopt
+    /// mode, whose corpus was not written with `new`, does not propose it.
+    #[test]
+    fn the_scaffold_comparator_is_not_proposed_by_adopt() {
+        let proposed = vec![ProposedRecordType {
+            name: "adr".to_string(),
+            dir: "docs/adr".to_string(),
+            record_count: 3,
+            prefix: Some("ADR".to_string()),
+            header_shape: HeaderShape::YamlFrontmatter,
+            exclude_files: vec![],
+        }];
+        let yaml = render_config_yaml(&proposed);
+        assert!(!yaml.contains("header.scaffold-mismatch"), "{yaml}");
+        assert!(yaml.contains("identity.open-pr-collision"), "{yaml}");
     }
 
     #[test]
@@ -1223,6 +1264,15 @@ mod tests {
             "section.required",
             "section.shape",
             "sections.required",
+            "header.required-fields",
+            "pointer.resolution",
+            "pointer_fields or narrative_fields",
+            "status.delivery-agreement",
+            "statuses.delivery",
+            "waiver.matches-nothing",
+            "role: suppression",
+            "revision-log.change-class-required",
+            "revision_log",
         ] {
             assert!(message.contains(needle), "{needle} missing from: {message}");
         }

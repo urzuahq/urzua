@@ -6,7 +6,7 @@
 # build, a checksum mismatch, a failed build-provenance attestation, or a
 # binary that does not report the pinned version.
 #
-# Inputs (environment): VERSION (exact tag, e.g. v0.3.0), REPO (default
+# Inputs (environment): VERSION (exact tag, e.g. v0.4.2), REPO (default
 # urzuahq/urzua), SHA256 (optional pin of the archive), DEST (install dir),
 # TARGET_OS / TARGET_ARCH (default RUNNER_OS / RUNNER_ARCH), RELEASE_BASE_URL
 # (default https://github.com; tests point it at a file:// tree), GH_TOKEN.
@@ -21,16 +21,16 @@ dest="${DEST:-${RUNNER_TEMP:-/tmp}/urzua-gate-bin}"
 os="${TARGET_OS:-${RUNNER_OS:-$(uname -s)}}"
 arch="${TARGET_ARCH:-${RUNNER_ARCH:-$(uname -m)}}"
 
-[ -n "$version" ] || fail "no version given: pin an exact release tag (for example v0.3.0)"
+[ -n "$version" ] || fail "no version given: pin an exact release tag (for example v0.4.2)"
 if ! [[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
-  fail "version '$version' is not an exact release tag like v0.3.0; 'latest' and branch names are not pins"
+  fail "version '$version' is not an exact release tag like v0.4.2; 'latest' and branch names are not pins"
 fi
 
 case "$os/$arch" in
   Linux/X64 | Linux/x86_64) target="x86_64-unknown-linux-gnu" ;;
   macOS/ARM64 | Darwin/arm64) target="aarch64-apple-darwin" ;;
-  macOS/X64 | Darwin/x86_64) target="x86_64-apple-darwin" ;;
-  *) fail "no published urzua build for $os/$arch (published: x86_64 Linux, arm64 and x86_64 macOS)" ;;
+  macOS/X64 | Darwin/x86_64) fail "there is no Intel Mac build of urzua (published: x86_64 Linux and Apple Silicon macOS); install it from source with cargo install" ;;
+  *) fail "no published urzua build for $os/$arch (published: x86_64 Linux and Apple Silicon macOS)" ;;
 esac
 
 sha256_of() {
