@@ -1,6 +1,0 @@
----
-default: minor
-closes: []
----
-
-First-run and configuration fixes. `urzua init --types` now creates each selected type's directory (with an empty `.gitkeep`) and lists them under `directories`, so on an empty repository `init`, `doctor` and `check` all pass: `check` over a repository with no record yet is `ok` with an `empty-corpus` notice instead of `not-run`, and `doctor` no longer warns about the `authority` block `init` writes. Greenfield proposes `revision-log.version-bump-required` when the `spec` profile declares the version bump and withholds `type.no-declared-spec`; adopt and greenfield no longer propose any rule that reads a declaration they do not write (`header.required-fields`, `pointer.resolution`, the field-hygiene, status, supersession, locator, revision-log and waiver rules). A key repeated under `rules:` or `record_types:` is a load error, and a config that starts with a byte order mark loads. A section rule enabled while no record type declares the `sections` key it reads is named in a `rule-reads-nothing-declared` warning notice and in `config.scope-matches-nothing`. `drift_baseline` accepts a tag or a commit sha and refuses a branch or `HEAD`, which would hold out every drift already merged. Config messages are written in YAML, and `new` reports a missing `extra_dirs` entry in its JSON.
