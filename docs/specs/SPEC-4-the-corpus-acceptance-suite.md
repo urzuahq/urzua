@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5N2PD9ZYBJPZHN05W7
-Version: '0.23'
+Version: '0.24'
 Date: 2026-08-20
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/tests/acceptance.rs@sha256:88011c208cad06c5ba0c78457b0f6288e9ff042ff9717a3fd1ac58bf1ca18a09, test:rust/crates/urzua-cli/tests/acceptance_property.rs@sha256:776f499ed6f76ab895ab380e38f62e1bacba4613b5dcd49074f31b99662d248e
+Realized-by: code:rust/crates/urzua-cli/tests/acceptance.rs@sha256:5e48c899ec5f690ea7082f10c91fd01cd12ba8637e4043c06ee2e235a47f6bca, test:rust/crates/urzua-cli/tests/acceptance_property.rs@sha256:776f499ed6f76ab895ab380e38f62e1bacba4613b5dcd49074f31b99662d248e
 Author: beauwilliams
 Subject: 'The corpus acceptance suite -- documented bug classes `check` must reproduce against real corpora.'
 Parent: SPEC-1
@@ -307,8 +307,8 @@ built, and where it differs from the sketch:
 
 ### Added by the rest of MILE-170
 
-- **Commits, `--base` and shallow runs.** A case may list `commits`, each writing, renaming or removing
-  files and committing; the fixture commit is tagged `base`, so `check --base base` gives the changed-path
+- **Commits, `--base` and shallow runs.** A case may list `commits`, each writing, renaming, removing or
+  symlinking (`symlink`, path to target) files and committing; the fixture commit is tagged `base`, so `check --base base` gives the changed-path
   rules a diff. `shallow: true` runs the case in a `--depth 1` clone made after the commits.
   `expect_notices` matches the report's notices by `subject` and `message_contains`. Git history is part
   of the fixture, so a case's commits are written in its own file, not in the corpus.
@@ -495,3 +495,6 @@ own-corpus case lacks the flag. A case over a fixture corpus needs none.
 > | 2026-11-14 | Bumped to `0.22`. Added the `bugs:` case field and the "Bug coverage gate": every Fixed bug record is tagged by a case, listed in one of four shrink-only lane gap files, or listed in a ledger of bugs no corpus run can show, and the lists cannot grow against the merge base without a label. **Why:** `MILE-101`'s remaining half is "every documented bug reproduces", and nothing linked a bug record to a case, so the count of reproduced bugs was a hand classification; the gate makes the gap a number that only falls. | **substantive** |
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/acceptance.rs` 6bc5217cec95 -> e037aece9053. Reason: Read the diff of acceptance.rs since the pin: Case gained an optional bugs list (tags read by acceptance_bug_gate.rs, never by the runner), a doc paragraph, and bug_tag_problem, which fails a case whose tag is not BUG-<number> or that is a known_gap. How a case is run, mutation-proven, sharded or gated is unchanged, so the claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/acceptance.rs` e037aece9053 -> 88011c208cad. Reason: Read the diff of acceptance.rs against the previous commit: a case's empty_population_ok_without entry gains an optional with_key, and the runner now moves the directory scan into acceptance/population.rs, where a file counts as part of the population only when its frontmatter lists a non-empty value under that key (so a fragment with closes: [] is not one). Case behaviour with no with_key is unchanged. No other runner behaviour changed, so each claim this record makes about the runner still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-14 | Bumped to `0.24`. A case's `commits` may create symlinks (`symlink`); `corpus-d` gains the case for `identity.record-symlink-escapes`. **Why:** `ADR-89` amendment of 2026-11-14 added that rule. | **structural** |
+> | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/acceptance.rs` 88011c208cad -> f96453567b7c. Reason: Pinned file(s) changed by the symlinked-record refusal: acceptance.rs: a case's commits may create symlinks. The record's claim is unaffected by these changes. (Re-applied after merging main.) **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/acceptance.rs` f96453567b7c -> 5e48c899ec5f. Reason: Pinned file(s) changed by the symlinked-record refusal: acceptance.rs: a case's commits may create symlinks. The record's claim is unaffected by these changes. (Re-applied after the config change and merging main.) **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |

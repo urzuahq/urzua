@@ -59,6 +59,17 @@
       "status": "ran"
     },
     {
+      "rule": "identity.record-symlink-escapes",
+      "population": {
+        "unit": "path",
+        "eligible": 13,
+        "examined": 13,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
       "rule": "status.delivery-agreement",
       "population": {
         "unit": "record",

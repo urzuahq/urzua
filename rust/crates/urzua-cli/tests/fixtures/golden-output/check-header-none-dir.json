@@ -81,6 +81,17 @@
         },
         "rule": "header.field-set-consistency",
         "status": "ran"
+      },
+      {
+        "population": {
+          "eligible": 4,
+          "examined": 4,
+          "out_of_scope": 0,
+          "unit": "path",
+          "unreadable": 0
+        },
+        "rule": "identity.record-symlink-escapes",
+        "status": "ran"
       }
     ],
     "rules_selected": null,
