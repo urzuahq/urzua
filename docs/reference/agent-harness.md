@@ -96,6 +96,43 @@ that repository), `shared` (also judge a file of a linked worktree of the same r
 same gates; recommended) or `deny` (refuse an agent's write outside, except under `allow_paths`).
 `urzua init` proposes `shared`.
 
+## Limits
+
+`limits` sets how much of one agent call the harness reads, and how long the agent waits for the
+editor hook. Every key is optional; one you leave out keeps its built-in value, so a config without
+`limits` behaves exactly as before.
+
+```yaml
+harness:
+  limits:
+    hook_timeout_seconds: 180   # 10 to 600; default 120
+    paths_per_call: 1024        # default 512, and never lower
+```
+
+Every key but `hook_timeout_seconds` is a security floor: you may raise it, never lower it. A lower
+value, a key urzua does not know, or a value that is not a whole number stops the config from
+loading, with a message naming the key and the floor. Raising a cap moves only the number. A call
+beyond it is still an edit that was not judged, and `on_unjudged` decides what happens to it.
+
+| Key | Default | Bounds |
+|---|---|---|
+| `hook_timeout_seconds` | 120 (10 to 600) | seconds the agent waits for the editor hook |
+| `paths_per_call` | 512 | files of one call judged against the gates |
+| `records_per_call` | 8 | record-checking writes of one MCP call judged |
+| `loose_strings_per_call` | 512 | other strings of one MCP call looked at as possible paths |
+| `input_depth` | 24 (at most 256) | nesting levels of one MCP call's input read |
+| `path_length` | 4096 | characters of a string read as a path |
+| `string_length` | 65536 | characters of a string looked into for paths |
+| `symlink_hops` | 40 | symbolic links followed resolving one path |
+| `json_depth` | 128 (at most 1024) | nesting levels of a settings file read |
+| `mcp_line_bytes` | 1048576 | bytes of one request line `urzua mcp` reads |
+| `gate_walk_files` | 50000 | files walked under the path-gate entries |
+
+`urzua harness limits` prints the values in force. The translator asks it for them before it scans
+an MCP call; if it gets no answer it keeps the built-in values. `hook_timeout_seconds` is written
+into the installed hook entry, so after changing it run `urzua harness update`; until then `urzua
+harness status`, `urzua doctor` and the session-start check report the entry as out of date.
+
 ## What it can and cannot promise
 
 The hooks bind an agent that goes through its edit tools. They do not see a shell command that writes

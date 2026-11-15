@@ -158,10 +158,13 @@ pub fn parse(text: &str) -> Result<J, String> {
     Ok(value)
 }
 
-/// How deep an array or object may nest. The parser, the writer and the drop of
-/// the tree all recurse, so a file nested a hundred thousand levels deep would
-/// overflow the stack; a settings file never nests anywhere near this.
-const MAX_DEPTH: usize = 128;
+/// How deep an array or object may nest (`harness.limits.json_depth`). The
+/// parser, the writer and the drop of the tree all recurse, so a file nested a
+/// hundred thousand levels deep would overflow the stack; a settings file never
+/// nests anywhere near the floor.
+fn max_depth() -> usize {
+    super::limits::get(urzua_core::harness::limits::JSON_DEPTH)
+}
 
 struct Parser {
     chars: Vec<char>,
@@ -193,9 +196,10 @@ impl Parser {
     }
 
     fn nested(&mut self, open: impl FnOnce(&mut Self) -> Result<J, String>) -> Result<J, String> {
-        if self.depth >= MAX_DEPTH {
+        let max = max_depth();
+        if self.depth >= max {
             return Err(format!(
-                "the document nests deeper than {MAX_DEPTH} levels at offset {}",
+                "the document nests deeper than {max} levels at offset {}",
                 self.at
             ));
         }
@@ -363,8 +367,8 @@ mod tests {
     #[test]
     fn a_document_nested_past_the_cap_is_refused_not_a_stack_overflow() {
         let deep = |n: usize| format!("{}{}", "[".repeat(n), "]".repeat(n));
-        assert!(parse(&deep(MAX_DEPTH)).is_ok());
-        let err = parse(&deep(MAX_DEPTH + 1)).unwrap_err();
+        assert!(parse(&deep(128)).is_ok());
+        let err = parse(&deep(129)).unwrap_err();
         assert!(err.contains("nests deeper"), "{err}");
         assert!(parse(&deep(100_000)).is_err());
         assert!(parse(&format!(
@@ -373,5 +377,17 @@ mod tests {
             "}".repeat(100_000)
         ))
         .is_err());
+    }
+
+    #[test]
+    fn a_raised_json_depth_reads_deeper_and_still_refuses_past_it() {
+        let deep = |n: usize| format!("{}{}", "[".repeat(n), "]".repeat(n));
+        super::super::limits::raise_for_test("json_depth", 200);
+        assert!(parse(&deep(200)).is_ok());
+        assert!(parse(&deep(201)).is_err());
+        // The ceiling parses, writes and drops on a test thread's 2 MiB stack.
+        super::super::limits::raise_for_test("json_depth", 1024);
+        let doc = parse(&deep(1024)).unwrap();
+        assert!(!doc.pretty().is_empty());
     }
 }

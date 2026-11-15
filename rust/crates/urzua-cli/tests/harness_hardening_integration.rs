@@ -1121,10 +1121,10 @@ fn the_installed_hook_entry_matches_notebook_edit_and_mcp_tools() {
     let v: serde_json::Value = serde_json::from_str(&fragment).unwrap();
     let matcher = v["hooks"]["PreToolUse"][0]["matcher"].as_str().unwrap();
     assert_eq!(matcher, "Write|Edit|MultiEdit|NotebookEdit|mcp__.*");
-    // An explicit timeout, longer than the host's 60 second default: a call may
-    // carry up to eight record writes at several seconds each.
-    let timeout = v["hooks"]["PreToolUse"][0]["hooks"][0]["timeout"].as_u64();
-    assert_eq!(timeout, Some(120), "{v}");
+    // An explicit timeout from `harness.limits.hook_timeout_seconds` (default
+    // 120, above the host's 60 second default), filled in at install.
+    let timeout = v["hooks"]["PreToolUse"][0]["hooks"][0]["timeout"].as_str();
+    assert_eq!(timeout, Some("{{limit:hook_timeout_seconds}}"), "{v}");
 }
 
 // ------------------------- a gitignored protected file written by shell

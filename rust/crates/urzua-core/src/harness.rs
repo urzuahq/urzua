@@ -11,6 +11,9 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
+pub mod limits;
+pub use limits::Limits;
+
 /// What a guardrail does when it cannot judge (`ADR-89` section 3).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -173,6 +176,8 @@ pub struct HarnessDecl {
     /// Absolute or `~`-relative directories an agent may write under with
     /// `outside_writes: deny`.
     pub allow_paths: Vec<String>,
+    /// `limits`: only the declared keys; the rest are built-in.
+    pub limits: Limits,
     /// Keys and guardrails this build does not know, and values a guardrail
     /// does not take. Reported at install and by `doctor`, never skipped.
     pub problems: Vec<String>,
@@ -202,6 +207,7 @@ const HARNESS_KEYS: &[&str] = &[
     "guardrails",
     "outside_writes",
     "allow_paths",
+    "limits",
 ];
 
 impl GuardrailInfo {
@@ -338,11 +344,12 @@ impl<'de> Deserialize<'de> for HarnessDecl {
                 }
                 "outside_writes" => decl.outside_writes = Some(read_outside_writes::<D>(v)?),
                 "allow_paths" => decl.allow_paths = read_allow_paths::<D>(v)?,
+                "limits" => decl.limits = Limits::read(v).map_err(D::Error::custom)?,
                 other => decl.note_unknown_key(
                     "harness".to_string(),
                     other,
                     HARNESS_KEYS,
-                    "which this build does not know (it reads adapters, instructions_file, guardrails, outside_writes, allow_paths)",
+                    "which this build does not know (it reads adapters, instructions_file, guardrails, outside_writes, allow_paths, limits)",
                 ),
             }
         }
@@ -431,6 +438,9 @@ impl Serialize for HarnessDecl {
         }
         if !self.allow_paths.is_empty() {
             map.serialize_entry("allow_paths", &self.allow_paths)?;
+        }
+        if !self.limits.is_empty() {
+            map.serialize_entry("limits", &self.limits)?;
         }
         if !self.guardrails.is_empty() {
             let guardrails: BTreeMap<&str, yaml_serde::Value> = self
