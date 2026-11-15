@@ -26,10 +26,10 @@ jobs:
 
 Pin the action itself to a commit sha, as you would any third-party action.
 
-**Which version.** `version` must name a release whose config format matches yours. The latest
-published release (`v0.3.0`) reads an older config than `main` does (see [Install](install.md)), so
-for a config written from these pages use the `binary` input until the next release is published:
-build urzua in an earlier step and pass its path.
+**Which version.** `version` must name a release that ships every rule and config key your config
+uses. A config written from these pages can be ahead of the latest release (see [Install](install.md));
+the run then reports `not-run` naming the rule or key the release does not know. Until a release has
+it, use the `binary` input: build urzua in an earlier step and pass its path.
 
 ```yaml
       - run: git clone --depth 1 https://github.com/urzuahq/urzua /tmp/urzua && (cd /tmp/urzua/rust && cargo build --release -p urzua-cli)
@@ -111,7 +111,7 @@ pin that cannot be read at all.
           echo "no stale evidence pins"
 ```
 
-This step needs a build that has `fix --rebaseline`; the published `v0.3.0` does not, so with `version: v0.3.0` use the `binary` input instead.
+This step needs a build that has `fix --rebaseline`: release `v0.4.2` or later.
 
 `fix --rebaseline` without `--apply` only reads. The step passes only when the report says
 `"status": "ok"`: any other status, a missing key, empty or unparseable output fails it. `urzua` must
