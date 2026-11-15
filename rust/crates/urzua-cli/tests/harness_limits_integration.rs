@@ -97,7 +97,7 @@ fn a_config_declaring_no_limit_behaves_as_before() {
     assert_eq!(timeouts(&dir), [120]);
     let text = std::fs::read_to_string(dir.join(".claude/settings.json")).unwrap();
     assert!(text.contains("\"timeout\": 120\n"), "{text}");
-    assert!(!text.contains("{{limit:"), "{text}");
+    assert!(!text.contains("limit:hook_timeout"), "{text}");
 }
 
 #[test]
