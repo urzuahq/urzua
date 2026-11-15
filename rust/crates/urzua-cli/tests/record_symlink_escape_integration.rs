@@ -157,6 +157,13 @@ fn a_configuration_may_set_the_level_or_turn_the_refusal_off() {
     let (_, report, stdout) = run(&dir, &["check"]);
     assert!(escapes(&report).is_empty(), "{stdout}");
     assert_eq!(report["blocking"], false, "{stdout}");
+    let notices = report["notices"].as_array().cloned().unwrap_or_default();
+    assert!(
+        notices
+            .iter()
+            .any(|n| n["subject"] == RULE && n["severity"] == "warning"),
+        "turning the refusal off is announced: {stdout}"
+    );
     let (code, _, stdout) = run(&dir, &["graph"]);
     assert_eq!(code, 0, "{stdout}");
     // A selection does not bring it back once it is off.
@@ -294,4 +301,49 @@ fn an_honest_move_with_no_symlink_left_behind_is_not_refused() {
     commit_all(&dir, "move");
     let (_, report, stdout) = run(&dir, &["check"]);
     assert!(escapes(&report).is_empty(), "{stdout}");
+}
+
+#[test]
+fn an_absent_key_means_the_refusal_is_on_at_error_with_no_off_notice() {
+    let dir = fixture("absent-key");
+    assert!(!CONFIG.contains(RULE));
+    std::os::unix::fs::symlink("draft.txt", dir.join("docs/adr/ADR-12-x.md")).unwrap();
+    std::fs::write(dir.join("docs/adr/draft.txt"), ACCEPTED).unwrap();
+    commit_all(&dir, "alias to a non-record");
+    let (code, report, stdout) = run(&dir, &["check"]);
+    let found = escapes(&report);
+    assert_eq!(found.len(), 1, "{stdout}");
+    assert_eq!(found[0]["file"], "docs/adr/ADR-12-x.md");
+    assert_eq!(found[0]["severity"], "error", "{stdout}");
+    assert_eq!(code, 1, "{stdout}");
+    let notices = report["notices"].as_array().cloned().unwrap_or_default();
+    assert!(!notices.iter().any(|n| n["subject"] == RULE), "{stdout}");
+}
+
+#[test]
+fn a_chain_of_symlinks_ending_at_a_real_record_is_refused_at_every_link() {
+    let dir = fixture("chain");
+    std::os::unix::fs::symlink("ADR-1-a.md", dir.join("docs/adr/ADR-3-b.md")).unwrap();
+    std::os::unix::fs::symlink("ADR-3-b.md", dir.join("docs/adr/ADR-4-c.md")).unwrap();
+    std::os::unix::fs::symlink("draft.txt", dir.join("docs/adr/ADR-5-d.md")).unwrap();
+    std::os::unix::fs::symlink("ADR-5-d.md", dir.join("docs/adr/ADR-6-e.md")).unwrap();
+    std::fs::write(dir.join("docs/adr/draft.txt"), PROPOSED).unwrap();
+    commit_all(&dir, "chains");
+    let (code, report, stdout) = run(&dir, &["check"]);
+    let mut files: Vec<&str> = escapes(&report)
+        .iter()
+        .filter_map(|f| f["file"].as_str())
+        .collect();
+    files.sort_unstable();
+    assert_eq!(
+        files,
+        [
+            "docs/adr/ADR-3-b.md",
+            "docs/adr/ADR-4-c.md",
+            "docs/adr/ADR-5-d.md",
+            "docs/adr/ADR-6-e.md"
+        ],
+        "{stdout}"
+    );
+    assert_eq!(code, 1, "{stdout}");
 }

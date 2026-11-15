@@ -831,6 +831,49 @@ rest of the checks. A case-only difference between the base's and the head's sta
 
 The Decision is otherwise unchanged. The Status of this ADR stays Accepted.
 
+## Amendment (2026-11-14, symlinked records)
+
+Status of this amendment: decided by the orchestrator on 2026-11-14, pending maintainer review. It closes a
+route around the status gate; the rest of section 4 is unchanged.
+
+**The problem.** The gate judges a record by the path it is tracked at. A tracked record file that is a
+symlink was read through the link. A non-decider could land an Accepted record in two pull requests: the first
+moves a Proposed record out of the governed directory (`git mv docs/adr/ADR-1-a.md notes/x.md`) and leaves a
+symlink in its place, which changes no `Status`; the second sets `Status: Accepted` in `notes/x.md`, a path no
+record type governs and no gate names, while the link at `docs/adr/ADR-1-a.md` now reads as an Accepted record.
+Neither change is a gated move. Separately, a link to a file outside the repository was read and, by
+`urzua export`, published.
+
+**The decision.** A tracked record file that is a symlink, or sits behind a symlinked directory, is refused by
+every command and never read (`identity.record-symlink-escapes`, `SPEC-2`). A record is read where it is tracked,
+never through a link.
+
+- `check`, `check --base`, `audit` and the MCP check tool report it as a blocking finding (an error) that names
+  the link and where it points. It is reported on a path-scoped or `--base` run too, and no waiver excuses it.
+  Every other command that loads the corpus (`fix`, `reverify`, `waive`, `migrate`, `export`, `graph`, `index`,
+  `roadmap`, `explain`) stops with exit 2 naming the file, instead of shrinking the corpus without saying so.
+- No link is allowed, an alias to a sibling record included. A first version of this amendment let a link to a
+  file in the same type directory through; a review showed that moving a record to `docs/adr/draft.txt`, a name no
+  type governs, and leaving `ADR-1-a.md` linked to it, hides the record just as well. A record has no use for an
+  alias. A link that does not resolve, or resolves to a directory, keeps the loader's own "could not read" error.
+- The rule is on for every configuration, and a configuration sets its level or turns it `off` under `rules:` like
+  any rule (maintainer principle, 2026-11-14: everything is a config); an earlier version made `off` a load error.
+  **Turning it off accepts the route above:** records are then read through links as before and nothing is reported.
+  `urzua init` does not write an entry for it, and this repository's configuration does not declare it. Unless
+  declared `off` it runs under every `--rules` selection and so appears in the `rules_executed` of a narrowed run.
+  A configuration that declares it `off` gets a warning notice on every `check` naming the rule and that risk, so the
+  choice is never silent.
+- **Why a default-on rule departs from opt-in configuration.** `ADR-53` makes a rule opt-in because a rule is a
+  repository's policy about its records, and a repository may decline a policy. This is not a policy: it is a
+  refusal that keeps the engine from reading a record where the gates do not look, a security property of the
+  tool and not a style rule, so it is on unless a repository says otherwise, and the risk of saying so is written next to the rule.
+- The two-pull-request route is closed at its first step: the pull request that leaves the symlink behind carries
+  the blocking finding, and the second pull request, had the first merged, carries it too, because the finding
+  does not depend on what the second changes. The diff gate does not need to resolve a changed path back to the
+  record that links to it.
+
+The Decision is otherwise unchanged. The Status of this ADR stays Accepted.
+
 ## Amendment (2026-11-14, leaving a gate)
 
 Status of this amendment: decided by the orchestrator on 2026-11-14, pending maintainer review. It extends what
@@ -908,3 +951,4 @@ The Decision is otherwise unchanged. The Status of this ADR stays Accepted.
 > | 2026-11-10 | Rename-pairing amendment accepted. **Why:** Maintainer decision, 2026-11-10. | **substantive** |
 > | 2026-11-10 | Added an `## Amendment (2026-11-10, deletions)`, accepted by the maintainer on 2026-11-10: a record the diff deletes while its base `Status` is one a gate names is a gated move (`gated-deletion-without-decider`), judged like any other and reported by the post-command check; a rename pair is exempt; under `base`/`both` the base revision's type declaration also decides which deleted files are records of a gated type; gate statuses compare case-insensitively after trim and the status field is read case-insensitively for the gate. `Status` stays Accepted. **Why:** Maintainer decision, 2026-11-10, on the review that found a non-decider deleting an Accepted ADR with an ok check, and a lower-case `accepted` passing the gate. | **substantive** |
 > | 2026-11-14 | Added an `## Amendment (2026-11-14, leaving a gate)`, decided by the orchestrator on 2026-11-14, pending maintainer review: blanking an Accepted (gated) record, stripping its header, or moving it from a gate status to a status that gate does not name (an un-accept) is a gated move like deletion (`gated-departure-without-decider`), in `diff.decider-required` and in the editor hook; and, under a `gh-verified` identity, `fix --apply`, `fix --rebaseline --apply` and `reverify --apply` require `--actor`. The Decision is unchanged. `Status` stays Accepted. **Why:** the external review found blanking or un-accepting an Accepted ADR passing both gates while deletion is gated, and 208 re-pin rows attributing an agent's re-verification to the maintainer. | **substantive** |
+> | 2026-11-14 | Added an `## Amendment (2026-11-14, symlinked records)`, decided by the orchestrator on 2026-11-14, pending maintainer review: a tracked record file that is a symlink, or sits behind a symlinked directory, is refused by every command and reported by `check` as the unwaivable finding `identity.record-symlink-escapes`; no link is allowed, a same-directory alias included (`ADR-12.md` linked to `draft.txt`). The rule is on at `error` for every configuration; a configuration may set its level or `off`, and `off` raises a warning notice on every `check`. This closes the two-pull-request route (move a record out of the governed tree leaving a symlink, then accept the moved copy). The Decision is unchanged. `Status` stays Accepted. **Why:** an external review reproduced a non-decider landing an Accepted record through a symlink, and a follow-up review found the same-directory alias. | **substantive** |

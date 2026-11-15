@@ -659,7 +659,23 @@ fn session_notices(
         (with_base, context.actors.is_some()),
         selection,
     ));
+    notices.extend(symlink_refusal_off_notice(&session.config));
     notices
+}
+
+/// A configuration that turns the symlink refusal off is told so on every run:
+/// a record may then be read through a link from where no gate looks (SPEC-2).
+fn symlink_refusal_off_notice(config: &Config) -> Option<Notice> {
+    let id = rules::RULE_IDENTITY_RECORD_SYMLINK_ESCAPES;
+    (rules::effective_level(config, id) == RuleLevel::Off).then(|| Notice {
+        severity: NoticeSeverity::Warning,
+        subject: id.to_string(),
+        message: format!(
+            "{id} is off: a record file that is a symlink is read through the link, \
+             so its content can live at a path no gate on a record directory sees"
+        ),
+        detail: None,
+    })
 }
 
 /// Holds the drift a `drift_baseline` names out of `context` and discloses it
