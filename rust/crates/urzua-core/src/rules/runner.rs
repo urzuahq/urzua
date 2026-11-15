@@ -159,6 +159,9 @@ pub struct RuleCtx<'a> {
     pub refs_snapshot: &'a Result<crate::refs_snapshot::RefsSnapshot, String>,
     /// Every discovered path, staged deletions included.
     pub tracked_paths: &'a [PathBuf],
+    /// Tracked record files that are symlinks out of their governed tree;
+    /// never loaded (`identity.record-symlink-escapes`).
+    pub escaping_records: &'a [EscapingRecord],
     /// Discovered paths less staged deletions.
     pub live_paths: &'a [PathBuf],
     /// False only on a definite absence: an unreadable path counts as present,
@@ -168,6 +171,20 @@ pub struct RuleCtx<'a> {
     /// A file's text for a scoped locator to resolve in; read once per path.
     pub read_text: &'a dyn Fn(&str) -> crate::locator::SharedText,
     pub run: RunState<'a>,
+}
+
+/// The level a rule runs at: the repository's declared level, else the default
+/// of a rule that is on for every configuration (`DEFAULT_ON_RULES`), else `off`.
+/// The one place that decides, so the runner and a caller gathering a rule's
+/// inputs agree on whether it runs.
+pub fn effective_level(config: &Config, id: &str) -> crate::config::RuleLevel {
+    use crate::config::RuleLevel;
+    config
+        .rules
+        .get(id)
+        .map(|s| s.level)
+        .or_else(|| super::default_on(id).map(|d| d.level))
+        .unwrap_or(RuleLevel::Off)
 }
 
 /// A rule the repository has not declared does not run at all -- it is not run
@@ -185,9 +202,11 @@ pub fn gate_and_run(
 ) -> (RuleExecution, Vec<Finding>) {
     use crate::config::RuleLevel;
 
-    match config.rules.get(id).map(|s| s.level) {
-        None | Some(RuleLevel::Off) => (RuleExecution::not_enabled(id), Vec::new()),
-        Some(level) => {
+    // A rule on for every configuration runs at its default level when the
+    // repository declares none (`DEFAULT_ON_RULES`).
+    match effective_level(config, id) {
+        RuleLevel::Off => (RuleExecution::not_enabled(id), Vec::new()),
+        level => {
             let severity = level
                 .severity()
                 .expect("a level other than off has a severity");
@@ -252,7 +271,11 @@ pub fn run_phase_with(
 ) -> Vec<(RuleExecution, Vec<Finding>)> {
     let mut out = Vec::new();
     for d in RULE_TABLE.iter().filter(|d| d.phase == phase) {
-        if plan.selected.is_some_and(|s| !s.contains(d.id)) {
+        // A security refusal runs under any selection unless the configuration
+        // declared it `off`: narrowing a run must not hide it (`DEFAULT_ON_RULES`).
+        let pinned = default_on(d.id).is_some_and(|o| o.under_selection)
+            && effective_level(ctx.config, d.id) != crate::config::RuleLevel::Off;
+        if !pinned && plan.selected.is_some_and(|s| !s.contains(d.id)) {
             continue;
         }
         let can_report_on_a_record =

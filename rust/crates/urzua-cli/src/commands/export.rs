@@ -3,7 +3,7 @@
 //! `check` uses instead of a second one (`MILE-115`).
 
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::ExitCode;
 
 use urzua_core::config::RelationRole;
@@ -42,24 +42,15 @@ pub(crate) fn build(
     config_path: Option<PathBuf>,
     filter: &RecordFilter,
 ) -> Result<ExportReport, Failure> {
-    // `raw_text` publishes a file's contents, so a tracked record that is a
-    // symlink resolving outside the repository must not be read: the export
-    // would otherwise disclose an arbitrary file under a repository path.
-    // Refuse the whole export rather than drop the record silently.
+    // `raw_text` publishes a file's contents; `Session::open` refuses a tracked
+    // record that resolves outside the repository or its type's directory, so an
+    // export cannot disclose an arbitrary file under a repository path.
     let Session {
         config,
         records,
         full_text,
         ..
-    } = Session::open_with(&[], config_path, |repo_root, config, discovered| {
-        match first_record_outside_repo(repo_root, &discovered.paths, config) {
-            Some(escaping) => Err(format!(
-                "{} resolves outside the repository; export refuses to read it",
-                escaping.display()
-            )),
-            None => Ok(()),
-        }
-    })?;
+    } = Session::open(config_path)?;
 
     let mut exported: Vec<ExportedRecord> = records
         .iter()
@@ -189,22 +180,4 @@ fn apply_filter(
         exported.retain(|_| keep.next().unwrap_or(false));
     }
     notices
-}
-
-/// The first tracked file in a record directory whose real location is
-/// outside `repo_root`, if any.
-fn first_record_outside_repo(
-    repo_root: &Path,
-    paths: &[PathBuf],
-    config: &Config,
-) -> Option<PathBuf> {
-    let root = repo_root.canonicalize().ok()?;
-    paths
-        .iter()
-        .filter(|p| config.record_types.values().any(|t| t.owns_dir(p.parent())))
-        .find(|p| match repo_root.join(p).canonicalize() {
-            Ok(real) => !real.starts_with(&root),
-            Err(_) => false,
-        })
-        .cloned()
 }
