@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5E1D23JRXBPTP54NSG
-Version: '0.29'
+Version: '0.30'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/commands/doctor.rs@sha256:9a3f5ddc016fe0514d84ce1b2884f2aa25b3062613fc1086d490706a1deb6a59, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs@sha256:dc29b51bde5a2ba79d95c5e0a09466a54e816e8e2cc4a86a80e4459be477a447, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:919b855ba25bcabe5719a5edee34e9e5c3b9d8fe8f67ee7818f4a747971f13db
+Realized-by: code:rust/crates/urzua-cli/src/commands/doctor.rs@sha256:9a3f5ddc016fe0514d84ce1b2884f2aa25b3062613fc1086d490706a1deb6a59, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs@sha256:dc29b51bde5a2ba79d95c5e0a09466a54e816e8e2cc4a86a80e4459be477a447, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:6d2ad3bf88308769fb6dfa67352f5323dc6968b98b54fa5f0726b76eeaa94658
 Author: beauwilliams
 Subject: '`urzua doctor` -- diagnosing whether checks are actually wired to CI/hooks, not just present.'
 Implements: —
@@ -141,3 +141,5 @@ than compounded:
 > | 2026-11-14 | Bumped to `0.28`. The test files this spec's evidence pins were hardened (exact exit codes, isolated git, visible root skips); the pins are re-baselined in the row above and the specified behaviour is unchanged. **Why:** the review's test findings; a re-baseline row is structural, so the version moves with it. | **structural** |
 > | 2026-11-14 | Bumped to `0.29`. Documents `authority-host` and stops warning about an `authority` that declares only `decider_table` and `waivable`, the block `urzua init` writes. **Why:** the first-run review, finding 6.1: `doctor` warned about the config `init` had just written. | **substantive** |
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/check_integration.rs` 3441046fd344 -> 919b855ba25b. Reason: Read the diff of each pinned file against main and the claim still holds. check_integration.rs: the init-then-check blockquote test also enables header.required-fields after declaring required_fields, because adopt now withholds that rule; other tests unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-15 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/check_integration.rs` 919b855ba25b -> 6d2ad3bf8830. Reason: Read the diff of each re-pinned file against main: check_integration.rs fix fixtures create the file their record cites. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-15 | Bumped to `0.30`. Evidence pins re-baselined for this change (the `Re-baselined` row above); the specification text is unchanged. **Why:** a revision-log entry that adds a structural change bumps `Version`. | **structural** |
