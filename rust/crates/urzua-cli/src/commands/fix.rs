@@ -226,6 +226,8 @@ struct Detected {
     population: Population,
     repairs: Vec<Repair>,
     notices: Vec<Notice>,
+    /// Records whose pinned evidence changed: `fix --rebaseline`'s, not ours.
+    pinned_drift: Vec<PathBuf>,
 }
 
 /// The detect pass of Tier 1: drift, back-pointer evidence and the repairs
@@ -252,6 +254,8 @@ fn detect_repairs_in(
         }
     };
     let mut notices = crate::discovery::drift_notices(drift.shallow, &drift.git_problems);
+    let pinned_drift = urzua_core::fix::pinned_drift_records(scoped, config, &drift.drifted);
+    notices.extend(pinned_drift_notice(&pinned_drift));
     let back_pointed =
         back_pointer_evidence(repo_root, discovered, config, records).map_err(refuse)?;
     // The derived-blocked records (`ADR-96` section 7): `fix` writes no
@@ -278,6 +282,32 @@ fn detect_repairs_in(
         population,
         repairs,
         notices,
+        pinned_drift,
+    })
+}
+
+/// The notice naming the records whose pinned evidence changed: `fix` does
+/// not write their drift state, and the re-pin listing is their next step.
+fn pinned_drift_notice(records: &[PathBuf]) -> Option<Notice> {
+    if records.is_empty() {
+        return None;
+    }
+    let ids: Vec<String> = records.iter().map(|p| p.display().to_string()).collect();
+    let mut detail = std::collections::BTreeMap::new();
+    detail.insert(
+        "records".to_string(),
+        urzua_core::report::DetailValue::List(ids.clone()),
+    );
+    Some(Notice {
+        severity: NoticeSeverity::Warning,
+        subject: urzua_core::report::NOTICE_PINNED_DRIFT.to_string(),
+        message: format!(
+            "{} cite{} a pinned file that changed since it was pinned: fix does not write the drift state over a stale pin; read each diff, then `urzua fix --rebaseline --ids {}` lists the pins and its next_action is the attested re-pin",
+            if ids.len() == 1 { "1 record".to_string() } else { format!("{} records", ids.len()) },
+            if ids.len() == 1 { "s" } else { "" },
+            ids.join(",")
+        ),
+        detail: Some(detail),
     })
 }
 
@@ -308,12 +338,24 @@ fn apply_repairs(
     // "checked, nothing to do" while a repair is still pending. `--force`
     // selects every repair regardless, so it has no selectors to miss.
     if !args.force {
-        failed.extend(missing_ids(
+        let missing = missing_ids(
             &selected,
             |r| r.record.display().to_string(),
             &args.ids,
             "matched no pending repair (an entry is a record's repo-relative path, e.g. docs/adr/ADR-1-title.md)",
-        ));
+        );
+        failed.extend(missing.into_iter().map(|(id, why)| {
+            if detected.pinned_drift.contains(&id) {
+                let why = format!(
+                    "a pinned file of '{}' changed since it was pinned, and fix does not write the drift state over a stale pin: read the diff, then `urzua fix --rebaseline --ids {}` lists the pins to re-pin",
+                    id.display(),
+                    id.display()
+                );
+                (id, why)
+            } else {
+                (id, why)
+            }
+        }));
     }
     for repair in selected {
         match write_repair(tree, &repair, &today, &identity.attestation) {

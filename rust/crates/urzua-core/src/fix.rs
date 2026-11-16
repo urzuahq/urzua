@@ -147,6 +147,14 @@ impl RepairScan<'_> {
             cited_by_test,
         );
         let stated = stated.trim();
+        // A changed pinned file is re-pinned with a reason (`fix --rebaseline`),
+        // never answered by writing the drift state, which would quiet the
+        // finding while the pin stays stale.
+        if crate::rules::DriftCause::of(config, computed, realized_by_value)
+            == crate::rules::DriftCause::Pin
+        {
+            return (Outcome::Examined, None);
+        }
         // Fresh drift (`drift_grace_days`) never flips a stated `Drift detected`.
         let keeps_stated_drift =
             self.fresh_drift.contains(&record.path) && config.embodiment.is_drift(stated);
@@ -202,6 +210,35 @@ impl RepairScan<'_> {
         });
         (Outcome::Examined, repair)
     }
+}
+
+/// The records `fix --apply` leaves for `fix --rebaseline`: their evidence
+/// drifted on a changed pinned file and their stated state is not the drift
+/// state. `fix` reports them in a notice instead of writing that state.
+pub fn pinned_drift_records(
+    records: &[Record],
+    config: &Config,
+    drifted: &HashSet<PathBuf>,
+) -> Vec<PathBuf> {
+    let drift_state = config.embodiment.state_for(true, |_| false).to_string();
+    records
+        .iter()
+        .filter(|r| drifted.contains(&r.path))
+        .filter(|r| {
+            let state =
+                relation_field_name(config, &r.record_type, RelationRole::EmbodimentState);
+            r.header
+                .get(state)
+                .is_some_and(|s| !config.embodiment.is_drift(s.trim()))
+        })
+        .filter(|r| {
+            let locator =
+                relation_field_name(config, &r.record_type, RelationRole::EmbodimentLocator);
+            crate::rules::DriftCause::of(config, &drift_state, evidence_text(r, locator).as_deref())
+                == crate::rules::DriftCause::Pin
+        })
+        .map(|r| r.path.clone())
+        .collect()
 }
 
 /// The 1-based line of `field` in `record`'s header; `0` when it has none.
@@ -478,16 +515,14 @@ pub fn apply_repair(
         )
     })?;
     let log = log.map_err(|problem| problem.message)?;
-    let Some(last_entry) = log.entries.last() else {
-        return Err(
-            "record's Revision log section has no existing rows to append after".to_string(),
-        );
+    let Some(last_line) = log.append_after() else {
+        return Err(NO_LOG_TABLE.to_string());
     };
 
-    // The new row repeats the existing last row's own prefix, so it lands
+    // The new row repeats the last table line's own prefix, so it lands
     // inside the table whether the log is a blockquote table or a plain one.
     let prefix = doc
-        .line(last_entry.line)
+        .line(last_line)
         .and_then(table_row_prefix)
         .unwrap_or("> ")
         .to_string();
@@ -500,11 +535,12 @@ pub fn apply_repair(
         repair.computed_value
     );
     let new_row = log_row(&prefix, log.layout, shape, today, &narrative)?;
-    let last_line = last_entry.line;
     doc.insert_after(last_line, new_row);
 
     Ok(doc.to_string())
 }
+
+const NO_LOG_TABLE: &str = "record's Revision log section has no table (a header row such as `| Date | Change | Class |` and its `|---|---|---|` separator) to append a row to";
 
 /// The lines a scoped pin resolved to, shown to the reviewer so they diff
 /// exactly those lines and see that the resolver found the right item
@@ -856,10 +892,8 @@ fn locate_revision_log(
         format!("record has no Revision log section -- refusing to {verb} without one to record the attestation in")
     })?;
     let log = log.map_err(|problem| problem.message)?;
-    if log.entries.is_empty() {
-        return Err(
-            "record's Revision log section has no existing rows to append after".to_string(),
-        );
+    if log.append_after().is_none() {
+        return Err(NO_LOG_TABLE.to_string());
     }
     Ok(log)
 }
@@ -876,7 +910,7 @@ pub(crate) fn append_log_rows(
     verb: &str,
 ) -> Result<(), String> {
     let log = locate_revision_log(&doc.to_string(), log_id, shape, verb)?;
-    let last_line = log.entries.last().map(|e| e.line).unwrap_or_default();
+    let last_line = log.append_after().unwrap_or_default();
     let prefix = doc
         .line(last_line)
         .and_then(table_row_prefix)

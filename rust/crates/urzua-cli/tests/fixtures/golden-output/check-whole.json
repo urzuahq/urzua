@@ -55,7 +55,9 @@
               "fix",
               "--apply",
               "--ids",
-              "docs/adr/ADR-3-third.md"
+              "docs/adr/ADR-3-third.md",
+              "--actor",
+              "agent"
             ]
           }
         }
@@ -76,7 +78,8 @@
         }
       }
     ],
-    "next_action": "urzua fix --apply --ids docs/adr/ADR-3-third.md",
+    "next_action": "urzua fix --apply --ids docs/adr/ADR-3-third.md --actor agent",
+    "next_action_inputs": [],
     "next_action_reason": "repairs 1 of 4 findings",
     "records_read_by_any_rule": 4,
     "rules_executed": [

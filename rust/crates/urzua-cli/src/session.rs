@@ -81,7 +81,7 @@ impl Session {
     pub fn open_with(
         root_hint: &[PathBuf],
         config_path: Option<PathBuf>,
-        adjust: impl FnOnce(&Path, &Config, &mut DiscoveredFiles) -> Result<(), String>,
+        adjust: impl FnOnce(&Path, &Config, &mut DiscoveredFiles) -> Result<(), Failure>,
     ) -> Result<Self, Failure> {
         Self::load(Workspace::open(root_hint, config_path)?, adjust)
     }
@@ -90,7 +90,7 @@ impl Session {
     /// that must judge the config before it touches the corpus (`index`).
     pub fn load(
         workspace: Workspace,
-        adjust: impl FnOnce(&Path, &Config, &mut DiscoveredFiles) -> Result<(), String>,
+        adjust: impl FnOnce(&Path, &Config, &mut DiscoveredFiles) -> Result<(), Failure>,
     ) -> Result<Self, Failure> {
         let Workspace {
             repo_root,

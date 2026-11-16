@@ -201,7 +201,7 @@ Read the diff of the changed file, decide whether the claim still holds, and if 
 ```sh
 urzua fix --rebaseline                       # lists each stale pin: recorded_hash and current_hash
 urzua fix --rebaseline --apply --ids docs/adr/ADR-0001-use-postgres.md \
-  --by alex --reason "added a helper function; the claim still holds"
+  --by alex --actor human --reason "added a helper function; the claim still holds"
 ```
 
 `--reason` is required and is written into the record's revision log. A re-pin is an attestation
@@ -231,7 +231,7 @@ When a claim has expired, `check` reports it and `urzua reverify` renews it:
 
 ```sh
 urzua reverify                               # the records whose claim has expired
-urzua reverify --apply --ids docs/adr/ADR-0001-use-postgres.md --reason "re-read the code"
+urzua reverify --apply --ids docs/adr/ADR-0001-use-postgres.md --actor human --reason "re-read the code"
 ```
 
 `reverify` re-resolves and re-hashes every locator, refuses to renew over changed evidence (that is

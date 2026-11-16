@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5Q0XVK27P5T8FN72BN
-Version: '0.51'
+Version: '0.52'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -57,7 +57,14 @@ the expected tier and reports a disagreement as a structured entry:
 A record whose `Realized-by` locator changed since the `Realized-by` line was last touched (ADR-32)
 computes to `Drift detected` regardless of the locators' tier, exactly as `check`'s
 `embodiment.consistency` does: `fix` reads the same drifted-record set `check` computes, so the two
-never disagree. The repair is written like any other Tier 1 repair, and a stated `Drift detected`
+never disagree. The repair is written like any other Tier 1 repair, except where the drift comes
+from a changed pinned file (the record's evidence carries a `@sha256:` pin and computes to the drift
+state): `fix` does not write the drift state over a stale pin, since that would quiet
+`embodiment.consistency` while the pin stays stale. It reports the record in a warning notice,
+`embodiment-drift-pinned` (its `detail.records`), names `urzua fix --rebaseline --ids <records>` as
+`next_action`, and an `--ids` entry naming it fails with that reason (`MILE-266`, decided by the
+builder on 2026-11-16, pending maintainer review). After the re-pin the record computes to its tier
+again. A stated `Drift detected`
 that is no longer drifted (the `Realized-by` line was touched again) is repaired back to the
 tier-computed value. `fix` computes drift only when `embodiment.consistency` is enabled, as `check`
 does (`MILE-159`): with the rule off or undeclared there is no embodiment verdict to repair, so `fix`
@@ -236,7 +243,10 @@ Every one of the following is a hard gate — none are optional, none are defaul
 - **A missing Revision log section refuses that record's write outright, where the log is required.**
   A type declares `revision_log: {required: false}` (`MILE-159`, SPEC-3) to be written without a row;
   `true` is the default. The error names the record and the identity looked for. ADR-14's reversibility
-  clause is enforced per write, not assumed — a repair with nowhere to record itself is reported
+  clause is enforced per write, not assumed. A log whose table has its header and separator but no
+  row yet takes the tool's row as its first, after the separator, in the table's own prefix (`fix
+  --apply`, `fix --rebaseline --apply` and `reverify --apply`, `MILE-267`); a section with no table
+  at all is refused. A repair with nowhere to record itself is reported
   failed, and every other selected repair still proceeds independently. Partial failure is a
   first-class outcome, not a batch-wide abort.
 - **Re-verification at write time.** The exact file is re-read from disk immediately before writing;
@@ -536,3 +546,4 @@ asserted by test, not assumed by convention.
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/fix.rs` 8108f0b26a58 -> 8e0c4f850c4d, `rust/crates/urzua-core/src/fix.rs` b5bfb2aa1386 -> 4a03c290767b, `rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs` 50ac84d1005f -> 29408f8d9f3c. Reason: Read the diff of each re-pinned file against main: cli fix.rs refuses a rebaseline --reason under 3 words or 12 characters; fix_rebaseline_integration.rs passes sentence reasons and adds the short-reason test; core fix.rs counts only resolving locators for Embodiment and Status and puts header-less types out of rebaseline scope. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Bumped to `0.51`. `fix --rebaseline` runs with neither `embodiment.consistency` nor `status.delivery-agreement` declared; the reason minimum is the configuration's `attestation.reason` (defaults 3 words, 12 characters) and applies to `reverify --apply` too. **Why:** a review found the re-pin `embodiment.pin-stale` suggests refused in a repository that declares neither repair rule, and the ADR-101 amendment of 2026-11-15 puts behaviour in configuration. | **substantive** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/fix.rs` 8e0c4f850c4d -> 8de563649d5c, `rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs` 29408f8d9f3c -> e20101f904c9. Reason: Read the diff of each re-pinned file since its previous pin: cli fix.rs runs --rebaseline before the repair-rule guard and reads the reason minimum from attestation.reason instead of two constants; fix_rebaseline_integration.rs adds the attestation.reason test. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-16 | Bumped to `0.52`. `fix` does not write the drift state over a stale pin and names the re-pin listing instead; a revision-log table with no row takes the first tool row (`fix --apply`, `fix --rebaseline --apply`, `reverify --apply`). Decided by the builder on 2026-11-16, pending maintainer review. **Why:** `MILE-266` and `MILE-267` -- a drift repair turned a changed pinned file green without a re-pin, and a record from a built-in template could not take a tool row. | **substantive** |

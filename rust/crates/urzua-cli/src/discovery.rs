@@ -43,14 +43,15 @@ pub(crate) fn find_repo_root(paths: &[PathBuf]) -> Result<PathBuf, String> {
         match dir.parent() {
             Some(parent) => dir = parent.to_path_buf(),
             None => {
-                return Err(
-                    "urzua needs a git repository: no .git directory found above the given path"
-                        .to_string(),
-                )
+                return Err(NO_GIT_REPOSITORY.to_string())
             }
         }
     }
 }
+
+/// No `next_action`: the remedy is running from the right directory, which only
+/// the caller knows, or making this one a repository, which may be wrong.
+const NO_GIT_REPOSITORY: &str = "urzua needs a git repository: no .git directory found above the given path; run urzua from inside the repository's working tree, with any path argument inside it (`git init` makes a directory a repository)";
 
 /// One place that names the config file, so a format change is one edit
 /// rather than fourteen (ADR-52).
@@ -67,6 +68,7 @@ pub(crate) fn load_config(path: &PathBuf) -> Result<Config, Failure> {
         urzua_core::config::ConfigError::SchemaVersionOutOfWindow(v) => Failure {
             message: v.to_string(),
             schema_version: Some(Box::new(v)),
+            next: None,
         },
         other => Failure::from(other.to_string()),
     })
@@ -607,7 +609,10 @@ pub(crate) fn drift_notices(shallow: bool, problems: &[String]) -> Vec<urzua_cor
             severity: NoticeSeverity::Warning,
             subject: NOTICE_DRIFT_GIT.to_string(),
             message: "the repository is a shallow clone, so the git history that embodiment drift reads is truncated: a result of no drift cannot be trusted (fetch full history, e.g. `git fetch --unshallow`)".to_string(),
-            detail: None,
+            detail: Some(std::collections::BTreeMap::from([(
+                urzua_core::report::DETAIL_SHALLOW.to_string(),
+                urzua_core::report::DetailValue::Text("true".to_string()),
+            )])),
         });
     }
     if !problems.is_empty() {
@@ -643,7 +648,7 @@ pub(crate) const NOTICE_UNTRACKED_NOT_DRIFT_JUDGED: &str = "discovery.untracked-
 
 /// Notice subject for the untracked records a run did not examine (`ADR-92`
 /// clause 4).
-pub(crate) const NOTICE_UNTRACKED_SKIPPED: &str = "discovery.untracked-skipped";
+pub(crate) const NOTICE_UNTRACKED_SKIPPED: &str = urzua_core::report::NOTICE_UNTRACKED_SKIPPED;
 
 /// The most untracked paths the skipped notice names; the count says the rest.
 const SKIPPED_SHOWN: usize = 20;
@@ -757,7 +762,10 @@ pub(crate) fn skipped_untracked_notice(skipped: &[PathBuf]) -> Option<urzua_core
             },
             if n == 1 { "it" } else { "them" },
         ),
-        detail: None,
+        detail: Some(std::collections::BTreeMap::from([(
+            "records".to_string(),
+            urzua_core::report::DetailValue::List(skipped.iter().map(|p| p.display().to_string()).collect()),
+        )])),
     })
 }
 

@@ -19,10 +19,17 @@ something blocking, and 2 means it could not run (the report then has `"status":
 `error`). `urzua --help` lists the commands and `urzua <command> --help` lists the flags; the pages
 below were written from that output.
 
-Every report also carries `next_action` and `next_action_reason`, on every command and on a `not-run`
-report. `next_action` is one command to run next, as a bare string such as `urzua fix --apply`, or
-`null` when nothing is better than reading the findings; `next_action_reason` says why, from counts,
-and is `null` exactly when `next_action` is. [`check`](check.md) describes how it is chosen.
+Every report also carries `next_action`, `next_action_reason` and `next_action_inputs`, on every command and on a `not-run`
+report. `next_action` is one command to run next, as a bare string such as
+`urzua fix --apply --ids <record> --actor agent`, or `null` when nothing is better than reading the
+findings; `next_action_reason` says why, from counts, and is `null` exactly when `next_action` is;
+`next_action_inputs` lists the `<...>` placeholders the command carries, and is empty when it runs as
+printed. `new` names `git add -- <path>` when untracked records are not examined; a `not-run` report
+names a command when one removes the cause (the nearest rule id for a mistyped one, `git fetch` for
+a `--base` remote-tracking ref that is not here, `git fetch --unshallow` for a shallow clone) and
+`null` when the remedy is an edit or a choice only you can make (an unknown configuration key, a
+path outside the repository, a directory that is not a git repository).
+[`check`](check.md) describes how it is chosen.
 
 ### What uses the network
 
