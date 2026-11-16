@@ -146,7 +146,7 @@ steps:
       fetch-depth: 0 # drift reads history; a shallow checkout fails with that reason
   - uses: urzuahq/urzua/.github/actions/urzua-gate@<sha>
     with:
-      version: v0.4.4 # an exact release tag
+      version: v0.4.5 # an exact release tag
       base-ref: ${{ github.base_ref }} # empty outside pull requests
 ```
 
