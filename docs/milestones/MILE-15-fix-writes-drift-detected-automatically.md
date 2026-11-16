@@ -5,7 +5,11 @@ Phase: '1'
 Track: embodiment-model
 Implements: ADR-32
 Blocked-on: —
+<<<<<<< HEAD
 Realized-by: code:rust/crates/urzua-core/src/fix.rs@sha256:19262b26587902c4b45383be227c8b436e4347c64cc498a6cec5540dadffe4f7, test:rust/crates/urzua-cli/tests/fix_drift_integration.rs#detect_reports_drift_detected_as_the_computed_value@sha256:4a897f9195c546a3736948bded974d5dd81c8f2654aec9edc2d2b7014c9184cb, test:rust/crates/urzua-cli/tests/fix_drift_integration.rs#apply_writes_drift_detected_and_a_revision_log_row@sha256:8ad2485f3747908a7e98a396ab4fcbb8d1d4899819dc5c4a6059430ff6c08bcc, test:rust/crates/urzua-cli/tests/fix_drift_integration.rs#apply_is_idempotent_and_check_agrees_afterwards@sha256:47ef92e836e36f38fe740452447d14795b59d44f8790e3b15535da058ed00ace, test:rust/crates/urzua-cli/tests/fix_drift_integration.rs@sha256:ff69343ca324400bde79c266372f9a213728d4d4ef8202beca6e12e54aa35352
+=======
+Realized-by: code:rust/crates/urzua-core/src/fix.rs@sha256:a2bf44749480a1a2499911d7e9d5f134c07e7e9f5a931ac45e4796ae61c3444a, test:rust/crates/urzua-cli/tests/fix_drift_integration.rs#detect_reports_drift_detected_as_the_computed_value@sha256:4a897f9195c546a3736948bded974d5dd81c8f2654aec9edc2d2b7014c9184cb, test:rust/crates/urzua-cli/tests/fix_drift_integration.rs#apply_writes_drift_detected_and_a_revision_log_row@sha256:8ad2485f3747908a7e98a396ab4fcbb8d1d4899819dc5c4a6059430ff6c08bcc, test:rust/crates/urzua-cli/tests/fix_drift_integration.rs#apply_is_idempotent_and_check_agrees_afterwards@sha256:47ef92e836e36f38fe740452447d14795b59d44f8790e3b15535da058ed00ace, test:rust/crates/urzua-cli/tests/fix_drift_integration.rs@sha256:ff69343ca324400bde79c266372f9a213728d4d4ef8202beca6e12e54aa35352
+>>>>>>> origin/main
 ---
 # 15 — fix writes Drift detected automatically
 
@@ -19,8 +23,13 @@ ADR-32 explicitly named this as separate follow-up work, not implied by drift de
 
 ## Done means
 
+<<<<<<< HEAD
 - `urzua fix` detects `Drift detected` from the drifted-record set `check` computes. — evidence: code:rust/crates/urzua-core/src/fix.rs@sha256:19262b26587902c4b45383be227c8b436e4347c64cc498a6cec5540dadffe4f7, test:rust/crates/urzua-cli/tests/fix_drift_integration.rs#detect_reports_drift_detected_as_the_computed_value@sha256:4a897f9195c546a3736948bded974d5dd81c8f2654aec9edc2d2b7014c9184cb
 - `urzua fix --apply` writes `Drift detected` with a revision-log row. — evidence: code:rust/crates/urzua-core/src/fix.rs@sha256:19262b26587902c4b45383be227c8b436e4347c64cc498a6cec5540dadffe4f7, test:rust/crates/urzua-cli/tests/fix_drift_integration.rs#apply_writes_drift_detected_and_a_revision_log_row@sha256:8ad2485f3747908a7e98a396ab4fcbb8d1d4899819dc5c4a6059430ff6c08bcc
+=======
+- `urzua fix` detects `Drift detected` from the drifted-record set `check` computes. — evidence: code:rust/crates/urzua-core/src/fix.rs@sha256:a2bf44749480a1a2499911d7e9d5f134c07e7e9f5a931ac45e4796ae61c3444a, test:rust/crates/urzua-cli/tests/fix_drift_integration.rs#detect_reports_drift_detected_as_the_computed_value@sha256:4a897f9195c546a3736948bded974d5dd81c8f2654aec9edc2d2b7014c9184cb
+- `urzua fix --apply` writes `Drift detected` with a revision-log row. — evidence: code:rust/crates/urzua-core/src/fix.rs@sha256:a2bf44749480a1a2499911d7e9d5f134c07e7e9f5a931ac45e4796ae61c3444a, test:rust/crates/urzua-cli/tests/fix_drift_integration.rs#apply_writes_drift_detected_and_a_revision_log_row@sha256:8ad2485f3747908a7e98a396ab4fcbb8d1d4899819dc5c4a6059430ff6c08bcc
+>>>>>>> origin/main
 - Applying twice is a no-op and `check` agrees afterwards. — evidence: test:rust/crates/urzua-cli/tests/fix_drift_integration.rs#apply_is_idempotent_and_check_agrees_afterwards@sha256:47ef92e836e36f38fe740452447d14795b59d44f8790e3b15535da058ed00ace
 - Tests cover detection, application and idempotence (`fix_drift_integration.rs`). — evidence: test:rust/crates/urzua-cli/tests/fix_drift_integration.rs@sha256:ff69343ca324400bde79c266372f9a213728d4d4ef8202beca6e12e54aa35352
 
@@ -42,4 +51,8 @@ ADR-32 explicitly named this as separate follow-up work, not implied by drift de
 > | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/fix.rs` 98b3bebce0fd -> 0b23d692333e. Reason: Read the diff of fix.rs since the old pin against what this record evidences: the only change is log_row, which now writes a pipe in a revision-row narrative as an escaped pipe so the row keeps its columns (plus its unit test); the behaviour this record evidences is unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-09 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/fix.rs` 0b23d692333e -> b5bfb2aa1386. Reason: Read the diff of each pinned file or span since the old pin against what this record evidences. rust/crates/urzua-core/src/fix.rs: replace_exact_pin becomes pub(crate) so reverify can reuse it; its body and every caller are unchanged. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/fix.rs` b5bfb2aa1386 -> 4a03c290767b. Reason: Read the diff of each re-pinned file against main: core fix.rs counts only resolving locators for Embodiment and Status and puts header-less types out of rebaseline scope. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+<<<<<<< HEAD
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/fix.rs` 4a03c290767b -> 19262b265879. Reason: fix.rs: the only change is one added `hooks: Default::default()` field in a Config struct literal, needed by the new optional hooks key; behaviour is unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+=======
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/fix.rs` 4a03c290767b -> a2bf44749480. Reason: core fix.rs: apply_rebaseline writes its row with the type's evidence class (tool_class unless evidence_class is declared) and a test shape literal gains evidence_class; the detect and re-pin logic is unchanged. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+>>>>>>> origin/main

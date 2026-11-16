@@ -1,9 +1,9 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.151'
+Version: '0.152'
 Date: 2026-08-20
 Status: Shipped
-Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:0b3481a4fe1c2382e2e502ba8f936eb0430df006ce7ea44e321cb90ff1ee597e, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:09c2431a269316741c35b51dabd5766ecd3d50fab2b98069314bb1bc8857767d, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:255395e7d2caa34947cef28f463e2ec050e3eba798a4dc7573a3cad946fee1ae
+Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:d893e7e95cb80d17c43899968ac2a5edf1b20b8984e071800c75ed71b67f8821, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:09c2431a269316741c35b51dabd5766ecd3d50fab2b98069314bb1bc8857767d, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:255395e7d2caa34947cef28f463e2ec050e3eba798a4dc7573a3cad946fee1ae
 Embodiment: Verified
 Author: beauwilliams
 Subject: '`.urzua/config.yaml` -- the schema for record types, required/known fields, and per-type behavior.'
@@ -141,6 +141,7 @@ Two details carry weight:
     class_column: Class                  # a header cell's name
     date_column: Date                    # a header cell's name
     tool_class: structural               # what fix writes
+    evidence_class: evidence             # what re-pin rows carry (optional)
   ```
 
   Undeclared, each keeps today's behaviour from defaults held in the engine: `classes` is
@@ -158,7 +159,11 @@ Two details carry weight:
   shorter than the class column has a blank class. A pipe written `\|` stays inside its cell, as in GitHub-flavoured Markdown. A row wider than the header (a cell holding an unescaped pipe) is one `change-class-required` finding naming the row and its cell count when a column is declared, and its columns are not guessed; undeclared, the class is the row's last cell as before. `class_column` and `date_column` may not name the
   same header. When `classes` is declared, every `version_bump.classes` entry and `tool_class` must
   be in it, and `tool_class` may be omitted only when the vocabulary has `structural`; a violation
-  is a load error naming the type and the entry or key. With `classes` undeclared, `version_bump.classes`
+  is a load error naming the type and the entry or key. `evidence_class` (optional, default
+  `tool_class`) is the class of the rows `fix --rebaseline --apply`, `reverify --apply` and
+  `fix --conflicts --apply` write; it must be in `classes` (the default pair when `classes` is
+  undeclared), else a load error, and left out of `version_bump.classes` a re-pin needs no version
+  bump (`ADR-67` amendment of 2026-11-16, `SPEC-8`). With `classes` undeclared, `version_bump.classes`
   is not checked against the default pair. A declared class absent from `version_bump.classes`
   requires no bump. These keys are additive and optional, so `schema_version` is unchanged.
 - **A record type may declare that it is the suppression type: `role: suppression`** (`BUG-74`).
@@ -2727,4 +2732,8 @@ proves this configuration produces the three findings.
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 76578456015b -> 26b96561f2fa. Reason: Read the diff of each re-pinned file against main. config.rs: the `unread_markers` rule option (UnreadMarkers, its field-name entry, validate_unread_markers) and `issue_refs.workers` (IssueRefs::workers, REFS_WORKERS_DEFAULT/MAX, a 1-to-16 check in issue_refs_problem); nothing else. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 305844777dc8 -> 7207b798837c. Reason: Read the diff of each re-pinned file against main. config.rs: the `unread_markers` rule option (UnreadMarkers, its field-name entry, validate_unread_markers) and `issue_refs.workers` (IssueRefs::workers, REFS_WORKERS_DEFAULT/MAX, a 1-to-16 check in issue_refs_problem); nothing else. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Bumped to `0.151`. Added the `hooks` key: the urzua arguments the pre-commit and pre-push hooks run and `on_not_run`, defaulting to today's `check --base HEAD`, `check` and `block`. **Why:** `MILE-220` adds `urzua hooks install`, and `ADR-101` (amendment of 2026-11-15) puts values that shape behaviour in configuration. | **substantive** |
+> | 2026-11-16 | Bumped to `0.151`. Documents the optional `revision_log.evidence_class`: the class of re-pin rows, defaulting to `tool_class`, a load error when not in `classes`; left out of `version_bump.classes`, a re-pin needs no bump. **Why:** maintainer decision of 2026-11-16 that a re-pin stops bumping a spec's version, recorded in the `ADR-67` amendment; built in `MILE-284`'s pull request. | **substantive** |
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 170c2efa746e -> a7b0b06e70f3. Reason: config.rs adds the optional revision_log.evidence_class key, RevisionLogShape.evidence_class defaulting to tool_class with for_evidence, and a load error when evidence_class is blank or not in classes; a config that declares none behaves as before. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 7207b798837c -> 0b3481a4fe1c. Reason: config.rs adds the optional top-level `hooks` key (HooksDecl, HookOnNotRun) with its load-time validation and error variant; every existing key and default is unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 7207b798837c -> 170c2efa746e. Reason: config.rs adds the optional revision_log.evidence_class key and RevisionLogShape.evidence_class (defaulting to tool_class) with for_evidence; a config that declares none behaves as before. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-16 | Pin recomputed on merge (attested by beauwilliams, identity: gh-verified, actor: agent): both merged sides re-pinned, `rust/crates/urzua-core/src/config.rs` 0b3481a4fe1c and a7b0b06e70f3 -> d893e7e95cb8; the new hash is the merged file's, which is git's automatic merge of the two re-pinned commits. No person wrote a reason for the merged state. **Why:** `urzua fix --conflicts` resolved a conflict that lay only in re-pin lines; a reviewer of the pull request should confirm the merged pin. | **structural** |

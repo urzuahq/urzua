@@ -409,6 +409,7 @@ mod tests {
                         class_column: None,
                         date_column: None,
                         tool_class: None,
+                        evidence_class: None,
                     }),
                     role: None,
                     effective_requires: None,
