@@ -13,7 +13,7 @@ When `check` examined no record because every candidate under the declared direc
 
 ## Why
 
-On 2026-11-16 an agent created six records with `urzua new`, ran `urzua check`, and got `"status": "ok"` with `files_examined: 0`: the records were untracked. The cause is reported, as an info notice and as the next action, but under a top-level `ok` in a report of several hundred lines, and the agent caught it only from the count. A status is what a caller branches on.
+On 2026-11-16 an agent created six records with `urzua new`, ran `urzua check`, and got `"status": "ok"` with `files_examined: 0`: the records were untracked. The cause is reported, as an info notice and as the next action, but under a top-level `ok` in a report of several hundred lines, and the agent caught it only from the count. The `ok` is the designed empty-corpus status (`MILE-206`); a status is what a caller branches on, so the design is what this changes.
 
 ## Done means
 

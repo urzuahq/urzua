@@ -19,7 +19,7 @@ Add to the reference a short, complete configuration example for each of a few c
 
 - The reference has a complete, loadable example of under forty lines for each of: a type with a checklist whose state is computed, a type whose field points at another type, a type with a gated status, and a type with a declared relation pair; each is loaded by a test so it cannot go stale.
 - `urzua init`'s report names the page.
-- The statement in the commands reference that greenfield `init` does not create the type directories is corrected to what the command does.
+- The type-directory statement in the commands reference is corrected under `MILE-270`, which already tracks it.
 
 > **Revision log**
 >

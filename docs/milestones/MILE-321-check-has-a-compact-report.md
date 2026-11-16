@@ -13,11 +13,11 @@ Add a report form for `check` that carries the status, counts, findings, notices
 
 ## Why
 
-A clean `check` of one record in a freshly initialised repository prints 549 lines (11.8 KB), 505 of them `rules_executed` entries and a third of those `not-enabled`. In this repository a clean run is 1,209 lines (53 KB): 793 lines of per-rule entries, 257 of notices, 130 of suppressed findings. The readers are agents paying for every line, and the reporting agent wrote a script to extract the five fields it needed. The only reducing option today is `--rules`.
+A clean `check` of one record in a freshly initialised repository prints 549 lines (11.8 KB), 505 of them `rules_executed` entries and a third of those `not-enabled`. In this repository a clean run is 1,209 lines (53 KB): 793 lines of per-rule entries, 257 of notices, 130 of suppressed findings. The readers are agents paying for every line, and the reporting agent wrote a script to extract the five fields it needed. The only option that reduces the per-rule section is `--rules`. The compact form is still JSON for agents, not a human rendering.
 
 ## Done means
 
-- A flag, and a configuration default for it, selects the compact form: status, counts of files and findings by severity, the findings themselves, notices as counts by kind with one example each, and the next action, shown by a test that the compact report of a clean run in a freshly initialised repository is under a stated size.
+- A flag, and a configuration default for it, selects the compact form: status, counts of files and findings by severity, the findings themselves, notices as counts by kind with one example each, suppressed findings as counts (`MILE-209`), and the next action, shown by a test that the compact report of a clean run in a freshly initialised repository is under a stated size.
 - The full form remains available and unchanged in shape, and the compact form says how to get it.
 - Rules that are not enabled appear in the compact form as one count.
 - The hooks and the agent harness use the compact form where they print a report.

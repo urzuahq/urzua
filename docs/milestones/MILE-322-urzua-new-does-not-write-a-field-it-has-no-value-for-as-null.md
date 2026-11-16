@@ -17,7 +17,7 @@ Have `urzua new` write an unset field the way the type's template writes it, or 
 
 ## Done means
 
-- A record made by `urzua new` with no value for a field carries the template's text for that field, shown by a test against each initialised type profile.
+- A record made by `urzua new` with no value for a field carries the template's text for that field or omits the field, shown by a test against each initialised type profile.
 - `urzua new` followed by `urzua check` on the staged record reports no finding about a field `new` wrote, or `new`'s report lists the fields still to fill with a next action.
 
 > **Revision log**
