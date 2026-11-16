@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.148'
+Version: '0.149'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:305844777dc8bc2ec33e63a2c644171f6d7d97e8fa5435690f0de39f49ded0dc, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:09c2431a269316741c35b51dabd5766ecd3d50fab2b98069314bb1bc8857767d, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:255395e7d2caa34947cef28f463e2ec050e3eba798a4dc7573a3cad946fee1ae
@@ -927,6 +927,7 @@ harness:
   adapters: [claude-code]            # installed when --adapter is not given
   instructions_file: AGENTS.md       # carries the marked block; the engine assumes no file name
   outside_writes: shared             # allow | shared | deny; undeclared acts as allow
+  report_outside_writes: false       # say so when an allowed write outside the repository is not judged
   guardrails:
     editor-hook:    {enabled: true, on_unjudged: allow}   # allow | deny
     session-start:  {enabled: true}
@@ -957,6 +958,13 @@ harness:
   `~`-relative directories that `doctor` reports as read by nothing under any other value. A value other
   than the three, or a relative `allow_paths` entry, is a load error. `urzua init` proposes `shared`;
   `urzua doctor` warns when a guardrail is enabled and the key is undeclared; `shared` is recommended.
+- **`report_outside_writes`** is `true` or `false` (default `false`; anything else is a load error). With
+  `false` the editor hook says nothing about a write it allows whose every path, as written and as its
+  symlinks resolve, lies outside the repository; `true` restores the notice that urzua did not judge it
+  ("is outside the repository"). A refused write (`outside_writes: deny`, under `shared`, a gated move or protected path in a linked worktree, `on_unjudged: deny` for an agent) and an edit inside the repository it could not judge are
+  reported either way (`SPEC-24`, `MILE-278`). The default is a behaviour change, not today's value: the
+  maintainer chose it on 2026-11-16 ("yes hook should be silent by default and n config"), an exception to
+  the rule of `ADR-101` that a new key's default equals the behaviour before it.
 - **`guardrails`** names which guardrails are on: a guardrail is on only when named with `enabled: true`.
   The names are `editor-hook`, `post-command`, `session-start`, `acceptance` and `protected-paths`. Only
   `editor-hook`, `acceptance` and `protected-paths` take `on_unjudged`: `allow` (the default for
@@ -2683,3 +2691,4 @@ proves this configuration produces the three findings.
 > | 2026-11-14 | Bumped to `0.147`. Documents that `embodiment.pin-stale` is on by default (maintainer decision, 2026-11-14: on by default), that a last-audit date after today is reported and ignored, and that a heading inside an HTML comment is not a section. **Why:** external review items 1.2, 1.5 and 1.7. | **substantive** |
 > | 2026-11-16 | Bumped to `0.148`. Documents `attestation.reason` (`min_words`, default 3; `min_chars`, default 12), the reason minimum of `fix --rebaseline --apply` and `reverify --apply`. **Why:** the ADR-101 amendment of 2026-11-15: configuration owns behaviour, and a fixed minimum in code was not configurable. | **substantive** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 9b216fd928bd -> 305844777dc8. Reason: Read the diff of each re-pinned file since its previous pin: config.rs adds attestation.reason (ReasonMinimum: min_words default 3, min_chars default 12, and its check) with a unit test. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-16 | Bumped to `0.149`. Documents `harness.report_outside_writes` (default `false`): an allowed write outside the repository is silent unless it is `true`. The default is a new behaviour, decided by the maintainer on 2026-11-16 ("yes hook should be silent by default and n config"), and stated as an exception to `ADR-101`'s rule that a key's default is today's value; under `shared` it is a gated move or protected path in a linked worktree that is refused, and any other linked-worktree file, a record included, is allowed with a notice (`MILE-278`). | **substantive** |

@@ -138,9 +138,26 @@ def out(obj):
 def stated(message, event):
     """The engine could not give a verdict: say so, loudly, and let the call proceed."""
     sys.stderr.write(message + "\n")
-    hook = {"session-start": "SessionStart", "post-command": "PostToolUse"}.get(event, "PreToolUse")
+    if event == "post-command":
+        return relay_post_command(message, "urzua harness (post-command): NOT judged; run 'urzua check' before committing.")
+    hook = {"session-start": "SessionStart"}.get(event, "PreToolUse")
     out({"systemMessage": message, "hookSpecificOutput": {"hookEventName": hook, "additionalContext": message}})
     return 0
+
+
+def relay_post_command(person, agent):
+    """A post-command report goes to one audience per message: `person` (a gated
+    move, a protected-path change, a check that could not run) as the message
+    shown to the person, `agent` as the model's context. Neither repeats the other."""
+    obj = {}
+    if person:
+        obj["systemMessage"] = person
+    if agent and agent != person:
+        obj["hookSpecificOutput"] = {"hookEventName": "PostToolUse", "additionalContext": agent}
+    if obj:
+        out(obj)
+    return 0
+
 
 
 def deny(message):
@@ -647,10 +664,12 @@ def main():
             out({"systemMessage": message, "hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": message}})
         return 0
     if event == "post-command":
-        # Context for the agent, never a decision: the command has already run.
-        if kind != "allow" and message:
-            out({"systemMessage": message, "hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": message}})
-        return 0
+        # A report, never a decision: the command has already run.
+        if kind == "allow":
+            return 0
+        if "agent" in verdict or "person" in verdict:
+            return relay_post_command(verdict.get("person") or "", verdict.get("agent") or "")
+        return relay_post_command("", message)
     if kind == "block":
         out({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": message}})
     elif kind in ("allow-unjudged", "allow-override", "allow-with-warnings"):
