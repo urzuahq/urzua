@@ -19,9 +19,17 @@ fn claimed_closed_by(line: &str, verbs: &[String]) -> Vec<String> {
 
     while let Some(token) = tokens.next() {
         let word = token
+            .trim_matches(|c: char| !c.is_ascii_alphanumeric())
+            .to_lowercase();
+        // The Unicode trim keeps more of a token than the ASCII one, so it adds
+        // matches only for a declared verb ending in a non-ASCII letter.
+        let wide = token
             .trim_matches(|c: char| !c.is_alphanumeric())
             .to_lowercase();
-        if !verbs.iter().any(|v| v.to_lowercase() == word) {
+        if !verbs.iter().any(|v| {
+            let v = v.to_lowercase();
+            v == word || v == wide
+        }) {
             continue;
         }
         let mut expecting = true;

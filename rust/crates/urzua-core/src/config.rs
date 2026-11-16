@@ -1263,13 +1263,28 @@ pub struct RecordTypeConfig {
     /// case. Added to the built-in ones (the compiled-in placeholder words and
     /// `pending`), which a declaration cannot remove: a value configuration
     /// could make effective would let an unreviewed suppression take effect.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "present_list"
+    )]
     pub rejected_values: Option<Vec<String>>,
     /// The fields `urzua waive` writes a draft's reason and owner into
     /// (`MILE-233`); `Reason` and `Owner` unless declared. On the suppression
     /// type only.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub waiver_fields: Option<WaiverFields>,
+}
+
+/// A list key whose `null` is refused, as a rule option's is: present with no
+/// value must not read as the key left out.
+fn present_list<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<Vec<String>>, D::Error> {
+    match Option::<Vec<String>>::deserialize(d)? {
+        Some(list) => Ok(Some(list)),
+        None => Err(serde::de::Error::custom(
+            "option 'rejected_values' is present with no value; give it a list or remove the key",
+        )),
+    }
 }
 
 /// The suppression type's `waiver_fields` (`MILE-233`).
@@ -3319,11 +3334,13 @@ fn validate_suppression_vocabulary(name: &str, rt: &RecordTypeConfig) -> Result<
                 return Err(bad("waiver_fields", format!("with {role} '{field}', a field the matching grammar reads by name; choose another field")));
             }
         }
-        if fields.reason.is_some() && fields.reason == fields.owner {
-            return Err(bad(
-                "waiver_fields",
-                "with the same field for reason and owner".into(),
-            ));
+        if let (Some(r), Some(o)) = (&fields.reason, &fields.owner) {
+            if r.eq_ignore_ascii_case(o) {
+                return Err(bad(
+                    "waiver_fields",
+                    "with the same field for reason and owner".into(),
+                ));
+            }
         }
     }
     Ok(())
@@ -4193,9 +4210,6 @@ fn validate_extensions(config: &Config) -> Result<(), ConfigError> {
     Ok(())
 }
 
-/// `code_comment_prefixes`: each key is one of the rule's `extensions` (a key
-/// matching no read file is a silent no-op), each list is non-empty, and no
-/// leader is blank, padded, containing whitespace, or repeated.
 /// The vocabulary options (`MILE-233`): each belongs to its one rule, and a
 /// declared value that could not work is refused rather than read as nothing.
 /// An empty list is refused too: it would turn the reading off without saying
@@ -4251,7 +4265,13 @@ fn validate_vocabulary_options(config: &Config) -> Result<(), ConfigError> {
             }
             // The grammar reads the ids after the marker's colon, and a word
             // without one would match prose that merely starts with it.
-            if !marker.ends_with(':') || marker.len() < 2 {
+            if marker.trim_end_matches(':').is_empty() {
+                return Err(bad(
+                    option,
+                    format!("is '{marker}', which has no word before the colon; a marker needs a word before its ':', such as 'Implements:'"),
+                ));
+            }
+            if !marker.ends_with(':') {
                 return Err(bad(
                     option,
                     format!("is '{marker}', which does not end with ':' after at least one character; write it as '{}:'", marker.trim_end_matches(':')),
@@ -4315,6 +4335,9 @@ fn vocabulary_list_problem(option: &str, list: &[String]) -> Option<String> {
     None
 }
 
+/// `code_comment_prefixes`: each key is one of the rule's `extensions` (a key
+/// matching no read file is a silent no-op), each list is non-empty, and no
+/// leader is blank, padded, containing whitespace, or repeated.
 fn validate_code_comment_prefixes(config: &Config) -> Result<(), ConfigError> {
     for (name, setting) in &config.rules {
         let Some(map) = &setting.code_comment_prefixes else {

@@ -45,6 +45,17 @@ impl SuppressionType {
         self.fields.owner.as_deref().unwrap_or("Owner")
     }
 
+    /// Whether `value` is one of the type's `statuses.placeholders`, as a whole
+    /// value ignoring case. For a suppression these only add to the built-in
+    /// words, never replace them.
+    fn is_declared_placeholder(&self, value: &str) -> bool {
+        let value = value.trim().to_lowercase();
+        self.declared
+            .as_ref()
+            .and_then(|d| d.placeholders.as_ref())
+            .is_some_and(|words| words.iter().any(|w| w.to_lowercase() == value))
+    }
+
     /// Whether `value` is a declared `rejected_values` entry, as a whole value
     /// ignoring case.
     pub fn is_rejected(&self, value: &str) -> bool {
@@ -97,7 +108,8 @@ impl SuppressionType {
         if state == FieldState::Present {
             if let Some(default) = value.and_then(crate::field_state::whole_value_default_state) {
                 state = default;
-            } else if value.is_some_and(|v| self.is_rejected(v)) {
+            } else if value.is_some_and(|v| self.is_rejected(v) || self.is_declared_placeholder(v))
+            {
                 state = FieldState::Placeholder;
             }
         }

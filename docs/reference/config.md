@@ -110,7 +110,7 @@ rules:
     implements_marker: "Realises:"
 ```
 
-Three more are declared on a record type: `statuses.placeholders`, a `y-statement` shape's `phrases`,
+Four more are declared in a record type's configuration: `statuses.placeholders`, a `y-statement` shape's `phrases`,
 and, on the suppression type, `rejected_values` and `waiver_fields` (below).
 
 To see what a rule judges, its options and their current values, ask the binary:

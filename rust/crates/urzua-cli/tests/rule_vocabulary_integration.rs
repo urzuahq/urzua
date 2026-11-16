@@ -371,3 +371,51 @@ fn an_added_rejected_reviewer_is_not_a_review_and_the_built_in_floor_stays() {
     assert_eq!(unreviewed("TBD", added), 1);
     assert_eq!(unreviewed("carol", added), 0);
 }
+
+/// A waiver's required field holding a word its own type declares as a
+/// placeholder does not take effect, and the built-in words still block
+/// beside the declared ones: for a suppression they only add.
+#[test]
+fn a_waiver_type_s_declared_placeholders_add_to_the_floor() {
+    let config = waiver_config("").replace(
+        "    effective_requires: [Reason]\n",
+        "    effective_requires: [Reason]\n    statuses:\n      pending: [offen]\n      placeholders: [ausstehend]\n",
+    );
+    let takes_effect = |reason: &str| {
+        let dir = repo(
+            "waiver-placeholders",
+            &config,
+            &[
+                ("docs/adr/ADR-1-a.md", "---\nStatus: Accepted\nOwner: TBD\n---\n# 1 — A\n"),
+                (
+                    "docs/waivers/WAIVER-1-a.md",
+                    &format!("---\nRule: field.quality\nScope: docs/adr/ADR-1-a.md\nReason: {reason}\nExpires: 2099-01-01\n---\n# 1 — A\n"),
+                ),
+            ],
+        );
+        let found: Vec<_> = findings(dir.path(), "field.quality")
+            .into_iter()
+            .filter(|f| f["file"] == "docs/adr/ADR-1-a.md")
+            .collect();
+        assert_eq!(found.len(), 1, "{found:?}");
+        !found[0]["waived"].is_null()
+    };
+    assert!(!takes_effect("ausstehend"));
+    assert!(!takes_effect("Ausstehend"));
+    assert!(!takes_effect("TBD"));
+    assert!(takes_effect("The owner is assigned at the next review."));
+}
+
+/// `rejected_values: null` is refused alike on a rule and on a type.
+#[test]
+fn a_null_rejected_values_is_refused_on_a_rule_and_on_a_type() {
+    for config in [
+        override_config("    rejected_values: null\n"),
+        waiver_config("    rejected_values: null\n"),
+    ] {
+        let dir = repo("null", &config, &[]);
+        let (code, out, err) = run(dir.path(), &["check"]);
+        assert_eq!(code, Some(2), "{out}{err}");
+        assert!((out + &err).contains("'rejected_values' is present with no value"));
+    }
+}
