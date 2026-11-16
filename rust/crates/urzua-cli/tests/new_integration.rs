@@ -475,3 +475,22 @@ fn new_numbers_across_every_directory_of_a_type() {
     // Written to the primary directory.
     assert_eq!(out["path"], "docs/adr/ADR-10-next.md");
 }
+
+#[test]
+fn new_refuses_to_write_into_a_directory_under_a_path_gate() {
+    let dir = fixture_repo("gated");
+    std::fs::write(dir.join(".urzua/config.yaml"), BUG_CONFIG).unwrap();
+    common::gate_paths(&dir, &["docs/bug"]);
+    let out = run_urzua(&dir, &["new", "bug", "A title"]);
+    let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_ne!(out.status.code(), Some(0), "{v}");
+    assert!(
+        v.to_string()
+            .contains("only group 'leads' (lead) may change it"),
+        "{v}"
+    );
+    assert!(
+        !dir.join("docs/bug").exists()
+            || std::fs::read_dir(dir.join("docs/bug")).unwrap().count() == 0
+    );
+}

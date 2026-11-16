@@ -295,6 +295,11 @@ pub const DEFAULT_ON_RULES: &[DefaultOn] = &[
         level: crate::config::RuleLevel::Warn,
         under_selection: false,
     },
+    DefaultOn {
+        id: RULE_DIFF_PIN_CHANGED_UNATTESTED,
+        level: crate::config::RuleLevel::Error,
+        under_selection: false,
+    },
 ];
 
 /// The default-on entry for `id`, if it has one.
@@ -2288,6 +2293,37 @@ pub const RULE_TABLE: &[RuleDef] = &[
                 c.actors,
                 c.base_authority,
                 &opts,
+            )
+        },
+    },
+    RuleDef {
+        id: RULE_DIFF_PIN_CHANGED_UNATTESTED,
+        description: "On a `--base` run, a changed record whose `@sha256` pin for a locator (in `Realized-by` or a Done-means item evidence clause) differs from the merge base's copy is reported unless the head's revision log gained a row the tooling writes for that change: a re-baseline row (`urzua fix --rebaseline --apply`) naming the locator with the base's old hash and the head's new hash, a merge row (`urzua fix --conflicts --apply`) naming it with the base's hash as one side and the head's as the merged hash, or a renewal row (`urzua reverify --apply`) listing it at the head's hash. The rows are read by the parsers that sit beside their writers, and the hashes must equal the base's and the head's exactly (the 12-character prefix the rows carry), so a row is not reused for another change. A row typed by hand in that shape passes: that is the same trust as a reason typed into the command, and the pull request shows it. A pin removed from a locator the record still lists is reported (un-pinning weakens evidence). A pin added to a locator that had none, a locator added with a pin, a locator removed, a scope change (a different locator) and a record new in the diff are not reported: a first pin is judged by `embodiment.pin-stale` as before. The message names the locator, the base and head hashes, and the re-pin command that writes the row once the base's pin is back. On by default at `error` for every configuration; a repository sets another level, or `off`, under `rules:`, and `off` is announced by a warning notice on every run. Judges the changed set, so it reports `not-applicable` on a run with no `--base`. The population counts records.",
+        scope: Scope::Diff,
+        anchor: Anchor::Record,
+        judges: Judges::ChangedSet,
+        needs_identity_index: false,
+        requires_relation_pairs: false,
+        requires_acyclic_pair: false,
+        requires_override_log: false,
+        requires_authority: false,
+        reads_declaration: None,
+        header_none: HeaderNone::Exempt("judges only the records a --base run changed, against their merge-base copy"),
+        options: &[],
+        population: PopulationUnit::Record,
+        actions: &[
+            VariantAction::new("pin-changed-unattested", ActionDecl::Exempt("putting the merge base's pin back is an edit inside the evidence clause that no action kind addresses; the message names the old hash and the re-pin command that writes the row")),
+            VariantAction::new("pin-removed", ActionDecl::Exempt("restoring a removed pin is an edit inside the evidence clause that no action kind addresses; the message names the hash it held")),
+        ],
+        phase: Phase::Main,
+        companion: None,
+        run: |c| {
+            diff_pin_changed_unattested(
+                c.records,
+                c.config,
+                c.full_text,
+                c.base_text,
+                c.changed_paths,
             )
         },
     },

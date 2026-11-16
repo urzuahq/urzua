@@ -147,7 +147,9 @@ fn load_base_text(
     let bump = enabled_setting(config, rules::RULE_REVISION_LOG_VERSION_BUMP_REQUIRED).is_some();
     let renewal =
         enabled_setting(config, rules::RULE_EMBODIMENT_CLAIM_RENEWAL_UNATTESTED).is_some();
-    if !bump && !renewal {
+    let pins =
+        rules::effective_level(config, rules::RULE_DIFF_PIN_CHANGED_UNATTESTED) != RuleLevel::Off;
+    if !bump && !renewal && !pins {
         return Ok(out);
     }
     let expiry: rules::ClaimExpiredOpts = config.rule_opts(rules::RULE_EMBODIMENT_CLAIM_EXPIRED);
@@ -162,7 +164,8 @@ fn load_base_text(
                 .periods
                 .iter()
                 .any(|p| p.record_type == record.record_type);
-        if !(wanted_by_bump || wanted_by_renewal) || !changes.changed.contains(&record.path) {
+        if !(wanted_by_bump || wanted_by_renewal || pins) || !changes.changed.contains(&record.path)
+        {
             continue;
         }
         // A path added since the merge base (a rename's new name too) has no
@@ -687,6 +690,7 @@ fn session_notices(
         selection,
     ));
     notices.extend(symlink_refusal_off_notice(&session.config));
+    notices.extend(pin_attestation_off_notice(&session.config));
     notices.extend(super::fix_conflicts::unmerged_records_notice(
         &session.repo_root,
         &session.config,
@@ -704,6 +708,20 @@ fn symlink_refusal_off_notice(config: &Config) -> Option<Notice> {
         message: format!(
             "{id} is off: a record file that is a symlink is read through the link, \
              so its content can live at a path no gate on a record directory sees"
+        ),
+        detail: None,
+    })
+}
+
+/// A configuration that turns the pin attestation rule off is told so on every
+/// run: a pin can then be changed by hand with no row and no reason (SPEC-8).
+fn pin_attestation_off_notice(config: &Config) -> Option<Notice> {
+    let id = rules::RULE_DIFF_PIN_CHANGED_UNATTESTED;
+    (rules::effective_level(config, id) == RuleLevel::Off).then(|| Notice {
+        severity: NoticeSeverity::Warning,
+        subject: id.to_string(),
+        message: format!(
+            "{id} is off: a pull request can change an evidence pin by hand, with no revision-log row and no reason"
         ),
         detail: None,
     })

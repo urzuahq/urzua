@@ -273,3 +273,25 @@ fn a_multi_line_link_list_index_with_no_id_token_checks_and_regenerates() {
     let (_, fresh) = check(&dir);
     assert!(findings(&fresh).is_empty(), "{fresh}");
 }
+
+#[test]
+fn an_index_under_a_path_gate_is_not_written() {
+    let dir = repo("gated", INDEXES);
+    commit_all(&dir);
+    common::gate_paths(&dir, &["docs/adr/README.md"]);
+    let out = common::urzua()
+        .args(["index", "--apply"])
+        .current_dir(&dir)
+        .output()
+        .unwrap();
+    let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(v["indexes"][0]["outcome"], "failed", "{v}");
+    assert!(
+        v["indexes"][0]["error"]
+            .as_str()
+            .unwrap()
+            .contains("path gate"),
+        "{v}"
+    );
+    assert!(!dir.join("docs/adr/README.md").exists());
+}

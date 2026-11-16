@@ -553,3 +553,156 @@ fn a_declared_evidence_class_is_the_class_of_the_re_pin_row() {
     let row = a.lines().find(|l| l.contains("Re-baselined")).unwrap();
     assert!(row.ends_with("| **evidence** |"), "{row}");
 }
+
+#[test]
+fn a_record_under_a_path_gate_is_not_re_pinned_for_an_agent() {
+    let dir = fixture("gated");
+    common::gate_paths(&dir, &["docs/adr"]);
+    let before = std::fs::read_to_string(dir.join(A)).unwrap();
+    let out = run_urzua_with_gh(
+        &dir,
+        &[
+            "fix",
+            "--rebaseline",
+            "--apply",
+            "--ids",
+            A,
+            "--actor",
+            "agent",
+            "--reason",
+            "Read the diff; the claim holds.",
+        ],
+        Some("lead"),
+    );
+    let parsed = json(&out);
+    assert_eq!(parsed["status"], "partial-failure", "{parsed}");
+    assert!(
+        parsed
+            .to_string()
+            .contains("only group 'leads' (lead) may change it"),
+        "{parsed}"
+    );
+    assert_eq!(std::fs::read_to_string(dir.join(A)).unwrap(), before);
+}
+
+fn check_base(dir: &Path) -> serde_json::Value {
+    json(&run_urzua(dir, &["check", "--base", "main"]))
+}
+
+fn unattested(report: &serde_json::Value) -> Vec<serde_json::Value> {
+    report["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|f| f["rule"] == "diff.pin-changed-unattested")
+        .cloned()
+        .collect()
+}
+
+/// `fixture` on `main`, then a branch to change pins on.
+fn branched(name: &str) -> common::TempDir {
+    let dir = fixture(name);
+    git(&dir, &["branch", "-M", "main"]);
+    git(&dir, &["checkout", "-q", "-b", "work"]);
+    dir
+}
+
+#[test]
+fn a_hand_edited_pin_fails_check_base_and_a_re_pin_with_the_tool_does_not() {
+    let dir = branched("hand");
+    let text = std::fs::read_to_string(dir.join(A)).unwrap();
+    std::fs::write(dir.join(A), text.replace(&sha256(V1), &sha256(V2))).unwrap();
+    commit_all(&dir);
+    let report = check_base(&dir);
+    let found = unattested(&report);
+    assert_eq!(found.len(), 1, "{report}");
+    assert_eq!(found[0]["severity"], "error", "{report}");
+    let message = found[0]["message"].as_str().unwrap();
+    assert!(
+        message.contains("'src/a.rs'") && message.contains(&sha256(V1)[..12]),
+        "{message}"
+    );
+    assert!(message.contains("--actor agent"), "{message}");
+    assert!(unattested(&json(&run_urzua(&dir, &["check"]))).is_empty());
+
+    let dir = branched("tool");
+    let out = run_urzua(
+        &dir,
+        &[
+            "fix",
+            "--rebaseline",
+            "--apply",
+            "--ids",
+            A,
+            "--by",
+            "ana",
+            "--reason",
+            "Read the diff; the claim holds.",
+        ],
+    );
+    assert_eq!(json(&out)["status"], "applied");
+    commit_all(&dir);
+    assert!(unattested(&check_base(&dir)).is_empty());
+}
+
+#[test]
+fn a_row_for_another_change_does_not_account_for_a_hand_edited_pin() {
+    let dir = branched("reuse");
+    let text = std::fs::read_to_string(dir.join(B)).unwrap();
+    let row = format!(
+        "> | 2026-11-16 | Re-baselined (attested by ana, identity: asserted, actor: agent): re-pinned `src/a.rs` {} -> {}. Reason: r **Why:** w | **structural** |\n",
+        &sha256("other")[..12],
+        &sha256(V2)[..12]
+    );
+    std::fs::write(
+        dir.join(B),
+        format!("{}{row}", text.replace(&sha256(V1), &sha256(V2))),
+    )
+    .unwrap();
+    commit_all(&dir);
+    assert_eq!(unattested(&check_base(&dir)).len(), 1);
+}
+
+#[test]
+fn a_removed_pin_is_reported_and_a_pin_on_a_new_record_is_not() {
+    let dir = branched("removed");
+    let text = std::fs::read_to_string(dir.join(A)).unwrap();
+    std::fs::write(
+        dir.join(A),
+        text.replace(&format!("@sha256:{}", sha256(V1)), ""),
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("docs/adr/ADR-3-c.md"),
+        record(3).replace(&sha256(V1), &sha256(V2)),
+    )
+    .unwrap();
+    commit_all(&dir);
+    let found = unattested(&check_base(&dir));
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert_eq!(found[0]["file"], A);
+    assert!(found[0]["message"].as_str().unwrap().contains("removed"));
+}
+
+#[test]
+fn turning_the_rule_off_is_announced() {
+    let dir = fixture("off");
+    let cfg = std::fs::read_to_string(dir.join(".urzua/config.yaml")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        cfg.replace(
+            "rules: {embodiment.consistency: error}",
+            "rules: {embodiment.consistency: error, diff.pin-changed-unattested: off}",
+        ),
+    )
+    .unwrap();
+    let report = json(&run_urzua(&dir, &["check"]));
+    assert!(
+        report["notices"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|n| n["subject"] == "diff.pin-changed-unattested"),
+        "{report}"
+    );
+}

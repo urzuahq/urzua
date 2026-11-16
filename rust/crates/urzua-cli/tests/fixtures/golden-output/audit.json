@@ -177,6 +177,10 @@
         },
         "rule": "identity.record-symlink-escapes",
         "status": "ran"
+      },
+      {
+        "rule": "diff.pin-changed-unattested",
+        "status": "not-applicable"
       }
     ],
     "rules_selected": null,

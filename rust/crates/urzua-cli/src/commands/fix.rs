@@ -454,6 +454,13 @@ fn write_repair(
     if let Some(refusal) = authority_refusal(config, record_type, repair) {
         return Err(refusal);
     }
+    if let Some(refusal) = urzua_core::authority::path_gate_refusal(
+        config.authority.as_ref(),
+        &repair.record,
+        Some(attestation),
+    ) {
+        return Err(refusal);
+    }
     let log_id = record_type
         .map(|t| config.revision_log_id(t))
         .unwrap_or_default();
@@ -940,6 +947,13 @@ fn write_rebaseline(
     today: &str,
     attestation: &Attestation,
 ) -> Result<(), String> {
+    if let Some(refusal) = urzua_core::authority::path_gate_refusal(
+        args.config.authority.as_ref(),
+        &rb.record,
+        Some(attestation),
+    ) {
+        return Err(refusal);
+    }
     let full_path = args.repo_root.join(&rb.record);
     let fresh =
         urzua_io::read_to_string(&full_path).map_err(|e| format!("could not re-read: {e}"))?;

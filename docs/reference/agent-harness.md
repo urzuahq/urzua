@@ -87,6 +87,12 @@ it is superseded by A. The editor hook judges one file at a time, so neither hal
   separate step, and gated where your `authority` table names it.
 - `refuse`: the edit is refused as it was before this key existed, and the refusal names the same command.
 
+The commands that write records on someone's behalf honour path gates as the hook does. `urzua fix --apply`,
+`fix --rebaseline --apply`, `fix --conflicts --apply` and `reverify --apply` write a path-gated record only for
+`--actor human` under a `gh`-verified login in the gate's group, and refuse an agent; `waive --apply`, `index
+--apply`, `migrate ids --apply`, `migrate filenames --apply` and `new` take no actor and refuse under a path gate.
+Each refusal names the gate's group and its logins. A repository with no path gate is unaffected.
+
 Any other new error in the same edit still refuses, and the gates are unchanged: an edit that writes the second
 half and moves the record to a gated status is still refused for the status. A pair left unmatched is still a
 `urzua check` finding, so the post-command hook reports it and pre-commit and CI block it. The default `allow`

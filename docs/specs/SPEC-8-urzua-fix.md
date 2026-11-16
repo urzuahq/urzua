@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5Q0XVK27P5T8FN72BN
-Version: '0.57'
+Version: '0.58'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -529,6 +529,28 @@ declared and is `not-run` otherwise.
 - The exit codes are `fix`'s: 0 for a review or an applied batch, 1 for a refused or failed record,
   2 for `not-run`.
 
+## Path gates bind every command that writes for someone (`MILE-289`)
+
+A path gate in the `authority` table (`gates: [{paths, by}]`) names who may change a path: the group `by`. The editor
+hook refuses an agent's edit there; the commands that write records on someone's behalf now refuse the same write, through
+one function, `authority::path_gate_refusal`, before anything is written (decided by the builder on 2026-11-16, pending
+maintainer review):
+
+- **`fix --apply`** (every repair), **`fix --rebaseline --apply`**, **`fix --conflicts --apply`** and
+  **`reverify --apply`** take an attestation. A record a path gate covers is written only when the run is `--actor human`
+  and the `gh`-verified login (the identity itself, or the login verified beside an asserted name) is in the gate's group:
+  the same identity and actor attestation the revision row records. Otherwise the record is failed (for `--conflicts`,
+  `refused`) with a message naming the gate, its group and its logins, and saying that one of them runs the command with
+  `--actor human` under a `gh`-verified identity. An agent (`--actor agent`) is always refused, whoever's token it holds.
+- **`waive --apply`**, **`index --apply`**, **`migrate ids --apply`**, **`migrate filenames --apply`** and **`new`** take
+  no actor, so they cannot say who runs them: under a path gate they refuse, naming the group, and the change is made by
+  hand by one of its members. `migrate filenames` checks every file it would rewrite or rename first and writes nothing
+  when any is covered, so a migration never lands half done. `migrate config` takes no `--apply` and is unchanged.
+
+A repository with no path gate behaves exactly as before. The `--actor` value is the caller's claim, as everywhere else
+(`ADR-89`): the refusal stops an agent that says what it is, and CI's `diff.decider-required` judges the pull request
+that carries the change.
+
 ## The evaluation date (`--as-of`)
 
 `fix` and `reverify` reports carry a top-level `as_of` (`{"date", "source"}`, `SPEC-1`). In detect mode the
@@ -653,3 +675,4 @@ asserted by test, not assumed by convention.
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/fix.rs` 7ea3d709cad8 -> 82fdfdfb9176. Reason: fix.rs only gains rejected_values and waiver_fields in a test fixture's RecordTypeConfig literal. The claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Pin recomputed on merge (attested by beauwilliams, identity: gh-verified, actor: agent): both merged sides re-pinned, `rust/crates/urzua-core/src/fix.rs` 6b93e753f499 and 82fdfdfb9176 -> cf5aee142c59; the new hash is the merged file's, which is git's automatic merge of the two re-pinned commits. No person wrote a reason for the merged state. **Why:** `urzua fix --conflicts` resolved a conflict that lay only in re-pin lines; a reviewer of the pull request should confirm the merged pin. | **structural** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/fix.rs` cf5aee142c59 -> fcc0a952e83d. Reason: fix.rs: a record of a header_shape none type is counted with its type's header_out_of_scope, still out of scope; re-baselining logic unchanged **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-16 | Bumped to `0.58`. Adds "Path gates bind every command that writes for someone": `fix --apply`, `fix --rebaseline --apply`, `fix --conflicts --apply` and `reverify --apply` write a path-gated record only for `--actor human` under a `gh`-verified login in the gate's group; `waive`, `index`, `migrate ids`, `migrate filenames` and `new` refuse under a path gate; the refusal names who can make the change. A re-pin row is what `diff.pin-changed-unattested` (`SPEC-2`) reads. Decided by the builder on 2026-11-16, pending maintainer review. **Why:** `MILE-289` -- `fix --apply --actor agent` rewrote a path-gated record the edit hook would have refused. | **substantive** |

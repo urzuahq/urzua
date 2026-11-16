@@ -397,6 +397,17 @@ pub const MERGE_ROW_PREFIX: &str = "Pin recomputed on merge (attested by ";
 
 /// The locators a merge row names as recomputed, or `None` when `row` is not one.
 pub fn merge_row_locators(row: &str) -> Option<Vec<String>> {
+    Some(
+        merge_row_pins(row)?
+            .into_iter()
+            .map(|p| p.locator)
+            .collect(),
+    )
+}
+
+/// The re-pins a merge row names, each `` `locator` a and b -> merged ``, or
+/// `None` when `row` is not one.
+pub fn merge_row_pins(row: &str) -> Option<Vec<crate::fix::RowPin>> {
     let at = row.find(MERGE_ROW_PREFIX)?;
     let rest = &row[at..];
     let list = rest
@@ -407,7 +418,18 @@ pub fn merge_row_locators(row: &str) -> Option<Vec<String>> {
     Some(
         list.split(", `")
             .filter_map(|item| item.trim_start_matches('`').split_once('`'))
-            .map(|(loc, _)| loc.to_string())
+            .map(|(loc, tail)| {
+                let (sides, to) = tail.split_once(" -> ").unwrap_or((tail, ""));
+                crate::fix::RowPin {
+                    locator: loc.to_string(),
+                    from: sides
+                        .split(" and ")
+                        .map(|s| s.trim().to_string())
+                        .filter(|s| !s.is_empty())
+                        .collect(),
+                    to: to.trim().to_string(),
+                }
+            })
             .collect(),
     )
 }

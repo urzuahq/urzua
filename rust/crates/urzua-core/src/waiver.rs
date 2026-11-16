@@ -97,6 +97,9 @@ impl SuppressionType {
     /// the one judgment `load_suppressions` makes of an `effective_requires`
     /// field, so a command that writes a value can prove how `check` will read it.
     pub fn field_state(&self, field: &str, value: Option<&str>) -> FieldState {
+        if value.is_some_and(crate::field_state::is_blank_value) {
+            return FieldState::Blank;
+        }
         let mut state = classify_against_template(
             value,
             self.template.get(field).map(String::as_str),
@@ -773,6 +776,31 @@ scope: docs/adr/ADR-1-x.md
             apply_suppressions(&mut findings, &loaded, "2026-11-05");
             assert!(findings[0].waived.is_none(), "{case}");
         }
+    }
+
+    #[test]
+    fn a_reason_with_no_letter_or_digit_does_not_suppress_observed_failing() {
+        let kind = requiring_reason();
+        for reason in [
+            "'\u{2014}'",
+            "'-'",
+            "'--'",
+            "'\u{2026}'",
+            "'\u{1F44D}'",
+            "'   '",
+        ] {
+            let loaded = load_suppressions(&[reason_record(Some(reason))], &kind);
+            assert_eq!(loaded[0].unmet_states, vec![FieldState::Blank], "{reason}");
+            assert!(!loaded[0].is_effective(), "{reason}");
+            let mut findings = vec![finding("field.quality", "docs/adr/0001-x.md")];
+            apply_suppressions(&mut findings, &loaded, "2026-11-05");
+            assert!(findings[0].waived.is_none(), "{reason}");
+        }
+        let loaded = load_suppressions(&[reason_record(Some("n/a"))], &kind);
+        assert!(
+            loaded[0].is_effective(),
+            "n/a has letters, so it is not blank"
+        );
     }
 
     /// A Reason that is entirely a default placeholder word is not a real

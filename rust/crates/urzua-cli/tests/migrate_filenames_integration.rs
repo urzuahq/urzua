@@ -421,3 +421,18 @@ fn the_report_states_how_many_records_were_examined_even_when_every_one_is_skipp
     assert_eq!(report["population"]["examined"], 1, "{report}");
     assert!(report["renames"].as_array().unwrap().is_empty());
 }
+
+#[test]
+fn a_rename_under_a_path_gate_writes_nothing() {
+    let dir = fixture("gated", Some(PATTERN));
+    bare_corpus(&dir);
+    common::gate_paths(&dir, &["docs/adr/0001-first-thing.md"]);
+    let (_, v) = run(&dir, &["migrate", "filenames", "--apply"]);
+    assert_eq!(v["status"], "partial-failure", "{v}");
+    assert!(v["results"].to_string().contains("path gate"), "{v}");
+    assert!(dir.join("docs/adr/0001-first-thing.md").exists(), "{v}");
+    assert!(
+        !dir.join("docs/adr/ADR-0001-first-thing.md").exists(),
+        "{v}"
+    );
+}

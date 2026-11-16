@@ -984,3 +984,21 @@ fn a_renewal_reason_below_the_configured_minimum_is_refused() {
     let out = run_urzua(&dir, &apply_args(&p1, "ok"));
     assert_eq!(json(&out)["status"], "applied", "{out:?}");
 }
+
+#[test]
+fn a_record_under_a_path_gate_is_not_renewed() {
+    let dir = fixture("gated", &config(RULE, ""), 1);
+    common::gate_paths(&dir, &["docs/milestones"]);
+    let before = read(&dir, &path(1));
+    let parsed = json(&run_urzua(
+        &dir,
+        &apply_args(&path(1), "Read the cited code and tests: checked"),
+    ));
+    assert_eq!(parsed["status"], "partial-failure", "{parsed}");
+    let error = parsed["failed"][0]["error"].as_str().unwrap();
+    assert!(
+        error.contains("path gate") && error.contains("'leads' (lead)"),
+        "{error}"
+    );
+    assert_eq!(read(&dir, &path(1)), before);
+}

@@ -100,8 +100,8 @@ pub fn parse_override_log(text: &str) -> (Vec<OverrideEntry>, Vec<MalformedRow>)
 
 /// What a `Reviewed-by` cell says, by the field-state vocabulary `field.quality`
 /// and `field.pending` use: blank, a placeholder (the compiled-in tokens, or a
-/// cell of nothing but dashes, which is a "not applicable" mark and names no
-/// one) and a pending value are all "no one has reviewed this". A pending value
+/// cell with no letter or digit, `field_state::is_blank_value`, is blank and
+/// names no one) and a pending value are all "no one has reviewed this". A pending value
 /// is judged by the pending vocabulary the repository's record types declare
 /// (`StatusDecl::is_pending_value`), and by the compiled-in match when none
 /// declares one. Only a cell that is `Present` names a reviewer.
@@ -112,12 +112,8 @@ pub fn parse_override_log(text: &str) -> (Vec<OverrideEntry>, Vec<MalformedRow>)
 fn reviewer_state(cell: &str, config: &Config) -> crate::FieldState {
     use crate::field_state::classify_with;
     let value = cell.trim();
-    if !value.is_empty()
-        && value
-            .chars()
-            .all(|c| matches!(c, '-' | '\u{2013}' | '\u{2014}'))
-    {
-        return crate::FieldState::Placeholder;
+    if crate::field_state::is_blank_value(value) {
+        return crate::FieldState::Blank;
     }
     if let Some(floor) = crate::field_state::whole_value_default_state(value) {
         return floor;
@@ -275,7 +271,18 @@ mod tests {
     fn a_blank_placeholder_or_pending_reviewer_is_not_a_review() {
         for config in [plain(), declaring_pending()] {
             for cell in [
-                "", "   ", "-", "--", "\u{2014}", "TBD", "tbd", "todo", "name", "Pending",
+                "",
+                "   ",
+                "-",
+                "--",
+                "\u{2014}",
+                "\u{2026}",
+                "\u{1F44D}",
+                "TBD",
+                "tbd",
+                "todo",
+                "name",
+                "Pending",
             ] {
                 let (_, findings) = override_unreviewed(Some(&row(cell)), &config);
                 assert_eq!(findings.len(), 1, "{cell:?}: {findings:?}");

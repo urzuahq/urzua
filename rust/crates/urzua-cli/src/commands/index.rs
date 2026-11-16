@@ -24,6 +24,7 @@ pub fn run(config_path: Option<PathBuf>, apply: bool) -> ExitCode {
         Err(e) => return emit(&CouldNotRun::from(e)),
     };
     let config = &workspace.config;
+    let authority = config.authority.clone();
     let specs: Vec<urzua_core::config::IndexSpec> = config
         .enabled_rule_opts::<urzua_core::rules::IndexOpts>(urzua_core::rules::RULE_INDEX_FRESHNESS)
         .map_or_else(Vec::new, |o| o.indexes);
@@ -52,7 +53,16 @@ pub fn run(config_path: Option<PathBuf>, apply: bool) -> ExitCode {
 
     let results: Vec<IndexResult> = artifacts
         .iter()
-        .map(|artifact| regenerate_artifact(artifact, &records, &full_text, &repo_root, apply))
+        .map(|artifact| {
+            regenerate_artifact(
+                artifact,
+                &records,
+                &full_text,
+                &repo_root,
+                apply,
+                authority.as_ref(),
+            )
+        })
         .collect();
 
     let failed = results.iter().any(|r| r.outcome == IndexOutcome::Failed);
@@ -98,6 +108,7 @@ fn regenerate_artifact(
     full_text: &HashMap<PathBuf, String>,
     repo_root: &Path,
     apply: bool,
+    authority: Option<&urzua_core::authority::AuthorityDecl>,
 ) -> IndexResult {
     let spec = &artifact.spec;
     let entries = render_index_entries(spec, records, full_text)
@@ -122,6 +133,11 @@ fn regenerate_artifact(
         (Some(_), false) => IndexOutcome::Stale,
         (None, false) => IndexOutcome::Missing,
         (current, true) => {
+            if let Some(refusal) =
+                urzua_core::authority::path_gate_refusal(authority, Path::new(&spec.path), None)
+            {
+                return fail(refusal);
+            }
             let full = repo_root.join(&spec.path);
             if let Err(e) = urzua_io::confine_to_root(repo_root, &full) {
                 return fail(e);

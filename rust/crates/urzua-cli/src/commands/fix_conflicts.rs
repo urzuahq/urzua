@@ -250,6 +250,15 @@ impl Ctx<'_> {
             Ok(r) => r,
             Err(e) => return Ok(refused(e)),
         };
+        if let Some(refusal) = write.and_then(|w| {
+            urzua_core::authority::path_gate_refusal(
+                self.config.authority.as_ref(),
+                path,
+                Some(&w.attestation),
+            )
+        }) {
+            return Ok(refused(refusal));
+        }
         if write.is_some() {
             urzua_io::write_atomic_in(
                 self.repo_root,

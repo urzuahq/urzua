@@ -270,6 +270,11 @@ fn backfill_stable_id(
         }
         Err(e) => return failed(format!("could not re-read: {e}")),
     }
+    if let Some(refusal) =
+        urzua_core::authority::path_gate_refusal(config.authority.as_ref(), &r.path, None)
+    {
+        return failed(refusal);
+    }
     match urzua_io::write_atomic_in(repo_root, &full_path, &new_content) {
         Ok(()) => Some(MigrateIdsResult {
             record: r.path.clone(),

@@ -388,3 +388,21 @@ fn with_an_evidence_class_a_resolve_writes_it_and_needs_no_bump() {
     let (code, v) = urzua(&dir, &["check", "--base", "main"]);
     assert_eq!(code, Some(0), "{v}");
 }
+
+#[test]
+fn a_record_under_a_path_gate_is_refused_and_left_unresolved() {
+    let config = format!(
+        "{CONFIG}authority:\n  deciders:\n    leads: {{logins: [lead]}}\n  gates:\n    - {{paths: [{REC}], by: leads}}\n"
+    );
+    let dir = fixture_with("gated", &config, ("2", "3", "structural"), (None, None));
+    assert!(!git(&dir, &["merge", "-q", "main"]), "the merge conflicts");
+    let before = std::fs::read_to_string(dir.join(REC)).unwrap();
+    let (_, v) = apply(&dir);
+    assert_eq!(v["conflicts"][0]["outcome"], "refused", "{v}");
+    let reason = v["conflicts"][0]["reason"].as_str().unwrap();
+    assert!(
+        reason.contains("path gate") && reason.contains("'leads' (lead)"),
+        "{reason}"
+    );
+    assert_eq!(std::fs::read_to_string(dir.join(REC)).unwrap(), before);
+}

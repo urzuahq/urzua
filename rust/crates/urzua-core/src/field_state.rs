@@ -24,6 +24,16 @@ pub const PLACEHOLDER_TOKENS: &[&str] = &[
     "(session author)",
 ];
 
+/// Whether `value` says nothing: it holds no letter or digit in any script.
+/// Whitespace, `-`, `--`, an em dash, an ellipsis and an emoji-only value are
+/// blank; `n/a` is not (it has letters). This is the one definition a required
+/// suppression field and an override log's `Reviewed-by` cell share; the
+/// general [`classify`] still reads a lone em dash as a deliberate "not
+/// applicable" value in other header fields.
+pub fn is_blank_value(value: &str) -> bool {
+    !value.chars().any(char::is_alphanumeric)
+}
+
 /// Classify a header field's value. `None` (the field is absent entirely) is
 /// [`FieldState::Blank`], same as an empty string -- absence and emptiness
 /// are the same defect from a reader's point of view.
@@ -173,6 +183,26 @@ fn is_placeholder_reference(lower: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_value_with_no_letter_or_digit_is_blank() {
+        for v in [
+            "",
+            "  ",
+            "\u{2014}",
+            "-",
+            "--",
+            "\u{2026}",
+            "\u{1F44D}",
+            "\u{1F44D}\u{1F3FD}",
+            " - ",
+        ] {
+            assert!(super::is_blank_value(v), "{v:?}");
+        }
+        for v in ["n/a", "x", "7", "\u{00E9}", "\u{4E2D}", "- see ADR"] {
+            assert!(!super::is_blank_value(v), "{v:?}");
+        }
+    }
+
     use super::*;
 
     #[test]

@@ -476,6 +476,14 @@ impl AuthorityDecl {
     /// Whether a path gate covers `rel`, compared with Unicode case folding as
     /// the editor hook compares it.
     pub fn protects_path(&self, rel: &std::path::Path) -> bool {
+        self.path_gates_over(rel).next().is_some()
+    }
+
+    /// The path gates that cover `rel`.
+    pub fn path_gates_over<'a>(
+        &'a self,
+        rel: &std::path::Path,
+    ) -> impl Iterator<Item = &'a Gate> + 'a {
         let fold = |t: &str| -> String {
             t.chars()
                 .flat_map(char::to_uppercase)
@@ -483,11 +491,14 @@ impl AuthorityDecl {
                 .collect()
         };
         let folded = fold(&rel.to_string_lossy());
-        self.gates.iter().filter(|g| g.is_path_gate()).any(|g| {
-            g.paths
-                .iter()
-                .any(|e| crate::rules::path_matches_entry(std::path::Path::new(&folded), &fold(e)))
-        })
+        self.gates
+            .iter()
+            .filter(|g| g.is_path_gate())
+            .filter(move |g| {
+                g.paths.iter().any(|e| {
+                    crate::rules::path_matches_entry(std::path::Path::new(&folded), &fold(e))
+                })
+            })
     }
 
     /// A table with no group and no gate: what the base revision holds when it
@@ -706,6 +717,45 @@ pub struct Actors {
     pub approvers: Vec<String>,
 }
 
+/// The one check every command that writes a file on someone's behalf makes
+/// before writing `rel` (`ADR-89` amendment of 2026-11-16): `None` when no path
+/// gate covers it, or when `attestation` is a person (`actor: human`) whose
+/// `gh`-verified login is in every covering gate's group. Otherwise the refusal,
+/// naming the gate's group and its logins. A command that takes no attestation
+/// passes `None` and is refused under a gate: it cannot say who runs it.
+pub fn path_gate_refusal(
+    authority: Option<&AuthorityDecl>,
+    rel: &std::path::Path,
+    attestation: Option<&crate::fix::Attestation>,
+) -> Option<String> {
+    let authority = authority?;
+    let login = attestation
+        .filter(|a| a.actor == crate::fix::ActorKind::Human)
+        .and_then(|a| match (&a.verified_login, a.source) {
+            (Some(l), _) => Some(l.as_str()),
+            (None, crate::fix::IdentitySource::GhVerified) => Some(a.by.as_str()),
+            _ => None,
+        });
+    let gate = authority
+        .path_gates_over(rel)
+        .find(|g| !login.is_some_and(|l| authority.in_group(g, l)))?;
+    let who = authority
+        .group(gate)
+        .map(|g| g.logins.join(", "))
+        .unwrap_or_default();
+    let how = if attestation.is_some() {
+        "one of them runs it with --actor human under a gh-verified identity"
+    } else {
+        "this command takes no attestation, so one of them makes the change by hand"
+    };
+    Some(format!(
+        "refused: '{}' is under the path gate {}: only group '{}' ({who}) may change it, and {how}",
+        rel.display(),
+        gate.describe(),
+        gate.by
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -716,6 +766,37 @@ mod tests {
     }
 
     const OK: &str = "deciders:\n  maintainers: {logins: [Alice, bob]}\ngates:\n  - {type: adr, to: [Accepted], by: maintainers}\n  - {paths: [.agent-config], by: maintainers}\n";
+
+    #[test]
+    fn a_path_gate_lets_through_only_a_verified_person_in_its_group() {
+        use crate::fix::{ActorKind, Attestation, IdentitySource};
+        use std::path::Path;
+        let a = parse(OK).unwrap();
+        let gated = Path::new(".agent-config/x.md");
+        let open = Path::new("docs/adr/ADR-1-a.md");
+        let att = |by: &str, src, actor| Attestation::new(by, src, actor);
+        assert!(path_gate_refusal(Some(&a), open, None).is_none());
+        assert!(path_gate_refusal(None, gated, None).is_none());
+        let none = path_gate_refusal(Some(&a), gated, None).unwrap();
+        assert!(
+            none.contains("'maintainers' (Alice, bob)") && none.contains("by hand"),
+            "{none}"
+        );
+        for refused in [
+            att("alice", IdentitySource::GhVerified, ActorKind::Agent),
+            att("alice", IdentitySource::Asserted, ActorKind::Human),
+            att("alice", IdentitySource::GitConfig, ActorKind::Human),
+            att("carol", IdentitySource::GhVerified, ActorKind::Human),
+        ] {
+            let why = path_gate_refusal(Some(&a), gated, Some(&refused)).unwrap();
+            assert!(why.contains("--actor human"), "{why}");
+        }
+        let person = att("alice", IdentitySource::GhVerified, ActorKind::Human);
+        assert!(path_gate_refusal(Some(&a), gated, Some(&person)).is_none());
+        let mut asserted = att("Alice A.", IdentitySource::Asserted, ActorKind::Human);
+        asserted.verified_login = Some("bob".into());
+        assert!(path_gate_refusal(Some(&a), gated, Some(&asserted)).is_none());
+    }
 
     #[test]
     fn a_table_reads_back_with_the_default_evidence() {

@@ -914,6 +914,47 @@ pub(crate) fn replace_exact_pin(line: &str, old: &str, new: &str) -> Option<Stri
 /// moves, then one revision-log row names who attested and why. Pure. Fails
 /// when a pin is no longer on the line (a concurrent edit since detect) or the
 /// record has no revision log to record the attestation in.
+/// What starts the row `apply_rebaseline` writes; `rebaseline_row_pins` parses it.
+pub const REBASELINE_ROW_PREFIX: &str = "Re-baselined (attested by ";
+
+/// One re-pin a tool-written row names: the locator, the hash text it moved
+/// from (each side, for a merge row) and the hash text it moved to, as written
+/// (the tool's 12-character prefix).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RowPin {
+    pub locator: String,
+    pub from: Vec<String>,
+    pub to: String,
+}
+
+/// The re-pins a re-baseline row names, or `None` when `row` is not one:
+/// the list between `re-pinned ` and `. Reason: `, each item `` `locator`
+/// [(lines a-b)] old -> new ``.
+pub fn rebaseline_row_pins(row: &str) -> Option<Vec<RowPin>> {
+    let rest = &row[row.find(REBASELINE_ROW_PREFIX)?..];
+    let list = rest
+        .split_once("): re-pinned ")?
+        .1
+        .split_once(". Reason: ")?
+        .0;
+    list.split(", `")
+        .map(|item| {
+            let (locator, tail) = item.trim_start_matches('`').split_once('`')?;
+            let tail = tail.trim();
+            let tail = match tail.strip_prefix("(lines ") {
+                Some(t) => t.split_once(')')?.1.trim(),
+                None => tail,
+            };
+            let (from, to) = tail.split_once(" -> ")?;
+            Some(RowPin {
+                locator: locator.to_string(),
+                from: vec![from.trim().to_string()],
+                to: to.trim().to_string(),
+            })
+        })
+        .collect()
+}
+
 pub fn apply_rebaseline(
     content: &str,
     rebaseline: &Rebaseline,
@@ -969,7 +1010,7 @@ pub fn apply_rebaseline(
         .collect::<Vec<_>>()
         .join(", ");
     let narrative = format!(
-        "Re-baselined (attested by {}): re-pinned {moved}. Reason: {reason} **Why:** {}",
+        "{REBASELINE_ROW_PREFIX}{}): re-pinned {moved}. Reason: {reason} **Why:** {}",
         attestation.label(),
         attestation.rebaseline_why()
     );

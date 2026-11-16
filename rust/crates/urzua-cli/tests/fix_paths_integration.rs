@@ -183,3 +183,67 @@ fn force_by_and_actor_without_apply_are_usage_errors_observed_failing() {
     let a = std::fs::read_to_string(dir.join("docs/adr/ADR-1-a.md")).unwrap();
     assert!(a.contains("Not started"), "{a}");
 }
+
+#[test]
+fn a_record_under_a_path_gate_is_refused_to_an_agent_and_written_for_a_person_in_its_group() {
+    let dir = fixture("gated");
+    common::gate_paths(&dir, &["docs/adr/ADR-1-a.md"]);
+    let before = std::fs::read_to_string(dir.join("docs/adr/ADR-1-a.md")).unwrap();
+    let run = |login: &str, actor: &str| {
+        let gh = common::gh_login_dir(login);
+        let mut cmd = common::urzua_as(&gh);
+        cmd.current_dir(&dir);
+        let out = cmd
+            .args([
+                "fix",
+                "--apply",
+                "--ids",
+                "docs/adr/ADR-1-a.md",
+                "--actor",
+                actor,
+            ])
+            .output()
+            .unwrap();
+        json(&out)
+    };
+    for (login, actor) in [("lead", "agent"), ("other", "human")] {
+        let v = run(login, actor);
+        assert_eq!(v["status"], "partial-failure", "{v}");
+        let error = v["failed"][0]["error"].as_str().unwrap();
+        assert!(
+            error.contains("path gate")
+                && error.contains("'leads' (lead)")
+                && error.contains("--actor human"),
+            "{error}"
+        );
+        assert_eq!(
+            std::fs::read_to_string(dir.join("docs/adr/ADR-1-a.md")).unwrap(),
+            before
+        );
+    }
+    let v = run("lead", "human");
+    assert_eq!(v["status"], "applied", "{v}");
+    assert_ne!(
+        std::fs::read_to_string(dir.join("docs/adr/ADR-1-a.md")).unwrap(),
+        before
+    );
+}
+
+#[test]
+fn without_a_path_gate_an_agent_fix_applies_as_before() {
+    let dir = fixture("ungated");
+    let v = json(&run_urzua(
+        &dir,
+        &[
+            "fix",
+            "--apply",
+            "--ids",
+            "docs/adr/ADR-1-a.md",
+            "--by",
+            "t",
+            "--actor",
+            "agent",
+        ],
+    ));
+    assert_eq!(v["status"], "applied", "{v}");
+}

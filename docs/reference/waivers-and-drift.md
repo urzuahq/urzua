@@ -71,7 +71,8 @@ Notes that save time:
   the rule and scope it claimed.
 - **`effective_requires: [Reason, Expires]`** makes a waiver take effect only once every listed field
   holds a real value: not blank, not a placeholder such as `TBD`, and not a value the type declares
-  `pending`. With `Expires` listed, a waiver with no date takes no effect, which is what you want
+  `pending`. A value with no letter or digit in any script is blank: `—`, `-`, `--`, `…` or an emoji
+  alone is not a reason (`n/a` has letters, so it counts). With `Expires` listed, a waiver with no date takes no effect, which is what you want
   unless you declare `permanent`. `waive --from-report` refuses to run unless the type lists `Expires`
   here or declares `permanent`, because a draft given only a `Reason` would otherwise become a
   permanent waiver.
@@ -195,6 +196,10 @@ A record that states no `Embodiment`, such as a bug or a milestone that pins cod
 level or `off` under `rules:`) and whose suggested action is the re-pin below. When you upgrade to a
 build that has it, a repository whose pins went stale unseen shows those warnings at once; clear them
 with the re-pin below, or waive a record you have chosen to leave.
+
+Re-pin with the tool, never by editing the hash: on a pull request, `diff.pin-changed-unattested` (on by
+default at `error`) reports a pin that changed without the row the re-pin writes, naming the locator and the
+old and new hash.
 
 Read the diff of the changed file, decide whether the claim still holds, and if it does re-pin:
 

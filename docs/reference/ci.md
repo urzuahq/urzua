@@ -103,6 +103,13 @@ re-pin each record after reading the change (`urzua fix --rebaseline` lists them
 set the rule's level under `rules:` (`embodiment.pin-stale: info` reports without failing the job,
 `off` turns it off).
 
+**A pin changed by hand fails `check --base`:** the rule `diff.pin-changed-unattested` is on by default at
+`error`. When a pull request changes a record's pin and the record gained no row the re-pin tooling writes for
+that exact change (`urzua fix --rebaseline --apply`, `urzua reverify --apply`, `urzua fix --conflicts --apply`),
+the gate's `check --base` fails and names the locator and both hashes. Put the base's pin back and re-pin with
+the tool, which writes the row with who attested and why. A removed pin is reported the same way. Set another
+level, or `off`, under `rules:`; `off` adds a warning notice to every `check`.
+
 ```yaml
       - name: no stale evidence pins
         shell: bash -eo pipefail {0}
