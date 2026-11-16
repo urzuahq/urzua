@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5BCRKD027XA81J0Q8Q
-Version: '0.24'
+Version: '0.25'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-core/src/waiver.rs@sha256:2ac7aae607817d5c346a0e6a9d9c38254a71ccd3dd4a083324ba4819f285c53e, code:rust/crates/urzua-core/src/rules/waiver.rs@sha256:6d20296d8b4e2ae446b38d16359b9d9fc8dcaa7955aa894430467ba280c78705, test:rust/crates/urzua-cli/tests/waiver_stale_integration.rs@sha256:34de7eb7e0b26307bd3136ca9aaada2395f10aac03ea2f68885f8e0251cbe774
+Realized-by: code:rust/crates/urzua-core/src/waiver.rs@sha256:a6283261e0ee247dd7e1bd90020ca0240f09166d01f0645004767a1f96ed2fe9, code:rust/crates/urzua-core/src/rules/waiver.rs@sha256:6d20296d8b4e2ae446b38d16359b9d9fc8dcaa7955aa894430467ba280c78705, test:rust/crates/urzua-cli/tests/waiver_stale_integration.rs@sha256:34de7eb7e0b26307bd3136ca9aaada2395f10aac03ea2f68885f8e0251cbe774
 Author: beauwilliams
 Subject: 'The `waiver` record type -- time-boxed, scoped exceptions to a check finding.'
 Implements: ADR-11
@@ -195,3 +195,5 @@ record is edited later.
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/rules/waiver.rs` 6bd392b9a1d9 -> 6d20296d8b4e. Reason: Read the diff of each re-pinned file against main. rules/waiver.rs: a non-serialized `unread_markers` list on RuleExecution and its empty initialiser in this literal; nothing else changed. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Bumped to `0.23`. A pinned evidence file (`rules/waiver.rs`) was re-baselined in this change (one added struct-literal field); this spec's text is unchanged. **Why:** a revision-log entry that adds a structural change bumps `Version`. | **structural** |
 > | 2026-11-16 | Bumped to `0.24`. The 2026-11-14 narrowing paragraph no longer names this repository's own waiver for the milestone type's `WontDo` exemption: the waiver is retired because `MILE-219` is `WontDo`, so the exemption is exercised and the finding it excused stops. **Why:** the maintainer decided on 2026-11-16 that `MILE-219` will not be done ("we just always output JSON. Only agents use this software."); `waiver.matches-nothing` reports a waiver whose finding has stopped. | **substantive** |
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/waiver.rs` 2ac7aae60781 -> a6283261e0ee. Reason: waiver.rs adds rejected_values and waiver_fields to SuppressionType, keeping the built-in placeholder floor. The claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-16 | Bumped to `0.25`. Re-pinned the evidence `MILE-233` changed (the rule vocabulary read from configuration); what this spec states is unchanged. **Why:** a re-pinned versioned spec carries a version above main's. | **structural** |
