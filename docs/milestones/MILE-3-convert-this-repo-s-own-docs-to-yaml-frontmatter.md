@@ -5,7 +5,7 @@ Phase: '0'
 Track: header-format
 Implements: ADR-33
 Blocked-on: —
-Realized-by: code:.urzua/config.yaml@sha256:169fd605713992b1e68ae1bbc0899f84248449fea4d9f10c3094bd60acbd33b0, code:.github/workflows/checks.yml@sha256:e166badec9b1eac84bcd921aaf137fc7552a48d8a35b96a4c36fac4bd2b3cb84
+Realized-by: code:.urzua/config.yaml#record_types@sha256:eb1050f4107932cb5735fe652140f9bd14a215c8759500bc69d75409f95adb0b, code:.github/workflows/checks.yml@sha256:e166badec9b1eac84bcd921aaf137fc7552a48d8a35b96a4c36fac4bd2b3cb84
 ---
 # 3 — Convert this repo's own docs to yaml-frontmatter
 
@@ -21,7 +21,7 @@ The actual dogfooding step ADR-33 named as the real forcing function for this wo
 
 ## Done means
 
-- Every record type configured in this repository's `.urzua/config.yaml` declares `header_shape: yaml-frontmatter`. — evidence: code:.urzua/config.yaml@sha256:169fd605713992b1e68ae1bbc0899f84248449fea4d9f10c3094bd60acbd33b0
+- Every record type configured in this repository's `.urzua/config.yaml` declares `header_shape: yaml-frontmatter`. — evidence: code:.urzua/config.yaml#record_types@sha256:eb1050f4107932cb5735fe652140f9bd14a215c8759500bc69d75409f95adb0b
 - Every ADR, RFC, spec, milestone and bug record parses under it, and `urzua check` over this repository reports no unreadable header. — evidence: code:.github/workflows/checks.yml@sha256:e166badec9b1eac84bcd921aaf137fc7552a48d8a35b96a4c36fac4bd2b3cb84
 - The conversion was a one-time pass that shipped no tool, and nothing below the header changed. — waived: process-outcome -- a property of the one-time conversion of 2026-09-08, verified at the time by a before/after field-set comparison against every file (see the revision log); the scratch tool was never committed, so no file can evidence it now
 
@@ -55,3 +55,4 @@ The actual dogfooding step ADR-33 named as the real forcing function for this wo
 > | 2026-11-15 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` e544107a6abb -> 1690790d0bdc. Reason: config.yaml: adds harness.limits with hook_timeout_seconds: 120, the built-in value, under harness; no other key changed. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` 1690790d0bdc -> b3876c284bd2. Reason: Read the diff of each re-pinned file against main: config.yaml declares embodiment.pin-stale: warn with a two-line comment; no other key changed. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` b3876c284bd2 -> 169fd6057139. Reason: Read the diff of each re-pinned file against main. .urzua/config.yaml: `unread_markers: report` on embodiment.back-pointer-resolution; no other key changed. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-16 | Pinned (attested by beauwilliams, identity: gh-verified, actor: agent): 1 locators pinned, 0 file-level, 1 scoped. Evidence: .urzua/config.yaml#record_types@sha256:eb1050f41079 Reason: Narrowed to record_types: the claim is that every configured record type declares header_shape yaml-frontmatter, which lives only under record_types. **Why:** a claim is renewed only over pinned code and test evidence. | **structural** |

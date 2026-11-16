@@ -154,7 +154,7 @@ A run that could not run fails the job and is shown as NOT RUN; it is never a pa
 
 ## Adopt without a rewrite
 
-Install a release binary first ([`docs/reference/install.md`](docs/reference/install.md)); nothing needs compiling.
+Install a release binary first: [`docs/reference/install.md`](docs/reference/install.md) has a one-line install script that verifies the download, and the manual steps; nothing needs compiling.
 
 ```sh
 cd /path/to/your-repo
