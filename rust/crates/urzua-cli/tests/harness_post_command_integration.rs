@@ -631,3 +631,204 @@ fn without_the_engine_the_adapter_states_that_the_command_was_not_judged() {
         "{v}"
     );
 }
+
+// ------------------------------------------- MILE-278: once, and only its own
+
+const PROTECTED_CONFIG: &str = "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\nharness:\n  adapters: [claude-code]\n  guardrails:\n    protected-paths: {enabled: true}\n    post-command: {enabled: true}\nauthority:\n  deciders:\n    maintainers: {logins: [Alice]}\n  gates:\n    - {paths: [\"ops\"], by: maintainers}\n";
+
+fn protected_fixture(name: &str) -> common::TempDir {
+    let dir = fixture(name, PROTECTED_CONFIG, GOOD);
+    std::fs::create_dir_all(dir.join("ops")).unwrap();
+    std::fs::write(dir.join("ops/deploy.sh"), "one\n").unwrap();
+    git(&dir, &["add", "-A"]);
+    git(&dir, &["commit", "-q", "-m", "ops"]);
+    dir
+}
+
+fn protected(v: &serde_json::Value) -> usize {
+    v["protected_changes"].as_array().map_or(0, Vec::len)
+}
+
+#[test]
+fn a_command_that_edits_a_protected_path_is_reported_once_to_each_audience() {
+    let dir = protected_fixture("protected-once");
+    let v = post(&dir);
+    assert_eq!(v["verdict"], "allow", "a clean tree says nothing: {v}");
+    bash(&dir, "echo two > ops/deploy.sh");
+    let v = post(&dir);
+    assert_eq!(protected(&v), 1, "{v}");
+    let (person, agent) = (v["person"].as_str().unwrap(), v["agent"].as_str().unwrap());
+    assert!(person.contains("ops/deploy.sh"), "{v}");
+    assert!(!agent.is_empty() && agent != person, "{v}");
+    let v = post(&dir);
+    assert_eq!(protected(&v), 0, "not repeated: {v}");
+    assert_eq!(v["verdict"], "allow", "{v}");
+}
+
+#[test]
+fn a_pull_that_changes_a_protected_path_is_not_the_commands_and_is_not_repeated() {
+    let upstream = protected_fixture("pull-upstream");
+    let parent = common::TempDir::new("urzua-postcmd-pull");
+    let clone = parent.join("clone");
+    git(
+        &parent,
+        &[
+            "clone",
+            "-q",
+            upstream.to_str().unwrap(),
+            clone.to_str().unwrap(),
+        ],
+    );
+    git(&clone, &["config", "user.email", "t@example.com"]);
+    git(&clone, &["config", "user.name", "t"]);
+    std::fs::create_dir_all(clone.join(".urzua/cache")).unwrap();
+    assert_eq!(post(&clone)["verdict"], "allow");
+
+    std::fs::write(upstream.join("ops/deploy.sh"), "upstream\n").unwrap();
+    git(&upstream, &["commit", "-q", "-am", "upstream ops"]);
+    bash(&clone, "git pull -q --no-rebase");
+    let v = post(&clone);
+    assert_eq!(protected(&v), 0, "a pull is not the agent's edit: {v}");
+    assert_eq!(v["person"].as_str().unwrap_or(""), "", "{v}");
+    assert!(
+        v["adopted"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|p| p == "ops/deploy.sh"),
+        "{v}"
+    );
+    // A read-only command after it says nothing.
+    bash(&clone, "ls >/dev/null");
+    let v = post(&clone);
+    assert_eq!(v["verdict"], "allow", "{v}");
+    assert_eq!(protected(&v), 0, "{v}");
+}
+
+#[test]
+fn a_commit_the_command_makes_to_a_protected_path_is_still_reported() {
+    let dir = protected_fixture("commit-own");
+    post(&dir);
+    bash(&dir, "echo mine > ops/deploy.sh && git commit -q -am mine");
+    let v = post(&dir);
+    assert_eq!(protected(&v), 1, "{v}");
+}
+
+#[test]
+fn a_stash_pop_restores_changes_that_are_not_the_commands() {
+    let dir = protected_fixture("stash");
+    post(&dir);
+    bash(&dir, "echo stashed > ops/deploy.sh && git stash -q");
+    assert_eq!(post(&dir)["verdict"], "allow");
+    bash(&dir, "git stash pop -q");
+    let v = post(&dir);
+    assert_eq!(protected(&v), 0, "{v}");
+    let v = post(&dir);
+    assert_eq!(protected(&v), 0, "{v}");
+}
+
+fn payload_with(dir: &Path, response: serde_json::Value) -> String {
+    serde_json::json!({
+        "hook_event_name": "PostToolUse", "tool_name": "Bash", "cwd": dir.to_string_lossy(),
+        "tool_input": {"command": "x"}, "tool_response": response,
+    })
+    .to_string()
+}
+
+#[test]
+fn the_adapter_sends_findings_to_the_agent_only_and_a_protected_change_to_both_without_repeating() {
+    let dir = fixture(
+        "audiences",
+        PROTECTED_CONFIG
+            .replace(
+                "    post-command",
+                "    editor-hook: {enabled: true}\n    post-command",
+            )
+            .as_str(),
+        GOOD,
+    );
+    std::fs::create_dir_all(dir.join("ops")).unwrap();
+    std::fs::write(dir.join("ops/deploy.sh"), "one\n").unwrap();
+    install(&dir);
+    git(&dir, &["add", "-A"]);
+    git(&dir, &["commit", "-q", "-m", "install"]);
+    let cmd = hook_command(&dir, "Bash");
+    let out = run_hook(&dir, &cmd, &payload(&dir, "Bash"), None);
+    assert!(out.stdout.is_empty(), "{out:?}");
+
+    // A read-only command prints nothing.
+    bash(&dir, "cat ops/deploy.sh >/dev/null");
+    let out = run_hook(&dir, &cmd, &payload(&dir, "Bash"), None);
+    assert!(out.stdout.is_empty(), "{out:?}");
+
+    bash(&dir, "echo two > ops/deploy.sh");
+    let out = run_hook(&dir, &cmd, &payload(&dir, "Bash"), None);
+    let v = json(&out);
+    let person = v["systemMessage"].as_str().unwrap();
+    let agent = v["hookSpecificOutput"]["additionalContext"]
+        .as_str()
+        .unwrap();
+    assert!(person.contains("ops/deploy.sh"), "{v}");
+    assert_ne!(person, agent, "{v}");
+    let out = run_hook(&dir, &cmd, &payload(&dir, "Bash"), None);
+    assert!(out.stdout.is_empty(), "reported once: {out:?}");
+}
+
+#[test]
+fn the_adapter_relays_a_finding_to_the_agent_alone() {
+    let dir = fixture("agent-only", CONFIG, GOOD);
+    install(&dir);
+    git(&dir, &["add", "-A"]);
+    git(&dir, &["commit", "-q", "-m", "install"]);
+    let cmd = hook_command(&dir, "Bash");
+    run_hook(&dir, &cmd, &payload(&dir, "Bash"), None);
+    bash(
+        &dir,
+        &format!("sed -i 's/Implemented/Not started/' {PATH_1}"),
+    );
+    let out = run_hook(&dir, &cmd, &payload(&dir, "Bash"), None);
+    let v = json(&out);
+    assert!(v.get("systemMessage").is_none(), "{v}");
+    let agent = v["hookSpecificOutput"]["additionalContext"]
+        .as_str()
+        .unwrap();
+    assert!(agent.contains(PATH_1), "{v}");
+}
+
+#[test]
+fn a_host_list_of_changed_files_skips_the_engine_only_when_empty() {
+    let dir = fixture("host-list", CONFIG, GOOD);
+    install(&dir);
+    git(&dir, &["add", "-A"]);
+    git(&dir, &["commit", "-q", "-m", "install"]);
+    let cmd = hook_command(&dir, "Bash");
+    run_hook(&dir, &cmd, &payload(&dir, "Bash"), None);
+    bash(
+        &dir,
+        &format!("sed -i 's/Implemented/Not started/' {PATH_1}"),
+    );
+    // The host says nothing changed: the engine is not started (the record
+    // change waits for a command the host does not vouch for).
+    let empty = payload_with(&dir, serde_json::json!({"stdout": "", "bashEditDiff": []}));
+    let out = run_hook(&dir, &cmd, &empty, None);
+    assert!(out.stdout.is_empty(), "{out:?}");
+    // The host names the file: the engine runs and reports it.
+    let named = payload_with(
+        &dir,
+        serde_json::json!({"stdout": "", "bashEditDiff": [{"filePath": dir.join(PATH_1).to_string_lossy()}]}),
+    );
+    let out = run_hook(&dir, &cmd, &named, None);
+    let v = json(&out);
+    assert!(
+        v["hookSpecificOutput"]["additionalContext"]
+            .as_str()
+            .unwrap()
+            .contains(PATH_1),
+        "{v}"
+    );
+    // A shape it does not know is the field being absent: the comparison runs.
+    bash(&dir, &format!("echo more >> {PATH_1}"));
+    let odd = payload_with(&dir, serde_json::json!({"stdout": "", "bashEditDiff": "x"}));
+    let out = run_hook(&dir, &cmd, &odd, None);
+    assert!(!out.stdout.is_empty(), "{out:?}");
+}

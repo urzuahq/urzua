@@ -96,6 +96,16 @@ that repository), `shared` (also judge a file of a linked worktree of the same r
 same gates; recommended) or `deny` (refuse an agent's write outside, except under `allow_paths`).
 `urzua init` proposes `shared`.
 
+An agent's write that is allowed and lands outside the repository (a note, a scratch file) prints
+nothing. Set `report_outside_writes: true` under `harness` to see the old notice, "urzua did NOT judge
+this edit ... is outside the repository", for each such write. A refused write, and an edit inside the
+repository that urzua could not judge, are reported either way.
+
+The post-command check prints nothing for a command that changed nothing governed. What a `git pull`,
+`checkout`, `merge`, `rebase` or `stash pop` brought in is not reported as the agent's edit, and is not
+repeated after later commands. What the command itself changed is reported once: a short line to the
+agent, and a message to you only for a gated move, a protected-path change, or a check that could not run.
+
 ## Limits
 
 `limits` sets how much of one agent call the harness reads, and how long the agent waits for the

@@ -906,6 +906,29 @@ so a row must not read as that person's own attestation when an agent ran the co
 
 The Decision is otherwise unchanged. The Status of this ADR stays Accepted.
 
+## Amendment (2026-11-16): what the hooks say, and to whom
+
+Status of this amendment: the silent default for writes outside the repository was decided by the maintainer on
+2026-11-16; the rest was decided by the builder, pending maintainer review. It narrows what the editor hook and the
+post-command check print (`MILE-278`); what they refuse and what they judge are unchanged.
+
+**The problem.** The editor hook printed that urzua did not judge every write an agent made outside the repository
+(notes, scratch files), and the post-command check printed a report after every shell command that compared the
+tree with a baseline, so after a pull it repeated protected-path changes the command had not made, with the same text
+to the person and the agent.
+
+**The decision.** A write the harness allows whose every path lies outside the repository says nothing, unless
+`harness.report_outside_writes` is `true`. Asked on 2026-11-16 "should the edit hook stay silent for writes outside
+the repository by default?", the maintainer answered "yes hook should be silent by default and n config". A refused
+write, an edit inside the repository that was not judged, and a hook that could not run still speak. The
+post-command check takes what a pull, checkout, merge, rebase, reset or stash pop brought in into its baseline
+without reporting it, reports what the command itself changed once, and says nothing for a command that changed
+nothing governed. Section 4's "reports it to the agent" now reads: a short line to the agent, and a message to the
+person for a gated move, a protected-path change, or a check that could not run; never the same text to both
+(`SPEC-24`).
+
+The Decision is otherwise unchanged. The Status of this ADR stays Accepted.
+
 ## References
 
 - `ADR-69`, `ADR-70`, `ADR-71`: the hook, drafting commands and layered gate this extends; `ADR-70` gains an
@@ -952,3 +975,4 @@ The Decision is otherwise unchanged. The Status of this ADR stays Accepted.
 > | 2026-11-10 | Added an `## Amendment (2026-11-10, deletions)`, accepted by the maintainer on 2026-11-10: a record the diff deletes while its base `Status` is one a gate names is a gated move (`gated-deletion-without-decider`), judged like any other and reported by the post-command check; a rename pair is exempt; under `base`/`both` the base revision's type declaration also decides which deleted files are records of a gated type; gate statuses compare case-insensitively after trim and the status field is read case-insensitively for the gate. `Status` stays Accepted. **Why:** Maintainer decision, 2026-11-10, on the review that found a non-decider deleting an Accepted ADR with an ok check, and a lower-case `accepted` passing the gate. | **substantive** |
 > | 2026-11-14 | Added an `## Amendment (2026-11-14, leaving a gate)`, decided by the orchestrator on 2026-11-14, pending maintainer review: blanking an Accepted (gated) record, stripping its header, or moving it from a gate status to a status that gate does not name (an un-accept) is a gated move like deletion (`gated-departure-without-decider`), in `diff.decider-required` and in the editor hook; and, under a `gh-verified` identity, `fix --apply`, `fix --rebaseline --apply` and `reverify --apply` require `--actor`. The Decision is unchanged. `Status` stays Accepted. **Why:** the external review found blanking or un-accepting an Accepted ADR passing both gates while deletion is gated, and 208 re-pin rows attributing an agent's re-verification to the maintainer. | **substantive** |
 > | 2026-11-14 | Added an `## Amendment (2026-11-14, symlinked records)`, decided by the orchestrator on 2026-11-14, pending maintainer review: a tracked record file that is a symlink, or sits behind a symlinked directory, is refused by every command and reported by `check` as the unwaivable finding `identity.record-symlink-escapes`; no link is allowed, a same-directory alias included (`ADR-12.md` linked to `draft.txt`). The rule is on at `error` for every configuration; a configuration may set its level or `off`, and `off` raises a warning notice on every `check`. This closes the two-pull-request route (move a record out of the governed tree leaving a symlink, then accept the moved copy). The Decision is unchanged. `Status` stays Accepted. **Why:** an external review reproduced a non-decider landing an Accepted record through a symlink, and a follow-up review found the same-directory alias. | **substantive** |
+> | 2026-11-16 | Added an `## Amendment (2026-11-16): what the hooks say, and to whom`: an allowed write outside the repository is silent by default (`harness.report_outside_writes`), decided by the maintainer on 2026-11-16 ("yes hook should be silent by default and n config"); the post-command check adopts changes it did not make, reports its own once, and splits agent and person messages, decided by the builder, pending maintainer review (`MILE-278`). | **substantive** |

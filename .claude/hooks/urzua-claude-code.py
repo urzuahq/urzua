@@ -138,9 +138,47 @@ def out(obj):
 def stated(message, event):
     """The engine could not give a verdict: say so, loudly, and let the call proceed."""
     sys.stderr.write(message + "\n")
-    hook = {"session-start": "SessionStart", "post-command": "PostToolUse"}.get(event, "PreToolUse")
+    if event == "post-command":
+        return relay_post_command(message, "urzua harness (post-command): NOT judged; run 'urzua check' before committing.")
+    hook = {"session-start": "SessionStart"}.get(event, "PreToolUse")
     out({"systemMessage": message, "hookSpecificOutput": {"hookEventName": hook, "additionalContext": message}})
     return 0
+
+
+def relay_post_command(person, agent):
+    """A post-command report goes to one audience per message: `person` (a gated
+    move, a protected-path change, a check that could not run) as the message
+    shown to the person, `agent` as the model's context. Neither repeats the other."""
+    obj = {}
+    if person:
+        obj["systemMessage"] = person
+    if agent and agent != person:
+        obj["hookSpecificOutput"] = {"hookEventName": "PostToolUse", "additionalContext": agent}
+    if obj:
+        out(obj)
+    return 0
+
+
+def host_changed_files(payload):
+    """The files the host says the shell command changed, or None when it does
+    not say. Read from `tool_response.bashEditDiff` as a list of paths or of
+    objects with a path, or a mapping keyed by path; any other shape is None."""
+    resp = payload.get("tool_response")
+    if not isinstance(resp, dict) or "bashEditDiff" not in resp:
+        return None
+    diff = resp["bashEditDiff"]
+    if isinstance(diff, dict):
+        diff = list(diff.keys())
+    if not isinstance(diff, list):
+        return None
+    files = []
+    for entry in diff:
+        if isinstance(entry, dict):
+            entry = entry.get("filePath") or entry.get("file_path") or entry.get("path")
+        if not isinstance(entry, str) or not entry:
+            return None
+        files.append(entry)
+    return files
 
 
 def deny(message):
@@ -613,6 +651,11 @@ def main():
         # Any Bash command. The engine reads git, never the command.
         if payload.get("tool_name") != "Bash":
             return 0
+        # The host saying the command changed no file is enough to skip the
+        # engine; a commit or a pull is still caught by the next command that
+        # runs it, since the engine compares with the commit it last saw.
+        if host_changed_files(payload) == []:
+            return 0
         request = {"event": "post-command", "tool": "Bash", "paths": [], "content": None, "actor": "agent", "cwd": cwd, "project_dir": PROJECT_DIR}
     else:
         tool = payload.get("tool_name")
@@ -647,10 +690,12 @@ def main():
             out({"systemMessage": message, "hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": message}})
         return 0
     if event == "post-command":
-        # Context for the agent, never a decision: the command has already run.
-        if kind != "allow" and message:
-            out({"systemMessage": message, "hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": message}})
-        return 0
+        # A report, never a decision: the command has already run.
+        if kind == "allow":
+            return 0
+        if "agent" in verdict or "person" in verdict:
+            return relay_post_command(verdict.get("person") or "", verdict.get("agent") or "")
+        return relay_post_command("", message)
     if kind == "block":
         out({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": message}})
     elif kind in ("allow-unjudged", "allow-override", "allow-with-warnings"):

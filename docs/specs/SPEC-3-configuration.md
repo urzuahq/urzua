@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.146'
+Version: '0.147'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:9b216fd928bd3f9899537d02dc64718b869ec42f36c6d041af0d27fe911a4936, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:09c2431a269316741c35b51dabd5766ecd3d50fab2b98069314bb1bc8857767d, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:255395e7d2caa34947cef28f463e2ec050e3eba798a4dc7573a3cad946fee1ae
@@ -926,6 +926,7 @@ harness:
   adapters: [claude-code]            # installed when --adapter is not given
   instructions_file: AGENTS.md       # carries the marked block; the engine assumes no file name
   outside_writes: shared             # allow | shared | deny; undeclared acts as allow
+  report_outside_writes: false       # say so when an allowed write outside the repository is not judged
   guardrails:
     editor-hook:    {enabled: true, on_unjudged: allow}   # allow | deny
     session-start:  {enabled: true}
@@ -956,6 +957,14 @@ harness:
   `~`-relative directories that `doctor` reports as read by nothing under any other value. A value other
   than the three, or a relative `allow_paths` entry, is a load error. `urzua init` proposes `shared`;
   `urzua doctor` warns when a guardrail is enabled and the key is undeclared; `shared` is recommended.
+- **`report_outside_writes`** is `true` or `false` (default `false`; anything else is a load error). With
+  `false` the editor hook says nothing about a write it allows whose every path, as written and as its
+  symlinks resolve, lies outside the repository; `true` restores the notice that urzua did not judge it
+  ("is outside the repository"). A refused write (`outside_writes: deny`, a linked worktree's file under
+  `shared`, `on_unjudged: deny` for an agent) and an edit inside the repository it could not judge are
+  reported either way (`SPEC-24`, `MILE-278`). The default is a behaviour change, not today's value: the
+  maintainer chose it on 2026-11-16 ("yes hook should be silent by default and n config"), an exception to
+  the rule of `ADR-101` that a new key's default equals the behaviour before it.
 - **`guardrails`** names which guardrails are on: a guardrail is on only when named with `enabled: true`.
   The names are `editor-hook`, `post-command`, `session-start`, `acceptance` and `protected-paths`. Only
   `editor-hook`, `acceptance` and `protected-paths` take `on_unjudged`: `allow` (the default for
@@ -2669,3 +2678,4 @@ proves this configuration produces the three findings.
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 9b216fd928bd -> 6e7b740a88d5, `rust/crates/urzua-cli/tests/own_config_integration.rs` d6dcb432d05a -> 09c2431a2693. Reason: Pinned file(s) changed by the symlinked-record refusal: config.rs: default-on rules are known to the config (a rule on by default needs no declaration; its level or `off` is configurable); own_config_integration.rs: a revision row appended by an earlier re-pin in this change. The record's claim is unaffected by these changes. (Re-applied after merging main.) **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 6e7b740a88d5 -> 9b216fd928bd. Reason: Pinned file(s) changed by the symlinked-record refusal: config.rs: default-on rules are known to the config (a rule on by default needs no declaration; its level or `off` is configurable). The record's claim is unaffected by these changes. (Re-applied after the config change and merging main.) **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-15 | Bumped to `0.146`. Documents `harness.limits`: eleven keys with their defaults, the editor hook timeout as a floor of 120 with a ceiling of 600 (a host that kills the hook first lets the call proceed), the ten input caps as security floors, and the ceilings of the two recursion depths (256 and 1024) and of the MCP request line (64 MiB), a value below a floor or an unknown key under `limits` as a load error, `urzua harness limits`, and the installed timeout as drift. Adds `## Format invariants and security floors`, which lists the post-command cache paths and `.urzua/harness.lock` as format invariants and the ten harness input caps as security floors, each with its reason. **Why:** `ADR-101` amendment of 2026-11-15 (configuration owns behaviour), accepted by the maintainer; tracked by `MILE-232`; the maintainer's instruction for this change: "the input caps ... are SECURITY FLOORS. Today's value is both the default and the minimum". | **substantive** |
+> | 2026-11-16 | Bumped to `0.147`. Documents `harness.report_outside_writes` (default `false`): an allowed write outside the repository is silent unless it is `true`. The default is a new behaviour, decided by the maintainer on 2026-11-16 ("yes hook should be silent by default and n config"), and stated as an exception to `ADR-101`'s rule that a key's default is today's value (`MILE-278`). | **substantive** |

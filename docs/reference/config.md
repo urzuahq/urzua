@@ -42,7 +42,7 @@ rules:
 | `new` | map | How `urzua new` numbers records. `check_open_prs` (default `false`) fetches pull request head refs to skip numbers open pull requests took; `pull_ref_patterns` (default `refs/pull/*/head`), `remote` (default `origin`), `fetch_timeout_seconds` (30), `lock_timeout_seconds` (10). |
 | `discovery` | map | `include_untracked` (default `false`): also read untracked, non-ignored files directly under a record directory, so `check` sees a draft before `git add`. |
 | `attestation` | map | Who a tool-written revision row names. `identity` is `gh-verified` (default) or `asserted`; `require_verified` (default `false`) refuses a run with no verified identity. |
-| `harness` | map | The agent harness. See [the agent harness](agent-harness.md). Its `limits` map sets the hook timeout and the input caps, each of which may be raised but never lowered below its default; see [limits](agent-harness.md#limits). |
+| `harness` | map | The agent harness. See [the agent harness](agent-harness.md). `report_outside_writes` (default `false`) brings back the notice for an allowed write outside the repository. Its `limits` map sets the hook timeout and the input caps, each of which may be raised but never lowered below its default; see [limits](agent-harness.md#limits). |
 | `authority` | map | Who may accept a record or change a protected path. Read by the harness guardrails and by the `diff.decider-required` rule. See `SPEC-3`, "Who may accept a record". |
 | `override_log` | path | A committed log of editor-hook overrides, read by `override.unreviewed`. |
 | `block_on` | `introduced` or `all` | Which errors the editor hook blocks on. Default `introduced`. |
