@@ -814,7 +814,11 @@ pub fn apply_reverify(
 /// Sets `field` to `today` in the header, adding the line just before the
 /// closing delimiter when the record has none.
 fn set_anchor(doc: &mut LineDoc, field: &str, today: &str) -> Result<(), String> {
-    let first = doc.line(1).map(str::trim_end);
+    // A leading byte-order mark is not part of the delimiter: the loader reads
+    // such a record, so the writer must too.
+    let first = doc
+        .line(1)
+        .map(|l| l.trim_end().trim_start_matches('\u{feff}'));
     if first != Some("---") {
         return Err("the record has no YAML frontmatter to hold the anchor field".to_string());
     }
@@ -1031,6 +1035,24 @@ mod tests {
             out.contains(&format!("code: src/a.rs#Foo::bar@sha256:{H}, test:t.rs")),
             "{out}"
         );
+    }
+
+    #[test]
+    fn the_anchor_is_set_in_a_record_that_starts_with_a_byte_order_mark() {
+        let mut doc = LineDoc::parse("\u{feff}---\nStatus: Done\n---\n# T\n");
+        set_anchor(&mut doc, "Last-audited", "2026-11-14").unwrap();
+        assert_eq!(
+            doc.to_string(),
+            "\u{feff}---\nStatus: Done\nLast-audited: 2026-11-14\n---\n# T\n"
+        );
+        let mut doc = LineDoc::parse("\u{feff}---\nLast-audited: 2026-01-01\n---\n");
+        set_anchor(&mut doc, "Last-audited", "2026-11-14").unwrap();
+        assert_eq!(
+            doc.to_string(),
+            "\u{feff}---\nLast-audited: 2026-11-14\n---\n"
+        );
+        let mut bare = LineDoc::parse("# T\n");
+        assert!(set_anchor(&mut bare, "Last-audited", "2026-11-14").is_err());
     }
 
     #[test]

@@ -361,21 +361,24 @@ fn normalize(path: &Path) -> Option<PathBuf> {
 }
 
 /// Which repository path a mention of `prefix + file name` in `file` means, in the
-/// order it would be tried: a link starting `./` or `../` or naming only a file is
-/// relative to the file; one starting `/` is relative to the repository root; any other
+/// order it would be tried: a link starting `../` or naming only a file is relative to
+/// the file; one starting `./` is relative to the file and then to the root; one starting `/` is relative to the repository root; any other
 /// path is a repository path first and a relative one second.
 fn candidates(file: &Path, prefix: &str, name: &str) -> Vec<PathBuf> {
     let dir = file.parent().unwrap_or(Path::new(""));
     let joined = format!("{prefix}{name}");
     let relative = normalize(&dir.join(&joined));
     let from_root = || normalize(Path::new(joined.trim_start_matches('/')));
-    let first_is_dot = prefix.starts_with("./") || prefix.starts_with("../");
     let list = if prefix.starts_with("//") {
         Vec::new()
     } else if prefix.starts_with('/') {
         vec![from_root()]
-    } else if prefix.is_empty() || first_is_dot {
+    } else if prefix.is_empty() || prefix.starts_with("../") {
         vec![relative]
+    } else if prefix.starts_with("./") {
+        // `./x` is the file's own directory in a link and the repository root in
+        // prose and code comments; a moved file under either is a mention.
+        vec![relative, from_root()]
     } else {
         vec![from_root(), relative]
     };
@@ -516,6 +519,29 @@ mod tests {
         );
         assert_eq!(found.len(), 5);
         assert_eq!(found[0].0.line, 1);
+    }
+
+    #[test]
+    fn a_dot_slash_path_is_read_from_the_file_and_from_the_repository_root() {
+        // From a file elsewhere in the tree, `./docs/adr/...` names the repository
+        // path as often as a path under the file's own directory.
+        let (new, found) = rewrite_citations(
+            Path::new("docs/rfc/0003-c.md"),
+            "see ./docs/adr/0001-a.md and [x](./docs/adr/0001-a.md#y)\n",
+            &moved(),
+        );
+        assert_eq!(
+            new,
+            "see ./docs/adr/ADR-0001-a.md and [x](./docs/adr/ADR-0001-a.md#y)\n"
+        );
+        assert_eq!(found.len(), 2);
+        // `../` stays relative to the file only.
+        let (_, found) = rewrite_citations(
+            Path::new("docs/rfc/0003-c.md"),
+            "see ../docs/adr/0001-a.md\n",
+            &moved(),
+        );
+        assert!(found.is_empty());
     }
 
     #[test]

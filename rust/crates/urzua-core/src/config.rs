@@ -238,6 +238,58 @@ pub struct AttestationDecl {
     pub identity: AttestationIdentity,
     #[serde(default)]
     pub require_verified: bool,
+    /// The least an attestation's `--reason` must hold (`fix --rebaseline
+    /// --apply`, `reverify --apply`).
+    #[serde(default)]
+    pub reason: ReasonMinimum,
+}
+
+/// `attestation.reason`: a reason shorter than this is refused, so `x` or `ok`
+/// is never written as a person's account of what they checked.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ReasonMinimum {
+    /// Words, counted as whitespace-separated runs holding a letter or digit.
+    #[serde(default = "ReasonMinimum::default_words")]
+    pub min_words: usize,
+    /// Characters of the trimmed reason.
+    #[serde(default = "ReasonMinimum::default_chars")]
+    pub min_chars: usize,
+}
+
+impl ReasonMinimum {
+    fn default_words() -> usize {
+        3
+    }
+    fn default_chars() -> usize {
+        12
+    }
+
+    /// `Err` naming the minimum when `reason` falls short of it.
+    pub fn check(&self, reason: &str) -> Result<(), String> {
+        let words = reason
+            .split_whitespace()
+            .filter(|w| w.chars().any(char::is_alphanumeric))
+            .count();
+        if words >= self.min_words && reason.trim().chars().count() >= self.min_chars {
+            return Ok(());
+        }
+        Err(format!(
+            "--reason must say what was checked, in at least {} words and {} characters (attestation.reason); '{}' does not",
+            self.min_words,
+            self.min_chars,
+            reason.trim()
+        ))
+    }
+}
+
+impl Default for ReasonMinimum {
+    fn default() -> Self {
+        ReasonMinimum {
+            min_words: Self::default_words(),
+            min_chars: Self::default_chars(),
+        }
+    }
 }
 
 impl AttestationDecl {
@@ -7174,6 +7226,36 @@ mod option_table_tests {
                 && err.contains("asserted"),
             "{err}"
         );
+    }
+
+    #[test]
+    fn attestation_reason_defaults_to_three_words_and_twelve_characters() {
+        let config = parse(ATT_BASE).unwrap();
+        assert_eq!(
+            config.attestation.reason,
+            ReasonMinimum {
+                min_words: 3,
+                min_chars: 12
+            }
+        );
+        assert!(config.attestation.reason.check("ok").is_err());
+        assert!(config
+            .attestation
+            .reason
+            .check("Read the diff; it holds.")
+            .is_ok());
+        let set = parse(&format!(
+            "{ATT_BASE}attestation:\n  reason: {{min_words: 1}}\n"
+        ))
+        .unwrap();
+        assert_eq!(
+            set.attestation.reason,
+            ReasonMinimum {
+                min_words: 1,
+                min_chars: 12
+            }
+        );
+        assert!(parse(&format!("{ATT_BASE}attestation:\n  reason: {{words: 1}}\n")).is_err());
     }
 
     #[test]

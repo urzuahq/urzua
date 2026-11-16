@@ -12,8 +12,8 @@ use crate::line_edit::{table_row_prefix, LineDoc};
 use crate::record::Record;
 use crate::report::{census, Outcome, Population, PopulationUnit};
 use crate::rules::{
-    compute_embodiment, evidence_text, find_revision_log_entries, parse_realized_by,
-    relation_field_name, DeliveryContext,
+    compute_embodiment, evidence_text, find_revision_log_entries, relation_field_name,
+    DeliveryContext,
 };
 use crate::status_model::StatusDecl;
 
@@ -133,9 +133,15 @@ impl RepairScan<'_> {
         // Drift (ADR-32) is computed by the caller from git history and
         // handed in as plain data, the same shape `embodiment_consistency`
         // takes, so this function stays pure (MILE-15).
+        // Only locators that resolve are evidence: a path that is not there
+        // must not lift the tier (`embodiment.locator-exists` reports it).
+        let (resolving, unresolved) = match realized_by_value {
+            Some(value) => crate::rules::resolving_realized_by(value, locator_field, self.ctx.env),
+            None => Default::default(),
+        };
         let computed = compute_embodiment(
             &config.embodiment,
-            &realized_by_value.map(parse_realized_by).unwrap_or_default(),
+            &resolving,
             self.drifted.contains(&record.path),
             cited_by_code,
             cited_by_test,
@@ -152,7 +158,11 @@ impl RepairScan<'_> {
             computed_value: computed.to_string(),
             tier: 1,
             evidence: match realized_by_value {
-                Some(value) => format!("{locator_field}: {value}"),
+                Some(value) if unresolved.is_empty() => format!("{locator_field}: {value}"),
+                Some(value) => format!(
+                    "{locator_field}: {value} (not counted, does not resolve: {})",
+                    unresolved.join(", ")
+                ),
                 None => format!(
                     "no {locator_field} field; cited by {} back-pointers",
                     if cited_by_test { "test" } else { "source" }
@@ -587,6 +597,14 @@ pub fn detect_rebaselines(
     let mut found = Vec::new();
     let mut failed = Vec::new();
     let population = census(PopulationUnit::Record, records.iter().collect(), |record| {
+        // A type with no header has no evidence field to hold a pin (`ADR-50`).
+        if config
+            .record_types
+            .get(&record.record_type)
+            .is_some_and(|t| t.has_no_header())
+        {
+            return Outcome::OutOfScope;
+        }
         let locator_field =
             relation_field_name(config, &record.record_type, RelationRole::EmbodimentLocator);
         // `Realized-by` plus the Done-means item clauses (`ADR-96`): a pin in an
@@ -934,8 +952,8 @@ mod tests {
         assert_eq!(row.matches(" | ").count(), 2, "{row}");
     }
 
-    /// `detect_repairs` over a tree with no files, no blocked record and the
-    /// given back-pointers.
+    /// `detect_repairs` over a tree in which every file a record cites exists
+    /// and is tracked, no blocked record and the given back-pointers.
     fn detect(
         records: &[Record],
         config: &Config,
@@ -943,15 +961,30 @@ mod tests {
         fresh: &HashSet<PathBuf>,
         back_pointed: &crate::rules::BackPointerEvidence,
     ) -> (Population, Vec<Repair>) {
-        crate::rules::LocatorEnv::without_files(config, |env| {
-            let blocked = std::collections::HashMap::new();
-            let ctx = DeliveryContext {
-                back_pointed,
-                env,
-                blocked: &blocked,
-            };
-            detect_repairs(records, config, drifted, fresh, &ctx)
-        })
+        let tracked: Vec<PathBuf> = records
+            .iter()
+            .filter_map(|r| r.header.get("Realized-by"))
+            .flat_map(crate::rules::realized_by_locator_paths)
+            .map(PathBuf::from)
+            .collect();
+        let present = |_: &str| true;
+        let untracked = |_: &str| false;
+        let env = crate::rules::LocatorEnv {
+            config,
+            opts: config.rule_opts(crate::rules::RULE_EMBODIMENT_LOCATOR_EXISTS),
+            tracked: &tracked,
+            present: &present,
+            read: &crate::locator::no_file_text,
+            untracked_on_disk: &untracked,
+            records: &[],
+        };
+        let blocked = std::collections::HashMap::new();
+        let ctx = DeliveryContext {
+            back_pointed,
+            env: &env,
+            blocked: &blocked,
+        };
+        detect_repairs(records, config, drifted, fresh, &ctx)
     }
 
     fn record(path: &str, content: &str) -> Record {
