@@ -105,18 +105,19 @@ editor hook. Every key is optional; one you leave out keeps its built-in value, 
 ```yaml
 harness:
   limits:
-    hook_timeout_seconds: 180   # 10 to 600; default 120
+    hook_timeout_seconds: 180   # 120 to 600; default 120
     paths_per_call: 1024        # default 512, and never lower
 ```
 
-Every key but `hook_timeout_seconds` is a security floor: you may raise it, never lower it. A lower
+Every key is a security floor: you may raise it, never lower it. That includes the hook timeout,
+because Claude Code lets a call through when the hook runs past it. A lower
 value, a key urzua does not know, or a value that is not a whole number stops the config from
 loading, with a message naming the key and the floor. Raising a cap moves only the number. A call
 beyond it is still an edit that was not judged, and `on_unjudged` decides what happens to it.
 
 | Key | Default | Bounds |
 |---|---|---|
-| `hook_timeout_seconds` | 120 (10 to 600) | seconds the agent waits for the editor hook |
+| `hook_timeout_seconds` | 120 (at most 600) | seconds the agent waits for the editor hook |
 | `paths_per_call` | 512 | files of one call judged against the gates |
 | `records_per_call` | 8 | record-checking writes of one MCP call judged |
 | `loose_strings_per_call` | 512 | other strings of one MCP call looked at as possible paths |
@@ -125,7 +126,7 @@ beyond it is still an edit that was not judged, and `on_unjudged` decides what h
 | `string_length` | 65536 | characters of a string looked into for paths |
 | `symlink_hops` | 40 | symbolic links followed resolving one path |
 | `json_depth` | 128 (at most 1024) | nesting levels of a settings file read |
-| `mcp_line_bytes` | 1048576 | bytes of one request line `urzua mcp` reads |
+| `mcp_line_bytes` | 1048576 (at most 67108864) | bytes of one request line `urzua mcp` reads |
 | `gate_walk_files` | 50000 | files walked under the path-gate entries |
 
 `urzua harness limits` prints the values in force. The translator asks it for them before it scans

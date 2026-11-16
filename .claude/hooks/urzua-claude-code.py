@@ -99,7 +99,7 @@ def load_limits(argv, cwd):
     if exe == "urzua" and os.environ.get("URZUA_BIN"):
         exe = os.environ["URZUA_BIN"]
     try:
-        p = subprocess.run([exe, "harness", "limits"], capture_output=True, text=True, cwd=PROJECT_DIR or cwd or None, timeout=30)
+        p = subprocess.run([exe, "harness", "limits"], capture_output=True, text=True, cwd=PROJECT_DIR or cwd or None, timeout=10)
         limits = json.loads(p.stdout).get("limits")
     except (OSError, ValueError, AttributeError, subprocess.SubprocessError):
         return

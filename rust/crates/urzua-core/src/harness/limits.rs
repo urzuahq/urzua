@@ -15,11 +15,11 @@ pub struct LimitInfo {
     pub key: &'static str,
     /// The built-in value: the default, and for a floor also the minimum.
     pub default: u64,
-    /// `Some((min, max))` for a plainly configurable value; `None` for a
+    /// `Some((min, max))` for a value with a stated range; `None` for a
     /// security floor, which takes any value from `default` up.
     pub range: Option<(u64, u64)>,
     /// A floor's ceiling, where raising it far enough would bring back the
-    /// failure the floor guards against.
+    /// failure the floor guards against (a stack overflow, unbounded memory).
     pub ceiling: Option<u64>,
     pub what: &'static str,
 }
@@ -41,7 +41,10 @@ pub const LIMITS: &[LimitInfo] = &[
     LimitInfo {
         key: HOOK_TIMEOUT_SECONDS,
         default: 120,
-        range: Some((10, 600)),
+        // The agent host lets the call through when the hook outlives its
+        // timeout, and one record check can take over ten seconds, so a
+        // shorter wait than the built-in one would let edits pass unjudged.
+        range: Some((120, 600)),
         ceiling: None,
         what: "seconds the agent waits for the editor hook",
     },
@@ -109,7 +112,8 @@ pub const LIMITS: &[LimitInfo] = &[
         key: MCP_LINE_BYTES,
         default: 1024 * 1024,
         range: None,
-        ceiling: None,
+        // A line up to the cap is held in memory before it is refused or read.
+        ceiling: Some(64 * 1024 * 1024),
         what: "bytes of one request line `urzua mcp` reads",
     },
     LimitInfo {
@@ -191,7 +195,7 @@ impl Limits {
                 }
                 None if info.ceiling.is_some_and(|c| n > c) => {
                     return Err(format!(
-                        "harness.limits.{name} is {n}, above its ceiling of {}: deeper recursion risks a stack overflow",
+                        "harness.limits.{name} is {n}, above its ceiling of {}: raising it further would bring back the failure it guards against",
                         info.ceiling.unwrap_or_default()
                     ))
                 }
@@ -272,12 +276,12 @@ mod tests {
     #[test]
     fn the_hook_timeout_takes_its_range_only() {
         assert_eq!(
-            read("hook_timeout_seconds: 30")
+            read("hook_timeout_seconds: 300")
                 .unwrap()
                 .get(HOOK_TIMEOUT_SECONDS),
-            30
+            300
         );
-        for bad in ["9", "601", "-1", "ten", "1.5"] {
+        for bad in ["10", "119", "601", "-1", "ten", "1.5"] {
             assert!(
                 read(&format!("hook_timeout_seconds: {bad}")).is_err(),
                 "{bad}"
@@ -296,8 +300,12 @@ mod tests {
     }
 
     #[test]
-    fn a_depth_above_its_ceiling_is_an_error() {
-        for (key, ceiling) in [(INPUT_DEPTH, 256), (JSON_DEPTH, 1024)] {
+    fn a_value_above_its_ceiling_is_an_error() {
+        for (key, ceiling) in [
+            (INPUT_DEPTH, 256),
+            (JSON_DEPTH, 1024),
+            (MCP_LINE_BYTES, 64 * 1024 * 1024),
+        ] {
             assert!(read(&format!("{key}: {ceiling}")).is_ok());
             let e = read(&format!("{key}: {}", ceiling + 1)).unwrap_err();
             assert!(e.contains(&format!("ceiling of {ceiling}")), "{e}");

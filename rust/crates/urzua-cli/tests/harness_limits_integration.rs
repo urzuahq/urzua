@@ -172,7 +172,7 @@ fn a_limit_below_its_floor_or_an_unknown_limit_stops_the_load() {
         ),
         (
             "  limits: {hook_timeout_seconds: 1}\n",
-            vec!["harness.limits.hook_timeout_seconds", "from 10 to 600"],
+            vec!["harness.limits.hook_timeout_seconds", "from 120 to 600"],
         ),
         (
             "  limits: {path_lenght: 5000}\n",

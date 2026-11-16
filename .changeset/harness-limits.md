@@ -4,7 +4,7 @@ closes: []
 ---
 
 `harness.limits` in `.urzua/config.yaml` sets the editor hook's timeout (`hook_timeout_seconds`,
-10 to 600, default 120) and the caps on how much of one agent call the harness reads: files and
+120 to 600, default 120) and the caps on how much of one agent call the harness reads: files and
 record checks per call, loose strings, input depth, path and string length, symlink hops, settings
 file depth, the `urzua mcp` request line and the path-gate walk. Each cap is a security floor:
 today's value is the default and the minimum, so you may raise it but a lower value, an unknown key
