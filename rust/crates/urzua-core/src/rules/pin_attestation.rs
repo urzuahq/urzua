@@ -209,11 +209,12 @@ fn base_has(base: &[Pin], locator: &str, hash: &str) -> bool {
 
 /// A first pin, or the new side of a replacement whose old side the base held.
 fn added_ok(events: &[Event], base: &[Pin], locator: &str, head: &str) -> bool {
+    // The first pin or the replacement's new side, then any re-pins after it.
     events.iter().any(|e| match e {
-        Event::First { locator: l, to } => l == locator && same(to, head),
+        Event::First { locator: l, to } => l == locator && moved(events, locator, to, head),
         Event::Replace(r) => {
             r.to_locator == locator
-                && same(&r.to_hash, head)
+                && moved(events, locator, &r.to_hash, head)
                 && base_has(base, &r.from_locator, &r.from_hash)
         }
         _ => false,
@@ -451,6 +452,21 @@ mod tests {
                 hash: h.map(str::to_string),
             })
             .collect()
+    }
+
+    #[test]
+    fn a_first_pin_re_pinned_later_in_the_same_change_is_accounted_for() {
+        let base = occ(&[("src/u.rs", None)]);
+        let head = occ(&[("src/u.rs", Some(B))]);
+        let events = [
+            Event::First {
+                locator: "src/u.rs".into(),
+                to: A[..12].into(),
+            },
+            mv("src/u.rs", &[&A[..12]], &B[..12]),
+        ];
+        assert!(unattested(&base, &head, &events).is_empty());
+        assert_eq!(unattested(&base, &head, &events[..1]).len(), 1);
     }
 
     #[test]
