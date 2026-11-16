@@ -330,6 +330,20 @@ fn locator_exists_for_record(
     Outcome::Examined
 }
 
+/// The listing of the attested first pin, for a scoped locator with no pin:
+/// `urzua fix --pin --ids <record>` runs as printed and names the apply form.
+fn pin_action(variant: &str, record: &Record) -> Option<ActionSource> {
+    (variant == "locator-scope-unpinned").then(|| {
+        ActionSource::new("locator-scope-unpinned").argv([
+            "urzua",
+            "fix",
+            "--pin",
+            "--ids",
+            &record.path.display().to_string(),
+        ])
+    })
+}
+
 /// The findings on the `Realized-by`-style header field.
 fn header_locator_findings(
     record: &Record,
@@ -344,7 +358,7 @@ fn header_locator_findings(
             RULE_EMBODIMENT_LOCATOR_EXISTS,
             FindingSeverity::Error,
             record.path.clone(),
-            ActionSource::new(variant).field(field),
+            pin_action(variant, record).unwrap_or_else(|| ActionSource::new(variant).field(field)),
             message,
         ));
     };
@@ -387,15 +401,17 @@ fn item_locator_findings(
         }
         let place = format!("a {section} item (line {})", clause.line);
         for entry in crate::locator::realized_by_locators(&clause.text) {
-            if let Some((_, message)) = locator_defect(&entry, &place, env) {
+            if let Some((variant, message)) = locator_defect(&entry, &place, env) {
                 findings.push(
                     Finding::new(
                         RULE_EMBODIMENT_LOCATOR_EXISTS,
                         FindingSeverity::Error,
                         record.path.clone(),
-                        ActionSource::new("item-locator-defect")
-                            .section(section.clone())
-                            .line(clause.line),
+                        pin_action(variant, record).unwrap_or_else(|| {
+                            ActionSource::new("item-locator-defect")
+                                .section(section.clone())
+                                .line(clause.line)
+                        }),
                         message,
                     )
                     .at(clause.line),
@@ -617,8 +633,7 @@ fn locator_scope_defect(
             l.display()
         ))),
         Ok(_) if l.anchor.is_none() => Some(("locator-scope-unpinned", format!(
-            "{field} names '{}': scope given without a pin; drift is judged on the whole file (add `@sha256:` from `urzua explain {}`)",
-            l.display(),
+            "{field} names '{}': scope given without a pin; drift is judged on the whole file (pin it with the attested command the suggested action lists, `urzua fix --pin --apply --ids <record> --actor agent --reason \"<why this evidence carries the claim>\"`)",
             l.display()
         ))),
         Ok(_) => None,
@@ -1300,7 +1315,7 @@ end: brace_balanced
         let m = exists_messages("code:a.rs#one");
         assert_eq!(m.len(), 1, "{m:?}");
         assert!(
-            m[0].contains("without a pin") && m[0].contains("urzua explain"),
+            m[0].contains("without a pin") && m[0].contains("urzua fix --pin --apply"),
             "{m:?}"
         );
     }

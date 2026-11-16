@@ -711,12 +711,35 @@ pub fn pinned_row(attestation: &Attestation, pins: &[FirstPin], reason: &str) ->
         .collect::<Vec<_>>()
         .join(", ");
     format!(
-        "Pinned (attested by {}): {} locators pinned, {} file-level, {} scoped. Evidence: {evidence} Reason: {reason} **Why:** a claim is renewed only over pinned code and test evidence.",
+        "{PINNED_ROW_PREFIX}{}): {} locators pinned, {} file-level, {} scoped. Evidence: {evidence} Reason: {reason} **Why:** a claim is renewed only over pinned code and test evidence.",
         attestation.label(),
         pins.len(),
         file_level,
         pins.len() - file_level,
     )
+}
+
+/// What starts the row [`pinned_row`] writes.
+pub const PINNED_ROW_PREFIX: &str = "Pinned (attested by ";
+
+/// The `(locator, hash)` pairs a `Pinned` row names, or `None` when `row` is
+/// not one: the first pins a person or agent attested.
+pub fn parse_pinned_row(row: &str) -> Option<Vec<(String, String)>> {
+    let rest = &row[row.find(PINNED_ROW_PREFIX)? + PINNED_ROW_PREFIX.len()..];
+    let (label, rest) = rest.split_once("): ")?;
+    if !label.contains(", identity: ") {
+        return None;
+    }
+    let (_, rest) = rest.split_once(" Evidence: ")?;
+    let (listed, _) = rest.split_once(" Reason: ")?;
+    let pins: Vec<(String, String)> = split_list(listed)
+        .iter()
+        .filter_map(|e| {
+            let (l, h) = e.split_once("@sha256:")?;
+            Some((l.trim().to_string(), h.trim().to_string()))
+        })
+        .collect();
+    (!pins.is_empty()).then_some(pins)
 }
 
 /// The `Re-verified` row (`ADR-97` section 4): every locator re-resolved, how

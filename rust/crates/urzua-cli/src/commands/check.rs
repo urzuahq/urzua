@@ -137,6 +137,7 @@ struct Context<'a> {
 fn load_base_text(
     session: &Session,
     changes: Option<&urzua_io::GitChanges>,
+    pin_level: RuleLevel,
     notices: &mut Vec<Notice>,
 ) -> Result<HashMap<PathBuf, String>, String> {
     let mut out = HashMap::new();
@@ -147,8 +148,7 @@ fn load_base_text(
     let bump = enabled_setting(config, rules::RULE_REVISION_LOG_VERSION_BUMP_REQUIRED).is_some();
     let renewal =
         enabled_setting(config, rules::RULE_EMBODIMENT_CLAIM_RENEWAL_UNATTESTED).is_some();
-    let pins =
-        rules::effective_level(config, rules::RULE_DIFF_PIN_CHANGED_UNATTESTED) != RuleLevel::Off;
+    let pins = pin_level != RuleLevel::Off;
     if !bump && !renewal && !pins {
         return Ok(out);
     }
@@ -172,10 +172,27 @@ fn load_base_text(
         // copy there: not an error, and not examined. Any other failure to read
         // the merge base's copy is disclosed, since the record then goes
         // unexamined.
-        if changes.added.contains(&record.path) {
-            continue;
-        }
-        match urzua_io::read_at_commit(&session.repo_root, &changes.merge_base, &record.path) {
+        // A path added since the merge base has no copy there, unless it is a
+        // rename: the pin rule then judges it against the copy under its old
+        // name, so renaming a record is not a way past it.
+        let base_path = if changes.added.contains(&record.path) {
+            let renamed = pins.then(|| {
+                crate::diff_scope::renamed_from(
+                    &session.repo_root,
+                    config,
+                    record,
+                    changes,
+                    notices,
+                )
+            });
+            match renamed.flatten() {
+                Some(old) => old,
+                None => continue,
+            }
+        } else {
+            record.path.clone()
+        };
+        match urzua_io::read_at_commit(&session.repo_root, &changes.merge_base, &base_path) {
             Ok(text) => {
                 out.insert(record.path.clone(), text);
             }
@@ -183,8 +200,10 @@ fn load_base_text(
                 severity: NoticeSeverity::Warning,
                 subject: if wanted_by_bump {
                     rules::RULE_REVISION_LOG_VERSION_BUMP_REQUIRED
-                } else {
+                } else if wanted_by_renewal {
                     rules::RULE_EMBODIMENT_CLAIM_RENEWAL_UNATTESTED
+                } else {
+                    rules::RULE_DIFF_PIN_CHANGED_UNATTESTED
                 }
                 .to_string(),
                 message: format!(
@@ -711,6 +730,67 @@ fn symlink_refusal_off_notice(config: &Config) -> Option<Notice> {
         ),
         detail: None,
     })
+}
+
+/// The level `diff.pin-changed-unattested` runs at: on a `--base` run the
+/// stricter of the head's and the base revision's (its declared level, or the
+/// default-on level when its config declares none), so a pull request cannot
+/// turn the rule off or lower it in the change it judges. An info notice says
+/// when the base's level applies. Without a base, or when the base has no
+/// config, the head's.
+fn base_pin_level(
+    session: &Session,
+    changes: Option<&urzua_io::GitChanges>,
+    notices: &mut Vec<Notice>,
+) -> RuleLevel {
+    let rule = rules::RULE_DIFF_PIN_CHANGED_UNATTESTED;
+    let head = rules::effective_level(&session.config, rule);
+    let Some(changes) = changes else {
+        return head;
+    };
+    let Ok(rel) = crate::discovery::relative_to_root(&session.repo_root, &session.config_path)
+    else {
+        return head;
+    };
+    let text =
+        match urzua_io::read_at_commit_if_present(&session.repo_root, &changes.merge_base, &rel) {
+            Ok(Some(text)) => text,
+            _ => return head,
+        };
+    let base = match urzua_core::authority::BaseGate::from_config_text(Some(&text), rule) {
+        Ok(gate) => gate
+            .rule
+            .map(|s| s.level)
+            .unwrap_or_else(|| rules::default_on(rule).map_or(RuleLevel::Off, |d| d.level)),
+        Err(_) => return head,
+    };
+    if base > head {
+        notices.push(Notice {
+            severity: NoticeSeverity::Info,
+            subject: rule.to_string(),
+            message: format!(
+                "{rule} is '{}' at the base revision and '{}' here: the base's level applies to this change",
+                base.as_str(),
+                head.as_str()
+            ),
+            detail: None,
+        });
+    }
+    head.max(base)
+}
+
+/// `config` with the pin rule at `level` when that is above the head's own.
+fn hold_pin_level(gate_config: Option<Config>, head: &Config, level: RuleLevel) -> Option<Config> {
+    let rule = rules::RULE_DIFF_PIN_CHANGED_UNATTESTED;
+    let current = gate_config.as_ref().unwrap_or(head);
+    if rules::effective_level(current, rule) >= level {
+        return gate_config;
+    }
+    let mut adjusted = gate_config.unwrap_or_else(|| head.clone());
+    let mut setting = adjusted.rules.get(rule).cloned().unwrap_or_default();
+    setting.level = level;
+    adjusted.rules.insert(rule.to_string(), setting);
+    Some(adjusted)
 }
 
 /// A configuration that turns the pin attestation rule off is told so on every
@@ -1915,7 +1995,8 @@ fn read_diff_inputs(
         .as_ref()
         .map(|p| head_changes_for(repo_root, &p.path));
     let changes = scope.changed.as_ref().or(head_changes.as_ref());
-    let base_text = load_base_text(session, changes, notices)?;
+    let pin_level = base_pin_level(session, changes, notices);
+    let base_text = load_base_text(session, changes, pin_level, notices)?;
     if let Some(changed) = scope.changed.as_ref() {
         notices.extend(merge_recomputed_notice(session, changed, &base_text));
     }
@@ -1936,6 +2017,7 @@ fn read_diff_inputs(
     let base_authority = base_gate.authority.clone();
     let (gate_config, fail_on) =
         apply_base_gate(&session.config, &base_gate, changes.is_some(), notices);
+    let gate_config = hold_pin_level(gate_config, &session.config, pin_level);
     let rule_config = gate_config.as_ref().unwrap_or(&session.config);
     let gated_types = gated_type_names(rule_config, &base_authority);
     // One warning per unreadable deleted base copy, whichever reader reaches it

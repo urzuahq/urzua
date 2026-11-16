@@ -706,3 +706,211 @@ fn turning_the_rule_off_is_announced() {
         "{report}"
     );
 }
+
+fn variants(report: &serde_json::Value) -> Vec<String> {
+    unattested(report)
+        .iter()
+        .map(|f| {
+            let m = f["message"].as_str().unwrap_or_default();
+            if m.contains("was added") {
+                "pin-added-unattested"
+            } else if m.contains("removed") {
+                "pin-removed"
+            } else {
+                "pin-changed-unattested"
+            }
+            .to_string()
+        })
+        .collect()
+}
+
+#[test]
+fn renaming_a_record_does_not_take_a_hand_edited_pin_past_the_rule() {
+    let dir = fixture("rename");
+    let text = std::fs::read_to_string(dir.join(A)).unwrap();
+    std::fs::write(
+        dir.join(A),
+        text.replacen("---\n", "---\nStable-Id: 01AAAAAAAAAAAAAAAAAAAAAA01\n", 1),
+    )
+    .unwrap();
+    commit_all(&dir);
+    git(&dir, &["branch", "-M", "main"]);
+    git(&dir, &["checkout", "-q", "-b", "work"]);
+    git(&dir, &["mv", A, "docs/adr/ADR-1-renamed.md"]);
+    let moved = dir.join("docs/adr/ADR-1-renamed.md");
+    let text = std::fs::read_to_string(&moved).unwrap();
+    std::fs::write(&moved, text.replace(&sha256(V1), &sha256(V2))).unwrap();
+    commit_all(&dir);
+    let found = unattested(&check_base(&dir));
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert_eq!(found[0]["file"], "docs/adr/ADR-1-renamed.md");
+}
+
+#[test]
+fn a_hand_added_first_pin_is_reported_and_fix_pin_writes_the_row_that_clears_it() {
+    let dir = branched("first-hand");
+    let text = std::fs::read_to_string(dir.join(A)).unwrap();
+    std::fs::write(
+        dir.join(A),
+        text.replace("test:t.rs", &format!("test:t.rs@sha256:{}", sha256("t\n"))),
+    )
+    .unwrap();
+    commit_all(&dir);
+    let report = check_base(&dir);
+    let found = unattested(&report);
+    assert_eq!(found.len(), 1, "{report}");
+    assert!(
+        found[0]["message"]
+            .as_str()
+            .unwrap()
+            .contains("urzua fix --pin --apply --ids"),
+        "{report}"
+    );
+
+    let dir = branched("first-tool");
+    let listed = json(&run_urzua(&dir, &["fix", "--pin", "--ids", A]));
+    assert_eq!(listed["status"], "pins-available", "{listed}");
+    assert!(
+        listed["next_action"]
+            .as_str()
+            .unwrap()
+            .contains("--actor agent"),
+        "{listed}"
+    );
+    assert_eq!(
+        listed["next_action_inputs"][0]["flag"], "--reason",
+        "{listed}"
+    );
+    let out = run_urzua(
+        &dir,
+        &[
+            "fix",
+            "--pin",
+            "--apply",
+            "--ids",
+            A,
+            "--by",
+            "ana",
+            "--reason",
+            "t.rs is the test this claim rests on.",
+        ],
+    );
+    assert_eq!(json(&out)["status"], "applied", "{out:?}");
+    assert!(std::fs::read_to_string(dir.join(A))
+        .unwrap()
+        .contains(&format!("test:t.rs@sha256:{}", sha256("t\n"))));
+    commit_all(&dir);
+    assert!(unattested(&check_base(&dir)).is_empty());
+}
+
+#[test]
+fn moving_a_pin_to_a_renamed_file_needs_fix_pin_replace() {
+    let dir = branched("move-hand");
+    git(&dir, &["mv", "src/a.rs", "src/b.rs"]);
+    let text = std::fs::read_to_string(dir.join(A)).unwrap();
+    std::fs::write(
+        dir.join(A),
+        text.replace(
+            &format!("src/a.rs@sha256:{}", sha256(V1)),
+            &format!("src/b.rs@sha256:{}", sha256(V2)),
+        ),
+    )
+    .unwrap();
+    commit_all(&dir);
+    let report = check_base(&dir);
+    let mut found = variants(&report);
+    found.sort();
+    assert_eq!(found, ["pin-added-unattested", "pin-removed"], "{report}");
+
+    let dir = branched("move-tool");
+    git(&dir, &["mv", "src/a.rs", "src/b.rs"]);
+    let out = run_urzua(
+        &dir,
+        &[
+            "fix",
+            "--pin",
+            "--apply",
+            "--ids",
+            A,
+            "--replace",
+            "src/a.rs=src/b.rs",
+            "--by",
+            "ana",
+            "--reason",
+            "a.rs was renamed to b.rs; the code the claim rests on moved with it.",
+        ],
+    );
+    assert_eq!(json(&out)["status"], "applied", "{out:?}");
+    let text = std::fs::read_to_string(dir.join(A)).unwrap();
+    assert!(
+        text.contains(&format!("code:src/b.rs@sha256:{}", sha256(V2))),
+        "{text}"
+    );
+    assert!(text.contains("Pin moved to another locator"), "{text}");
+    commit_all(&dir);
+    let report = check_base(&dir);
+    assert!(unattested(&report).is_empty(), "{report}");
+}
+
+#[test]
+fn removing_a_pinned_locator_needs_fix_pin_remove() {
+    let dir = branched("remove-tool");
+    let out = run_urzua(
+        &dir,
+        &[
+            "fix",
+            "--pin",
+            "--apply",
+            "--ids",
+            A,
+            "--remove",
+            "src/a.rs",
+            "--by",
+            "ana",
+            "--reason",
+            "the claim no longer rests on a.rs.",
+        ],
+    );
+    assert_eq!(json(&out)["status"], "applied", "{out:?}");
+    let text = std::fs::read_to_string(dir.join(A)).unwrap();
+    let field = text
+        .lines()
+        .find(|l| l.starts_with("Realized-by:"))
+        .unwrap();
+    assert_eq!(field, "Realized-by: 'spec:docs/s.md, test:t.rs'", "{text}");
+    commit_all(&dir);
+    assert!(unattested(&check_base(&dir)).is_empty());
+}
+
+#[test]
+fn a_pull_request_that_turns_the_rule_off_is_still_judged_at_the_base_level() {
+    let dir = branched("off-in-head");
+    let cfg = std::fs::read_to_string(dir.join(".urzua/config.yaml")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        cfg.replace(
+            "rules: {embodiment.consistency: error}",
+            "rules: {embodiment.consistency: error, diff.pin-changed-unattested: off}",
+        ),
+    )
+    .unwrap();
+    let text = std::fs::read_to_string(dir.join(A)).unwrap();
+    std::fs::write(dir.join(A), text.replace(&sha256(V1), &sha256(V2))).unwrap();
+    commit_all(&dir);
+    let report = check_base(&dir);
+    let found = unattested(&report);
+    assert_eq!(found.len(), 1, "{report}");
+    assert_eq!(found[0]["severity"], "error", "{report}");
+    assert!(
+        report["notices"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|n| n["subject"] == "diff.pin-changed-unattested"
+                && n["message"]
+                    .as_str()
+                    .unwrap()
+                    .contains("the base's level applies")),
+        "{report}"
+    );
+}

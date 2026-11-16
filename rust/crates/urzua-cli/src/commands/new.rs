@@ -488,8 +488,6 @@ fn render_record(inputs: &NewRecordInputs) -> String {
     )
 }
 
-/// Writes the record, refusing a path that leaves the repository and never
-/// overwriting an existing file.
 /// [`write_new_file`], refused when a path gate covers the new file: neither
 /// `new` nor `waive` takes an actor, so neither can say a person runs it.
 pub(crate) fn write_new_record(
@@ -506,6 +504,8 @@ pub(crate) fn write_new_record(
     write_new_file(repo_root, dir, file_path, content)
 }
 
+/// Writes the record, refusing a path that leaves the repository and never
+/// overwriting an existing file.
 pub(crate) fn write_new_file(
     repo_root: &std::path::Path,
     dir: &std::path::Path,

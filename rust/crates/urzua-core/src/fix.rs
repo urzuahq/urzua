@@ -44,6 +44,7 @@ pub struct Repair {
 }
 
 pub mod inverse;
+pub mod pin;
 
 /// What an inverse repair answers: the claim that asks for it, and the
 /// `Status` the repair leaves alone.
@@ -908,18 +909,12 @@ pub(crate) fn replace_exact_pin(line: &str, old: &str, new: &str) -> Option<Stri
     found.then_some(out)
 }
 
-// Implements: ADR-67 (attributed re-baselining of a pin)
-/// New file content for re-pinning one record: each stale pin on the
-/// `Realized-by` line becomes the current hash and nothing else on the line
-/// moves, then one revision-log row names who attested and why. Pure. Fails
-/// when a pin is no longer on the line (a concurrent edit since detect) or the
-/// record has no revision log to record the attestation in.
 /// What starts the row `apply_rebaseline` writes; `rebaseline_row_pins` parses it.
 pub const REBASELINE_ROW_PREFIX: &str = "Re-baselined (attested by ";
 
 /// One re-pin a tool-written row names: the locator, the hash text it moved
 /// from (each side, for a merge row) and the hash text it moved to, as written
-/// (the tool's 12-character prefix).
+/// (the tool's 12-character prefix, or the full hash).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RowPin {
     pub locator: String,
@@ -955,6 +950,12 @@ pub fn rebaseline_row_pins(row: &str) -> Option<Vec<RowPin>> {
         .collect()
 }
 
+// Implements: ADR-67 (attributed re-baselining of a pin)
+/// New file content for re-pinning one record: each stale pin on the
+/// `Realized-by` line becomes the current hash and nothing else on the line
+/// moves, then one revision-log row names who attested and why. Pure. Fails
+/// when a pin is no longer on the line (a concurrent edit since detect) or the
+/// record has no revision log to record the attestation in.
 pub fn apply_rebaseline(
     content: &str,
     rebaseline: &Rebaseline,

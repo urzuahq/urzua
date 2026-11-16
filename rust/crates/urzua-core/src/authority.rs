@@ -490,7 +490,7 @@ impl AuthorityDecl {
                 .flat_map(char::to_lowercase)
                 .collect()
         };
-        let folded = fold(&rel.to_string_lossy());
+        let folded = fold(&lexical(&rel.to_string_lossy()));
         self.gates
             .iter()
             .filter(|g| g.is_path_gate())
@@ -717,6 +717,25 @@ pub struct Actors {
     pub approvers: Vec<String>,
 }
 
+/// `rel` with `.` and empty segments dropped and `..` applied, so `./x`,
+/// `a//x`, `x/` and `a/../x` name the path a gate names. A `..` that climbs
+/// above the root is kept: such a path is outside the repository, which the
+/// writers refuse on their own.
+fn lexical(rel: &str) -> String {
+    let slashed = rel.replace('\\', "/");
+    let mut parts: Vec<&str> = Vec::new();
+    for seg in slashed.split('/') {
+        match seg {
+            "" | "." => {}
+            ".." if parts.last().is_some_and(|p| *p != "..") => {
+                parts.pop();
+            }
+            other => parts.push(other),
+        }
+    }
+    parts.join("/")
+}
+
 /// The one check every command that writes a file on someone's behalf makes
 /// before writing `rel` (`ADR-89` amendment of 2026-11-16): `None` when no path
 /// gate covers it, or when `attestation` is a person (`actor: human`) whose
@@ -744,7 +763,7 @@ pub fn path_gate_refusal(
         .map(|g| g.logins.join(", "))
         .unwrap_or_default();
     let how = if attestation.is_some() {
-        "one of them runs it with --actor human under a gh-verified identity"
+        "one of them runs it with --actor human under a gh-verified identity (--actor is the caller's claim: the gate rests on the verified login being in the group, so an agent running under a member's own token is not stopped by it)"
     } else {
         "this command takes no attestation, so one of them makes the change by hand"
     };
@@ -777,6 +796,18 @@ mod tests {
         let att = |by: &str, src, actor| Attestation::new(by, src, actor);
         assert!(path_gate_refusal(Some(&a), open, None).is_none());
         assert!(path_gate_refusal(None, gated, None).is_none());
+        for spelled in [
+            "./.agent-config/x.md",
+            ".agent-config//x.md",
+            ".agent-config/x.md/",
+            "docs/../.agent-config/x.md",
+            "./docs/./../.agent-config/x.md",
+        ] {
+            assert!(
+                path_gate_refusal(Some(&a), Path::new(spelled), None).is_some(),
+                "{spelled}"
+            );
+        }
         let none = path_gate_refusal(Some(&a), gated, None).unwrap();
         assert!(
             none.contains("'maintainers' (Alice, bob)") && none.contains("by hand"),

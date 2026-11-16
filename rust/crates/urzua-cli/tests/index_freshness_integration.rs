@@ -295,3 +295,23 @@ fn an_index_under_a_path_gate_is_not_written() {
     );
     assert!(!dir.join("docs/adr/README.md").exists());
 }
+
+#[test]
+fn an_index_spelled_with_a_leading_dot_slash_is_still_under_its_path_gate() {
+    for spelled in ["./docs/adr/README.md", "docs//adr/README.md"] {
+        let dir = repo(
+            "gated-spelled",
+            &INDEXES.replace("\"docs/adr/README.md\"", &format!("\"{spelled}\"")),
+        );
+        commit_all(&dir);
+        common::gate_paths(&dir, &["docs/adr/README.md"]);
+        let out = common::urzua()
+            .args(["index", "--apply"])
+            .current_dir(&dir)
+            .output()
+            .unwrap();
+        let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+        assert_eq!(v["indexes"][0]["outcome"], "failed", "{spelled}: {v}");
+        assert!(!dir.join("docs/adr/README.md").exists(), "{spelled}");
+    }
+}

@@ -148,6 +148,8 @@ enum UnreadableCopy {
     RenamePairing,
     /// To judge the deletion itself (`diff.decider-required`).
     Deletion,
+    /// To judge a renamed record's pins against its old copy.
+    PinPairing,
 }
 
 impl UnreadableCopy {
@@ -157,6 +159,13 @@ impl UnreadableCopy {
                 rules::RULE_STATUS_TRANSITION_ALLOWED,
                 format!(
                     "{}: could not read the merge base's copy of a deleted record, so a record renamed from it cannot be paired and its Status move is not judged: {e}",
+                    path.display()
+                ),
+            ),
+            Self::PinPairing => (
+                rules::RULE_DIFF_PIN_CHANGED_UNATTESTED,
+                format!(
+                    "{}: could not read the merge base's copy of a deleted record, so a record renamed from it is not paired and its pins are not judged: {e}",
                     path.display()
                 ),
             ),
@@ -183,6 +192,36 @@ type DeletedCopy = (PathBuf, Option<Identity>, Option<String>);
 
 /// The statuses of the deleted base copies, by pairing identity.
 type DeletedByIdentity = HashMap<Identity, Vec<Option<String>>>;
+
+/// The merge-base path `record`, added by the diff, was renamed from: the one
+/// deleted record of its type with the same `Stable-Id` and record id, the
+/// pairing `status.transition-allowed` uses. `None` for a record truly new.
+pub(crate) fn renamed_from(
+    repo_root: &Path,
+    config: &Config,
+    record: &Record,
+    changes: &urzua_io::GitChanges,
+    notices: &mut Vec<Notice>,
+) -> Option<PathBuf> {
+    let identity = rules::rename_identity(record)?;
+    let mut warned = HashSet::new();
+    let mut paired = deleted_copies(
+        repo_root,
+        config,
+        None,
+        &record.record_type,
+        "Status",
+        changes,
+        UnreadableCopy::PinPairing,
+        notices,
+        &mut warned,
+    )
+    .into_iter()
+    .filter(|(_, id, _)| id.as_ref() == Some(&identity))
+    .map(|(path, _, _)| path);
+    let first = paired.next()?;
+    paired.next().is_none().then_some(first)
+}
 
 /// The base copies of the records the diff deleted, by `Stable-Id`, for one
 /// record type (`BUG-191`). The diff reports a rename as a deletion plus an

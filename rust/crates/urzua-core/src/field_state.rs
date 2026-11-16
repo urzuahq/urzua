@@ -31,7 +31,29 @@ pub const PLACEHOLDER_TOKENS: &[&str] = &[
 /// general [`classify`] still reads a lone em dash as a deliberate "not
 /// applicable" value in other header fields.
 pub fn is_blank_value(value: &str) -> bool {
-    !value.chars().any(char::is_alphanumeric)
+    !without_link_targets(value)
+        .chars()
+        .any(char::is_alphanumeric)
+}
+
+/// `value` with the target of every Markdown link removed, so `[](https://x)`
+/// (a link with no text) says nothing while `[why](https://x)` still does.
+fn without_link_targets(value: &str) -> String {
+    let mut out = String::new();
+    let mut rest = value;
+    while let Some(at) = rest.find("](") {
+        out.push_str(&rest[..=at]);
+        let after = &rest[at + 2..];
+        match after.find(')') {
+            Some(end) => rest = &after[end + 1..],
+            None => {
+                rest = after;
+                break;
+            }
+        }
+    }
+    out.push_str(rest);
+    out
 }
 
 /// Classify a header field's value. `None` (the field is absent entirely) is
@@ -195,10 +217,19 @@ mod tests {
             "\u{1F44D}",
             "\u{1F44D}\u{1F3FD}",
             " - ",
+            "[](https://x)",
         ] {
             assert!(super::is_blank_value(v), "{v:?}");
         }
-        for v in ["n/a", "x", "7", "\u{00E9}", "\u{4E2D}", "- see ADR"] {
+        for v in [
+            "n/a",
+            "x",
+            "7",
+            "\u{00E9}",
+            "\u{4E2D}",
+            "- see ADR",
+            "[why](https://x)",
+        ] {
             assert!(!super::is_blank_value(v), "{v:?}");
         }
     }
