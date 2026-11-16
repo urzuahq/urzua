@@ -133,10 +133,27 @@ this edit ... is outside the repository", for each such write. A refused write, 
 repository that urzua could not judge, are reported either way.
 
 The post-command check prints nothing for a command that changed nothing governed. A gated move or a
-protected-path change is reported once, to you, however it arrived; when it came in by a `git pull`,
-`checkout`, `merge`, `reset` or `stash pop` the message says so. Ordinary findings in records a pull or
+protected-path change is reported once, to you, however it arrived. Ordinary findings in records a pull or
 checkout brought in are not reported. The agent gets a short line; you get a message only for a gated
 move, a protected-path change, or a check that could not run.
+
+Each gated change is compared with a base branch: the file as it is after the command, hashed as git
+hashes it, against the same path in that branch's tree. When every one matches, as after a fast-forward
+`git pull` of the default branch, you get one sentence, such as "the command changed 3 gated path(s),
+and each now holds exactly the content on origin/main, so nothing needs doing", at level `info`. A change
+that differs is reported at level `error` under its gate, each gate named once, even when it arrived in
+the same command as changes that match. Two keys of the guardrail set this:
+
+```yaml
+harness:
+  guardrails:
+    post-command: {enabled: true, base: origin/HEAD, base_match: info}   # base_match: info | warning | error
+```
+
+The comparison uses your local refs, and an agent can move those (`git update-ref`, a commit on the local
+base branch), so it is advisory: it lowers how loudly a change is reported, never whether, and CI, which
+compares with the real remote, is the guarantee. A base that does not resolve compares nothing, and every
+change keeps level `error`.
 
 ## Limits
 

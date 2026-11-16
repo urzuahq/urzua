@@ -159,7 +159,7 @@ fn a_bash_edit_that_moves_a_record_to_a_gated_status_is_reported_and_not_blocked
         "{line}"
     );
     assert!(
-        msg(&v).contains("1 gated move(s)") && msg(&v).contains("was not prevented"),
+        msg(&v).contains("1 gated change(s)") && msg(&v).contains("was not prevented"),
         "{v}"
     );
 }
@@ -850,7 +850,7 @@ fn launder_by_cherry_pick_is_reported() {
 }
 
 #[test]
-fn a_pull_of_a_protected_change_says_it_arrived_by_a_git_move_once() {
+fn a_pull_with_no_base_ref_reports_the_protected_change_at_full_weight() {
     let dir = launder_fixture("pull-protected");
     let up_dir = common::TempDir::new("urzua-postcmd-up");
     let parent = up_dir.join("up");
@@ -874,8 +874,8 @@ fn a_pull_of_a_protected_change_says_it_arrived_by_a_git_move_once() {
     let v = post(&dir);
     let person = v["person"].as_str().unwrap();
     assert!(
-        person.contains(".github/workflows/ci.yml") && person.contains("arrived by a git move"),
-        "{v}"
+        person.contains(".github/workflows/ci.yml") && person.contains("[protected-paths] error"),
+        "with no base ref to compare with, the change keeps full weight: {v}"
     );
     bash(&dir, "ls >/dev/null");
     assert_eq!(post(&dir)["verdict"], "allow");
@@ -970,5 +970,137 @@ fn a_gated_move_the_agent_committed_itself_is_worded_as_its_own_change() {
     let v = post(&dir);
     let person = v["person"].as_str().unwrap();
     assert!(person.contains("[acceptance]"), "{v}");
-    assert!(!person.contains("arrived by a git move"), "{v}");
+}
+
+/// An upstream repository with the gates, and a clone of it whose
+/// `origin/HEAD` is the base the post-command check compares with.
+fn cloned_fixture(name: &str) -> (common::TempDir, PathBuf, common::TempDir) {
+    cloned_fixture_with(name, None)
+}
+
+fn cloned_fixture_with(
+    name: &str,
+    post_command: Option<&str>,
+) -> (common::TempDir, PathBuf, common::TempDir) {
+    let up = launder_fixture(&format!("{name}-up"));
+    if let Some(decl) = post_command {
+        let config = LAUNDER_CONFIG.replace("post-command: {enabled: true}", decl);
+        std::fs::write(up.join(".urzua/config.yaml"), config).unwrap();
+        git(&up, &["commit", "-qam", "post-command keys"]);
+    }
+    let holder = common::TempDir::new(&format!("urzua-postcmd-{name}-clone"));
+    let dir = holder.join("work");
+    git(
+        &holder,
+        &["clone", "-q", up.to_str().unwrap(), dir.to_str().unwrap()],
+    );
+    git(&dir, &["config", "user.email", "t@example.com"]);
+    git(&dir, &["config", "user.name", "t"]);
+    assert_eq!(post(&dir)["verdict"], "allow");
+    (up, dir, holder)
+}
+
+fn upstream_change(up: &Path) {
+    bash(up, &format!("{A} && echo upstream >> .github/workflows/ci.yml && echo up > .github/workflows/new.yml && git add -A && git commit -qm upstream"));
+}
+
+#[test]
+fn a_fast_forward_pull_of_the_base_branch_is_one_plain_sentence() {
+    let (up, dir, _h) = cloned_fixture("ff-base");
+    upstream_change(&up);
+    bash(&dir, "git pull -q --ff-only");
+    let v = post(&dir);
+    assert_eq!(v["verdict"], "allow-with-warnings", "still printed: {v}");
+    let person = v["person"].as_str().unwrap();
+    assert_eq!(
+        person,
+        "urzua harness (post-command) info: the command changed 3 gated path(s), and each now holds exactly the content on origin/main, so nothing needs doing.",
+        "{v}"
+    );
+    assert!(!person.contains("error"), "{v}");
+    assert_eq!(v["base_match"]["paths"].as_array().unwrap().len(), 3, "{v}");
+    assert_eq!(v["base_match"]["level"], "info", "{v}");
+    bash(&dir, "ls >/dev/null");
+    assert_eq!(post(&dir)["verdict"], "allow");
+}
+
+#[test]
+fn a_pull_with_a_differing_shell_edit_keeps_the_edit_at_full_weight() {
+    let (up, dir, _h) = cloned_fixture("ff-mixed");
+    upstream_change(&up);
+    bash(
+        &dir,
+        "git pull -q --ff-only && echo evil > .github/workflows/evil.yml",
+    );
+    let v = post(&dir);
+    let person = v["person"].as_str().unwrap();
+    assert!(
+        person.contains("[protected-paths] error (gate: ")
+            && person.contains(".github/workflows/evil.yml"),
+        "{v}"
+    );
+    assert!(
+        person.contains("info: 3 other gated path(s) now hold exactly the content on origin/main"),
+        "{v}"
+    );
+    assert_eq!(
+        person.matches("[protected-paths]").count(),
+        1,
+        "one gate, named once: {v}"
+    );
+    let evil = v["protected_changes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|l| l.as_str().unwrap().contains("evil.yml"))
+        .unwrap()
+        .as_str()
+        .unwrap();
+    assert!(evil.contains("[protected-paths] error:"), "{v}");
+}
+
+#[test]
+fn a_shell_edit_of_a_protected_path_not_on_the_base_branch_is_an_error() {
+    let (_up, dir, _h) = cloned_fixture("shell-edit");
+    bash(&dir, &format!("{W} && echo b >> .github/workflows/ci.yml"));
+    let v = post(&dir);
+    let person = v["person"].as_str().unwrap();
+    assert!(
+        person.contains("[protected-paths] error") && person.contains(".github/workflows/ci.yml"),
+        "{v}"
+    );
+    assert!(v["base_match"].is_null(), "{v}");
+}
+
+#[test]
+fn a_match_forged_by_a_local_commit_on_the_base_branch_is_still_printed() {
+    let (_up, dir, _h) = cloned_fixture("forged");
+    bash(
+        &dir,
+        &format!("{W} && git commit -qam forged && git update-ref refs/remotes/origin/main HEAD"),
+    );
+    let v = post(&dir);
+    assert_eq!(v["verdict"], "allow-with-warnings", "{v}");
+    let person = v["person"].as_str().unwrap();
+    assert!(
+        person.contains("the command changed 1 gated path(s), and each now holds exactly the content on origin/main"),
+        "the forged match lowers the weight but is never silent: {v}"
+    );
+}
+
+#[test]
+fn the_comparison_ref_and_the_level_come_from_configuration() {
+    let (up, dir, _h) = cloned_fixture_with(
+        "configured",
+        Some("post-command: {enabled: true, base: refs/remotes/origin/main, base_match: warning}"),
+    );
+    upstream_change(&up);
+    bash(&dir, "git pull -q --ff-only");
+    let v = post(&dir);
+    assert_eq!(
+        v["person"],
+        "urzua harness (post-command) warning: the command changed 3 gated path(s), and each now holds exactly the content on origin/main, so nothing needs doing.",
+        "{v}"
+    );
+    assert_eq!(v["base_match"]["level"], "warning", "{v}");
 }

@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.155'
+Version: '0.156'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:04472363242c8fea612ce39fc1f6cdc08571a58cc760845d5fa9a193060a3cff, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:09c2431a269316741c35b51dabd5766ecd3d50fab2b98069314bb1bc8857767d, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:255395e7d2caa34947cef28f463e2ec050e3eba798a4dc7573a3cad946fee1ae
@@ -943,7 +943,7 @@ harness:
   guardrails:
     editor-hook:    {enabled: true, on_unjudged: allow, pending_pair: allow}   # allow | deny; allow | refuse
     session-start:  {enabled: true}
-    post-command:   {enabled: false}
+    post-command:   {enabled: false, base: origin/HEAD, base_match: info}   # a ref; info | warning | error
     acceptance:     {enabled: false, on_unjudged: deny}
     protected-paths: {enabled: false, on_unjudged: deny}
   limits:                            # optional; each key undeclared is its built-in value
@@ -993,6 +993,20 @@ harness:
   refusal names the same command. Any other new error refuses either way, and the gates, `on_unjudged` and the
   override are unaffected. An unmatched pair left in the tree is still a `urzua check` finding, so the
   post-command hook reports it and pre-commit and CI block it. The default is `allow`, accepted by the maintainer on 2026-11-16 ("pad edit switch can be on by default", dictated for "paired edit switch"; confirmed: "Yeah, it should be on by default"): a deliberate exception to the `ADR-101` amendment of 2026-11-15, under which a configuration that does not declare a new key behaves as before. A configuration that wants the earlier refusal sets `refuse`. The key's name and values were decided by the builder on 2026-11-16, pending maintainer review.
+- **`post-command.base`** and **`post-command.base_match`** set how the post-command report
+  weighs a gated change (a gated status move, a gated deletion, or a change to a protected path) that holds
+  exactly the content on a base ref. `base` is a git ref (default `origin/HEAD`, the remote's default branch
+  as a clone records it); a blank value, or one starting with `-`, is a load error. After a command, each gated path the command changed
+  is hashed as git hashes it and compared with the blob `<base>:<path>`; a path absent from both matches, and
+  a status move matches only when the whole record file does. `base_match` is `info`, `warning` or `error`
+  (default `info`; anything else is a load error) and is the level a matching change is reported at. When
+  every gated change matches, the report is one sentence naming their count and the branch and saying that
+  nothing needs doing; a change that differs keeps level `error` and its full report, grouped under its gate
+  with each gate named once, and the matching ones in the same command are summarised in one line. A base
+  that does not resolve compares nothing, so every change keeps level `error`. Every gated change is still
+  printed: the comparison uses local refs, which the agent the report is about can move or commit to, so it
+  is advisory and lowers only how loudly a change is reported, never whether; CI's `diff.decider-required`
+  against the real remote is the guarantee. No other guardrail takes these keys.
 - **A guardrail name the build does not ship is a load error.** A name under `harness.guardrails` that is
   not one of `editor-hook`, `post-command`, `session-start`, `acceptance`, `protected-paths` stops every
   command (`check` exits 2) with a message naming it and, when one is close, the nearest valid name
@@ -2829,5 +2843,6 @@ proves this configuration produces the three findings.
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 4285ca9e4458 -> e56be4912522. Reason: config.rs: validate_hooks also rejects --config, --stdin-path and --actors in a hook's check arguments; every other key and default is unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | `hooks.<hook>` may be a map with `command` and `managed` (`block` or `declared`); a declared hook is the repository's assertion, checked by `urzua hooks verify --run`. **Why:** a third review of `MILE-220`'s pull request: reading a hook's text cannot prove a line runs, and the maintainer asked for configuration that supports hooks a repository maintains itself. | **substantive** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` e56be4912522 -> f74531f49e9c. Reason: config.rs: hooks.<hook> may be a map with command and managed (block or declared) as well as a list, and args() fills in each hook's default; every other key and default is unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-16 | Bumped to `0.156`. Adds `harness.guardrails.post-command.base` (default `origin/HEAD`) and `base_match` (default `info`): a gated change whose content is the base ref's is reported in one sentence at that level, still printed, advisory because the refs are local. **Why:** the maintainer reported on 2026-11-16 that the report after a pull of the default branch could not be understood. | **substantive** |
 > | 2026-11-16 | Adds `hooks.verify_timeout_seconds` (default 600). **Why:** a fourth review of `MILE-220`'s pull request: `urzua hooks verify --run` ran a hook with no time limit. | **substantive** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` f74531f49e9c -> 04472363242c. Reason: config.rs: the hooks key gains verify_timeout_seconds (default 600, at least 1), and hooks.<hook> may be a map with command and managed; every other key and default is unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |

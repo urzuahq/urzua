@@ -147,10 +147,7 @@ fn a_bash_edit_of_a_protected_path_is_reported_once_and_never_blocked() {
     );
     assert!(lines.iter().any(|l| l.contains(".urzua/config.yaml")));
     assert!(
-        v["message"]
-            .as_str()
-            .unwrap()
-            .contains("2 protected path change(s)"),
+        v["message"].as_str().unwrap().contains("2 gated change(s)"),
         "{v}"
     );
     // The same change is not reported again.
