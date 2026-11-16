@@ -4436,3 +4436,35 @@ fn audit_help_describes_a_deprecated_alias_of_check_not_the_old_rule_pair() {
     let text = String::from_utf8_lossy(&run_urzua(&dir, &["audit", "--help"]).stdout).to_string();
     assert!(text.contains("check --rules"), "{text}");
 }
+
+#[test]
+fn migrate_ids_apply_refuses_a_record_under_a_path_gate() {
+    let dir = fixture_repo("migrate-ids-gated");
+    std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        "schema_version: 2\nrules: {header.required-fields: error}\n\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: []\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("docs/adr/0001-x.md"),
+        "---\nStatus: Accepted\n---\n# 0001 — X\n",
+    )
+    .unwrap();
+    commit_all(&dir);
+    common::gate_paths(&dir, &["docs/adr"]);
+    let output = run_urzua(&dir, &["migrate", "ids", "--apply"]);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let parsed = assert_valid_json_object(&stdout);
+    assert_eq!(parsed["results"][0]["outcome"], "failed", "{stdout}");
+    assert!(
+        parsed["results"][0]["error"]
+            .as_str()
+            .unwrap()
+            .contains("path gate"),
+        "{stdout}"
+    );
+    assert!(!std::fs::read_to_string(dir.join("docs/adr/0001-x.md"))
+        .unwrap()
+        .contains("Stable-Id"));
+}

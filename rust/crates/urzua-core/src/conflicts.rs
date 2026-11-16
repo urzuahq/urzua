@@ -800,6 +800,17 @@ pub fn is_machine_row(row: &str) -> bool {
 
 /// The locators a merge row names as recomputed, or `None` when `row` is not one.
 pub fn merge_row_locators(row: &str) -> Option<Vec<String>> {
+    let mut out: Vec<String> = merge_row_pins(row)?
+        .into_iter()
+        .map(|p| p.locator)
+        .collect();
+    out.dedup();
+    Some(out)
+}
+
+/// The re-pins a merge row names, each `` `locator` a and b -> merged ``, or
+/// `None` when `row` is not one.
+pub fn merge_row_pins(row: &str) -> Option<Vec<crate::fix::RowPin>> {
     let at = row.find(MERGE_ROW_PREFIX)?;
     let rest = &row[at..];
     let list = rest
@@ -807,13 +818,28 @@ pub fn merge_row_locators(row: &str) -> Option<Vec<String>> {
         .1
         .split_once("; the new hash")?
         .0;
-    let mut out: Vec<String> = list
-        .split(", `")
-        .filter_map(|item| item.trim_start_matches('`').split_once('`'))
-        .map(|(loc, _)| loc.to_string())
-        .collect();
-    out.dedup();
-    Some(out)
+    Some(
+        list.split(", `")
+            .filter_map(|item| item.trim_start_matches('`').split_once('`'))
+            .map(|(loc, tail)| {
+                let (sides, to) = tail.split_once(" -> ").unwrap_or((tail, ""));
+                // The site in parentheses before the hashes, `(Realized-by)`.
+                let sides = match sides.trim().starts_with('(') {
+                    true => sides.rsplit_once(") ").map_or(sides, |(_, h)| h),
+                    false => sides,
+                };
+                crate::fix::RowPin {
+                    locator: loc.to_string(),
+                    from: sides
+                        .split(" and ")
+                        .map(|s| s.trim().to_string())
+                        .filter(|s| !s.is_empty())
+                        .collect(),
+                    to: to.trim().to_string(),
+                }
+            })
+            .collect(),
+    )
 }
 
 fn merge_narrative(moved: &[&PinOutcome], attestation: &Attestation, note: Option<&str>) -> String {

@@ -386,10 +386,16 @@ const COVERED: &[(&str, &str, &[&str])] = &[
 ];
 
 /// `run-command` variants no fixture here produces, each with why.
-const EXEMPT: &[(&str, &str)] = &[(
+const EXEMPT: &[(&str, &str)] = &[
+    (
+        "locator-scope-unpinned",
+        "needs a scoped locator and a declared locator resolver; its action is the read-only listing `urzua fix --pin --ids <record>`, and fix_rebaseline_integration runs that listing and the apply form its next_action prints",
+    ),
+    (
     "delivery-partial-not-started",
     "needs a Done-means items declaration; its action is built by the same code as delivery-not-done (`urzua fix --apply --ids <record> --actor agent`), and done_items_integration runs it",
-)];
+),
+];
 
 /// Every finding of `report` that offers a `run-command` action, as
 /// (rule, argv).

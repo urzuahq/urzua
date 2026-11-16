@@ -671,6 +671,13 @@ impl RenewalWrite<'_> {
         if !review.refused.is_empty() {
             return Err(format!("refused: {}", review.refused.join("; ")));
         }
+        if let Some(refusal) = urzua_core::authority::path_gate_refusal(
+            self.config.authority.as_ref(),
+            &review.record,
+            Some(attestation),
+        ) {
+            return Err(refusal);
+        }
         let full = self.repo_root.join(&review.record);
         let fresh =
             urzua_io::read_to_string(&full).map_err(|e| format!("could not re-read: {e}"))?;

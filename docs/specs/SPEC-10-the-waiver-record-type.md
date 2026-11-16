@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5BCRKD027XA81J0Q8Q
-Version: '0.25'
+Version: '0.26'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-core/src/waiver.rs@sha256:20350e7953792a3a8914bd67f80ed10821e19578de3bd8f228deb5061c95beea, code:rust/crates/urzua-core/src/rules/waiver.rs@sha256:6d20296d8b4e2ae446b38d16359b9d9fc8dcaa7955aa894430467ba280c78705, test:rust/crates/urzua-cli/tests/waiver_stale_integration.rs@sha256:34de7eb7e0b26307bd3136ca9aaada2395f10aac03ea2f68885f8e0251cbe774
+Realized-by: code:rust/crates/urzua-core/src/waiver.rs@sha256:d6cc43b080a82784348e1bc8acb0878119491029b3bea8542f4b8417d17101a6, code:rust/crates/urzua-core/src/rules/waiver.rs@sha256:6d20296d8b4e2ae446b38d16359b9d9fc8dcaa7955aa894430467ba280c78705, test:rust/crates/urzua-cli/tests/waiver_stale_integration.rs@sha256:34de7eb7e0b26307bd3136ca9aaada2395f10aac03ea2f68885f8e0251cbe774
 Author: beauwilliams
 Subject: 'The `waiver` record type -- time-boxed, scoped exceptions to a check finding.'
 Implements: ADR-11
@@ -198,3 +198,5 @@ record is edited later.
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/waiver.rs` 2ac7aae60781 -> a6283261e0ee. Reason: waiver.rs adds rejected_values and waiver_fields to SuppressionType, keeping the built-in placeholder floor. The claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Bumped to `0.25`. Re-pinned the evidence `MILE-233` changed (the rule vocabulary read from configuration); what this spec states is unchanged. **Why:** a re-pinned versioned spec carries a version above main's. | **structural** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/waiver.rs` a6283261e0ee -> 20350e795379. Reason: waiver.rs adds rejected_values, waiver_fields and the type's declared placeholders to the suppression judgement, which only add to the built-in floor. The claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/waiver.rs` 20350e795379 -> d6cc43b080a8. Reason: waiver.rs reads a required suppression field with no letter or digit as blank, so such a suppression does not take effect; the record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-16 | Bumped to `0.26`. Re-pinned the evidence `MILE-288`, `MILE-289` and `MILE-290` changed (the pin attestation rule, path gates on write commands, one definition of blank); what this spec states is unchanged. **Why:** a re-pinned versioned spec carries a version above main's. | **structural** |

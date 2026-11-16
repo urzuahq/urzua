@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5C0WX34AQKF79DQDS5
-Version: '0.34'
+Version: '0.35'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/commands/new.rs@sha256:1a54159935079af3211c815fe93091a3a1c922d63dd2c59c4ca422dfc05f27f2, code:rust/crates/urzua-core/src/new_record.rs@sha256:9ad96b4bc33122a1185b91e2d0af210a68e7c2acadc5efb2d16ea1ec1f0e9875, test:rust/crates/urzua-cli/tests/new_integration.rs@sha256:c319a5750aa11e1bd2b6be9fc6a2d707f34150c514d49c35290ad353f0ef61f7
+Realized-by: code:rust/crates/urzua-cli/src/commands/new.rs@sha256:17c7a9534720911110a6f238679ced2b79bedc79957afed8001e7b50b6deb233, code:rust/crates/urzua-core/src/new_record.rs@sha256:9ad96b4bc33122a1185b91e2d0af210a68e7c2acadc5efb2d16ea1ec1f0e9875, test:rust/crates/urzua-cli/tests/new_integration.rs@sha256:24cdee5f880f8a7c547e11efb4bb0350c8b9cfa1d5b634785ddc350e4c505c14
 Author: beauwilliams
 Subject: '`urzua new` -- generating a record''s initial content with a real stable ID assigned.'
 Implements: ADR-27
@@ -257,3 +257,6 @@ steps and in seconds, for each record type.
 > | 2026-11-16 | Bumped to `0.33`. The pins re-baselined above follow code changed for `MILE-266` and `MILE-267` (printed next actions that run as printed, a revision log in every built-in template); nothing this spec states changes. **Why:** the re-pin rows are structural and `revision-log.version-bump-required` asks for a bump. | **structural** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/new_record.rs` 203bcd8b4321 -> 9ad96b4bc331. Reason: new_record.rs makes the scaffold's reason a (field, value) pair so a declared waiver_fields.reason is written. The claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Bumped to `0.34`. Re-pinned the evidence `MILE-233` changed (the rule vocabulary read from configuration); what this spec states is unchanged. **Why:** a re-pinned versioned spec carries a version above main's. | **structural** |
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/new.rs` 1a5415993507 -> 42834880ff2b, `rust/crates/urzua-cli/tests/new_integration.rs` c319a5750aa1 -> 24cdee5f880f. Reason: new.rs refuses to write a record into a path-gated directory through write_new_record, which waive shares; new_integration.rs gains a test that new refuses a path-gated directory; the record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-16 | Bumped to `0.35`. Re-pinned the evidence `MILE-288`, `MILE-289` and `MILE-290` changed (the pin attestation rule, path gates on write commands, one definition of blank); what this spec states is unchanged. **Why:** a re-pinned versioned spec carries a version above main's. | **structural** |
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/new.rs` 42834880ff2b -> 17c7a9534720. Reason: new.rs refuses a path-gated directory through write_new_record, and a misplaced doc comment moved back to write_new_file; the record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |

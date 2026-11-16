@@ -28,6 +28,9 @@ pub struct FixArgs {
     pub rebaseline: bool,
     pub conflicts: bool,
     pub reason: Option<String>,
+    pub pin: bool,
+    pub replace: Option<String>,
+    pub remove: Option<String>,
 }
 
 /// Why a command could not run: the sentence `urzua` prints as `not-run`.
@@ -51,6 +54,9 @@ pub(crate) fn rule_enabled(config: &Config, rule: &str) -> bool {
 
 /// `run` with every refusal as an `Err`, so each step can stop with `?`.
 fn run_checked(config_path: Option<PathBuf>, args: FixArgs) -> Result<ExitCode, Refusal> {
+    if args.pin || args.replace.is_some() || args.remove.is_some() {
+        return run_pin(config_path, &args);
+    }
     let reason = check_usage(&args)?;
     if args.conflicts {
         return Ok(super::fix_conflicts::run(
@@ -143,6 +149,45 @@ fn run_checked(config_path: Option<PathBuf>, args: FixArgs) -> Result<ExitCode, 
 
 /// The usage errors of the command line that need no repository, in the order
 /// they are reported; the validated `--reason` (empty when none applies).
+/// `fix --pin`, with the flags that belong to other modes refused.
+fn run_pin(config_path: Option<PathBuf>, args: &FixArgs) -> Result<ExitCode, Refusal> {
+    if !args.pin {
+        return Err(refuse("--replace and --remove belong to --pin: `urzua fix --pin --replace OLD=NEW` or `--remove OLD`"));
+    }
+    if args.rebaseline
+        || args.conflicts
+        || args.stdin_path.is_some()
+        || !args.paths.is_empty()
+        || args.force
+    {
+        return Err(refuse("urzua fix --pin cannot be combined with --rebaseline, --conflicts, --stdin-path, --force or PATHS (--ids names the records)"));
+    }
+    if args.apply && args.ids.is_empty() {
+        return Err(refuse(
+            "urzua fix --pin --apply: pass --ids <record,...>; a pin is attested record by record",
+        ));
+    }
+    if !args.apply
+        && (args.by.is_some()
+            || args.actor != urzua_core::fix::ActorKind::Unspecified
+            || args.reason.is_some())
+    {
+        return Err(refuse("urzua fix --pin: --by, --actor and --reason belong to --apply; without it nothing is written"));
+    }
+    super::fix_pin::run(
+        config_path,
+        super::fix_pin::PinArgs {
+            apply: args.apply,
+            ids: &args.ids,
+            by: args.by.as_deref(),
+            actor: args.actor,
+            reason: args.reason.as_deref(),
+            replace: args.replace.as_deref(),
+            remove: args.remove.as_deref(),
+        },
+    )
+}
+
 fn check_usage(args: &FixArgs) -> Result<String, Refusal> {
     if args.tier != 1 {
         return Err(refuse(
@@ -452,6 +497,13 @@ fn write_repair(
         .find(|r| r.path == repair.record)
         .map(|r| r.record_type.as_str());
     if let Some(refusal) = authority_refusal(config, record_type, repair) {
+        return Err(refusal);
+    }
+    if let Some(refusal) = urzua_core::authority::path_gate_refusal(
+        config.authority.as_ref(),
+        &repair.record,
+        Some(attestation),
+    ) {
         return Err(refusal);
     }
     let log_id = record_type
@@ -940,6 +992,13 @@ fn write_rebaseline(
     today: &str,
     attestation: &Attestation,
 ) -> Result<(), String> {
+    if let Some(refusal) = urzua_core::authority::path_gate_refusal(
+        args.config.authority.as_ref(),
+        &rb.record,
+        Some(attestation),
+    ) {
+        return Err(refusal);
+    }
     let full_path = args.repo_root.join(&rb.record);
     let fresh =
         urzua_io::read_to_string(&full_path).map_err(|e| format!("could not re-read: {e}"))?;

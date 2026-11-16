@@ -295,7 +295,24 @@ pub const DEFAULT_ON_RULES: &[DefaultOn] = &[
         level: crate::config::RuleLevel::Warn,
         under_selection: false,
     },
+    DefaultOn {
+        id: RULE_DIFF_PIN_CHANGED_UNATTESTED,
+        level: crate::config::RuleLevel::Error,
+        under_selection: false,
+    },
 ];
+
+/// The merge-base copies of the records the diff did not add: a renamed record
+/// has its old copy in `base_text` only for `diff.pin-changed-unattested`, and
+/// the other readers judge it as they always did, as new.
+fn unrenamed(c: &RuleCtx<'_>) -> HashMap<PathBuf, String> {
+    let added: &[PathBuf] = c.added_paths.unwrap_or_default();
+    c.base_text
+        .iter()
+        .filter(|(p, _)| !added.contains(p))
+        .map(|(p, t)| (p.clone(), t.clone()))
+        .collect()
+}
 
 /// The default-on entry for `id`, if it has one.
 pub fn default_on(id: &str) -> Option<&'static DefaultOn> {
@@ -707,7 +724,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         ],
         phase: Phase::Main,
         companion: None,
-        run: |c| revision_log_version_bump(c.records, c.config, c.full_text, c.changed_paths, c.base_text),
+        run: |c| revision_log_version_bump(c.records, c.config, c.full_text, c.changed_paths, &unrenamed(c)),
     },
     RuleDef {
         id: RULE_EMBODIMENT_CONSISTENCY,
@@ -828,7 +845,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
                 c.records,
                 c.config,
                 c.full_text,
-                c.base_text,
+                &unrenamed(c),
                 c.changed_paths,
                 &BaseReads {
                     drift: c.base_drift,
@@ -1011,7 +1028,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
             VariantAction::new("locator-untracked", ActionDecl::Exempt("the repair is `git add` on the named file, and no action kind addresses git: `run-command` is closed to `urzua` commands and `edit-config` edits configuration")),
             VariantAction::new("locator-malformed", ActionDecl::FIELD_SET),
             VariantAction::new("locator-scope-unresolved", ActionDecl::FIELD_SET),
-            VariantAction::new("locator-scope-unpinned", ActionDecl::FIELD_SET),
+            VariantAction::new("locator-scope-unpinned", ActionDecl::RUN_COMMAND),
             VariantAction::new("locator-commit-anchor", ActionDecl::FIELD_SET),
             VariantAction::new("locator-kind-undeclared", ActionDecl::FIELD_SET),
             VariantAction::new("locator-kind-unpinnable", ActionDecl::FIELD_SET),
@@ -2292,6 +2309,39 @@ pub const RULE_TABLE: &[RuleDef] = &[
         },
     },
     RuleDef {
+        id: RULE_DIFF_PIN_CHANGED_UNATTESTED,
+        description: "On a `--base` run, every `@sha256` pin a changed record carries (in `Realized-by` or a Done-means item evidence clause), when the merge base holds the record, is unchanged at the same occurrence or accounted for by rows the pinning tools write; a record added at a new path is paired with a deleted one by `Stable-Id`, then record id, then git's rename detection (a unique match each), and a `Stable-Id` the head changed or dropped is reported (`stable-id-changed`). Unchanged pins are matched wherever they sit (same locator and hash, the same kind of site first); the pins left at one locator are then compared in order, so a hash copied over another is a change. `check --base` lists every pin replaced or removed with `fix --pin` in the notice `pins-replaced-or-removed`. Reported: a changed pin with no chain of re-baseline (`urzua fix --rebaseline --apply`) or merge (`urzua fix --conflicts --apply`) rows from the base's hash to the head's, or a renewal row (`urzua reverify --apply`) that acknowledged that locator's drift and lists it at the head's hash; an added pin (a first pin, a new pinned locator, a changed scope, a pin moved to a renamed file) with no `Pinned` or moved-pin row (`urzua fix --pin --apply`, with `--replace OLD=NEW` for a move); a removed pin or pinned locator with no removal or moved-pin row (`urzua fix --pin --apply --remove OLD`). Not reported: a locator added or removed without a pin, a record new in the diff, an unchanged pin. Rows are read by the parsers beside their writers and matched on the full hash where the row carries it and on its 12-character form otherwise. A row typed by hand in a tool's shape passes, the same trust as a typed `--reason`; the pull request shows it. The message names the command for its case. On by default at `error`; under `--base` the level is the stricter of the head's and the base revision's (its configuration read at the path the base used), so a pull request cannot switch the rule off for itself (an info notice says when the base's applies); `off` in the head adds a warning notice. Reports `not-applicable` with no `--base`. The population counts records.",
+        scope: Scope::Records,
+        anchor: Anchor::Record,
+        judges: Judges::ChangedSet,
+        needs_identity_index: false,
+        requires_relation_pairs: false,
+        requires_acyclic_pair: false,
+        requires_override_log: false,
+        requires_authority: false,
+        reads_declaration: None,
+        header_none: HeaderNone::Exempt("judges only the records a --base run changed, against their merge-base copy"),
+        options: &[],
+        population: PopulationUnit::Record,
+        actions: &[
+            VariantAction::new("pin-changed-unattested", ActionDecl::Exempt("putting the merge base's pin back is an edit inside the evidence clause that no action kind addresses; the message names the old hash and the re-pin command that writes the row")),
+            VariantAction::new("stable-id-changed", ActionDecl::Exempt("putting a record's Stable-Id back is a header edit to a value the base held, which the message names; no tool writes an identity")),
+            VariantAction::new("pin-added-unattested", ActionDecl::Exempt("taking a hand-typed pin off is an edit inside the evidence clause that no action kind addresses; the message names the `urzua fix --pin` command that writes the first pin or the move with its row")),
+            VariantAction::new("pin-removed", ActionDecl::Exempt("restoring a removed pin is an edit inside the evidence clause that no action kind addresses; the message names the hash it held")),
+        ],
+        phase: Phase::Main,
+        companion: None,
+        run: |c| {
+            diff_pin_changed_unattested(
+                c.records,
+                c.config,
+                c.full_text,
+                c.base_text,
+                c.changed_paths,
+            )
+        },
+    },
+    RuleDef {
         id: RULE_OVERRIDE_UNREVIEWED,
         description: "An editor-hook override that no one has reviewed is reported, on the committed override log the repository declares as `override_log` (`ADR-78`, `MILE-188`). The log is a Markdown table of `Date`, `Name`, `Record`, `Field`, `Rule`, `Reason` and `Reviewed-by`; the hook appends a row, with `Reviewed-by` blank, whenever a named override lets a blocked edit through, and the entry is reviewed once a person names themselves in `Reviewed-by` on its row in a later change; a blank cell, a placeholder (`TBD`, `-`) and a declared pending value are not a review. The finding names the override, the record, the rule and the reason, so it surfaces in the pull request that carries the log change. A row that is not an entry is a finding; a declared log that does not exist, or is not text, is reported and counted unreadable, never read as an empty log. Opt-in; needs the top-level `override_log` declaration. The population counts log entries. The optional `rejected_values` option adds whole values that are never a reviewer to the built-in ones (dashes, the compiled-in placeholder words, `pending`), which no declaration removes (`MILE-233`).",
         scope: Scope::Files,
@@ -2643,7 +2693,8 @@ mod tests {
                 RULE_REVISION_LOG_VERSION_BUMP_REQUIRED,
                 RULE_HEADER_SCAFFOLD_MISMATCH,
                 RULE_IDENTITY_OPEN_PR_COLLISION,
-                RULE_STATUS_TRANSITION_ALLOWED
+                RULE_STATUS_TRANSITION_ALLOWED,
+                RULE_DIFF_PIN_CHANGED_UNATTESTED
             ]
         );
         for id in [

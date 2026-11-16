@@ -92,6 +92,10 @@
       "status": "ran"
     },
     {
+      "rule": "diff.pin-changed-unattested",
+      "status": "not-applicable"
+    },
+    {
       "rule": "embodiment.locator-on-back-pointer-path",
       "population": {
         "unit": "field",

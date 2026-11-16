@@ -143,6 +143,17 @@
         },
         "rule": "identity.record-symlink-escapes",
         "status": "ran"
+      },
+      {
+        "population": {
+          "eligible": 4,
+          "examined": 1,
+          "out_of_scope": 0,
+          "unit": "record",
+          "unreadable": 0
+        },
+        "rule": "diff.pin-changed-unattested",
+        "status": "ran"
       }
     ],
     "rules_selected": null,

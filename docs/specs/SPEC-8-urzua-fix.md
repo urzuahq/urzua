@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5Q0XVK27P5T8FN72BN
-Version: '0.61'
+Version: '0.62'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/commands/fix.rs@sha256:90200653f67b820be83351060cfffc25b75636394cb6401d7af3d5df85bf2666, code:rust/crates/urzua-core/src/fix.rs@sha256:af5e5c811c17d35e32c312898a4cb85b4b9e29f2d0f396cc93cc34af259d0acc, test:rust/crates/urzua-cli/tests/fix_paths_integration.rs@sha256:73cb06a1782f02abeaf6c0795632ed1d1939633d72f67033247120656c6927d2, test:rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs@sha256:9a053f2ed41dac449d16634b6c76070192f55863ace5a56d8aa096543e90b131, test:rust/crates/urzua-cli/tests/fix_drift_integration.rs@sha256:ff69343ca324400bde79c266372f9a213728d4d4ef8202beca6e12e54aa35352
+Realized-by: code:rust/crates/urzua-cli/src/commands/fix.rs@sha256:317aab0052ff53642b117753b33d10b7067aba4395b9c52a3fb523e7ef067689, code:rust/crates/urzua-core/src/fix.rs@sha256:f95de51150cfbb35b11f7fe2a1f05c21641bb5bf7d24de68822b69cbfc63ad4b, test:rust/crates/urzua-cli/tests/fix_paths_integration.rs@sha256:efefbffa3dc1992d97ff18582c7a15df6ff789f2f036b4ec3b36bfb910a12ff6, test:rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs@sha256:e99a142c76d0cb18d6dd2d07d3012648963c3fb1f83d8374989b617f271ea244, test:rust/crates/urzua-cli/tests/fix_drift_integration.rs@sha256:ff69343ca324400bde79c266372f9a213728d4d4ef8202beca6e12e54aa35352
 Author: beauwilliams
 Subject: '`urzua fix` -- detecting and applying Embodiment corrections computed from evidence.'
 Implements: ADR-15, ADR-18, ADR-19, ADR-20
@@ -575,6 +575,70 @@ declared and is `not-run` otherwise.
 - The exit codes are `fix`'s: 0 for a review or an applied batch, 1 for a refused or failed record,
   2 for `not-run`.
 
+## When a pinned file was merged by hand
+
+`fix --conflicts` recomputes a pin only over git's automatic merge of the pinned file. When the file was merged by hand
+(or edited during the merge, or changed on a side without a re-pin) it refuses the record, and its refusal and
+`next_action` give the sequence that passes `diff.pin-changed-unattested`: take the merged-in side's version of the
+record, whose pins are the base's (`git checkout --theirs -- :/<record>` while merging, `--ours` while rebasing; the
+report's `take_side` names which), `git add` it, then `urzua fix --rebaseline --apply --ids <record> --actor agent
+--reason "<what the hand-merged code changed>"`. Re-pinning from the branch's own pin instead would leave a chain that
+starts from the branch's hash, not the base's, and the rule would report it. Taking the merged-in side drops that
+record's own branch rows, which the new re-pin row supersedes. A path that resolves the record's text while leaving the
+hand-merged pins stale (so only the re-pin is left to do) is not built (decided by the builder on 2026-11-16, pending
+maintainer review).
+
+## Path gates bind every command that writes for someone (`MILE-289`)
+
+A path gate in the `authority` table (`gates: [{paths, by}]`) names who may change a path: the group `by`. The editor
+hook refuses an agent's edit there; the commands that write records on someone's behalf now refuse the same write, through
+one function, `authority::path_gate_refusal`, before anything is written (decided by the builder on 2026-11-16, pending
+maintainer review):
+
+- **`fix --apply`** (every repair), **`fix --rebaseline --apply`**, **`fix --conflicts --apply`** and
+  **`reverify --apply`** take an attestation. A record a path gate covers is written only when the run is `--actor human`
+  and the `gh`-verified login (the identity itself, or the login verified beside an asserted name) is in the gate's group:
+  the same identity and actor attestation the revision row records. Otherwise the record is failed (for `--conflicts`,
+  `refused`) with a message naming the gate, its group and its logins, and saying that one of them runs the command with
+  `--actor human` under a `gh`-verified identity. `--actor agent` is always refused. `fix --pin --apply` writes through
+  the same check.
+- **`waive --apply`**, **`index --apply`**, **`migrate ids --apply`**, **`migrate filenames --apply`** and **`new`** take
+  no actor, so they cannot say who runs them: under a path gate they refuse, naming the group, and the change is made by
+  hand by one of its members. `migrate filenames` checks every file it would rewrite or rename first and writes nothing
+  when any is covered, so a migration never lands half done. `migrate config` takes no `--apply` and is unchanged.
+
+A repository with no path gate behaves exactly as before. A path given as `./x`, `a//x`, `x/` or `a/../x` is
+normalised inside `path_gate_refusal`, so no caller's spelling escapes a gate.
+
+**What this gate rests on.** `--actor human` is the caller's claim, as everywhere else (`ADR-89`), so the gate rests on
+the `gh`-verified login being in the gate's group. An agent running under a maintainer's own token can pass
+`--actor human` and write, and the row then records `actor: human`. The gate stops an agent with its own identity or
+with no verified login, and an accidental write; it is weaker than the edit hook, which refuses the agent whatever it
+claims. CI's `diff.decider-required` judges the pull request that carries the change.
+
+## Pinning evidence with a row (`fix --pin`)
+
+`urzua fix --pin` is the attested way to change what a record's evidence pins, so `diff.pin-changed-unattested`
+(`SPEC-2`) can tell a reviewed change from a hand edit (decided by the builder on 2026-11-16, pending maintainer review).
+It works on any record of any type and status; no expiry period is needed.
+
+- `urzua fix --pin [--ids <record,...>]` lists every unpinned `code:` and `test:` locator whose file can be read, with the
+  hash it would write, and prints the apply form as `next_action` (its `<...>` reason in `next_action_inputs`). A locator
+  it cannot pin (a missing file, a scope that finds nothing) is listed under `not_pinned` with the reason.
+- A pin is of the working tree at the time of pinning. When a pinned file has uncommitted changes the report carries a
+  `pin-uncommitted` warning notice naming it, so the file is committed with the record.
+- `urzua fix --pin --apply --ids <record,...> --actor agent --reason "<why this evidence carries the claim>"` pins them
+  and appends a `Pinned` row naming each locator and its hash.
+- `--replace OLD=NEW` (one record) moves a pin to another locator, a new scope or a renamed file: `OLD` is the pinned
+  locator as `path` or `path#scope`, `NEW` the locator that replaces it (optionally `code:` or `test:`), hashed now. The
+  row names the old locator and hash and the new locator and hash, in full.
+- `--remove OLD` (one record) removes a pinned locator from the evidence, with a row naming it and its hash. A record's
+  only locator is removed by hand.
+
+Each write takes `--reason` (held to `attestation.reason`), an identity and `--actor`, takes the fix lock, re-reads the
+record and passes the path-gate check above. The finding of `diff.pin-changed-unattested` prints the command for its case,
+and the scoped-locator-without-a-pin finding of `embodiment.locator-exists` suggests the listing.
+
 ## The evaluation date (`--as-of`)
 
 `fix` and `reverify` reports carry a top-level `as_of` (`{"date", "source"}`, `SPEC-1`). In detect mode the
@@ -700,8 +764,11 @@ asserted by test, not assumed by convention.
 > | 2026-11-16 | Pin recomputed on merge (attested by beauwilliams, identity: gh-verified, actor: agent): both merged sides re-pinned, `rust/crates/urzua-core/src/fix.rs` 6b93e753f499 and 82fdfdfb9176 -> cf5aee142c59; the new hash is the merged file's, which is git's automatic merge of the two re-pinned commits. No person wrote a reason for the merged state. **Why:** `urzua fix --conflicts` resolved a conflict that lay only in re-pin lines; a reviewer of the pull request should confirm the merged pin. | **structural** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/fix.rs` cf5aee142c59 -> fcc0a952e83d. Reason: fix.rs: a record of a header_shape none type is counted with its type's header_out_of_scope, still out of scope; re-baselining logic unchanged **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Bumped to `0.56`. `fix --conflicts` treats a pin in a Done-means item's evidence clause like one in the evidence field (items identical apart from hashes when one moved), keeps rows with the merged-in side first and this branch's last within a date in a merge and a rebase alike, resolves a later stop of a multi-commit rebase, checks index stages 2 and 3 against the two commits, refuses a symlink or mode change in the pinned file, names line-ending conversion and a pinned file still unmerged (with the order of work as `next_action`), states a version a kept row no longer tells truly in the machine row, and says the residual trust plainly. Decided by the builder on 2026-11-16, pending maintainer review. **Why:** in real use over six pull requests the command refused about 60 percent of conflicted records, nearly all for a pin inside a Done-means item; a security re-check found the stages unchecked. | **substantive** |
-> | 2026-11-16 | Version set on merge (attested by beauwilliams, identity: gh-verified, actor: agent): `Version` is now 0.57; an earlier row's version 0.56 was written before this merge and is superseded by it. **Why:** `urzua fix --conflicts` resolved a conflict that lay only in re-pin lines; a person's row is never rewritten. | **structural** |
 > | 2026-11-16 | Bumped to `0.58`. `fix --conflicts`: a locator repeated in one site is matched and restored by its position; stage 1 is checked against the merge bases; the version row is written only when the merge set a version neither side had, reads only rows a side added, and says nothing a reader could find false; a pinned file still unmerged gives `git diff` as the next action with the rest of the order in its reason; an item clause continued onto a second line is stated as not handled. Decided by the builder on 2026-11-16, pending maintainer review. **Why:** independent review of pull request 552. | **substantive** |
+> | 2026-11-16 | Version set on merge (attested by beauwilliams, identity: gh-verified, actor: agent): `Version` is now 0.57; an earlier row's version 0.56 was written before this merge and is superseded by it. **Why:** `urzua fix --conflicts` resolved a conflict that lay only in re-pin lines; a person's row is never rewritten. | **structural** |
 > | 2026-11-16 | Version set on merge (attested by beauwilliams, identity: gh-verified, actor: agent): `Version` is set to 0.59 by this merge, the next number above the higher side's 0.58, because `version_bump` requires a new version for the rows this merge combines. A row added on a branch states version 0.58 and 0.57, which was true there and is superseded by this merge. **Why:** `urzua fix --conflicts` resolved a conflict that lay only in re-pin lines; a person's row is never rewritten. | **structural** |
 > | 2026-11-16 | Bumped to `0.60`. Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/fix.rs` fcc0a952e83d -> af5e5c811c17. Reason: fix.rs: the only change on this branch is one added `hooks: Default::default()` field in a Config struct literal, needed by the new optional hooks key, merged with main's own change to the file; behaviour this record cites is unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Version set on merge (attested by beauwilliams, identity: gh-verified, actor: agent): `Version` is set to 0.61 by this merge, the next number above the higher side's 0.60, because `version_bump` requires a new version for the rows this merge combines. Rows added on the branches state versions 0.60 and 0.59, which were true there and are superseded by this merge. **Why:** `urzua fix --conflicts` resolved a conflict that lay only in re-pin lines; a person's row is never rewritten. | **evidence** |
+> | 2026-11-16 | Bumped to `0.62`. Adds "When a pinned file was merged by hand" (the take-side sequence, `take_side` in the report); `fix --pin` lists `not_pinned` locators and warns on an uncommitted pinned file. Adds "Pinning evidence with a row (`fix --pin`)": a first pin, `--replace OLD=NEW` and `--remove OLD` on any record, each with a reason and a row `diff.pin-changed-unattested` reads; path-gate paths are normalised; "What this gate rests on" states that `--actor human` is a claim and the gate rests on the verified login. Adds "Path gates bind every command that writes for someone": `fix --apply`, `fix --rebaseline --apply`, `fix --conflicts --apply` and `reverify --apply` write a path-gated record only for `--actor human` under a `gh`-verified login in the gate's group; `waive`, `index`, `migrate ids`, `migrate filenames` and `new` refuse under a path gate; the refusal names who can make the change. A re-pin row is what `diff.pin-changed-unattested` (`SPEC-2`) reads. Decided by the builder on 2026-11-16, pending maintainer review. **Why:** `MILE-289` -- `fix --apply --actor agent` rewrote a path-gated record the edit hook would have refused. | **substantive** |
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/fix.rs` 90200653f67b -> 317aab0052ff, `rust/crates/urzua-core/src/fix.rs` af5e5c811c17 -> f95de51150cf, `rust/crates/urzua-cli/tests/fix_paths_integration.rs` 73cb06a1782f -> efefbffa3dc1, `rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs` 9a053f2ed41d -> a3485ebbfc5e. Reason: cli fix.rs routes --pin, --replace and --remove to the new fix --pin command and refuses a path-gated write unless a verified member runs it as a human; core fix.rs adds the fix::pin module and moves a misplaced doc comment back onto apply_rebaseline; fix_paths_integration.rs has the path-gate tests for fix --apply; fix_rebaseline_integration.rs adds tests for the pin rule: a renamed record, a hand-added first pin, a moved pin, a removed pin, the base level, and fix --pin; the record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs` a3485ebbfc5e -> e99a142c76d0. Reason: fix_rebaseline_integration.rs adds tests for rename pairing, reordered and inserted citations, the swaps notice, a moved config and fix --pin's listing; the record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |

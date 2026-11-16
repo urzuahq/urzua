@@ -406,9 +406,21 @@ enum Command {
         #[arg(long)]
         conflicts: bool,
         /// Why the evidence still holds, recorded in the revision row.
-        /// Required by --rebaseline --apply.
+        /// Required by --rebaseline --apply and --pin --apply.
         #[arg(long)]
         reason: Option<String>,
+        /// Pin evidence with an attributed row: without --replace or --remove,
+        /// give every unpinned `code:` and `test:` locator of the --ids records
+        /// its first pin. Without --apply it lists what it would pin.
+        #[arg(long)]
+        pin: bool,
+        /// With --pin: move a pin to another locator, `OLD=NEW` (a new scope, a
+        /// renamed file), hashing NEW now.
+        #[arg(long, value_name = "OLD=NEW")]
+        replace: Option<String>,
+        /// With --pin: remove the pinned locator OLD from the evidence.
+        #[arg(long, value_name = "OLD")]
+        remove: Option<String>,
     },
 
     /// Renew an expired claim (`ADR-97`): re-resolve and re-hash every
@@ -741,6 +753,9 @@ fn dispatch(config: Option<PathBuf>, command: Command) -> ExitCode {
             rebaseline,
             conflicts,
             reason,
+            pin,
+            replace,
+            remove,
         } => commands::fix::run(
             config,
             commands::fix::FixArgs {
@@ -755,6 +770,9 @@ fn dispatch(config: Option<PathBuf>, command: Command) -> ExitCode {
                 rebaseline,
                 conflicts,
                 reason,
+                pin,
+                replace,
+                remove,
             },
         ),
     }

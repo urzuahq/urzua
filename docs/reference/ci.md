@@ -103,6 +103,14 @@ re-pin each record after reading the change (`urzua fix --rebaseline` lists them
 set the rule's level under `rules:` (`embodiment.pin-stale: info` reports without failing the job,
 `off` turns it off).
 
+**A pin changed, added, moved or removed by hand fails `check --base`:** the rule `diff.pin-changed-unattested`
+is on by default at `error`. In a record the base holds, every pin must be unchanged or carry the row a pinning
+tool writes: `urzua fix --rebaseline --apply` for a stale pin, `urzua fix --pin --apply` for a first pin,
+`urzua fix --pin --apply --replace OLD=NEW` for a new scope or a renamed file, `urzua fix --pin --apply --remove OLD`
+for a dropped locator (each with `--ids <record> --actor agent --reason "<...>"`). The finding prints the command
+for its case. A pull request that turns the rule off is still judged at the base revision's level; `off` applies
+from the next change on and adds a warning notice to every `check`.
+
 ```yaml
       - name: no stale evidence pins
         shell: bash -eo pipefail {0}

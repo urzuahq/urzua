@@ -102,8 +102,8 @@ pub fn run(
         today: &today,
     });
 
-    let file_path = dir.join(&filename);
-    if let Err(why) = write_new_file(&repo_root, &dir, &file_path, &content) {
+    let (file_path, gate) = (dir.join(&filename), config.authority.as_ref());
+    if let Err(why) = write_new_record(gate, &repo_root, &dir, &file_path, &content) {
         return fail(why);
     }
 
@@ -486,6 +486,22 @@ fn render_record(inputs: &NewRecordInputs) -> String {
         ),
         template.as_deref(),
     )
+}
+
+/// [`write_new_file`], refused when a path gate covers the new file: neither
+/// `new` nor `waive` takes an actor, so neither can say a person runs it.
+pub(crate) fn write_new_record(
+    authority: Option<&urzua_core::authority::AuthorityDecl>,
+    repo_root: &std::path::Path,
+    dir: &std::path::Path,
+    file_path: &std::path::Path,
+    content: &str,
+) -> Result<(), String> {
+    let rel = file_path.strip_prefix(repo_root).unwrap_or(file_path);
+    if let Some(refusal) = urzua_core::authority::path_gate_refusal(authority, rel, None) {
+        return Err(refusal);
+    }
+    write_new_file(repo_root, dir, file_path, content)
 }
 
 /// Writes the record, refusing a path that leaves the repository and never

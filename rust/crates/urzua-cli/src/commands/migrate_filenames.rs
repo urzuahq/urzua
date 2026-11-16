@@ -110,7 +110,8 @@ fn run_inner(config_path: Option<PathBuf>, apply: bool) -> Result<ExitCode, Fail
     let notices = notices_for(&planned, apply);
     let results = if apply && !planned.renames.is_empty() {
         let _lock = urzua_io::FixLock::acquire(&session.repo_root)?;
-        write_plan(&session.repo_root, &planned, &rewritable)
+        gated_plan(session.config.authority.as_ref(), &planned)
+            .unwrap_or_else(|| write_plan(&session.repo_root, &planned, &rewritable))
     } else {
         Vec::new()
     };
@@ -245,6 +246,25 @@ fn write_plan(
         });
     }
     results
+}
+
+/// The plan's results when a path gate covers a file it would write or rename:
+/// each such file `failed` with the refusal and nothing written, so a migration
+/// never lands half done. `None` when no gate covers any of them.
+fn gated_plan(
+    authority: Option<&urzua_core::authority::AuthorityDecl>,
+    planned: &FilenamePlan,
+) -> Option<Vec<WriteResult>> {
+    let refuse = |p: &Path| urzua_core::authority::path_gate_refusal(authority, p, None);
+    let mut results = Vec::new();
+    for path in planned.new_texts.keys() {
+        results.extend(refuse(path).map(|e| result(path, Action::Rewrite, Err(e))));
+    }
+    for rename in &planned.renames {
+        let why = refuse(&rename.from).or_else(|| refuse(&rename.to));
+        results.extend(why.map(|e| result(&rename.from, Action::Rename, Err(e))));
+    }
+    (!results.is_empty()).then_some(results)
 }
 
 fn result(path: &Path, action: Action, outcome: Result<(), String>) -> WriteResult {

@@ -2527,6 +2527,11 @@ pub struct Conflict {
     /// stage them first, then re-run `urzua fix --conflicts`.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub waits_on: Vec<PathBuf>,
+    /// For a pin that cannot be recomputed (its file was merged by hand):
+    /// the `git checkout` side that holds the merged-in record, whose pins
+    /// are the base's, so an ordinary re-pin from it chains from them.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub take_side: Option<String>,
 }
 
 impl Report for ConflictsReport {
@@ -2579,6 +2584,9 @@ impl Report for ConflictsReport {
                 }
                 let mut diff = vec!["git".to_string(), "diff".to_string(), "--".to_string()];
                 diff.extend(files.iter().map(|f| format!(":/{f}")));
+                if waiting == 0 {
+                    return take_side_next_action(&self.conflicts);
+                }
                 (waiting > 0).then(|| NextAction::runs_as_printed(
                     shell_command(&diff),
                     format!(
@@ -2592,6 +2600,34 @@ impl Report for ConflictsReport {
             _ => None,
         }
     }
+}
+
+/// `git checkout --theirs -- :/<record>...` for the records refused because
+/// a pinned file was merged by hand: the first step of the sequence that ends
+/// with a re-pin chaining from the base's hash.
+fn take_side_next_action(conflicts: &[Conflict]) -> Option<NextAction> {
+    let side = conflicts.iter().find_map(|c| c.take_side.clone())?;
+    let records: Vec<&str> = conflicts
+        .iter()
+        .filter(|c| c.take_side.as_deref() == Some(side.as_str()))
+        .filter_map(|c| c.record.to_str())
+        .collect();
+    let mut words = vec![
+        "git".to_string(),
+        "checkout".to_string(),
+        side,
+        "--".to_string(),
+    ];
+    words.extend(records.iter().map(|r| format!(":/{r}")));
+    Some(NextAction::runs_as_printed(
+        shell_command(&words),
+        format!(
+            "{} cannot have its pins recomputed because a pinned file was merged by hand. This takes the merged-in side's version, whose pins are the base's; then `{}`, then re-pin each with a person's reason: `urzua fix --rebaseline --apply --ids {} --actor agent --reason \"<what the hand-merged code changed>\"`",
+            if records.len() == 1 { "1 record".to_string() } else { format!("{} records", records.len()) },
+            shell_command(&git_add(records.iter().copied())),
+            records.join(",")
+        ),
+    ))
 }
 
 /// The subject of the notice `check` and `fix --rebaseline` raise when git

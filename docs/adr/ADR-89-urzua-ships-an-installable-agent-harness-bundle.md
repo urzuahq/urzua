@@ -937,6 +937,29 @@ person for a gated move, a protected-path change, or a check that could not run;
 
 The Decision is otherwise unchanged. The Status of this ADR stays Accepted.
 
+## Amendment (2026-11-16): path gates bind the commands that write for someone
+
+Decided by the builder on 2026-11-16, pending maintainer review (`MILE-289`). A path gate names who may change a path,
+and the editor hook refuses an agent's edit there; but `urzua fix --apply --actor agent` wrote an `Embodiment` repair
+into a path-gated record, because the write path checked only status gates. From this amendment every command that
+writes a record on someone's behalf asks one function, `authority::path_gate_refusal`, before it writes:
+
+1. `fix --apply` (every repair), `fix --rebaseline --apply`, `fix --conflicts --apply` and `reverify --apply` write a
+   path-gated record only when the run is `--actor human` and its `gh`-verified login is in the gate's group, read from
+   the same attestation the revision row records. Anything else is refused, and the refusal names the gate, the group
+   and its logins and says that one of them runs the command with `--actor human` under a `gh`-verified identity.
+2. `waive --apply`, `index --apply`, `migrate ids --apply`, `migrate filenames --apply` and `new` take no actor, so under
+   a path gate they refuse and say that a member of the group makes the change by hand.
+3. A repository with no path gate behaves as before.
+
+What the gate rests on: `--actor human` is the caller's claim (this record's section 5), so the gate rests on the
+`gh`-verified login being in the gate's group. An agent running under a maintainer's own token can pass `--actor human`
+and write, and the row then records `actor: human`. The gate stops an agent with its own identity or with no verified
+login, and an accidental write; it is weaker than the edit hook, which refuses the agent whatever it claims.
+`diff.decider-required` judges the pull request in CI. A path is normalised inside the one function (`./x`, `a//x`,
+`x/`, `a/../x`), so no caller's spelling escapes a gate; `fix --pin --apply` passes through it too. The Decision is
+unchanged. `Status` stays Accepted.
+
 ## References
 
 - `ADR-69`, `ADR-70`, `ADR-71`: the hook, drafting commands and layered gate this extends; `ADR-70` gains an
@@ -986,3 +1009,4 @@ The Decision is otherwise unchanged. The Status of this ADR stays Accepted.
 > | 2026-11-16 | Added an `## Amendment (2026-11-16): what the hooks say, and to whom`: an allowed write outside the repository is silent by default (`harness.report_outside_writes`), decided by the maintainer on 2026-11-16 ("yes hook should be silent by default and n config"); the post-command check reports gate events once however they arrived, absorbs only ordinary findings brought in by git, and splits agent and person messages, decided by the orchestrator on 2026-11-16 after an independent review reproduced seven ways to launder a gated move through git, pending maintainer review (`MILE-278`). | **substantive** |
 > | 2026-11-16 | Amendment of 2026-11-14 (symlinked records: a tracked record that is a symlink is refused; on by default; configurable; `off` raises a notice) accepted by the maintainer. `Status` stays Accepted. **Why:** Asked on 2026-11-16 whether to accept it as decided, the maintainer answered "Accept"; it had been decided by the orchestrator pending their review. | **substantive** |
 > | 2026-11-16 | Amendment of 2026-11-14 (leaving a gate: a move out of a gated status, or deleting such a record, is a gated move; `--actor` is required with `--apply` under a verified identity) accepted by the maintainer. `Status` stays Accepted. **Why:** Asked on 2026-11-16 whether to accept it as decided, the maintainer answered "Accept"; it had been decided by the orchestrator pending their review. | **substantive** |
+> | 2026-11-16 | Added an `## Amendment (2026-11-16): path gates bind the commands that write for someone`, decided by the builder on 2026-11-16, pending maintainer review: `fix --apply`, `fix --rebaseline --apply`, `fix --conflicts --apply` and `reverify --apply` write a path-gated record only for `--actor human` under a `gh`-verified login in the gate's group; `waive`, `index`, `migrate ids`, `migrate filenames` and `new` refuse under a path gate; the refusal says who can make the change; the gate rests on the verified login, since `--actor human` is a claim, and is weaker than the edit hook. `Status` stays Accepted. **Why:** `MILE-289` -- an agent's `fix --apply` wrote a record the edit hook would have refused. | **substantive** |

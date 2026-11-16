@@ -205,6 +205,7 @@ impl Ctx<'_> {
             version: None,
             rows_kept: 0,
             waits_on: Vec::new(),
+            take_side: None,
         };
         let working = urzua_io::read_to_string(&self.repo_root.join(path))
             .map_err(|e| format!("could not read: {e}"))?;
@@ -263,13 +264,8 @@ impl Ctx<'_> {
             Ok(r) => r,
             Err(e) => return Ok(refused(e)),
         };
-        if write.is_some() {
-            urzua_io::write_atomic_in(
-                self.repo_root,
-                &self.repo_root.join(path),
-                &resolved.content,
-            )
-            .map_err(|e| format!("could not write: {e}"))?;
+        if let Some(why) = self.write_resolved(path, write, &resolved.content)? {
+            return Ok(refused(why));
         }
         Ok(Conflict {
             record: path.to_path_buf(),
@@ -284,7 +280,30 @@ impl Ctx<'_> {
             version: resolved.version,
             rows_kept: resolved.rows_kept,
             waits_on: Vec::new(),
+            take_side: None,
         })
+    }
+
+    /// Writes the resolved record when `write` carries the identity: `Ok(Some)`
+    /// is the refusal of a path gate over it, and nothing is written.
+    fn write_resolved(
+        &self,
+        path: &Path,
+        write: Option<&ResolvedAttestation>,
+        content: &str,
+    ) -> Result<Option<String>, String> {
+        let Some(w) = write else {
+            return Ok(None);
+        };
+        let gate = self.config.authority.as_ref();
+        if let Some(refusal) =
+            urzua_core::authority::path_gate_refusal(gate, path, Some(&w.attestation))
+        {
+            return Ok(Some(refusal));
+        }
+        urzua_io::write_atomic_in(self.repo_root, &self.repo_root.join(path), content)
+            .map_err(|e| format!("could not write: {e}"))?;
+        Ok(None)
     }
 
     /// The merged hash of each pin both sides moved, by its index; a refused
@@ -304,6 +323,7 @@ impl Ctx<'_> {
             version: None,
             rows_kept: 0,
             waits_on: Vec::new(),
+            take_side: None,
         };
         let mut recomputed = Vec::new();
         let mut waits_on: Vec<PathBuf> = Vec::new();
@@ -318,7 +338,23 @@ impl Ctx<'_> {
                         waits_on.push(file);
                     }
                 }
-                Err(Unverified::Other(e)) => return Err(Box::new(refused(e))),
+                Err(Unverified::Other(e)) => {
+                    // The merged-in side's record holds the base's pins, so a
+                    // re-pin from it chains from the hash the pull request is
+                    // judged against.
+                    let incoming_is_theirs = heads.as_ref().map_or(true, |h| h.incoming_is_theirs);
+                    return Err(Box::new(Conflict {
+                        take_side: Some(
+                            if incoming_is_theirs {
+                                "--theirs"
+                            } else {
+                                "--ours"
+                            }
+                            .to_string(),
+                        ),
+                        ..refused(e)
+                    }));
+                }
             }
         }
         if !waits_on.is_empty() {
@@ -397,7 +433,7 @@ impl Ctx<'_> {
         why.map_err(|e| match e {
             Unverified::Unmerged(f) => Unverified::Unmerged(f),
             Unverified::Other(e) => Unverified::Other(format!(
-                "the pin on '{}' ({}) cannot be recomputed on merge: {e}. Resolve the record by hand and give that pin an ordinary re-pin with a person's reason: urzua fix --rebaseline --apply --ids {} --by <you> --reason \"<what changed in the pinned file>\"",
+                "the pin on '{}' ({}) cannot be recomputed on merge: {e}. Take the merged-in side's version of the record, whose pins are the base's (the next action), `git add` it, then re-pin with a person's reason: urzua fix --rebaseline --apply --ids {} --actor agent --reason \"<what the hand-merged code changed>\"; a re-pin from this branch's pin would not chain from the base's hash",
                 pin.spelling,
                 pin.site,
                 path.display()

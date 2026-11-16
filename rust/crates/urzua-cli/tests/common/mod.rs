@@ -277,3 +277,40 @@ pub fn commit_all(dir: &Path, days_ago: u32) {
         .unwrap();
     assert!(status.success());
 }
+
+/// Appends an `authority` table to the fixture's configuration with one path
+/// gate over `paths`, owned by the group `leads` (login `lead`).
+pub fn gate_paths(dir: &Path, paths: &[&str]) {
+    use std::io::Write;
+    let mut f = std::fs::OpenOptions::new()
+        .append(true)
+        .open(dir.join(".urzua/config.yaml"))
+        .expect("open the fixture configuration");
+    write!(
+        f,
+        "authority:\n  deciders:\n    leads: {{logins: [lead]}}\n  gates:\n    - {{paths: [{}], by: leads}}\n",
+        paths.join(", ")
+    )
+    .unwrap();
+}
+
+/// A directory holding a `gh` that prints `login`, for a test that needs a
+/// verified identity.
+pub fn gh_login_dir(login: &str) -> TempDir {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = TempDir::new("urzua-gh-login");
+    std::fs::write(dir.join("gh"), format!("#!/bin/sh\necho '{login}'\n")).unwrap();
+    std::fs::set_permissions(dir.join("gh"), std::fs::Permissions::from_mode(0o755)).unwrap();
+    dir
+}
+
+/// [`urzua`] with the `gh` of [`gh_login_dir`].
+pub fn urzua_as(gh: &TempDir) -> std::process::Command {
+    let mut command = urzua();
+    let mut paths = vec![gh.path().to_path_buf()];
+    if let Some(existing) = std::env::var_os("PATH") {
+        paths.extend(std::env::split_paths(&existing));
+    }
+    command.env("PATH", std::env::join_paths(paths).unwrap());
+    command
+}

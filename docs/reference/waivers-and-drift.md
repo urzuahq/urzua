@@ -71,7 +71,8 @@ Notes that save time:
   the rule and scope it claimed.
 - **`effective_requires: [Reason, Expires]`** makes a waiver take effect only once every listed field
   holds a real value: not blank, not a placeholder such as `TBD`, and not a value the type declares
-  `pending`. With `Expires` listed, a waiver with no date takes no effect, which is what you want
+  `pending`. A value with no letter or digit in any script is blank: `—`, `-`, `--`, `…`, an emoji
+  alone or a link with no text (`[](https://x)`) is not a reason (`n/a` has letters, so it counts). With `Expires` listed, a waiver with no date takes no effect, which is what you want
   unless you declare `permanent`. `waive --from-report` refuses to run unless the type lists `Expires`
   here or declares `permanent`, because a draft given only a `Reason` would otherwise become a
   permanent waiver.
@@ -196,6 +197,11 @@ level or `off` under `rules:`) and whose suggested action is the re-pin below. W
 build that has it, a repository whose pins went stale unseen shows those warnings at once; clear them
 with the re-pin below, or waive a record you have chosen to leave.
 
+Re-pin with the tool, never by editing the hash: on a pull request, `diff.pin-changed-unattested` (on by
+default at `error`) reports a pin that changed, was added, moved or removed without the row a pinning tool
+writes. A first pin is `urzua fix --pin --apply --ids <record> --actor agent --reason "<...>"`; a pin moved to a
+new scope or a renamed file adds `--replace OLD=NEW`; a dropped pinned locator `--remove OLD`.
+
 Read the diff of the changed file, decide whether the claim still holds, and if it does re-pin:
 
 ```sh
@@ -231,9 +237,14 @@ reviewer is shown it.
 
 If the pinned file is itself still conflicted (both branches edited the same lines of the source),
 resolve and `git add` that file first, then run `urzua fix --conflicts` again; the listing says which
-files it waits on. A record that conflicts anywhere else (including a Done-means item's text), whose
-pinned file was edited during the merge, or changed on a branch without a re-pin, is refused: resolve it
-by hand and re-pin with a reason (`urzua fix --rebaseline --apply --ids <record> --reason "..."`). While
+files it waits on. A record that conflicts anywhere else (including a Done-means item's text) is refused: resolve it by
+hand. A record whose pinned file was merged by hand, edited during the merge, or changed on a branch
+without a re-pin is refused too, and its `next_action` is the first step of the sequence that works: take
+the merged-in side's version of the record, whose pins are the base's (`git checkout --theirs --
+:/<record>` while merging, `--ours` while rebasing), `git add` it, then re-pin with a reason:
+`urzua fix --rebaseline --apply --ids <record> --actor agent --reason "<what the hand-merged code changed>"`.
+Keeping your branch's pin and re-pinning that instead leaves a chain that starts from your branch's hash,
+and `check --base` reports it. While
 records are unmerged, `urzua check` names `urzua fix --conflicts` as its next action.
 
 To tolerate a short lag between a code change and its record, set `drift_grace_days` on

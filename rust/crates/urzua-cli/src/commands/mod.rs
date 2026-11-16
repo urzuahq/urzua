@@ -8,6 +8,7 @@ pub mod explain;
 pub mod export;
 pub mod fix;
 pub(crate) mod fix_conflicts;
+pub(crate) mod fix_pin;
 pub mod graph;
 pub mod hooks;
 pub mod hooks_verify;

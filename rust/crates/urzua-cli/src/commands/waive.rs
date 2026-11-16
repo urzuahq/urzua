@@ -21,7 +21,7 @@ use urzua_core::waiver::SuppressionType;
 use super::check::{self, CheckArgs};
 use super::new::{
     build_filename, disabled_pull_report, lookup_record_type, number_record, scan_pull_requests,
-    write_new_file, Numbered,
+    write_new_record, Numbered,
 };
 use crate::emit;
 use crate::session::Session;
@@ -475,9 +475,10 @@ fn write_all(
 ) -> Result<(), String> {
     let root = &ctx.session.repo_root;
     let dir = root.join(&type_config(ctx).dir);
+    let gate = ctx.session.config.authority.as_ref();
     write_drafts(
         built,
-        &mut |b| write_new_file(root, &dir, &root.join(&b.path), &b.content),
+        &mut |b| write_new_record(gate, root, &dir, &root.join(&b.path), &b.content),
         &mut |from| {
             *numbering = number(ctx, false, &mut Vec::new())?.1;
             build(ctx, numbering, &groups[from..])

@@ -1182,3 +1182,74 @@ fn check_base_is_clean_after_a_resolve_when_version_bump_leaves_out_the_merge_ro
     assert_eq!(v["conflicts"][0]["version"], "'2'", "{v}");
     assert_mclean(&dir, MREC, &["commit", "-q", "--no-edit"]);
 }
+
+#[test]
+fn a_record_under_a_path_gate_is_refused_and_left_unresolved() {
+    let config = format!(
+        "{CONFIG}authority:\n  deciders:\n    leads: {{logins: [lead]}}\n  gates:\n    - {{paths: [{REC}], by: leads}}\n"
+    );
+    let dir = fixture_with("gated", &config, ("2", "3", "structural"), (None, None));
+    assert!(!git(&dir, &["merge", "-q", "main"]), "the merge conflicts");
+    let before = std::fs::read_to_string(dir.join(REC)).unwrap();
+    let (_, v) = apply(&dir);
+    assert_eq!(v["conflicts"][0]["outcome"], "refused", "{v}");
+    let reason = v["conflicts"][0]["reason"].as_str().unwrap();
+    assert!(
+        reason.contains("path gate") && reason.contains("'leads' (lead)"),
+        "{reason}"
+    );
+    assert_eq!(std::fs::read_to_string(dir.join(REC)).unwrap(), before);
+}
+
+#[test]
+fn a_hand_merged_pinned_file_leads_to_a_sequence_that_passes_check_base() {
+    let dir = fixture("hand-merged", None, None);
+    assert!(!git(&dir, &["merge", "-q", "main"]));
+    std::fs::write(dir.join("src/a.rs"), "fn merged_by_hand() {}\n").unwrap();
+    ok(&dir, &["add", "src/a.rs"]);
+    let (_, v) = urzua(&dir, &["fix", "--conflicts"]);
+    let next = v["next_action"].as_str().unwrap_or_else(|| panic!("{v}"));
+    assert_eq!(next, format!("git checkout --theirs -- :/{REC}"), "{v}");
+    assert!(
+        v["next_action_reason"]
+            .as_str()
+            .unwrap()
+            .contains("urzua fix --rebaseline --apply --ids"),
+        "{v}"
+    );
+    let out = Command::new("sh")
+        .arg("-c")
+        .arg(next)
+        .current_dir(&dir)
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "{out:?}");
+    ok(&dir, &["add", REC]);
+    let (_, v) = urzua(
+        &dir,
+        &[
+            "fix",
+            "--rebaseline",
+            "--apply",
+            "--ids",
+            REC,
+            "--by",
+            "tester",
+            "--actor",
+            "agent",
+            "--reason",
+            "a.rs was merged by hand; read the merged code and the claim holds.",
+        ],
+    );
+    assert_eq!(v["status"], "applied", "{v}");
+    ok(&dir, &["add", "-A"]);
+    ok(&dir, &["commit", "-q", "--no-edit"]);
+    let (_, v) = urzua(&dir, &["check", "--base", "main"]);
+    let pins: Vec<_> = v["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|f| f["rule"] == "diff.pin-changed-unattested")
+        .collect();
+    assert!(pins.is_empty(), "{v}");
+}

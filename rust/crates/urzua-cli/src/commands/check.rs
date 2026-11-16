@@ -137,6 +137,7 @@ struct Context<'a> {
 fn load_base_text(
     session: &Session,
     changes: Option<&urzua_io::GitChanges>,
+    pin_level: RuleLevel,
     notices: &mut Vec<Notice>,
 ) -> Result<HashMap<PathBuf, String>, String> {
     let mut out = HashMap::new();
@@ -147,10 +148,12 @@ fn load_base_text(
     let bump = enabled_setting(config, rules::RULE_REVISION_LOG_VERSION_BUMP_REQUIRED).is_some();
     let renewal =
         enabled_setting(config, rules::RULE_EMBODIMENT_CLAIM_RENEWAL_UNATTESTED).is_some();
-    if !bump && !renewal {
+    let pins = pin_level != RuleLevel::Off;
+    if !bump && !renewal && !pins {
         return Ok(out);
     }
     let expiry: rules::ClaimExpiredOpts = config.rule_opts(rules::RULE_EMBODIMENT_CLAIM_EXPIRED);
+    let mut renames: Option<HashMap<PathBuf, PathBuf>> = None;
     for record in &session.records {
         let wanted_by_bump = bump
             && config
@@ -162,17 +165,40 @@ fn load_base_text(
                 .periods
                 .iter()
                 .any(|p| p.record_type == record.record_type);
-        if !(wanted_by_bump || wanted_by_renewal) || !changes.changed.contains(&record.path) {
+        if !(wanted_by_bump || wanted_by_renewal || pins) || !changes.changed.contains(&record.path)
+        {
             continue;
         }
         // A path added since the merge base (a rename's new name too) has no
         // copy there: not an error, and not examined. Any other failure to read
         // the merge base's copy is disclosed, since the record then goes
         // unexamined.
-        if changes.added.contains(&record.path) {
-            continue;
-        }
-        match urzua_io::read_at_commit(&session.repo_root, &changes.merge_base, &record.path) {
+        // A path added since the merge base has no copy there, unless it is a
+        // rename: the pin rule then judges it against the copy under its old
+        // name, so renaming a record is not a way past it.
+        let base_path = if changes.added.contains(&record.path) {
+            let renamed = pins.then(|| {
+                let renames = renames.get_or_insert_with(|| {
+                    urzua_io::renamed_paths_since(&session.repo_root, &changes.merge_base)
+                        .unwrap_or_default()
+                });
+                crate::diff_scope::renamed_from(
+                    &session.repo_root,
+                    config,
+                    record,
+                    changes,
+                    renames,
+                    notices,
+                )
+            });
+            match renamed.flatten() {
+                Some(old) => old,
+                None => continue,
+            }
+        } else {
+            record.path.clone()
+        };
+        match urzua_io::read_at_commit(&session.repo_root, &changes.merge_base, &base_path) {
             Ok(text) => {
                 out.insert(record.path.clone(), text);
             }
@@ -180,8 +206,10 @@ fn load_base_text(
                 severity: NoticeSeverity::Warning,
                 subject: if wanted_by_bump {
                     rules::RULE_REVISION_LOG_VERSION_BUMP_REQUIRED
-                } else {
+                } else if wanted_by_renewal {
                     rules::RULE_EMBODIMENT_CLAIM_RENEWAL_UNATTESTED
+                } else {
+                    rules::RULE_DIFF_PIN_CHANGED_UNATTESTED
                 }
                 .to_string(),
                 message: format!(
@@ -687,6 +715,7 @@ fn session_notices(
         selection,
     ));
     notices.extend(symlink_refusal_off_notice(&session.config));
+    notices.extend(pin_attestation_off_notice(&session.config));
     notices.extend(super::fix_conflicts::unmerged_records_notice(
         &session.repo_root,
         &session.config,
@@ -704,6 +733,102 @@ fn symlink_refusal_off_notice(config: &Config) -> Option<Notice> {
         message: format!(
             "{id} is off: a record file that is a symlink is read through the link, \
              so its content can live at a path no gate on a record directory sees"
+        ),
+        detail: None,
+    })
+}
+
+/// The level `diff.pin-changed-unattested` runs at: on a `--base` run the
+/// stricter of the head's and the base revision's (its declared level, or the
+/// default-on level when its config declares none), so a pull request cannot
+/// turn the rule off or lower it in the change it judges. An info notice says
+/// when the base's level applies. Without a base, or when the base has no
+/// config, the head's.
+fn base_pin_level(
+    session: &Session,
+    changes: Option<&urzua_io::GitChanges>,
+    notices: &mut Vec<Notice>,
+) -> RuleLevel {
+    let rule = rules::RULE_DIFF_PIN_CHANGED_UNATTESTED;
+    let head = rules::effective_level(&session.config, rule);
+    let Some(changes) = changes else {
+        return head;
+    };
+    // The base's configuration at the path the base used: the default path,
+    // else the `--config` path if the base had a file there, so moving the
+    // file in the pull request does not lift the base's level.
+    let mut candidates = vec![PathBuf::from(".urzua/config.yaml")];
+    if let Ok(rel) = crate::discovery::relative_to_root(&session.repo_root, &session.config_path) {
+        if !candidates.contains(&rel) {
+            candidates.push(rel);
+        }
+    }
+    let found = candidates.iter().find_map(|rel| {
+        urzua_io::read_at_commit_if_present(&session.repo_root, &changes.merge_base, rel)
+            .ok()
+            .flatten()
+    });
+    let Some(text) = found else {
+        notices.push(Notice {
+            severity: NoticeSeverity::Info,
+            subject: rule.to_string(),
+            message: format!(
+                "the base revision has no configuration at {}: the head's level applies to {rule}",
+                candidates
+                    .iter()
+                    .map(|p| p.display().to_string())
+                    .collect::<Vec<_>>()
+                    .join(" or ")
+            ),
+            detail: None,
+        });
+        return head;
+    };
+    let base = match urzua_core::authority::BaseGate::from_config_text(Some(&text), rule) {
+        Ok(gate) => gate
+            .rule
+            .map(|s| s.level)
+            .unwrap_or_else(|| rules::default_on(rule).map_or(RuleLevel::Off, |d| d.level)),
+        Err(_) => return head,
+    };
+    if base > head {
+        notices.push(Notice {
+            severity: NoticeSeverity::Info,
+            subject: rule.to_string(),
+            message: format!(
+                "{rule} is '{}' at the base revision and '{}' here: the base's level applies to this change",
+                base.as_str(),
+                head.as_str()
+            ),
+            detail: None,
+        });
+    }
+    head.max(base)
+}
+
+/// `config` with the pin rule at `level` when that is above the head's own.
+fn hold_pin_level(gate_config: Option<Config>, head: &Config, level: RuleLevel) -> Option<Config> {
+    let rule = rules::RULE_DIFF_PIN_CHANGED_UNATTESTED;
+    let current = gate_config.as_ref().unwrap_or(head);
+    if rules::effective_level(current, rule) >= level {
+        return gate_config;
+    }
+    let mut adjusted = gate_config.unwrap_or_else(|| head.clone());
+    let mut setting = adjusted.rules.get(rule).cloned().unwrap_or_default();
+    setting.level = level;
+    adjusted.rules.insert(rule.to_string(), setting);
+    Some(adjusted)
+}
+
+/// A configuration that turns the pin attestation rule off is told so on every
+/// run: a pin can then be changed by hand with no row and no reason (SPEC-2).
+fn pin_attestation_off_notice(config: &Config) -> Option<Notice> {
+    let id = rules::RULE_DIFF_PIN_CHANGED_UNATTESTED;
+    (rules::effective_level(config, id) == RuleLevel::Off).then(|| Notice {
+        severity: NoticeSeverity::Warning,
+        subject: id.to_string(),
+        message: format!(
+            "{id} is off: a pull request can change an evidence pin by hand, with no revision-log row and no reason"
         ),
         detail: None,
     })
@@ -1897,9 +2022,11 @@ fn read_diff_inputs(
         .as_ref()
         .map(|p| head_changes_for(repo_root, &p.path));
     let changes = scope.changed.as_ref().or(head_changes.as_ref());
-    let base_text = load_base_text(session, changes, notices)?;
+    let pin_level = base_pin_level(session, changes, notices);
+    let base_text = load_base_text(session, changes, pin_level, notices)?;
     if let Some(changed) = scope.changed.as_ref() {
         notices.extend(merge_recomputed_notice(session, changed, &base_text));
+        notices.extend(pins_replaced_notice(session, changed, &base_text));
     }
     let base_drift = load_base_drift(session, changes, &base_text);
     let added_row_days = load_added_row_days(session, changes, &base_text);
@@ -1918,6 +2045,7 @@ fn read_diff_inputs(
     let base_authority = base_gate.authority.clone();
     let (gate_config, fail_on) =
         apply_base_gate(&session.config, &base_gate, changes.is_some(), notices);
+    let gate_config = hold_pin_level(gate_config, &session.config, pin_level);
     let rule_config = gate_config.as_ref().unwrap_or(&session.config);
     let gated_types = gated_type_names(rule_config, &base_authority);
     // One warning per unreadable deleted base copy, whichever reader reaches it
@@ -3065,6 +3193,54 @@ fn merge_recomputed_notice(
         message: format!(
             "{} recomputed on merge by urzua fix --conflicts, with no reason written by a person: {}; confirm each merged pin in review",
             if items.len() == 1 { "1 record's pins were".to_string() } else { format!("{} records' pins were", items.len()) },
+            items.join("; ")
+        ),
+        detail: None,
+    })
+}
+
+/// The pins a pull request moved to another locator or removed with a tool row
+/// (`urzua fix --pin --replace` / `--remove`): the rule accepts each, and this
+/// notice puts every evidence swap in front of the reviewer without reading
+/// the log rows. First pins are not listed.
+fn pins_replaced_notice(
+    session: &Session,
+    changed: &urzua_io::GitChanges,
+    base_text: &HashMap<PathBuf, String>,
+) -> Option<Notice> {
+    use urzua_core::fix::pin::{parse_removed_row, parse_replaced_row};
+    let mut items: Vec<String> = Vec::new();
+    let mut paths: Vec<&PathBuf> = changed.changed.iter().collect();
+    paths.sort();
+    for path in paths {
+        let Some(now) = session.full_text.get(path) else {
+            continue;
+        };
+        let then = base_text.get(path).map(String::as_str).unwrap_or_default();
+        for row in now.lines().filter(|l| !then.lines().any(|t| t == *l)) {
+            if let Some(r) = parse_replaced_row(row) {
+                items.push(format!(
+                    "{}: {}@{} replaced by {}@{}",
+                    path.display(),
+                    r.from_locator,
+                    r.from_hash.get(..12).unwrap_or(&r.from_hash),
+                    r.to_locator,
+                    r.to_hash.get(..12).unwrap_or(&r.to_hash)
+                ));
+            } else if let Some((locator, hash)) = parse_removed_row(row) {
+                items.push(format!(
+                    "{}: {locator}@{} removed",
+                    path.display(),
+                    hash.get(..12).unwrap_or(&hash)
+                ));
+            }
+        }
+    }
+    (!items.is_empty()).then(|| Notice {
+        severity: NoticeSeverity::Warning,
+        subject: "pins-replaced-or-removed".to_string(),
+        message: format!(
+            "this change replaced or removed pinned evidence with urzua fix --pin: {}; confirm in review that the record's claim rests on what is pinned now",
             items.join("; ")
         ),
         detail: None,

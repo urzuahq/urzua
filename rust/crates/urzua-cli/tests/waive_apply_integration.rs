@@ -406,3 +406,22 @@ fn applying_drafts_for_a_dangling_citation_adds_no_citation_finding() {
     assert!(text.contains("ADR-99"), "{text}");
     assert!(text.contains("\n## Findings\n\n```text\n"), "{text}");
 }
+
+#[test]
+fn drafts_into_a_directory_under_a_path_gate_are_refused() {
+    let dir = fixture("gated", two_noisy());
+    common::gate_paths(&dir, &["docs/waiver"]);
+    let (code, report) = apply(&dir, &[]);
+    assert_ne!(code, 0, "{report}");
+    assert!(
+        report
+            .to_string()
+            .contains("only group 'leads' (lead) may change it"),
+        "{report}"
+    );
+    assert!(report.to_string().contains("by hand"), "{report}");
+    assert_eq!(
+        std::fs::read_dir(dir.join("docs/waiver")).unwrap().count(),
+        0
+    );
+}

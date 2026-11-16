@@ -511,8 +511,16 @@ fn claim_standing_findings(
 /// `Key: value` lines), as the loader reads the record. Parsing every copy as
 /// front matter made the renewal check blind to a prefix-lines type.
 fn header_in_text(config: &Config, record_type: &str, text: &str) -> crate::header::Header {
-    let Some(type_config) = config.record_types.get(record_type) else {
+    if !config.record_types.contains_key(record_type) {
         return crate::header::parse(text);
+    }
+    record_in_text(config, record_type, text).header
+}
+
+/// A copy of a record's text read as the loader reads a record of its type.
+pub(super) fn record_in_text(config: &Config, record_type: &str, text: &str) -> Record {
+    let Some(type_config) = config.record_types.get(record_type) else {
+        return Record::parse(PathBuf::new(), record_type.to_string(), text);
     };
     let model = crate::document_model::declared_model(record_type, type_config)
         .ok()
@@ -531,7 +539,6 @@ fn header_in_text(config: &Config, record_type: &str, text: &str) -> crate::head
         prefix,
         &model,
     )
-    .header
 }
 
 /// The anchor date of a record's text, `None` when the field is absent or not a date.
@@ -646,7 +653,10 @@ pub fn embodiment_claim_renewal_unattested(
 
 /// The record's current evidence locators, each with the hash its pin holds
 /// (`None` when unpinned or unparseable), in the order written.
-fn current_locator_pins(config: &Config, record: &Record) -> Vec<(String, Option<String>)> {
+pub(super) fn current_locator_pins(
+    config: &Config,
+    record: &Record,
+) -> Vec<(String, Option<String>)> {
     let locator_field = relation_field_name(
         config,
         &record.record_type,
