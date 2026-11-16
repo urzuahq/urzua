@@ -92,6 +92,17 @@
       "status": "ran"
     },
     {
+      "rule": "diff.pin-changed-unattested",
+      "population": {
+        "unit": "record",
+        "eligible": 13,
+        "examined": 1,
+        "out_of_scope": 0,
+        "unreadable": 0
+      },
+      "status": "ran"
+    },
+    {
       "rule": "embodiment.locator-on-back-pointer-path",
       "population": {
         "unit": "field",

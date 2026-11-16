@@ -5,6 +5,8 @@ corpus: corpus-j
 invocation: [check]
 expect_exit: 0
 expect_stdout_contains:
-  - '"status": "not-applicable"'
+  # The population line pins this to status.transition-allowed: the
+  # default-on diff rule also reports not-applicable, with no population.
+  - "\"unreadable\": 0\n      },\n      \"status\": \"not-applicable\""
 proves:
   - status.transition-allowed
