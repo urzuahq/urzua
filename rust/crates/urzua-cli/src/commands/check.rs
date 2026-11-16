@@ -1073,7 +1073,10 @@ fn base_failure(e: urzua_io::DiscoveryError) -> Failure {
     let message = e.to_string();
     match &e {
         urzua_io::DiscoveryError::UnresolvedRef { base } => {
-            match base.split_once('/').filter(|(r, b)| !r.is_empty() && !b.is_empty()) {
+            match base
+                .split_once('/')
+                .filter(|(r, b)| !r.is_empty() && !b.is_empty())
+            {
                 Some((remote, branch)) => Failure::with_next(
                     message,
                     NextAction::runs_as_printed(

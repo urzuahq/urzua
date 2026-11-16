@@ -2,7 +2,7 @@
 Stable-Id: 01M6R3NK4S1K3KKMGNV0RC498S
 Status: Superseded
 Embodiment: Deprecated
-Realized-by: code:rust/crates/urzua-core/src/report.rs@sha256:5285d870dcf601bc0d5b58c4be42d9fb12845b16eb345526ee6e34d595e87215, spec:docs/specs/SPEC-2-urzua-check.md
+Realized-by: code:rust/crates/urzua-core/src/report.rs@sha256:44f22eda8b4a889f3bd17655a753ad8b075486586b2e184de4e4dcb4026cd135, spec:docs/specs/SPEC-2-urzua-check.md
 Date: 2026-09-04
 Accepted-on: 2026-09-05
 Author: beauwilliams
@@ -88,3 +88,4 @@ Cheap to revise before v0 ships to any external user.
 > | 2026-11-16 | Amendment of 2026-11-14 (a repository with no record yet is `ok`, with a notice) accepted by the maintainer. `Status` stays `Superseded`. **Why:** Asked on 2026-11-16 whether to accept it as decided, the maintainer answered "Accept"; it had been decided by the orchestrator pending their review. | **substantive** |
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/report.rs` ab83ad474a70 -> 80282b91b96b. Reason: Read the diff of each pinned file against main and the claim still holds. report.rs: WaiveDraft gained optional variant and key_path, serialized only when present; nothing else changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/report.rs` 80282b91b96b -> 5285d870dcf6. Reason: Read the diff of each re-pinned file against main. report.rs: RuleExecution gained a non-serialized unread_markers list and with_unread_markers; its constructors and test literals initialise it empty; no other change. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/report.rs` 5285d870dcf6 -> 44f22eda8b4a. Reason: report.rs adds next_action_inputs (ActionInput), git add for untracked records and git fetch --unshallow to check's next action, the re-pin and renewal apply forms, --actor agent on every printed apply, and a next action on new and on could-not-run reports; the record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |

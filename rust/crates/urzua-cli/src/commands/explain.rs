@@ -75,9 +75,10 @@ impl Report for ExplainRuleReport {
 fn run_rule(config_path: Option<PathBuf>, id: &str) -> Result<ExitCode, Failure> {
     let Some(def) = rule_def(id) else {
         let Some(valid) = nearest_name(id, RULE_TABLE.iter().map(|d| d.id)) else {
-            return Err(
-                format!("'{id}' is not a rule this build ships (`urzua rules` lists them)").into(),
-            );
+            return Err(format!(
+                "'{id}' is not a rule this build ships (`urzua rules` lists them)"
+            )
+            .into());
         };
         return Err(Failure::with_next(
             format!(

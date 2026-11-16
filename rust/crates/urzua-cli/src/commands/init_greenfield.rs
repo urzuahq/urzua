@@ -128,7 +128,8 @@ macro_rules! revision_log {
     };
 }
 
-const ADR_TEMPLATE: &str = concat!("---
+const ADR_TEMPLATE: &str = concat!(
+    "---
 Stable-Id: assigned by `urzua new`; never written by hand
 Status: Proposed | Accepted | Rejected | Superseded
 Date: YYYY-MM-DD
@@ -160,7 +161,8 @@ What becomes true, easier, harder or newly required, including the bad ones.
     revision_log!()
 );
 
-const RFC_TEMPLATE: &str = concat!("---
+const RFC_TEMPLATE: &str = concat!(
+    "---
 Stable-Id: assigned by `urzua new`; never written by hand
 Status: Draft | Discussion | Accepted | Rejected | Superseded
 Date: YYYY-MM-DD
@@ -187,7 +189,8 @@ What is genuinely unresolved.
     revision_log!()
 );
 
-const SPEC_TEMPLATE: &str = concat!("---
+const SPEC_TEMPLATE: &str = concat!(
+    "---
 Stable-Id: assigned by `urzua new`; never written by hand
 Status: Draft | Accepted | Shipped
 Date: YYYY-MM-DD
@@ -204,7 +207,8 @@ What this specification covers and why it exists.
     revision_log!()
 );
 
-const PRD_TEMPLATE: &str = concat!("---
+const PRD_TEMPLATE: &str = concat!(
+    "---
 Stable-Id: assigned by `urzua new`; never written by hand
 Status: Draft | Review | Approved | Rejected | Superseded
 Date: YYYY-MM-DD

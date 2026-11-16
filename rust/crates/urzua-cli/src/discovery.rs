@@ -42,9 +42,7 @@ pub(crate) fn find_repo_root(paths: &[PathBuf]) -> Result<PathBuf, String> {
         }
         match dir.parent() {
             Some(parent) => dir = parent.to_path_buf(),
-            None => {
-                return Err(NO_GIT_REPOSITORY.to_string())
-            }
+            None => return Err(NO_GIT_REPOSITORY.to_string()),
         }
     }
 }

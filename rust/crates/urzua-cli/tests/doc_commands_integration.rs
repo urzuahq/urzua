@@ -133,7 +133,8 @@ fn governed(name: &str) -> common::TempDir {
     git(&dir, &["init", "-q", "-b", "main"]);
     std::fs::write(dir.join(".urzua/config.yaml"), CONFIG).unwrap();
     std::fs::write(dir.join("src/lib.rs"), "fn a() {}\n").unwrap();
-    let pinned = "code:src/lib.rs@sha256:0000000000000000000000000000000000000000000000000000000000000000";
+    let pinned =
+        "code:src/lib.rs@sha256:0000000000000000000000000000000000000000000000000000000000000000";
     std::fs::write(
         dir.join("docs/adr/ADR-0001-use-postgres.md"),
         adr(
@@ -183,7 +184,10 @@ fn empty(name: &str) -> common::TempDir {
 #[test]
 fn every_documented_urzua_command_runs_against_a_fixture() {
     let commands = documented_commands();
-    assert!(commands.len() > 20, "the extraction found the commands: {commands:?}");
+    assert!(
+        commands.len() > 20,
+        "the extraction found the commands: {commands:?}"
+    );
     let mut path = bin_dir().into_os_string();
     path.push(":");
     path.push(std::env::var_os("PATH").unwrap_or_default());

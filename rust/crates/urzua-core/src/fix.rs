@@ -225,8 +225,7 @@ pub fn pinned_drift_records(
         .iter()
         .filter(|r| drifted.contains(&r.path))
         .filter(|r| {
-            let state =
-                relation_field_name(config, &r.record_type, RelationRole::EmbodimentState);
+            let state = relation_field_name(config, &r.record_type, RelationRole::EmbodimentState);
             r.header
                 .get(state)
                 .is_some_and(|s| !config.embodiment.is_drift(s.trim()))

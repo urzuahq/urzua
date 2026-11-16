@@ -1063,7 +1063,10 @@ pub fn attested_apply(
 /// (`ADR-73`: it needs the network and may not apply to a typo).
 const NEXT_ACTION_ORDER: [(&[&str], &str); 5] = [
     (&["urzua", "fix", "--apply"], "repairs"),
-    (&["urzua", "fix", "--rebaseline"], "lists the stale pins behind"),
+    (
+        &["urzua", "fix", "--rebaseline"],
+        "lists the stale pins behind",
+    ),
     (&["urzua", "reverify"], "lists the claims to renew behind"),
     (&["urzua", "index"], "regenerates the index for"),
     (&["urzua", "migrate"], "migrates the configuration for"),
@@ -1776,8 +1779,9 @@ impl Report for FixReport {
             }
             FixStatus::Ok | FixStatus::RepairsAvailable => {
                 let paths = notice_records(&self.notices, NOTICE_PINNED_DRIFT)?;
-                let mut words: Vec<String> =
-                    ["urzua", "fix", "--rebaseline", "--ids"].map(String::from).to_vec();
+                let mut words: Vec<String> = ["urzua", "fix", "--rebaseline", "--ids"]
+                    .map(String::from)
+                    .to_vec();
                 words.push(paths.join(","));
                 Some(NextAction::runs_as_printed(
                     shell_command(&words),

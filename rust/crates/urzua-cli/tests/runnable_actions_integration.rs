@@ -316,7 +316,11 @@ const COVERED: &[(&str, &str, &[&str])] = &[
         &["urzua", "fix", "--apply"],
     ),
     ("index-stale", "index.freshness", &["urzua", "index"]),
-    ("claim-expired", "embodiment.claim-expired", &["urzua", "reverify"]),
+    (
+        "claim-expired",
+        "embodiment.claim-expired",
+        &["urzua", "reverify"],
+    ),
     (
         "schema-version-outdated",
         "config.schema-version-outdated",
@@ -381,9 +385,11 @@ fn every_run_command_variant_is_covered_by_a_fixture_or_exempt_with_a_reason() {
     assert!(EXEMPT.iter().all(|(_, why)| !why.is_empty()));
 }
 
+type Fixture = fn(&str) -> common::TempDir;
+
 #[test]
 fn every_suggested_action_and_every_next_action_runs_as_printed() {
-    let fixtures: [(&str, fn(&str) -> common::TempDir); 3] = [
+    let fixtures: [(&str, Fixture); 3] = [
         ("main", main_fixture),
         ("claim", claim_fixture),
         ("schema", outdated_schema_fixture),
@@ -569,7 +575,10 @@ fn profile_repo(profile: &str) -> (common::TempDir, String) {
     let config_path = dir.join(".urzua/config.yaml");
     let config = std::fs::read_to_string(&config_path)
         .unwrap()
-        .replace("    known_fields: []", "    known_fields: [Embodiment, Realized-by]")
+        .replace(
+            "    known_fields: []",
+            "    known_fields: [Embodiment, Realized-by]",
+        )
         .replace("rules:\n", "rules:\n  embodiment.consistency: warn\n");
     std::fs::write(&config_path, config).unwrap();
     std::fs::write(dir.join("src/a.rs"), "fn a() {}\n").unwrap();
@@ -591,20 +600,45 @@ fn log_rows(text: &str) -> usize {
         .count()
 }
 
-#[test]
-fn a_record_from_each_built_in_profile_takes_fix_apply_with_no_hand_edit() {
-    for profile in ["adr", "rfc", "spec", "prd"] {
-        let (dir, path) = profile_repo(profile);
-        let text = std::fs::read_to_string(dir.join(&path)).unwrap();
-        assert_eq!(log_rows(&text), 1, "{profile} starts with one dated row: {text}");
-        assert!(!text.contains("YYYY-MM-DD"), "{text}");
+/// A record from `profile` starts with one dated row and takes `fix --apply`.
+fn takes_fix_apply(profile: &str) {
+    let (dir, path) = profile_repo(profile);
+    let text = std::fs::read_to_string(dir.join(&path)).unwrap();
+    assert_eq!(
+        log_rows(&text),
+        1,
+        "{profile} starts with one dated row: {text}"
+    );
+    assert!(!text.contains("YYYY-MM-DD"), "{text}");
 
-        let applied = runs(&dir, &format!("urzua fix --apply --ids {path} --actor agent"));
-        assert_eq!(applied["status"], "applied", "{profile}: {applied}");
-        let text = std::fs::read_to_string(dir.join(&path)).unwrap();
-        assert_eq!(log_rows(&text), 2, "{profile}: {text}");
-        assert!(text.contains("Embodiment: Implemented"), "{text}");
-    }
+    let applied = runs(
+        &dir,
+        &format!("urzua fix --apply --ids {path} --actor agent"),
+    );
+    assert_eq!(applied["status"], "applied", "{profile}: {applied}");
+    let text = std::fs::read_to_string(dir.join(&path)).unwrap();
+    assert_eq!(log_rows(&text), 2, "{profile}: {text}");
+    assert!(text.contains("Embodiment: Implemented"), "{text}");
+}
+
+#[test]
+fn an_adr_from_the_built_in_profile_takes_fix_apply_with_no_hand_edit() {
+    takes_fix_apply("adr");
+}
+
+#[test]
+fn an_rfc_from_the_built_in_profile_takes_fix_apply_with_no_hand_edit() {
+    takes_fix_apply("rfc");
+}
+
+#[test]
+fn a_spec_from_the_built_in_profile_takes_fix_apply_with_no_hand_edit() {
+    takes_fix_apply("spec");
+}
+
+#[test]
+fn a_prd_from_the_built_in_profile_takes_fix_apply_with_no_hand_edit() {
+    takes_fix_apply("prd");
 }
 
 #[test]
@@ -620,7 +654,10 @@ fn an_empty_revision_log_table_receives_its_first_row() {
     commit_all(&dir, 0);
     assert_eq!(log_rows(&emptied), 0);
 
-    let applied = runs(&dir, &format!("urzua fix --apply --ids {path} --actor agent"));
+    let applied = runs(
+        &dir,
+        &format!("urzua fix --apply --ids {path} --actor agent"),
+    );
     assert_eq!(applied["status"], "applied", "{applied}");
     let text = std::fs::read_to_string(dir.join(&path)).unwrap();
     assert_eq!(log_rows(&text), 1, "{text}");
@@ -628,5 +665,8 @@ fn an_empty_revision_log_table_receives_its_first_row() {
         .lines()
         .find(|l| l.contains("Tool-authored"))
         .expect("the tool row");
-    assert!(row.starts_with("> | "), "inside the blockquote table: {row}");
+    assert!(
+        row.starts_with("> | "),
+        "inside the blockquote table: {row}"
+    );
 }
