@@ -31,7 +31,7 @@ pub fn identity_collision(
             if record_id(record).is_some() {
                 Outcome::Examined
             } else {
-                Outcome::OutOfScope
+                Outcome::OutOfScopeNoIdentity
             }
         },
     );

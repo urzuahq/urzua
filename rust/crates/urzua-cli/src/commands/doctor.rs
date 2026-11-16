@@ -7,7 +7,7 @@
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use urzua_core::report::{CouldNotRun, Notice, Report};
+use urzua_core::report::{CouldNotRun, NextAction, Notice, Report};
 
 use crate::discovery::{find_repo_root, load_config};
 use crate::emit;
@@ -254,6 +254,9 @@ struct DoctorReport {
     /// report, so `exit_code()` never has to (mis)derive it from `status`.
     #[serde(skip)]
     exit_code: u8,
+    /// Emitted as the top-level `next_action`.
+    #[serde(skip)]
+    next: Option<NextAction>,
 }
 
 impl Report for DoctorReport {
@@ -262,6 +265,43 @@ impl Report for DoctorReport {
     }
     fn exit_code(&self) -> ExitCode {
         ExitCode::from(self.exit_code)
+    }
+    fn next_action(&self) -> Option<NextAction> {
+        self.next.clone()
+    }
+}
+
+/// The step past a missing config, from what `init` would do here today: a
+/// step that sends the user to an `init` that refuses is a loop.
+fn missing_config_step(
+    repo_root: &std::path::Path,
+    config_path: &std::path::Path,
+) -> (String, Option<NextAction>) {
+    use crate::commands::init::{adopt_outlook, AdoptOutlook, GREENFIELD_COMMAND};
+    let missing = format!("{} does not exist", config_path.display());
+    match adopt_outlook(repo_root, config_path) {
+        Ok(AdoptOutlook::Proposes(n)) => (
+            format!("{missing} -- `urzua init` proposes {n} record type(s) for this corpus; run `urzua init --dry-run` to read the proposal, then `urzua init` to write it"),
+            Some(NextAction::runs_as_printed(
+                "urzua init".to_string(),
+                format!("adopt proposes {n} record type(s) for the records found here"),
+            )),
+        ),
+        Ok(AdoptOutlook::NothingToAdopt(why)) => (
+            format!("{missing} -- `urzua init` has nothing to adopt here ({why}); run `{GREENFIELD_COMMAND}` to start, or write the config by hand"),
+            Some(NextAction::runs_as_printed(
+                GREENFIELD_COMMAND.to_string(),
+                "no record directory to adopt; greenfield mode writes a config for the types --types names".to_string(),
+            )),
+        ),
+        Ok(AdoptOutlook::Unwritable(why)) => (
+            format!("{missing} -- `urzua init` cannot propose a config here: {why}"),
+            None,
+        ),
+        Err(e) => (
+            format!("{missing} -- the tracked files could not be listed to see what `urzua init` would propose: {e}"),
+            None,
+        ),
     }
 }
 
@@ -293,19 +333,18 @@ pub fn run(config: Option<PathBuf>) -> ExitCode {
     let config_path = config.unwrap_or_else(|| crate::discovery::default_config_path(&repo_root));
 
     if !config_path.exists() {
+        let (message, next) = missing_config_step(&repo_root, &config_path);
         checks.push(DoctorCheck::new(
             "config-exists",
             DoctorStatus::Error,
-            format!(
-                "{} does not exist -- run `urzua init` to adopt this corpus",
-                config_path.display()
-            ),
+            message,
         ));
         return emit(&DoctorReport {
             status: DoctorStatus::Error,
             checks,
             notices: Vec::new(),
             exit_code: 2,
+            next,
         });
     }
     checks.push(DoctorCheck::new(
@@ -343,6 +382,7 @@ pub fn run(config: Option<PathBuf>) -> ExitCode {
                 checks,
                 notices: Vec::new(),
                 exit_code: 1,
+                next: None,
             });
         }
     };
@@ -390,6 +430,7 @@ fn report_from(checks: Vec<DoctorCheck>) -> DoctorReport {
         checks,
         notices: Vec::new(),
         exit_code: if has_error { 1 } else { 0 },
+        next: None,
     }
 }
 
