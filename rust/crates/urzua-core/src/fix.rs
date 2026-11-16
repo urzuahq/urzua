@@ -872,7 +872,14 @@ pub fn apply_rebaseline(
         attestation.label(),
         attestation.rebaseline_why()
     );
-    append_log_rows(&mut doc, log_id, shape, today, &[narrative], "re-baseline")?;
+    append_log_rows(
+        &mut doc,
+        log_id,
+        &shape.for_evidence(),
+        today,
+        &[narrative],
+        "re-baseline",
+    )?;
     Ok(doc.to_string())
 }
 
@@ -1844,6 +1851,7 @@ mod tests {
             class_column: class_column.map(str::to_string),
             date_column: date_column.map(str::to_string),
             tool_class: tool_class.to_string(),
+            evidence_class: tool_class.to_string(),
         }
     }
 

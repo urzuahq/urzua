@@ -132,7 +132,7 @@ network](#what-uses-the-network)).
 
 ```text
 urzua fix [PATHS]... [--apply --ids <path>,... | --force] [--by <name>] [--actor agent|human]
-          [--tier 1] [--rebaseline --reason <text>] [--stdin-path <path>]
+          [--tier 1] [--rebaseline --reason <text>] [--conflicts] [--stdin-path <path>]
 ```
 
 Finds fields whose stated value disagrees with what urzua computes. Read-only by default. Tier 1
@@ -159,6 +159,14 @@ findings print this command, `urzua fix --apply --ids <B>`.
   `--apply` it lists each stale pin with its recorded and current hash. With `--apply` it needs
   `--ids` or `--force`, `--by` and `--reason` (why the evidence still holds), rewrites the pins and
   appends an attributed revision row.
+- `--conflicts` looks at the records a merge or rebase left unmerged and lists each by `kind`. Kind
+  `pin` is a record whose two sides differ only in evidence pin hashes, the version field and rows
+  appended to the revision log. With `--apply` (and `--ids` or `--force`, and an identity) it keeps both
+  sides' rows in date order, takes the higher version, recomputes each pin both sides moved from the
+  merged file and appends a row saying the pin was recomputed on merge. Any other conflict is
+  `refused` with its reason and left untouched. It does not stage: `git add` the resolved records.
+  `status` is `nothing-conflicted`, `no-record-conflicts`, `resolvable`, `resolved` or
+  `partial-failure`.
 - `--stdin-path <path>` judges proposed content for one record from stdin without writing. It cannot
   be combined with `PATHS` or any apply flag.
 

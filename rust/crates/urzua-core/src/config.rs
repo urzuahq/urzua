@@ -1317,6 +1317,11 @@ pub struct RevisionLogDecl {
     /// The class `urzua fix` writes. Absent: `DEFAULT_REVISION_LOG_TOOL_CLASS`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool_class: Option<String>,
+    /// The class of the rows that move evidence pins (`fix --rebaseline`,
+    /// `reverify`, `fix --conflicts`). Absent: `tool_class`. Left out of
+    /// `version_bump.classes`, a re-pin does not bump the version.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub evidence_class: Option<String>,
 }
 
 /// A type's version-bump requirement: a revision-log row of one of `classes`
@@ -1368,6 +1373,20 @@ pub struct RevisionLogShape {
     pub date_column: Option<String>,
     /// The class `urzua fix` writes.
     pub tool_class: String,
+    /// The class of the rows that move evidence pins; `tool_class` unless
+    /// declared.
+    pub evidence_class: String,
+}
+
+impl RevisionLogShape {
+    /// This shape with the evidence class as the class the tool writes, for
+    /// the commands that move pins.
+    pub fn for_evidence(&self) -> RevisionLogShape {
+        RevisionLogShape {
+            tool_class: self.evidence_class.clone(),
+            ..self.clone()
+        }
+    }
 }
 
 impl Default for RevisionLogShape {
@@ -1380,6 +1399,7 @@ impl Default for RevisionLogShape {
             class_column: None,
             date_column: None,
             tool_class: DEFAULT_REVISION_LOG_TOOL_CLASS.to_string(),
+            evidence_class: DEFAULT_REVISION_LOG_TOOL_CLASS.to_string(),
         }
     }
 }
@@ -1464,6 +1484,9 @@ impl RecordTypeConfig {
             }),
             class_column: name(&decl.class_column),
             date_column: name(&decl.date_column),
+            evidence_class: name(&decl.evidence_class)
+                .or_else(|| name(&decl.tool_class))
+                .unwrap_or_else(|| default.tool_class.clone()),
             tool_class: name(&decl.tool_class).unwrap_or(default.tool_class),
         }
     }
@@ -1925,7 +1948,8 @@ fn revision_log_identity_problem(decl: &RevisionLogDecl) -> Option<&'static str>
                 || decl.classes.is_some()
                 || decl.class_column.is_some()
                 || decl.date_column.is_some()
-                || decl.tool_class.is_some() =>
+                || decl.tool_class.is_some()
+                || decl.evidence_class.is_some() =>
         {
             None
         }
@@ -1997,6 +2021,7 @@ fn revision_log_problem(decl: &RevisionLogDecl) -> Option<String> {
         ("class_column", &decl.class_column),
         ("date_column", &decl.date_column),
         ("tool_class", &decl.tool_class),
+        ("evidence_class", &decl.evidence_class),
     ] {
         if value
             .as_deref()
@@ -2024,6 +2049,18 @@ fn revision_log_problem(decl: &RevisionLogDecl) -> Option<String> {
                 ));
             }
             _ => {}
+        }
+    }
+    if let Some(evidence) = decl.evidence_class.as_deref().map(strip_emphasis) {
+        let known = if decl.classes.is_some() {
+            seen.contains(&evidence)
+        } else {
+            DEFAULT_REVISION_LOG_CLASSES.contains(&evidence)
+        };
+        if !known {
+            return Some(format!(
+                "an `evidence_class` `{evidence}` that is not in `classes` -- re-pin rows would carry a class the log rejects"
+            ));
         }
     }
     None
@@ -5459,6 +5496,26 @@ rules:
     }
 
     #[test]
+    fn an_evidence_class_is_the_re_pin_class_and_must_be_declared() {
+        let shape =
+            log_shape("{classes: [substantive, structural, evidence], evidence_class: evidence}")
+                .unwrap();
+        assert_eq!(shape.evidence_class, "evidence");
+        assert_eq!(shape.for_evidence().tool_class, "evidence");
+        assert_eq!(shape.tool_class, "structural");
+        assert_eq!(
+            log_shape("{tool_class: structural}")
+                .unwrap()
+                .evidence_class,
+            "structural"
+        );
+        assert!(
+            log_shape("{classes: [substantive, structural], evidence_class: evidence}").is_err()
+        );
+        assert!(log_shape("{evidence_class: evidence}").is_err());
+    }
+
+    #[test]
     fn an_undeclared_revision_log_shape_is_todays_behaviour() {
         // ADR-94 point 2: the defaults live in the engine.
         let want = RevisionLogShape {
@@ -5466,6 +5523,7 @@ rules:
             class_column: None,
             date_column: None,
             tool_class: "structural".into(),
+            evidence_class: "structural".into(),
         };
         assert_eq!(RevisionLogShape::default(), want);
         let c = parse(LOG_BASE).unwrap();
