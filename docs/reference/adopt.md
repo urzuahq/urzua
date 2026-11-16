@@ -171,7 +171,20 @@ new records of a type your own sections.
 
 Add the gate action so every pull request is checked. See [CI](ci.md).
 
-## 9. Optional: agent hooks
+## 9. Wire the git hooks
+
+Run the check before each commit and push:
+
+```bash
+urzua hooks install
+urzua doctor
+```
+
+`install` finds where your hooks live (`.git/hooks`, `core.hooksPath`, husky or the pre-commit framework)
+and adds a call to urzua without replacing what is there; `doctor` then reports both `hook-wired` checks as
+`ok`. See [Local hooks](ci.md#local-hooks).
+
+## 10. Optional: agent hooks
 
 If agents write records in your repository, install the harness so their edits are judged before they
 land. See [the agent harness](agent-harness.md).

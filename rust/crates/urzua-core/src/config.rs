@@ -102,6 +102,66 @@ pub struct Config {
         skip_serializing_if = "Option::is_none"
     )]
     pub authority: Option<crate::authority::AuthorityDecl>,
+    /// What the git hooks `urzua hooks install` wires run (`ADR-71` amendment
+    /// of 2026-11-16, `MILE-220`, `SPEC-3`). Absent means `check --base HEAD`
+    /// at pre-commit, `check` at pre-push, and a hook that blocks when urzua
+    /// cannot run.
+    #[serde(default, skip_serializing_if = "HooksDecl::is_default")]
+    pub hooks: HooksDecl,
+}
+
+/// The `hooks` key: the urzua arguments each git hook runs, and what a hook
+/// does when urzua is missing or cannot run.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct HooksDecl {
+    #[serde(rename = "pre-commit", default = "HooksDecl::default_pre_commit")]
+    pub pre_commit: Vec<String>,
+    #[serde(rename = "pre-push", default = "HooksDecl::default_pre_push")]
+    pub pre_push: Vec<String>,
+    #[serde(default)]
+    pub on_not_run: HookOnNotRun,
+}
+
+/// `block` stops the commit or push with a message naming how to install urzua
+/// and how to skip once; `warn` prints the message and lets it through.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HookOnNotRun {
+    #[default]
+    Block,
+    Warn,
+}
+
+impl HooksDecl {
+    fn default_pre_commit() -> Vec<String> {
+        ["check", "--base", "HEAD"].map(String::from).to_vec()
+    }
+    fn default_pre_push() -> Vec<String> {
+        vec!["check".to_string()]
+    }
+    pub fn is_default(&self) -> bool {
+        *self == HooksDecl::default()
+    }
+    /// The urzua arguments the named git hook runs, or `None` for a hook this
+    /// key does not govern.
+    pub fn args(&self, hook: &str) -> Option<&[String]> {
+        match hook {
+            "pre-commit" => Some(&self.pre_commit),
+            "pre-push" => Some(&self.pre_push),
+            _ => None,
+        }
+    }
+}
+
+impl Default for HooksDecl {
+    fn default() -> Self {
+        HooksDecl {
+            pre_commit: Self::default_pre_commit(),
+            pre_push: Self::default_pre_push(),
+            on_not_run: HookOnNotRun::default(),
+        }
+    }
 }
 
 /// A map whose keys are all distinct. A repeated key is a load error naming the
@@ -1808,6 +1868,8 @@ pub enum ConfigError {
         option: &'static str,
         reason: String,
     },
+    #[error("hooks: {reason}")]
+    InvalidHooks { reason: String },
     #[error("embodiment: {reason}")]
     InvalidEmbodiment { reason: String },
     #[error("locator_resolvers: {reason}")]
@@ -3001,7 +3063,29 @@ pub fn parse_with_document_models(
     validate_extensions(&config)?;
     validate_code_comment_prefixes(&config)?;
     validate_rule_fields(&config)?;
+    validate_hooks(&config.hooks)?;
     Ok((config, models))
+}
+
+/// Each hook runs a urzua subcommand: an empty list or one starting with a flag
+/// would install a hook that runs nothing useful.
+fn validate_hooks(hooks: &HooksDecl) -> Result<(), ConfigError> {
+    for (name, args) in [
+        ("pre-commit", &hooks.pre_commit),
+        ("pre-push", &hooks.pre_push),
+    ] {
+        match args.first() {
+            Some(first) if first.starts_with(|c: char| c.is_ascii_alphabetic()) => {}
+            _ => {
+                return Err(ConfigError::InvalidHooks {
+                    reason: format!(
+                        "'{name}' must list the urzua arguments the hook runs, starting with a subcommand (for example [check])"
+                    ),
+                })
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Record types: the values that reach filenames and discovery (directories,

@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5E1D23JRXBPTP54NSG
-Version: '0.30'
+Version: '0.31'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -70,7 +70,7 @@ empty, same as every other command's report.
 | `authority-config-gated` | When `authority` declares gates and no path gate lists `.urzua/config.yaml`: `warn`, since a pull request can then edit the configuration (`exclude_files`, `dir`, status field names) and accept a record without a decider. Absent when a gate lists it. |
 | `template-sections` | One check per record type whose configuration declares `sections.required` (`MILE-6`): the type's template, `.urzua/templates/<type>.md`, has a heading for each required section. The headings are read as a record's are, to the type's `sections.depth` (a heading inside a code fence is not one), and a requirement is met by its `name` or an alias at its level and under its declared parent, or, where it also reads a Y-statement from the preamble, by the preamble carrying the marker. `warn` when one is missing, naming each (`## Decision`): a record made from that template fails `section.required` the moment it is written. `ok` when each is present, or when the type has no template (`urzua new` scaffolds it from the declaration, so there is nothing to compare). `error` when the template exists and cannot be read. A type that declares no required section is not listed. Presence only: order is `section.order`'s. |
 
-| `hook-wired` | One check per local hook layer (`pre-commit`, `pre-push`), carrying `layer` and a machine-readable `state` (`MILE-179`, `ADR-71`). The hooks directory is `core.hooksPath` (relative to the working tree root) when set, else the repository's own `hooks`. `state` is `not-installed`, `installed-running-urzua` (the file runs `urzua <subcommand>`, by a path ending in `urzua` or by a variable assigned one; a mention in a comment or an `echo` does not count), `installed-not-running-urzua`, or `installed-not-executable` (git ignores a hook without the execute bit; not checked on non-Unix hosts). `ok` only for `installed-running-urzua`; the other states are `warn`, since a local layer is a convenience and only CI is the guarantee. `error` when the hooks directory or hook file cannot be read: not knowing is not the same as absent. Hook-manager configuration (lefthook, pre-commit framework) is not read; a manager that installs real hook files, or sets `core.hooksPath`, is seen. |
+| `hook-wired` | One check per local hook layer (`pre-commit`, `pre-push`), carrying `layer`, a machine-readable `state`, `hook_layout` and, when it is not `ok`, `next_action` (`MILE-179`, `MILE-220`, `ADR-71`). `hook_layout` is where the hooks live: `hooks-path` (`core.hooksPath`, relative to the working tree root, when set and not under `.husky`), `husky` (`core.hooksPath` under `.husky`, or no `core.hooksPath` and a `.husky/` directory: the files read are `.husky/<hook>`, and with `core.hooksPath` `.husky/_` or unset they need no execute bit, since husky runs them through `sh`), `pre-commit-framework` (no `core.hooksPath` and a `.pre-commit-config.yaml`: the layer is wired when the config runs `urzua hooks run <hook>` and the framework's own script is installed for that hook type) or `default` (the repository's own `hooks`). `state` is `not-installed`, `installed-running-urzua` (the file carries the block `urzua hooks install` writes, or runs `urzua <subcommand>`, by a path ending in `urzua` or by a variable assigned one; a mention in a comment or an `echo` does not count), `installed-not-running-urzua`, or `installed-not-executable` (git ignores a hook without the execute bit; not checked on non-Unix hosts). `ok` only for `installed-running-urzua`; the other states are `warn`, since a local layer is a convenience and only CI is the guarantee, and their message and `next_action` name the one command that wires it: `urzua hooks install` (with `--write-config` for the pre-commit framework, `pre-commit install --hook-type <hook>` when only the framework's script is missing, and, for a hooks path outside the repository or not writable, the line to add to the hook). `error` when the hooks directory or hook file cannot be read: not knowing is not the same as absent. The report's top-level `next_action` is the first such command. Other hook managers (lefthook) are not read; one that installs real hook files, or sets `core.hooksPath`, is seen. |
 
 ## What's aspirational, not yet built
 
@@ -94,6 +94,39 @@ than compounded:
 - SPEC-2 — `check`, the command whose own correct invocation `doctor` verifies without duplicating.
 - SPEC-3 — configuration, `doctor`'s original home before this spec split out.
 - MILE-80 — configurable rule severity, which "which rules are off" depends on.
+
+## `urzua hooks`
+
+`urzua hooks install` wires the layers `hook-wired` reports, in the layout it reports (`ADR-71` amendment of
+2026-11-16, `MILE-220`). It writes unless `--dry-run`, as `urzua harness install` does, and prints one JSON report:
+`status` (`ok`, `not-run` when it refused, `drift` from `status`), `action`, `dry_run`, `layout`, `items` (one per
+file, `{hook, path, state}`), `stanza` (pre-commit framework only), `problems` and `notices`, exit 0, 1 (`status` found a
+layer not wired) or 2 (refused: nothing is written).
+
+- **A missing hook** is created with `#!/bin/sh` and the marked block, executable (`created`).
+- **A shell hook that does not run urzua** gets the marked block, between `# >>> urzua-hooks begin` and
+  `# <<< urzua-hooks end`, after its content, or before its last command when that is an `exec` line (`extended`).
+  A file with no shebang is a shell hook (husky's style).
+- **A hook that runs urzua** without the block is left alone (`wired`); one with the block has it rewritten in place
+  when the configuration changed it (`updated`), else `unchanged`. Running the install twice changes nothing.
+- **Refused**, naming the one line to add: a hook whose shebang names another interpreter (Node and Python get a line
+  in their own terms), a hook file without the execute bit where git needs it, and a `core.hooksPath` outside the
+  repository or one that cannot be written. Unbalanced markers are refused too.
+- **The pre-commit framework**: no hook file is written. The report carries the `repo: local` stanza (two `language:
+  system` hooks running `urzua hooks run pre-commit` and `urzua hooks run pre-push` at those stages); `--write-config`
+  appends it, marked, when `repos:` is the config's last top-level key, and refuses otherwise. `next_action` names
+  `pre-commit install --hook-type ...` while the framework's own scripts are missing.
+
+`urzua hooks status` reports each layer as `ok`, `missing`, `not-wired` or `not-executable`, with `next_action`.
+`urzua hooks uninstall` removes the marked block, and deletes a hook file left holding only `#!/bin/sh` (`removed`,
+`block-removed`); a file without the block is `not-ours` and untouched.
+
+The block finds the binary as the harness does (`URZUA_BIN`, then `PATH`) and calls `urzua hooks run <hook>`, which
+runs the urzua arguments `hooks.<hook>` names (`SPEC-3`; default `check --base HEAD` and `check`) and writes to stderr
+`no blocking findings`, or the count and each blocking finding's rule, file, line and message, the check's
+`next_action` and the command for the full report. Its exit is the hook's: 1 on blocking findings. When urzua is not
+found, or the check cannot run (exit 2), the hook says the commit or push was not checked, how to install urzua and how
+to skip once with `--no-verify`, and exits 1; `hooks.on_not_run: warn` exits 0 with the same message.
 
 > **Revision log**
 >
@@ -143,3 +176,4 @@ than compounded:
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/check_integration.rs` 3441046fd344 -> 919b855ba25b. Reason: Read the diff of each pinned file against main and the claim still holds. check_integration.rs: the init-then-check blockquote test also enables header.required-fields after declaring required_fields, because adopt now withholds that rule; other tests unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/check_integration.rs` 919b855ba25b -> 6d2ad3bf8830. Reason: Read the diff of each re-pinned file against main: check_integration.rs fix fixtures create the file their record cites. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Bumped to `0.30`. Evidence pins re-baselined for this change (the `Re-baselined` row above); the specification text is unchanged. **Why:** a revision-log entry that adds a structural change bumps `Version`. | **structural** |
+> | 2026-11-16 | Bumped to `0.31`. `hook-wired` reads husky, the pre-commit framework and `core.hooksPath` layouts, carries `hook_layout` and `next_action`, and names the command that wires the layer; added `urzua hooks install`, `status`, `uninstall` and `run`. **Why:** `MILE-220`: `doctor` warned about missing hooks that no command installed, and read `.husky/pre-commit` as a hook git runs directly (`ADR-71` amendment of 2026-11-16). | **substantive** |

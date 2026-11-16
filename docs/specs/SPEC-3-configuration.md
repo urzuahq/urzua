@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.150'
+Version: '0.151'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:7207b798837c05f8190919092228e00717c9201b7b1b6946d2b1392ba1097f22, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:09c2431a269316741c35b51dabd5766ecd3d50fab2b98069314bb1bc8857767d, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:255395e7d2caa34947cef28f463e2ec050e3eba798a4dc7573a3cad946fee1ae
@@ -1161,6 +1161,26 @@ authority:
   `CODEOWNERS` file are the host's settings, which the engine can neither read nor verify: `urzua doctor`
   says so and does not claim them, and names a distinct agent identity with `CODEOWNERS` on the protected
   paths as a future option and not as configured.
+
+## Git hooks: `hooks`
+
+A top-level `hooks` key names what the git hooks `urzua hooks install` wires run (`ADR-71`, amendment of
+2026-11-16; `MILE-220`; `SPEC-15`). Each value is the urzua arguments, starting with a subcommand:
+
+```yaml
+hooks:
+  pre-commit: [check, --base, HEAD]   # the default
+  pre-push: [check]                   # the default
+  on_not_run: block                   # the default; or warn
+```
+
+- **Absent means the defaults above**, and any key left out takes its default. `pre-commit` checks the records
+  changed since `HEAD`, staged or not, with the diff rules; `pre-push` checks the whole tree, as CI does.
+- **`on_not_run`** is what a hook does when urzua is not found or the check cannot run: `block` stops the commit or
+  push, `warn` lets it through; both print how to install urzua and how to skip once with `--no-verify`. The value is
+  written into the hook's block at install, so changing it takes `urzua hooks install` again; the arguments are read
+  when the hook runs.
+- **A list that is empty or starts with a flag is a load error** (exit 2), as is any other key under `hooks`.
 
 ## Editor hook blocking: `block_on`
 
@@ -2706,3 +2726,4 @@ proves this configuration produces the three findings.
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 9b216fd928bd -> 76578456015b. Reason: Read the diff of each re-pinned file against main. config.rs: the `unread_markers` rule option was added (UnreadMarkers enum, its field-name list entry and the load check validate_unread_markers that refuses it on any rule but the two back-pointer rules); nothing else changed. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 76578456015b -> 26b96561f2fa. Reason: Read the diff of each re-pinned file against main. config.rs: the `unread_markers` rule option (UnreadMarkers, its field-name entry, validate_unread_markers) and `issue_refs.workers` (IssueRefs::workers, REFS_WORKERS_DEFAULT/MAX, a 1-to-16 check in issue_refs_problem); nothing else. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 305844777dc8 -> 7207b798837c. Reason: Read the diff of each re-pinned file against main. config.rs: the `unread_markers` rule option (UnreadMarkers, its field-name entry, validate_unread_markers) and `issue_refs.workers` (IssueRefs::workers, REFS_WORKERS_DEFAULT/MAX, a 1-to-16 check in issue_refs_problem); nothing else. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-16 | Bumped to `0.151`. Added the `hooks` key: the urzua arguments the pre-commit and pre-push hooks run and `on_not_run`, defaulting to today's `check --base HEAD`, `check` and `block`. **Why:** `MILE-220` adds `urzua hooks install`, and `ADR-101` (amendment of 2026-11-15) puts values that shape behaviour in configuration. | **substantive** |

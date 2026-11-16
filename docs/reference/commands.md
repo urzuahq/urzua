@@ -234,6 +234,9 @@ exists, whether a CI workflow invokes `urzua check` or the gate action, whether 
 pre-push hooks run it, and the harness and authority declarations.
 
 Output: `status` (`ok`, `warn` or `error`) and `checks`, each with `check`, `status` and `message`.
+A `hook-wired` check also carries `layer`, `state`, `hook_layout` (`default`, `hooks-path`, `husky` or
+`pre-commit-framework`) and, when the hook is not wired, `next_action`: the command that wires it,
+usually `urzua hooks install`. The report's `next_action` is the first such command.
 The `check` ids include `config-exists`, `config-parses`, `record-type-dir`, `ci-wired`, `hook-wired`,
 `authority-host` (whether the declared authority gates anything), `authority-decider-table`,
 `authority-waivable`, `harness-config` (the declared harness, and any key of it this build does not
@@ -390,6 +393,35 @@ urzua harness run <edit | session-start | post-command>
 ```
 
 Installs and runs the agent harness. See [the agent harness](agent-harness.md) for what each does.
+
+## hooks
+
+```text
+urzua hooks install [--dry-run] [--write-config]
+urzua hooks status
+urzua hooks uninstall [--dry-run]
+urzua hooks run <pre-commit | pre-push>
+```
+
+Wires the git hooks `doctor` reports. `install` finds where the hooks live (`.git/hooks`, a
+`core.hooksPath` inside the repository, husky's `.husky/`, or the pre-commit framework) and makes the
+pre-commit hook run `urzua hooks run pre-commit` and the pre-push hook `urzua hooks run pre-push`. A
+missing hook is created; an existing shell hook gets a block between `# >>> urzua-hooks begin` and
+`# <<< urzua-hooks end` after its content (before a trailing `exec` line); a hook that already runs urzua
+is left alone. It refuses, writing nothing and printing the line to add, a Node or Python hook, a hook
+without the execute bit and a hooks path outside the repository or not writable. With the pre-commit
+framework it writes no hook file: the report's `stanza` is the `repo: local` entry to add, and
+`--write-config` appends it to `.pre-commit-config.yaml`.
+
+`run` is what the hooks call: it runs the arguments `hooks.pre-commit` or `hooks.pre-push` names in the
+config (default `check --base HEAD` and `check`) and prints, on stderr, the blocking findings' rule, file
+and message and the command for the full report. When urzua is missing or cannot run, the hook stops the
+commit or push and prints how to install urzua and how to skip once with `--no-verify`
+(`hooks.on_not_run: warn` lets it through). See [CI](ci.md#local-hooks).
+
+Output: `status` (`ok`, `drift` from `status` when a hook is not wired, `not-run` when `install` refused),
+`action`, `dry_run`, `layout`, `items` (`{hook, path, state}`), `stanza`, `problems`. `uninstall` removes
+only the block, and a hook file it created. Exit 0, 1 (`status` found a hook not wired) or 2 (refused).
 
 ## audit
 

@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5AJB7EBVDWVSMCSYZQ
-Version: '0.48'
+Version: '0.49'
 Date: 2026-07-29
 Status: Shipped
 Embodiment: Verified
@@ -46,6 +46,7 @@ because you cannot sell a decision graph you have never run against a real corpu
 > | **SPEC-13** | `urzua explain` / `urzua graph` | Accepted |
 > | **SPEC-14** | `urzua migrate ids` / `urzua migrate filenames` / `urzua migrate schema` / `urzua migrate config` | Accepted |
 > | **SPEC-15** | `urzua doctor` | Accepted |
+> | **SPEC-15**, **ADR-71** | `urzua hooks install` / `status` / `uninstall` / `run` — wires the git hooks `doctor` reports | Draft |
 > | **SPEC-25** | `urzua waive --from-report` | Draft |
 > | **SPEC-26** | `urzua mcp` | Draft |
 >
@@ -421,3 +422,4 @@ None. Every question this spec carried has been answered or routed:
 > | 2026-11-14 | Bumped to `0.47`. The export's refusal of a record symlinked outside the repository is the guard every corpus command now applies, and it also covers a link to a file outside the record type's directory. **Why:** `ADR-89` amendment of 2026-11-14. | **substantive** |
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/export_integration.rs` 58ac0e2a0da0 -> 2bb508f31a96. Reason: Pinned file(s) changed by the symlinked-record refusal: export_integration.rs: a revision row appended by an earlier re-pin in this change. The record's claim is unaffected by these changes. (Re-applied after the follow-up review and merging main.) **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-14 | Bumped to `0.48`. `urzua refs refresh` requests the pages of a listing `issue_refs.workers` (default 4) at a time when the first answer names its last page, and follows the listing on serially if that last page still has a next. **Why:** the adopter switchover (item 10): 5,700 numbers took about 75 s paged serially. | **substantive** |
+> | 2026-11-16 | Bumped to `0.49`. Added `urzua hooks` (`install`, `status`, `uninstall`, `run`) to the table of command specs, described in `SPEC-15`. **Why:** `MILE-220` adds the command that wires the git hooks `doctor` reports (`ADR-71` amendment of 2026-11-16). | **substantive** |

@@ -315,6 +315,18 @@ enum Command {
         target: HarnessTarget,
     },
 
+    /// Wire the pre-commit and pre-push git hooks `doctor` asks for (`ADR-71`).
+    ///
+    /// Finds where the hooks live (`.git/hooks`, `core.hooksPath`, husky, the
+    /// pre-commit framework) and adds a marked block that runs `urzua hooks
+    /// run <hook>`; `hooks.pre-commit` and `hooks.pre-push` in the
+    /// configuration name what each runs. Never replaces a hook it did not
+    /// write; `uninstall` removes only its block.
+    Hooks {
+        #[command(subcommand)]
+        target: HooksTarget,
+    },
+
     /// Report on the tool's own configuration and invocation health: is
     /// there a config, does it parse, is it wired into a real gate. An
     /// unrecognized config key is an error here, not a warning.
@@ -423,6 +435,35 @@ enum Command {
         /// line, without `|`.
         #[arg(long)]
         reason: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
+enum HooksTarget {
+    /// Write or extend the pre-commit and pre-push hooks so they run urzua.
+    /// Refuses (exit 2, nothing written) a hook it cannot extend safely, and
+    /// names the line to add instead.
+    Install {
+        /// List what would change and write nothing.
+        #[arg(long)]
+        dry_run: bool,
+        /// With the pre-commit framework, append the urzua stanza to
+        /// `.pre-commit-config.yaml` instead of only printing it.
+        #[arg(long)]
+        write_config: bool,
+    },
+    /// Report whether each hook runs urzua. Exit 1 when one does not.
+    Status,
+    /// Remove the marked block, and a hook file that held nothing else.
+    Uninstall {
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// Run what the configuration names for a hook, summarised on stderr: what
+    /// the installed hooks call.
+    Run {
+        /// `pre-commit` or `pre-push`.
+        hook: String,
     },
 }
 
@@ -633,6 +674,15 @@ fn dispatch(config: Option<PathBuf>, command: Command) -> ExitCode {
         Command::Import { .. } => not_implemented("import"),
         init @ Command::Init { .. } => dispatch_init(config, init),
         Command::Harness { target } => dispatch_harness(config, target),
+        Command::Hooks { target } => match target {
+            HooksTarget::Install {
+                dry_run,
+                write_config,
+            } => commands::hooks::run_install(config, dry_run, write_config),
+            HooksTarget::Status => commands::hooks::run_status(config),
+            HooksTarget::Uninstall { dry_run } => commands::hooks::run_uninstall(config, dry_run),
+            HooksTarget::Run { hook } => commands::hooks::run_hook(config, hook),
+        },
         Command::Doctor => commands::doctor::run(config),
         Command::Rules => commands::rules::run(),
         Command::Index { apply } => commands::index::run(config, apply),
@@ -814,6 +864,7 @@ fn command_name(command: &Command) -> &'static str {
         Command::Import { .. } => "import",
         Command::Init { .. } => "init",
         Command::Harness { .. } => "harness",
+        Command::Hooks { .. } => "hooks",
         Command::Doctor => "doctor",
         Command::Rules => "rules",
         Command::Index { .. } => "index",
