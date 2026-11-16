@@ -32,12 +32,12 @@ pub(super) fn scoped_census_records<'a, T>(
         |candidate| record_of(candidate).path.clone(),
         |candidate| {
             let record = record_of(candidate);
-            if config
+            if let Some(t) = config
                 .record_types
                 .get(&record.record_type)
-                .is_some_and(|t| t.has_no_header())
+                .filter(|t| t.has_no_header())
             {
-                return Outcome::OutOfScope;
+                return t.header_out_of_scope();
             }
             body(candidate)
         },

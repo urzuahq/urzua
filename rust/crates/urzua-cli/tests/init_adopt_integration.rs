@@ -465,3 +465,488 @@ fn init_withholds_the_waiver_declaration_and_names_its_keys() {
         "{notices}"
     );
 }
+
+/// The most common ADR style: numbered files, a `# N. Title` heading, a `Date:`
+/// line and `## Status`/`## Context`/`## Decision`/`## Consequences`, no
+/// header block. Planted: a duplicate number, a dangling `Superseded by ADR
+/// 0099`, one file missing `## Decision`, and a `README.md` index.
+fn headerless_adr_repo(name: &str) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-cli-test-{name}"));
+    git(&dir, &["init", "-q"]);
+    git(&dir, &["config", "user.email", "t@example.com"]);
+    git(&dir, &["config", "user.name", "t"]);
+    write_headerless_adrs(&dir, "docs/adr");
+    git(&dir, &["add", "-A"]);
+    git(&dir, &["commit", "-q", "-m", "fixture"]);
+    dir
+}
+
+fn write_headerless_adrs(dir: &Path, adr_dir: &str) {
+    for i in 1..=14u32 {
+        let status = match i {
+            3 => "Superseded by ADR 0007",
+            5 => "Superseded by ADR 0099",
+            _ => "Accepted",
+        };
+        let decision = if i == 9 {
+            String::new()
+        } else {
+            "## Decision\n\nWe will.\n\n".to_string()
+        };
+        write(
+            dir,
+            &format!("{adr_dir}/{i:04}-decision-{i}.md"),
+            &format!(
+                "# {i}. Decision {i}\n\nDate: 2021-03-04\n\n## Status\n\n{status}\n\n## Context\n\nWhy.\n\n{decision}## Consequences\n\nSo.\n"
+            ),
+        );
+    }
+    write(
+        dir,
+        &format!("{adr_dir}/0006-another-sixth.md"),
+        "# 6. Another\n\nDate: 2021-04-01\n\n## Status\n\nAccepted\n\n## Context\n\nc\n\n## Decision\n\nd\n\n## Consequences\n\ne\n",
+    );
+    write(
+        dir,
+        &format!("{adr_dir}/README.md"),
+        "# Decisions\n\n* [1. Decision 1](0001-decision-1.md)\n",
+    );
+}
+
+/// MILE-265: `init` refused this corpus ("no file in these directories has a
+/// header"). It now proposes a headerless type with the sections it found,
+/// names what the config cannot see, and `check` reports the missing section.
+#[test]
+fn init_proposes_a_headerless_type_for_the_common_adr_style_and_check_runs_observed_failing() {
+    let dir = headerless_adr_repo("init-headerless");
+
+    let dry = run_urzua(&dir, &["init", "--dry-run"]);
+    assert_eq!(
+        dry.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&dry.stdout)
+    );
+    let report = json(&dry);
+    let proposed = report["proposed"].as_array().unwrap();
+    assert_eq!(proposed.len(), 1, "{report}");
+    let adr = &proposed[0];
+    assert_eq!(adr["dir"], "docs/adr");
+    assert_eq!(adr["header_shape"], "none");
+    assert_eq!(adr["record_count"], 15);
+    assert!(adr["prefix"].is_null(), "no prefix is invented: {adr}");
+    assert_eq!(
+        adr["required_sections"],
+        serde_json::json!(["Status", "Context", "Decision", "Consequences"])
+    );
+    assert_eq!(adr["exclude_files"], serde_json::json!(["README.md"]));
+    let notes = adr["notes"].to_string();
+    for needle in [
+        "80% of the files (12 of 15)",
+        "`## Decision` is missing from 1 of 15 file(s): docs/adr/0009-decision-9.md",
+        "6 (docs/adr/0006-another-sixth.md, docs/adr/0006-decision-6.md)",
+        "not read as the record's status",
+        "not read as a reference",
+        "4-digit zero-padded number",
+        "README.md",
+    ] {
+        assert!(
+            notes.contains(needle),
+            "{needle} missing from notes: {notes}"
+        );
+    }
+    let yaml = report["config_yaml"].as_str().unwrap();
+    assert!(yaml.contains("header_shape: none"), "{yaml}");
+    assert!(yaml.contains("section.required: warn"), "{yaml}");
+    for withheld in [
+        "section.shape:",
+        "header.case-variant-key:",
+        "identity.collision:",
+        "date.field-valid:",
+    ] {
+        assert!(
+            !yaml.contains(withheld),
+            "{withheld} cannot run here: {yaml}"
+        );
+    }
+    let notices = report["notices"].to_string();
+    assert!(
+        notices.contains("no proposed record type has a header block"),
+        "{notices}"
+    );
+    assert!(notices.contains("section.shape"), "{notices}");
+
+    let out = run_urzua(&dir, &["init"]);
+    assert_eq!(out.status.code(), Some(0));
+    assert_eq!(
+        std::fs::read_to_string(dir.join(".urzua/config.yaml")).unwrap(),
+        yaml,
+        "the written config is the proposed one"
+    );
+
+    let check = run_urzua(&dir, &["check"]);
+    let checked = json(&check);
+    assert_eq!(checked["files_examined"], 15, "{checked}");
+    let findings = checked["findings"].as_array().unwrap();
+    let missing: Vec<&serde_json::Value> = findings
+        .iter()
+        .filter(|f| f["rule"] == "section.required")
+        .collect();
+    assert_eq!(missing.len(), 1, "{checked}");
+    assert!(missing[0]["message"]
+        .as_str()
+        .unwrap()
+        .contains("## Decision"));
+    assert!(
+        !checked.to_string().contains("README.md ->"),
+        "the index page is not read as a record: {checked}"
+    );
+}
+
+/// MILE-265: each directory is proposed by what it holds.
+#[test]
+fn a_mixed_corpus_proposes_each_directory_by_what_it_holds() {
+    let dir = headerless_adr_repo("init-mixed");
+    write(
+        &dir,
+        "docs/rfc/RFC-0001-a.md",
+        "---\nStatus: Draft\n---\n# RFC-0001 A\n",
+    );
+    write(
+        &dir,
+        "docs/rfc/RFC-0002-b.md",
+        "---\nStatus: Draft\n---\n# RFC-0002 B\n",
+    );
+    git(&dir, &["add", "-A"]);
+    git(&dir, &["commit", "-q", "-m", "rfc"]);
+
+    let report = json(&run_urzua(&dir, &["init", "--dry-run"]));
+    let shape_of = |d: &str| {
+        report["proposed"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|p| p["dir"] == d)
+            .unwrap_or_else(|| panic!("{d} not proposed: {report}"))["header_shape"]
+            .clone()
+    };
+    assert_eq!(shape_of("docs/adr"), "none");
+    assert_eq!(shape_of("docs/rfc"), "yaml-frontmatter");
+    let yaml = report["config_yaml"].as_str().unwrap();
+    assert!(
+        yaml.contains("header.case-variant-key"),
+        "a header rule runs on the headed type: {yaml}"
+    );
+    assert!(yaml.contains("section.required"), "{yaml}");
+}
+
+/// MILE-265: an `index.md` and a numberless file beside numbered records are
+/// excluded and named, not proposed as records.
+#[test]
+fn index_pages_and_numberless_files_beside_numbered_records_are_excluded() {
+    let dir = headerless_adr_repo("init-index-pages");
+    write(&dir, "docs/adr/index.md", "# Index\n");
+    write(&dir, "docs/adr/glossary.md", "# Glossary\n");
+    git(&dir, &["add", "-A"]);
+    git(&dir, &["commit", "-q", "-m", "pages"]);
+
+    let report = json(&run_urzua(&dir, &["init", "--dry-run"]));
+    let adr = &report["proposed"][0];
+    assert_eq!(
+        adr["exclude_files"],
+        serde_json::json!(["README.md", "glossary.md", "index.md"]),
+        "{adr}"
+    );
+    assert!(adr["notes"].to_string().contains("glossary.md, index.md"));
+    run_urzua(&dir, &["init"]);
+    let check = json(&run_urzua(&dir, &["check"]));
+    assert_eq!(check["files_examined"], 15, "{check}");
+}
+
+/// MILE-265: the rename finding for a numberless file names `exclude_files`.
+#[test]
+fn the_rename_finding_for_a_numberless_file_names_exclude_files() {
+    let dir = headerless_adr_repo("init-rename-hint");
+    write(
+        &dir,
+        ".urzua/config.yaml",
+        "schema_version: 2\nrecord_types:\n  adr:\n    dir: docs/adr\n    prefix: ADR\n    header_shape: none\nrules:\n  filename.identity-pattern: warn\n",
+    );
+    let check = json(&run_urzua(&dir, &["check"]));
+    let message = check["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|f| f["rule"] == "filename.identity-pattern")
+        .unwrap_or_else(|| panic!("{check}"))["message"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert!(
+        message.contains("list README.md under `record_types.adr.exclude_files`"),
+        "{message}"
+    );
+}
+
+/// MILE-265 / SPEC-1 "no silent no-op": `migrate ids --apply` on a type with
+/// no header said `ok` and wrote nothing without saying so.
+#[test]
+fn migrate_ids_on_a_headerless_type_says_it_wrote_nothing_and_why_observed_failing() {
+    let dir = headerless_adr_repo("init-migrate-ids");
+    run_urzua(&dir, &["init"]);
+    let out = run_urzua(&dir, &["migrate", "ids", "--apply"]);
+    let report = json(&out);
+    assert_eq!(report["written"], 0, "{report}");
+    let notices = report["notices"].to_string();
+    assert!(
+        notices.contains("header_shape: none") && notices.contains("nothing was written"),
+        "{notices}"
+    );
+    assert_eq!(
+        report["status"], "not-run",
+        "a run that wrote nothing is not ok: {report}"
+    );
+    assert_eq!(out.status.code(), Some(2), "{report}");
+    assert!(report["results"][0]["error"]
+        .as_str()
+        .unwrap()
+        .contains("no header to hold a `Stable-Id`"));
+    let status = Command::new("git")
+        .args(["status", "--porcelain", "docs"])
+        .current_dir(&*dir)
+        .output()
+        .unwrap();
+    assert!(status.stdout.is_empty(), "no record was touched");
+}
+
+fn repo_with(name: &str, files: &[(&str, &str)]) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-cli-test-{name}"));
+    git(&dir, &["init", "-q"]);
+    git(&dir, &["config", "user.email", "t@example.com"]);
+    git(&dir, &["config", "user.name", "t"]);
+    for (rel, body) in files {
+        write(&dir, rel, body);
+    }
+    git(&dir, &["add", "-A"]);
+    git(&dir, &["commit", "-q", "-m", "fixture"]);
+    dir
+}
+
+fn config_findings(check: &serde_json::Value) -> Vec<String> {
+    check["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|f| f["rule"].as_str().unwrap().starts_with("config."))
+        .map(|f| f["message"].to_string())
+        .collect()
+}
+
+/// Review of MILE-265: a misnamed record with a full header was written to
+/// `exclude_files`, so `check` stopped reporting its name.
+#[test]
+fn a_numberless_file_with_a_header_stays_a_record_and_keeps_its_filename_finding_observed_failing()
+{
+    let header = "---\nStatus: Accepted\n---\n# Title\n\n## Context\n\nc\n";
+    let dir = repo_with(
+        "init-numberless-headed",
+        &[
+            ("docs/adr/ADR-0001-t1.md", header),
+            ("docs/adr/ADR-0002-t2.md", header),
+            ("docs/adr/ADR-0003-t3.md", header),
+            ("docs/adr/use-postgres.md", header),
+        ],
+    );
+    let report = json(&run_urzua(&dir, &["init"]));
+    assert!(report["proposed"][0]["exclude_files"].is_null(), "{report}");
+    let check = json(&run_urzua(&dir, &["check"]));
+    assert_eq!(check["files_examined"], 4, "{check}");
+    assert!(
+        check["findings"].as_array().unwrap().iter().any(|f| {
+            f["rule"] == "filename.identity-pattern"
+                && f["file"]
+                    .as_str()
+                    .unwrap_or("")
+                    .ends_with("use-postgres.md")
+        }),
+        "{check}"
+    );
+}
+
+/// Review of MILE-265: on this repository's own tree adopt excluded a planted
+/// record (`corpus-e/records/gizmo/notes.md`). Every exclusion it proposes
+/// here is an index page, as before the change.
+#[test]
+fn init_on_this_repository_excludes_only_index_pages() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let report = json(&run_urzua(&root, &["init", "--dry-run"]));
+    let excluded: Vec<String> = report["proposed"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .flat_map(|p| {
+            p["exclude_files"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default()
+                .into_iter()
+                .map(move |f| format!("{}/{}", p["dir"].as_str().unwrap(), f.as_str().unwrap()))
+        })
+        .collect();
+    for path in &excluded {
+        let name = path.rsplit('/').next().unwrap().to_ascii_lowercase();
+        assert!(
+            name == "readme.md" || name == "index.md",
+            "{path} is not an index page: {excluded:?}"
+        );
+    }
+}
+
+/// Review of MILE-265: numbered tutorial pages sharing headings were adopted
+/// as a record type. They are named as ordinary pages instead.
+#[test]
+fn numbered_tutorial_pages_are_named_as_ordinary_pages_not_proposed_observed_failing() {
+    let page =
+        "# Step\n\n## Prerequisites\n\np\n\n## What you will build\n\nw\n\n## Next steps\n\nn\n";
+    let mut files: Vec<(String, &str)> = (1..=5)
+        .map(|i| (format!("docs/tutorial/0{i}-step-{i}.md"), page))
+        .collect();
+    files.push(("docs/tutorial/index.md".to_string(), "# Tutorial\n"));
+    let refs: Vec<(&str, &str)> = files.iter().map(|(a, b)| (a.as_str(), *b)).collect();
+    let dir = repo_with("init-tutorial", &refs);
+    let out = run_urzua(&dir, &["init", "--dry-run"]);
+    let report = json(&out);
+    assert_eq!(out.status.code(), Some(2), "nothing to adopt: {report}");
+    let error = report["error"].as_str().unwrap();
+    assert!(error.contains("look like ordinary pages"), "{error}");
+    assert!(
+        error.contains("docs/tutorial (5 file(s) sharing"),
+        "{error}"
+    );
+    assert!(
+        error.contains("record_types"),
+        "names how to adopt it anyway: {error}"
+    );
+}
+
+/// Review of MILE-265: the first `check` after `init` warned about the config
+/// `init` had just written.
+#[test]
+fn the_first_check_after_adopting_a_headerless_or_mixed_corpus_has_no_config_warning_observed_failing(
+) {
+    let dir = headerless_adr_repo("init-clean-first-check");
+    run_urzua(&dir, &["init"]);
+    let check = json(&run_urzua(&dir, &["check"]));
+    assert_eq!(config_findings(&check), Vec::<String>::new(), "{check}");
+
+    let mixed = headerless_adr_repo("init-clean-first-check-mixed");
+    write(
+        &mixed,
+        "docs/rfc/RFC-0001-a.md",
+        "---\nStatus: Draft\n---\n# RFC-0001 A\n",
+    );
+    write(
+        &mixed,
+        "docs/rfc/RFC-0002-b.md",
+        "---\nStatus: Draft\n---\n# RFC-0002 B\n",
+    );
+    git(&mixed, &["add", "-A"]);
+    git(&mixed, &["commit", "-q", "-m", "rfc"]);
+    run_urzua(&mixed, &["init"]);
+    let check = json(&run_urzua(&mixed, &["check"]));
+    assert_eq!(config_findings(&check), Vec::<String>::new(), "{check}");
+}
+
+/// Review of MILE-265: a refusal said the files "share no `##` section" when
+/// the cause was a single file or headings at another level.
+#[test]
+fn a_refused_headerless_directory_gets_its_real_reason_observed_failing() {
+    let dir = repo_with(
+        "init-refusal-reasons",
+        &[
+            ("docs/one/0001-only.md", "# Only\n\n## Context\n\nc\n"),
+            ("docs/deep/0001-a.md", "# A\n\n### Context\n\nc\n"),
+            ("docs/deep/0002-b.md", "# B\n\n### Context\n\nc\n"),
+        ],
+    );
+    let report = json(&run_urzua(&dir, &["init", "--dry-run"]));
+    let error = report["error"].as_str().unwrap();
+    assert!(
+        error.contains("docs/one (1 file(s); only one numbered file"),
+        "{error}"
+    );
+    assert!(
+        error.contains(
+            "docs/deep (2 file(s); no `##` heading in any file; headings at another level"
+        ),
+        "{error}"
+    );
+}
+
+/// Review of MILE-265: `Decision`, `Decision:` and `decision` were counted as
+/// three headings.
+#[test]
+fn heading_spellings_that_differ_in_case_or_a_colon_count_as_one_observed_failing() {
+    let body = |h: &str| format!("# T\n\n## Context\n\nc\n\n## {h}\n\nd\n");
+    let (a, b, c, d) = (
+        body("Decision"),
+        body("Decision"),
+        body("Decision:"),
+        body("decision"),
+    );
+    let dir = repo_with(
+        "init-heading-variants",
+        &[
+            ("docs/adr/0001-a.md", &a),
+            ("docs/adr/0002-b.md", &b),
+            ("docs/adr/0003-c.md", &c),
+            ("docs/adr/0004-d.md", &d),
+        ],
+    );
+    let report = json(&run_urzua(&dir, &["init", "--dry-run"]));
+    let adr = &report["proposed"][0];
+    assert_eq!(
+        adr["required_sections"],
+        serde_json::json!(["Context", "Decision"]),
+        "{adr}"
+    );
+    let notes = adr["notes"].to_string();
+    assert!(
+        notes.contains("also spelled `Decision:` (1), `decision` (1)"),
+        "{notes}"
+    );
+    assert!(
+        notes.contains("reports those files as missing the section"),
+        "{notes}"
+    );
+}
+
+/// Review of MILE-265: a directory where only some files carry a header got
+/// no inferred `sections.required`.
+#[test]
+fn a_partly_headed_directory_gets_sections_from_every_body_observed_failing() {
+    let headed = "---\nStatus: Accepted\n---\n# T\n\n## Context\n\nc\n\n## Decision\n\nd\n";
+    let bare = "# T\n\n## Context\n\nc\n\n## Decision\n\nd\n";
+    let dir = repo_with(
+        "init-partly-headed",
+        &[
+            ("docs/adr/ADR-0001-a.md", headed),
+            ("docs/adr/ADR-0002-b.md", headed),
+            ("docs/adr/ADR-0003-c.md", bare),
+        ],
+    );
+    let report = json(&run_urzua(&dir, &["init", "--dry-run"]));
+    let adr = &report["proposed"][0];
+    assert_eq!(adr["header_shape"], "yaml-frontmatter", "{adr}");
+    assert_eq!(
+        adr["required_sections"],
+        serde_json::json!(["Context", "Decision"]),
+        "{adr}"
+    );
+    assert!(
+        adr["notes"]
+            .to_string()
+            .contains("1 of 3 file(s) in docs/adr have no header block"),
+        "{adr}"
+    );
+}

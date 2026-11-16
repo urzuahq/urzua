@@ -455,6 +455,8 @@ fn proposed_for(
             prefix: Some(p.name.to_ascii_uppercase()),
             header_shape: HeaderShape::YamlFrontmatter,
             exclude_files: Vec::new(),
+            required_sections: Vec::new(),
+            notes: Vec::new(),
         })
         .collect()
 }

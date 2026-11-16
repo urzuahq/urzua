@@ -16,7 +16,7 @@ pub fn filename_title_consistency(
         |record| record.path.clone(),
         |record| {
             let Some(filename_number) = filename_number(record) else {
-                return Outcome::OutOfScope;
+                return Outcome::OutOfScopeNoIdentity;
             };
             let Some(content) = full_text.get(&record.path) else {
                 return Outcome::Absent;
@@ -331,6 +331,14 @@ fn identity_findings_for_type(
         let expected = expected_name(&record.type_prefix, &name, identity.as_ref());
         format!("{name} -> {expected}")
     };
+    // A file with no number of its own is more often an index page than a
+    // record, and renaming it would invent a record.
+    let unnumbered: Vec<String> = off
+        .iter()
+        .map(|r| file_name_of(r))
+        .filter(|name| !name.starts_with(|c: char| c.is_ascii_digit()))
+        .collect();
+    let exclude_hint = |names: &[String]| exclude_files_hint(type_name, names);
 
     if off.len() == total {
         let dir = type_config.map_or_else(
@@ -350,7 +358,7 @@ fn identity_findings_for_type(
             ActionSource::new("identity-pattern-none-match"),
             format!(
                 "none of record type '{type_name}''s {} file(s) matches {convention}, so \
-                 no identity-reading rule can examine any of them; rename each: {}",
+                 no identity-reading rule can examine any of them; rename each: {}{}",
                 off.len(),
                 {
                     // A corpus can hold hundreds of such files; naming every
@@ -362,7 +370,8 @@ fn identity_findings_for_type(
                         names.push(format!("and {} more", off.len() - SHOWN));
                     }
                     names.join("; ")
-                }
+                },
+                exclude_hint(&unnumbered)
             ),
         ));
     } else {
@@ -374,12 +383,32 @@ fn identity_findings_for_type(
                 ActionSource::new("identity-pattern-mismatch"),
                 format!(
                     "file name does not match {convention} for record type '{type_name}', \
-                     so it has no identity and identity-reading rules skip it; rename: {}",
-                    guidance(record)
+                     so it has no identity and identity-reading rules skip it; rename: {}{}",
+                    guidance(record),
+                    {
+                        let name = file_name_of(record);
+                        if unnumbered.contains(&name) {
+                            exclude_hint(&[name])
+                        } else {
+                            String::new()
+                        }
+                    }
                 ),
             ));
         }
     }
+}
+
+/// The alternative to renaming a file that is not a record.
+fn exclude_files_hint(type_name: &str, names: &[String]) -> String {
+    if names.is_empty() {
+        return String::new();
+    }
+    format!(
+        "; or, if {} not a record (an index or readme page), list {} under `record_types.{type_name}.exclude_files`",
+        if names.len() == 1 { "it is" } else { "they are" },
+        names.join(", ")
+    )
 }
 
 fn file_name_of(record: &Record) -> String {

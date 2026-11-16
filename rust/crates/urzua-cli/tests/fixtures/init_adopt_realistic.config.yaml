@@ -17,8 +17,6 @@ record_types:
 rules:
   header.case-variant-key: warn
   type.dir-matches-nothing: warn
-  identity.collision: warn
-  identity.open-pr-collision: warn
   type.record-outside-declared-dir: warn
   type.no-declared-spec: warn
   config.companion-declaration-missing: warn
@@ -27,7 +25,6 @@ rules:
   config.pointer-narrative-overlap: warn
   config.header-none-has-no-required-fields: warn
   config.relation-field-not-known: warn
-  config.known-fields-declaration-missing: warn
   config.schema-version-outdated: warn
   filename.identity-pattern: warn
   config.scope-matches-nothing: warn
