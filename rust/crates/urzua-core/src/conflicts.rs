@@ -711,9 +711,15 @@ fn version_set_by_merge(prepared: &Prepared, final_version: Option<&str>) -> Opt
     let superseded = if stated.is_empty() {
         String::new()
     } else {
+        let (rows, verb) = if stated.len() == 1 {
+            ("A row added on a branch states version", "was")
+        } else {
+            ("Rows added on the branches state versions", "were")
+        };
         format!(
-            " A row added on a branch states version {}, which was true there and is superseded by this merge.",
-            stated.join(" and ")
+            " {rows} {}, which {verb} true there and {} superseded by this merge.",
+            stated.join(" and "),
+            if verb == "was" { "is" } else { "are" }
         )
     };
     Some(format!(
