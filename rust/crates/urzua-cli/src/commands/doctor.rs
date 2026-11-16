@@ -67,10 +67,14 @@ fn hook_checks(
                 .collect();
         }
     };
-    hooks::HOOKS
-        .iter()
-        .zip(hooks::report_wiring(repo_root, &layout, decl))
-        .map(|(layer, w)| {
+    hooks::report_wiring(repo_root, &layout, decl)
+        .into_iter()
+        .enumerate()
+        .map(|(i, w)| {
+            let layer = match &w {
+                Ok(w) => w.hook.clone(),
+                Err(_) => hooks::HOOKS.get(i).copied().unwrap_or("hook").to_string(),
+            };
             let (status, state, message, fix) = match w {
                 Err(message) => (DoctorStatus::Error, None, message, None),
                 Ok(w) => (
@@ -88,7 +92,7 @@ fn hook_checks(
                 check: "hook-wired".to_string(),
                 status,
                 message,
-                layer: Some((*layer).to_string()),
+                layer: Some(layer),
                 state,
                 hook_layout: Some(layout.kind()),
                 fix,

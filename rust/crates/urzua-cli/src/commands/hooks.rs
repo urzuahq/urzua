@@ -286,7 +286,7 @@ impl HookState {
 /// all report it.
 #[derive(Debug, Clone)]
 pub(crate) struct Wiring {
-    pub hook: &'static str,
+    pub hook: String,
     pub path: PathBuf,
     pub state: HookState,
     pub message: String,
@@ -467,29 +467,36 @@ fn escapes(repo_root: &Path, real: &Path) -> Option<&'static str> {
 
 /// Each hook git would run from the directory `hooks.path` names that is a
 /// symlink leaving the working tree, declared or not, with why.
-fn unsafe_hooks(repo_root: &Path, configured: &str) -> Vec<(&'static str, String)> {
+fn unsafe_hooks(repo_root: &Path, configured: &str) -> Vec<(String, String)> {
     let dir = repo_root.join(configured);
-    HOOKS
-        .iter()
-        .filter_map(|hook| {
-            let path = dir.join(hook);
-            let meta = std::fs::symlink_metadata(&path).ok()?;
-            if !meta.file_type().is_symlink() {
-                return None;
-            }
-            let real = resolve(&path);
-            escapes(repo_root, &real).map(|where_| {
-                (
-                    *hook,
-                    format!(
-                        "{} is a symlink to {}, {where_}, so git would run a file the repository does not commit",
-                        path.display(),
-                        real.display()
-                    ),
-                )
-            })
+    let Ok(entries) = std::fs::read_dir(&dir) else {
+        return Vec::new();
+    };
+    let mut found: Vec<(String, String)> = entries
+        .flatten()
+        .filter_map(|e| {
+            let path = e.path();
+            let target = std::fs::read_link(&path).ok()?;
+            // A dangling link is judged by where it points, so it is unsafe
+            // before its target exists.
+            let real = if path.exists() {
+                resolve(&path)
+            } else {
+                resolve(&path.parent().unwrap_or(&dir).join(&target))
+            };
+            let where_ = escapes(repo_root, &real)?;
+            Some((
+                e.file_name().to_string_lossy().into_owned(),
+                format!(
+                    "{} is a symlink to {}, {where_}, so git would run a file the repository does not commit",
+                    path.display(),
+                    real.display()
+                ),
+            ))
         })
-        .collect()
+        .collect();
+    found.sort();
+    found
 }
 
 /// `urzua hooks uninstall`, when running it would unset this clone's
@@ -532,15 +539,16 @@ pub(crate) fn report_wiring(
                 None,
             )
         };
-        let at = HOOKS.iter().position(|h| *h == hook).unwrap_or(0);
-        if let Some(slot) = all.get_mut(at) {
-            *slot = Ok(wired(
-                hook,
-                &repo_root.join(p).join(hook),
-                HookState::UnsafeHook,
-                message,
-                fix,
-            ));
+        let unsafe_entry = Ok(wired(
+            &hook,
+            &repo_root.join(p).join(&hook),
+            HookState::UnsafeHook,
+            message,
+            fix,
+        ));
+        match HOOKS.iter().position(|h| *h == hook) {
+            Some(at) => all[at] = unsafe_entry,
+            None => all.push(unsafe_entry),
         }
     }
     all
@@ -687,14 +695,14 @@ pub(crate) fn wiring(layout: &Layout, decl: &HooksDecl) -> Vec<Result<Wiring, St
 }
 
 fn wired(
-    hook: &'static str,
+    hook: &str,
     path: &Path,
     state: HookState,
     message: String,
     fix: Option<String>,
 ) -> Wiring {
     Wiring {
-        hook,
+        hook: hook.to_string(),
         path: path.to_path_buf(),
         state,
         message,
@@ -1449,7 +1457,7 @@ fn status(repo_root: &Path, layout: &Layout, decl: &HooksDecl) -> HooksReport {
         match w {
             Err(m) => report.refuse(m),
             Ok(w) => {
-                report.item(w.hook, &w.path, w.state.status_word());
+                report.item(&w.hook, &w.path, w.state.status_word());
                 if !w.state.is_ok() {
                     report.problems.push(w.message);
                     if let Some(cmd) = w.fix {
@@ -1507,6 +1515,15 @@ fn point_and_install(
             .into_iter()
             .map(|m| format!("{m}; nothing was written and core.hooksPath was not set to {p}"))
             .collect();
+        if !dry_run {
+            for i in plan
+                .items
+                .iter_mut()
+                .filter(|i| i.state.starts_with("would-"))
+            {
+                i.state = "not-written".to_string();
+            }
+        }
         return plan;
     }
     if dry_run {
@@ -1566,10 +1583,10 @@ fn shared_note(p: &str) -> String {
 /// so install never says `ok` while the declaration is false.
 fn declared_problems(report: &mut HooksReport, layout: &Layout, decl: &HooksDecl) {
     for w in wiring(layout, decl).into_iter().flatten() {
-        if decl.managed(w.hook) == HookManaged::Declared && !w.state.is_ok() {
+        if decl.managed(&w.hook) == HookManaged::Declared && !w.state.is_ok() {
             let path = w.path.display().to_string();
             report.items.retain(|i| i.hook != w.hook || i.path != path);
-            report.item(w.hook, &w.path, w.state.status_word());
+            report.item(&w.hook, &w.path, w.state.status_word());
             report.problems.push(w.message);
             if report.exit == 0 {
                 report.status = "drift";
@@ -1642,7 +1659,7 @@ fn link_problem(hook: &str, path: &Path, on_not_run: HookOnNotRun) -> Option<Str
     #[cfg(unix)]
     {
         use std::os::unix::fs::MetadataExt;
-        if meta.nlink() > 1 {
+        if meta.is_file() && meta.nlink() > 1 {
             return Some(format!(
                 "{} is a hard link ({} names); rewriting it would split it from its other names, so add this line to it: {line} -- or, if the repository maintains this hook itself, declare it (hooks.{hook}.managed: declared)",
                 path.display(),
@@ -1733,7 +1750,11 @@ fn install_files(report: &mut HooksReport, decl: &HooksDecl, target: &Target, dr
     }
     let refused = report.exit != 0;
     for w in writes {
-        if refused || dry_run {
+        if refused && !dry_run {
+            report.item(w.hook, &w.path, "not-written");
+            continue;
+        }
+        if dry_run {
             report.item(w.hook, &w.path, &would(w.state));
             continue;
         }
