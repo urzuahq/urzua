@@ -29,3 +29,4 @@ the audit of 2026-11-15 found one adapter. The mission in `ADR-101` speaks of ag
 > | 2026-11-15 | Initial record, `Status: Planned`. **Why:** Filed from the audits of 2026-11-15; the maintainer committed to the work in conversation that day. | **structural** |
 > | 2026-11-15 | Initial record, `Status: Planned`. **Why:** Filed from the audits of 2026-11-15; the maintainer committed to the work in conversation that day. | **structural** |
 > | 2026-11-15 | Initial record, `Status: Planned`. **Why:** Filed from the audits of 2026-11-15; the maintainer committed to the work in conversation that day. | **structural** |
+> | 2026-11-16 | Decided: Codex and Cursor are the next two adapters. **Why:** the maintainer chose them on 2026-11-16 when asked which harnesses come after Claude Code. | **substantive** |

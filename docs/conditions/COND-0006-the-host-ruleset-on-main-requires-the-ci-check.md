@@ -1,6 +1,7 @@
 ---
 Stable-Id: 01M6XEAT4ZYYHJ31X2XYTGB59D
-Status: Open
+Status: Met
+Met-by: ADR-95
 ---
 # COND-0006 — The host ruleset on main requires the ci check
 
@@ -22,3 +23,4 @@ The ruleset should also require branches to be up to date before merging (the "R
 > |---|---|---|
 > | 2026-11-08 | Initial record. **Why:** `ADR-95` leaves the `main` ruleset requiring `ci` pending as a maintainer-only host setting, and no record tracked it. | **structural** |
 > | 2026-11-09 | Added a note that the ruleset should also require branches to be up to date before merging, or use a merge queue, as the mitigation for `ADR-89` accepted risk 13. The Signal is unchanged. **Why:** maintainer decision of 2026-11-09 accepting that risk on the condition that this mitigation is available. | **substantive** |
+> | 2026-11-16 | Met by `ADR-95`, whose revision log records the ruleset as applied (`Met-by` is a record pointer). Read with `gh api repos/urzuahq/urzua/rulesets/27249299` on 2026-11-16: active since 2026-11-14; targets the default branch only (not the `release` branch, not tags); a pull request with 0 required approvals; the `ci` status check from GitHub Actions; deletion and non-fast-forward (force pushes) blocked; empty bypass list. **Why:** that is the Signal. The up-to-date-branch option (`strict_required_status_checks_policy`) is off, so the mitigation of `ADR-89` risk 13 is still open; it is not part of the Signal. | **substantive** |
