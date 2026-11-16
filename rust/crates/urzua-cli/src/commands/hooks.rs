@@ -1337,16 +1337,20 @@ fn nlink(meta: &std::fs::Metadata) -> u64 {
 }
 
 /// 32 hex characters from the system's random source, or, where there is
-/// none, from the clock and process id (still unique, not secret).
+/// none, from the standard library's per-process random hasher keys.
 pub(crate) fn random_hex() -> String {
     use std::io::Read as _;
     let mut bytes = [0u8; 16];
     let random = std::fs::File::open("/dev/urandom").and_then(|mut f| f.read_exact(&mut bytes));
     if random.is_err() {
-        let nanos = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_or(0, |d| d.as_nanos());
-        bytes = (nanos ^ (u128::from(std::process::id()) << 64)).to_le_bytes();
+        use std::hash::{BuildHasher, Hasher};
+        // Each RandomState carries keys the standard library seeds from the OS.
+        let half = || {
+            let mut h = std::collections::hash_map::RandomState::new().build_hasher();
+            h.write_u32(std::process::id());
+            h.finish()
+        };
+        bytes = (u128::from(half()) << 64 | u128::from(half())).to_le_bytes();
     }
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
