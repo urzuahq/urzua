@@ -25,6 +25,16 @@ pub struct ClaimOpts {
     /// `false` stops closing verbs in prose being read as claims (`ADR-88`);
     /// `true` unless declared.
     pub verb_claims: bool,
+    /// The verbs read as a claim (`MILE-233`); a declared list replaces
+    /// [`DEFAULT_CLOSING_VERBS`].
+    pub closing_verbs: Vec<String>,
+}
+
+/// The closing verbs read when `closing_verbs` is not declared.
+pub const DEFAULT_CLOSING_VERBS: [&str; 3] = ["closes", "fixes", "resolves"];
+
+fn default_closing_verbs() -> Vec<String> {
+    DEFAULT_CLOSING_VERBS.map(String::from).to_vec()
 }
 
 impl Default for ClaimOpts {
@@ -35,6 +45,7 @@ impl Default for ClaimOpts {
             closes: None,
             strict: false,
             verb_claims: true,
+            closing_verbs: default_closing_verbs(),
         }
     }
 }
@@ -47,6 +58,10 @@ impl RuleOpts for ClaimOpts {
             closes: s.closes.clone(),
             strict: s.strict.unwrap_or(false),
             verb_claims: s.verb_claims.unwrap_or(true),
+            closing_verbs: s
+                .closing_verbs
+                .clone()
+                .unwrap_or_else(default_closing_verbs),
         }
     }
 }
@@ -283,6 +298,53 @@ mod tests {
         .unwrap()
     }
 
+    /// `MILE-233`: a configuration that declares none of the vocabulary keys
+    /// reads exactly the words that were compiled in before them.
+    #[test]
+    fn without_the_vocabulary_keys_the_effective_vocabulary_is_the_old_one() {
+        let c = config("  embodiment.back-pointer-resolution:\n    level: error\n    back_pointer_paths: [src]\n  claim.status-agreement:\n    level: error\n    claim_paths: [a]\n    closed_statuses: [Done]\n");
+        let v = crate::rules::back_pointer_vocab(&c);
+        assert_eq!(
+            (v.implements.as_str(), v.verifies.as_str()),
+            ("Implements:", "Verifies:")
+        );
+        assert_eq!(
+            v.syntax.leaders(),
+            ["<!--", "///", "//!", "//", "/*", "--", "#", ";", "*"]
+        );
+        assert_eq!(v.syntax.trailing(), ["<!--", "//", "/*", "--", "#"]);
+        assert_eq!(v, crate::rules::back_pointer_vocab(&config("")));
+        let o: ClaimOpts = c.rule_opts(RULE_CLAIM_STATUS_AGREEMENT);
+        assert_eq!(o.closing_verbs, ["closes", "fixes", "resolves"]);
+        assert_eq!(
+            crate::rules::DEFAULT_Y_PHRASES,
+            [
+                "in the context of",
+                "facing",
+                "we decided",
+                "to achieve",
+                "accepting"
+            ]
+        );
+        assert_eq!(
+            crate::field_state::PLACEHOLDER_TOKENS,
+            [
+                "name",
+                "name(s)",
+                "yyyy-mm-dd",
+                "tbd",
+                "todo",
+                "(project lead)",
+                "(session author)"
+            ]
+        );
+        let o: OverrideUnreviewedOpts = c.rule_opts(crate::rules::RULE_OVERRIDE_UNREVIEWED);
+        assert!(o.rejected_values.is_empty());
+        let st = crate::waiver::SuppressionType::from_config(&c);
+        assert_eq!((st.reason_field(), st.owner_field()), ("Reason", "Owner"));
+        assert!(st.rejected_values.is_empty());
+    }
+
     #[test]
     fn an_enabled_rule_yields_its_declared_options() {
         let c = config("  claim.status-agreement:\n    level: error\n    claim_paths: [a, b]\n    closed_statuses: [Done]\n");
@@ -438,6 +500,63 @@ impl RuleOpts for ClaimExpiredOpts {
                 .collect(),
             max_batch: s.max_batch.map_or(1, |n| n as usize),
             periods: s.periods.clone().unwrap_or_default(),
+        }
+    }
+}
+
+/// The back-pointer vocabulary (`MILE-233`), declared on
+/// `embodiment.back-pointer-resolution`: each value replaces its default.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BackPointerVocab {
+    pub implements: String,
+    pub verifies: String,
+    pub syntax: super::CommentSyntax,
+}
+
+impl Default for BackPointerVocab {
+    fn default() -> Self {
+        BackPointerVocab::from_setting(&RuleSetting::default())
+    }
+}
+
+impl RuleOpts for BackPointerVocab {
+    fn from_setting(s: &RuleSetting) -> Self {
+        let list = |declared: &Option<Vec<String>>, default: &[&str]| {
+            declared
+                .clone()
+                .unwrap_or_else(|| default.iter().map(|l| l.to_string()).collect())
+        };
+        BackPointerVocab {
+            implements: s
+                .implements_marker
+                .clone()
+                .unwrap_or_else(|| super::MARKER_IMPLEMENTS.to_string()),
+            verifies: s
+                .verifies_marker
+                .clone()
+                .unwrap_or_else(|| super::MARKER_VERIFIES.to_string()),
+            syntax: super::CommentSyntax::new(
+                list(&s.comment_leaders, &super::DEFAULT_COMMENT_LEADERS),
+                list(
+                    &s.trailing_comment_leaders,
+                    &super::DEFAULT_TRAILING_COMMENT_LEADERS,
+                ),
+            ),
+        }
+    }
+}
+
+/// `override.unreviewed`: the values added to the built-in floor of what is
+/// never a reviewer (`MILE-233`).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct OverrideUnreviewedOpts {
+    pub rejected_values: Vec<String>,
+}
+
+impl RuleOpts for OverrideUnreviewedOpts {
+    fn from_setting(s: &RuleSetting) -> Self {
+        OverrideUnreviewedOpts {
+            rejected_values: s.rejected_values.clone().unwrap_or_default(),
         }
     }
 }

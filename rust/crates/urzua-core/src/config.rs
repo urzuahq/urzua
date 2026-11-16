@@ -655,6 +655,35 @@ pub struct RuleSetting {
     /// no blank or repeated entry. Only meaningful to that rule; optional.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub code_comment_prefixes: Option<std::collections::BTreeMap<String, Vec<String>>>,
+    /// The comment marker of code evidence (`MILE-233`), `Implements:` unless
+    /// declared. Declared on `embodiment.back-pointer-resolution` only; every
+    /// rule and command that reads back-pointers reads this one value.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub implements_marker: Option<String>,
+    /// The comment marker of test evidence (`MILE-233`), `Verifies:` unless
+    /// declared. Declared on `embodiment.back-pointer-resolution` only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub verifies_marker: Option<String>,
+    /// The comment leaders a back-pointer may follow at the start of a line
+    /// (`MILE-233`); a declared list replaces the built-in set. Declared on
+    /// `embodiment.back-pointer-resolution` only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub comment_leaders: Option<Vec<String>>,
+    /// The comment leaders that also open a comment after code, following
+    /// whitespace (`MILE-233`); a declared list replaces the built-in set.
+    /// Declared on `embodiment.back-pointer-resolution` only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trailing_comment_leaders: Option<Vec<String>>,
+    /// The verbs that make a prose line a claim to close the references after
+    /// it (`MILE-233`); a declared list replaces `closes`, `fixes`, `resolves`.
+    /// Only meaningful to `claim.status-agreement`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub closing_verbs: Option<Vec<String>>,
+    /// Whole values that are never a reviewer (`MILE-233`), added to the
+    /// built-in ones, which cannot be removed. Only meaningful to
+    /// `override.unreviewed`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rejected_values: Option<Vec<String>>,
     /// Path prefixes, each inside a `back_pointer_paths` entry, whose files are
     /// the test class: a `Verifies:` comment there is test-tier evidence for
     /// the record it cites (`MILE-146`). Only meaningful to
@@ -1229,7 +1258,48 @@ pub struct RecordTypeConfig {
     /// suppression without `Expires` is allowed for any rule, as before.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub permanent: Option<Vec<PermanentDecl>>,
+    /// Whole values that never meet an `effective_requires` field or an
+    /// `Expires` of a suppression (`MILE-233`), compared without regard to
+    /// case. Added to the built-in ones (the compiled-in placeholder words and
+    /// `pending`), which a declaration cannot remove: a value configuration
+    /// could make effective would let an unreviewed suppression take effect.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "present_list"
+    )]
+    pub rejected_values: Option<Vec<String>>,
+    /// The fields `urzua waive` writes a draft's reason and owner into
+    /// (`MILE-233`); `Reason` and `Owner` unless declared. On the suppression
+    /// type only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub waiver_fields: Option<WaiverFields>,
 }
+
+/// A list key whose `null` is refused, as a rule option's is: present with no
+/// value must not read as the key left out.
+fn present_list<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<Vec<String>>, D::Error> {
+    match Option::<Vec<String>>::deserialize(d)? {
+        Some(list) => Ok(Some(list)),
+        None => Err(serde::de::Error::custom(
+            "option 'rejected_values' is present with no value; give it a list or remove the key",
+        )),
+    }
+}
+
+/// The suppression type's `waiver_fields` (`MILE-233`).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct WaiverFields {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub owner: Option<String>,
+}
+
+/// The header fields the waiver matching grammar reads by name (`SPEC-10`,
+/// `SPEC-3` format invariants): `waiver_fields` may not name one.
+pub const RESERVED_WAIVER_FIELDS: [&str; 5] = ["Rule", "Scope", "Expires", "Variant", "Key-path"];
 
 // Implements: ADR-86 (the declared vocabulary of permanent suppressions)
 /// One rule a suppression may be permanent for (`RecordTypeConfig::permanent`).
@@ -1879,6 +1949,12 @@ pub enum ConfigError {
     },
     #[error("record type '{record_type}' declares effective_requires {reason}")]
     InvalidEffectiveRequires { record_type: String, reason: String },
+    #[error("record type '{record_type}' declares {key} {reason}")]
+    InvalidTypeVocabulary {
+        record_type: String,
+        key: &'static str,
+        reason: String,
+    },
     #[error("record type '{record_type}' declares permanent {reason}")]
     InvalidPermanent { record_type: String, reason: String },
     #[error("record type '{record_type}' declares revision_log {reason}")]
@@ -2842,10 +2918,8 @@ fn generic_marker_problem(config: &Config, marker: &str) -> Option<String> {
     }
     // A fragment of a keyword run into an id head (`ements: ADR-`) sits on every
     // back-pointer line of that type.
-    for keyword in [
-        crate::rules::MARKER_IMPLEMENTS,
-        crate::rules::MARKER_VERIFIES,
-    ] {
+    let vocab = crate::rules::back_pointer_vocab(config);
+    for keyword in [vocab.implements.as_str(), vocab.verifies.as_str()] {
         for prefix in &prefixes {
             for joiner in ["", " "] {
                 let combined = format!("{keyword}{joiner}{prefix}-").to_lowercase();
@@ -2869,10 +2943,7 @@ fn generic_marker_problem(config: &Config, marker: &str) -> Option<String> {
     // The keywords and id heads are stripped whatever their case: `implements:`
     // and `adr` sit on back-pointer lines as much as `Implements:` and `ADR`.
     let mut rest = marker.to_lowercase();
-    for keyword in [
-        crate::rules::MARKER_IMPLEMENTS,
-        crate::rules::MARKER_VERIFIES,
-    ] {
+    for keyword in [vocab.implements.as_str(), vocab.verifies.as_str()] {
         rest = rest.replace(&keyword.to_lowercase(), " ");
     }
     for prefix in &prefixes {
@@ -2941,10 +3012,8 @@ fn validate_ignore_markers(config: &Config) -> Result<(), ConfigError> {
         option: "ignore_marker",
         reason,
     };
-    let keywords = [
-        crate::rules::MARKER_IMPLEMENTS,
-        crate::rules::MARKER_VERIFIES,
-    ];
+    let vocab = crate::rules::back_pointer_vocab(config);
+    let keywords = [vocab.implements.as_str(), vocab.verifies.as_str()];
     let back_pointer_rules = [
         crate::rules::RULE_EMBODIMENT_BACK_POINTER_RESOLUTION,
         crate::rules::RULE_EMBODIMENT_BACK_POINTER_DECISION_ACCEPTED,
@@ -3037,6 +3106,7 @@ pub fn parse_with_document_models(
     validate_test_paths(&config)?;
     validate_extensions(&config)?;
     validate_code_comment_prefixes(&config)?;
+    validate_vocabulary_options(&config)?;
     validate_rule_fields(&config)?;
     Ok((config, models))
 }
@@ -3052,6 +3122,7 @@ fn validate_record_types(config: &Config) -> Result<(), ConfigError> {
     for (name, rt) in &config.record_types {
         validate_type_dirs(name, rt, &mut seen_dir)?;
         validate_effective_requires(name, rt)?;
+        validate_suppression_vocabulary(name, rt)?;
         if let Some(entries) = &rt.permanent {
             if let Some(reason) = permanent_problem(rt, entries) {
                 return Err(ConfigError::InvalidPermanent {
@@ -3190,6 +3261,86 @@ fn validate_effective_requires(name: &str, rt: &RecordTypeConfig) -> Result<(), 
                 record_type: name.to_string(),
                 reason,
             });
+        }
+    }
+    Ok(())
+}
+
+/// `rejected_values` and `waiver_fields` belong to the suppression type; a
+/// list that adds nothing, a blank or repeated value, and a field name that is
+/// blank, reserved by the matching grammar or shared by both roles are refused
+/// (`MILE-233`).
+fn validate_suppression_vocabulary(name: &str, rt: &RecordTypeConfig) -> Result<(), ConfigError> {
+    let bad = |key: &'static str, reason: String| ConfigError::InvalidTypeVocabulary {
+        record_type: name.to_string(),
+        key,
+        reason,
+    };
+    let suppression = rt.role == Some(TypeRole::Suppression);
+    if let Some(values) = &rt.rejected_values {
+        if !suppression {
+            return Err(bad(
+                "rejected_values",
+                "but not `role: suppression` -- only a suppression has fields that take effect"
+                    .into(),
+            ));
+        }
+        if values.is_empty() {
+            return Err(bad(
+                "rejected_values",
+                "as an empty list, which adds nothing to the built-in values; remove the key"
+                    .into(),
+            ));
+        }
+        for (i, v) in values.iter().enumerate() {
+            if v.trim().is_empty() || v.trim() != v {
+                return Err(bad(
+                    "rejected_values",
+                    format!("with '{v}', which is blank or has surrounding whitespace"),
+                ));
+            }
+            if values[..i]
+                .iter()
+                .any(|w| w.to_lowercase() == v.to_lowercase())
+            {
+                return Err(bad("rejected_values", format!("naming '{v}' twice")));
+            }
+        }
+    }
+    if let Some(fields) = &rt.waiver_fields {
+        if !suppression {
+            return Err(bad(
+                "waiver_fields",
+                "but not `role: suppression` -- only a suppression is drafted by `urzua waive`"
+                    .into(),
+            ));
+        }
+        let named = [
+            ("reason", fields.reason.as_deref()),
+            ("owner", fields.owner.as_deref()),
+        ];
+        for (role, field) in named {
+            let Some(field) = field else { continue };
+            if field.trim().is_empty() || field.chars().any(char::is_whitespace) {
+                return Err(bad(
+                    "waiver_fields",
+                    format!("with {role} '{field}', which is blank or holds whitespace"),
+                ));
+            }
+            if RESERVED_WAIVER_FIELDS
+                .iter()
+                .any(|r| r.eq_ignore_ascii_case(field))
+            {
+                return Err(bad("waiver_fields", format!("with {role} '{field}', a field the matching grammar reads by name; choose another field")));
+            }
+        }
+        if let (Some(r), Some(o)) = (&fields.reason, &fields.owner) {
+            if r.eq_ignore_ascii_case(o) {
+                return Err(bad(
+                    "waiver_fields",
+                    "with the same field for reason and owner".into(),
+                ));
+            }
         }
     }
     Ok(())
@@ -4057,6 +4208,131 @@ fn validate_extensions(config: &Config) -> Result<(), ConfigError> {
         }
     }
     Ok(())
+}
+
+/// The vocabulary options (`MILE-233`): each belongs to its one rule, and a
+/// declared value that could not work is refused rather than read as nothing.
+/// An empty list is refused too: it would turn the reading off without saying
+/// so, and the switch for that is the rule's level (`SPEC-1`, no silent no-op).
+fn validate_vocabulary_options(config: &Config) -> Result<(), ConfigError> {
+    for (name, setting) in &config.rules {
+        let lists: [(&'static str, Option<&Vec<String>>); 4] = [
+            ("comment_leaders", setting.comment_leaders.as_ref()),
+            (
+                "trailing_comment_leaders",
+                setting.trailing_comment_leaders.as_ref(),
+            ),
+            ("closing_verbs", setting.closing_verbs.as_ref()),
+            ("rejected_values", setting.rejected_values.as_ref()),
+        ];
+        let markers: [(&'static str, Option<&String>); 2] = [
+            ("implements_marker", setting.implements_marker.as_ref()),
+            ("verifies_marker", setting.verifies_marker.as_ref()),
+        ];
+        let declared = lists
+            .iter()
+            .filter(|(_, v)| v.is_some())
+            .map(|(o, _)| *o)
+            .chain(markers.iter().filter(|(_, v)| v.is_some()).map(|(o, _)| *o));
+        for option in declared {
+            if !crate::rules::rule_accepts_option(name, option) {
+                return Err(ConfigError::OptionNotApplicable {
+                    rule: name.clone(),
+                    option: option.to_string(),
+                });
+            }
+        }
+        let bad = |option: &'static str, reason: String| ConfigError::InvalidBoundary {
+            rule: name.clone(),
+            option,
+            reason,
+        };
+        for (option, list) in lists {
+            let Some(list) = list else { continue };
+            if let Some(reason) = vocabulary_list_problem(option, list) {
+                return Err(bad(option, reason));
+            }
+        }
+        for (option, marker) in markers {
+            let Some(marker) = marker else { continue };
+            if marker.is_empty() || marker.chars().any(char::is_whitespace) {
+                return Err(bad(
+                    option,
+                    format!(
+                        "is '{marker}', which is blank or holds whitespace; a marker is one word"
+                    ),
+                ));
+            }
+            // The grammar reads the ids after the marker's colon, and a word
+            // without one would match prose that merely starts with it.
+            if marker.trim_end_matches(':').is_empty() {
+                return Err(bad(
+                    option,
+                    format!("is '{marker}', which has no word before the colon; a marker needs a word before its ':', such as 'Implements:'"),
+                ));
+            }
+            if !marker.ends_with(':') {
+                return Err(bad(
+                    option,
+                    format!("is '{marker}', which does not end with ':' after at least one character; write it as '{}:'", marker.trim_end_matches(':')),
+                ));
+            }
+        }
+        if setting.implements_marker.is_some() || setting.verifies_marker.is_some() {
+            let vocab = <crate::rules::BackPointerVocab as RuleOpts>::from_setting(setting);
+            let v = &vocab.verifies;
+            if vocab.implements == vocab.verifies {
+                return Err(bad(
+                    "verifies_marker",
+                    format!(
+                        "is '{v}', the same as implements_marker; the two tiers need two markers"
+                    ),
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Why a declared vocabulary list cannot work, or `None`.
+fn vocabulary_list_problem(option: &str, list: &[String]) -> Option<String> {
+    if list.is_empty() {
+        return Some(match option {
+            "rejected_values" => "is empty, which adds nothing to the built-in values; remove the key".to_string(),
+            _ => "is empty, which would turn the reading off without saying so; declare at least one value, or set the rule's level to off".to_string(),
+        });
+    }
+    let fold = |v: &str| v.to_lowercase();
+    for (i, value) in list.iter().enumerate() {
+        let one_word = option != "rejected_values";
+        if value.trim().is_empty()
+            || value.trim() != value
+            || (one_word && value.chars().any(char::is_whitespace))
+        {
+            return Some(format!(
+                "lists '{value}', which is blank{}",
+                if one_word {
+                    " or holds whitespace"
+                } else {
+                    " or has surrounding whitespace"
+                }
+            ));
+        }
+        if option == "closing_verbs" && !value.chars().all(char::is_alphanumeric) {
+            return Some(format!(
+                "lists '{value}', which is not a word of letters or digits, so no prose word would ever match it"
+            ));
+        }
+        let duplicate = if option == "closing_verbs" || option == "rejected_values" {
+            list[..i].iter().any(|v| fold(v) == fold(value))
+        } else {
+            list[..i].contains(value)
+        };
+        if duplicate {
+            return Some(format!("lists '{value}' twice"));
+        }
+    }
+    None
 }
 
 /// `code_comment_prefixes`: each key is one of the rule's `extensions` (a key
@@ -5034,6 +5310,8 @@ mod tests {
             role: None,
             effective_requires: None,
             permanent: None,
+            rejected_values: None,
+            waiver_fields: None,
         };
         let declared = t.declared_fields();
         assert!(declared.contains("Status"));
@@ -7250,6 +7528,12 @@ mod option_table_tests {
         "unread_markers",
         "scope",
         "code_comment_prefixes",
+        "implements_marker",
+        "verifies_marker",
+        "comment_leaders",
+        "trailing_comment_leaders",
+        "closing_verbs",
+        "rejected_values",
     ];
 
     /// The option names `RuleSetting` accepts, read from the derived

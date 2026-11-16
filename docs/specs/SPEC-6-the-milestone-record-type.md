@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5QF32RM76Y50THPQEG
-Version: '0.31'
+Version: '0.32'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-core/src/status_model.rs@sha256:31006f883b8cbd8da18dae10dfe146e2ed0e0963008224f63c60de0cdae73f23, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs@sha256:dc29b51bde5a2ba79d95c5e0a09466a54e816e8e2cc4a86a80e4459be477a447, test:rust/crates/urzua-cli/tests/status_delivery_integration.rs@sha256:fe4384f6222fb074ab6830a682f07e113c7a252b4cbe6f8922ce5cf28b2b4f1b
+Realized-by: code:rust/crates/urzua-core/src/status_model.rs@sha256:ecfc8dd9b742bf0709c14c0120757b2af26f39e1b4c9c305f8189d76b35b4f9e, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs@sha256:dc29b51bde5a2ba79d95c5e0a09466a54e816e8e2cc4a86a80e4459be477a447, test:rust/crates/urzua-cli/tests/status_delivery_integration.rs@sha256:fe4384f6222fb074ab6830a682f07e113c7a252b4cbe6f8922ce5cf28b2b4f1b
 Author: beauwilliams
 Subject: 'The `milestone` record type -- this project''s own planned-work backlog as a checkable corpus.'
 Implements: ADR-34
@@ -347,3 +347,5 @@ to another record — nothing to check for resolution, no cycle risk, no new rul
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/status_delivery_integration.rs` b3aee9963c76 -> adebf61b0161. Reason: Read the diff of each re-pinned file against main: status_delivery_integration.rs fixtures create the cited files. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Bumped to `0.31`. Evidence pins re-baselined for this change (the `Re-baselined` row above); the specification text is unchanged. **Why:** a revision-log entry that adds a structural change bumps `Version`. | **structural** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/status_delivery_integration.rs` adebf61b0161 -> fe4384f6222f. Reason: Read the diff of each re-pinned file since its previous pin: status_delivery_integration.rs restores the #t and #a scoped locators, with the scoped items, a resolver and pins. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/status_model.rs` 31006f883b8c -> ecfc8dd9b742. Reason: status_model.rs adds statuses.placeholders and its load check. The claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-16 | Bumped to `0.32`. Re-pinned the evidence `MILE-233` changed (the rule vocabulary read from configuration); what this spec states is unchanged. **Why:** a re-pinned versioned spec carries a version above main's. | **structural** |

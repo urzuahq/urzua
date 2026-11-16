@@ -425,9 +425,10 @@ pub struct ScaffoldSpec<'a> {
     pub stable_id: &'a str,
     pub author: &'a str,
     pub today: &'a str,
-    /// A value for the `Reason` header (the field `Waiver` reads), when the
-    /// caller drafts one. `None` leaves it as the type's blank.
-    pub reason: Option<&'a str>,
+    /// The reason field (the suppression type's `waiver_fields.reason`,
+    /// `Reason` by default) and its value, when the caller drafts one. `None`
+    /// leaves it as the type's blank.
+    pub reason: Option<(&'a str, &'a str)>,
     /// A value for the `Expires` header; `None` leaves it blank.
     pub expires: Option<&'a str>,
     /// Further `(field, value)` header pairs the caller supplies, written after
@@ -514,7 +515,7 @@ pub fn scaffold_record(spec: &ScaffoldSpec, template: Option<&str>) -> String {
     };
     let template_fields = declared_template_fields(type_config, template);
     let mut supplied: Vec<(&str, &str)> = Vec::new();
-    supplied.extend(spec.reason.map(|v| (REASON_FIELD, v)));
+    supplied.extend(spec.reason);
     supplied.extend(spec.expires.map(|v| (EXPIRES_FIELD, v)));
     supplied.extend(spec.header_fields.iter().copied());
     let mut out = render_yaml_with(
@@ -1304,7 +1305,7 @@ mod tests {
     fn supplied_values_fill_the_header_and_the_body_and_log_follow_the_template() {
         let type_config = waiver_type();
         let spec = ScaffoldSpec {
-            reason: Some("Pending"),
+            reason: Some((REASON_FIELD, "Pending")),
             expires: Some("2027-01-31"),
             header_fields: &[("Rule", "r.x"), ("Scope", "docs/a.md"), ("Owner", "me")],
             extra_body: Some("## Findings\n\n- docs/a.md:3 msg"),

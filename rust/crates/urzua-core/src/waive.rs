@@ -66,9 +66,10 @@ fn default_choice() -> PendingChoice {
 /// pending value that suppressed, or a waiver that could become permanent by
 /// accident, is the baseline file the decision rejects.
 pub fn choose_pending(st: &SuppressionType) -> Result<PendingChoice, String> {
-    if !st.effective_requires.iter().any(|f| f == REASON_FIELD) {
+    let reason_field = st.reason_field();
+    if !st.effective_requires.iter().any(|f| f == reason_field) {
         return Err(format!(
-            "the {} type does not list {REASON_FIELD} in `effective_requires`, so a draft with a pending {REASON_FIELD} would suppress its finding; add {REASON_FIELD} to `effective_requires` and run again",
+            "the {} type does not list {reason_field} in `effective_requires`, so a draft with a pending {reason_field} would suppress its finding; add {reason_field} to `effective_requires` and run again",
             st.name
         ));
     }
@@ -76,7 +77,7 @@ pub fn choose_pending(st: &SuppressionType) -> Result<PendingChoice, String> {
         // A non-empty list with no whole value: nothing to write.
         Some(entries) if !entries.is_empty() && !entries.iter().any(is_whole_value) => {
             return Err(format!(
-                "the {} type's `statuses.pending` holds only patterns, so there is no whole value to write as the {REASON_FIELD}; add a whole-value entry (for example `pending: [Pending, {{pattern: ...}}]`)",
+                "the {} type's `statuses.pending` holds only patterns, so there is no whole value to write as the {reason_field}; add a whole-value entry (for example `pending: [Pending, {{pattern: ...}}]`)",
                 st.name
             ))
         }
@@ -94,7 +95,7 @@ pub fn choose_pending(st: &SuppressionType) -> Result<PendingChoice, String> {
     ensure_not_present(st, &choice.value)?;
     if st.permanent.is_none() && !st.effective_requires.iter().any(|f| f == EXPIRES_FIELD) {
         return Err(format!(
-            "the {} type neither declares `permanent` nor lists {EXPIRES_FIELD} in `effective_requires`, so a draft given only a {REASON_FIELD} would be a permanent waiver; declare `permanent` (ADR-86) or add {EXPIRES_FIELD} to `effective_requires`, then run again",
+            "the {} type neither declares `permanent` nor lists {EXPIRES_FIELD} in `effective_requires`, so a draft given only a {reason_field} would be a permanent waiver; declare `permanent` (ADR-86) or add {EXPIRES_FIELD} to `effective_requires`, then run again",
             st.name
         ));
     }
@@ -103,9 +104,10 @@ pub fn choose_pending(st: &SuppressionType) -> Result<PendingChoice, String> {
 
 /// Refuses a value the type reads as a real `Reason`: it would suppress.
 fn ensure_not_present(st: &SuppressionType, value: &str) -> Result<(), String> {
-    if st.field_state(REASON_FIELD, Some(value)) == FieldState::Present {
+    let reason_field = st.reason_field();
+    if st.field_state(reason_field, Some(value)) == FieldState::Present {
         return Err(format!(
-            "the {} type reads '{value}' as a real {REASON_FIELD}, not a pending one, so a draft holding it would suppress its finding; declare it under `statuses.pending` or choose a pending value",
+            "the {} type reads '{value}' as a real {reason_field}, not a pending one, so a draft holding it would suppress its finding; declare it under `statuses.pending` or choose a pending value",
             st.name
         ));
     }
@@ -519,6 +521,18 @@ mod tests {
 
     fn serde_yaml_default() -> StatusDecl {
         yaml_serde::from_str("{}").unwrap()
+    }
+
+    /// `MILE-233`: a declared `waiver_fields.reason` is the field the draft
+    /// must find in `effective_requires`, not `Reason`.
+    #[test]
+    fn a_declared_reason_field_replaces_reason() {
+        let mut st = st_with(None);
+        st.fields.reason = Some("Grund".into());
+        let err = choose_pending(&st).unwrap_err();
+        assert!(err.contains("does not list Grund"), "{err}");
+        st.effective_requires = vec!["Grund".into(), "Expires".into()];
+        assert!(choose_pending(&st).is_ok());
     }
 
     #[test]
