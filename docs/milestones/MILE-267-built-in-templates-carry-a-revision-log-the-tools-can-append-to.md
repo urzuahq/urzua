@@ -26,3 +26,4 @@ A walkthrough of 2026-11-15 followed only the user documentation with the releas
 > |---|---|---|
 > | 2026-11-15 | Initial record, `Status: Planned`. **Why:** Filed from the audits of 2026-11-15; the maintainer committed to the work in conversation that day. | **structural** |
 > | 2026-11-16 | Tool-authored (by beauwilliams, identity: gh-verified, actor: agent): recomputed `Status` from `the Done means items (2 of 2 items resolved) computes to Verified` -- stated `Planned` disagreed with the computed value `Done`. | **structural** |
+> | 2026-11-16 | Delivered in #548: each Done-means item cites the test that shows it, and `urzua fix --apply` computed `Status: Done` from that evidence. **Why:** the PR that delivers a milestone records it. | **structural** |
