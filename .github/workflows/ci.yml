@@ -135,6 +135,18 @@ jobs:
           persist-credentials: false
       - run: .github/actions/urzua-gate/test.sh
 
+  install-script:
+    name: install script tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: scripts/install-test.sh
+
   # The pinned release, installed through the same unit an adopter uses
   # (checksum and attestation verified), run over this repository's corpus as
   # of that release. The current corpus cannot be the subject: a release older
@@ -171,7 +183,7 @@ jobs:
   # is `changeset`, which exists on pull requests alone.
   ci:
     name: ci
-    needs: [rust, changeset, release-invariants, gate-action, gate-released]
+    needs: [rust, changeset, release-invariants, gate-action, install-script, gate-released]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     if: always()
