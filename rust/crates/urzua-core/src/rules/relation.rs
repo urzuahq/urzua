@@ -49,6 +49,7 @@ pub fn inverse_fix_argv(target: &Path) -> Vec<String> {
         .iter()
         .map(|w| w.to_string())
         .chain([target.display().to_string()])
+        .chain(["--actor", "agent"].map(String::from))
         .collect()
 }
 

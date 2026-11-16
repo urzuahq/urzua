@@ -331,6 +331,17 @@ pub(crate) struct LogLayout {
 pub(crate) struct RevisionLog {
     pub(crate) entries: Vec<RevisionLogEntry>,
     pub(crate) layout: LogLayout,
+    /// The 1-based line of the table's last row, header and separator
+    /// included; `None` when the section has no table.
+    pub(crate) last_table_line: Option<usize>,
+}
+
+impl RevisionLog {
+    /// The line a tool-authored row goes after: the last data row, or the
+    /// header's separator row of a table that has none yet.
+    pub(crate) fn append_after(&self) -> Option<usize> {
+        self.entries.last().map(|e| e.line).or(self.last_table_line)
+    }
 }
 
 /// A declared column the header lacks or repeats: the log cannot be read.
@@ -469,6 +480,7 @@ fn parse_log_table(
 ) -> Result<RevisionLog, ColumnProblem> {
     let mut entries = Vec::new();
     let mut layout: Option<LogLayout> = None;
+    let mut last_table_line = None;
     let mut row_index = 0; // 0 before the header row, 1 = header seen, 2+ = data rows
     for (idx, raw_line) in lines.iter().enumerate().skip(marker_idx + 1) {
         let stripped = raw_line.trim_start().trim_start_matches('>').trim();
@@ -484,6 +496,7 @@ fn parse_log_table(
 
         let cells = split_cells(stripped);
         row_index += 1;
+        last_table_line = Some(idx + 1);
         if row_index == 1 {
             layout = Some(header_layout(&cells, shape, idx + 1)?);
             continue;
@@ -516,7 +529,11 @@ fn parse_log_table(
         date: 0,
         class: 0,
     });
-    Ok(RevisionLog { entries, layout })
+    Ok(RevisionLog {
+        entries,
+        layout,
+        last_table_line,
+    })
 }
 
 #[cfg(test)]

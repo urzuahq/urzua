@@ -527,6 +527,7 @@ pub fn scaffold_record(spec: &ScaffoldSpec, template: Option<&str>) -> String {
     if let Some(body) = template.and_then(template_body) {
         out.push('\n');
         out.push_str(body);
+        out = with_log_rows_dated(out, type_config, spec.today);
     }
     if let Some(narrative) = spec.log_row {
         out = with_first_log_row(out, type_config, spec.today, narrative);
@@ -547,6 +548,41 @@ pub fn scaffold_record(spec: &ScaffoldSpec, template: Option<&str>) -> String {
 /// The header fields `Waiver` reads by name beyond `Rule` and `Scope`.
 pub(crate) const REASON_FIELD: &str = "Reason";
 pub(crate) const EXPIRES_FIELD: &str = "Expires";
+
+/// The placeholder a template writes in a revision-log row's date cell.
+const DATE_PLACEHOLDER: &str = "YYYY-MM-DD";
+
+/// `text` with each revision-log row whose date cell is the template's
+/// placeholder dated `today`, so a record starts with a dated first row.
+fn with_log_rows_dated(
+    text: String,
+    type_config: &crate::config::RecordTypeConfig,
+    today: &str,
+) -> String {
+    let id = type_config.revision_log_id();
+    let shape = type_config.revision_log_shape();
+    let Some(Ok(log)) = crate::rules::find_revision_log_entries(&text, &id, &shape) else {
+        return text;
+    };
+    let rows: Vec<usize> = log
+        .entries
+        .iter()
+        .filter(|e| e.date.trim() == DATE_PLACEHOLDER)
+        .map(|e| e.line)
+        .collect();
+    if rows.is_empty() {
+        return text;
+    }
+    let mut out: Vec<String> = text.lines().map(str::to_string).collect();
+    for line in rows {
+        if let Some(l) = out.get_mut(line - 1) {
+            *l = l.replacen(DATE_PLACEHOLDER, today, 1);
+        }
+    }
+    let mut joined = out.join("\n");
+    joined.push('\n');
+    joined
+}
 
 /// `text` with one tool-authored row after the last line of its revision log's
 /// table, laid out by the log's own header (`ADR-94`). A type with no readable

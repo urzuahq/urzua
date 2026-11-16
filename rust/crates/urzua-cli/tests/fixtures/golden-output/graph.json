@@ -14,6 +14,7 @@
       }
     ],
     "next_action": null,
+    "next_action_inputs": [],
     "next_action_reason": null,
     "population": {
       "eligible": 4,

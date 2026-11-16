@@ -33,6 +33,8 @@ pub enum DiscoveryError {
     },
     #[error("{base:?} is not a valid base ref: a ref may not begin with `-`")]
     InvalidRef { base: String },
+    #[error("--base {base:?} names no commit in this repository: it is not a branch, tag or commit here (fetch it first, e.g. `git fetch origin <branch>`, or name an existing ref)")]
+    UnresolvedRef { base: String },
     #[error("there is no merge base between {base:?} and HEAD: the histories are unrelated")]
     NoMergeBase { base: String },
     #[error("there is no merge base between {base:?} and HEAD because this is a shallow clone and the history that joins them is not fetched: fetch full history (e.g. `git fetch --unshallow`, or `fetch-depth: 0` in CI)")]
@@ -240,6 +242,13 @@ impl GitChanges {
     }
 }
 
+/// The names `git remote` lists; empty when it cannot run.
+pub fn git_remotes(repo_root: &Path) -> Vec<String> {
+    run_git(repo_root, &["remote"])
+        .map(|out| out.lines().map(str::to_string).collect())
+        .unwrap_or_default()
+}
+
 /// Every path that differs between the merge base of `base` and `HEAD` and
 /// the working tree, repository-relative (`MILE-123`). Merge base, not the
 /// ref's tip: a pull request must not be charged for what its base branch
@@ -260,9 +269,14 @@ pub fn changed_paths_since(repo_root: &Path, base: &str) -> Result<GitChanges, D
             base: base.to_string(),
         });
     }
+    let probe = format!("{base}^{{commit}}");
+    if run_git(repo_root, &["rev-parse", "--verify", "--quiet", &probe]).is_err() {
+        return Err(DiscoveryError::UnresolvedRef {
+            base: base.to_string(),
+        });
+    }
     // `merge-base` exits 1 with nothing on stderr when the two commits share
-    // no history; every other failure (an unknown ref, 128) keeps git's own
-    // message, which names the ref.
+    // no history; every other failure keeps git's own message.
     let merge_base = match run_git(repo_root, &["merge-base", base, "HEAD"]) {
         Ok(out) => out,
         Err(DiscoveryError::NonZeroExit { status, stderr, .. })

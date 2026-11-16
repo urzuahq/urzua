@@ -115,7 +115,7 @@ set the rule's level under `rules:` (`embodiment.pin-stale: info` reports withou
             jq -r '(.rebaselines // [])[] | .record as $r | .pins[] | "\($r)  \(.locator)"' "$report" >&2 || true
             echo "Pins that cannot be re-pinned (record  locator  reason):" >&2
             jq -r '(.failed_pins // [])[] | "\(.record)  \(.locator)  \(.reason)"' "$report" >&2 || true
-            echo "Re-pin with: urzua fix --rebaseline --apply --ids <record> --by <you> --reason '<what changed in the pinned code>'" >&2
+            echo "Re-pin with: urzua fix --rebaseline --apply --ids <record> --actor agent --reason '<what changed in the pinned code>'" >&2
             exit 1
           fi
           echo "no stale evidence pins"

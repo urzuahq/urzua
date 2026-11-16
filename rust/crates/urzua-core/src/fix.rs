@@ -227,6 +227,29 @@ impl RepairScan<'_> {
     }
 }
 
+/// The records `fix --apply` leaves for `fix --rebaseline`: they drifted, a
+/// pinned locator of theirs no longer hashes to its pin (`stale_pinned`), and
+/// their stated state is not the drift state. `fix` reports them in a notice
+/// instead of writing that state.
+pub fn pinned_drift_records(
+    records: &[Record],
+    config: &Config,
+    drifted: &HashSet<PathBuf>,
+    stale_pinned: &HashSet<PathBuf>,
+) -> Vec<PathBuf> {
+    records
+        .iter()
+        .filter(|r| drifted.contains(&r.path) && stale_pinned.contains(&r.path))
+        .filter(|r| {
+            let state = relation_field_name(config, &r.record_type, RelationRole::EmbodimentState);
+            r.header
+                .get(state)
+                .is_some_and(|s| !config.embodiment.is_drift(s.trim()))
+        })
+        .map(|r| r.path.clone())
+        .collect()
+}
+
 /// The 1-based line of `field` in `record`'s header; `0` when it has none.
 fn field_line(record: &Record, field: &str) -> usize {
     record
@@ -490,16 +513,14 @@ pub fn apply_repair(
         )
     })?;
     let log = log.map_err(|problem| problem.message)?;
-    let Some(last_entry) = log.entries.last() else {
-        return Err(
-            "record's Revision log section has no existing rows to append after".to_string(),
-        );
+    let Some(last_line) = log.append_after() else {
+        return Err(NO_LOG_TABLE.to_string());
     };
 
-    // The new row repeats the existing last row's own prefix, so it lands
+    // The new row repeats the last table line's own prefix, so it lands
     // inside the table whether the log is a blockquote table or a plain one.
     let prefix = doc
-        .line(last_entry.line)
+        .line(last_line)
         .and_then(table_row_prefix)
         .unwrap_or("> ")
         .to_string();
@@ -523,11 +544,12 @@ pub fn apply_repair(
         ),
     };
     let new_row = log_row(&prefix, log.layout, shape, today, &narrative)?;
-    let last_line = last_entry.line;
     doc.insert_after(last_line, new_row);
 
     Ok(doc.to_string())
 }
+
+const NO_LOG_TABLE: &str = "record's Revision log section has no table (a header row such as `| Date | Change | Class |` and its `|---|---|---|` separator) to append a row to";
 
 /// Adds `field: value` as the last line of a front-matter header. Fails when
 /// the record has no front matter, or already writes the field (it changed
@@ -1013,10 +1035,8 @@ fn locate_revision_log(
         format!("record has no Revision log section -- refusing to {verb} without one to record the attestation in")
     })?;
     let log = log.map_err(|problem| problem.message)?;
-    if log.entries.is_empty() {
-        return Err(
-            "record's Revision log section has no existing rows to append after".to_string(),
-        );
+    if log.append_after().is_none() {
+        return Err(NO_LOG_TABLE.to_string());
     }
     Ok(log)
 }
@@ -1033,7 +1053,7 @@ pub(crate) fn append_log_rows(
     verb: &str,
 ) -> Result<(), String> {
     let log = locate_revision_log(&doc.to_string(), log_id, shape, verb)?;
-    let last_line = log.entries.last().map(|e| e.line).unwrap_or_default();
+    let last_line = log.append_after().unwrap_or_default();
     let prefix = doc
         .line(last_line)
         .and_then(table_row_prefix)

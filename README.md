@@ -123,14 +123,14 @@ $ urzua fix
   ]
 }
 
-$ urzua fix --apply --ids docs/adr/ADR-42-example.md --by beau
+$ urzua fix --apply --ids docs/adr/ADR-42-example.md --actor agent
 ```
 
-Every applied write touches only the one field's line, byte-for-byte preserving the rest of the record; requires a resolved identity (`--by`, or `gh api user`, or `git config user.name`); and appends a structural entry to the record's own revision log. It refuses outright, per-record, if that log doesn't exist, rather than writing somewhere it can't be audited. Rationale, alternatives, and every hand-authored sentence stay permanently off-limits: this is a cache of a computation, never an editor.
+Every applied write touches only the one field's line, byte-for-byte preserving the rest of the record; requires a resolved identity (`gh api user`, or `git config user.name`, or `--by <name>`) and, when `gh` verifies the login, `--actor agent` or `--actor human` saying who ran it; and appends a structural entry to the record's own revision log. It refuses outright, per-record, if that log doesn't exist, rather than writing somewhere it can't be audited. Rationale, alternatives, and every hand-authored sentence stay permanently off-limits: this is a cache of a computation, never an editor.
 
-A pinned locator (`code:src/a.rs@sha256:...`) whose file changed is cleared the same way, by review: `urzua fix --rebaseline` lists each stale pin with its recorded and current hash, and `urzua fix --rebaseline --apply --ids <record> --by <who> --reason "<why it still holds>"` re-pins it and logs who attested and why.
+A pinned locator (`code:src/a.rs@sha256:...`) whose file changed is cleared the same way, by review: `urzua fix --rebaseline` lists each stale pin with its recorded and current hash, and `urzua fix --rebaseline --apply --ids <record> --actor agent --reason "<what changed in the pinned file>"` re-pins it and logs who attested and why.
 
-A claim can also expire. A repository that declares `embodiment.claim-expired` gives each record type, status and evidence tier a period; a claim older than its period is a finding, and `urzua reverify --ids <record>` lists what renewing it would re-check, locator by locator. `urzua reverify --apply --ids <record> --by <who> --reason "<what you checked>"` re-hashes the evidence, refuses a pin that changed (that is `fix --rebaseline`), pins `code:` and `test:` locators that have no pin, dates the claim, and logs who renewed it and why. See `SPEC-8` and `SPEC-3`.
+A claim can also expire. A repository that declares `embodiment.claim-expired` gives each record type, status and evidence tier a period; a claim older than its period is a finding, and `urzua reverify --ids <record>` lists what renewing it would re-check, locator by locator. `urzua reverify --apply --ids <record> --actor agent --reason "<what you checked>"` re-hashes the evidence, refuses a pin that changed (that is `fix --rebaseline`), pins `code:` and `test:` locators that have no pin, dates the claim, and logs who renewed it and why. See `SPEC-8` and `SPEC-3`.
 
 ## Run the gate in CI
 
