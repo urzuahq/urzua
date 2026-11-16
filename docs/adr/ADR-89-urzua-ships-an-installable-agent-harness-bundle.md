@@ -977,6 +977,18 @@ agent can move or commit to (`git update-ref`, a commit on the local base branch
 how loudly a change is reported, never whether, and CI's `diff.decider-required` against the real remote stays
 the guarantee. The reflog still chooses only whether ordinary findings are absorbed.
 
+## Amendment (2026-11-16): a match lowers the report only against a remote-tracking ref
+
+Decided by the orchestrator on 2026-11-16, pending maintainer review (`MILE-311`). This corrects the amendment
+above on the post-command base comparison. A gate event matches when its working-tree mode and the blob of its
+raw bytes (no filters run) equal the base tree's entry; absent from both counts only for a deletion, and a path
+whose name is not valid UTF-8 never matches. A match lowers the report to `base_match` only when the base is a
+remote-tracking ref (`refs/remotes/...`); with a local ref the matching paths are still listed, at `error`,
+because the agent can move that ref. A change of the comparison rule (`base`, `base_match`) from the one the
+baseline recorded, or a configuration change while the baseline records no rule, is itself reported at
+`error` and lowers nothing for that command; with the configuration file unchanged, a differing recorded rule
+is reported as an edited baseline. The agent receives its own line in every case, not the person's text.
+
 ## References
 
 - `ADR-69`, `ADR-70`, `ADR-71`: the hook, drafting commands and layered gate this extends; `ADR-70` gains an
@@ -1028,3 +1040,4 @@ the guarantee. The reflog still chooses only whether ordinary findings are absor
 > | 2026-11-16 | Amendment of 2026-11-14 (leaving a gate: a move out of a gated status, or deleting such a record, is a gated move; `--actor` is required with `--apply` under a verified identity) accepted by the maintainer. `Status` stays Accepted. **Why:** Asked on 2026-11-16 whether to accept it as decided, the maintainer answered "Accept"; it had been decided by the orchestrator pending their review. | **substantive** |
 > | 2026-11-16 | Added an `## Amendment (2026-11-16): path gates bind the commands that write for someone`, decided by the builder on 2026-11-16, pending maintainer review: `fix --apply`, `fix --rebaseline --apply`, `fix --conflicts --apply` and `reverify --apply` write a path-gated record only for `--actor human` under a `gh`-verified login in the gate's group; `waive`, `index`, `migrate ids`, `migrate filenames` and `new` refuse under a path gate; the refusal says who can make the change; the gate rests on the verified login, since `--actor human` is a claim, and is weaker than the edit hook. `Status` stays Accepted. **Why:** `MILE-289` -- an agent's `fix --apply` wrote a record the edit hook would have refused. | **substantive** |
 > | 2026-11-16 | Added an `## Amendment (2026-11-16): the post-command report weighs a gate event by the base branch`: the "arrived by a git move" wording and the stash tracking are removed, and a gate event matching the configured base ref is reported in one sentence at a lower level, still printed. **Why:** `MILE-311`, decided by the orchestrator on 2026-11-16, pending maintainer review, after the maintainer reported on 2026-11-16 that the report after a pull could not be understood. | **substantive** |
+> | 2026-11-16 | Added an `## Amendment (2026-11-16): a match lowers the report only against a remote-tracking ref`, correcting the earlier amendment of that day: raw-byte and mode matching, deletion-only absent-from-both, non-UTF-8 names never match, the remote-tracking-only downgrade, the rule-change event, and the agent's own line. **Why:** `MILE-311`, decided by the orchestrator on 2026-11-16, pending maintainer review, after the third review of its pull request. | **substantive** |

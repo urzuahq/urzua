@@ -192,7 +192,7 @@ fn judge(config: Option<PathBuf>) -> PostVerdict {
         (Some(t), Some(l), Some(h)) if l != h && !committed.is_empty() => {
             let elsewhere = not_own(&committed, own_files(t, l, h).as_ref());
             let refs: Vec<&String> = elsewhere.iter().collect();
-            same_as(t, h, &refs)
+            same_as(t, h, &refs, &HashSet::new())
         }
         _ => Vec::new(),
     };
@@ -272,14 +272,13 @@ fn not_own(committed: &[String], own: Option<&HashSet<String>>) -> Vec<String> {
     }
 }
 
-/// The paths whose file on disk is the entry `rev` holds, the same mode and the
-/// same blob of its raw bytes (both absent counts). Filters are not run: a
-/// clean filter the agent configures could make any content hash as `rev`'s. A symlink is compared as its link text and
-/// is never followed; a submodule or a directory never matches.
-fn same_as(top: &Path, rev: &str, paths: &[&String]) -> Vec<String> {
-    if paths.is_empty() {
-        return Vec::new();
-    }
+/// The `(mode, blob)` `rev` holds for each of `paths` that it has, from
+/// `git ls-tree` with the paths as literal pathspecs. `None` when git fails.
+fn base_entries(
+    top: &Path,
+    rev: &str,
+    paths: &[&String],
+) -> Option<BTreeMap<String, (String, String)>> {
     let mut args: Vec<String> = [
         "--no-optional-locks",
         "--literal-pathspecs",
@@ -295,16 +294,13 @@ fn same_as(top: &Path, rev: &str, paths: &[&String]) -> Vec<String> {
     .map(|a| a.to_string())
     .collect();
     args.extend(paths.iter().map(|p| p.to_string()));
-    let Some(out) = GitRun::new()
+    let out = GitRun::new()
         .cwd(top)
         .args(&args)
         .discard_stderr()
         .output()
         .ok()
-        .filter(|o| o.status.success())
-    else {
-        return Vec::new();
-    };
+        .filter(|o| o.status.success())?;
     // `<mode> <type> <oid>\t<path>`
     let entries: BTreeMap<String, (String, String)> = out
         .stdout
@@ -318,11 +314,30 @@ fn same_as(top: &Path, rev: &str, paths: &[&String]) -> Vec<String> {
             Some((path.to_string(), (mode, oid)))
         })
         .collect();
+    Some(entries)
+}
+
+/// The paths whose file on disk is the entry `rev` holds, the same mode and the
+/// same blob of its raw bytes. Absent from both counts only for a path in
+/// `deleted`; a path git named in bytes that are not UTF-8 never matches,
+/// since its decoded name is not the file. Filters are not run: a
+/// clean filter the agent configures could make any content hash as `rev`'s. A symlink is compared as its link text and
+/// is never followed; a submodule or a directory never matches.
+fn same_as(top: &Path, rev: &str, paths: &[&String], deleted: &HashSet<String>) -> Vec<String> {
+    if paths.is_empty() {
+        return Vec::new();
+    }
+    let Some(entries) = base_entries(top, rev, paths) else {
+        return Vec::new();
+    };
     let mut same = Vec::new();
     let mut regular: Vec<(&String, &'static str)> = Vec::new();
     for p in paths {
+        if p.contains('\u{FFFD}') {
+            continue;
+        }
         let Ok(meta) = top.join(p.as_str()).symlink_metadata() else {
-            if !entries.contains_key(p.as_str()) {
+            if deleted.contains(p.as_str()) && !entries.contains_key(p.as_str()) {
                 same.push((*p).clone());
             }
             continue;
@@ -522,26 +537,19 @@ fn rule_change(
     prior: Option<&ProtectedState>,
 ) -> Option<GateEvent> {
     let prior = prior?;
-    let recorded = (prior.post_base.clone()?, prior.post_level.clone()?);
     let now = loaded_rule(loaded);
-    if recorded == now {
-        return None;
-    }
     let show = |(b, l): &(String, String)| format!("base '{b}', base_match '{l}'");
     let same_config =
         urzua_io::sha256_hex_of_file(config_path).is_some_and(|sig| sig == prior.config_sig);
-    let act = if same_config {
-        format!(
-            "left the configuration's post-command comparison rule ({}) different from the one the baseline under .urzua/cache recorded ({}), so the baseline was edited",
-            show(&now),
-            show(&recorded)
-        )
-    } else {
-        format!(
-            "changed the post-command comparison rule from {} to {}",
-            show(&recorded),
+    let recorded = prior.post_base.clone().zip(prior.post_level.clone());
+    let act = match recorded {
+        Some(r) if r == now => return None,
+        Some(r) => rule_act(&show(&now), &show(&r), same_config),
+        None if same_config => return None,
+        None => format!(
+            "changed the configuration while the baseline records no post-command comparison rule to compare with; the rule is now {}",
             show(&now)
-        )
+        ),
     };
     Some(GateEvent {
         path: config_path
@@ -553,6 +561,16 @@ fn rule_change(
         act,
         gate: String::new(),
     })
+}
+
+fn rule_act(now: &str, recorded: &str, same_config: bool) -> String {
+    if same_config {
+        format!(
+            "left the configuration's post-command comparison rule ({now}) different from the one the baseline under .urzua/cache recorded ({recorded}), so the baseline was edited"
+        )
+    } else {
+        format!("changed the post-command comparison rule from {recorded} to {now}")
+    }
 }
 
 /// The verdict when no governed record and no gated path changed.
@@ -616,7 +634,12 @@ fn base_gates(
     let matched = if base_ref.is_empty() {
         None
     } else {
-        matching_base(repo_root, &base_ref, &event_paths)
+        let deleted: HashSet<String> = paths
+            .iter()
+            .filter(|(_, d)| **d)
+            .map(|(p, _)| p.clone())
+            .collect();
+        matching_base(repo_root, &base_ref, &event_paths, &deleted)
     };
     let compared = matched.is_some();
     let mut matched = matched.unwrap_or_default();
@@ -633,6 +656,7 @@ fn base_gates(
         // A local ref is whatever the agent made it, so a match with it
         // lowers nothing.
         local: compared && !remote,
+        rule_changed,
         level: if remote { level } else { FindingSeverity::Error },
         unresolved: (!compared).then(|| {
             if base_ref.is_empty() {
@@ -653,6 +677,8 @@ struct Gates {
     base: String,
     /// The base is not a remote-tracking ref, so a match proves nothing.
     local: bool,
+    /// The comparison rule changed, so nothing was compared.
+    rule_changed: bool,
     /// Why no comparison was made, when none was.
     unresolved: Option<String>,
     level: FindingSeverity,
@@ -661,10 +687,33 @@ struct Gates {
 impl Gates {
     /// ", and their content is not the one on <base>" when that was compared.
     fn unlike(&self) -> String {
+        if self.rule_changed {
+            return " (the post-command comparison rule changed in this command, so nothing was compared with the base)".to_string();
+        }
         match &self.unresolved {
             None => format!(", and their content is not the one on {}", self.base),
             Some(why) => format!(" ({why})"),
         }
+    }
+
+    /// The agent's own line when every gated change matches, never the
+    /// person's text, so the translator does not drop it as a repeat.
+    fn agent_match_line(&self) -> Option<String> {
+        let n = self.matching().len();
+        if n == 0 {
+            return None;
+        }
+        Some(if self.local || self.level == FindingSeverity::Error {
+            format!(
+                "{P}: {n} gated change(s) match {}, which proves nothing; a decider must make or approve them, and the person has been told.",
+                self.base
+            )
+        } else {
+            format!(
+                "{P}: {n} gated change(s) match {}; nothing to do.",
+                self.base
+            )
+        })
     }
 
     fn is_empty(&self) -> bool {
@@ -718,9 +767,9 @@ impl Gates {
         let level = level_name(self.level);
         let names = named(matching.iter().map(|e| e.path.as_str()));
         let tail = if self.local {
-            ", which the agent can move, so the match proves nothing"
+            ", which the agent can move, so the match proves nothing; a decider must review the listed paths"
         } else if self.level == FindingSeverity::Error {
-            ""
+            "; a decider must review the listed paths"
         } else if alone {
             ", so nothing needs doing"
         } else {
@@ -862,7 +911,12 @@ fn level_name(level: FindingSeverity) -> &'static str {
 /// This is advisory: `base` is a local ref, and the agent the report is about
 /// can move it or commit to it. A match therefore only lowers how loudly a
 /// change is reported, never whether it is; CI compares with the real remote.
-fn matching_base(repo_root: &Path, base: &str, paths: &[&String]) -> Option<HashSet<String>> {
+fn matching_base(
+    repo_root: &Path,
+    base: &str,
+    paths: &[&String],
+    deleted: &HashSet<String>,
+) -> Option<HashSet<String>> {
     if paths.is_empty() {
         return Some(HashSet::new());
     }
@@ -876,7 +930,11 @@ fn matching_base(repo_root: &Path, base: &str, paths: &[&String]) -> Option<Hash
     if !resolves {
         return None;
     }
-    Some(same_as(repo_root, base, paths).into_iter().collect())
+    Some(
+        same_as(repo_root, base, paths, deleted)
+            .into_iter()
+            .collect(),
+    )
 }
 
 /// The base ref for the report, as configured. A remote-tracking ref that
@@ -988,12 +1046,10 @@ fn agent_line(new: &[&Finding], old: usize, gates: &Gates, note: Option<&str>) -
             gates.unlike()
         ));
     }
-    if let Some(m) = gates.matching_sentence(differing == 0) {
-        parts.push(if differing == 0 {
-            m
-        } else {
-            format!("{P} {m}")
-        });
+    if differing == 0 {
+        parts.extend(gates.agent_match_line());
+    } else if let Some(m) = gates.matching_sentence(false) {
+        parts.push(format!("{P} {m}"));
     }
     if let Some(note) = note {
         parts.push(format!("{P}: {note}"));

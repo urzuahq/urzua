@@ -1323,7 +1323,7 @@ fn a_local_base_never_lowers_the_report() {
     let v = post(&dir);
     let person = v["person"].as_str().unwrap();
     assert!(
-        person.starts_with("urzua harness (post-command) error: the command changed 1 gated path(s) (.github/workflows/ci.yml), and each now holds exactly the content on the local ref HEAD, which the agent can move, so the match proves nothing."),
+        person.starts_with("urzua harness (post-command) error: the command changed 1 gated path(s) (.github/workflows/ci.yml), and each now holds exactly the content on the local ref HEAD, which the agent can move, so the match proves nothing; a decider must review the listed paths."),
         "{v}"
     );
     assert_eq!(v["base_match"]["level"], "error", "{v}");
@@ -1357,9 +1357,139 @@ fn at_base_match_error_the_sentence_does_not_say_nothing_needs_doing() {
     bash(&dir, "git pull -q --ff-only");
     let person = post(&dir)["person"].as_str().unwrap().to_string();
     assert!(
-        person.ends_with("now holds exactly the content on origin/HEAD (origin/main).")
+        person.ends_with("now holds exactly the content on origin/HEAD (origin/main); a decider must review the listed paths.")
             && person.contains(" error: ")
             && !person.contains("nothing needs doing"),
         "{person}"
+    );
+}
+
+const NON_UTF8: &str = "printf 'evil\\n' > \".github/workflows/$(printf '\\377').yml\"";
+
+#[test]
+fn a_file_name_that_is_not_utf8_never_matches() {
+    let (_up, dir, _h) = cloned_fixture("non-utf8");
+    bash(&dir, NON_UTF8);
+    let v = post(&dir);
+    assert!(v["base_match"].is_null(), "uncommitted: {v}");
+    assert!(
+        v["person"]
+            .as_str()
+            .unwrap()
+            .contains("[protected-paths] error"),
+        "{v}"
+    );
+    let (_up2, dir2, _h2) = cloned_fixture("non-utf8-commit");
+    bash(
+        &dir2,
+        &format!("{NON_UTF8} && git add -A && git commit -qm x"),
+    );
+    let v = post(&dir2);
+    assert!(v["base_match"].is_null(), "committed: {v}");
+    assert!(
+        v["person"]
+            .as_str()
+            .unwrap()
+            .contains("[protected-paths] error"),
+        "{v}"
+    );
+}
+
+#[test]
+fn a_file_a_pull_deleted_that_the_base_lacks_still_matches() {
+    let (up, dir, _h) = cloned_fixture("pull-delete");
+    bash(
+        &up,
+        "git rm -q .github/workflows/ci.yml && git commit -qm rm",
+    );
+    bash(&dir, "git pull -q --ff-only");
+    let v = post(&dir);
+    assert_eq!(
+        base_paths(&v),
+        vec![".github/workflows/ci.yml".to_string()],
+        "{v}"
+    );
+}
+
+/// A cloned fixture whose upstream installed the Claude Code adapter, so the
+/// translator runs as the host runs it.
+fn cloned_with_adapter(
+    name: &str,
+    post_command: Option<&str>,
+) -> (common::TempDir, PathBuf, common::TempDir, String) {
+    let up = launder_fixture(&format!("{name}-up"));
+    if let Some(decl) = post_command {
+        let config = LAUNDER_CONFIG.replace("post-command: {enabled: true}", decl);
+        std::fs::write(up.join(".urzua/config.yaml"), config).unwrap();
+    }
+    install(&up);
+    git(&up, &["add", "-A"]);
+    git(&up, &["commit", "-qm", "install"]);
+    let holder = common::TempDir::new(&format!("urzua-postcmd-{name}-clone"));
+    let dir = holder.join("work");
+    git(
+        &holder,
+        &["clone", "-q", up.to_str().unwrap(), dir.to_str().unwrap()],
+    );
+    git(&dir, &["config", "user.email", "t@example.com"]);
+    git(&dir, &["config", "user.name", "t"]);
+    let cmd = hook_command(&dir, "Bash");
+    let out = run_hook(&dir, &cmd, &payload(&dir, "Bash"), None);
+    assert!(out.stdout.is_empty(), "{out:?}");
+    (up, dir, holder, cmd)
+}
+
+fn audiences(dir: &Path, cmd: &str) -> (String, String) {
+    let v = json(&run_hook(dir, cmd, &payload(dir, "Bash"), None));
+    (
+        v["systemMessage"].as_str().unwrap_or("").to_string(),
+        v["hookSpecificOutput"]["additionalContext"]
+            .as_str()
+            .unwrap_or("")
+            .to_string(),
+    )
+}
+
+#[test]
+fn the_agent_gets_its_own_line_when_every_gated_change_matches() {
+    let (up, dir, _h, cmd) = cloned_with_adapter("agent-match", None);
+    upstream_change(&up);
+    bash(&dir, "git pull -q --ff-only");
+    let (person, agent) = audiences(&dir, &cmd);
+    assert!(person.contains("nothing needs doing"), "{person}");
+    assert!(
+        agent.contains("3 gated change(s) match origin/HEAD (origin/main); nothing to do."),
+        "{agent}"
+    );
+}
+
+#[test]
+fn the_agent_gets_its_own_line_when_the_base_is_a_local_ref() {
+    let (_up, dir, _h, cmd) = cloned_with_adapter(
+        "agent-local",
+        Some("post-command: {enabled: true, base: HEAD}"),
+    );
+    bash(&dir, &format!("{W} && git commit -qam x"));
+    let (person, agent) = audiences(&dir, &cmd);
+    assert!(person.contains("proves nothing"), "{person}");
+    assert!(
+        agent.contains("1 gated change(s) match the local ref HEAD, which proves nothing; a decider must make or approve them"),
+        "{agent}"
+    );
+}
+
+#[test]
+fn the_agent_gets_its_own_line_in_a_mixed_report() {
+    let (up, dir, _h, cmd) = cloned_with_adapter("agent-mixed", None);
+    upstream_change(&up);
+    bash(
+        &dir,
+        "git pull -q --ff-only && echo evil > .github/workflows/evil.yml",
+    );
+    let (person, agent) = audiences(&dir, &cmd);
+    assert!(person.contains("evil.yml"), "{person}");
+    assert!(
+        agent.contains("a decider must make or approve these") && agent != person,
+        "{agent}"
     );
 }
