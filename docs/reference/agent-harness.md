@@ -138,12 +138,14 @@ checkout brought in are not reported. The agent gets a short line; you get a mes
 move, a protected-path change, or a check that could not run.
 
 Each gated change is compared with a base branch: the file as it is after the command, its mode and its
-content hashed as git hashes it, against the same path in that branch's tree (a symlink or an executable bit
+raw bytes (no filters run) against the same path in that branch's tree (a symlink or an executable bit
 the branch does not have never matches). When every one matches, as after a fast-forward
 `git pull` of the default branch, you get one sentence, such as "the command changed 2 gated path(s) (.github/workflows/ci.yml,
 docs/adr/ADR-1-a.md), and each now holds exactly the content on origin/HEAD (origin/main), so nothing
-needs doing", at level `info`. A ref that is not a remote-tracking one is called a local ref in that
-sentence (`the local ref HEAD`). A command that edits the configuration is judged by the comparison rule
+needs doing", at level `info`. Only a remote-tracking base (`refs/remotes/...`) lowers the level: with a local ref such as
+`HEAD` the matching paths are listed at `error`, since the agent can move that ref and the match proves
+nothing. Changing `base` or `base_match` is itself reported at `error`, and lowers nothing for that
+command, even when the configuration file is not a protected path. A command that edits the configuration is judged by the comparison rule
 from before it, and is lowered only when the configuration file itself matches that base. A change
 that differs is reported at level `error` under its gate, each gate named once, even when it arrived in
 the same command as changes that match. Two keys of the guardrail set this:

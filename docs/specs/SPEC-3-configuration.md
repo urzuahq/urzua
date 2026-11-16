@@ -998,12 +998,17 @@ harness:
   exactly the content on a base ref. `base` is a git ref (default `origin/HEAD`, the remote's default branch
   as a clone records it); a blank value, or one starting with `-`, is a load error. After a command, each gated path the command changed
   matches when its working-tree mode (`120000` for a symlink, compared as its link text and never followed;
-  `100755` for an executable file; `100644` otherwise) and its blob, hashed as git hashes it, equal the entry
+  `100755` for an executable file; `100644` otherwise) and the blob of its raw bytes (no filters run, so a filter cannot forge a match and a CRLF or filtered checkout does not match) equal the entry
   `git ls-tree <base> -- <path>` names; a path absent from both matches, and a status move matches only when
   the whole record file does. A command that changed the configuration file is judged by the `base` and
   `base_match` the baseline recorded before it, and nothing is lowered unless the configuration file itself
   matches that base; with no recorded rule, nothing is lowered. `base_match` is `info`, `warning` or `error`
-  (default `info`; anything else is a load error) and is the level a matching change is reported at. When
+  (default `info`; anything else is a load error) and is the level a matching change is reported at. A match lowers the level only when `base` is a
+  remote-tracking ref (`refs/remotes/...`); with a local ref (`HEAD`, a branch, a tag, a commit id) matching
+  paths are listed in one line at `error`, saying the match proves nothing. A change of `base` or `base_match`
+  from the rule the baseline recorded is itself reported at `error` (and, with the configuration file
+  unchanged, as an edited baseline), whether or not the configuration file is protected, and lowers nothing
+  for that command. When
   every gated change matches, the report is one sentence naming their count, up to five of the paths and then
   how many more (all of them in the verdict's `base_match`), and the ref as configured (a remote-tracking ref
   that names another adds the branch it points at, as `origin/HEAD (origin/main)`; any other ref is called a
@@ -2855,3 +2860,4 @@ proves this configuration produces the three findings.
 > | 2026-11-16 | Bumped to `0.156`. Adds `harness.guardrails.post-command.base` (default `origin/HEAD`) and `base_match` (default `info`): a gated change whose content is the base ref's is reported in one sentence at that level, still printed, advisory because the refs are local. **Why:** the maintainer reported on 2026-11-16 that the report after a pull of the default branch could not be understood. | **substantive** |
 > | 2026-11-16 | Adds `hooks.verify_timeout_seconds` (default 600). **Why:** a fourth review of `MILE-220`'s pull request: `urzua hooks verify --run` ran a hook with no time limit. | **substantive** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` f74531f49e9c -> 04472363242c. Reason: config.rs: the hooks key gains verify_timeout_seconds (default 600, at least 1), and hooks.<hook> may be a map with command and managed; every other key and default is unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-16 | `post-command.base` lowers a report only when it is a remote-tracking ref; matching compares raw bytes; a change of `base` or `base_match` is reported at `error` and lowers nothing for that command. **Why:** `MILE-311`, decided by the orchestrator on 2026-11-16, pending maintainer review, after a security review of its pull request showed a clean filter could forge a match and a command could lower its own report through the comparison rule. | **substantive** |

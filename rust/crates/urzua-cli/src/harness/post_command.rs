@@ -273,7 +273,8 @@ fn not_own(committed: &[String], own: Option<&HashSet<String>>) -> Vec<String> {
 }
 
 /// The paths whose file on disk is the entry `rev` holds, the same mode and the
-/// same blob (both absent counts). A symlink is compared as its link text and
+/// same blob of its raw bytes (both absent counts). Filters are not run: a
+/// clean filter the agent configures could make any content hash as `rev`'s. A symlink is compared as its link text and
 /// is never followed; a submodule or a directory never matches.
 fn same_as(top: &Path, rev: &str, paths: &[&String]) -> Vec<String> {
     if paths.is_empty() {
@@ -347,7 +348,12 @@ fn same_as(top: &Path, rev: &str, paths: &[&String]) -> Vec<String> {
         .join("\n");
     let oids: Vec<String> = GitRun::new()
         .cwd(top)
-        .args(["--no-optional-locks", "hash-object", "--stdin-paths"])
+        .args([
+            "--no-optional-locks",
+            "hash-object",
+            "--no-filters",
+            "--stdin-paths",
+        ])
         .stdin(list.as_bytes())
         .discard_stderr()
         .output()
@@ -439,7 +445,13 @@ fn judge_changes(
         mut protected,
         remembered,
     } = select_unseen(&repo_root, &loaded, &paths, &scan.baseline_entries);
-    protected.extend(shrink_lines(&repo_root, &config_path, &scan));
+    let prior_rule = prior.as_ref();
+    protected.extend(shrink_lines(
+        &repo_root,
+        &config_path,
+        &scan,
+        (&loaded, prior_rule),
+    ));
     let deletions = gated_deletions(&repo_root, &loaded, &paths, base, &scan);
     let mut remembered = remembered;
     let adopted: Vec<String> = fresh
@@ -451,16 +463,7 @@ fn judge_changes(
     let deletions: Vec<GateEvent> = deletions.into_iter().map(|(_, e)| e).collect();
     if fresh.is_empty() && protected.is_empty() && deletions.is_empty() {
         write_memory(&repo_root, &remembered);
-        let mut v = PostVerdict::quiet(format!(
-            "{P}: no governed record changed since the last check; no check ran"
-        ));
-        v.adopted = adopted;
-        if let Some(note) = &scan.note {
-            v.verdict = "allow-with-warnings";
-            v.message.push_str(&format!(" {note}"));
-            v.agent = format!("{P}: {note}");
-        }
-        return v;
+        return nothing_to_check(adopted, scan.note.as_deref());
     }
 
     // A gated move is judged on the same records, against the commit the
@@ -492,6 +495,77 @@ fn judge_changes(
 
     let mut v = report_verdict(&to_check, &gates, (new, old), scan.note.as_deref());
     v.adopted = adopted;
+    v
+}
+
+/// The comparison rule (`base`, `base_match`) the configuration sets.
+fn loaded_rule(loaded: &Config) -> (String, String) {
+    let harness = loaded.harness.as_ref();
+    (
+        harness
+            .map_or(urzua_core::harness::DEFAULT_BASE, |h| h.post_command_base())
+            .to_string(),
+        level_name(harness.map_or(FindingSeverity::Info, |h| h.post_command_base_match()))
+            .to_string(),
+    )
+}
+
+/// An event when the comparison rule differs from the one the baseline
+/// recorded: the configuration changed it, or, with the configuration file
+/// unchanged, the baseline under `.urzua/cache` was edited. Either way a
+/// command cannot lower its own report, so this is an error of its own whether
+/// or not the configuration file is a protected path.
+fn rule_change(
+    repo_root: &Path,
+    config_path: &Path,
+    loaded: &Config,
+    prior: Option<&ProtectedState>,
+) -> Option<GateEvent> {
+    let prior = prior?;
+    let recorded = (prior.post_base.clone()?, prior.post_level.clone()?);
+    let now = loaded_rule(loaded);
+    if recorded == now {
+        return None;
+    }
+    let show = |(b, l): &(String, String)| format!("base '{b}', base_match '{l}'");
+    let same_config =
+        urzua_io::sha256_hex_of_file(config_path).is_some_and(|sig| sig == prior.config_sig);
+    let act = if same_config {
+        format!(
+            "left the configuration's post-command comparison rule ({}) different from the one the baseline under .urzua/cache recorded ({}), so the baseline was edited",
+            show(&now),
+            show(&recorded)
+        )
+    } else {
+        format!(
+            "changed the post-command comparison rule from {} to {}",
+            show(&recorded),
+            show(&now)
+        )
+    };
+    Some(GateEvent {
+        path: config_path
+            .strip_prefix(repo_root)
+            .unwrap_or(config_path)
+            .display()
+            .to_string(),
+        guardrail: "post-command",
+        act,
+        gate: String::new(),
+    })
+}
+
+/// The verdict when no governed record and no gated path changed.
+fn nothing_to_check(adopted: Vec<String>, note: Option<&str>) -> PostVerdict {
+    let mut v = PostVerdict::quiet(format!(
+        "{P}: no governed record changed since the last check; no check ran"
+    ));
+    v.adopted = adopted;
+    if let Some(note) = note {
+        v.verdict = "allow-with-warnings";
+        v.message.push_str(&format!(" {note}"));
+        v.agent = format!("{P}: {note}");
+    }
     v
 }
 
@@ -546,15 +620,20 @@ fn base_gates(
     };
     let compared = matched.is_some();
     let mut matched = matched.unwrap_or_default();
-    if config_changed && !matched.contains(&config_rel) {
+    let rule_changed = protected.iter().any(|e| e.guardrail == "post-command");
+    if rule_changed || (config_changed && !matched.contains(&config_rel)) {
         matched.clear();
     }
+    let (base, remote) = describe_base(repo_root, &base_ref);
     Gates {
         moves: gated,
         protected,
         matched,
-        base: describe_base(repo_root, &base_ref),
-        level,
+        base,
+        // A local ref is whatever the agent made it, so a match with it
+        // lowers nothing.
+        local: compared && !remote,
+        level: if remote { level } else { FindingSeverity::Error },
         unresolved: (!compared).then(|| {
             if base_ref.is_empty() {
                 "no base ref to compare with: the command changed the configuration and the comparison rule it had before is not known".to_string()
@@ -572,6 +651,8 @@ struct Gates {
     protected: Vec<GateEvent>,
     matched: HashSet<String>,
     base: String,
+    /// The base is not a remote-tracking ref, so a match proves nothing.
+    local: bool,
     /// Why no comparison was made, when none was.
     unresolved: Option<String>,
     level: FindingSeverity,
@@ -636,14 +717,23 @@ impl Gates {
         }
         let level = level_name(self.level);
         let names = named(matching.iter().map(|e| e.path.as_str()));
+        let tail = if self.local {
+            ", which the agent can move, so the match proves nothing"
+        } else if self.level == FindingSeverity::Error {
+            ""
+        } else if alone {
+            ", so nothing needs doing"
+        } else {
+            "; nothing needs doing for them"
+        };
         Some(if alone {
             format!(
-                "{P} {level}: the command changed {n} gated path(s) ({names}), and each now holds exactly the content on {}, so nothing needs doing.",
+                "{P} {level}: the command changed {n} gated path(s) ({names}), and each now holds exactly the content on {}{tail}.",
                 self.base
             )
         } else {
             format!(
-                "{level}: {n} other gated path(s) ({names}) now hold exactly the content on {}; nothing needs doing for them.",
+                "{level}: {n} other gated path(s) ({names}) now hold exactly the content on {}{tail}.",
                 self.base
             )
         })
@@ -793,7 +883,7 @@ fn matching_base(repo_root: &Path, base: &str, paths: &[&String]) -> Option<Hash
 /// names another (`origin/HEAD`) adds the branch it points at; anything else
 /// (a local branch, `HEAD`, a commit) is called a local ref, since it says
 /// nothing about the default branch.
-fn describe_base(repo_root: &Path, base: &str) -> String {
+fn describe_base(repo_root: &Path, base: &str) -> (String, bool) {
     let git = |args: &[&str]| {
         GitRun::new()
             .cwd(repo_root)
@@ -806,7 +896,7 @@ fn describe_base(repo_root: &Path, base: &str) -> String {
             .filter(|t| !t.is_empty())
     };
     if base.is_empty() {
-        return "no base".to_string();
+        return ("no base".to_string(), false);
     }
     let full = git(&[
         "--no-optional-locks",
@@ -818,12 +908,13 @@ fn describe_base(repo_root: &Path, base: &str) -> String {
         .as_deref()
         .is_some_and(|f| f.starts_with("refs/remotes/"))
     {
-        return format!("the local ref {base}");
+        return (format!("the local ref {base}"), false);
     }
-    match git(&["--no-optional-locks", "rev-parse", "--abbrev-ref", base]) {
+    let name = match git(&["--no-optional-locks", "rev-parse", "--abbrev-ref", base]) {
         Some(short) if short != base => format!("{base} ({short})"),
         _ => base.to_string(),
-    }
+    };
+    (name, true)
 }
 
 /// The verdict for a judged command: the findings `check` reported on the
@@ -912,7 +1003,12 @@ fn agent_line(new: &[&Finding], old: usize, gates: &Gates, note: Option<&str>) -
 
 /// The report lines for what the command took out of the baseline's gates: a
 /// path gate, and a status gate or the `acceptance` guardrail.
-fn shrink_lines(repo_root: &Path, config_path: &Path, scan: &ProtectedScan) -> Vec<GateEvent> {
+fn shrink_lines(
+    repo_root: &Path,
+    config_path: &Path,
+    scan: &ProtectedScan,
+    (loaded, prior): (&Config, Option<&ProtectedState>),
+) -> Vec<GateEvent> {
     let mut lines = Vec::new();
     if !scan.shrunk.is_empty() {
         lines.push(shrink_line(repo_root, config_path, &scan.shrunk));
@@ -924,6 +1020,7 @@ fn shrink_lines(repo_root: &Path, config_path: &Path, scan: &ProtectedScan) -> V
             &scan.status_shrunk,
         ));
     }
+    lines.extend(rule_change(repo_root, config_path, loaded, prior));
     lines
 }
 
