@@ -3305,11 +3305,22 @@ fn hooks_path_problem(path: &str) -> Option<&'static str> {
         if c.contains(['\\', ':']) || c.chars().any(char::is_control) {
             return Some("may not contain a backslash, a colon or a control character");
         }
-        if c.eq_ignore_ascii_case(".git") {
+        if is_git_dir_name(c) {
             return Some("may not name .git in any part (compared case-insensitively), which is not committed");
         }
     }
     None
+}
+
+/// `.git` as Windows and HFS+ read it: trailing dots and spaces dropped,
+/// ignorable zero-width characters skipped, and the 8.3 short name `GIT~1`.
+fn is_git_dir_name(c: &str) -> bool {
+    let visible: String = c
+        .chars()
+        .filter(|ch| !matches!(ch, '\u{200B}'..='\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2060}'..='\u{2064}' | '\u{206A}'..='\u{206F}' | '\u{FEFF}'))
+        .collect();
+    let trimmed = visible.trim_end_matches(['.', ' ']);
+    trimmed.eq_ignore_ascii_case(".git") || trimmed.eq_ignore_ascii_case("git~1")
 }
 
 /// A hook runs only a read-only check of this repository: another subcommand could write files

@@ -3,7 +3,7 @@ Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
 Version: '0.156'
 Date: 2026-08-20
 Status: Shipped
-Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:cc9ac43c376fa211ee054379c445ea66714d8130112529a73eab3203dc45f632, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:09c2431a269316741c35b51dabd5766ecd3d50fab2b98069314bb1bc8857767d, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:255395e7d2caa34947cef28f463e2ec050e3eba798a4dc7573a3cad946fee1ae
+Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:5b7ad3cd442cb9aab5694787bb3d5afccc70ad2c3d6121307d38360c739148b8, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:09c2431a269316741c35b51dabd5766ecd3d50fab2b98069314bb1bc8857767d, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:255395e7d2caa34947cef28f463e2ec050e3eba798a4dc7573a3cad946fee1ae
 Embodiment: Verified
 Author: beauwilliams
 Subject: '`.urzua/config.yaml` -- the schema for record types, required/known fields, and per-type behavior.'
@@ -1243,22 +1243,30 @@ hooks:
 - **`path`** names the directory, relative to the repository root, the hooks are committed in. git's
   `core.hooksPath` is set per clone, so a fresh clone runs none of them until it is pointed there: `urzua hooks
   install` sets this clone's local `core.hooksPath` to `path` (with `--dry-run`, reports `would-point` and writes
-  nothing). It refuses, writing nothing, when `core.hooksPath` is already set to something else, naming the value,
-  its scope and the file that sets it, and when `path` resolves through a symlink outside the working tree or into
-  the git directory, or git would read the value as another place. Every guard, for the directory and for each hook
-  file in it, runs before anything is written: on a refusal neither `core.hooksPath` nor any file changes. While the
-  clone is not pointed at `path`, `doctor`, `urzua hooks status` and the session-start check report every hook
-  `not-pointed`, naming the directory, with `urzua hooks install` as the next action; when another value is set
-  there is no next action: urzua never changes a value it did not set, and none either when `install` would refuse
-  (the message names why; a directory that resolves outside the working tree or into the git directory is
-  `unsafe-dir`, also after install); and the message names its scope and origin
-  and that a person can choose `git config --local core.hooksPath <path>`. `install` reports a declared hook
-  missing from `path` as `status` does, with a non-`ok` status. `urzua hooks uninstall` leaves the files in `path`
-  as they are (`left`) and unsets `core.hooksPath` only when it equals `path` and is set in the repository's own
-  configuration file (a value from an included file or another scope is named and left). `path` is relative; each
-  `/`-separated part is non-empty, is not `.` or `..`, contains no backslash, colon or control character, and is not
-  `.git` compared case-insensitively; the first part does not begin with `~`. Nothing is normalised: `./x`, `a//b`
-  and an absolute path are rejected. Anything else is a load error naming `hooks.path`.
+  nothing); the report notes that the relative value is shared by every worktree of the clone. Every guard, for the
+  directory and for each hook file git would run from it, declared or not, runs before anything is written; on a
+  refusal neither `core.hooksPath` nor any file changes. It refuses when `core.hooksPath` is already set to something
+  else (naming the value, its scope and the file that sets it), when `path` resolves through a symlink outside the
+  working tree or into the git directory or git would read the value as another place, when a hook file there is a
+  symlink resolving outside the working tree or into the git directory, and when a hook it must write cannot be
+  written (for a directory not yet created, its nearest existing ancestor is probed). Pointing alone, with every hook
+  declared, needs no write.
+  While the clone is not pointed at `path`, `doctor`, `urzua hooks status` and the session-start check report every
+  hook `not-pointed`, naming the directory. A next action is offered only when running it would succeed:
+  `urzua hooks install` when it would; none when another value is set (urzua never changes a value it did not set;
+  the message names its scope and origin and that a person can choose `git config --local core.hooksPath <path>`)
+  or when `install` would refuse (the message names why). A directory that resolves outside the working tree or into
+  the git directory is `unsafe-dir`, and a hook file that is such a symlink is `unsafe-hook`; when the clone is
+  already pointed there, the message says git runs hooks from there and the next action is `urzua hooks uninstall`
+  when that would unset the value.
+  `urzua hooks uninstall` leaves the files in `path` as they are (`left`) and unsets `core.hooksPath` only when it
+  equals `path` and is set in the repository's own configuration file (a value from an included file or another
+  scope is named and left).
+  `path` is relative; each `/`-separated part is non-empty, is not `.` or `..`, contains no backslash, colon or
+  control character, and is not `.git` compared case-insensitively, nor a name Windows or HFS+ read as `.git`
+  (trailing dots or spaces, `GIT~1`, ignorable zero-width characters); the first part does not begin with `~`.
+  Nothing is normalised: `./x`, `a//b` and an absolute path are rejected. Anything else is a load error naming
+  `hooks.path`.
 - **`print_success`** makes `urzua hooks run` print `<hook>: urzua <args>: no blocking findings` on stderr when
   nothing blocks. Default `false`: a clean run prints nothing and exits 0. A refusal prints the same whatever it is.
 
@@ -1271,7 +1279,9 @@ hooks:
   writes nothing to that hook, and `doctor`, `urzua hooks status` and the session-start check report it `ok`
   (`declared`) while the file exists, is executable and mentions urzua, and warn (`declared-missing`,
   `declared-not-executable`, `declared-no-call`) when the declaration is plainly false. A declared hook missing
-  while `core.hooksPath` is unset names `hooks.path`, not the clone's own hooks directory, as the place for it. The declaration is an
+  while `core.hooksPath` is unset names `hooks.path`, not the clone's own hooks directory, as the place for it.
+  `urzua hooks install` reports a declared hook it finds missing, not executable or without a call as `status` does,
+  and exits 1 with `drift`, with or without `hooks.path`. The declaration is an
   assertion by the repository, not something urzua reads from the hook: that is why `.urzua/config.yaml` is a
   protected path in a gated repository, and `urzua hooks verify --run` is how to check it (`SPEC-15`).
 
@@ -2860,3 +2870,4 @@ proves this configuration produces the three findings.
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 04472363242c -> 98204e0e0814. Reason: config.rs: the hooks key gains path (a relative directory inside the repository, validated) and print_success (default false); every other key and default is unchanged **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 98204e0e0814 -> 1110a9945a86. Reason: config.rs: hooks.path also rejects '.', '..', empty parts and a first component of .git; hooks.print_success is unchanged; every other key and default is unchanged **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 1110a9945a86 -> cc9ac43c376f. Reason: config.rs: hooks.path validation moves into hooks_path_problem, which also rejects a leading '~', a backslash, colon or control character in any part, and .git in any part compared case-insensitively; every other key and default is unchanged **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` cc9ac43c376f -> 5b7ad3cd442c. Reason: config.rs: hooks.path also rejects names Windows or HFS+ read as .git (trailing dots or spaces, GIT~1, ignorable zero-width characters); every other key and default is unchanged **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
