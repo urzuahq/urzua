@@ -5,7 +5,7 @@ Phase: '0'
 Track: schema-governance
 Implements: ADR-34, SPEC-6
 Blocked-on: —
-Realized-by: code:.urzua/config.yaml@sha256:169fd605713992b1e68ae1bbc0899f84248449fea4d9f10c3094bd60acbd33b0, spec:docs/specs/SPEC-6-the-milestone-record-type.md, code:.urzua/templates/milestone.md@sha256:878708705fa067c5365be3434ce2ab904f0b29b72615df3595c8856e01b3597e
+Realized-by: code:.urzua/config.yaml#record_types::milestone@sha256:cb0390de9bbe3d5dceb67db854f77f5c42b8eb04a5533c27e3f1ae4b143f0142, spec:docs/specs/SPEC-6-the-milestone-record-type.md, code:.urzua/templates/milestone.md@sha256:878708705fa067c5365be3434ce2ab904f0b29b72615df3595c8856e01b3597e
 ---
 # 71 — Add a terminal status for deferred or abandoned milestones
 
@@ -27,10 +27,10 @@ crashes or emits wrong output today, the enum is just incomplete for a real case
 
 ## Done means
 
-- `WontDo` is a value of the milestone `Status` enum, declared as a failure status in urzua's own `.urzua/config.yaml`. — evidence: code:.urzua/config.yaml@sha256:169fd605713992b1e68ae1bbc0899f84248449fea4d9f10c3094bd60acbd33b0
+- `WontDo` is a value of the milestone `Status` enum, declared as a failure status in urzua's own `.urzua/config.yaml`. — evidence: code:.urzua/config.yaml#record_types::milestone@sha256:cb0390de9bbe3d5dceb67db854f77f5c42b8eb04a5533c27e3f1ae4b143f0142
 - `WontDo` is documented in `SPEC-6`. — evidence: spec:docs/specs/SPEC-6-the-milestone-record-type.md
 - `WontDo` is listed in the milestone template. — evidence: code:.urzua/templates/milestone.md@sha256:878708705fa067c5365be3434ce2ab904f0b29b72615df3595c8856e01b3597e
-- A deliberately abandoned milestone has an honest terminal state distinct from `Blocked`, which is derived and never a `Status` value. — evidence: code:.urzua/config.yaml@sha256:169fd605713992b1e68ae1bbc0899f84248449fea4d9f10c3094bd60acbd33b0, spec:docs/specs/SPEC-6-the-milestone-record-type.md
+- A deliberately abandoned milestone has an honest terminal state distinct from `Blocked`, which is derived and never a `Status` value. — evidence: code:.urzua/config.yaml#record_types::milestone@sha256:cb0390de9bbe3d5dceb67db854f77f5c42b8eb04a5533c27e3f1ae4b143f0142, spec:docs/specs/SPEC-6-the-milestone-record-type.md
 
 > **Revision log**
 >
@@ -59,3 +59,4 @@ crashes or emits wrong output today, the enum is just incomplete for a real case
 > | 2026-11-15 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` e544107a6abb -> 1690790d0bdc. Reason: config.yaml: adds harness.limits with hook_timeout_seconds: 120, the built-in value, under harness; no other key changed. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` 1690790d0bdc -> b3876c284bd2. Reason: Read the diff of each re-pinned file against main: config.yaml declares embodiment.pin-stale: warn with a two-line comment; no other key changed. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` b3876c284bd2 -> 169fd6057139. Reason: Read the diff of each re-pinned file against main. .urzua/config.yaml: `unread_markers: report` on embodiment.back-pointer-resolution; no other key changed. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-16 | Pinned (attested by beauwilliams, identity: gh-verified, actor: agent): 1 locators pinned, 0 file-level, 1 scoped. Evidence: .urzua/config.yaml#record_types::milestone@sha256:cb0390de9bbe Reason: Narrowed to record_types::milestone: WontDo as a failure value of the milestone Status enum is declared in that entry's statuses block. **Why:** a claim is renewed only over pinned code and test evidence. | **structural** |
