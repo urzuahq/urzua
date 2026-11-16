@@ -27,3 +27,4 @@ the audit of 2026-11-15 found that day one needs a manual archive download or a 
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-15 | Initial record, `Status: Planned`. **Why:** Filed from the audits of 2026-11-15; the maintainer committed to the work in conversation that day. | **structural** |
+> | 2026-11-16 | Publishing to the crates registry is decided: yes, alongside the install script. **Why:** Asked on 2026-11-16 whether to publish there as well as shipping the script, the maintainer answered "Publish to crates.io too". It needs a registry token from the maintainer as a repository secret. | **substantive** |
