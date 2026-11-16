@@ -2465,8 +2465,12 @@ pub struct Conflict {
     pub pins: Vec<crate::conflicts::PinOutcome>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub version: Option<String>,
-    /// Revision-log rows the two sides appended, kept in date order.
+    /// Revision-log rows the two sides added, kept.
     pub rows_kept: usize,
+    /// Pinned files still unmerged that this record waits on: resolve and
+    /// stage them first, then re-run `urzua fix --conflicts`.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub waits_on: Vec<PathBuf>,
 }
 
 impl Report for ConflictsReport {
@@ -2505,6 +2509,27 @@ impl Report for ConflictsReport {
                 )),
                 "fix --conflicts does not stage: stage the resolved records, then continue the merge or rebase",
             )),
+            ConflictsStatus::PartialFailure => {
+                let mut files: Vec<String> = Vec::new();
+                let mut waiting = 0;
+                for c in self.conflicts.iter().filter(|c| !c.waits_on.is_empty()) {
+                    waiting += 1;
+                    for f in &c.waits_on {
+                        let f = f.display().to_string();
+                        if !files.contains(&f) {
+                            files.push(f);
+                        }
+                    }
+                }
+                (waiting > 0).then(|| NextAction::runs_as_printed(
+                    "urzua fix --conflicts",
+                    format!(
+                        "{} on pinned files that are still unmerged ({}): resolve those files and stage them with git add first, then re-run this command",
+                        if waiting == 1 { "1 record waits".to_string() } else { format!("{waiting} records wait") },
+                        files.join(", ")
+                    ),
+                ))
+            }
             _ => None,
         }
     }

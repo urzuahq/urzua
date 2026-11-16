@@ -15,6 +15,7 @@ use urzua_core::report::{
 };
 
 use super::fix::{identity_notices, refuse, resolve_attestation, Refusal, ResolvedAttestation};
+use super::merge_pins::Unverified;
 use crate::emit;
 use crate::session::Workspace;
 
@@ -139,6 +140,7 @@ struct TypeShape {
     log_id: urzua_core::config::RevisionLogId,
     log_shape: urzua_core::config::RevisionLogShape,
     bump_classes: Vec<String>,
+    items: Option<urzua_core::rules::ItemsReader>,
 }
 
 impl TypeShape {
@@ -163,6 +165,7 @@ impl TypeShape {
                         .collect()
                 })
                 .unwrap_or_default(),
+            items: urzua_core::rules::ItemsReader::of(config, t),
         }
     }
 
@@ -173,6 +176,7 @@ impl TypeShape {
             log_id: &self.log_id,
             log_shape: &self.log_shape,
             bump_classes: &self.bump_classes,
+            items: self.items.as_ref(),
         }
     }
 }
@@ -200,6 +204,7 @@ impl Ctx<'_> {
             pins: Vec::new(),
             version: None,
             rows_kept: 0,
+            waits_on: Vec::new(),
         };
         let working = urzua_io::read_to_string(&self.repo_root.join(path))
             .map_err(|e| format!("could not read: {e}"))?;
@@ -211,27 +216,57 @@ impl Ctx<'_> {
         let Some((base, ours, theirs)) = self.stages(path) else {
             return Ok(refused("git has no merge-base, ours and theirs version of this record (added or deleted on one side)".into()));
         };
+        let heads = super::merge_pins::heads(self.repo_root);
+        if let Ok(h) = &heads {
+            if let Some(why) = self.forged_stage(path, h, &ours, &theirs) {
+                return Ok(refused(why));
+            }
+        }
         let stages = Stages {
             base: &base,
             ours: &ours,
             theirs: &theirs,
+            incoming_is_theirs: heads.as_ref().map_or(true, |h| h.incoming_is_theirs),
         };
         let prepared = match conflicts::prepare(&stages, &shape) {
             Ok(p) => p,
             Err(e) => return Ok(refused(format!("could not read the record's sides: {e}"))),
         };
+        if let Some(why) = &prepared.item_mismatch {
+            return Ok(refused(why.clone()));
+        }
         let merged = match merge_file(&prepared)? {
             Ok(m) => m,
             Err(near) => return Ok(refused(format!(
-                "conflicts outside the evidence pins, the version and the appended revision-log rows (near: {near}); resolve it by hand"
+                "conflicts outside the evidence pins, the version and the appended revision-log rows (near: {near}{}); resolve it by hand",
+                in_item(&ours, &shape, &near)
             ))),
         };
         let mut recomputed = Vec::new();
-        for pin in prepared.pins.iter().filter(|p| p.needs_recompute()) {
-            match self.merged_hash(path, pin) {
-                Ok(h) => recomputed.push((pin.spelling.clone(), h)),
-                Err(e) => return Ok(refused(e)),
+        let mut waits_on: Vec<PathBuf> = Vec::new();
+        for (i, pin) in prepared.pins.iter().enumerate() {
+            if !pin.needs_recompute() {
+                continue;
             }
+            match self.merged_hash(path, pin, &heads) {
+                Ok(h) => recomputed.push((i, h)),
+                Err(Unverified::Unmerged(file)) => {
+                    if !waits_on.contains(&file) {
+                        waits_on.push(file);
+                    }
+                }
+                Err(Unverified::Other(e)) => return Ok(refused(e)),
+            }
+        }
+        if !waits_on.is_empty() {
+            let files: Vec<String> = waits_on.iter().map(|p| p.display().to_string()).collect();
+            return Ok(Conflict {
+                waits_on,
+                ..refused(format!(
+                    "a pinned file is still unmerged ({}): its merged content does not exist yet, so the pin cannot be recomputed. Resolve and stage that file first (git add), then re-run urzua fix --conflicts",
+                    files.join(", ")
+                ))
+            });
         }
         let label_only = urzua_core::fix::Attestation::new(
             "",
@@ -270,6 +305,7 @@ impl Ctx<'_> {
             pins: resolved.pins,
             version: resolved.version,
             rows_kept: resolved.rows_kept,
+            waits_on: Vec::new(),
         })
     }
 
@@ -284,7 +320,7 @@ impl Ctx<'_> {
     ) -> Conflict {
         let merge_rows = |text: &str| -> Vec<String> {
             text.lines()
-                .filter(|l| conflicts::merge_row_locators(l).is_some())
+                .filter(|l| conflicts::is_machine_row(l))
                 .map(str::to_string)
                 .collect()
         };
@@ -317,22 +353,101 @@ impl Ctx<'_> {
 
     /// The merged pin hash when it is git's merge of two attested states;
     /// the refusal names the condition that failed and the ordinary re-pin.
-    fn merged_hash(&self, path: &Path, pin: &conflicts::PinSides) -> Result<String, String> {
-        let why = super::merge_pins::heads(self.repo_root).and_then(|heads| {
-            super::merge_pins::verified_hash(
+    fn merged_hash(
+        &self,
+        path: &Path,
+        pin: &conflicts::PinSides,
+        heads: &Result<super::merge_pins::Heads, String>,
+    ) -> Result<String, Unverified> {
+        let why = match heads {
+            Ok(heads) => super::merge_pins::verified_hash(
                 self.repo_root,
                 self.config,
                 self.unmerged,
-                &heads,
+                heads,
                 pin,
-            )
-        });
-        why.map_err(|e| format!(
-            "the pin on '{}' cannot be recomputed on merge: {e}. Resolve the record by hand and give that pin an ordinary re-pin with a person's reason: urzua fix --rebaseline --apply --ids {} --by <you> --reason \"<what changed in the pinned file>\"",
-            pin.spelling,
-            path.display()
-        ))
+            ),
+            Err(e) => Err(Unverified::Other(e.clone())),
+        };
+        why.map_err(|e| match e {
+            Unverified::Unmerged(f) => Unverified::Unmerged(f),
+            Unverified::Other(e) => Unverified::Other(format!(
+                "the pin on '{}' ({}) cannot be recomputed on merge: {e}. Resolve the record by hand and give that pin an ordinary re-pin with a person's reason: urzua fix --rebaseline --apply --ids {} --by <you> --reason \"<what changed in the pinned file>\"",
+                pin.spelling,
+                pin.site,
+                path.display()
+            )),
+        })
     }
+
+    /// Why stage 2 or 3 is not the record as committed at the commit git
+    /// names for that side: index stages written by hand would let the merge
+    /// row claim a re-pin a side never made.
+    fn forged_stage(
+        &self,
+        path: &Path,
+        heads: &super::merge_pins::Heads,
+        ours: &str,
+        theirs: &str,
+    ) -> Option<String> {
+        for (stage, side, commit, text) in [
+            (2, "our commit (HEAD)", &heads.ours, ours),
+            (3, "their commit", &heads.theirs, theirs),
+        ] {
+            let committed =
+                super::merge_pins::show(self.repo_root, &format!("{commit}:{}", path.display()))
+                    .ok()
+                    .map(|b| String::from_utf8_lossy(&b).into_owned());
+            if committed.as_deref() != Some(text) {
+                return Some(format!(
+                    "index stage {stage} of this record is not the record at {side}: the stage was written by hand, so what that side committed cannot be told; resolve it by hand"
+                ));
+            }
+        }
+        None
+    }
+}
+
+/// Which Done-means item a conflicting line lies in, for the refusal.
+fn in_item(ours: &str, shape: &Shape<'_>, near: &str) -> String {
+    let Some(reader) = shape.items else {
+        return String::new();
+    };
+    let near = near.trim();
+    if near.is_empty() {
+        return String::new();
+    }
+    let header = if ours.starts_with("---") {
+        ours.lines()
+            .skip(1)
+            .position(|l| l.trim_end() == "---")
+            .map_or(0, |i| i + 2)
+    } else {
+        0
+    };
+    let lines: Vec<&str> = ours.lines().collect();
+    reader
+        .items(ours, header)
+        .items
+        .iter()
+        .find(|item| {
+            [
+                Some(item.line),
+                item.evidence.as_ref().map(|c| c.line),
+                item.waiver.as_ref().map(|w| w.line),
+            ]
+            .into_iter()
+            .flatten()
+            .any(|n| lines.get(n - 1).is_some_and(|l| l.trim().starts_with(near)))
+        })
+        .map(|item| {
+            format!(
+                ", in Done means item {} '{}'",
+                item.n,
+                item.text.chars().take(60).collect::<String>()
+            )
+        })
+        .unwrap_or_default()
 }
 
 /// The three-way merge of the normalised texts: `Err` with the first

@@ -57,6 +57,38 @@ fn items_of(record: &Record, text: &str, spec: &Spec) -> DoneItems {
     }
 }
 
+/// A type's Done-means declaration, for reading items out of a text that is
+/// not a loaded record (`fix --conflicts` reads the three index stages).
+pub struct ItemsReader(Spec);
+
+impl ItemsReader {
+    /// `None` when the type declares no `statuses.delivery.items`.
+    pub fn of(config: &Config, record_type: &str) -> Option<Self> {
+        spec_for(config, &statuses_by_type(config), record_type).map(ItemsReader)
+    }
+
+    /// The items of `text`, whose header takes its first `header_lines` lines.
+    pub fn items(&self, text: &str, header_lines: usize) -> DoneItems {
+        let body: String = text
+            .split_inclusive('\n')
+            .skip(header_lines)
+            .collect::<Vec<_>>()
+            .concat();
+        let sections =
+            crate::section::parse_sections_to_depth(&body, header_lines + 1, self.0.depth);
+        match super::section::find_section(&sections, &self.0.required) {
+            Some((section, _)) => {
+                done_items::parse_items(&section.body, section.line + 1, section.line, &self.0.decl)
+            }
+            None => DoneItems::default(),
+        }
+    }
+
+    pub fn evidence_marker(&self) -> &str {
+        &self.0.decl.evidence_marker
+    }
+}
+
 /// Reads each opted-in record's declared section into `record.items`. The core
 /// opens no file, so the caller hands the text in, as it does for `section.*`.
 /// A type that declares no `statuses.delivery.items` is left as it was.
