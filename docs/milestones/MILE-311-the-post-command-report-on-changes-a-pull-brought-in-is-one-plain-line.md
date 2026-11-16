@@ -18,8 +18,9 @@ On 2026-11-16 a fast-forward `git pull` of this repository's default branch, bri
 ## Done means
 
 - When every gated path a command changed has, after the command, the content recorded for it in the configured base branch's tree, the post-command report is one sentence naming the count and the branch, at a level below error, shown by a test with a fast-forward pull.
-- A gated path whose content differs from the base branch's tree is still reported at its configured level, including when it arrived in the same command as paths that match, shown by a test.
-- The report names each gate once, not once per file, and the sentence for a person says what, if anything, they need to do.
+- A gated path whose content differs from the base branch's tree is still reported at `error`, the default of the level that the last item makes configurable, including when it arrived in the same command as paths that match, shown by a test.
+- Every post-command report, matching or not, names each gate once, not once per file, and the one-sentence report says that nothing needs doing, shown by a test of its text.
+- A change made to look as if it matches by moving a local ref or committing on the local base branch is still printed, as the one sentence; the existing tests of those cases are updated to assert it, and the spec and decision record that state the report's rule are amended.
 - The level and the comparison branch come from configuration, and the reference page for the harness states that the comparison uses local refs and so is advisory, with CI as the guarantee.
 
 > **Revision log**
