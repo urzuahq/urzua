@@ -257,10 +257,13 @@ mod tests {
                 row("src/b.rs", &["cccccccccccc"], "dddddddddddd")
             ]
         );
-        let merge = format!("2026-11-16 | {}t, identity: asserted, actor: agent): both merged sides re-pinned, `src/a.rs` aaa and bbb -> ccc; the new hash is the merged file's. | **evidence**", crate::conflicts::MERGE_ROW_PREFIX);
+        let merge = format!("2026-11-16 | {}t, identity: asserted, actor: agent): both merged sides re-pinned, `src/a.rs` aaa and bbb -> ccc, `src/b.rs` (Realized-by, occurrence 2) ddd and eee -> fff; the new hash is the merged file's. | **evidence**", crate::conflicts::MERGE_ROW_PREFIX);
         assert_eq!(
             crate::conflicts::merge_row_pins(&merge).unwrap(),
-            vec![row("src/a.rs", &["aaa", "bbb"], "ccc")]
+            vec![
+                row("src/a.rs", &["aaa", "bbb"], "ccc"),
+                row("src/b.rs", &["ddd", "eee"], "fff")
+            ]
         );
         assert!(crate::fix::rebaseline_row_pins("2026-11-16 | Re-baselined by hand | x").is_none());
     }
