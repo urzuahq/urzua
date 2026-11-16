@@ -80,8 +80,10 @@ it is superseded by A. The editor hook judges one file at a time, so neither hal
 
 - `allow` (the default): an edit whose only new errors are such findings, each satisfied by one edit of
   another record, is allowed. The message the agent reads names the other record, the field and value to add,
-  and the command that writes it, `urzua fix --apply --ids <other record> --by <you> --actor agent`, which
-  changes only that field and adds a revision-log row. It never changes a `Status`: a move to `Superseded` is a
+  and the command that writes it, `urzua fix --apply --ids <other record> --actor agent`, which
+  changes only that field and adds a revision-log row. When the other record is a protected path, the edit
+  is refused instead: an agent can write that record neither by an edit nor by `urzua fix`, so a decider
+  makes the paired change. It never changes a `Status`: a move to `Superseded` is a
   separate step, and gated where your `authority` table names it.
 - `refuse`: the edit is refused as it was before this key existed, and the refusal names the same command.
 

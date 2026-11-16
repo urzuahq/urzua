@@ -1104,6 +1104,13 @@ fn judge_record(j: &Judging<'_>, content: String, request: &Request) -> Verdict 
     let (pending, introduced): (Vec<&Finding>, Vec<&Finding>) = introduced
         .into_iter()
         .partition(|f| pending_half(f, &j.rel));
+    // The other half going into a protected path is not one edit the agent
+    // can make, so that half is refused for a decider instead.
+    let (protected, pending): (Vec<&Finding>, Vec<&Finding>) = pending.into_iter().partition(|f| {
+        urzua_core::fix::inverse::UNRECIPROCATED_PROTECTED.contains(&f.action_source.variant)
+    });
+    let protected_note = protected_note(&protected);
+    let introduced: Vec<&Finding> = introduced.into_iter().chain(protected).collect();
     let pending_allowed = urzua_core::harness::PendingPair::Allow
         == j.config
             .harness
@@ -1150,6 +1157,7 @@ fn judge_record(j: &Judging<'_>, content: String, request: &Request) -> Verdict 
         return v;
     }
     note.push_str(&pending_note);
+    note.push_str(&protected_note);
 
     // A "run:" hint repairs the record on disk, so it is shown only for a
     // finding the disk already has; an introduced finding is listed without it.
@@ -1163,10 +1171,24 @@ fn judge_record(j: &Judging<'_>, content: String, request: &Request) -> Verdict 
 /// which one edit of another record (or `urzua fix`) supplies (`MILE-287`).
 fn pending_half(f: &Finding, rel: &Path) -> bool {
     let source = &f.action_source;
-    urzua_core::fix::inverse::UNRECIPROCATED.contains(&source.variant)
+    (urzua_core::fix::inverse::UNRECIPROCATED.contains(&source.variant)
+        || urzua_core::fix::inverse::UNRECIPROCATED_PROTECTED.contains(&source.variant))
         && source.target.file.as_deref().is_some_and(|t| t != rel)
         && source.target.field.is_some()
         && source.value.is_some()
+}
+
+fn protected_note(protected: &[&Finding]) -> String {
+    if protected.is_empty() {
+        return String::new();
+    }
+    let records = protected
+        .iter()
+        .filter_map(|f| f.action_source.target.file.as_deref())
+        .map(|p| p.display().to_string())
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!("\nThe other record of the pair is a protected path ({records}): an agent cannot write it, through an edit or `urzua fix`, so a decider must make the paired change.")
 }
 
 /// What the agent must do next for each pending half: the record, the field
@@ -1183,7 +1205,7 @@ fn follow_up(pending: &[&Finding], allowed: bool) -> String {
                 _ => String::new(),
             };
             format!(
-                "  - add {id} to {field} in {target}: edit that record, or run `urzua fix --apply --ids {target} --by <you> --actor agent` (it writes only that field and a revision-log row, never a Status)"
+                "  - add {id} to {field} in {target}: edit that record, or run `urzua fix --apply --ids {target} --actor agent` (it writes only that field and a revision-log row, never a Status)"
             )
         })
         .collect::<Vec<_>>()

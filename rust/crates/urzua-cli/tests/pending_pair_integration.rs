@@ -377,3 +377,183 @@ fn fix_writes_nothing_to_a_type_the_pair_is_not_declared_for() {
     let (_, v) = run(&dir, &["fix"]);
     assert!(repairs(&v).is_empty(), "{v}");
 }
+
+/// Rewrites the configuration and commits it.
+fn reconfigure(dir: &Path, edit: impl Fn(String) -> String) {
+    let path = dir.join(".urzua/config.yaml");
+    let text = std::fs::read_to_string(&path).unwrap();
+    std::fs::write(&path, edit(text)).unwrap();
+    common::git(dir, &["add", "-A"]);
+    common::git(dir, &["commit", "-q", "-m", "config"]);
+}
+
+fn protect_b(dir: &Path) {
+    reconfigure(dir, |t| {
+        t.replace(
+            "[\".urzua/config.yaml\"]",
+            &format!("[\".urzua/config.yaml\", \"{B}\"]"),
+        )
+    });
+}
+
+#[test]
+fn the_first_half_is_refused_when_the_other_record_is_protected() {
+    let dir = pair_project("protected-hook", "");
+    protect_b(&dir);
+    let (code, v) = edit(&dir, A, &record(1, "Supersedes: ADR-2\n"));
+    assert_eq!((code, v["verdict"].as_str().unwrap()), (1, "block"), "{v}");
+    let m = message(&v);
+    assert!(m.contains("protected"), "{m}");
+    assert!(m.contains("a decider"), "{m}");
+    assert!(!m.contains("urzua fix --apply"), "{m}");
+}
+
+#[test]
+fn fix_does_not_write_the_inverse_into_a_protected_record() {
+    let dir = project(
+        "protected-fix",
+        "",
+        &[(A, record(1, "Supersedes: ADR-2\n")), (B, record(2, ""))],
+    );
+    protect_b(&dir);
+    let (_, v) = run(&dir, &["fix"]);
+    assert!(repairs(&v).is_empty(), "{v}");
+    assert!(v["notices"].to_string().contains("protected"), "{v}");
+    let (_, v) = run(
+        &dir,
+        &[
+            "fix", "--apply", "--ids", B, "--by", "t", "--actor", "agent",
+        ],
+    );
+    assert_ne!(v["status"], "applied", "{v}");
+    let b = std::fs::read_to_string(dir.join(B)).unwrap();
+    assert!(!b.contains("Superseded-by"), "{b}");
+}
+
+#[test]
+fn the_allowed_follow_up_command_runs_as_printed() {
+    let dir = pair_project("printed", "");
+    let half_a = record(1, "Supersedes: ADR-2\n");
+    let (_, v) = edit(&dir, A, &half_a);
+    let m = message(&v);
+    assert!(!m.contains('<'), "a placeholder in: {m}");
+    let start = m.find("`urzua fix").unwrap() + 1;
+    let command = &m[start..start + m[start..].find('`').unwrap()];
+    std::fs::write(dir.join(A), &half_a).unwrap();
+    let argv: Vec<&str> = command.split(' ').skip(1).collect();
+    let (code, applied) = run(&dir, &argv);
+    assert_eq!(
+        (code, applied["status"].as_str().unwrap()),
+        (0, "applied"),
+        "{applied}"
+    );
+    let (code, check) = run(&dir, &["check"]);
+    assert_eq!(code, 0, "{check}");
+}
+
+/// Writes ADR-1 claiming ADR-2, ADR-5 already claiming it, and ADR-2 stating
+/// `field_text` (its other half, in a written form); applies the inverse and
+/// returns ADR-2.
+fn apply_into(name: &str, field_text: &str) -> String {
+    let dir = project(
+        name,
+        "",
+        &[
+            (A, record(1, "Supersedes: ADR-2\n")),
+            (B, record(2, field_text)),
+            ("docs/adr/ADR-5-e.md", record(5, "Supersedes: ADR-2\n")),
+        ],
+    );
+    let (code, v) = run(
+        &dir,
+        &[
+            "fix", "--apply", "--ids", B, "--by", "t", "--actor", "agent",
+        ],
+    );
+    assert_eq!((code, v["status"].as_str().unwrap()), (0, "applied"), "{v}");
+    let (code, check) = run(&dir, &["check"]);
+    assert_eq!(code, 0, "{check}");
+    std::fs::read_to_string(dir.join(B)).unwrap()
+}
+
+#[test]
+fn fix_appends_to_a_flow_list_and_keeps_the_brackets() {
+    let b = apply_into("flow", "Superseded-by: [ADR-5]\n");
+    assert!(b.contains("\nSuperseded-by: [ADR-5, ADR-1]\n"), "{b}");
+}
+
+#[test]
+fn fix_appends_to_a_block_list_as_a_new_item() {
+    let b = apply_into("block", "Superseded-by:\n  - ADR-5\n");
+    assert!(
+        b.contains("\nSuperseded-by:\n  - ADR-5\n  - ADR-1\n"),
+        "{b}"
+    );
+}
+
+#[test]
+fn fix_appends_inside_a_quoted_scalar() {
+    let b = apply_into("quoted", "Superseded-by: \"ADR-5\"\n");
+    assert!(b.contains("\nSuperseded-by: \"ADR-5, ADR-1\"\n"), "{b}");
+}
+
+#[test]
+fn fix_writes_into_a_flow_list_claim_in_the_reverse_direction() {
+    let dir = project(
+        "reverse-flow",
+        "",
+        &[
+            (A, record(1, "Supersedes: [ADR-3]\n")),
+            (B, record(2, "Superseded-by: ADR-1\n")),
+            ("docs/adr/ADR-3-c.md", record(3, "Superseded-by: ADR-1\n")),
+        ],
+    );
+    let (code, v) = run(
+        &dir,
+        &[
+            "fix", "--apply", "--ids", A, "--by", "t", "--actor", "agent",
+        ],
+    );
+    assert_eq!((code, v["status"].as_str().unwrap()), (0, "applied"), "{v}");
+    let a = std::fs::read_to_string(dir.join(A)).unwrap();
+    assert!(a.contains("\nSupersedes: [ADR-3, ADR-2]\n"), "{a}");
+}
+
+#[test]
+fn fix_appends_to_the_combined_supersession_field_in_a_flow_list() {
+    const F: &str = "Supersedes / Superseded-by";
+    let dir = project(
+        "combined",
+        "",
+        &[
+            (A, record(1, &format!("{F}: ADR-2\n"))),
+            (B, record(2, &format!("{F}: [ADR-5]\n"))),
+            ("docs/adr/ADR-5-e.md", record(5, &format!("{F}: ADR-2\n"))),
+        ],
+    );
+    reconfigure(&dir, |t| {
+        let t = t
+            .replace(
+                "  relation.pair-reciprocity: error\n",
+                "  relation.supersession-reciprocity: error\n",
+            )
+            .replace(
+                "known_fields: [\"Supersedes\", \"Superseded-by\"]\n    statuses",
+                &format!("known_fields: [\"{F}\"]\n    statuses"),
+            );
+        let pairs = t.find("relation_pairs:").unwrap();
+        let harness = t.find("harness:").unwrap();
+        format!("{}{}", &t[..pairs], &t[harness..])
+    });
+    let (code, v) = run(
+        &dir,
+        &[
+            "fix", "--apply", "--ids", B, "--by", "t", "--actor", "agent",
+        ],
+    );
+    assert_eq!((code, v["status"].as_str().unwrap()), (0, "applied"), "{v}");
+    let b = std::fs::read_to_string(dir.join(B)).unwrap();
+    assert!(b.contains(&format!("\n{F}: [ADR-5, ADR-1]\n")), "{b}");
+    let (code, check) = run(&dir, &["check"]);
+    assert_eq!(code, 0, "{check}");
+}

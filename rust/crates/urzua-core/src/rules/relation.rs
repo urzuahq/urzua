@@ -52,10 +52,39 @@ pub fn inverse_fix_argv(target: &Path) -> Vec<String> {
         .collect()
 }
 
+fn protected(config: &Config, target: &Path) -> bool {
+    config
+        .authority
+        .as_ref()
+        .is_some_and(|a| a.protects_path(target))
+}
+
+/// An unechoed claim's action: the `urzua fix` command, or, when the target is
+/// a protected path that `fix` and an agent may not write, the `-protected`
+/// variant's edit for a decider.
+fn inverse_action(
+    config: &Config,
+    target: &Path,
+    open: ActionSource,
+    protected_variant: ActionSource,
+) -> ActionSource {
+    if protected(config, target) {
+        protected_variant
+    } else {
+        open.argv(inverse_fix_argv(target))
+    }
+}
+
 /// The way forward an unechoed claim's message ends with.
-fn inverse_hint(target: &Path, field: &str, id: &str) -> String {
+fn inverse_hint(config: &Config, target: &Path, field: &str, id: &str) -> String {
+    if protected(config, target) {
+        return format!(
+            "; {} is a protected path, so a decider adds {id} to its {field}",
+            target.display()
+        );
+    }
     format!(
-        "; add {id} to {field} in {} (`{} --by <you> --actor <agent|human>` writes it; it never changes a Status)",
+        "; add {id} to {field} in {} (`{}` writes it, never changing a Status; with a gh-verified identity add --actor agent or --actor human)",
         target.display(),
         inverse_fix_argv(target).join(" ")
     )
@@ -167,14 +196,18 @@ impl SupersessionCheck<'_> {
                 RULE_RELATION_SUPERSESSION_RECIPROCITY,
                 FindingSeverity::Error,
                 record.path.clone(),
-                ActionSource::new("supersession-unreciprocated")
+                inverse_action(
+                    self.config,
+                    &target.path,
+                    ActionSource::new("supersession-unreciprocated"),
+                    ActionSource::new("supersession-unreciprocated-protected"),
+                )
                     .file(target.path.clone())
                     .field(target_field)
-                    .text(id.clone())
-                    .argv(inverse_fix_argv(&target.path)),
+                    .text(id.clone()),
                 format!(
                     "{field} claims a relation with {reference}, but {reference}'s {target_field} does not reciprocally name {id}{}",
-                    inverse_hint(&target.path, target_field, id)
+                    inverse_hint(self.config, &target.path, target_field, id)
                 ),
             ));
         }
@@ -557,15 +590,19 @@ impl PairReciprocityCheck<'_> {
                 RULE_RELATION_PAIR_RECIPROCITY,
                 declared_severity.unwrap_or(FindingSeverity::Error),
                 record.path.clone(),
-                ActionSource::new("pair-unreciprocated")
+                inverse_action(
+                    self.config,
+                    &target.path,
+                    ActionSource::new("pair-unreciprocated"),
+                    ActionSource::new("pair-unreciprocated-protected"),
+                )
                     .file(target.path.clone())
                     .field(echo)
-                    .text(id.clone())
-                    .argv(inverse_fix_argv(&target.path)),
+                    .text(id.clone()),
                 format!(
                     "{field} claims a relation with {reference} (pair '{}'), but {reference}'s {echo} does not reciprocally name {id}{note}{}",
                     slot.pair.name,
-                    inverse_hint(&target.path, echo, &id)
+                    inverse_hint(self.config, &target.path, echo, &id)
                 ),
             )
             .declared_opt(declared_severity));

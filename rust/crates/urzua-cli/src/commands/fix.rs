@@ -146,7 +146,7 @@ fn run_checked(config_path: Option<PathBuf>, args: FixArgs) -> Result<ExitCode, 
 fn check_usage(args: &FixArgs) -> Result<String, Refusal> {
     if args.tier != 1 {
         return Err(refuse(
-            "only tier 1 is implemented so far -- tiers 2 and 3 are not yet built",
+            "--tier accepts only 1: the one tier-2 repair built, the missing inverse of a relation, runs in every run without it, and tier 3 is not built",
         ));
     }
     if args.apply && args.ids.is_empty() && !args.force {

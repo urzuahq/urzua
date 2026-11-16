@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5Q0XVK27P5T8FN72BN
-Version: '0.53'
+Version: '0.54'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -53,14 +53,18 @@ added, and an `inverse` object naming the claimant, its field, whether B writes 
 implies (to `Superseded`, say) is a separate step, gated where the authority table names the status. The
 repair is read from the rules' own findings, so it covers exactly what `check` reports, in either direction
 (a written inverse with no forward claim gets the forward claim), for every claimant of a list-valued field.
-It is additive: an empty, `null`, `~` or `—` value is replaced, a reference list is appended to (inside `[...]`
-when bracketed), and a value that names no record is never overwritten: it is reported as a warning notice
-instead. A target that does not exist, a target whose type does not declare the field, a claim excluded by a
+It is additive and keeps the form the field is written in: a flow list `[a]` becomes `[a, b]`, a block list
+gains a `- b` line at the items' indent, a quoted scalar `"a"` becomes `"a, b"`, a plain one `a, b`, and an
+empty, `null`, `~` or `—` value becomes the ids; a value that names no record is never overwritten: it is
+reported as a warning notice instead. A target that is a protected path (a path gate of `authority`) is not
+written: the notice says a decider makes the paired change, so `fix` never writes what the editor hook would
+refuse an agent. A target that does not exist, a target whose type does not declare the field, a claim excluded by a
 pair's `types` or `cross_type`, and an acknowledged provisional claim get no repair; the first two are
 reported as notices. `--apply --ids <B>` writes it, adding the field's line at the end of the front matter
 when absent, with one tool-authored revision-log row naming the claim it answers. Either reciprocity rule
-being on is enough for `fix` to run. The `--tier` flag still accepts only 1; the Tier 2 repair runs with the
-default command, which is what the reciprocity findings print. Decided by the builder on 2026-11-16, pending
+being on is enough for `fix` to run. It is Tier 2, the one Tier 2 repair built: `--tier` still accepts only 1, its
+refusal says the Tier 2 repair runs in every run without the flag and that Tier 3 is not built, and the
+default command, which the reciprocity findings print, runs both tiers. Decided by the builder on 2026-11-16, pending
 maintainer review.
 
 ## Detect mode (default, read-only, CI-safe)
@@ -629,3 +633,4 @@ asserted by test, not assumed by convention.
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/fix.rs` 8de563649d5c -> f81c730e2417. Reason: commands/fix.rs dispatches --conflicts to its own module, refuses it beside --rebaseline, --stdin-path, --reason or PATHS, and adds the unmerged-records notice to the rebaseline listing; repair and re-pin logic is unchanged. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/fix.rs` 4a03c290767b -> a2bf44749480, `rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs` e20101f904c9 -> 9a053f2ed41d. Reason: core fix.rs: apply_rebaseline writes its row with the type's evidence class (tool_class unless evidence_class is declared) and a test shape literal gains evidence_class; the detect and re-pin logic is unchanged; fix_rebaseline_integration.rs adds a test that a declared evidence_class is the class of the re-pin row; existing tests are unchanged. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Pin recomputed on merge (attested by beauwilliams, identity: gh-verified, actor: agent): both merged sides re-pinned, `rust/crates/urzua-cli/src/commands/fix.rs` 73f00d578860 and f81c730e2417 -> 913bdc4281bf, `rust/crates/urzua-core/src/fix.rs` 958a755d87a6 and a2bf44749480 -> ad8613947560; the new hash is the merged file's, which is git's automatic merge of the two re-pinned commits. No person wrote a reason for the merged state. **Why:** `urzua fix --conflicts` resolved a conflict that lay only in re-pin lines; a reviewer of the pull request should confirm the merged pin. | **structural** |
+> | 2026-11-16 | Bumped to `0.54`. The inverse repair keeps the field's written form (flow list, block list, quoted or plain scalar) and does not write a protected path; the `--tier` refusal names the Tier 2 repair that runs without the flag. **Why:** review of pull request 546: a bracketed or block list failed to apply, and the repair would have written a file the editor hook refuses an agent. | **substantive** |

@@ -53,6 +53,8 @@ pub struct InverseOf {
     pub claimant_field: String,
     /// The field is not written in the record yet, so the repair adds its line.
     pub field_absent: bool,
+    /// The ids the repair adds, written in the field's own form.
+    pub ids: Vec<String>,
     /// The record's status field, which the repair never writes.
     pub status_field: String,
     pub status: String,
@@ -469,10 +471,12 @@ pub fn apply_repair(
     log_required: bool,
 ) -> Result<String, String> {
     let mut doc = LineDoc::parse(content);
-    if repair.inverse.as_ref().is_some_and(|i| i.field_absent) {
-        insert_header_field(&mut doc, &repair.field, &repair.computed_value)?;
-    } else {
-        replace_stated(&mut doc, repair)?;
+    match &repair.inverse {
+        Some(inv) if inv.field_absent => {
+            insert_header_field(&mut doc, &repair.field, &repair.computed_value)?
+        }
+        Some(inv) => append_ids(&mut doc, &repair.field, &inv.ids)?,
+        None => replace_stated(&mut doc, repair)?,
     }
 
     if !log_required {
@@ -553,6 +557,81 @@ fn insert_header_field(doc: &mut LineDoc, field: &str, value: &str) -> Result<()
     Err(format!(
         "could not add '{field}:' -- the record's front-matter header is not closed"
     ))
+}
+
+/// Appends `ids` to the front-matter field `field`, in the form it is written
+/// in: a flow list `[a]`, a block list of `- a` lines, a quoted scalar or a
+/// plain one; a value that states nothing becomes the ids. Fails when the
+/// field is gone or already names one of the ids (it changed since detect).
+fn append_ids(doc: &mut LineDoc, field: &str, ids: &[String]) -> Result<(), String> {
+    let changed = || format!("the record's '{field}:' changed since detect ran");
+    let mut n = 2;
+    let at = loop {
+        let line = doc.line(n).ok_or_else(changed)?;
+        if line.trim_end() == "---" {
+            return Err(changed());
+        }
+        if line.strip_prefix(field).is_some_and(|r| r.starts_with(':')) {
+            break n;
+        }
+        n += 1;
+    };
+    let line = doc.line(at).unwrap_or_default().to_string();
+    let rest = line[field.len() + 1..].trim();
+    let mut items_end = at;
+    let mut indent = String::from("  ");
+    while let Some(next) = doc.line(items_end + 1) {
+        let body = next.trim_start();
+        if !body.starts_with("- ") || next.len() == body.len() {
+            break;
+        }
+        indent = next[..next.len() - body.len()].to_string();
+        items_end += 1;
+    }
+    let mut written = rest.to_string();
+    for k in at + 1..=items_end {
+        written.push(' ');
+        written.push_str(doc.line(k).unwrap_or_default());
+    }
+    let present =
+        crate::rules::extract_references(&written.replace(['[', ']', '"', '\'', '-'], " "));
+    if ids.iter().any(|id| {
+        present
+            .iter()
+            .any(|p| crate::values::RecordId::new(p) == crate::values::RecordId::new(id))
+    }) {
+        return Err(changed());
+    }
+    let joined = ids.join(", ");
+    if rest.is_empty() && items_end > at {
+        for (i, id) in ids.iter().enumerate() {
+            doc.insert_after(items_end + i, format!("{indent}- {id}"));
+        }
+        return Ok(());
+    }
+    let value = if is_empty_yaml_value(rest) || crate::values::is_no_value_sentinel(rest) {
+        joined
+    } else if let Some(inner) = rest.strip_prefix('[').and_then(|r| r.strip_suffix(']')) {
+        if inner.trim().is_empty() {
+            format!("[{joined}]")
+        } else {
+            format!("[{}, {joined}]", inner.trim())
+        }
+    } else if let Some(q) = ['"', '\'']
+        .into_iter()
+        .find(|q| rest.len() > 1 && rest.starts_with(*q) && rest.ends_with(*q))
+    {
+        let inner = rest[1..rest.len() - 1].trim();
+        if is_empty_yaml_value(inner) {
+            format!("{q}{joined}{q}")
+        } else {
+            format!("{q}{inner}, {joined}{q}")
+        }
+    } else {
+        format!("{rest}, {joined}")
+    };
+    doc.replace_line(at, format!("{field}: {value}"));
+    Ok(())
 }
 
 /// Replaces the stated value of the repair's field on the field's own line.

@@ -18,6 +18,11 @@ use crate::rules::{
 /// The finding variants an inverse repair answers, and those whose target
 /// does not exist.
 pub const UNRECIPROCATED: [&str; 2] = ["supersession-unreciprocated", "pair-unreciprocated"];
+/// The same claims when the counterpart is a protected path.
+pub const UNRECIPROCATED_PROTECTED: [&str; 2] = [
+    "supersession-unreciprocated-protected",
+    "pair-unreciprocated-protected",
+];
 const UNRESOLVED: [&str; 2] = ["supersession-unresolved", "pair-unresolved"];
 
 fn enabled(config: &Config, rule: &str) -> bool {
@@ -75,7 +80,9 @@ pub fn detect(records: &[Record], scope: &[Record], config: &Config) -> (Vec<Rep
             ));
             continue;
         }
-        if !UNRECIPROCATED.contains(&source.variant) {
+        if !UNRECIPROCATED.contains(&source.variant)
+            && !UNRECIPROCATED_PROTECTED.contains(&source.variant)
+        {
             continue;
         }
         let (Some(target), Some(field), Some(crate::report::ActionValue::Text(id))) =
@@ -100,6 +107,22 @@ pub fn detect(records: &[Record], scope: &[Record], config: &Config) -> (Vec<Rep
         let Some(record) = records.iter().find(|r| r.path == target) else {
             continue;
         };
+        // A write the editor hook would refuse an agent is never made easier
+        // through `fix`: a path gate is a decider's to change.
+        if config
+            .authority
+            .as_ref()
+            .is_some_and(|a| a.protects_path(&target))
+        {
+            notices.push(warning(
+                &target,
+                format!(
+                    "{} is a protected path (a path gate of the authority table): fix does not write {field} there; a decider makes the paired change by hand",
+                    target.display()
+                ),
+            ));
+            continue;
+        }
         match repair_for(record, &field, &asks, config) {
             Ok(repair) => repairs.push(repair),
             Err(why) => notices.push(warning(&target, why)),
@@ -205,6 +228,7 @@ fn repair_for(
             claimant: first.claimant.clone(),
             claimant_field: first.claimant_field.clone(),
             field_absent: current.is_none(),
+            ids: ids.iter().map(|i| i.to_string()).collect(),
             status_field: status_field.to_string(),
             status: status_note(status_field),
         }),
