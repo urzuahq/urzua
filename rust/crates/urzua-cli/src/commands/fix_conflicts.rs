@@ -218,7 +218,7 @@ impl Ctx<'_> {
         };
         let heads = super::merge_pins::heads(self.repo_root);
         if let Ok(h) = &heads {
-            if let Some(why) = self.forged_stage(path, h, &ours, &theirs) {
+            if let Some(why) = self.forged_stage(path, h, [&base, &ours, &theirs]) {
                 return Ok(refused(why));
             }
         }
@@ -412,18 +412,26 @@ impl Ctx<'_> {
         &self,
         path: &Path,
         heads: &super::merge_pins::Heads,
-        ours: &str,
-        theirs: &str,
+        [base, ours, theirs]: [&str; 3],
     ) -> Option<String> {
+        let at = |commit: &str| {
+            super::merge_pins::show(self.repo_root, &format!("{commit}:{}", path.display()))
+                .ok()
+                .map(|b| String::from_utf8_lossy(&b).into_owned())
+        };
+        // With several merge bases git's stage 1 is its virtual merge of them,
+        // which is not read back here, so it must match one of them.
+        if !heads.bases.iter().any(|b| at(b).as_deref() == Some(base)) {
+            return Some(format!(
+                "index stage 1 of this record is not the record at the merge base{}: the stage was written by hand, or git merged several merge bases into one, so which pins the two sides moved cannot be told; resolve it by hand",
+                if heads.bases.len() > 1 { "s" } else { "" }
+            ));
+        }
         for (stage, side, commit, text) in [
             (2, "our commit (HEAD)", &heads.ours, ours),
             (3, "their commit", &heads.theirs, theirs),
         ] {
-            let committed =
-                super::merge_pins::show(self.repo_root, &format!("{commit}:{}", path.display()))
-                    .ok()
-                    .map(|b| String::from_utf8_lossy(&b).into_owned());
-            if committed.as_deref() != Some(text) {
+            if at(commit).as_deref() != Some(text) {
                 return Some(format!(
                     "index stage {stage} of this record is not the record at {side}: the stage was written by hand, so what that side committed cannot be told; resolve it by hand"
                 ));

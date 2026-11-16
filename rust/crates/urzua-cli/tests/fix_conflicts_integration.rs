@@ -264,10 +264,11 @@ fn a_record_whose_pinned_file_is_still_unmerged_says_so_and_orders_the_work() {
     assert!(reason.contains("Resolve and stage that file first"), "{v}");
     assert!(!reason.contains("--rebaseline"), "{v}");
     assert_eq!(c["waits_on"], serde_json::json!(["src/a.rs"]), "{v}");
-    assert_eq!(v["next_action"], "urzua fix --conflicts", "{v}");
+    assert_eq!(v["next_action"], "git diff -- :/src/a.rs", "{v}");
+    assert_eq!(v["next_action_inputs"], serde_json::json!([]), "{v}");
     let why = v["next_action_reason"].as_str().unwrap();
     assert!(
-        why.contains("src/a.rs") && why.contains("stage them with git add first"),
+        why.contains("`git add -- :/src/a.rs`, then `urzua fix --conflicts`"),
         "{v}"
     );
     assert_eq!(std::fs::read_to_string(dir.join(REC)).unwrap(), before);
@@ -439,12 +440,62 @@ fn pin_of(dir: &Path, file: &str) -> String {
 
 /// A milestone pinning `src/a.rs` in `Realized-by` and `items` as its Done
 /// means, each `{a}`/`{b}` replaced by that file's pin.
+/// A line `RB: <value>` in `items` replaces the `Realized-by` value and a
+/// line `ROW: <row>` adds a base row after the first.
 fn milestone(n: usize, dir: &Path, items: &str) -> String {
     let (a, b) = (pin_of(dir, "src/a.rs"), pin_of(dir, "src/b.rs"));
     let items = items.replace("{a}", &a).replace("{b}", &b);
+    let mut rb = format!("code:src/a.rs@sha256:{a}, test:t.rs");
+    let mut rows = String::new();
+    let mut body = String::new();
+    for line in items.lines() {
+        if let Some(v) = line.strip_prefix("RB: ") {
+            rb = v.to_string();
+        } else if let Some(r) = line.strip_prefix("ROW: ") {
+            rows.push_str(r);
+            rows.push('\n');
+        } else {
+            body.push_str(line);
+            body.push('\n');
+        }
+    }
     format!(
-        "---\nStatus: Done\nVersion: '1'\nEmbodiment: Implemented\nRealized-by: 'code:src/a.rs@sha256:{a}, test:t.rs'\n---\n# MILE-{n}: T\n\n## Done means\n\n{items}\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Initial. | **structural** |\n"
+        "---\nStatus: Done\nVersion: '1'\nEmbodiment: Implemented\nRealized-by: '{rb}'\n---\n# MILE-{n}: T\n\n## Done means\n\n{body}\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Initial. | **structural** |\n{rows}"
     )
+}
+
+/// The Done-means item lines of `text` with every pin hash blanked.
+fn items_without_hashes(text: &str) -> Vec<String> {
+    let section = text
+        .split("## Done means")
+        .nth(1)
+        .unwrap()
+        .split("> **Revision log**")
+        .next()
+        .unwrap();
+    section
+        .lines()
+        .filter(|l| !l.trim().is_empty())
+        .map(|l| {
+            let mut out = String::new();
+            let mut rest = l;
+            while let Some(at) = rest.find("@sha256:") {
+                out.push_str(&rest[..at + 8]);
+                rest = &rest[at + 8 + 64..];
+            }
+            out.push_str(rest);
+            out
+        })
+        .collect()
+}
+
+fn show(dir: &Path, spec: &str) -> String {
+    let out = Command::new("git")
+        .args(["show", spec])
+        .current_dir(dir)
+        .output()
+        .unwrap();
+    String::from_utf8(out.stdout).unwrap()
 }
 
 const TWO_PINS: &str =
@@ -736,7 +787,9 @@ fn rows_of_one_date_put_the_merged_in_side_first_and_the_version_row_is_not_left
             .find(|l| l.contains("Pin recomputed on merge"))
             .unwrap();
         assert!(
-            merge_row.contains("`Version` is now 3; an earlier row's version 2"),
+            merge_row.contains(
+                "`Version` is set to 3 by this merge, the next number above the higher side's 2"
+            ) && merge_row.contains("states version 2, which was true there"),
             "{merge_row}"
         );
         assert_mclean(&dir, MREC, cont);
@@ -838,10 +891,10 @@ fn a_line_ending_conversion_is_named_not_blamed_on_a_hand_edit() {
     assert!(!reason.contains("edited by hand"), "{v}");
 }
 
-#[test]
-fn a_later_stop_of_a_multi_commit_rebase_where_both_sides_re_pinned_resolves() {
-    let dir = mfixture(
-        "multi",
+/// x re-pins once, y twice in two commits.
+fn multi_fixture(name: &str) -> common::TempDir {
+    mfixture(
+        name,
         &[(MREC.to_string(), TWO_ITEMS.to_string())],
         &|d| {
             edit(d, "src/a.rs", 0, "2;");
@@ -869,7 +922,12 @@ fn a_later_stop_of_a_multi_commit_rebase_where_both_sides_re_pinned_resolves() {
                 "> | 2026-03-03 | Re-baselined by y2. | **structural** |",
             );
         },
-    );
+    )
+}
+
+#[test]
+fn a_later_stop_of_a_multi_commit_rebase_where_both_sides_re_pinned_resolves() {
+    let dir = multi_fixture("multi");
     assert!(
         !git(&dir, &["rebase", "-q", "main"]),
         "the first stop conflicts"
@@ -889,6 +947,20 @@ fn a_later_stop_of_a_multi_commit_rebase_where_both_sides_re_pinned_resolves() {
         "{text}"
     );
     assert_mclean(&dir, MREC, &["rebase", "--continue"]);
+    let merged = multi_fixture("multi-as-merge");
+    assert!(!git(&merged, &["merge", "-q", "main"]));
+    mapply(&merged);
+    let person_only = |t: String| -> String {
+        t.lines()
+            .filter(|l| !l.contains("on merge (attested by"))
+            .map(|l| format!("{l}\n"))
+            .collect()
+    };
+    assert_eq!(
+        person_only(std::fs::read_to_string(dir.join(MREC)).unwrap()),
+        person_only(std::fs::read_to_string(merged.join(MREC)).unwrap()),
+        "the rebased record equals the merged one, machine rows aside"
+    );
 }
 
 #[test]
@@ -935,8 +1007,178 @@ fn thirty_milestones_both_branches_re_pinned_all_resolve_in_one_run() {
         ok(&dir, &["add", p]);
     }
     ok(&dir, &["commit", "-q", "--no-edit"]);
+    for p in &paths {
+        let result = items_without_hashes(&show(&dir, &format!("HEAD:{p}")));
+        for side in ["HEAD^1", "HEAD^2"] {
+            assert_eq!(
+                result,
+                items_without_hashes(&show(&dir, &format!("{side}:{p}"))),
+                "{p} {side}"
+            );
+        }
+    }
     let (code, v) = urzua(&dir, &["check"]);
     assert_eq!(code, Some(0), "{v}");
     let (code, v) = urzua(&dir, &["fix", "--rebaseline"]);
     assert_eq!((code, v["status"].as_str()), (Some(0), Some("ok")), "{v}");
+}
+
+/// Re-pins the `nth` occurrence (from 0) of `file`'s pin in `rec`.
+fn repin_nth(dir: &Path, rec: &str, file: &str, nth: usize) {
+    let text = std::fs::read_to_string(dir.join(rec)).unwrap();
+    let needle = format!("{file}@sha256:");
+    let at = text.match_indices(&needle).nth(nth).unwrap().0 + needle.len();
+    let out = format!("{}{}{}", &text[..at], pin_of(dir, file), &text[at + 64..]);
+    std::fs::write(dir.join(rec), out).unwrap();
+}
+
+fn add_row(dir: &Path, rec: &str, version: &str, row: &str) {
+    let text = std::fs::read_to_string(dir.join(rec)).unwrap();
+    let text = text.replace("Version: '1'", &format!("Version: '{version}'"));
+    std::fs::write(dir.join(rec), format!("{text}{row}\n")).unwrap();
+}
+
+/// Both branches edit `src/a.rs` and re-pin occurrences `repinned` of its pin.
+fn repeated(name: &str, items: &str, repinned: &'static [usize]) -> common::TempDir {
+    mfixture(
+        name,
+        &[(MREC.to_string(), items.to_string())],
+        &move |d| {
+            edit(d, "src/a.rs", 0, "2;");
+            for n in repinned {
+                repin_nth(d, MREC, "src/a.rs", *n);
+            }
+            add_row(d, MREC, "2", X_ROW);
+        },
+        &move |d| {
+            edit(d, "src/a.rs", 1, "3;");
+            for n in repinned {
+                repin_nth(d, MREC, "src/a.rs", *n);
+            }
+            add_row(d, MREC, "2", Y_ROW);
+        },
+    )
+}
+
+#[test]
+fn a_locator_repeated_in_one_item_clause_keeps_each_occurrences_own_pin() {
+    let dir = repeated(
+        "repeat-item",
+        "- Twice. — evidence: code:src/a.rs@sha256:{a}, code:src/a.rs@sha256:{a}\n",
+        &[0, 1],
+    );
+    let old = sha256(A_RS);
+    assert!(!git(&dir, &["merge", "-q", "main"]));
+    let v = mapply(&dir);
+    let merged = pin_of(&dir, "src/a.rs");
+    let text = std::fs::read_to_string(dir.join(MREC)).unwrap();
+    let item = text.lines().find(|l| l.starts_with("- Twice.")).unwrap();
+    assert_eq!(
+        item,
+        format!("- Twice. — evidence: code:src/a.rs@sha256:{merged}, code:src/a.rs@sha256:{old}"),
+        "{v}"
+    );
+    let row = text
+        .lines()
+        .find(|l| l.contains("Pin recomputed on merge"))
+        .unwrap();
+    assert!(row.contains("(Done means item 1)"), "{row}");
+}
+
+#[test]
+fn a_locator_repeated_in_realized_by_keeps_each_occurrences_own_pin() {
+    let dir = repeated(
+        "repeat-rb",
+        "RB: code:src/a.rs@sha256:{a}, code:src/a.rs@sha256:{a}, test:t.rs\n- B works. — evidence: code:src/b.rs@sha256:{b}\n",
+        &[0],
+    );
+    let old = sha256(A_RS);
+    assert!(!git(&dir, &["merge", "-q", "main"]));
+    mapply(&dir);
+    let merged = pin_of(&dir, "src/a.rs");
+    let text = std::fs::read_to_string(dir.join(MREC)).unwrap();
+    assert!(
+        text.contains(&format!(
+            "Realized-by: 'code:src/a.rs@sha256:{merged}, code:src/a.rs@sha256:{old}, test:t.rs'"
+        )),
+        "{text}"
+    );
+}
+
+#[test]
+fn a_version_one_side_set_is_kept_and_no_false_version_row_is_written() {
+    let dir = mfixture(
+        "version-kept",
+        &[(
+            MREC.to_string(),
+            format!("{TWO_ITEMS}ROW: > | 2026-02-01 | Reviewed. Bumped to 1 after review. | **structural** |\n"),
+        )],
+        &|d| {
+            edit(d, "src/b.rs", 0, "2;");
+            repin_all(d, MREC, "2", X_ROW);
+        },
+        &|d| {
+            add_row(d, MREC, "1", "> | 2026-03-01 | Wording. | **editorial** |");
+        },
+    );
+    assert!(!git(&dir, &["merge", "-q", "main"]), "the rows conflict");
+    let v = mapply(&dir);
+    assert_eq!(v["conflicts"][0]["version"], "'2'", "{v}");
+    let text = std::fs::read_to_string(dir.join(MREC)).unwrap();
+    assert!(!text.contains("on merge (attested by"), "{text}");
+    assert!(text.contains("Version: '2'"), "{text}");
+}
+
+#[test]
+fn a_hand_written_merge_base_stage_is_refused() {
+    let dir = one_milestone("forged-base", TWO_PINS, X_ROW, Y_ROW);
+    assert!(!git(&dir, &["merge", "-q", "main"]));
+    let ours = Command::new("git")
+        .args(["rev-parse", &format!(":2:{MREC}")])
+        .current_dir(&*dir)
+        .output()
+        .unwrap()
+        .stdout;
+    let ours = String::from_utf8(ours).unwrap().trim().to_string();
+    let mut child = Command::new("git")
+        .args(["update-index", "--index-info"])
+        .current_dir(&*dir)
+        .stdin(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    use std::io::Write;
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(format!("100644 {ours} 1\t{MREC}\n").as_bytes())
+        .unwrap();
+    assert!(child.wait().unwrap().success());
+    let (code, v) = apply(&dir);
+    assert_eq!(code, Some(1), "{v}");
+    assert!(
+        v["conflicts"][0]["reason"]
+            .as_str()
+            .unwrap()
+            .contains("index stage 1"),
+        "{v}"
+    );
+}
+
+#[test]
+fn check_base_is_clean_after_a_resolve_when_version_bump_leaves_out_the_merge_rows_class() {
+    let config = MILE_CONFIG.replace(
+        "classes: [substantive, structural]",
+        "classes: [substantive]",
+    );
+    let dir = one_milestone("no-bump-class", TWO_PINS, X_ROW, Y_ROW);
+    for branch in ["main", "y"] {
+        ok(&dir, &["checkout", "-q", branch]);
+        std::fs::write(dir.join(".urzua/config.yaml"), &config).unwrap();
+        commit_all(&dir, "config");
+    }
+    assert!(!git(&dir, &["merge", "-q", "main"]));
+    let v = mapply(&dir);
+    assert_eq!(v["conflicts"][0]["version"], "'2'", "{v}");
+    assert_mclean(&dir, MREC, &["commit", "-q", "--no-edit"]);
 }

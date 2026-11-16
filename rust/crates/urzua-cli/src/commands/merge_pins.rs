@@ -17,6 +17,9 @@ pub(crate) struct Heads {
     pub(crate) ours: String,
     pub(crate) theirs: String,
     base: String,
+    /// Every merge base git found; stage 1 is the record at one of them, or
+    /// at git's virtual merge of them.
+    pub(crate) bases: Vec<String>,
     /// A merge or cherry-pick brings theirs into this branch; a rebase
     /// replays this branch's commit (theirs) onto ours.
     pub(crate) incoming_is_theirs: bool,
@@ -47,12 +50,24 @@ fn rev(repo_root: &Path, spec: &str) -> Option<String> {
 pub(crate) fn heads(repo_root: &Path) -> Result<Heads, String> {
     let ours = rev(repo_root, "HEAD").ok_or("there is no HEAD commit")?;
     if let Some(theirs) = rev(repo_root, "MERGE_HEAD") {
-        let base = urzua_io::git::stdout_in(repo_root, &["merge-base", &ours, &theirs])
-            .map(|b| String::from_utf8_lossy(&b).trim().to_string())?;
+        let bases: Vec<String> =
+            urzua_io::git::stdout_in(repo_root, &["merge-base", "--all", &ours, &theirs]).map(
+                |b| {
+                    String::from_utf8_lossy(&b)
+                        .split_whitespace()
+                        .map(str::to_string)
+                        .collect()
+                },
+            )?;
+        let base = bases
+            .first()
+            .cloned()
+            .ok_or("the two commits have no merge base")?;
         return Ok(Heads {
             ours,
             theirs,
             base,
+            bases,
             incoming_is_theirs: true,
         });
     }
@@ -63,6 +78,7 @@ pub(crate) fn heads(repo_root: &Path) -> Result<Heads, String> {
             return Ok(Heads {
                 ours,
                 theirs,
+                bases: vec![base.clone()],
                 base,
                 incoming_is_theirs: head == "CHERRY_PICK_HEAD",
             });

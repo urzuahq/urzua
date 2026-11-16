@@ -2521,12 +2521,15 @@ impl Report for ConflictsReport {
                         }
                     }
                 }
+                let mut diff = vec!["git".to_string(), "diff".to_string(), "--".to_string()];
+                diff.extend(files.iter().map(|f| format!(":/{f}")));
                 (waiting > 0).then(|| NextAction::runs_as_printed(
-                    "urzua fix --conflicts",
+                    shell_command(&diff),
                     format!(
-                        "{} on pinned files that are still unmerged ({}): resolve those files and stage them with git add first, then re-run this command",
+                        "{} on pinned files that are still unmerged ({}). This shows their conflicts; resolve them in the files, then run `{}`, then `urzua fix --conflicts`",
                         if waiting == 1 { "1 record waits".to_string() } else { format!("{waiting} records wait") },
-                        files.join(", ")
+                        files.join(", "),
+                        shell_command(&git_add(files.iter().map(String::as_str)))
                     ),
                 ))
             }

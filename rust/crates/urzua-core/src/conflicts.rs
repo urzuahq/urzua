@@ -48,6 +48,10 @@ pub struct PinSides {
     /// text with its occurrence among items of the same text.
     #[serde(skip)]
     key: String,
+    /// Which occurrence of this locator within the site, from 0: a locator
+    /// written twice in one site is two pins.
+    #[serde(skip)]
+    occurrence: usize,
     pub base: Option<String>,
     pub ours: Option<String>,
     pub theirs: Option<String>,
@@ -90,6 +94,8 @@ pub struct Prepared {
     pub rows: Vec<String>,
     /// How many of `rows` the base lacks: the rows the two sides added.
     pub rows_added: usize,
+    /// The rows the base lacks, in `rows` order.
+    pub added_rows: Vec<String>,
     /// The classes of the rows only ours added, and only theirs: a row the
     /// other side lacks is a change against it, which a version bump may need.
     pub one_sided_classes: (Vec<String>, Vec<String>),
@@ -148,10 +154,9 @@ pub fn prepare(stages: &Stages<'_>, shape: &Shape<'_>) -> Result<Prepared, Strin
     let mut pins: Vec<PinSides> = Vec::new();
     for (side, found) in [(0, &base.pins), (1, &ours.pins), (2, &theirs.pins)] {
         for f in found {
-            let at = match pins
-                .iter()
-                .position(|p| p.key == f.key && p.spelling == f.spelling)
-            {
+            let at = match pins.iter().position(|p| {
+                p.key == f.key && p.spelling == f.spelling && p.occurrence == f.occurrence
+            }) {
                 Some(at) => at,
                 None => {
                     pins.push(PinSides {
@@ -159,6 +164,7 @@ pub fn prepare(stages: &Stages<'_>, shape: &Shape<'_>) -> Result<Prepared, Strin
                         site: f.site.clone(),
                         path: f.path.clone(),
                         key: f.key.clone(),
+                        occurrence: f.occurrence,
                         base: None,
                         ours: None,
                         theirs: None,
@@ -190,10 +196,12 @@ pub fn prepare(stages: &Stages<'_>, shape: &Shape<'_>) -> Result<Prepared, Strin
         (&ours.rows, &theirs.rows)
     };
     let rows = ordered_rows(incoming, this);
-    let rows_added = rows
+    let added_rows: Vec<String> = rows
         .iter()
         .filter(|r| !base.rows.iter().any(|b| row_key(&b.raw) == row_key(&r.raw)))
-        .count();
+        .map(|r| r.raw.clone())
+        .collect();
+    let rows_added = added_rows.len();
     Ok(Prepared {
         base: base.text,
         ours: ours.text,
@@ -202,6 +210,7 @@ pub fn prepare(stages: &Stages<'_>, shape: &Shape<'_>) -> Result<Prepared, Strin
         versions: (ours.version, theirs.version),
         rows: rows.into_iter().map(|r| r.raw.clone()).collect(),
         rows_added,
+        added_rows,
         one_sided_classes,
         item_mismatch,
     })
@@ -262,6 +271,7 @@ struct FoundPin {
     spelling: String,
     path: String,
     hash: String,
+    occurrence: usize,
 }
 
 /// An item's masked lines: equal on two sides when only pin hashes differ.
@@ -336,6 +346,7 @@ fn normalise(content: &str, shape: &Shape<'_>) -> Result<Normalised, String> {
     let mut version = None;
     let version_key = shape.version_field.map(|v| format!("{v}:"));
     let fields = field_lines(&doc, header, shape.evidence_field);
+    let mut seen = Vec::new();
     for n in &fields {
         let line = doc.line(*n).unwrap_or_default().to_string();
         let value = if *n == fields[0] {
@@ -343,15 +354,20 @@ fn normalise(content: &str, shape: &Shape<'_>) -> Result<Normalised, String> {
         } else {
             line.as_str()
         };
-        let (text, found) = mask_pins(&line, value);
-        pins.extend(found.into_iter().map(|(spelling, path, hash)| FoundPin {
-            site: shape.evidence_field.to_string(),
-            key: shape.evidence_field.to_string(),
-            item: None,
-            spelling,
-            path,
-            hash,
-        }));
+        let (text, found) = mask_pins(&line, value, &mut seen);
+        pins.extend(
+            found
+                .into_iter()
+                .map(|(spelling, path, hash, occurrence)| FoundPin {
+                    site: site_name(shape.evidence_field, occurrence),
+                    occurrence,
+                    key: shape.evidence_field.to_string(),
+                    item: None,
+                    spelling,
+                    path,
+                    hash,
+                }),
+        );
         doc.replace_line(*n, text);
     }
     for n in 2..header.max(1) {
@@ -367,15 +383,20 @@ fn normalise(content: &str, shape: &Shape<'_>) -> Result<Normalised, String> {
         if let Some(clause) = &item.evidence {
             let line = doc.line(clause.line).unwrap_or_default().to_string();
             if let Some(at) = line.rfind(clause.text.as_str()) {
-                let (masked, found) = mask_pins(&line[at..], &line[at..]);
-                pins.extend(found.into_iter().map(|(spelling, path, hash)| FoundPin {
-                    site: format!("Done means item {position}"),
-                    key: key.clone(),
-                    item: Some(position),
-                    spelling,
-                    path,
-                    hash,
-                }));
+                let (masked, found) = mask_pins(&line[at..], &line[at..], &mut Vec::new());
+                pins.extend(
+                    found
+                        .into_iter()
+                        .map(|(spelling, path, hash, occurrence)| FoundPin {
+                            site: site_name(&format!("Done means item {position}"), occurrence),
+                            occurrence,
+                            key: key.clone(),
+                            item: Some(position),
+                            spelling,
+                            path,
+                            hash,
+                        }),
+                );
                 doc.replace_line(clause.line, format!("{}{masked}", &line[..at]));
             }
         }
@@ -430,22 +451,68 @@ fn header_end(doc: &LineDoc) -> usize {
         .unwrap_or(1)
 }
 
-/// `line` with each pin hash in `value` masked, and each pin's spelling, path
-/// and hash.
-fn mask_pins(line: &str, value: &str) -> (String, Vec<(String, String, String)>) {
+fn site_name(site: &str, occurrence: usize) -> String {
+    if occurrence == 0 {
+        site.to_string()
+    } else {
+        format!("{site}, occurrence {}", occurrence + 1)
+    }
+}
+
+/// The placeholder of one occurrence of a locator: the same on every side
+/// when the locator sits at the same position of the same site.
+fn pin_mark(spelling: &str, occurrence: usize) -> String {
+    format!("{spelling}{PIN_MARK}-{occurrence}")
+}
+
+/// `text` with the first exact occurrence of `old` at or after byte `from`
+/// replaced by `new` (a path character before it, or an alphanumeric after
+/// it, is not a match), and the byte after the replacement.
+fn replace_first(text: &str, old: &str, new: &str, from: usize) -> Option<(String, usize)> {
+    let path_char = |c: char| c.is_alphanumeric() || "_./-~@+%".contains(c);
+    text[from..]
+        .match_indices(old)
+        .map(|(at, _)| at + from)
+        .find(|&at| {
+            text[..at].chars().next_back().is_none_or(|c| !path_char(c))
+                && text[at + old.len()..]
+                    .chars()
+                    .next()
+                    .is_none_or(|c| !c.is_ascii_alphanumeric())
+        })
+        .map(|at| {
+            (
+                format!("{}{new}{}", &text[..at], &text[at + old.len()..]),
+                at + new.len(),
+            )
+        })
+}
+
+/// `line` with each pin hash in `value` masked, one occurrence at a time, and
+/// each pin's spelling, path, hash and occurrence within the site; `seen`
+/// counts the spellings already met in the site.
+fn mask_pins(
+    line: &str,
+    value: &str,
+    seen: &mut Vec<String>,
+) -> (String, Vec<(String, String, String, usize)>) {
     let unquoted = value.trim().trim_matches(|c| c == '\'' || c == '"');
     let mut text = line.to_string();
+    let mut cursor = line.len() - value.len();
     let mut pins = Vec::new();
     for entry in crate::locator::realized_by_locators(unquoted) {
         let Ok(locator) = entry.parsed else { continue };
         let Some(crate::locator::Anchor::Pin(hash)) = locator.anchor else {
             continue;
         };
+        let occurrence = seen.iter().filter(|s| **s == locator.spelling).count();
         let old = format!("{}@sha256:{hash}", locator.spelling);
-        let new = format!("{}{PIN_MARK}", locator.spelling);
-        if let Some(masked) = crate::fix::replace_exact_pin(&text, &old, &new) {
+        let new = pin_mark(&locator.spelling, occurrence);
+        if let Some((masked, end)) = replace_first(&text, &old, &new, cursor) {
             text = masked;
-            pins.push((locator.spelling, locator.path, hash));
+            cursor = end;
+            seen.push(locator.spelling.clone());
+            pins.push((locator.spelling, locator.path, hash, occurrence));
         }
     }
     (text, pins)
@@ -492,8 +559,8 @@ pub fn higher_version(a: &str, b: &str) -> Result<String, String> {
 /// Builds the resolved record from the clean merge of the normalised texts:
 /// pins restored at their sites (each recomputed one from `recomputed`, by
 /// its index in `prepared.pins`), the higher version, the rows in
-/// `prepared.rows` order and, when a pin was recomputed or a kept row states a
-/// version the merge superseded, one machine-written row saying so.
+/// `prepared.rows` order and, when a pin was recomputed or the merge set a
+/// version neither side had, one machine-written row saying so.
 pub fn rebuild(
     merged: &str,
     prepared: &Prepared,
@@ -504,12 +571,8 @@ pub fn rebuild(
 ) -> Result<Resolved, String> {
     let (mut text, pins) = restore_pins(merged, prepared, recomputed, shape)?;
     let recomputed_any = pins.iter().any(|p| p.recomputed);
-    let mut version = merged_version(prepared, shape, recomputed_any)?;
-    let mut superseded = superseded_versions(prepared, version.as_deref());
-    if !recomputed_any && !superseded.is_empty() {
-        version = merged_version(prepared, shape, true)?;
-        superseded = superseded_versions(prepared, version.as_deref());
-    }
+    let version = merged_version(prepared, shape, recomputed_any)?;
+    let note = version_set_by_merge(prepared, version.as_deref());
     if let Some(v) = &version {
         text = text.replace(VERSION_MARK, v);
     }
@@ -527,10 +590,6 @@ pub fn rebuild(
         after += 1;
     }
     let moved: Vec<&PinOutcome> = pins.iter().filter(|p| p.recomputed).collect();
-    let note = version
-        .as_deref()
-        .filter(|_| !superseded.is_empty())
-        .map(|v| version_note(v, &superseded));
     let narrative = match (moved.is_empty(), note) {
         (false, note) => Some(merge_narrative(&moved, attestation, note.as_deref())),
         (true, Some(note)) => Some(format!(
@@ -578,7 +637,7 @@ fn restore_pins(
     );
     let mut pins = Vec::new();
     for (i, p) in prepared.pins.iter().enumerate() {
-        let mark = format!("{}{PIN_MARK}", p.spelling);
+        let mark = pin_mark(&p.spelling, p.occurrence);
         let lines: Vec<usize> = sites
             .iter()
             .filter(|(n, key)| *key == p.key && doc.line(*n).is_some_and(|l| l.contains(&mark)))
@@ -600,7 +659,7 @@ fn restore_pins(
             let line = doc.line(n).unwrap_or_default().to_string();
             doc.replace_line(
                 n,
-                crate::fix::replace_exact_pin(&line, &mark, &pinned).unwrap_or(line),
+                replace_first(&line, &mark, &pinned, 0).map_or(line, |(t, _)| t),
             );
         }
         pins.push(PinOutcome {
@@ -623,24 +682,39 @@ fn restore_pins(
     Ok((text, pins))
 }
 
-/// The versions some added row states that are no longer the record's
-/// version: a row naming the version field (or a bump) and one side's version.
-fn superseded_versions(prepared: &Prepared, final_version: Option<&str>) -> Vec<String> {
-    let Some(final_version) = final_version else {
-        return Vec::new();
+/// What the merge row says when the merge set a version neither side
+/// had (a bump above the higher side's): the number, why, and each version a
+/// row added by one side states that the merge superseded. `None` when the
+/// version is one side's, which needs no row.
+fn version_set_by_merge(prepared: &Prepared, final_version: Option<&str>) -> Option<String> {
+    let (Some(o), Some(t)) = &prepared.versions else {
+        return None;
     };
-    let mut out: Vec<String> = Vec::new();
-    let (ours, theirs) = &prepared.versions;
-    for v in [ours, theirs].into_iter().flatten() {
-        let bare = v.trim_matches(|c| c == '\'' || c == '"').to_string();
-        if numbers(v) == numbers(final_version) || out.contains(&bare) {
-            continue;
-        }
-        if prepared.rows.iter().any(|r| states_version(r, &bare)) {
-            out.push(bare);
+    let final_version = final_version?;
+    if numbers(o) == numbers(final_version) || numbers(t) == numbers(final_version) {
+        return None;
+    }
+    let bare = |v: &str| v.trim_matches(|c| c == '\'' || c == '"').to_string();
+    let higher = higher_version(o, t).ok()?;
+    let mut stated: Vec<String> = Vec::new();
+    for v in [bare(o), bare(t)] {
+        if !stated.contains(&v) && prepared.added_rows.iter().any(|r| states_version(r, &v)) {
+            stated.push(v);
         }
     }
-    out
+    let superseded = if stated.is_empty() {
+        String::new()
+    } else {
+        format!(
+            " A row added on a branch states version {}, which was true there and is superseded by this merge.",
+            stated.join(" and ")
+        )
+    };
+    Some(format!(
+        "`Version` is set to {} by this merge, the next number above the higher side's {}, because `version_bump` requires a new version for the rows this merge combines.{superseded}",
+        bare(final_version),
+        bare(&higher)
+    ))
 }
 
 fn states_version(row: &str, version: &str) -> bool {
@@ -656,14 +730,6 @@ fn states_version(row: &str, version: &str) -> bool {
             && (edge(after)
                 || (after == Some('.') && edge(row[at + version.len() + 1..].chars().next())))
     })
-}
-
-fn version_note(final_version: &str, superseded: &[String]) -> String {
-    let bare = final_version.trim_matches(|c| c == '\'' || c == '"');
-    format!(
-        "`Version` is now {bare}; an earlier row's version {} was written before this merge and is superseded by it.",
-        superseded.join(" and ")
-    )
 }
 
 /// The higher version, bumped once more when the rows this merge adds against
@@ -712,7 +778,7 @@ pub fn bump_version(v: &str) -> String {
 pub const MERGE_ROW_PREFIX: &str = "Pin recomputed on merge (attested by ";
 
 /// What starts the row `fix --conflicts` writes when it recomputed no pin but
-/// a kept row states a version the merge superseded.
+/// set a version neither side had.
 pub const VERSION_ROW_PREFIX: &str = "Version set on merge (attested by ";
 
 /// Whether `row` is one `fix --conflicts` writes.
@@ -794,6 +860,7 @@ mod tests {
             site: "Realized-by".into(),
             path: "src/a.rs".into(),
             key: "Realized-by".into(),
+            occurrence: 0,
             base: Some(base.into()),
             ours: Some(ours.into()),
             theirs: Some(theirs.into()),
