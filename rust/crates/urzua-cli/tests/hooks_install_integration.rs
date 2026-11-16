@@ -284,10 +284,16 @@ fn a_hooks_path_outside_the_repository_is_refused_with_the_line_to_add() {
     );
     assert!(!outside.join("pre-commit").exists());
     let checks = hook_checks(&dir);
+    assert!(checks[0].get("fix").is_none(), "{checks:?}");
     assert!(
-        checks[0]["fix"].as_str().unwrap().starts_with("add `"),
+        checks[0]["message"]
+            .as_str()
+            .unwrap()
+            .contains("hooks run pre-commit || exit $?"),
         "{checks:?}"
     );
+    let (_, doctor) = urzua(&dir, &["doctor"]);
+    assert!(doctor["next_action"].is_null(), "{doctor}");
 }
 
 #[test]
@@ -378,10 +384,9 @@ fn assert_stanza_shape(text: &str) {
     assert_eq!(hooks.len(), 2);
     for (hook, stage) in hooks.iter().zip(["pre-commit", "pre-push"]) {
         assert_eq!(hook["id"].as_str(), Some(format!("urzua-{stage}").as_str()));
-        assert_eq!(
-            hook["entry"].as_str(),
-            Some(format!("urzua hooks run {stage}").as_str())
-        );
+        let entry = hook["entry"].as_str().unwrap();
+        assert!(entry.starts_with("sh -c '"), "{entry}");
+        assert!(entry.contains(&format!("hooks run {stage}")), "{entry}");
         assert_eq!(hook["language"].as_str(), Some("system"));
         assert_eq!(hook["pass_filenames"].as_bool(), Some(false));
         assert_eq!(hook["always_run"].as_bool(), Some(true));
@@ -494,7 +499,7 @@ fn a_commit_with_a_broken_record_is_blocked_and_a_clean_one_passes() {
 }
 
 #[test]
-fn a_missing_binary_blocks_with_how_to_install_and_skip_and_warn_lets_it_through() {
+fn a_missing_binary_warns_loudly_by_default_and_blocks_when_configured() {
     let dir = fixture("missing");
     let (code, _) = urzua(&dir, &["hooks", "install"]);
     assert_eq!(code, 0);
@@ -513,31 +518,43 @@ fn a_missing_binary_blocks_with_how_to_install_and_skip_and_warn_lets_it_through
             .output()
             .unwrap()
     };
-    if std::path::Path::new("/usr/bin/urzua").exists()
-        || std::path::Path::new("/bin/urzua").exists()
-    {
-        eprintln!("SKIPPED a_missing_binary_blocks...: urzua is installed system-wide");
+    if Path::new("/usr/bin/urzua").exists() || Path::new("/bin/urzua").exists() {
+        eprintln!("SKIPPED a_missing_binary_warns...: urzua is installed system-wide");
         return;
     }
     let out = commit_without_urzua(&dir);
     let stderr = String::from_utf8_lossy(&out.stderr);
-    assert!(!out.status.success(), "{stderr}");
-    assert!(stderr.contains("urzua is not installed"), "{stderr}");
-    assert!(stderr.contains("git commit --no-verify"), "{stderr}");
+    assert!(out.status.success(), "{stderr}");
+    assert!(stderr.contains("urzua did not run"), "{stderr}");
+    assert!(stderr.contains("NOT checked"), "{stderr}");
+    assert!(stderr.contains("CI will check"), "{stderr}");
     assert!(stderr.contains("install.md"), "{stderr}");
+    assert!(!stderr.contains("--no-verify"), "{stderr}");
 
     std::fs::write(
         dir.join(".urzua/config.yaml"),
-        format!("{CONFIG}hooks:\n  on_not_run: warn\n"),
+        format!("{CONFIG}hooks:\n  on_not_run: block\n"),
     )
     .unwrap();
+    let (code, status) = urzua(&dir, &["hooks", "status"]);
+    assert_eq!(code, 1, "{status}");
+    assert_eq!(
+        states(&status),
+        ["pre-commit=stale-policy", "pre-push=stale-policy"]
+    );
+    assert_eq!(status["next_action"], "urzua hooks install");
     let (_, report) = urzua(&dir, &["hooks", "install"]);
     assert_eq!(states(&report), ["pre-commit=updated", "pre-push=updated"]);
+    std::fs::write(
+        dir.join("docs/adr/ADR-3-c.md"),
+        "---\nStatus: Draft\n---\n# C\n",
+    )
+    .unwrap();
     common::git(&dir, &["add", "-A"]);
     let out = commit_without_urzua(&dir);
     let stderr = String::from_utf8_lossy(&out.stderr);
-    assert!(out.status.success(), "{stderr}");
-    assert!(stderr.contains("urzua is not installed"), "{stderr}");
+    assert!(!out.status.success(), "{stderr}");
+    assert!(stderr.contains("git commit --no-verify"), "{stderr}");
 }
 
 #[test]
@@ -565,7 +582,9 @@ fn the_hooks_key_names_what_each_hook_runs_and_rejects_an_empty_list() {
     let (code, report) = urzua(&dir, &["hooks", "status"]);
     assert_eq!(code, 2, "{report}");
     assert!(
-        report.to_string().contains("hooks: 'pre-push' must list"),
+        report
+            .to_string()
+            .contains("hooks: 'pre-push' must run `check`"),
         "{report}"
     );
 }

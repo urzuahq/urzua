@@ -36,14 +36,20 @@ struct DoctorCheck {
 /// What is wrong with the local git hook layers, as plain messages: the
 /// session-start check of the harness reads the same wiring `doctor` does.
 pub(crate) fn git_hook_problems(repo_root: &std::path::Path) -> Vec<String> {
-    hook_checks(repo_root)
+    let decl = load_config(&crate::discovery::default_config_path(repo_root))
+        .map(|c| c.hooks)
+        .unwrap_or_default();
+    hook_checks(repo_root, &decl)
         .into_iter()
         .filter(|c| c.status != DoctorStatus::Ok)
         .map(|c| c.message)
         .collect()
 }
 
-fn hook_checks(repo_root: &std::path::Path) -> Vec<DoctorCheck> {
+fn hook_checks(
+    repo_root: &std::path::Path,
+    decl: &urzua_core::config::HooksDecl,
+) -> Vec<DoctorCheck> {
     let layout = match hooks::detect(repo_root) {
         Ok(l) => l,
         Err(message) => {
@@ -63,7 +69,7 @@ fn hook_checks(repo_root: &std::path::Path) -> Vec<DoctorCheck> {
     };
     hooks::HOOKS
         .iter()
-        .zip(hooks::wiring(&layout))
+        .zip(hooks::wiring(&layout, decl))
         .map(|(layer, w)| {
             let (status, state, message, fix) = match w {
                 Err(message) => (DoctorStatus::Error, None, message, None),
@@ -226,7 +232,7 @@ pub fn run(config: Option<PathBuf>) -> ExitCode {
     // a local layer is a convenience and only CI is the guarantee, so a clone
     // without hooks is reported but does not fail doctor. A hook directory
     // that cannot be read is an error: not-knowing is not the same as absent.
-    checks.extend(hook_checks(&repo_root));
+    checks.extend(hook_checks(&repo_root, &config.hooks));
 
     // The agent harness (ADR-89), when the configuration declares one.
     for (level, check, message) in crate::harness::doctor_checks(&repo_root, &config) {

@@ -148,10 +148,13 @@ urzua hooks install
 
 It writes where git runs the hooks from: `.git/hooks`, the directory `core.hooksPath` names when it is
 inside the repository, or `.husky/` for husky. The pre-commit hook runs `urzua check --base HEAD` (the
-records changed since the last commit, staged or not, with the diff rules) and the pre-push hook runs
-`urzua check`; `hooks:` in the config changes either. An existing hook is never replaced: urzua appends
-a marked block after it (before a trailing `exec` line), and `urzua hooks uninstall` removes only that
-block. A Node or Python hook, or a hooks path outside the repository, is refused with the line to add.
+records changed since the last commit, staged or not, with the diff rules; about 9 seconds with a release
+build on urzua's own repository of about 670 records) and the pre-push hook runs `urzua check`;
+`hooks:` in the config changes either to another `check`, such as a cheaper one. An existing hook is never
+replaced: urzua adds a marked block after its last command (before it when that is an `exit` or `exec`),
+and `urzua hooks uninstall` removes only that block. A hook the block might not run in (an `exit` or `exec`
+elsewhere, a `trap`, a final `fi`), a Node or Python hook, a symlinked hook, or a hooks path outside the
+repository is refused with the line to add.
 
 With the [pre-commit framework](https://pre-commit.com), add this under `repos:` in
 `.pre-commit-config.yaml` (or run `urzua hooks install --write-config`), then
@@ -162,26 +165,30 @@ With the [pre-commit framework](https://pre-commit.com), add this under `repos:`
     hooks:
       - id: urzua-pre-commit
         name: urzua (pre-commit)
-        entry: urzua hooks run pre-commit
+        entry: 'sh -c ''b="${URZUA_BIN:-urzua}"; if command -v "$b" >/dev/null 2>&1; then exec "$b" hooks run pre-commit; fi; echo "pre-commit: urzua did not run (not installed), so the records were NOT checked; install it: https://github.com/urzuahq/urzua/blob/main/docs/reference/install.md -- CI will check them" >&2; exit 0'''
         language: system
         pass_filenames: false
         always_run: true
         stages: [pre-commit]
       - id: urzua-pre-push
         name: urzua (pre-push)
-        entry: urzua hooks run pre-push
+        entry: 'sh -c ''b="${URZUA_BIN:-urzua}"; if command -v "$b" >/dev/null 2>&1; then exec "$b" hooks run pre-push; fi; echo "pre-push: urzua did not run (not installed), so the records were NOT checked; install it: https://github.com/urzuahq/urzua/blob/main/docs/reference/install.md -- CI will check them" >&2; exit 0'''
         language: system
         pass_filenames: false
         always_run: true
         stages: [pre-push]
 ```
 
-The framework finds `urzua` on `PATH` itself; it does not read `URZUA_BIN`.
+The entry finds urzua as the other hooks do (`URZUA_BIN`, then `PATH`) and prints urzua's own message
+when it is missing, not the framework's "executable not found".
 
 A hook that finds blocking findings prints their count and each one's rule, file and message, and the
-command for the full report. When urzua is not installed (neither `URZUA_BIN` nor `PATH` finds it), or the
-check cannot run, the hook stops the commit and says how to install urzua and how to skip the hook once
-with `git commit --no-verify`; set `hooks.on_not_run: warn` to let it through with the same message.
+command for the full report, and stops the commit. When urzua is not installed (neither `URZUA_BIN` nor
+`PATH` finds it), is a release without `hooks run`, or the check cannot run, the hook prints one line saying
+urzua did not run, the records were NOT checked, how to install or upgrade it and that CI will check them,
+and lets the commit through: one person's install can be committed with the hooks, and a contributor who
+never installed urzua must still be able to commit. Set `hooks.on_not_run: block` to stop the commit
+instead (the message then names `git commit --no-verify`).
 
 `urzua doctor`, `urzua hooks status` and the harness session-start check report each hook in any of these
 layouts, and name the command that wires one that is missing. CI remains the guarantee: a hook can be

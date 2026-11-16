@@ -104,7 +104,7 @@ pub struct Config {
     pub authority: Option<crate::authority::AuthorityDecl>,
     /// What the git hooks `urzua hooks install` wires run (`ADR-71` amendment
     /// of 2026-11-16, `MILE-220`, `SPEC-3`). Absent means `check --base HEAD`
-    /// at pre-commit, `check` at pre-push, and a hook that blocks when urzua
+    /// at pre-commit, `check` at pre-push, and a hook that warns when urzua
     /// cannot run.
     #[serde(default, skip_serializing_if = "HooksDecl::is_default")]
     pub hooks: HooksDecl,
@@ -123,14 +123,24 @@ pub struct HooksDecl {
     pub on_not_run: HookOnNotRun,
 }
 
-/// `block` stops the commit or push with a message naming how to install urzua
-/// and how to skip once; `warn` prints the message and lets it through.
+/// `warn` (the default) says loudly that the records were not checked and
+/// lets the commit or push through, since CI remains the guarantee; `block`
+/// stops it and names how to skip once. A blocking finding always blocks.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum HookOnNotRun {
-    #[default]
     Block,
+    #[default]
     Warn,
+}
+
+impl HookOnNotRun {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            HookOnNotRun::Block => "block",
+            HookOnNotRun::Warn => "warn",
+        }
+    }
 }
 
 impl HooksDecl {
@@ -3104,22 +3114,21 @@ pub fn parse_with_document_models(
     Ok((config, models))
 }
 
-/// Each hook runs a urzua subcommand: an empty list or one starting with a flag
-/// would install a hook that runs nothing useful.
+/// A hook runs only a read-only check: another subcommand could write files
+/// (`fix --apply`), reach the network (`refs`) or call the hook again
+/// (`hooks run`) on every commit.
 fn validate_hooks(hooks: &HooksDecl) -> Result<(), ConfigError> {
     for (name, args) in [
         ("pre-commit", &hooks.pre_commit),
         ("pre-push", &hooks.pre_push),
     ] {
-        match args.first() {
-            Some(first) if first.starts_with(|c: char| c.is_ascii_alphabetic()) => {}
-            _ => {
-                return Err(ConfigError::InvalidHooks {
-                    reason: format!(
-                        "'{name}' must list the urzua arguments the hook runs, starting with a subcommand (for example [check])"
-                    ),
-                })
-            }
+        if !matches!(args.first().map(String::as_str), Some("check" | "audit")) {
+            return Err(ConfigError::InvalidHooks {
+                reason: format!(
+                    "'{name}' must run `check` (or its alias `audit`) with its flags, for example [check, --base, HEAD]; got [{}]",
+                    args.join(", ")
+                ),
+            });
         }
     }
     Ok(())
