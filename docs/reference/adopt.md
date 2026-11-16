@@ -183,7 +183,12 @@ The most common ADR style has no header block: files `docs/adr/0001-record-archi
 a heading `# 1. Record architecture decisions`, a line `Date: 2021-03-04`, then `## Status` (body
 `Accepted` or `Superseded by ADR 0007`), `## Context`, `## Decision` and `## Consequences`. `urzua init`
 proposes a type for such a directory when at least two of its files share a `##` heading that at least
-80% of them carry. For fifteen such records, one of them missing `## Decision`, and a `README.md` index
+80% of them carry (compared without letter case or a trailing colon), and either one of those headings is
+a decision-record heading (`Status`, `Context`, `Decision`, `Consequences`, `Decision Outcome`, `Context
+and Problem Statement`, `Decision Drivers`, `Considered Options`) or the directory is named `adr`, `adrs`,
+`decisions`, `rfc` or `rfcs`. A numbered directory that fails this, such as tutorial pages sharing `##
+Prerequisites`, is named in a notice as ordinary pages; declare it under `record_types` by hand if it does
+hold records. For fifteen such records, one of them missing `## Decision`, and a `README.md` index
 beside them, it writes:
 
 ```yaml
@@ -209,8 +214,9 @@ rules:
 
 The proposal's `notes` (in `urzua init --dry-run`'s `proposed` entry) list the threshold, each file that
 lacks a required section, the headings too rare to require, every number more than one file carries, and
-the files written under `exclude_files` (`README.md`, `index.md`, and a file with no number beside
-numbered ones). Remove a name from `exclude_files` if it is in fact a record.
+the other spellings of a heading, and the files written under `exclude_files` (`README.md`, `index.md`,
+and a file with no number and no header beside numbered ones; a numberless file that has a header stays a
+record). Remove a name from `exclude_files` if it is in fact a record.
 
 What `check` then checks for these records:
 

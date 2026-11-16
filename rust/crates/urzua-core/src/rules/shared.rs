@@ -37,7 +37,7 @@ pub(super) fn scoped_census_records<'a, T>(
                 .get(&record.record_type)
                 .is_some_and(|t| t.has_no_header())
             {
-                return Outcome::OutOfScope;
+                return Outcome::OutOfScopeNoHeader;
             }
             body(candidate)
         },

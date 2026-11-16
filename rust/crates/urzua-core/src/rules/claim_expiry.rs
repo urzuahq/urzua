@@ -397,7 +397,7 @@ pub fn embodiment_claim_expired(
                 .get(&record.record_type)
                 .is_some_and(|t| t.has_no_header())
             {
-                return Outcome::OutOfScope;
+                return Outcome::OutOfScopeNoHeader;
             }
             let standing = match standing_of(record) {
                 Ok(s) => s,

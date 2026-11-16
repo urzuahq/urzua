@@ -775,7 +775,7 @@ pub fn detect_rebaselines(
             .get(&record.record_type)
             .is_some_and(|t| t.has_no_header())
         {
-            return Outcome::OutOfScope;
+            return Outcome::OutOfScopeNoHeader;
         }
         let locator_field =
             relation_field_name(config, &record.record_type, RelationRole::EmbodimentLocator);

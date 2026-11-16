@@ -506,6 +506,15 @@ pub enum Outcome {
     /// reaches nothing, does not warn about a rule that was told to wait for a
     /// diff.
     DeferredByScope,
+    /// The record's type declares `header_shape: none` and the rule reads a
+    /// header (`ADR-50`). Counted in `out_of_scope` as before, and also apart,
+    /// so `config.scope-matches-nothing` does not warn about a type the
+    /// repository declared headerless on purpose.
+    OutOfScopeNoHeader,
+    /// The record's file name yields no identity under the type's convention
+    /// (`BUG-61`). Counted in `out_of_scope`, and also apart, because
+    /// `filename.identity-pattern` reports each such file with its rename.
+    OutOfScopeNoIdentity,
 }
 
 /// Run `body` over a population and report what it judged.
@@ -524,21 +533,35 @@ pub fn census<T>(
     let mut out_of_scope = 0;
     let mut unreadable = 0;
     let mut deferred_by_scope = 0;
+    let mut no_header = 0;
+    let mut no_identity = 0;
     for candidate in &candidates {
         match body(candidate) {
             Outcome::Examined => examined += 1,
             Outcome::OutOfScope => out_of_scope += 1,
+            Outcome::OutOfScopeNoHeader => {
+                out_of_scope += 1;
+                no_header += 1;
+            }
+            Outcome::OutOfScopeNoIdentity => {
+                out_of_scope += 1;
+                no_identity += 1;
+            }
             Outcome::Unreadable => unreadable += 1,
             Outcome::DeferredByScope => deferred_by_scope += 1,
             Outcome::Absent => {}
         }
     }
-    Population::build(
-        unit,
-        eligible,
-        examined,
-        (out_of_scope, unreadable, deferred_by_scope),
-    )
+    Population {
+        no_header,
+        no_identity,
+        ..Population::build(
+            unit,
+            eligible,
+            examined,
+            (out_of_scope, unreadable, deferred_by_scope),
+        )
+    }
 }
 
 /// `census`, also reporting *which* records were judged.
@@ -621,6 +644,15 @@ pub struct Population {
     /// before.
     #[serde(skip_serializing_if = "is_zero")]
     excused_lines: usize,
+    /// The part of `out_of_scope` that is records of a `header_shape: none`
+    /// type handed to a rule that reads a header. Not serialized: the JSON
+    /// `out_of_scope` is unchanged.
+    #[serde(skip)]
+    no_header: usize,
+    /// The part of `out_of_scope` whose file name yields no identity. Not
+    /// serialized.
+    #[serde(skip)]
+    no_identity: usize,
 }
 
 fn is_zero(n: &usize) -> bool {
@@ -659,6 +691,18 @@ impl Population {
     /// record is not in the diff's changed set (`ADR-90`).
     pub fn deferred_by_scope(&self) -> usize {
         self.deferred_by_scope
+    }
+
+    /// `out_of_scope` less the records of a type declared headerless and,
+    /// when another rule already reports them, the records with no identity:
+    /// the candidates the configuration fails to reach unreported.
+    pub fn out_of_scope_unreported(&self, identity_reported: bool) -> usize {
+        let identity = if identity_reported {
+            self.no_identity
+        } else {
+            0
+        };
+        self.out_of_scope - self.no_header - identity
     }
 
     /// How many lines a declared `ignore_marker` excused (`ADR-80` amendment).
@@ -723,6 +767,8 @@ impl Population {
             unreadable,
             deferred_by_scope,
             excused_lines: 0,
+            no_header: 0,
+            no_identity: 0,
         }
     }
 }

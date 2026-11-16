@@ -2348,7 +2348,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_CONFIG_SCOPE_MATCHES_NOTHING,
-        description: "Judges the run itself, not the corpus: whether the configuration's declared rules reached what they were handed, from the other rules' own executions (`MILE-106`). It also reports a section rule that is enabled while no record type declares the `sections` key it reads (`sections.required`, `sections.unique_headings`, `sections.no_skipped_levels` or `sections.order`): such a rule has no candidate to count out of scope, so no run could show it (`BUG-73`'s class).",
+        description: "Judges the run itself, not the corpus: whether the configuration's declared rules reached what they were handed, from the other rules' own executions (`MILE-106`). It also reports a section rule that is enabled while no record type declares the `sections` key it reads (`sections.required`, `sections.unique_headings`, `sections.no_skipped_levels` or `sections.order`): such a rule has no candidate to count out of scope, so no run could show it (`BUG-73`'s class). It does not count a record of a type declared `header_shape: none` handed to a rule that reads a header, nor, while `filename.identity-pattern` runs and reports each one, a record whose file name yields no identity.",
         scope: Scope::Run,
         anchor: Anchor::Config,
         judges: Judges::NotRecordLevel,

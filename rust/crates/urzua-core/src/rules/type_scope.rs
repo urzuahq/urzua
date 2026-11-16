@@ -286,11 +286,18 @@ pub fn config_scope_matches_nothing(
         .filter(|e| e.rule != RULE_ID && e.status == RuleStatus::Ran)
         .collect();
 
+    let identity_reported = executed
+        .iter()
+        .any(|e| e.rule == RULE_FILENAME_IDENTITY_PATTERN && e.status == RuleStatus::Ran);
     let population = census(PopulationUnit::Rule, candidates, |exec| {
         let Some(population) = &exec.population else {
             return Outcome::Absent;
         };
-        if population.out_of_scope() == 0 {
+        // A type declared `header_shape: none` is out of a header rule's
+        // reach on purpose, and a file with no identity is reported with its
+        // rename by `filename.identity-pattern` when that rule runs.
+        let unreached = population.out_of_scope_unreported(identity_reported);
+        if unreached == 0 {
             return Outcome::Examined;
         }
         findings.push(Finding::new(
@@ -303,8 +310,8 @@ pub fn config_scope_matches_nothing(
                  {} of {} are outside what this repository declared, so the rule cannot \
                  apply to them however the records are edited",
                 exec.rule,
-                population.out_of_scope(),
-                population.out_of_scope(),
+                unreached,
+                unreached,
                 population.eligible()
             ),
         ));

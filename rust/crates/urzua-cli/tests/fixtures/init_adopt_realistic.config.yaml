@@ -25,7 +25,6 @@ rules:
   config.pointer-narrative-overlap: warn
   config.header-none-has-no-required-fields: warn
   config.relation-field-not-known: warn
-  config.known-fields-declaration-missing: warn
   config.schema-version-outdated: warn
   filename.identity-pattern: warn
   config.scope-matches-nothing: warn

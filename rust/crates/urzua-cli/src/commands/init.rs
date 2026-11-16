@@ -46,18 +46,40 @@ fn is_index_page(file_name: &str) -> bool {
     lower == "readme.md" || lower == "index.md"
 }
 
-/// The files directly in `dir` that `check` would load as records but are not:
-/// an index page, and, in a directory of numbered records, a markdown file
-/// with no number. `exclude_files` matches bare names exactly, so each is
-/// written as spelled.
-fn excluded_files_in(discovered: &[PathBuf], dir: &Path, numbered: bool) -> Vec<String> {
+/// The index pages directly in `dir`, which `check` would otherwise load as
+/// records. `exclude_files` matches bare names exactly, so each is written as
+/// spelled.
+fn excluded_files_in(discovered: &[PathBuf], dir: &Path) -> Vec<String> {
     let mut out: Vec<String> = discovered
         .iter()
         .filter(|rel| rel.parent() == Some(dir))
         .filter_map(|rel| rel.file_name().and_then(|n| n.to_str()))
         .filter(|name| urzua_core::record::is_governed_record_filename(name))
-        .filter(|name| is_index_page(name) || (numbered && !is_record_shaped(name)))
+        .filter(|name| is_index_page(name))
         .map(str::to_string)
+        .collect();
+    out.sort();
+    out
+}
+
+/// The markdown files directly in a headerless `dir` that carry no number and
+/// no header beside the numbered records. A numberless file with a header is
+/// left a record, so `filename.identity-pattern` still reports its name.
+fn numberless_pages_in(repo_root: &Path, discovered: &[PathBuf], dir: &Path) -> Vec<String> {
+    let mut out: Vec<String> = discovered
+        .iter()
+        .filter(|rel| rel.parent() == Some(dir))
+        .filter(|rel| {
+            rel.file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|name| {
+                    urzua_core::record::is_governed_record_filename(name)
+                        && !is_index_page(name)
+                        && !is_record_shaped(name)
+                })
+        })
+        .filter(|rel| std::fs::read_to_string(repo_root.join(rel)).is_ok_and(|c| !has_header(&c)))
+        .filter_map(|rel| rel.file_name().and_then(|n| n.to_str()).map(str::to_string))
         .collect();
     out.sort();
     out
@@ -67,7 +89,7 @@ fn excluded_files_in(discovered: &[PathBuf], dir: &Path, numbered: bool) -> Vec<
 fn exclusion_note(exclude_files: &[String]) -> Option<String> {
     (!exclude_files.is_empty()).then(|| {
         format!(
-            "not read as records, so written under `exclude_files`: {} (an index page, or a file with no number where the others are numbered); remove a name from the list if it is a record",
+            "not read as records, so written under `exclude_files`: {} (an index page, or, in a directory with no header, a file with no number where the others are numbered); remove a name from the list if it is a record",
             exclude_files.join(", ")
         )
     })
@@ -148,7 +170,7 @@ pub fn detect_record_types(discovered: &[PathBuf]) -> Vec<ProposedRecordType> {
                 Some(first) if seen.iter().all(|p| p == first) => first.clone(),
                 _ => None,
             };
-            let exclude_files = excluded_files_in(discovered, &dir, true);
+            let exclude_files = excluded_files_in(discovered, &dir);
             ProposedRecordType {
                 name,
                 dir: dir.to_string_lossy().to_string(),
@@ -253,14 +275,40 @@ fn nested_either_way(a: &Path, b: &Path) -> bool {
 }
 
 /// A `##` heading counts as a required section when at least this share of a
-/// headerless directory's files carry it: "nearly all", so one file that lost
-/// a section is reported by `section.required` rather than dropping the
-/// section from the proposal.
+/// directory's files carry it: "nearly all", so one file that lost a section
+/// is reported by `section.required` rather than dropping the section from
+/// the proposal.
 const REQUIRED_SECTION_PERCENT: usize = 80;
+
+/// Headings that say a headerless directory holds decision records rather
+/// than pages, compared without letter case or a trailing colon. Built in:
+/// `init` runs before any configuration exists to declare a vocabulary in.
+pub(crate) const DECISION_HEADINGS: &[&str] = &[
+    "status",
+    "context",
+    "decision",
+    "consequences",
+    "decision outcome",
+    "context and problem statement",
+    "decision drivers",
+    "considered options",
+];
+
+/// Directory names that say the same, whatever headings the files carry.
+pub(crate) const DECISION_DIR_NAMES: &[&str] = &["adr", "adrs", "decisions", "rfc", "rfcs"];
 
 /// The least number of `files` that must carry a heading for it to be required.
 fn required_section_threshold(files: usize) -> usize {
     (files * REQUIRED_SECTION_PERCENT).div_ceil(100).max(1)
+}
+
+/// A heading as compared: trimmed, lower case, without a trailing colon.
+fn heading_key(heading: &str) -> String {
+    heading
+        .trim()
+        .trim_end_matches(':')
+        .trim_end()
+        .to_lowercase()
 }
 
 /// The record-shaped files directly in `dir`, sorted.
@@ -279,18 +327,85 @@ fn record_files_in<'a>(discovered: &'a [PathBuf], dir: &Path) -> Vec<&'a PathBuf
     files
 }
 
-/// For each proposed type none of whose record-shaped files carries a header:
-/// propose it with `header_shape: none` and the `##` sections nearly every
-/// file carries as required sections. A directory whose files share no
-/// section holds numbered pages (site content, notes) far more often than
-/// records, so it is not proposed, and the notice names it. Reads only.
+/// The `##` headings across a directory's files, grouped by [`heading_key`].
+#[derive(Default)]
+struct SectionCensus<'a> {
+    /// Keys in the order first seen.
+    order: Vec<String>,
+    /// For each key, the files carrying it.
+    carried: std::collections::BTreeMap<String, Vec<&'a PathBuf>>,
+    /// For each key, each spelling and how many files use it, in first-seen order.
+    spellings: std::collections::BTreeMap<String, Vec<(String, usize)>>,
+}
+
+impl<'a> SectionCensus<'a> {
+    fn of(contents: &[(&'a PathBuf, String)]) -> Self {
+        let mut census = SectionCensus::default();
+        for (rel, content) in contents {
+            let mut seen = std::collections::BTreeSet::new();
+            for section in urzua_core::section::parse_sections(content, 1) {
+                let spelling = section.heading.trim().to_string();
+                let key = heading_key(&spelling);
+                if key.is_empty() || !seen.insert(key.clone()) {
+                    continue;
+                }
+                if !census.carried.contains_key(&key) {
+                    census.order.push(key.clone());
+                }
+                census.carried.entry(key.clone()).or_default().push(*rel);
+                let spellings = census.spellings.entry(key).or_default();
+                match spellings.iter_mut().find(|(s, _)| *s == spelling) {
+                    Some((_, n)) => *n += 1,
+                    None => spellings.push((spelling, 1)),
+                }
+            }
+        }
+        census
+    }
+
+    /// The most common spelling of `key`; the first seen on a tie.
+    fn spelling(&self, key: &str) -> String {
+        let spellings = &self.spellings[key];
+        let best = spellings.iter().map(|(_, n)| *n).max().unwrap_or(0);
+        spellings
+            .iter()
+            .find(|(_, n)| *n == best)
+            .map(|(s, _)| s.clone())
+            .unwrap_or_default()
+    }
+
+    fn required(&self, threshold: usize) -> Vec<String> {
+        self.order
+            .iter()
+            .filter(|k| self.carried[*k].len() >= threshold)
+            .cloned()
+            .collect()
+    }
+}
+
+/// Why a headerless directory was not proposed.
+enum NotProposed {
+    /// It reads as numbered pages: too few files, or no shared `##` heading.
+    Pages(String),
+    /// It shares headings, but none says it holds decision records.
+    OrdinaryPages(Vec<String>),
+}
+
+/// Each proposed type none of whose record-shaped files carries a header is
+/// proposed with `header_shape: none` and the `##` sections nearly every file
+/// carries as required sections, when those sections or the directory's name
+/// say it holds decision records; otherwise it is named in a notice with the
+/// reason and how to declare it by hand. A type where only some files carry a
+/// header keeps its header shape and gets the sections all its files share.
+/// Reads only.
 pub fn classify_headerless(
     repo_root: &Path,
     discovered: &[PathBuf],
     proposed: Vec<ProposedRecordType>,
 ) -> (Vec<ProposedRecordType>, Vec<Notice>) {
     let mut kept = Vec::new();
-    let mut dropped = Vec::new();
+    let mut pages: Vec<String> = Vec::new();
+    let mut ordinary: Vec<String> = Vec::new();
     for mut rt in proposed {
         let files = record_files_in(discovered, Path::new(&rt.dir));
         let contents: Vec<(&PathBuf, String)> = files
@@ -301,102 +416,195 @@ pub fn classify_headerless(
                     .map(|c| (*rel, c))
             })
             .collect();
-        if contents.iter().any(|(_, c)| has_header(c)) {
+        let headed = contents.iter().filter(|(_, c)| has_header(c)).count();
+        if headed == contents.len() {
+            kept.push(rt);
+            continue;
+        }
+        if headed > 0 {
+            add_partial_sections(&mut rt, &contents, headed);
             kept.push(rt);
             continue;
         }
         match headerless_proposal(&rt, &contents) {
-            Some((sections, notes)) => {
+            Ok((sections, notes)) => {
                 rt.header_shape = HeaderShape::None;
                 rt.required_sections = sections;
-                let exclusions = std::mem::take(&mut rt.notes);
+                let pages_beside = numberless_pages_in(repo_root, discovered, Path::new(&rt.dir));
+                rt.exclude_files.extend(pages_beside);
+                rt.exclude_files.sort();
+                rt.exclude_files.dedup();
                 rt.notes = notes;
-                rt.notes.extend(exclusions);
+                rt.notes.extend(exclusion_note(&rt.exclude_files));
                 kept.push(rt);
             }
-            None => dropped.push(rt),
+            Err(NotProposed::Pages(why)) => {
+                pages.push(format!("{} ({} file(s); {why})", rt.dir, rt.record_count))
+            }
+            Err(NotProposed::OrdinaryPages(headings)) => ordinary.push(format!(
+                "{} ({} file(s) sharing {})",
+                rt.dir,
+                rt.record_count,
+                headings.join(", ")
+            )),
         }
     }
-    if dropped.is_empty() {
-        return (kept, Vec::new());
+    let mut notices = Vec::new();
+    if !pages.is_empty() {
+        notices.push(Notice::new(NoticeSeverity::Warning, NOTICE_INIT_SCAN.to_string(), format!(
+            "not proposed, because no file in these directories has a header and the reason given, so they hold pages rather than records: {}; declare a record type by hand if one of them is a record directory",
+            pages.join(", ")
+        )));
     }
-    let listed: Vec<String> = dropped
-        .iter()
-        .map(|rt| format!("{} ({} file(s))", rt.dir, rt.record_count))
-        .collect();
-    let notice = Notice::new(NoticeSeverity::Warning, NOTICE_INIT_SCAN.to_string(), format!(
-            "not proposed, because no file in these directories has a header and their files share no `##` section, so they hold pages rather than records: {}; declare a record type by hand if one of them is a record directory",
-            listed.join(", ")
-        ));
-    (kept, vec![notice])
+    if !ordinary.is_empty() {
+        notices.push(Notice::new(NoticeSeverity::Warning, NOTICE_INIT_SCAN.to_string(), format!(
+            "not proposed, because these directories look like ordinary pages: no file has a header, and neither their shared headings nor their names say they hold decision records (headings such as {}; directory names {}): {}; to adopt one anyway, declare it under `record_types` in .urzua/config.yaml with `header_shape: none` and `sections: {{from: headings, required: [{{name: <heading>}}]}}` (`init` has no flag to force a directory)",
+            DECISION_HEADINGS.iter().map(|h| format!("`{h}`")).collect::<Vec<_>>().join(", "),
+            DECISION_DIR_NAMES.join(", "),
+            ordinary.join("; ")
+        )));
+    }
+    (kept, notices)
 }
 
-/// The required sections and notes for a headerless directory, or `None` when
-/// fewer than two files share a `##` heading at the threshold.
+/// Sections for a directory where only some files carry a header: inferred
+/// from every file's body, with notes naming how many have none.
+fn add_partial_sections(
+    rt: &mut ProposedRecordType,
+    contents: &[(&PathBuf, String)],
+    headed: usize,
+) {
+    let total = contents.len();
+    let census = SectionCensus::of(contents);
+    let threshold = required_section_threshold(total);
+    let required = census.required(threshold);
+    let mut notes = vec![format!(
+        "{} of {total} file(s) in {} have no header block, so no rule reads a field from them",
+        total - headed,
+        rt.dir
+    )];
+    if total >= 2 && !required.is_empty() {
+        rt.required_sections = required.iter().map(|k| census.spelling(k)).collect();
+        notes.extend(section_notes(&census, contents, &required, threshold));
+    }
+    notes.append(&mut rt.notes);
+    rt.notes = notes;
+}
+
+/// The required sections and notes for a headerless directory, or why it is
+/// not proposed.
 fn headerless_proposal(
     rt: &ProposedRecordType,
     contents: &[(&PathBuf, String)],
-) -> Option<(Vec<String>, Vec<String>)> {
+) -> Result<(Vec<String>, Vec<String>), NotProposed> {
     let total = contents.len();
     if total < 2 {
-        return None;
+        return Err(NotProposed::Pages(
+            "only one numbered file, too few to infer the sections records share".to_string(),
+        ));
+    }
+    let census = SectionCensus::of(contents);
+    if census.order.is_empty() {
+        return Err(NotProposed::Pages(
+            "no `##` heading in any file; headings at another level are not read as sections"
+                .to_string(),
+        ));
     }
     let threshold = required_section_threshold(total);
-    // Headings in the order they are first seen, so the proposal reads in the
-    // corpus's own section order.
-    let mut order: Vec<String> = Vec::new();
-    let mut carried: std::collections::BTreeMap<String, Vec<&PathBuf>> =
-        std::collections::BTreeMap::new();
-    for (rel, content) in contents {
-        let mut seen = std::collections::BTreeSet::new();
-        for section in urzua_core::section::parse_sections(content, 1) {
-            let heading = section.heading.trim().to_string();
-            if heading.is_empty() || !seen.insert(heading.clone()) {
-                continue;
-            }
-            if !carried.contains_key(&heading) {
-                order.push(heading.clone());
-            }
-            carried.entry(heading).or_default().push(*rel);
-        }
-    }
-    let required: Vec<String> = order
-        .iter()
-        .filter(|h| carried[*h].len() >= threshold)
-        .cloned()
-        .collect();
+    let required = census.required(threshold);
     if required.is_empty() {
-        return None;
+        return Err(NotProposed::Pages(format!(
+            "no `##` heading is carried by {REQUIRED_SECTION_PERCENT}% of the files"
+        )));
+    }
+    let dir_name = Path::new(&rt.dir)
+        .file_name()
+        .map(|n| n.to_string_lossy().to_lowercase())
+        .unwrap_or_default();
+    let decision_shaped = required
+        .iter()
+        .any(|k| DECISION_HEADINGS.contains(&k.as_str()))
+        || DECISION_DIR_NAMES.contains(&dir_name.as_str());
+    if !decision_shaped {
+        return Err(NotProposed::OrdinaryPages(
+            required
+                .iter()
+                .map(|k| format!("`## {}`", census.spelling(k)))
+                .collect(),
+        ));
     }
 
     let mut notes = vec![format!(
         "no file in {} has a header block, so the type is proposed with `header_shape: none`: no field is read (a `Status:` or `Date:` line in the body included), and a rule that reads a header examines none of these records",
         rt.dir
     )];
-    notes.push(format!(
-        "`sections.required` lists the `##` headings found in at least {REQUIRED_SECTION_PERCENT}% of the files ({threshold} of {total}): {}; `section.required` reports a file that lacks one",
-        required.iter().map(|h| format!("`{h}`")).collect::<Vec<_>>().join(", ")
-    ));
-    for heading in &required {
-        let have = &carried[heading];
-        if have.len() == total {
-            continue;
-        }
-        let missing: Vec<String> = contents
-            .iter()
-            .filter(|(rel, _)| !have.contains(rel))
-            .map(|(rel, _)| rel.to_string_lossy().to_string())
-            .collect();
-        notes.push(format!(
-            "`## {heading}` is missing from {} of {total} file(s): {}",
-            missing.len(),
-            missing.join(", ")
-        ));
+    notes.extend(section_notes(&census, contents, &required, threshold));
+    if required.iter().any(|k| k == "status") {
+        notes.push(
+            "a `## Status` section is checked for presence only: its text is not read as the record's status, so status values and supersession (`Superseded by ...`) are not checked".to_string(),
+        );
     }
-    let optional: Vec<String> = order
+    if rt.prefix.is_none() {
+        notes.extend(identity_notes(contents));
+    }
+    notes.push(
+        "a reference written in prose (`ADR 0007`, `Superseded by ADR 0099`) is not read as a reference, so one that names no record is not reported".to_string(),
+    );
+    Ok((required.iter().map(|k| census.spelling(k)).collect(), notes))
+}
+
+/// What the proposal says about the sections it found: the threshold, the
+/// files missing each required one, other spellings of it and the headings
+/// too rare to require.
+fn section_notes(
+    census: &SectionCensus,
+    contents: &[(&PathBuf, String)],
+    required: &[String],
+    threshold: usize,
+) -> Vec<String> {
+    let total = contents.len();
+    let mut notes = vec![format!(
+        "`sections.required` lists the `##` headings found in at least {REQUIRED_SECTION_PERCENT}% of the files ({threshold} of {total}), compared without letter case or a trailing colon: {}; `section.required` reports a file that lacks one",
+        required.iter().map(|k| format!("`{}`", census.spelling(k))).collect::<Vec<_>>().join(", ")
+    )];
+    for key in required {
+        let have = &census.carried[key];
+        let written = census.spelling(key);
+        if have.len() < total {
+            let missing: Vec<String> = contents
+                .iter()
+                .filter(|(rel, _)| !have.contains(rel))
+                .map(|(rel, _)| rel.to_string_lossy().to_string())
+                .collect();
+            notes.push(format!(
+                "`## {written}` is missing from {} of {total} file(s): {}",
+                missing.len(),
+                missing.join(", ")
+            ));
+        }
+        let others: Vec<String> = census.spellings[key]
+            .iter()
+            .filter(|(s, _)| *s != written)
+            .map(|(s, n)| format!("`{s}` ({n})"))
+            .collect();
+        if !others.is_empty() {
+            notes.push(format!(
+                "`## {written}` is the most common spelling and the one written; also spelled {}: `section.required` matches a heading exactly, so it reports those files as missing the section until they are respelled or the spelling is added as an alias",
+                others.join(", ")
+            ));
+        }
+    }
+    let optional: Vec<String> = census
+        .order
         .iter()
-        .filter(|h| carried[*h].len() < threshold)
-        .map(|h| format!("`{h}` ({} of {total})", carried[h].len()))
+        .filter(|k| census.carried[*k].len() < threshold)
+        .map(|k| {
+            format!(
+                "`{}` ({} of {total})",
+                census.spelling(k),
+                census.carried[k].len()
+            )
+        })
         .collect();
     if !optional.is_empty() {
         const SHOWN: usize = 10;
@@ -409,18 +617,7 @@ fn headerless_proposal(
             shown.join(", ")
         ));
     }
-    if required.iter().any(|h| h.eq_ignore_ascii_case("status")) {
-        notes.push(
-            "a `## Status` section is checked for presence only: its text is not read as the record's status, so status values and supersession (`Superseded by ...`) are not checked".to_string(),
-        );
-    }
-    if rt.prefix.is_none() {
-        notes.extend(identity_notes(contents));
-    }
-    notes.push(
-        "a reference written in prose (`ADR 0007`, `Superseded by ADR 0099`) is not read as a reference, so one that names no record is not reported".to_string(),
-    );
-    Some((required, notes))
+    notes
 }
 
 /// What the file names show about identity, and what the engine cannot read
@@ -556,7 +753,7 @@ pub fn detect_unnumbered_record_types(
         if !taken.insert(name.clone()) {
             continue;
         }
-        let exclude_files = excluded_files_in(discovered, &dir, false);
+        let exclude_files = excluded_files_in(discovered, &dir);
         out.push(ProposedRecordType {
             name,
             dir: dir.to_string_lossy().to_string(),
@@ -738,7 +935,9 @@ fn no_prefix(proposed: &[ProposedRecordType]) -> bool {
 /// which adopt never writes, and, when no proposed type has a header, every
 /// rule that reads one would examine nothing.
 fn adopt_withheld_rules(proposed: &[ProposedRecordType]) -> Vec<&'static str> {
-    let mut out = Vec::new();
+    // It asks every headed type for `known_fields`, which adopt never infers
+    // (`ADR-33`), so it would warn about the config adopt just wrote.
+    let mut out = vec![urzua_core::rules::RULE_CONFIG_KNOWN_FIELDS_DECLARATION_MISSING];
     if !adopt_declarations(proposed).is_empty() {
         out.push(urzua_core::rules::RULE_SECTION_SHAPE);
     }
@@ -760,6 +959,10 @@ fn adopt_withheld_rules(proposed: &[ProposedRecordType]) -> Vec<&'static str> {
 fn adopt_withheld_notices(proposed: &[ProposedRecordType]) -> Vec<Notice> {
     let declared = adopt_declarations(proposed);
     let mut notices = withheld_rule_notices(&declared);
+    notices.push(Notice::new(NoticeSeverity::Info, NOTICE_RULE_APPLICABILITY.to_string(), format!(
+        "not proposed, because it asks each record type to declare `known_fields`, which init does not infer, so it would warn about the config init just wrote: {}; declare `known_fields` on each type, then enable it",
+        urzua_core::rules::RULE_CONFIG_KNOWN_FIELDS_DECLARATION_MISSING
+    )));
     if !declared.is_empty() {
         notices.push(Notice::new(NoticeSeverity::Info, NOTICE_RULE_APPLICABILITY.to_string(), format!(
             "not proposed, because it judges only a `sections.required` entry that declares a `shape`, which init does not infer: {} (declare `shape` on an entry); declare it, then enable the rule",

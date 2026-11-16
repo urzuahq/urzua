@@ -39,6 +39,10 @@ struct MigrateIdsReport {
 enum MigrateIdsStatus {
     Ok,
     PartialFailure,
+    /// `--apply` had records to write and could write none of them: every one
+    /// belongs to a type with no header. Exits 2, so a run that did nothing
+    /// is not read as success.
+    NotRun,
 }
 
 #[derive(serde::Serialize)]
@@ -66,6 +70,9 @@ impl Report for MigrateIdsReport {
     /// record structurally can't take the field, e.g. no header-shaped
     /// region) is not a write failure and doesn't affect the exit code.
     fn exit_code(&self) -> ExitCode {
+        if self.status == MigrateIdsStatus::NotRun {
+            return ExitCode::from(2);
+        }
         if self
             .results
             .iter()
@@ -133,6 +140,8 @@ fn run_ids_inner(config_path: Option<PathBuf>, apply: bool) -> Result<ExitCode, 
         .any(|r| r.outcome == MigrateIdsOutcome::Failed)
     {
         MigrateIdsStatus::PartialFailure
+    } else if headerless.len() == missing_paths.len() {
+        MigrateIdsStatus::NotRun
     } else {
         MigrateIdsStatus::Ok
     };

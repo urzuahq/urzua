@@ -4,7 +4,7 @@ Version: '0.31'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/commands/doctor.rs@sha256:0c55fbfc4a26973c23cc172810f0dfdfb24b38469f44d9c3f7aefea2442bc9a8, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs@sha256:dc29b51bde5a2ba79d95c5e0a09466a54e816e8e2cc4a86a80e4459be477a447, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:6d2ad3bf88308769fb6dfa67352f5323dc6968b98b54fa5f0726b76eeaa94658
+Realized-by: code:rust/crates/urzua-cli/src/commands/doctor.rs@sha256:36abc79c02fee4fbe6905155c7ab4b7ebc84d6a8908f19a140497586e39c933b, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs@sha256:dc29b51bde5a2ba79d95c5e0a09466a54e816e8e2cc4a86a80e4459be477a447, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:6d2ad3bf88308769fb6dfa67352f5323dc6968b98b54fa5f0726b76eeaa94658
 Author: beauwilliams
 Subject: '`urzua doctor` -- diagnosing whether checks are actually wired to CI/hooks, not just present.'
 Implements: —
@@ -145,3 +145,4 @@ than compounded:
 > | 2026-11-16 | Bumped to `0.30`. Evidence pins re-baselined for this change (the `Re-baselined` row above); the specification text is unchanged. **Why:** a revision-log entry that adds a structural change bumps `Version`. | **structural** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/doctor.rs` 9a3f5ddc016f -> 0c55fbfc4a26. Reason: doctor.rs: the missing-config check now names the step init would take here and sets next_action; the other checks are unchanged **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Bumped to `0.31`. A missing config's `config-exists` message and `next_action` name the step `init` would take here instead of always "run `urzua init`". Decided by the builder on 2026-11-16, pending maintainer review. **Why:** `MILE-265` -- after `init` refused a headerless corpus, `doctor` sent the user back to it, a loop. | **substantive** |
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/doctor.rs` 0c55fbfc4a26 -> 36abc79c02fe. Reason: doctor.rs: the missing-config check names the step init would take here and sets next_action; other checks unchanged **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |

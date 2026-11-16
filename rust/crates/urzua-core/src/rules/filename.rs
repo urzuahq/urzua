@@ -16,7 +16,7 @@ pub fn filename_title_consistency(
         |record| record.path.clone(),
         |record| {
             let Some(filename_number) = filename_number(record) else {
-                return Outcome::OutOfScope;
+                return Outcome::OutOfScopeNoIdentity;
             };
             let Some(content) = full_text.get(&record.path) else {
                 return Outcome::Absent;
