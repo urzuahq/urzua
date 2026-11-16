@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.155'
+Version: '0.156'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:04472363242c8fea612ce39fc1f6cdc08571a58cc760845d5fa9a193060a3cff, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:09c2431a269316741c35b51dabd5766ecd3d50fab2b98069314bb1bc8857767d, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:255395e7d2caa34947cef28f463e2ec050e3eba798a4dc7573a3cad946fee1ae
@@ -1516,6 +1516,7 @@ relation_pairs:
     cross_type: true          # optional, default true
     acyclic: false            # optional (MILE-27), default false
     types: [rfc]              # optional (MILE-155), default: every type declaring a side
+    target_types: [adr]       # optional (MILE-259), default: any type
     provisional:              # optional (MILE-154)
       statuses: [Draft]       # claimant statuses at which an unechoed claim is provisional
       level: warn             # warn (default) | error
@@ -1527,6 +1528,21 @@ Direction is the field name, so two records each claiming the `forward` side do 
 other. `relation.pair-reciprocity` checks `reciprocity: required` pairs; `relation.cross-type-disallowed`
 reports a claim whose target is another record type in a `cross_type: false` pair, which the
 reciprocity rule excludes (counted out of scope) rather than skipping silently.
+
+**Target types (`MILE-259`).** `target_types` lists the record types the pair's `forward` field may name; the
+`inverse` field is not constrained by it. A `pointer_fields` entry declares the same for a plain pointer field by
+taking the map form `{name: Parent, targets: [epic]}` in place of the bare name; the bare name and the map form mix
+freely in one list, and every other reader of `pointer_fields` sees only the names. `pointer.target-type` (`SPEC-2`)
+reports a reference that resolves to a record of a type outside the list, naming the field, the target, its type and
+the allowed types; each element of a list-valued field is judged, and a reference that names no record is
+`pointer.resolution`'s alone. A field constrained both ways must satisfy both. Load errors: a listed type that is not
+a configured record type, an empty list, a type listed twice, `targets` on any key other than `pointer_fields`, and
+a `cross_type: false` pair whose `target_types` names a type that does not carry its forward field (such a claim could
+never be made without a finding). A declared target list is the more specific statement: a claim whose target is
+outside it is reported by `pointer.target-type` only, not also by `relation.cross-type-disallowed`, unless
+`pointer.target-type` is declared `off`. A configuration that declares no target types behaves as before.
+`urzua graph` lists the claims of every declared relation pair as `pointer` edges, alongside `pointer_fields` and
+`narrative_fields`.
 
 `provisional` (`MILE-154`, from the `MILE-127` decision) splits `relation.pair-reciprocity` by the
 **claimant's** status, read from its `Status` role field by exact comparison. A claim from a record
@@ -2831,3 +2847,4 @@ proves this configuration produces the three findings.
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` e56be4912522 -> f74531f49e9c. Reason: config.rs: hooks.<hook> may be a map with command and managed (block or declared) as well as a list, and args() fills in each hook's default; every other key and default is unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Adds `hooks.verify_timeout_seconds` (default 600). **Why:** a fourth review of `MILE-220`'s pull request: `urzua hooks verify --run` ran a hook with no time limit. | **substantive** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` f74531f49e9c -> 04472363242c. Reason: config.rs: the hooks key gains verify_timeout_seconds (default 600, at least 1), and hooks.<hook> may be a map with command and managed; every other key and default is unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-16 | Adds target types for reference fields: a `pointer_fields` entry may be `{name, targets}`, and a relation pair may declare `target_types`; both are judged by `pointer.target-type`, and `urzua graph` lists relation-pair edges. **Why:** `MILE-259`: a link to a record of the wrong type could not be expressed as a finding. | **substantive** |
