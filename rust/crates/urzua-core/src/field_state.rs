@@ -14,7 +14,7 @@ use crate::FieldState;
 /// MILE-78's identity backfill, and the reason a hand-edit reverting
 /// `Author` back to one of them (the ADR-38 incident) classified as
 /// `Present`, indistinguishable from a real name, rather than `Placeholder`.
-const PLACEHOLDER_TOKENS: &[&str] = &[
+pub const PLACEHOLDER_TOKENS: &[&str] = &[
     "name",
     "name(s)",
     "yyyy-mm-dd",
@@ -31,12 +31,47 @@ pub fn classify(value: Option<&str>) -> FieldState {
     classify_with(value, None)
 }
 
+/// [`classify`] with the placeholder words `declared` gives (`MILE-233`) and
+/// the compiled-in pending reading, as `field.quality` judges a field.
+pub fn classify_placeholders(
+    value: Option<&str>,
+    declared: Option<&crate::status_model::StatusDecl>,
+) -> FieldState {
+    classify_inner(
+        value,
+        declared.and_then(|d| d.placeholders.as_deref()),
+        None,
+    )
+}
+
+/// Whether `lower` (the trimmed value, lowercased) is a placeholder word: one
+/// of `declared` when the type declares its own (`MILE-233`), else one of the
+/// compiled-in tokens.
+fn is_placeholder_word(lower: &str, declared: Option<&[String]>) -> bool {
+    match declared {
+        Some(words) => words.iter().any(|w| w.to_lowercase() == lower),
+        None => PLACEHOLDER_TOKENS.contains(&lower),
+    }
+}
+
 /// [`classify`], judging "pending" by the type's declared vocabulary when it
 /// declares one (BUG-65): whole values only, replacing the compiled-in
 /// whole-word `pending` match. A type declaring none keeps that match, so an
 /// undeclared type behaves exactly as before.
 pub fn classify_with(
     value: Option<&str>,
+    declared: Option<&crate::status_model::StatusDecl>,
+) -> FieldState {
+    classify_inner(
+        value,
+        declared.and_then(|d| d.placeholders.as_deref()),
+        declared,
+    )
+}
+
+fn classify_inner(
+    value: Option<&str>,
+    placeholders: Option<&[String]>,
     declared: Option<&crate::status_model::StatusDecl>,
 ) -> FieldState {
     let Some(value) = value else {
@@ -49,7 +84,11 @@ pub fn classify_with(
     }
 
     let lower = trimmed.to_ascii_lowercase();
-    if PLACEHOLDER_TOKENS.contains(&lower.as_str()) || is_placeholder_reference(&lower) {
+    let word = match placeholders {
+        Some(_) => trimmed.to_lowercase(),
+        None => lower.clone(),
+    };
+    if is_placeholder_word(&word, placeholders) || is_placeholder_reference(&lower) {
         return FieldState::Placeholder;
     }
 

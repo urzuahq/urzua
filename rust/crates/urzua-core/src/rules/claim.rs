@@ -7,16 +7,21 @@ use crate::status_model::StatusDecl;
 ///
 /// Deliberately narrow. A missed claim is recoverable; a false error on a
 /// correct sentence teaches people to stop reading the output.
+#[cfg(test)]
 fn claimed_closed(line: &str) -> Vec<String> {
-    const VERBS: [&str; 3] = ["closes", "fixes", "resolves"];
+    claimed_closed_by(line, &ClaimOpts::default().closing_verbs)
+}
+
+/// [`claimed_closed`] with the declared closing verbs, compared case-insensitively.
+fn claimed_closed_by(line: &str, verbs: &[String]) -> Vec<String> {
     let mut out = Vec::new();
     let mut tokens = line.split_whitespace().peekable();
 
     while let Some(token) = tokens.next() {
         let word = token
-            .trim_matches(|c: char| !c.is_ascii_alphanumeric())
+            .trim_matches(|c: char| !c.is_alphanumeric())
             .to_lowercase();
-        if !VERBS.contains(&word.as_str()) {
+        if !verbs.iter().any(|v| v.to_lowercase() == word) {
             continue;
         }
         let mut expecting = true;
@@ -58,7 +63,7 @@ fn verb_occurrences<'a>(claims: &'a [(String, String)], opts: &ClaimOpts) -> Vec
     let mut occurrences = Vec::new();
     for (path, content) in claims {
         for (idx, line) in verb_claim_lines(content, opts) {
-            for reference in claimed_closed(line) {
+            for reference in claimed_closed_by(line, &opts.closing_verbs) {
                 let normalized = crate::values::RecordId::new(&reference).to_string();
                 occurrences.push((path, idx + 1, reference, normalized));
             }
@@ -413,7 +418,7 @@ pub fn claim_field_notices(claims: &[(String, String)], opts: &ClaimOpts) -> Vec
     let verb_claims: usize = claims
         .iter()
         .flat_map(|(_, text)| verb_claim_lines(text, opts))
-        .map(|(_, line)| claimed_closed(line).len())
+        .map(|(_, line)| claimed_closed_by(line, &opts.closing_verbs).len())
         .sum();
     notices.push(Notice {
         severity: NoticeSeverity::Info,

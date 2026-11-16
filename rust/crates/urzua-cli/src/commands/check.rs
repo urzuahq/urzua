@@ -1518,11 +1518,13 @@ fn read_comment_sources(
     let scoped = path_scoped_read(scope);
     let ids = scope_record_ids(session, scope);
     let prefixes = rules::declared_prefixes(config);
+    let vocab = rules::back_pointer_vocab(config);
     let need = |reported: bool| {
         scoped.as_ref().map(|scoped| crate::discovery::ScopeNeed {
             scoped,
             ids: &ids,
             prefixes: &prefixes,
+            vocab: &vocab,
             reported,
             cited: true,
         })

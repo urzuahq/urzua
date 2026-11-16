@@ -1740,6 +1740,7 @@ pub(crate) struct ScopeNeed<'a> {
     /// The identifiers of the records in scope, as the index keys them.
     pub ids: &'a HashSet<urzua_core::values::RecordId>,
     pub prefixes: &'a [String],
+    pub vocab: &'a rules::BackPointerVocab,
     /// Read the files under a requested path (the rule judges them).
     pub reported: bool,
     /// Read the other files citing a record in scope (evidence, decisions).
@@ -1783,9 +1784,9 @@ fn read_files_for_scope(
                 need.reported
             } else {
                 need.cited
-                    && content
-                        .as_deref()
-                        .is_some_and(|t| rules::cites_any_record(t, need.prefixes, need.ids))
+                    && content.as_deref().is_some_and(|t| {
+                        rules::cites_any_record(t, need.prefixes, need.ids, need.vocab)
+                    })
             };
             if !keep {
                 unread.push(path.clone());
@@ -1860,10 +1861,12 @@ pub(crate) fn read_code_citation_sources(
     // This rule judges each comment in the files it reads and no evidence comes
     // of them, so a path scope reads only the files under a requested path.
     let (ids, prefixes) = (HashSet::new(), Vec::new());
+    let vocab = rules::back_pointer_vocab(config);
     let need = scoped.map(|scoped| ScopeNeed {
         scoped,
         ids: &ids,
         prefixes: &prefixes,
+        vocab: &vocab,
         reported: true,
         cited: false,
     });

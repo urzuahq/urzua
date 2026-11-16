@@ -271,6 +271,8 @@ mod tests {
                     role: None,
                     effective_requires: None,
                     permanent: None,
+                    rejected_values: None,
+                    waiver_fields: None,
                 },
             )]
             .into_iter()

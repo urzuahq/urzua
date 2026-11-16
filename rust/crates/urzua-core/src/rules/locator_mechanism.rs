@@ -47,6 +47,7 @@ pub fn embodiment_locator_on_back_pointer_path(
         test_paths,
         prefixes: declared_prefixes(config),
         read_text,
+        vocab: back_pointer_vocab(config),
     };
     let slots = declared_slots_for_roles(
         records,
@@ -100,6 +101,7 @@ struct LighterMechanism<'a> {
     test_paths: &'a [String],
     prefixes: Vec<String>,
     read_text: &'a dyn Fn(&str) -> crate::locator::SharedText,
+    vocab: BackPointerVocab,
 }
 
 impl LighterMechanism<'_> {
@@ -131,13 +133,14 @@ impl LighterMechanism<'_> {
             .back_pointer_paths
             .iter()
             .any(|e| path_is_published(path, e));
-        let marker = match entry.category.as_str() {
-            "code" if under_scan => "Implements",
+        let marker_word = match entry.category.as_str() {
+            "code" if under_scan => self.vocab.implements.as_str(),
             "test" if under_scan && self.test_paths.iter().any(|e| path_matches_entry(path, e)) => {
-                "Verifies"
+                self.vocab.verifies.as_str()
             }
             _ => return None,
         };
+        let marker = marker_word.strip_suffix(':').unwrap_or(marker_word);
         // Told apart through the shared `Realized-by` reader, never by
         // splitting the value: a path may itself contain a comma.
         let source = if entry_count == 1 {
@@ -148,8 +151,7 @@ impl LighterMechanism<'_> {
         let wanted = crate::values::RecordId::new(id);
         let comment_present = match &*(self.read_text)(&locator.path) {
             crate::locator::FileText::Text(text) => {
-                let marker_word = format!("{marker}:");
-                scan_marker(path, text, &self.prefixes, &marker_word)
+                scan_marker(path, text, &self.prefixes, marker_word, &self.vocab.syntax)
                     .iter()
                     .any(|p| crate::values::RecordId::new(&p.id) == wanted)
             }

@@ -41,14 +41,71 @@ pub fn scan_back_pointers(
     content: &str,
     prefixes: &[String],
 ) -> Vec<BackPointer> {
-    scan_marker(path, content, prefixes, MARKER_IMPLEMENTS)
+    scan_marker(
+        path,
+        content,
+        prefixes,
+        MARKER_IMPLEMENTS,
+        &CommentSyntax::default(),
+    )
 }
 
-/// The comment marker that makes a record's code evidence.
+/// The default comment marker that makes a record's code evidence; a
+/// repository declares another as `implements_marker` (`MILE-233`).
 pub const MARKER_IMPLEMENTS: &str = "Implements:";
-/// The comment marker that makes a record's test evidence (`MILE-146`), read
-/// only in a file of the declared test class.
+/// The default comment marker that makes a record's test evidence
+/// (`MILE-146`), read only in a file of the declared test class; a repository
+/// declares another as `verifies_marker` (`MILE-233`).
 pub const MARKER_VERIFIES: &str = "Verifies:";
+
+/// The default comment leaders a back-pointer may follow at the start of a
+/// line (`comment_leaders`, `MILE-233`).
+pub const DEFAULT_COMMENT_LEADERS: [&str; 9] =
+    ["<!--", "///", "//!", "//", "/*", "--", "#", ";", "*"];
+/// The default leaders that also open a comment after code
+/// (`trailing_comment_leaders`, `MILE-233`): `;` and `*` are operators in code.
+pub const DEFAULT_TRAILING_COMMENT_LEADERS: [&str; 5] = ["<!--", "//", "/*", "--", "#"];
+
+/// What opens a comment: the leaders read at the start of a line and those
+/// read after code, each tried longest first.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CommentSyntax {
+    leaders: Vec<String>,
+    trailing: Vec<String>,
+}
+
+impl CommentSyntax {
+    pub fn new(mut leaders: Vec<String>, mut trailing: Vec<String>) -> Self {
+        // Longest first, so `//!` and `///` are not read as `//` plus text.
+        leaders.sort_by_key(|l| std::cmp::Reverse(l.len()));
+        trailing.sort_by_key(|l| std::cmp::Reverse(l.len()));
+        CommentSyntax { leaders, trailing }
+    }
+
+    pub fn leaders(&self) -> &[String] {
+        &self.leaders
+    }
+
+    pub fn trailing(&self) -> &[String] {
+        &self.trailing
+    }
+}
+
+impl Default for CommentSyntax {
+    fn default() -> Self {
+        CommentSyntax::new(
+            DEFAULT_COMMENT_LEADERS.map(String::from).to_vec(),
+            DEFAULT_TRAILING_COMMENT_LEADERS.map(String::from).to_vec(),
+        )
+    }
+}
+
+/// The back-pointer vocabulary every reader of back-pointers shares: the one
+/// declared on `embodiment.back-pointer-resolution`, whatever its level, else
+/// the defaults (`MILE-233`).
+pub fn back_pointer_vocab(config: &Config) -> BackPointerVocab {
+    config.rule_opts::<BackPointerVocab>(RULE_EMBODIMENT_BACK_POINTER_RESOLUTION)
+}
 
 /// [`scan_back_pointers`] for any marker word; the same reading applies.
 pub fn scan_marker(
@@ -56,10 +113,11 @@ pub fn scan_marker(
     content: &str,
     prefixes: &[String],
     marker: &str,
+    syntax: &CommentSyntax,
 ) -> Vec<BackPointer> {
     let mut out = Vec::new();
     for (i, line) in content.lines().enumerate() {
-        let Some(rest) = marker_rest(line, marker) else {
+        let Some(rest) = marker_rest(line, marker, syntax) else {
             continue;
         };
         for id in cited_ids(rest, prefixes) {
@@ -80,7 +138,7 @@ pub fn scan_marker(
 pub struct UnreadMarker {
     pub file: PathBuf,
     pub line: usize,
-    pub marker: &'static str,
+    pub marker: String,
     /// The first id-shaped token in the marker's text.
     pub id: String,
 }
@@ -93,11 +151,12 @@ pub fn scan_unread_markers(
     path: &std::path::Path,
     content: &str,
     prefixes: &[String],
-    marker: &'static str,
+    marker: &str,
+    syntax: &CommentSyntax,
 ) -> Vec<UnreadMarker> {
     let mut out = Vec::new();
     for (i, line) in content.lines().enumerate() {
-        let Some(rest) = marker_rest(line, marker) else {
+        let Some(rest) = marker_rest(line, marker, syntax) else {
             continue;
         };
         if !cited_ids(rest, prefixes).is_empty() {
@@ -110,7 +169,7 @@ pub fn scan_unread_markers(
             out.push(UnreadMarker {
                 file: path.to_path_buf(),
                 line: i + 1,
-                marker,
+                marker: marker.to_string(),
                 id: id.to_string(),
             });
         }
@@ -161,6 +220,7 @@ struct UnreadMode<'a> {
     variant: &'static str,
     report: bool,
     ignore: Option<&'a str>,
+    syntax: &'a CommentSyntax,
 }
 
 fn unread_markers_declared(config: &Config, rule: &str) -> bool {
@@ -176,14 +236,14 @@ fn judge_unread_markers(
     mode: &UnreadMode,
     path: &std::path::Path,
     content: &str,
-    (prefixes, markers): (&[String], &[&'static str]),
+    (prefixes, markers): (&[String], &[&str]),
 ) -> UnreadOutcome {
     let lines: Vec<&str> = content.lines().collect();
     let mut out = UnreadOutcome::default();
     let mut excused = std::collections::BTreeSet::new();
     for unread in markers
         .iter()
-        .flat_map(|m| scan_unread_markers(path, content, prefixes, m))
+        .flat_map(|m| scan_unread_markers(path, content, prefixes, m, mode.syntax))
     {
         let carries = mode
             .ignore
@@ -221,12 +281,13 @@ pub fn scan_comment_citations(
     content: &str,
     prefixes: &[String],
     leaders: Option<&[String]>,
+    syntax: &CommentSyntax,
 ) -> Vec<CommentCitation> {
     let mut out = Vec::new();
     for (i, line) in content.lines().enumerate() {
         let text = match leaders {
             // The first comment start holds the text of every later one.
-            None => comment_starts(line).into_iter().next(),
+            None => comment_starts(line, syntax).into_iter().next(),
             Some(declared) => declared_comment_text(line, declared),
         };
         let Some(text) = text else {
@@ -312,12 +373,12 @@ pub fn scan_marker_excusing(
     path: &std::path::Path,
     content: &str,
     prefixes: &[String],
-    marker: &str,
+    (marker, syntax): (&str, &CommentSyntax),
     ignore: Option<&str>,
 ) -> MarkerScan {
     let mut out = MarkerScan::default();
     let lines: Vec<&str> = content.lines().collect();
-    for pointer in scan_marker(path, content, prefixes, marker) {
+    for pointer in scan_marker(path, content, prefixes, marker, syntax) {
         out.seen.insert(pointer.line);
         let excused = ignore.is_some_and(|m| {
             lines
@@ -340,19 +401,19 @@ fn unused_marker_lines(
     prefixes: &[String],
     path: &std::path::Path,
     ignore: &str,
-    read_markers: &[&'static str],
+    (read_markers, syntax): (&[&str], &CommentSyntax),
 ) -> Vec<usize> {
     // A line the marker excuses because its marker names an unread id carries a
     // back-pointer in the sense that matters here: the marker has a job.
     let mut pointer_lines: std::collections::BTreeSet<usize> = read_markers
         .iter()
-        .flat_map(|m| scan_marker(path, content, prefixes, m))
+        .flat_map(|m| scan_marker(path, content, prefixes, m, syntax))
         .map(|p| p.line)
         .collect();
     pointer_lines.extend(
         read_markers
             .iter()
-            .flat_map(|m| scan_unread_markers(path, content, prefixes, m))
+            .flat_map(|m| scan_unread_markers(path, content, prefixes, m, syntax))
             .map(|u| u.line),
     );
     content
@@ -388,9 +449,9 @@ fn unused_marker_findings(
     (rule, variant): (&str, &'static str),
     file: &SourceFile,
     content: &str,
-    (prefixes, ignore, read): (&[String], &str, &[&'static str]),
+    (prefixes, ignore, read, syntax): (&[String], &str, &[&str], &CommentSyntax),
 ) -> Vec<Finding> {
-    unused_marker_lines(content, prefixes, &file.path, ignore, read)
+    unused_marker_lines(content, prefixes, &file.path, ignore, (read, syntax))
         .into_iter()
         .map(|line| unused_marker_finding(rule, variant, &file.path, line, ignore))
         .collect()
@@ -460,24 +521,27 @@ fn decision_verdict(
     }
 }
 
-// Longest first, so `//!` and `///` are not read as `//` plus text.
-const LEADERS: &[&str] = &["<!--", "///", "//!", "//", "/*", "--", "#", ";", "*"];
-// The leaders that open a trailing comment after code.
-const TRAILING: &[&str] = &["<!--", "//", "/*", "--", "#"];
-
 /// The text of each comment `line` opens, in the order they are read: the one
 /// the line starts with, then one per trailing leader that follows whitespace.
 /// The one reading of what a comment is, shared by the back-pointer rules and
 /// `code.dangling-bug-reference`.
-fn comment_starts(line: &str) -> Vec<&str> {
+fn comment_starts<'a>(line: &'a str, syntax: &CommentSyntax) -> Vec<&'a str> {
     let mut out = Vec::new();
     let trimmed = line.trim_start();
-    if let Some(leader) = LEADERS.iter().find(|l| trimmed.starts_with(**l)) {
+    if let Some(leader) = syntax
+        .leaders
+        .iter()
+        .find(|l| trimmed.starts_with(l.as_str()))
+    {
         out.push(&trimmed[leader.len()..]);
     }
     for (at, _) in line.char_indices() {
         let here = &line[at..];
-        let Some(leader) = TRAILING.iter().find(|l| here.starts_with(**l)) else {
+        let Some(leader) = syntax
+            .trailing
+            .iter()
+            .find(|l| here.starts_with(l.as_str()))
+        else {
             continue;
         };
         let after_space = line[..at]
@@ -489,7 +553,7 @@ fn comment_starts(line: &str) -> Vec<&str> {
         }
         // `///` and `//!` are `//` plus one more character.
         let tail = &here[leader.len()..];
-        out.push(if *leader == "//" {
+        out.push(if leader == "//" {
             tail.strip_prefix(['/', '!']).unwrap_or(tail)
         } else {
             tail
@@ -499,8 +563,8 @@ fn comment_starts(line: &str) -> Vec<&str> {
 }
 
 /// The text after the marker of the first comment on `line` that carries one.
-fn marker_rest<'a>(line: &'a str, marker: &str) -> Option<&'a str> {
-    comment_starts(line)
+fn marker_rest<'a>(line: &'a str, marker: &str, syntax: &CommentSyntax) -> Option<&'a str> {
+    comment_starts(line, syntax)
         .into_iter()
         .find_map(|text| text.trim_start().strip_prefix(marker))
 }
@@ -602,16 +666,19 @@ pub fn cites_any_record(
     content: &str,
     prefixes: &[String],
     ids: &HashSet<crate::values::RecordId>,
+    vocab: &BackPointerVocab,
 ) -> bool {
     content.lines().any(|line| {
-        [MARKER_IMPLEMENTS, MARKER_VERIFIES].iter().any(|marker| {
-            line.contains(marker)
-                && marker_rest(line, marker).is_some_and(|rest| {
-                    cited_ids(rest, prefixes)
-                        .iter()
-                        .any(|id| ids.contains(&crate::values::RecordId::new(id)))
-                })
-        })
+        [vocab.implements.as_str(), vocab.verifies.as_str()]
+            .iter()
+            .any(|marker| {
+                line.contains(marker)
+                    && marker_rest(line, marker, &vocab.syntax).is_some_and(|rest| {
+                        cited_ids(rest, prefixes)
+                            .iter()
+                            .any(|id| ids.contains(&crate::values::RecordId::new(id)))
+                    })
+            })
     })
 }
 
@@ -643,6 +710,7 @@ pub fn back_pointer_evidence(
     // A line the declared `ignore_marker` excuses is not evidence either.
     let ignore = back_pointer_ignore_marker(config);
     let ignore = ignore.as_deref();
+    let vocab = back_pointer_vocab(config);
     for file in files {
         if !source_paths
             .iter()
@@ -654,8 +722,13 @@ pub fn back_pointer_evidence(
         let Some(content) = &file.content else {
             continue;
         };
-        let implements =
-            scan_marker_excusing(&file.path, content, &prefixes, MARKER_IMPLEMENTS, ignore);
+        let implements = scan_marker_excusing(
+            &file.path,
+            content,
+            &prefixes,
+            (vocab.implements.as_str(), &vocab.syntax),
+            ignore,
+        );
         let mut excused = implements.excused.clone();
         for pointer in implements.kept {
             if let Some(record) = index.get(&crate::values::RecordId::new(&pointer.id)) {
@@ -663,8 +736,13 @@ pub fn back_pointer_evidence(
             }
         }
         if is_test_file(&file.path, test_paths) {
-            let verifies =
-                scan_marker_excusing(&file.path, content, &prefixes, MARKER_VERIFIES, ignore);
+            let verifies = scan_marker_excusing(
+                &file.path,
+                content,
+                &prefixes,
+                (vocab.verifies.as_str(), &vocab.syntax),
+                ignore,
+            );
             excused.extend(&verifies.excused);
             for pointer in verifies.kept {
                 if let Some(record) = index.get(&crate::values::RecordId::new(&pointer.id)) {
@@ -767,6 +845,7 @@ pub fn embodiment_back_pointer_resolution(
     let mut excused_lines = 0;
     let mut unread = Vec::new();
     let report_unread = unread_markers_declared(config, RULE_ID);
+    let vocab = back_pointer_vocab(config);
 
     // A path-scoped run judges the files under the requested paths; a file it
     // read only for the evidence it gives a record in scope is counted as
@@ -786,12 +865,23 @@ pub fn embodiment_back_pointer_resolution(
             return Outcome::Unreadable;
         };
         let verifies = if is_test_file(&file.path, test_paths) {
-            scan_marker_excusing(&file.path, content, &prefixes, MARKER_VERIFIES, ignore)
+            scan_marker_excusing(
+                &file.path,
+                content,
+                &prefixes,
+                (vocab.verifies.as_str(), &vocab.syntax),
+                ignore,
+            )
         } else {
             MarkerScan::default()
         };
-        let implements =
-            scan_marker_excusing(&file.path, content, &prefixes, MARKER_IMPLEMENTS, ignore);
+        let implements = scan_marker_excusing(
+            &file.path,
+            content,
+            &prefixes,
+            (vocab.implements.as_str(), &vocab.syntax),
+            ignore,
+        );
         let excused: std::collections::BTreeSet<usize> = implements
             .excused
             .iter()
@@ -803,7 +893,7 @@ pub fn embodiment_back_pointer_resolution(
             file,
             content,
             (&prefixes, report_unread, ignore),
-            is_test_file(&file.path, test_paths),
+            (is_test_file(&file.path, test_paths), &vocab),
         )
         .absorb(&mut findings, &mut unread, &mut excused_lines);
         for pointer in implements.kept.into_iter().chain(verifies.kept) {
@@ -853,19 +943,17 @@ fn resolution_marker_findings(
     file: &SourceFile,
     content: &str,
     (prefixes, report, ignore): (&[String], bool, Option<&str>),
-    test_class: bool,
+    (test_class, vocab): (bool, &BackPointerVocab),
 ) -> UnreadOutcome {
     const RULE_ID: &str = RULE_EMBODIMENT_BACK_POINTER_RESOLUTION;
-    let read: &[&'static str] = if test_class {
-        &[MARKER_IMPLEMENTS, MARKER_VERIFIES]
-    } else {
-        &[MARKER_IMPLEMENTS]
-    };
+    let both = [vocab.implements.as_str(), vocab.verifies.as_str()];
+    let read: &[&str] = if test_class { &both } else { &both[..1] };
     let mode = UnreadMode {
         rule: RULE_ID,
         variant: "back-pointer-unread",
         report,
         ignore,
+        syntax: &vocab.syntax,
     };
     let mut out = judge_unread_markers(&mode, &file.path, content, (prefixes, read));
     if let Some(marker) = ignore {
@@ -873,7 +961,7 @@ fn resolution_marker_findings(
             (RULE_ID, "back-pointer-marker-unused"),
             file,
             content,
-            (prefixes, marker, read),
+            (prefixes, marker, read, &vocab.syntax),
         ));
     }
     out
@@ -886,6 +974,7 @@ fn decision_marker_findings(
     file: &SourceFile,
     content: &str,
     (prefixes, report, ignore): (&[String], bool, Option<&str>),
+    vocab: &BackPointerVocab,
 ) -> UnreadOutcome {
     const RULE_ID: &str = RULE_EMBODIMENT_BACK_POINTER_DECISION_ACCEPTED;
     let mode = UnreadMode {
@@ -893,15 +982,16 @@ fn decision_marker_findings(
         variant: "decision-pointer-unread",
         report,
         ignore,
+        syntax: &vocab.syntax,
     };
-    let read = &[MARKER_IMPLEMENTS];
+    let read = &[vocab.implements.as_str()];
     let mut out = judge_unread_markers(&mode, &file.path, content, (prefixes, read));
     if let Some(marker) = ignore {
         out.findings.extend(unused_marker_findings(
             (RULE_ID, "decision-marker-unused"),
             file,
             content,
-            (prefixes, marker, read),
+            (prefixes, marker, read, &vocab.syntax),
         ));
     }
     out
@@ -979,6 +1069,7 @@ pub fn embodiment_back_pointer_decision_accepted(
     let mut unused: Vec<Finding> = Vec::new();
     let mut unread = Vec::new();
     let report_unread = unread_markers_declared(config, RULE_ID);
+    let vocab = back_pointer_vocab(config);
 
     // The diff narrows what is handed to the rule; it is not the configuration
     // failing to reach a file, so an unchanged file is left out of the
@@ -998,8 +1089,13 @@ pub fn embodiment_back_pointer_decision_accepted(
         let Some(content) = &file.content else {
             return Outcome::Unreadable;
         };
-        let scanned =
-            scan_marker_excusing(&file.path, content, &prefixes, MARKER_IMPLEMENTS, ignore);
+        let scanned = scan_marker_excusing(
+            &file.path,
+            content,
+            &prefixes,
+            (vocab.implements.as_str(), &vocab.syntax),
+            ignore,
+        );
         // A path scope judges every back-pointer in a file under a requested
         // path, and in any other file only those citing a record in scope
         // (`MILE-207`).
@@ -1008,11 +1104,8 @@ pub fn embodiment_back_pointer_decision_accepted(
             excused_lines += scanned.excused.len();
         }
         if reports_unused && whole_file {
-            decision_marker_findings(file, content, (&prefixes, report_unread, ignore)).absorb(
-                &mut unused,
-                &mut unread,
-                &mut excused_lines,
-            );
+            decision_marker_findings(file, content, (&prefixes, report_unread, ignore), &vocab)
+                .absorb(&mut unused, &mut unread, &mut excused_lines);
         }
         findings.extend(decision_findings(
             scanned.kept,
@@ -1081,6 +1174,7 @@ mod tests {
             &expand("// @V ADR-550: a note\n"),
             &prefixes(),
             MARKER_VERIFIES,
+            &CommentSyntax::default(),
         );
         assert_eq!(verifies.len(), 1);
         assert_eq!(got("// @I ADR-1: why, ADR-2\n"), ["ADR-1", "ADR-2"]);
@@ -1098,6 +1192,7 @@ mod tests {
                 &expand(t),
                 &prefixes(),
                 MARKER_IMPLEMENTS,
+                &CommentSyntax::default(),
             )
             .into_iter()
             .map(|u| (u.line, u.id))
@@ -1135,7 +1230,14 @@ mod tests {
     #[test]
     fn the_scope_prefilter_accepts_a_file_citing_a_record_in_scope_only() {
         let ids = id_set(&["ADR-7"]);
-        let cites = |text: &str| cites_any_record(&expand(text), &prefixes(), &ids);
+        let cites = |text: &str| {
+            cites_any_record(
+                &expand(text),
+                &prefixes(),
+                &ids,
+                &BackPointerVocab::default(),
+            )
+        };
         assert!(cites("// @I ADR-7\n"));
         assert!(cites("fn a() {} // @I ADR-1, ADR-0007 (why)\n"));
         assert!(cites("// @V RFC-3 ADR-7\n"));
@@ -1163,13 +1265,24 @@ mod tests {
     fn a_declared_ignore_marker_drops_only_its_own_line() {
         let text = expand("// @I ADR-1\n// @I ADR-9 skip-me\n// @I ADR-2\n");
         let path = std::path::Path::new("src/a.rs");
-        let scan =
-            scan_marker_excusing(path, &text, &prefixes(), MARKER_IMPLEMENTS, Some("skip-me"));
+        let scan = scan_marker_excusing(
+            path,
+            &text,
+            &prefixes(),
+            (MARKER_IMPLEMENTS, &CommentSyntax::default()),
+            Some("skip-me"),
+        );
         let kept: Vec<usize> = scan.kept.iter().map(|p| p.line).collect();
         assert_eq!(kept, vec![1, 3]);
         assert_eq!(scan.excused.iter().copied().collect::<Vec<_>>(), vec![2]);
         // No marker declared: identical to the plain scan.
-        let plain = scan_marker_excusing(path, &text, &prefixes(), MARKER_IMPLEMENTS, None);
+        let plain = scan_marker_excusing(
+            path,
+            &text,
+            &prefixes(),
+            (MARKER_IMPLEMENTS, &CommentSyntax::default()),
+            None,
+        );
         assert_eq!(plain.kept, scan_back_pointers(path, &text, &prefixes()));
         assert!(plain.excused.is_empty());
     }
@@ -1182,7 +1295,7 @@ mod tests {
             &prefixes(),
             std::path::Path::new("a.rs"),
             "skip-me",
-            &[MARKER_IMPLEMENTS],
+            (&[MARKER_IMPLEMENTS], &CommentSyntax::default()),
         );
         assert_eq!(unused, vec![2]);
     }

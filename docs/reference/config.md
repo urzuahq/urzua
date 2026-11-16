@@ -83,6 +83,36 @@ optionally `fields` and `workers`). `workers` is how many pages of the issue lis
 requests at once when GitHub names the last page: an integer from 1 to 16, default 4, anything else a
 load error. A configuration without it behaves as it did before the key existed.
 
+### Rule vocabulary
+
+The words rules compare against are options, each defaulting to the list built in before it
+(`SPEC-3`, "Rule vocabulary"). A declared list **replaces** the default, except `rejected_values`,
+which **adds** to a built-in floor no declaration removes. An empty list, a blank or repeated value,
+and a marker without its colon are load errors naming the key.
+
+| Option | Rule | Default | A declared list |
+|---|---|---|---|
+| `implements_marker` | `embodiment.back-pointer-resolution` | `Implements:` | replaces |
+| `verifies_marker` | `embodiment.back-pointer-resolution` | `Verifies:` | replaces |
+| `comment_leaders` | `embodiment.back-pointer-resolution` | `<!--` `///` `//!` `//` `/*` `--` `#` `;` `*` | replaces |
+| `trailing_comment_leaders` | `embodiment.back-pointer-resolution` | `<!--` `//` `/*` `--` `#` | replaces |
+| `closing_verbs` | `claim.status-agreement` | `closes` `fixes` `resolves` | replaces |
+| `rejected_values` | `override.unreviewed` | none | adds to blank, dashes, the placeholder words and `pending` |
+
+The four back-pointer options are read by every rule and command that reads a back-pointer, so they
+are declared once, on `embodiment.back-pointer-resolution`:
+
+```yaml
+rules:
+  embodiment.back-pointer-resolution:
+    level: error
+    back_pointer_paths: [src]
+    implements_marker: "Realises:"
+```
+
+Three more are declared on a record type: `statuses.placeholders`, a `y-statement` shape's `phrases`,
+and, on the suppression type, `rejected_values` and `waiver_fields` (below).
+
 To see what a rule judges, its options and their current values, ask the binary:
 
 ```sh
@@ -120,6 +150,8 @@ record_types:
 | `role` | `suppression` makes this the waiver type. See [waivers and drift](waivers-and-drift.md). |
 | `effective_requires` | For a suppression type: fields that must hold a real value before a waiver takes effect. |
 | `permanent` | For a suppression type: where a waiver without `Expires` may take effect. |
+| `rejected_values` | For a suppression type: whole values (compared without case) that never meet an `effective_requires` field or an `Expires`, added to the built-in placeholder words and `pending`, which cannot be removed. |
+| `waiver_fields` | For a suppression type: `{reason: <field>, owner: <field>}`, the fields `urzua waive` writes a draft's reason and owner into; `Reason` and `Owner` by default. `Rule`, `Scope`, `Expires`, `Variant` and `Key-path` are read by name and cannot be renamed. |
 | `fields` | `{from: prefix-lines}` (or `yaml-frontmatter`, or `none`): where a record's fields are read from. `header_shape` is the usual way to say it; `fields` exists for a corpus whose headers are bare `Key: value` lines. |
 
 ### `statuses`
@@ -134,6 +166,7 @@ record_types:
 | `transitions` | `{From: [To, ...]}`: the lawful moves. |
 | `require`, `forbid` | Lists of `{when: [status, ...], fields: [field, ...]}`: fields that must, or must not, hold a value in those statuses. |
 | `pending` | The type's placeholder vocabulary: whole values (`unknown`) and `{pattern: <regex>}` entries that count as missing. |
+| `placeholders` | Whole values (compared without case) that are unedited template text, replacing the built-in words `name`, `name(s)`, `yyyy-mm-dd`, `tbd`, `todo`, `(project lead)`, `(session author)` for this type. An empty list is a load error. |
 | `blocked`, `progress` | Statuses read by the derived `blocked` value and `sequence.status-agreement`. |
 | `delivery` | How a status agrees with delivery evidence, including per-item evidence in a list-form "Done means" section (`items`). See `SPEC-3`, "Done-means items". |
 
@@ -154,7 +187,9 @@ sections:
 
 `name` is the heading text; `aliases` are other accepted headings; `level` (2 to 6, default 2) and
 `under` ask for a nested heading; `shape` is `y-statement` (with an optional `marker`, and
-`preamble: true` to find the block outside any section) or `table-min-rows` (with `min_rows`).
+`preamble: true` to find the block outside any section, and an optional `phrases` list replacing the
+five default phrases `in the context of`, `facing`, `we decided`, `to achieve`, `accepting`) or
+`table-min-rows` (with `min_rows`).
 `exempt_statuses` lists statuses whose records are eligible but not examined. `items` (default
 `false`) turns on item reading for the done-items rules; see `SPEC-3`. `section.required` and
 `section.shape` read this.

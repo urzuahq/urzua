@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.150'
+Version: '0.151'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:7207b798837c05f8190919092228e00717c9201b7b1b6946d2b1392ba1097f22, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:09c2431a269316741c35b51dabd5766ecd3d50fab2b98069314bb1bc8857767d, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:255395e7d2caa34947cef28f463e2ec050e3eba798a4dc7573a3cad946fee1ae
@@ -1026,6 +1026,43 @@ harness:
   | `mcp_line_bytes` | 1048576 | 1048576 to 67108864 | bytes of one request line `urzua mcp` reads (`SPEC-26`) |
   | `gate_walk_files` | 50000 | 50000 or more | files walked under the path-gate entries |
 
+## Rule vocabulary
+
+The words rules compare against are configuration (`MILE-233`, `ADR-101` amendment of 2026-11-15). Each
+key's default is exactly the list compiled in before it, so a configuration that declares none reads
+as before. A declared list **replaces** the default for a vocabulary a team in another language would
+swap whole; it **adds** to the default only for a security floor, whose built-in values no declaration
+removes. An empty list is a load error naming its key, never a silent no-op (`SPEC-1`): a replacing
+list that is empty would turn the reading off without saying so (the rule's level is the switch for
+that), and an adding list that is empty adds nothing. A blank value, a repeated one (compared without
+case where matching ignores case), and a value that cannot work are load errors naming the key; an
+unknown key is refused with the keys the place accepts, as everywhere in this file. Choices decided by
+the builder on 2026-11-16, pending maintainer review.
+
+| Key | Where | Default | Declared list |
+|---|---|---|---|
+| `implements_marker` | `embodiment.back-pointer-resolution` | `Implements:` | replaces; one word ending in `:` |
+| `verifies_marker` | `embodiment.back-pointer-resolution` | `Verifies:` | replaces; one word ending in `:`, not the `implements_marker` |
+| `comment_leaders` | `embodiment.back-pointer-resolution` | `<!--`, `///`, `//!`, `//`, `/*`, `--`, `#`, `;`, `*` | replaces; tried longest first at the start of a line |
+| `trailing_comment_leaders` | `embodiment.back-pointer-resolution` | `<!--`, `//`, `/*`, `--`, `#` | replaces; open a comment after code, following whitespace |
+| `closing_verbs` | `claim.status-agreement` | `closes`, `fixes`, `resolves` | replaces; words of letters or digits, compared without case |
+| `phrases` | a `y-statement` section shape | `in the context of`, `facing`, `we decided`, `to achieve`, `accepting` | replaces; compared without case or spacing |
+| `statuses.placeholders` | a record type | `name`, `name(s)`, `yyyy-mm-dd`, `tbd`, `todo`, `(project lead)`, `(session author)` | replaces for that type; whole values, compared without case |
+| `rejected_values` | `override.unreviewed` | none beyond the floor | adds to the floor of what is never a reviewer |
+| `rejected_values` | the suppression type | none beyond the floor | adds to the floor of what never meets an `effective_requires` field or an `Expires` |
+| `waiver_fields` | the suppression type | `{reason: Reason, owner: Owner}` | replaces each named field `urzua waive` writes a draft's reason and owner into |
+
+The four back-pointer keys are declared on `embodiment.back-pointer-resolution` only, whatever its
+level, and every rule and command that reads a back-pointer reads them from there:
+`embodiment.back-pointer-decision-accepted`, `embodiment.locator-on-back-pointer-path`,
+`boundary.published-path-reference`'s generated paths, the evidence `fix` and `reverify` compute, a
+path-scoped read, and `code.dangling-bug-reference`'s leaders for an extension `code_comment_prefixes`
+does not name. The marker's colon is required because the reading of the ids starts after it; the
+`ignore_marker` checks compare against the declared markers. The `nnnn` reference heuristic of
+`statuses.placeholders` (`ADR-NNNN`) is not a word list and stays. `waiver_fields` may not name a field
+the matching grammar reads (`Rule`, `Scope`, `Expires`, `Variant`, `Key-path`, listed below) nor the same
+field for both.
+
 ## Format invariants and security floors
 
 `ADR-101`'s amendment of 2026-11-15 makes configuration own any value that shapes what a user or agent
@@ -1040,6 +1077,11 @@ text. Configuring one would let two copies of urzua disagree about where a file 
 |---|---|---|
 | `.urzua/cache/post-command.json`, `.urzua/cache/post-command-head`, `.urzua/cache/protected-hashes.json` | `harness/post_command.rs` | the post-command baselines; the protected-path guardrail keeps `.urzua/cache` for the harness itself, so a configured location would be a baseline no gate protects from an agent's write |
 | `.urzua/harness.lock` | `harness/lock.rs` | what `install`, `status`, `update`, `uninstall`, `doctor` and the session-start check read to find what was installed; moving it would orphan an installed harness |
+| the pin marker `@sha256:` | `locator.rs` | every pinned locator in every record is written with it, and `fix`, `explain` and other copies of urzua read pins by it; another marker would read every existing pin as part of the path |
+| the scaffold placeholder `<resolved by urzua new>` | `rules/scaffold_header.rs` | `urzua new` writes it and `header.scaffold-unresolved` finds it; the two must agree byte for byte, across versions of urzua that wrote and check the file |
+| the override log's seven columns (`Date`, `Name`, `Record`, `Field`, `Rule`, `Reason`, `Reviewed-by`) | `rules/override_log.rs` | the editor hook writes the row and `override.unreviewed` reads it by position; a configured layout would let the hook of one version write rows another cannot read |
+| the managed-block markers `<!-- urzua-harness:begin -->` and `<!-- urzua-harness:end -->` | `harness/block.rs` | `install`, `update` and `uninstall` find the block they own by them in files the user also edits; another marker would orphan an installed block |
+| the waiver fields `Rule`, `Scope`, `Expires`, `Variant`, `Key-path` | `waiver.rs`, `commands/waive.rs` | the matching grammar reads them by name (`SPEC-10`): which finding a waiver covers and until when; a renamed field would make existing waivers cover nothing, or cover forever. `Reason` and `Owner` are configurable as `waiver_fields` |
 
 **Security floors** bound how much of an untrusted input urzua reads. Configuration may raise one but
 never lower it: the built-in value is both the default and the minimum, and a lower value is a load
@@ -1068,6 +1110,13 @@ seconds would let edits pass unjudged.
 | MCP request line | `harness.limits.mcp_line_bytes` | a longer line is refused with `-32600` without being held in memory |
 | editor hook timeout | `harness.limits.hook_timeout_seconds` | a host that kills the hook first lets the call proceed (`SPEC-24`) |
 | path-gate walk | `harness.limits.gate_walk_files` | a walk that stops at it reports it was truncated |
+
+Two floors are word lists rather than numbers: configuration may add to them and never remove from them.
+
+| Value | Key | Reason |
+|---|---|---|
+| values never a reviewer: blank, dashes, the compiled-in placeholder words, `pending` | `override.unreviewed`'s `rejected_values` adds | a reviewer cell a configuration could make `Present` with `TBD` would let an override pass as reviewed; a type's own `statuses.placeholders` does not lower it |
+| values that never meet a suppression's `effective_requires` field or `Expires`: the compiled-in placeholder words and `pending` | the suppression type's `rejected_values` adds | a waiver a configuration could make effective with a `TBD` reason suppresses a finding nobody reviewed; an `Expires` that is not a real date already never takes effect |
 
 ## Who may accept a record: `authority`
 
@@ -2706,3 +2755,4 @@ proves this configuration produces the three findings.
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 9b216fd928bd -> 76578456015b. Reason: Read the diff of each re-pinned file against main. config.rs: the `unread_markers` rule option was added (UnreadMarkers enum, its field-name list entry and the load check validate_unread_markers that refuses it on any rule but the two back-pointer rules); nothing else changed. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 76578456015b -> 26b96561f2fa. Reason: Read the diff of each re-pinned file against main. config.rs: the `unread_markers` rule option (UnreadMarkers, its field-name entry, validate_unread_markers) and `issue_refs.workers` (IssueRefs::workers, REFS_WORKERS_DEFAULT/MAX, a 1-to-16 check in issue_refs_problem); nothing else. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 305844777dc8 -> 7207b798837c. Reason: Read the diff of each re-pinned file against main. config.rs: the `unread_markers` rule option (UnreadMarkers, its field-name entry, validate_unread_markers) and `issue_refs.workers` (IssueRefs::workers, REFS_WORKERS_DEFAULT/MAX, a 1-to-16 check in issue_refs_problem); nothing else. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-16 | Bumped to `0.151`. Adds `## Rule vocabulary`: `implements_marker`, `verifies_marker`, `comment_leaders`, `trailing_comment_leaders`, `closing_verbs`, a `y-statement` shape's `phrases`, `statuses.placeholders`, `rejected_values` (on `override.unreviewed` and on the suppression type) and `waiver_fields`, each defaulting to the list compiled in before it; a declared list replaces the default except for the two `rejected_values`, which add to a floor; an empty list is a load error. Adds the pin marker, the scaffold placeholder, the override log columns, the managed-block markers and the waiver fields the matching grammar reads to the format invariants, and the reviewer and suppression rejection words to the security floors, each with its reason. **Why:** `ADR-101` amendment of 2026-11-15, accepted by the maintainer; tracked by `MILE-233`. The replace-or-add semantics and the empty-list refusal were decided by the builder on 2026-11-16, pending maintainer review. | **substantive** |
