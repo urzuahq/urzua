@@ -302,6 +302,18 @@ pub const DEFAULT_ON_RULES: &[DefaultOn] = &[
     },
 ];
 
+/// The merge-base copies of the records the diff did not add: a renamed record
+/// has its old copy in `base_text` only for `diff.pin-changed-unattested`, and
+/// the other readers judge it as they always did, as new.
+fn unrenamed(c: &RuleCtx<'_>) -> HashMap<PathBuf, String> {
+    let added: &[PathBuf] = c.added_paths.unwrap_or_default();
+    c.base_text
+        .iter()
+        .filter(|(p, _)| !added.contains(p))
+        .map(|(p, t)| (p.clone(), t.clone()))
+        .collect()
+}
+
 /// The default-on entry for `id`, if it has one.
 pub fn default_on(id: &str) -> Option<&'static DefaultOn> {
     DEFAULT_ON_RULES.iter().find(|d| d.id == id)
@@ -712,7 +724,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         ],
         phase: Phase::Main,
         companion: None,
-        run: |c| revision_log_version_bump(c.records, c.config, c.full_text, c.changed_paths, c.base_text),
+        run: |c| revision_log_version_bump(c.records, c.config, c.full_text, c.changed_paths, &unrenamed(c)),
     },
     RuleDef {
         id: RULE_EMBODIMENT_CONSISTENCY,
@@ -833,7 +845,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
                 c.records,
                 c.config,
                 c.full_text,
-                c.base_text,
+                &unrenamed(c),
                 c.changed_paths,
                 &BaseReads {
                     drift: c.base_drift,

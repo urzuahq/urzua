@@ -1,12 +1,15 @@
 id: a-pin-changed-by-hand-fails-check-base
 corpus: corpus-g
-# The first commit pins src/cache.rs; the second changes the hash by hand and
-# writes no re-pin row. `diff.pin-changed-unattested` is on by default and
-# reports the locator against the commit before.
+# The first commit pins src/cache.rs and declares the rule off; the second turns
+# it on and changes the hash by hand with no re-pin row. The rule runs at the
+# stricter of the head's and the base's level, so switching it off in the head
+# (the proof mutation) leaves both off and the finding goes away.
 commits:
   - write:
+      .urzua/config.yaml: "schema_version: 2\nfail_on: warning\nrecord_types:\n  adr:\n    dir: records\n    prefix: ADR\n    required_fields: [Status, Embodiment, Realized-by]\n    header_shape: yaml-frontmatter\nrules:\n  diff.pin-changed-unattested: off\n  embodiment.consistency: warn\n  embodiment.locator-exists: error\n  embodiment.back-pointer-resolution:\n    level: error\n    back_pointer_paths: [src]\n  code.dangling-bug-reference:\n    level: error\n    back_pointer_paths: [src]\n    extensions: [rs]\n"
       records/ADR-0011-repinned.md: "---\nStatus: Accepted\nEmbodiment: Implemented\nRealized-by: code:src/cache.rs@sha256:0000000000000000000000000000000000000000000000000000000000000000\n---\n# ADR-0011 — Re-pinned by hand\n"
   - write:
+      .urzua/config.yaml: "schema_version: 2\nfail_on: warning\nrecord_types:\n  adr:\n    dir: records\n    prefix: ADR\n    required_fields: [Status, Embodiment, Realized-by]\n    header_shape: yaml-frontmatter\nrules:\n  diff.pin-changed-unattested: error\n  embodiment.consistency: warn\n  embodiment.locator-exists: error\n  embodiment.back-pointer-resolution:\n    level: error\n    back_pointer_paths: [src]\n  code.dangling-bug-reference:\n    level: error\n    back_pointer_paths: [src]\n    extensions: [rs]\n"
       records/ADR-0011-repinned.md: "---\nStatus: Accepted\nEmbodiment: Implemented\nRealized-by: code:src/cache.rs@sha256:1111111111111111111111111111111111111111111111111111111111111111\n---\n# ADR-0011 — Re-pinned by hand\n"
 invocation: [check, --base, HEAD~1]
 expect_exit: 1
