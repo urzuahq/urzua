@@ -2,7 +2,7 @@
 Stable-Id: 01M2MP1F6VY4TNSH7J1QFMES1R
 Status: Accepted
 Embodiment: Implemented
-Realized-by: code:.github/workflows/checks.yml@sha256:e166badec9b1eac84bcd921aaf137fc7552a48d8a35b96a4c36fac4bd2b3cb84, code:.github/workflows/ci.yml@sha256:fe22a1814fb929539822f0b7e67b01c530fa4e90c89363d29285ec167b012fcd, code:.github/workflows/publish-release.yml@sha256:0a1fc6e498fb769a9b8c19a0abb651746f0806e5882a9e6ae3e610efb67fba30
+Realized-by: code:.github/workflows/checks.yml@sha256:e166badec9b1eac84bcd921aaf137fc7552a48d8a35b96a4c36fac4bd2b3cb84, code:.github/workflows/ci.yml@sha256:4ea9e5c7cf7da2c99290bbb784f1df5634157ba26bbe619c59e59a12aa1770f5, code:.github/workflows/publish-release.yml@sha256:0a1fc6e498fb769a9b8c19a0abb651746f0806e5882a9e6ae3e610efb67fba30
 Date: 2026-09-16
 Accepted-on: 2026-09-16
 Author: beauwilliams
@@ -120,6 +120,7 @@ than merely tedious.
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.github/workflows/checks.yml` 0a3547c3f12a -> e166badec9b1. Reason: checks.yml: the stale-pin step's suggested re-pin command now includes --actor (agent or human), required under a gh-verified identity; the rest of the workflow this record cites is unchanged **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.github/workflows/ci.yml` b738f035984a -> d6fdad2c5ec6. Reason: the pinned release moves from v0.4.2 to v0.4.4 in this file (version, ref and the linux archive sha256 in the pinned-release gate job, and the version named in the action's examples); nothing else in the file changed and the claim still holds **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.github/workflows/ci.yml` d6fdad2c5ec6 -> fe22a1814fb9. Reason: ci.yml gains the install-script job, which runs scripts/install-test.sh, and the ci job now requires it; the jobs this record relies on are unchanged **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.github/workflows/ci.yml` fe22a1814fb9 -> 4ea9e5c7cf7d. Reason: the pinned release moves from v0.4.4 to v0.4.5 in this file (version, ref and the linux archive sha256 in the pinned-release gate job, the version named in the action's examples, the README's gate example); nothing else in the file changed and the claim still holds **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 
 ## Amendment (2026-09-16): two Consequences corrected by the first real release
 
