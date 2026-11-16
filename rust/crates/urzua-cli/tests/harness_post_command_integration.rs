@@ -1493,3 +1493,46 @@ fn the_agent_gets_its_own_line_in_a_mixed_report() {
         "{agent}"
     );
 }
+
+fn assert_full_weight(dir: &Path, cmd: &str) {
+    bash(dir, cmd);
+    let v = post(dir);
+    assert!(v["base_match"].is_null(), "{cmd}: {v}");
+    assert!(
+        v["person"]
+            .as_str()
+            .unwrap()
+            .contains("[protected-paths] error"),
+        "{cmd}: {v}"
+    );
+}
+
+#[test]
+fn base_bytes_on_disk_over_a_different_commit_do_not_match() {
+    let (_up, dir, _h) = cloned_fixture("restore-commit");
+    assert_full_weight(&dir, "echo evil >> .github/workflows/ci.yml && git add .github/workflows/ci.yml && git restore --source=origin/main --worktree .github/workflows/ci.yml && git commit -qm x");
+}
+
+#[test]
+fn a_committed_file_removed_from_disk_does_not_match() {
+    let (_up, dir, _h) = cloned_fixture("commit-rm");
+    assert_full_weight(&dir, "echo evil > .github/workflows/e.yml && git add -A && git commit -qm x && rm .github/workflows/e.yml");
+}
+
+#[test]
+fn base_bytes_on_disk_over_a_different_index_do_not_match() {
+    let (_up, dir, _h) = cloned_fixture("restore-index");
+    assert_full_weight(&dir, "echo evil >> .github/workflows/ci.yml && git add .github/workflows/ci.yml && git restore --source=origin/main --worktree .github/workflows/ci.yml");
+}
+
+#[test]
+fn a_pull_with_an_unrelated_local_commit_still_matches() {
+    let (up, dir, _h) = cloned_fixture("pull-unrelated");
+    upstream_change(&up);
+    bash(
+        &dir,
+        "git pull -q --ff-only && echo x > notes.txt && git add notes.txt && git commit -qm notes",
+    );
+    let v = post(&dir);
+    assert_eq!(base_paths(&v).len(), 3, "{v}");
+}

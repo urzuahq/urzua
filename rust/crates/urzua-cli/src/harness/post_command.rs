@@ -492,7 +492,7 @@ fn judge_changes(
         &loaded,
         &paths,
         prior.as_ref(),
-        (gated, protected),
+        (gated, protected, base),
     );
     let to_check: Vec<String> = fresh
         .iter()
@@ -595,7 +595,7 @@ fn base_gates(
     loaded: &Config,
     paths: &BTreeMap<String, bool>,
     prior: Option<&ProtectedState>,
-    (gated, protected): (Vec<GateEvent>, Vec<GateEvent>),
+    (gated, protected, start): (Vec<GateEvent>, Vec<GateEvent>, &str),
 ) -> Gates {
     let harness = loaded.harness.as_ref();
     let config_rel = config_path
@@ -639,7 +639,7 @@ fn base_gates(
             .filter(|(_, d)| **d)
             .map(|(p, _)| p.clone())
             .collect();
-        matching_base(repo_root, &base_ref, &event_paths, &deleted)
+        matching_base(repo_root, (&base_ref, start), &event_paths, &deleted)
     };
     let compared = matched.is_some();
     let mut matched = matched.unwrap_or_default();
@@ -703,9 +703,14 @@ impl Gates {
         if n == 0 {
             return None;
         }
-        Some(if self.local || self.level == FindingSeverity::Error {
+        Some(if self.local {
             format!(
                 "{P}: {n} gated change(s) match {}, which proves nothing; a decider must make or approve them, and the person has been told.",
+                self.base
+            )
+        } else if self.level == FindingSeverity::Error {
+            format!(
+                "{P}: {n} gated change(s) match {}; a decider must make or approve them, and the person has been told.",
                 self.base
             )
         } else {
@@ -913,7 +918,7 @@ fn level_name(level: FindingSeverity) -> &'static str {
 /// change is reported, never whether it is; CI compares with the real remote.
 fn matching_base(
     repo_root: &Path,
-    base: &str,
+    (base, start): (&str, &str),
     paths: &[&String],
     deleted: &HashSet<String>,
 ) -> Option<HashSet<String>> {
@@ -930,11 +935,85 @@ fn matching_base(
     if !resolves {
         return None;
     }
-    Some(
-        same_as(repo_root, base, paths, deleted)
-            .into_iter()
-            .collect(),
-    )
+    let mut same: HashSet<String> = same_as(repo_root, base, paths, deleted)
+        .into_iter()
+        .collect();
+    // The working tree alone can hold the base's bytes while the index or a
+    // commit holds other content, so all three must equal the base, and no
+    // commit the command made that the base lacks may touch the path.
+    match committed_state(repo_root, (base, start), paths) {
+        Some((base_e, head_e, index_e, foreign)) => same.retain(|p| {
+            base_e.get(p) == head_e.get(p)
+                && base_e.get(p) == index_e.get(p)
+                && !foreign.contains(p)
+        }),
+        None => same.clear(),
+    }
+    Some(same)
+}
+
+type Entries = BTreeMap<String, (String, String)>;
+
+/// The base's, `HEAD`'s and the index's entry for each path, and the paths a
+/// commit in `start..HEAD` that `base` does not contain touched. `None` when
+/// git cannot say.
+fn committed_state(
+    repo_root: &Path,
+    (base, start): (&str, &str),
+    paths: &[&String],
+) -> Option<(Entries, Entries, Entries, HashSet<String>)> {
+    let base_e = base_entries(repo_root, base, paths)?;
+    let head_e = base_entries(repo_root, "HEAD", paths)?;
+    let git = |args: Vec<String>| {
+        GitRun::new()
+            .cwd(repo_root)
+            .args(&args)
+            .discard_stderr()
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| o.stdout)
+    };
+    let with_paths = |mut args: Vec<String>| {
+        args.push("--".to_string());
+        args.extend(paths.iter().map(|p| p.to_string()));
+        args
+    };
+    let flags = ["--no-optional-locks", "--literal-pathspecs"].map(String::from);
+    let mut ls = flags.to_vec();
+    ls.extend(["ls-files", "-s", "-z"].map(String::from));
+    // `<mode> <oid> <stage>\t<path>`; a conflicted path never matches.
+    let index_e: Entries = git(with_paths(ls))?
+        .split(|b| *b == 0)
+        .filter_map(|e| {
+            let text = String::from_utf8_lossy(e).to_string();
+            let (meta, path) = text.split_once('\t')?;
+            let mut meta = meta.split(' ');
+            let (mode, oid, stage) = (meta.next()?, meta.next()?, meta.next()?);
+            let entry = if stage == "0" {
+                (mode.to_string(), oid.to_string())
+            } else {
+                ("conflict".to_string(), String::new())
+            };
+            Some((path.to_string(), entry))
+        })
+        .collect();
+    let mut foreign = HashSet::new();
+    if start != "HEAD" {
+        let mut log = flags.to_vec();
+        log.extend(["log", "--format=", "--name-only", "-z"].map(String::from));
+        log.extend([
+            format!("{start}..HEAD"),
+            "--not".to_string(),
+            base.to_string(),
+        ]);
+        foreign = git(with_paths(log))?
+            .split(|b| *b == 0 || *b == b'\n')
+            .filter(|n| !n.is_empty())
+            .map(|n| String::from_utf8_lossy(n).to_string())
+            .collect();
+    }
+    Some((base_e, head_e, index_e, foreign))
 }
 
 /// The base ref for the report, as configured. A remote-tracking ref that
@@ -1230,7 +1309,7 @@ fn changed_path_map(
         paths.insert(rel, deleted);
     }
     for rel in committed {
-        let gone = !repo_root.join(&rel).exists();
+        let gone = !rel.contains('\u{FFFD}') && !repo_root.join(&rel).exists();
         paths.entry(rel).or_insert(gone);
     }
     for (rel, deleted) in protected_changes {
