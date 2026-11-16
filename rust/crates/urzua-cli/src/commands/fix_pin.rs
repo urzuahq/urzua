@@ -162,43 +162,14 @@ pub(crate) fn run(config_path: Option<PathBuf>, args: PinArgs<'_>) -> Result<Exi
             (_, Some(old)) => remove(record, config, old, write),
             _ => first_pins(record, config, &read, write, !args.ids.is_empty()),
         };
-        // The listing runs first, writing nothing, so a record the log plan
-        // refuses is never written and is refused the same way in both modes.
-        let outcome = match dispatch(None) {
-            Ok(Some(entry)) => {
-                let content =
-                    urzua_io::read_to_string(&repo_root.join(&record.path)).unwrap_or_default();
-                match super::fix::evidence_log(
-                    repo_root,
-                    config,
-                    Some(&record.record_type),
-                    &record.path,
-                    &content,
-                    "write",
-                ) {
-                    EvidenceLog::Refused(error, next) => {
-                        if failure_action.is_none() {
-                            failure_action = next;
-                        }
-                        Err(error)
-                    }
-                    plan => {
-                        let creates = matches!(plan, EvidenceLog::Create(_));
-                        let written = match &write {
-                            Some(w) => dispatch(Some(w)),
-                            None => Ok(Some(entry)),
-                        };
-                        written.map(|e| {
-                            e.map(|e| PinEntryReport {
-                                creates_revision_log: creates,
-                                ..e
-                            })
-                        })
-                    }
-                }
-            }
-            other => other,
-        };
+        let outcome = planned_outcome(
+            repo_root,
+            config,
+            record,
+            &dispatch,
+            write.as_ref(),
+            &mut failure_action,
+        );
         if let Ok(Some(entry)) = &outcome {
             notices.extend(uncommitted_notices(repo_root, entry));
         }
@@ -211,12 +182,7 @@ pub(crate) fn run(config_path: Option<PathBuf>, args: PinArgs<'_>) -> Result<Exi
             }),
         }
     }
-    let status = match (args.apply, done.is_empty(), failed.is_empty()) {
-        (_, _, false) => "partial-failure",
-        (true, _, true) => "applied",
-        (false, true, true) => "ok",
-        (false, false, true) => "pins-available",
-    };
+    let status = report_status(args.apply, done.is_empty(), failed.is_empty());
     Ok(emit(&PinReport {
         status,
         records: done,
@@ -224,6 +190,60 @@ pub(crate) fn run(config_path: Option<PathBuf>, args: PinArgs<'_>) -> Result<Exi
         identity: identity.map(|i| i.report),
         notices,
         failure_action,
+    }))
+}
+
+fn report_status(apply: bool, none_done: bool, none_failed: bool) -> &'static str {
+    match (apply, none_done, none_failed) {
+        (_, _, false) => "partial-failure",
+        (true, _, true) => "applied",
+        (false, true, true) => "ok",
+        (false, false, true) => "pins-available",
+    }
+}
+
+type PinOutcome = Result<Option<PinEntryReport>, String>;
+
+/// One record's outcome. The listing runs first, writing nothing, so a record
+/// the log plan refuses is never written and is refused the same way in both
+/// modes; the refusal's command, if any, fills `failure_action` once.
+fn planned_outcome(
+    repo_root: &std::path::Path,
+    config: &Config,
+    record: &Record,
+    dispatch: &dyn Fn(Option<&Write<'_>>) -> PinOutcome,
+    write: Option<&Write<'_>>,
+    failure_action: &mut Option<NextAction>,
+) -> PinOutcome {
+    let entry = match dispatch(None) {
+        Ok(Some(entry)) => entry,
+        other => return other,
+    };
+    let content = urzua_io::read_to_string(&repo_root.join(&record.path)).unwrap_or_default();
+    let plan = super::fix::evidence_log(
+        repo_root,
+        config,
+        Some(&record.record_type),
+        &record.path,
+        &content,
+        "write",
+    );
+    let creates = match plan {
+        EvidenceLog::Refused(error, next) => {
+            if failure_action.is_none() {
+                *failure_action = next;
+            }
+            return Err(error);
+        }
+        plan => matches!(plan, EvidenceLog::Create(_)),
+    };
+    let written = match write {
+        Some(w) => dispatch(Some(w))?,
+        None => Some(entry),
+    };
+    Ok(written.map(|e| PinEntryReport {
+        creates_revision_log: creates,
+        ..e
     }))
 }
 
