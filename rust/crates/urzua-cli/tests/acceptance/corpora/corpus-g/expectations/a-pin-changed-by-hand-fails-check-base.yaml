@@ -1,0 +1,19 @@
+id: a-pin-changed-by-hand-fails-check-base
+corpus: corpus-g
+# The first commit pins src/cache.rs; the second changes the hash by hand and
+# writes no re-pin row. `diff.pin-changed-unattested` is on by default and
+# reports the locator against the commit before.
+commits:
+  - write:
+      records/ADR-0011-repinned.md: "---\nStatus: Accepted\nEmbodiment: Implemented\nRealized-by: code:src/cache.rs@sha256:0000000000000000000000000000000000000000000000000000000000000000\n---\n# ADR-0011 — Re-pinned by hand\n"
+  - write:
+      records/ADR-0011-repinned.md: "---\nStatus: Accepted\nEmbodiment: Implemented\nRealized-by: code:src/cache.rs@sha256:1111111111111111111111111111111111111111111111111111111111111111\n---\n# ADR-0011 — Re-pinned by hand\n"
+invocation: [check, --base, HEAD~1]
+expect_exit: 1
+expect_findings:
+  - rule: diff.pin-changed-unattested
+    file: records/ADR-0011-repinned.md
+    severity: error
+    message_contains: "src/cache.rs"
+proves:
+  - diff.pin-changed-unattested
