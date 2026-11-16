@@ -2,7 +2,7 @@
 Stable-Id: 01M6R3NK4K2QQFBGS4V1FDFGWW
 Status: Accepted
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-io/src/lib.rs@sha256:94980392d34ea8f35aa40585e5f9d8762582ad32750ff0c61210aa209ff3a910, test:rust/crates/urzua-io/src/lib.rs@sha256:94980392d34ea8f35aa40585e5f9d8762582ad32750ff0c61210aa209ff3a910
+Realized-by: code:rust/crates/urzua-io/src/lib.rs@sha256:8001669b33863fc5c100c7e40130ce4dffd886301b43e61079b8f2e86c118eae, test:rust/crates/urzua-io/src/lib.rs@sha256:8001669b33863fc5c100c7e40130ce4dffd886301b43e61079b8f2e86c118eae
 Date: 2026-09-06
 Accepted-on: 2026-09-06
 Author: beauwilliams
@@ -143,3 +143,4 @@ surface.
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-io/src/lib.rs` 2ae8ac7886f1 -> 4bfa003229d6. Reason: io lib.rs resolves the --base ref first and reports which ref names no commit instead of a raw git merge-base error; the record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-io/src/lib.rs` 2ae8ac7886f1 -> be96d508a43b. Reason: io lib.rs adds sha256_hex_of_bytes and sha256_hex_of_str now calls it with the same output; nothing else changed. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Pin recomputed on merge (attested by beauwilliams, identity: gh-verified, actor: agent): both merged sides re-pinned, `rust/crates/urzua-io/src/lib.rs` 4bfa003229d6 and be96d508a43b -> 94980392d34e; the new hash is the merged file's, which is git's automatic merge of the two re-pinned commits. No person wrote a reason for the merged state. **Why:** `urzua fix --conflicts` resolved a conflict that lay only in re-pin lines; a reviewer of the pull request should confirm the merged pin. | **structural** |
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-io/src/lib.rs` 94980392d34e -> 8001669b3386. Reason: io lib.rs resolves the --base ref first and reports which ref names no commit instead of a raw git merge-base error, and adds git_remotes to list the configured remotes; the record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
