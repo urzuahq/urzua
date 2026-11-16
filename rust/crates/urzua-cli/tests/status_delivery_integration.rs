@@ -287,11 +287,24 @@ fn the_back_pointer_option_defaults_to_counting_and_accepts_true() {
 #[test]
 fn a_test_locator_list_in_realized_by_is_delivery_evidence_with_a_run_command_action() {
     let dir = repo("waiver", &config(DELIVERY, ""));
+    // The scoped items exist and a resolver reads them: a scope that does not
+    // resolve is no evidence (`fix` and `check` count only what resolves).
+    let resolver = "locator_resolvers:\n  - name: rust\n    glob: \"**/*.rs\"\n    start: '^\\s*fn\\s+{symbol}\\b'\n    end: brace_balanced\n";
+    let mut cfg = std::fs::read_to_string(dir.join(".urzua/config.yaml")).unwrap();
+    cfg.push_str(resolver);
+    std::fs::write(dir.join(".urzua/config.yaml"), cfg).unwrap();
+    std::fs::write(dir.join("tests/a.rs"), "fn t() {}\n").unwrap();
+    std::fs::write(dir.join("src/a.rs"), "fn a() {}\n").unwrap();
+    git(&dir, &["add", "-A"]);
+    git(&dir, &["commit", "-q", "-m", "scoped items"]);
+    let pin = |scope: &str| {
+        let explained = parsed(&run_urzua(&dir, &["explain", scope]));
+        explained["scope"]["pin"].as_str().unwrap().to_string()
+    };
+    let locators = format!("test:{}, test:{}", pin("tests/a.rs#t"), pin("src/a.rs#a"));
     std::fs::write(
         dir.join("docs/milestones/MILE-9-x.md"),
-        // Both files exist: a locator that names nothing, or a scope that does not
-        // resolve, is no evidence (`fix` and `check` count only what resolves).
-        milestone("InProgress", Some("test:tests/a.rs, test:src/a.rs")),
+        milestone("InProgress", Some(&locators)),
     )
     .unwrap();
     git(&dir, &["add", "-A"]);

@@ -1,6 +1,6 @@
 //! `urzua fix` counts only the `Realized-by` locators that resolve: a locator
 //! naming a file that is not there is no evidence, so `fix --apply` never
-//! writes `Embodiment` or `Status` from it (external review, item 1.1; SPEC-8).
+//! writes `Embodiment` or `Status` from it (SPEC-8).
 //! Real git-repo fixtures and the real binary; all output is JSON.
 
 mod common;

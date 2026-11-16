@@ -1,5 +1,5 @@
 //! `identity.collision` also reports two records that carry the same
-//! `Stable-Id` (external review, item 1.8): the rename pairing and the diff gate
+//! `Stable-Id`: the rename pairing and the diff gate
 //! match a record by it, so it must name one record. Real git fixtures and the
 //! real binary; all output is JSON.
 
