@@ -125,7 +125,7 @@ fn adr(n: &str, status: &str, extra: &str) -> String {
 
 /// A governed repository holding the records the pages name, with a drifted
 /// claim, a stale pin and an `origin` to diff against.
-fn governed(name: &str) -> common::TempDir {
+fn governed(name: &str) -> (common::TempDir, common::TempDir) {
     let dir = common::TempDir::new(&format!("urzua-doc-{name}"));
     for d in ["docs/adr", "docs/waiver", "src", ".urzua"] {
         std::fs::create_dir_all(dir.join(d)).unwrap();
@@ -170,8 +170,7 @@ fn governed(name: &str) -> common::TempDir {
     );
     git(&dir, &["remote", "add", "origin", origin.to_str().unwrap()]);
     git(&dir, &["fetch", "-q", "origin"]);
-    std::mem::forget(origin);
-    dir
+    (dir, origin)
 }
 
 fn empty(name: &str) -> common::TempDir {
@@ -199,16 +198,17 @@ fn every_documented_urzua_command_runs_against_a_fixture() {
         }
         // `init --types` starts a repository, `init` adopts one with records
         // and no configuration; everything else works on a governed one.
-        let dir = if command.starts_with("urzua init --types") {
-            empty(&format!("{i}"))
+        let (dir, _origin) = if command.starts_with("urzua init --types") {
+            (empty(&format!("{i}")), None)
         } else if command.starts_with("urzua init") {
-            let dir = governed(&format!("{i}"));
+            let (dir, origin) = governed(&format!("{i}"));
             std::fs::remove_file(dir.join(".urzua/config.yaml")).unwrap();
             git(&dir, &["add", "-A"]);
             git(&dir, &["commit", "-q", "-m", "unconfigured"]);
-            dir
+            (dir, Some(origin))
         } else {
-            governed(&format!("{i}"))
+            let (dir, origin) = governed(&format!("{i}"));
+            (dir, Some(origin))
         };
         let out = Command::new("sh")
             .arg("-c")
