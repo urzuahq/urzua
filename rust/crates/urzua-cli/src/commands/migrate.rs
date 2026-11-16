@@ -10,7 +10,9 @@ use std::process::ExitCode;
 
 use urzua_core::header::HeaderShape;
 use urzua_core::record::Record;
-use urzua_core::report::{Failure, MigrateSchemaReport, Notice, Report, ReportStatus};
+use urzua_core::report::{
+    Failure, MigrateSchemaReport, Notice, NoticeSeverity, Report, ReportStatus,
+};
 
 use crate::discovery::{default_config_path, find_repo_root};
 use crate::emit;
@@ -22,6 +24,8 @@ struct MigrateIdsReport {
     status: MigrateIdsStatus,
     apply: bool,
     missing: Vec<PathBuf>,
+    /// Records `--apply` wrote a `Stable-Id` into; `0` on a dry run.
+    written: usize,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     results: Vec<MigrateIdsResult>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -97,13 +101,21 @@ fn run_ids_inner(config_path: Option<PathBuf>, apply: bool) -> Result<ExitCode, 
         .filter(|r| r.header.get_reserved("Stable-Id").is_none())
         .collect();
 
+    let headerless: Vec<&Record> = missing
+        .iter()
+        .copied()
+        .filter(|r| has_no_header(r, &config))
+        .collect();
+    let notices = headerless_notice(&headerless, apply).into_iter().collect();
+
     if missing.is_empty() || !apply {
         return Ok(emit(&MigrateIdsReport {
             status: MigrateIdsStatus::Ok,
             apply,
             missing: missing.into_iter().map(|r| r.path.clone()).collect(),
+            written: 0,
             results: Vec::new(),
-            notices: Vec::new(),
+            notices,
         }));
     }
 
@@ -124,13 +136,50 @@ fn run_ids_inner(config_path: Option<PathBuf>, apply: bool) -> Result<ExitCode, 
     } else {
         MigrateIdsStatus::Ok
     };
+    let written = results
+        .iter()
+        .filter(|r| r.outcome == MigrateIdsOutcome::Applied)
+        .count();
     Ok(emit(&MigrateIdsReport {
         status,
         apply,
         missing: missing_paths,
+        written,
         results,
-        notices: Vec::new(),
+        notices,
     }))
+}
+
+fn has_no_header(r: &Record, config: &urzua_core::config::Config) -> bool {
+    config
+        .record_types
+        .get(&r.record_type)
+        .is_some_and(|t| t.has_no_header())
+}
+
+/// Names the records of a `header_shape: none` type, which can never take a
+/// `Stable-Id`, so a run over them is not mistaken for one that wrote.
+fn headerless_notice(headerless: &[&Record], apply: bool) -> Option<Notice> {
+    if headerless.is_empty() {
+        return None;
+    }
+    let mut types: Vec<&str> = headerless.iter().map(|r| r.record_type.as_str()).collect();
+    types.sort();
+    types.dedup();
+    let what = if apply {
+        "nothing was written to them"
+    } else {
+        "`--apply` writes nothing to them"
+    };
+    Some(Notice::new(
+        NoticeSeverity::Warning,
+        "migrate-ids".to_string(),
+        format!(
+            "{} record(s) belong to record type(s) declaring `header_shape: none` ({}), which have no header to hold a `Stable-Id`, so {what}; give the type a header block (`header_shape: yaml-frontmatter`) to backfill ids",
+            headerless.len(),
+            types.join(", ")
+        ),
+    ))
 }
 
 /// Writes a fresh `Stable-Id` into one record lacking it. `None` when the
@@ -141,6 +190,16 @@ fn backfill_stable_id(
     full_text: &HashMap<PathBuf, String>,
     repo_root: &Path,
 ) -> Option<MigrateIdsResult> {
+    if has_no_header(r, config) {
+        return Some(MigrateIdsResult {
+            record: r.path.clone(),
+            outcome: MigrateIdsOutcome::Skipped,
+            error: Some(format!(
+                "record type '{}' declares `header_shape: none`: there is no header to hold a `Stable-Id`, so nothing was written",
+                r.record_type
+            )),
+        });
+    }
     let Some(region) = r.header.region else {
         return Some(MigrateIdsResult {
             record: r.path.clone(),

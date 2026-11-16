@@ -962,7 +962,8 @@ pub trait Report: serde::Serialize {
     fn notices(&self) -> &[Notice];
     fn exit_code(&self) -> ExitCode;
     /// The one command worth running next, given the whole report (`MILE-72`).
-    /// Only `check`/`audit` and `fix` derive one; every other report has none.
+    /// `check`/`audit` and `fix` derive one from findings; `init` and `doctor` name the
+    /// command past a refusal; every other report has none.
     fn next_action(&self) -> Option<NextAction> {
         None
     }
@@ -1123,9 +1124,21 @@ pub struct CouldNotRun {
     pub schema_version_error: Option<crate::schema_version::SchemaVersionError>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub notices: Vec<Notice>,
+    /// Emitted as the top-level `next_action`, not as a key of its own.
+    #[serde(skip)]
+    pub next: Option<NextAction>,
 }
 
 impl CouldNotRun {
+    /// The command that gets past this refusal, for `next_action`.
+    pub fn with_next_action(mut self, command: impl Into<String>, reason: impl Into<String>) -> Self {
+        self.next = Some(NextAction {
+            command: command.into(),
+            reason: reason.into(),
+        });
+        self
+    }
+
     pub fn from(error: impl Into<Failure>) -> Self {
         let Failure {
             message,
@@ -1136,6 +1149,7 @@ impl CouldNotRun {
             error: message,
             schema_version_error: schema_version.map(|boxed| *boxed),
             notices: Vec::new(),
+            next: None,
         }
     }
 }
@@ -1184,6 +1198,9 @@ impl Report for CouldNotRun {
     }
     fn exit_code(&self) -> ExitCode {
         ExitCode::from(2)
+    }
+    fn next_action(&self) -> Option<NextAction> {
+        self.next.clone()
     }
 }
 
