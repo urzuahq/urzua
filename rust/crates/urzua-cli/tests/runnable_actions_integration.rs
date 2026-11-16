@@ -276,6 +276,53 @@ fn claim_fixture(name: &str) -> common::TempDir {
     dir
 }
 
+const PAIR_CONFIG: &str = "schema_version: 2
+rules:
+  relation.pair-reciprocity: error
+  relation.supersession-reciprocity: error
+relation_pairs:
+  - name: blocks
+    forward: Blocks
+    inverse: Blocked-by
+    reciprocity: required
+record_types:
+  adr:
+    dir: docs/adr
+    prefix: ADR
+    header_shape: yaml-frontmatter
+    required_fields: [Status]
+    known_fields: [Supersedes, Blocks, Blocked-by]
+    pointer_fields: [Supersedes, Blocks, Blocked-by]
+    relation_fields:
+      supersession: Supersedes
+    narrative_fields: []
+    statuses:
+      values: [Proposed, Accepted, Superseded]
+";
+
+/// One claim of each reciprocal pair whose other half is missing.
+fn pair_fixture(name: &str) -> common::TempDir {
+    let dir = repo(name);
+    std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
+    std::fs::write(dir.join(".urzua/config.yaml"), PAIR_CONFIG).unwrap();
+    let adr = |n: u32, fields: &str| {
+        format!(
+            "---\nStatus: Accepted\n{fields}---\n# {n} - A\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-11-04 | Filed. | **substantive** |\n"
+        )
+    };
+    let files = [
+        ("ADR-1-a.md", adr(1, "Supersedes: ADR-2\n")),
+        ("ADR-2-b.md", adr(2, "")),
+        ("ADR-3-c.md", adr(3, "Blocks: ADR-4\n")),
+        ("ADR-4-d.md", adr(4, "")),
+    ];
+    for (f, text) in files {
+        std::fs::write(dir.join("docs/adr").join(f), text).unwrap();
+    }
+    commit_all(&dir, 1);
+    dir
+}
+
 fn outdated_schema_fixture(name: &str) -> common::TempDir {
     let dir = repo(name);
     std::fs::write(
@@ -316,6 +363,16 @@ const COVERED: &[(&str, &str, &[&str])] = &[
         &["urzua", "fix", "--apply"],
     ),
     ("index-stale", "index.freshness", &["urzua", "index"]),
+    (
+        "pair-unreciprocated",
+        "relation.pair-reciprocity",
+        &["urzua", "fix", "--apply"],
+    ),
+    (
+        "supersession-unreciprocated",
+        "relation.supersession-reciprocity",
+        &["urzua", "fix", "--apply"],
+    ),
     (
         "claim-expired",
         "embodiment.claim-expired",
@@ -389,8 +446,9 @@ type Fixture = fn(&str) -> common::TempDir;
 
 #[test]
 fn every_suggested_action_and_every_next_action_runs_as_printed() {
-    let fixtures: [(&str, Fixture); 3] = [
+    let fixtures: [(&str, Fixture); 4] = [
         ("main", main_fixture),
+        ("pairs", pair_fixture),
         ("claim", claim_fixture),
         ("schema", outdated_schema_fixture),
     ];

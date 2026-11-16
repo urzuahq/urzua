@@ -473,6 +473,23 @@ fn waivable_from_value(value: &yaml_serde::Value) -> Result<Waivable, String> {
 }
 
 impl AuthorityDecl {
+    /// Whether a path gate covers `rel`, compared with Unicode case folding as
+    /// the editor hook compares it.
+    pub fn protects_path(&self, rel: &std::path::Path) -> bool {
+        let fold = |t: &str| -> String {
+            t.chars()
+                .flat_map(char::to_uppercase)
+                .flat_map(char::to_lowercase)
+                .collect()
+        };
+        let folded = fold(&rel.to_string_lossy());
+        self.gates.iter().filter(|g| g.is_path_gate()).any(|g| {
+            g.paths
+                .iter()
+                .any(|e| crate::rules::path_matches_entry(std::path::Path::new(&folded), &fold(e)))
+        })
+    }
+
     /// A table with no group and no gate: what the base revision holds when it
     /// declares no `authority`.
     pub fn none() -> AuthorityDecl {

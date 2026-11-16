@@ -21,7 +21,7 @@ harness:
   instructions_file: AGENTS.md
   outside_writes: shared
   guardrails:
-    editor-hook:   {enabled: true, on_unjudged: allow}
+    editor-hook:   {enabled: true, on_unjudged: allow, pending_pair: allow}
     session-start: {enabled: true}
     post-command:  {enabled: true}
 ```
@@ -69,6 +69,28 @@ not know is a load error, with the nearest valid name suggested.
 | `post-command` | After a shell command: runs `check` on the records git shows as changed, and reports. It never blocks. | not applicable |
 | `acceptance` | An agent's move of a record to a status your `authority` table reserves for a person. | `deny` |
 | `protected-paths` | An agent's write to a path your `authority` table protects (the harness's own files, CI workflows, `.urzua/config.yaml`, anything you list). | `deny` |
+
+### A change that needs two records to agree
+
+Some rules judge two records together: under a declared relation pair (`relation.pair-reciprocity`) or the
+combined supersession field (`relation.supersession-reciprocity`), if record A says it supersedes B, B must say
+it is superseded by A. The editor hook judges one file at a time, so neither half matches until both exist.
+
+`editor-hook.pending_pair` decides what happens to the first half:
+
+- `allow` (the default): an edit whose only new errors are such findings, each satisfied by one edit of
+  another record, is allowed. The message the agent reads names the other record, the field and value to add,
+  and the command that writes it, `urzua fix --apply --ids <other record> --actor agent`, which
+  changes only that field and adds a revision-log row. When the other record is a protected path, the edit
+  is refused instead: an agent can write that record neither by an edit nor by `urzua fix`, so a decider
+  makes the paired change. It never changes a `Status`: a move to `Superseded` is a
+  separate step, and gated where your `authority` table names it.
+- `refuse`: the edit is refused as it was before this key existed, and the refusal names the same command.
+
+Any other new error in the same edit still refuses, and the gates are unchanged: an edit that writes the second
+half and moves the record to a gated status is still refused for the status. A pair left unmatched is still a
+`urzua check` finding, so the post-command hook reports it and pre-commit and CI block it. The default `allow`
+is the maintainer's decision of 2026-11-16; set `pending_pair: refuse` for the earlier behaviour.
 
 `on_unjudged` (`allow` or `deny`) is what happens when the guardrail cannot run: the hook is missing,
 the config does not load. `acceptance` and `protected-paths` default to `deny` because an unjudged

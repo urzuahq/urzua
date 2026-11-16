@@ -142,8 +142,16 @@ urzua fix [PATHS]... [--apply --ids <path>,... | --force] [--by <name>] [--actor
           [--tier 1] [--rebaseline --reason <text>] [--conflicts] [--stdin-path <path>]
 ```
 
-Finds fields whose stated value disagrees with what urzua computes. Read-only by default. Tier 1,
-the `Embodiment` field, is the only tier implemented; any other `--tier` exits 2.
+Finds fields whose stated value disagrees with what urzua computes. Read-only by default. Tier 1
+recomputes `Embodiment` and `Status`; `--tier` accepts only 1, and any other value exits 2 (the one Tier 2 repair, below, runs without it).
+
+With `relation.pair-reciprocity` or `relation.supersession-reciprocity` on, it also lists the missing
+other half of a relation (a Tier 2 repair, run by the default command): when A claims a relation with B
+and B's inverse field does not name A, the repair adds A's id to B's field (appending to a list, adding
+the field when absent, and keeping a flow list, block list or quoted value in its form). It never writes a protected path (a path gate of `authority`; a notice says a decider makes the change), never changes a `Status` (the repair's `inverse.status` says the status move
+is a separate, gated step), never overwrites a value that names no record (reported as a notice), and
+writes nothing for a target that does not exist or a type the pair does not cover. The reciprocity
+findings print this command, `urzua fix --apply --ids <B>`.
 
 - `PATHS`: examine only these record files or directories. A path that matches no record is reported
   as a failure.
@@ -170,7 +178,8 @@ the `Embodiment` field, is the only tier implemented; any other `--tier` exits 2
   be combined with `PATHS` or any apply flag.
 
 `status` is `ok`, `repairs-available`, `applied` or `partial-failure`. Other output keys: `population`,
-`repairs` (`record`, `field`, `line`, `current_value`, `computed_value`, `tier`, `evidence`),
+`repairs` (`record`, `field`, `line`, `current_value`, `computed_value`, `tier`, `evidence`, and
+`inverse` for a Tier 2 repair),
 `rebaselines` (`record`, `field`, `line`, `pins` with `locator`, `recorded_hash`, `current_hash`),
 `failed_pins`, `failed`, `identity` and `notices`. See [Waivers and drift](waivers-and-drift.md).
 

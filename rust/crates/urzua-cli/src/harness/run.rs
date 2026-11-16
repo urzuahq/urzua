@@ -1101,6 +1101,31 @@ fn judge_record(j: &Judging<'_>, content: String, request: &Request) -> Verdict 
         .filter(|f| f.severity != FindingSeverity::Error)
         .collect();
     let (introduced, existing) = split_introduced(j, errors);
+    let (pending, introduced): (Vec<&Finding>, Vec<&Finding>) = introduced
+        .into_iter()
+        .partition(|f| pending_half(f, &j.rel));
+    // The other half going into a protected path is not one edit the agent
+    // can make, so that half is refused for a decider instead.
+    let (protected, pending): (Vec<&Finding>, Vec<&Finding>) = pending.into_iter().partition(|f| {
+        urzua_core::fix::inverse::UNRECIPROCATED_PROTECTED.contains(&f.action_source.variant)
+    });
+    let protected_note = protected_note(&protected);
+    let introduced: Vec<&Finding> = introduced.into_iter().chain(protected).collect();
+    let pending_allowed = urzua_core::harness::PendingPair::Allow
+        == j.config
+            .harness
+            .as_ref()
+            .map(|h| h.pending_pair())
+            .unwrap_or_default();
+    let (introduced, pending_note) = if pending.is_empty() {
+        (introduced, String::new())
+    } else if pending_allowed && introduced.is_empty() {
+        (introduced, follow_up(&pending, true))
+    } else {
+        let mut all = introduced;
+        all.extend(&pending);
+        (all, follow_up(&pending, false))
+    };
 
     let mut note = histnote.clone();
     if !existing.is_empty() {
@@ -1117,12 +1142,22 @@ fn judge_record(j: &Judging<'_>, content: String, request: &Request) -> Verdict 
     }
 
     if introduced.is_empty() {
-        let shown: Vec<&Finding> = existing.iter().chain(&others).copied().collect();
-        let (kind, message) = allow_message(rel, &report, &shown, &histnote, &note);
+        let shown: Vec<&Finding> = existing
+            .iter()
+            .chain(&others)
+            .chain(&pending)
+            .copied()
+            .collect();
+        let (kind, mut message) = allow_message(rel, &report, &shown, &histnote, &note);
+        if !pending.is_empty() {
+            message = format!("{EDIT_P}: urzua judged {rel}; the edit is allowed as the first half of a relation pair.{pending_note}\n{}{note}", ran_summary(&report));
+        }
         let mut v = Verdict::new(kind, Some(rel), message);
         v.findings = to_json(&shown);
         return v;
     }
+    note.push_str(&pending_note);
+    note.push_str(&protected_note);
 
     // A "run:" hint repairs the record on disk, so it is shown only for a
     // finding the disk already has; an introduced finding is listed without it.
@@ -1130,6 +1165,60 @@ fn judge_record(j: &Judging<'_>, content: String, request: &Request) -> Verdict 
     let mut v = Verdict::new("block", Some(rel), String::new());
     v.findings = to_json(&introduced);
     override_verdict(j, request, v, &introduced, &list, &note)
+}
+
+/// Whether a finding is only the missing other half of a declared relation,
+/// which one edit of another record (or `urzua fix`) supplies (`MILE-287`).
+fn pending_half(f: &Finding, rel: &Path) -> bool {
+    let source = &f.action_source;
+    (urzua_core::fix::inverse::UNRECIPROCATED.contains(&source.variant)
+        || urzua_core::fix::inverse::UNRECIPROCATED_PROTECTED.contains(&source.variant))
+        && source.target.file.as_deref().is_some_and(|t| t != rel)
+        && source.target.field.is_some()
+        && source.value.is_some()
+}
+
+fn protected_note(protected: &[&Finding]) -> String {
+    if protected.is_empty() {
+        return String::new();
+    }
+    let records = protected
+        .iter()
+        .filter_map(|f| f.action_source.target.file.as_deref())
+        .map(|p| p.display().to_string())
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!("\nThe other record of the pair is a protected path ({records}): an agent cannot write it, through an edit or `urzua fix`, so a decider must make the paired change.")
+}
+
+/// What the agent must do next for each pending half: the record, the field
+/// and value, and the `urzua fix` command that writes it.
+fn follow_up(pending: &[&Finding], allowed: bool) -> String {
+    let steps = pending
+        .iter()
+        .map(|f| {
+            let s = &f.action_source;
+            let target = s.target.file.as_deref().unwrap_or(Path::new("")).display();
+            let field = s.target.field.as_deref().unwrap_or_default();
+            let id = match &s.value {
+                Some(urzua_core::report::ActionValue::Text(t)) => t.clone(),
+                _ => String::new(),
+            };
+            format!(
+                "  - add {id} to {field} in {target}: edit that record, or run `urzua fix --apply --ids {target} --actor agent` (it writes only that field and a revision-log row, never a Status)"
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    if allowed {
+        format!(
+            "\nNow required, the other half of the pair:\n{steps}\nUntil it is written the pair is unmatched: the post-command hook reports it, and pre-commit and CI block it. A Status move the relation implies (to Superseded, say) is a separate step, gated where the authority table names it."
+        )
+    } else {
+        format!(
+            "\nThe other half of a relation pair is missing; write it without the shell:\n{steps}"
+        )
+    }
 }
 
 /// The check report of the proposed content, or the verdict when it cannot
