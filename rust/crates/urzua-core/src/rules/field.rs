@@ -217,7 +217,7 @@ pub fn classify_quality_field(
             statuses.get(&record.record_type),
         )
     } else {
-        classify(value)
+        crate::field_state::classify_placeholders(value, statuses.get(&record.record_type))
     }
 }
 

@@ -28,9 +28,43 @@ pub struct SuppressionType {
     /// `None` is "not declared": permanence is allowed for any rule, as it
     /// always was. `Some` closes permanence for every rule it does not list.
     pub permanent: Option<Vec<PermanentDecl>>,
+    /// The type's `rejected_values` (`MILE-233`), added to the built-in floor.
+    pub rejected_values: Vec<String>,
+    /// The type's `waiver_fields` (`MILE-233`).
+    pub fields: crate::config::WaiverFields,
 }
 
 impl SuppressionType {
+    /// The field a draft's reason is written to: `Reason` unless declared.
+    pub fn reason_field(&self) -> &str {
+        self.fields.reason.as_deref().unwrap_or("Reason")
+    }
+
+    /// The field a draft's owner is written to: `Owner` unless declared.
+    pub fn owner_field(&self) -> &str {
+        self.fields.owner.as_deref().unwrap_or("Owner")
+    }
+
+    /// Whether `value` is one of the type's `statuses.placeholders`, as a whole
+    /// value ignoring case. For a suppression these only add to the built-in
+    /// words, never replace them.
+    fn is_declared_placeholder(&self, value: &str) -> bool {
+        let value = value.trim().to_lowercase();
+        self.declared
+            .as_ref()
+            .and_then(|d| d.placeholders.as_ref())
+            .is_some_and(|words| words.iter().any(|w| w.to_lowercase() == value))
+    }
+
+    /// Whether `value` is a declared `rejected_values` entry, as a whole value
+    /// ignoring case.
+    pub fn is_rejected(&self, value: &str) -> bool {
+        let value = value.trim().to_lowercase();
+        self.rejected_values
+            .iter()
+            .any(|r| r.to_lowercase() == value)
+    }
+
     /// A suppression type that requires nothing beyond `Rule` and `Scope`.
     pub fn named(name: &str) -> Self {
         SuppressionType {
@@ -50,6 +84,12 @@ impl SuppressionType {
             declared: declared.and_then(|t| t.status_decl()),
             template: Default::default(),
             permanent: declared.and_then(|t| t.permanent.clone()),
+            rejected_values: declared
+                .and_then(|t| t.rejected_values.clone())
+                .unwrap_or_default(),
+            fields: declared
+                .and_then(|t| t.waiver_fields.clone())
+                .unwrap_or_default(),
         }
     }
 
@@ -63,10 +103,14 @@ impl SuppressionType {
             self.declared.as_ref(),
         );
         // The default vocabulary still applies to the whole value: a Reason
-        // that is just `TBD` or `TODO` is a placeholder.
+        // that is just `TBD` or `TODO` is a placeholder. It is a floor a type's
+        // own `placeholders` cannot lower; `rejected_values` adds to it.
         if state == FieldState::Present {
             if let Some(default) = value.and_then(crate::field_state::whole_value_default_state) {
                 state = default;
+            } else if value.is_some_and(|v| self.is_rejected(v) || self.is_declared_placeholder(v))
+            {
+                state = FieldState::Placeholder;
             }
         }
         state
@@ -331,7 +375,7 @@ pub fn load_suppressions(
             // A prose field is a placeholder only when its whole trimmed value
             // is the template's text for it or a declared pending value; the
             // word "pending" inside a real sentence is a real reason.
-            let (unmet, unmet_states): (Vec<String>, Vec<FieldState>) = suppression_type
+            let (mut unmet, mut unmet_states): (Vec<String>, Vec<FieldState>) = suppression_type
                 .effective_requires
                 .iter()
                 .filter_map(|field| {
@@ -339,6 +383,16 @@ pub fn load_suppressions(
                     (state != FieldState::Present).then(|| (field.clone(), state))
                 })
                 .unzip();
+            // A declared rejected `Expires` (a sentinel date) is unmet even
+            // where the type does not list `Expires` in `effective_requires`.
+            if expires
+                .as_deref()
+                .is_some_and(|e| suppression_type.is_rejected(e))
+                && !unmet.iter().any(|f| f == "Expires")
+            {
+                unmet.push("Expires".to_string());
+                unmet_states.push(FieldState::Placeholder);
+            }
             let permanence =
                 judge_permanence(r, &rule, expires.is_some(), suppression_type, &known);
             Some(Suppression {

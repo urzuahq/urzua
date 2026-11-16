@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5C0WX34AQKF79DQDS5
-Version: '0.33'
+Version: '0.34'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/commands/new.rs@sha256:1a54159935079af3211c815fe93091a3a1c922d63dd2c59c4ca422dfc05f27f2, code:rust/crates/urzua-core/src/new_record.rs@sha256:203bcd8b4321af5b754e647d3d75fe6d8fd3aaf037b7a10af7615663990cd6d1, test:rust/crates/urzua-cli/tests/new_integration.rs@sha256:c319a5750aa11e1bd2b6be9fc6a2d707f34150c514d49c35290ad353f0ef61f7
+Realized-by: code:rust/crates/urzua-cli/src/commands/new.rs@sha256:1a54159935079af3211c815fe93091a3a1c922d63dd2c59c4ca422dfc05f27f2, code:rust/crates/urzua-core/src/new_record.rs@sha256:9ad96b4bc33122a1185b91e2d0af210a68e7c2acadc5efb2d16ea1ec1f0e9875, test:rust/crates/urzua-cli/tests/new_integration.rs@sha256:c319a5750aa11e1bd2b6be9fc6a2d707f34150c514d49c35290ad353f0ef61f7
 Author: beauwilliams
 Subject: '`urzua new` -- generating a record''s initial content with a real stable ID assigned.'
 Implements: ADR-27
@@ -255,3 +255,5 @@ steps and in seconds, for each record type.
 > | 2026-11-14 | Bumped to `0.32`. The unknown-record-type error points at `record_types:` in the configuration instead of a TOML table. **Why:** the first-run review, finding 6.6 (the `extra_dirs` notice in the JSON is the `0.30` row's). | **substantive** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/new.rs` 92c75a760cc1 -> 1a5415993507, `rust/crates/urzua-core/src/new_record.rs` 4f85670917b9 -> 203bcd8b4321. Reason: new.rs makes git add -- <path> the report's next action when untracked records are not examined, with a small path helper; new_record.rs dates a template revision-log row whose date cell is YYYY-MM-DD with the day the record is made; the record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Bumped to `0.33`. The pins re-baselined above follow code changed for `MILE-266` and `MILE-267` (printed next actions that run as printed, a revision log in every built-in template); nothing this spec states changes. **Why:** the re-pin rows are structural and `revision-log.version-bump-required` asks for a bump. | **structural** |
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/new_record.rs` 203bcd8b4321 -> 9ad96b4bc331. Reason: new_record.rs makes the scaffold's reason a (field, value) pair so a declared waiver_fields.reason is written. The claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-16 | Bumped to `0.34`. Re-pinned the evidence `MILE-233` changed (the rule vocabulary read from configuration); what this spec states is unchanged. **Why:** a re-pinned versioned spec carries a version above main's. | **structural** |

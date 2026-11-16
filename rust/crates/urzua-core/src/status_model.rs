@@ -71,6 +71,11 @@ pub struct StatusDecl {
     /// substring match for this type (BUG-65). Omitted keeps that match.
     #[serde(default)]
     pub pending: Option<Vec<PendingEntry>>,
+    /// Whole field values that are unedited template text, compared without
+    /// regard to case, replacing the compiled-in placeholder words for this
+    /// type (`MILE-233`). Omitted keeps those words.
+    #[serde(default)]
+    pub placeholders: Option<Vec<String>>,
     #[serde(default)]
     pub require: Vec<StatusFieldRule>,
     #[serde(default)]
@@ -352,6 +357,29 @@ fn check_list(what: &str, list: &[String], allow_empty: bool) -> Result<(), Stri
     Ok(())
 }
 
+/// `placeholders` replaces the compiled-in words, so an empty list would turn
+/// placeholder detection off without saying so (`SPEC-1`): it is refused, as
+/// are a blank word and one listed twice ignoring case.
+fn check_placeholders(words: &[String]) -> Result<(), String> {
+    if words.is_empty() {
+        return Err("`placeholders` is empty, which would read no value as a placeholder; list at least one word or omit the key to keep the built-in words".into());
+    }
+    for (i, w) in words.iter().enumerate() {
+        if w.trim().is_empty() || w.trim() != w {
+            return Err(format!(
+                "`placeholders` lists '{w}', which is blank or has surrounding whitespace"
+            ));
+        }
+        if words[..i]
+            .iter()
+            .any(|v| v.to_lowercase() == w.to_lowercase())
+        {
+            return Err(format!("`placeholders` lists '{w}' twice"));
+        }
+    }
+    Ok(())
+}
+
 /// `pending` must hold at least one entry; whole values are non-blank and
 /// distinct, patterns compile and are distinct (a pattern that cannot compile
 /// would otherwise match nothing, silently).
@@ -410,6 +438,9 @@ fn validate_one(
     check_list("progress", &d.progress, true)?;
     if let Some(p) = &d.pending {
         check_pending(p)?;
+    }
+    if let Some(p) = &d.placeholders {
+        check_placeholders(p)?;
     }
     for (what, list) in [
         ("success", &d.success),
