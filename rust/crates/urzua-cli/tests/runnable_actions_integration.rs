@@ -464,6 +464,7 @@ fn an_error_with_a_known_remedy_names_it_and_the_remedy_runs() {
     );
     runs(&dir, report["next_action"].as_str().unwrap());
 
+    git(&dir, &["remote", "add", "origin", dir.to_str().unwrap()]);
     let report = urzua(&dir, "check --base origin/nosuch");
     assert!(
         report["error"]
@@ -483,7 +484,11 @@ fn a_new_record_is_reported_untracked_until_staged_then_examined() {
     commit_all(&dir, 0);
     let made = urzua(&dir, "new adr \"x\"");
     let path = made["path"].as_str().unwrap().to_string();
-    assert_eq!(made["next_action"], format!("git add -- {path}"), "{made}");
+    assert_eq!(
+        made["next_action"],
+        format!("git add -- :/{path}"),
+        "{made}"
+    );
 
     let report = urzua(&dir, "check");
     assert_eq!(report["files_examined"], 0, "{report}");
@@ -497,7 +502,7 @@ fn a_new_record_is_reported_untracked_until_staged_then_examined() {
         "the report says the record is untracked: {report}"
     );
     let next = report["next_action"].as_str().unwrap();
-    assert_eq!(next, format!("git add -- {path}"), "{report}");
+    assert_eq!(next, format!("git add -- :/{path}"), "{report}");
     runs(&dir, next);
     let report = urzua(&dir, "check");
     assert_eq!(report["files_examined"], 1, "{report}");
@@ -669,4 +674,181 @@ fn an_empty_revision_log_table_receives_its_first_row() {
         row.starts_with("> | "),
         "inside the blockquote table: {row}"
     );
+}
+
+const DRIFT_CONFIG: &str = "schema_version: 2
+rules:
+  embodiment.consistency: error
+record_types:
+  milestone:
+    dir: docs/milestones
+    prefix: MILE
+    header_shape: yaml-frontmatter
+    required_fields: [Status]
+    known_fields: [Realized-by, Embodiment]
+    statuses:
+      values: [Planned, Done]
+      success: [Done]
+";
+
+/// One record citing `src/a.rs` (pinned at `a_pin`) and `src/c.rs` (unpinned);
+/// after the commit, the files named in `change` are edited and committed.
+fn mixed_fixture(name: &str, a_pin: &str, change: &[&str]) -> common::TempDir {
+    let dir = repo(name);
+    std::fs::write(dir.join(".urzua/config.yaml"), DRIFT_CONFIG).unwrap();
+    for f in ["a", "c"] {
+        std::fs::write(dir.join(format!("src/{f}.rs")), "fn a() {}\n").unwrap();
+    }
+    std::fs::write(
+        dir.join("docs/milestones/MILE-1-m.md"),
+        milestone(
+            1,
+            "Planned",
+            &format!("Embodiment: Implemented\nRealized-by: code:src/a.rs@sha256:{a_pin}, code:src/c.rs\n"),
+        ),
+    )
+    .unwrap();
+    commit_all(&dir, 3);
+    for f in change {
+        std::fs::write(dir.join(format!("src/{f}.rs")), "fn a() { }\n").unwrap();
+    }
+    commit_all(&dir, 1);
+    dir
+}
+
+const MIXED_RECORD: &str = "docs/milestones/MILE-1-m.md";
+
+#[test]
+fn history_drift_beside_a_fresh_pin_takes_the_ordinary_repair() {
+    let current = sha256("fn a() {}\n");
+    let dir = mixed_fixture("mixed-history", &current, &["c"]);
+    let report = urzua(&dir, "check");
+    let finding = report["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|f| f["rule"] == "embodiment.consistency")
+        .unwrap_or_else(|| panic!("{report}"));
+    assert_eq!(
+        finding["suggested_action"]["target"]["argv"],
+        serde_json::json!([
+            "urzua",
+            "fix",
+            "--apply",
+            "--ids",
+            MIXED_RECORD,
+            "--actor",
+            "agent"
+        ]),
+        "{finding}"
+    );
+    assert!(
+        !finding["message"].as_str().unwrap().contains("pinned file"),
+        "{finding}"
+    );
+    follow(&dir, "urzua check", 6);
+    let after = urzua(&dir, "check");
+    assert_eq!(after["status"], "ok", "{after}");
+}
+
+#[test]
+fn a_stale_pin_and_history_drift_lead_out_in_a_few_steps() {
+    let current = sha256("fn a() {}\n");
+    let dir = mixed_fixture("mixed-both", &current, &["a", "c"]);
+    let report = urzua(&dir, "check");
+    assert_eq!(
+        report["next_action"],
+        format!("urzua fix --rebaseline --ids {MIXED_RECORD}"),
+        "the re-pin comes first: {report}"
+    );
+    let ran = follow(&dir, "urzua check", 10);
+    assert!(
+        ran.iter().any(|c| c.contains("--rebaseline --apply")),
+        "the re-pin is on the way out: {ran:?}"
+    );
+    // The re-pin rewrites the claim line, which renews the unpinned locator's
+    // history drift too (`ADR-32`); committed, the record stays clean.
+    let after = urzua(&dir, "check");
+    assert_eq!(after["status"], "ok", "{after}");
+    commit_all(&dir, 0);
+    follow(&dir, "urzua check", 6);
+    let after = urzua(&dir, "check");
+    assert_eq!(after["status"], "ok", "{after}");
+}
+
+#[test]
+fn a_fix_apply_naming_a_stale_pin_record_names_the_repin_listing() {
+    let dir = main_fixture("partial");
+    let out = urzua(
+        &dir,
+        "fix --apply --ids docs/milestones/MILE-3-m.md --actor agent",
+    );
+    assert_eq!(out["status"], "partial-failure", "{out}");
+    assert_eq!(
+        out["next_action"], "urzua fix --rebaseline --ids docs/milestones/MILE-3-m.md",
+        "{out}"
+    );
+}
+
+#[test]
+fn printed_commands_run_from_a_subdirectory() {
+    let dir = repo("subdir");
+    git(&dir, &["commit", "-q", "--allow-empty", "-m", "init"]);
+    runs(&dir, "urzua init --types adr");
+    commit_all(&dir, 0);
+    let sub = dir.join("docs");
+    let made = json(&sh(&sub, "urzua new adr \"x\""));
+    let next = made["next_action"].as_str().unwrap().to_string();
+    runs(&sub, &next);
+    let report = json(&sh(&sub, "urzua check"));
+    assert_eq!(report["files_examined"], 1, "{report}");
+
+    let drift = main_fixture("subdir-drift");
+    let sub = drift.join("src");
+    let mut report = json(&sh(&sub, "urzua check"));
+    let mut steps = 0;
+    while let Some(next) = filled_next_action(&report) {
+        assert!(steps < 12, "loops on `{next}`: {report}");
+        steps += 1;
+        report = runs(&sub, &next);
+        if next.starts_with("git ") || report["next_action"].is_null() {
+            report = json(&sh(&sub, "urzua check"));
+        }
+    }
+    assert_eq!(report["status"], "ok", "{report}");
+}
+
+#[test]
+fn a_base_with_a_slash_that_is_not_a_remote_offers_no_fetch() {
+    let dir = main_fixture("slash");
+    let report = urzua(&dir, "check --base feat/nosuch");
+    assert!(
+        report["error"].as_str().unwrap().contains("feat/nosuch"),
+        "{report}"
+    );
+    assert!(report["next_action"].is_null(), "{report}");
+    git(&dir, &["remote", "add", "origin", dir.to_str().unwrap()]);
+    let report = urzua(&dir, "check --base origin/nosuch");
+    assert_eq!(report["next_action"], "git fetch origin nosuch", "{report}");
+}
+
+#[test]
+fn reverify_apply_writes_the_first_row_of_an_empty_revision_log() {
+    let dir = repo("reverify-empty");
+    std::fs::write(dir.join(".urzua/config.yaml"), CLAIM_CONFIG).unwrap();
+    std::fs::write(dir.join("src/a.rs"), "fn a() {}\n").unwrap();
+    let text = milestone(1, "Done", "Realized-by: code:src/a.rs\n")
+        .lines()
+        .filter(|l| !l.contains("Filed."))
+        .map(|l| format!("{l}\n"))
+        .collect::<String>();
+    std::fs::write(dir.join("docs/milestones/MILE-1-m.md"), &text).unwrap();
+    commit_all(&dir, 40);
+    let out = runs(
+        &dir,
+        "urzua reverify --apply --ids docs/milestones/MILE-1-m.md --actor agent --reason 'read the cited code again'",
+    );
+    assert_eq!(out["status"], "applied", "{out}");
+    let text = std::fs::read_to_string(dir.join("docs/milestones/MILE-1-m.md")).unwrap();
+    assert!(log_rows(&text) >= 1, "{text}");
 }

@@ -796,14 +796,18 @@ it where they differ.
 - **Every printed apply carries `--actor agent`** (`urzua fix --apply --ids <records> --actor agent`):
   under a `gh`-verified identity `fix --apply` is `not-run` without `--actor`, and the consumers are
   agents. A person passes `--actor human`.
-- **`check`'s order** is: `git add -- <paths>` when untracked records under a declared directory
+- **Printed paths** are independent of the current directory: `git add` takes `:/`-prefixed
+  pathspecs (read from the repository root), and `--ids` takes repository-relative paths, which urzua
+  matches from any directory.
+- **`check`'s order** is: `git add -- :/<paths>` when untracked records under a declared directory
   were not examined (`discovery.untracked-skipped` carries them in `detail.records`); `git fetch
   --unshallow` when a drift notice says the clone is shallow; then the findings' tools, in order
   `urzua fix --apply`, `urzua fix --rebaseline` (the re-pin listing), `urzua reverify` (the renewal
   listing), `urzua index`, `urzua migrate`. Findings that each name `--ids` share one command whose
   `--ids` is the union of their records.
 - **A changed pinned file** (an `embodiment.consistency` disagreement that computes the drift state
-  from evidence carrying a `@sha256:` pin) is variant `embodiment-drift-pinned`, whose action is the
+  with a pinned locator that no longer hashes to its pin, as `embodiment.pin-stale` reads it; drift on
+  an unpinned locator beside a pin that still matches stays `embodiment-drift`) is variant `embodiment-drift-pinned`, whose action is the
   re-pin listing `urzua fix --rebaseline --ids <record>`, the same as `embodiment.pin-stale`'s, and
   whose message gives the apply form and says to read the diff. `fix --apply` does not write the drift
   state over it (`SPEC-8`), so following next actions cannot turn that drift green without a re-pin
@@ -812,10 +816,11 @@ it where they differ.
   agent --reason '<what changed in the pinned file>'` with that input; a run whose only drift is on a
   stale pin names the listing. **`reverify`**: a detect run with renewable records names `urzua
   reverify --apply --ids <records> --actor agent --reason '<what you checked>'` with that input, and
-  an apply names `urzua check`. **`new`**: `git add -- <path>` when `discovery.include_untracked` is
+  an apply names `urzua check`. **`new`**: `git add -- :/<path>` when `discovery.include_untracked` is
   off (the default). **`not-run`**: a mistyped `check --rules` or `explain --rule` id names the
-  command with the nearest shipped id; an unresolvable `--base <remote>/<branch>` names
-  `git fetch <remote> <branch>` (the error says which ref did not resolve instead of a raw `git
+  command with the nearest shipped id; an unresolvable `--base <remote>/<branch>`, where
+  `<remote>` is one `git remote` lists, names `git fetch <remote> <branch>` (a local `feat/x` gets
+  `null`) (the error says which ref did not resolve instead of a raw `git
   merge-base` error); a shallow clone with no merge base names `git fetch --unshallow`. It stays
   `null`, with the reason in `error`, where the remedy is an edit or a choice the tool cannot make:
   an unknown configuration key (the error lists the valid ones), a path outside the repository or a

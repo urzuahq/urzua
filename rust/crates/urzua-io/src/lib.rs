@@ -242,6 +242,13 @@ impl GitChanges {
     }
 }
 
+/// The names `git remote` lists; empty when it cannot run.
+pub fn git_remotes(repo_root: &Path) -> Vec<String> {
+    run_git(repo_root, &["remote"])
+        .map(|out| out.lines().map(str::to_string).collect())
+        .unwrap_or_default()
+}
+
 /// Every path that differs between the merge base of `base` and `HEAD` and
 /// the working tree, repository-relative (`MILE-123`). Merge base, not the
 /// ref's tip: a pull request must not be charged for what its base branch

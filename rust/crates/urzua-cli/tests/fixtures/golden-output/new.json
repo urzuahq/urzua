@@ -9,7 +9,7 @@
   "exit": 0,
   "stdout": {
     "display_number": 4,
-    "next_action": "git add -- docs/adr/ADR-4-golden-title.md",
+    "next_action": "git add -- :/docs/adr/ADR-4-golden-title.md",
     "next_action_inputs": [],
     "next_action_reason": "stages the new record: check examines only tracked records unless discovery.include_untracked is set",
     "notices": [

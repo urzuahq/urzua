@@ -58,8 +58,9 @@ A record whose `Realized-by` locator changed since the `Realized-by` line was la
 computes to `Drift detected` regardless of the locators' tier, exactly as `check`'s
 `embodiment.consistency` does: `fix` reads the same drifted-record set `check` computes, so the two
 never disagree. The repair is written like any other Tier 1 repair, except where the drift comes
-from a changed pinned file (the record's evidence carries a `@sha256:` pin and computes to the drift
-state): `fix` does not write the drift state over a stale pin, since that would quiet
+from a changed pinned file (a pinned locator of the record no longer hashes to its pin, as
+`--rebaseline` lists it, and the record computes to the drift state; drift on an unpinned locator
+beside a pin that still matches is repaired as before): `fix` does not write the drift state over a stale pin, since that would quiet
 `embodiment.consistency` while the pin stays stale. It reports the record in a warning notice,
 `embodiment-drift-pinned` (its `detail.records`), names `urzua fix --rebaseline --ids <records>` as
 `next_action`, and an `--ids` entry naming it fails with that reason (`MILE-266`, decided by the

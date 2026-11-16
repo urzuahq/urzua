@@ -731,10 +731,12 @@ pub const RULE_TABLE: &[RuleDef] = &[
         phase: Phase::Main,
         companion: None,
         run: |c| {
+            let stale: std::collections::HashSet<std::path::PathBuf> =
+                c.stale_pins.found.iter().map(|r| r.record.clone()).collect();
             embodiment_consistency_at(
                 c.records,
                 c.config,
-                (c.drifted, c.fresh),
+                (c.drifted, c.fresh, &stale),
                 c.back_pointed,
                 c.claim_ages,
                 c.now_unix,

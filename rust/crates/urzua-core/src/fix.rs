@@ -147,14 +147,6 @@ impl RepairScan<'_> {
             cited_by_test,
         );
         let stated = stated.trim();
-        // A changed pinned file is re-pinned with a reason (`fix --rebaseline`),
-        // never answered by writing the drift state, which would quiet the
-        // finding while the pin stays stale.
-        if crate::rules::DriftCause::of(config, computed, realized_by_value)
-            == crate::rules::DriftCause::Pin
-        {
-            return (Outcome::Examined, None);
-        }
         // Fresh drift (`drift_grace_days`) never flips a stated `Drift detected`.
         let keeps_stated_drift =
             self.fresh_drift.contains(&record.path) && config.embodiment.is_drift(stated);
@@ -212,29 +204,24 @@ impl RepairScan<'_> {
     }
 }
 
-/// The records `fix --apply` leaves for `fix --rebaseline`: their evidence
-/// drifted on a changed pinned file and their stated state is not the drift
-/// state. `fix` reports them in a notice instead of writing that state.
+/// The records `fix --apply` leaves for `fix --rebaseline`: they drifted, a
+/// pinned locator of theirs no longer hashes to its pin (`stale_pinned`), and
+/// their stated state is not the drift state. `fix` reports them in a notice
+/// instead of writing that state.
 pub fn pinned_drift_records(
     records: &[Record],
     config: &Config,
     drifted: &HashSet<PathBuf>,
+    stale_pinned: &HashSet<PathBuf>,
 ) -> Vec<PathBuf> {
-    let drift_state = config.embodiment.state_for(true, |_| false).to_string();
     records
         .iter()
-        .filter(|r| drifted.contains(&r.path))
+        .filter(|r| drifted.contains(&r.path) && stale_pinned.contains(&r.path))
         .filter(|r| {
             let state = relation_field_name(config, &r.record_type, RelationRole::EmbodimentState);
             r.header
                 .get(state)
                 .is_some_and(|s| !config.embodiment.is_drift(s.trim()))
-        })
-        .filter(|r| {
-            let locator =
-                relation_field_name(config, &r.record_type, RelationRole::EmbodimentLocator);
-            crate::rules::DriftCause::of(config, &drift_state, evidence_text(r, locator).as_deref())
-                == crate::rules::DriftCause::Pin
         })
         .map(|r| r.path.clone())
         .collect()

@@ -654,7 +654,7 @@ pub fn embodiment_consistency(
     embodiment_consistency_at(
         records,
         config,
-        (drifted, fresh_drift),
+        (drifted, fresh_drift, &HashSet::new()),
         back_pointed,
         claim_age_days,
         i64::MAX,
@@ -662,11 +662,13 @@ pub fn embodiment_consistency(
 }
 
 /// [`embodiment_consistency`] as of `now_unix`, the clock a last-audit date is
-/// judged against: a date after it is reported and ignored.
+/// judged against: a date after it is reported and ignored. `stale_pinned`
+/// names the records whose pinned evidence changed (`embodiment.pin-stale`'s
+/// scan): their drift is answered by a re-pin.
 pub fn embodiment_consistency_at(
     records: &[Record],
     config: &Config,
-    (drifted, fresh_drift): (&HashSet<PathBuf>, &HashSet<PathBuf>),
+    (drifted, fresh_drift, stale_pinned): (&HashSet<PathBuf>, &HashSet<PathBuf>, &HashSet<PathBuf>),
     back_pointed: &BackPointerEvidence,
     claim_age_days: &HashMap<PathBuf, u64>,
     now_unix: i64,
@@ -675,6 +677,7 @@ pub fn embodiment_consistency_at(
     let mut findings = Vec::new();
     let judge = ConsistencyJudge {
         config,
+        stale_pinned,
         drifted,
         fresh_drift,
         back_pointed,
@@ -730,8 +733,10 @@ pub fn held_back_drift_that_would_report(
 ) -> HashSet<PathBuf> {
     let none_held = HashSet::new();
     let no_ages = HashMap::new();
+    let none_stale = HashSet::new();
     let judge = ConsistencyJudge {
         config,
+        stale_pinned: &none_stale,
         drifted: held_back,
         fresh_drift: &none_held,
         back_pointed,
@@ -770,6 +775,8 @@ pub fn held_back_drift_that_would_report(
 /// precomputed history and evidence, and the rule's own options.
 struct ConsistencyJudge<'a> {
     config: &'a Config,
+    /// Records with a pinned locator that no longer hashes to its pin.
+    stale_pinned: &'a HashSet<PathBuf>,
     drifted: &'a HashSet<PathBuf>,
     fresh_drift: &'a HashSet<PathBuf>,
     back_pointed: &'a BackPointerEvidence,
@@ -839,11 +846,7 @@ impl ConsistencyJudge<'_> {
             self.fresh_drift.contains(&record.path) && config.embodiment.is_drift(stated.trim());
         if stated.trim() != computed && !agrees_with_fresh_drift {
             let has_evidence = realized_by_value.is_some() || cited_by_code || cited_by_test;
-            let drift = DriftCause::of(
-                config,
-                computed,
-                crate::rules::evidence_text(record, locator_field).as_deref(),
-            );
+            let drift = DriftCause::of(config, computed, self.stale_pinned.contains(&record.path));
             findings.push(disagreement_finding(
                 record,
                 state_field,
@@ -952,26 +955,14 @@ pub enum DriftCause {
 }
 
 impl DriftCause {
-    /// The cause for a record that computes to `computed` from `evidence` (its
-    /// `Realized-by` and Done-means clause text): `Pin` when it drifted and its
-    /// evidence carries a pinned locator, since a pin replaces the git-history
-    /// heuristic for that locator.
-    pub fn of(config: &Config, computed: &str, evidence: Option<&str>) -> DriftCause {
+    /// The cause for a record that computes to `computed`: `Pin` when it
+    /// drifted and one of its pinned locators no longer hashes to its pin
+    /// (`stale_pin`), since only a re-pin answers that; drift on an unpinned
+    /// locator alone is `History`.
+    pub fn of(config: &Config, computed: &str, stale_pin: bool) -> DriftCause {
         if !config.embodiment.is_drift(computed) {
-            return DriftCause::None;
-        }
-        let pinned = evidence.is_some_and(|value| {
-            crate::locator::realized_by_locators(value).iter().any(|e| {
-                matches!(
-                    &e.parsed,
-                    Ok(crate::locator::Locator {
-                        anchor: Some(crate::locator::Anchor::Pin(_)),
-                        ..
-                    })
-                )
-            })
-        });
-        if pinned {
+            DriftCause::None
+        } else if stale_pin {
             DriftCause::Pin
         } else {
             DriftCause::History

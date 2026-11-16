@@ -1070,16 +1070,18 @@ fn permanent_waivers_notice(
 }
 
 /// A `--base` that could not be diffed against, with the command that fixes
-/// the cause when there is one: fetching a remote-tracking ref that is not
-/// here, or the history a shallow clone lacks.
-fn base_failure(e: urzua_io::DiscoveryError) -> Failure {
+/// the cause when there is one: fetching a ref of a configured remote that is
+/// not here, or the history a shallow clone lacks. A ref whose first segment is
+/// no remote (a local `feat/x`) gets none: nothing here can create it.
+fn base_failure(repo_root: &Path, e: urzua_io::DiscoveryError) -> Failure {
     use urzua_core::report::{shell_command, NextAction};
     let message = e.to_string();
     match &e {
         urzua_io::DiscoveryError::UnresolvedRef { base } => {
+            let remotes = urzua_io::git_remotes(repo_root);
             match base
                 .split_once('/')
-                .filter(|(r, b)| !r.is_empty() && !b.is_empty())
+                .filter(|(r, b)| !b.is_empty() && remotes.iter().any(|x| x == r))
             {
                 Some((remote, branch)) => Failure::with_next(
                     message,
@@ -1150,8 +1152,8 @@ fn open_session(
             }
         }
         if let Some(base) = base {
-            let mut changes =
-                urzua_io::changed_paths_since(repo_root, base).map_err(base_failure)?;
+            let mut changes = urzua_io::changed_paths_since(repo_root, base)
+                .map_err(|e| base_failure(repo_root, e))?;
             // An included untracked record has no merge-base copy: it is new
             // by definition, so the diff rules judge it as an addition
             // (`ADR-92` clause 6).

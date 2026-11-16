@@ -277,7 +277,12 @@ fn detect_repairs_in(
         }
     };
     let mut notices = crate::discovery::drift_notices(drift.shallow, &drift.git_problems);
-    let pinned_drift = urzua_core::fix::pinned_drift_records(scoped, config, &drift.drifted);
+    let pinned_drift = urzua_core::fix::pinned_drift_records(
+        scoped,
+        config,
+        &drift.drifted,
+        &stale_pinned(repo_root, config, scoped),
+    );
     notices.extend(pinned_drift_notice(&pinned_drift));
     let back_pointed =
         back_pointer_evidence(repo_root, discovered, config, records).map_err(refuse)?;
@@ -301,12 +306,36 @@ fn detect_repairs_in(
             (population, repairs, notices)
         });
     notices.extend(with_excused_notice(unevidenced, &back_pointed));
+    // A changed pinned file is re-pinned with a reason (`fix --rebaseline`),
+    // never answered by writing the drift state, which would quiet the finding
+    // while the pin stays stale.
+    let repairs: Vec<Repair> = repairs
+        .into_iter()
+        .filter(|r| {
+            !(pinned_drift.contains(&r.record) && config.embodiment.is_drift(&r.computed_value))
+        })
+        .collect();
     Ok(Detected {
         population,
         repairs,
         notices,
         pinned_drift,
     })
+}
+
+/// The records of `scoped` with a pinned locator that no longer hashes to its
+/// pin, as `fix --rebaseline` lists them.
+fn stale_pinned(
+    repo_root: &Path,
+    config: &Config,
+    scoped: &[Record],
+) -> std::collections::HashSet<PathBuf> {
+    let texts = crate::file_texts::FileTexts::new(repo_root.to_path_buf(), config);
+    let read = |locator: &urzua_core::locator::Locator| {
+        crate::pins::read_pin(repo_root, config, &texts, locator)
+    };
+    let (_, found, _) = urzua_core::fix::detect_rebaselines(scoped, config, &read);
+    found.into_iter().map(|r| r.record).collect()
 }
 
 /// The notice naming the records whose pinned evidence changed: `fix` does

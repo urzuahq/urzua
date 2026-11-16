@@ -851,8 +851,6 @@ fn embodiment_disagreements(
             blocked: &blocked,
         };
         let (_, repairs) = urzua_core::fix::detect_repairs(subset, config, drifted, fresh, &ctx);
-        // `fix` writes no drift state over a stale pin, but the record still disagrees.
-        let pinned = urzua_core::fix::pinned_drift_records(subset, config, drifted);
         repairs
             .into_iter()
             .filter(|r| {
@@ -869,7 +867,6 @@ fn embodiment_disagreements(
                     })
             })
             .map(|r| r.record)
-            .chain(pinned)
             .collect()
     })
 }

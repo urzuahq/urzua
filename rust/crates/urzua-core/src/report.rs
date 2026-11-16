@@ -1020,6 +1020,15 @@ pub const DETAIL_SHALLOW: &str = "shallow";
 /// `detail.records` lists them for the report's `next_action`.
 pub const NOTICE_PINNED_DRIFT: &str = "embodiment-drift-pinned";
 
+/// `git add -- :/<path>...` for repository-relative paths: the `:/` pathspec
+/// magic reads each from the repository root, so the printed command runs
+/// from any directory of the working tree.
+pub fn git_add<'a>(paths: impl IntoIterator<Item = &'a str>) -> Vec<String> {
+    let mut words = vec!["git".to_string(), "add".to_string(), "--".to_string()];
+    words.extend(paths.into_iter().map(|p| format!(":/{p}")));
+    words
+}
+
 /// `words` as one shell command line, each word quoted only when it must be.
 pub fn shell_command<S: AsRef<str>>(words: &[S]) -> String {
     words
@@ -1159,8 +1168,7 @@ pub fn next_action_for_findings(findings: &[Finding]) -> Option<NextAction> {
 /// staged.
 fn stage_untracked(notices: &[Notice]) -> Option<NextAction> {
     let paths = notice_records(notices, NOTICE_UNTRACKED_SKIPPED)?;
-    let mut words = vec!["git".to_string(), "add".to_string(), "--".to_string()];
-    words.extend(paths.iter().cloned());
+    let words = git_add(paths.iter().map(String::as_str));
     Some(NextAction::runs_as_printed(
         shell_command(&words),
         format!(
@@ -1671,7 +1679,7 @@ impl Report for NewReport {
     }
     fn next_action(&self) -> Option<NextAction> {
         let path = self.path.display().to_string();
-        let words = ["git", "add", "--", path.as_str()];
+        let words = git_add([path.as_str()]);
         self.stage.then(|| {
             NextAction::runs_as_printed(
                 shell_command(&words),
@@ -1781,7 +1789,7 @@ impl Report for FixReport {
                     ),
                 ))
             }
-            FixStatus::Ok | FixStatus::RepairsAvailable => {
+            FixStatus::Ok | FixStatus::RepairsAvailable | FixStatus::PartialFailure => {
                 let paths = notice_records(&self.notices, NOTICE_PINNED_DRIFT)?;
                 let mut words: Vec<String> = ["urzua", "fix", "--rebaseline", "--ids"]
                     .map(String::from)
@@ -2489,7 +2497,12 @@ impl Report for ConflictsReport {
                 ),
             )),
             ConflictsStatus::Resolved => Some(NextAction::runs_as_printed(
-                format!("git add {}", records(ConflictOutcome::Resolved).join(" ")),
+                shell_command(&git_add(
+                    self.conflicts
+                        .iter()
+                        .filter(|c| c.outcome == ConflictOutcome::Resolved)
+                        .map(|c| c.record.to_str().unwrap_or_default()),
+                )),
                 "fix --conflicts does not stage: stage the resolved records, then continue the merge or rebase",
             )),
             _ => None,
