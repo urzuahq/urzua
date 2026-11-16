@@ -53,19 +53,25 @@ need to do".
   `.pre-commit-config.yaml` (a `repo: local` stanza, appended only with `--write-config`). `hooks status` reports the
   same wiring `doctor` and the session-start check read, and `hooks uninstall` removes only what the install added. It
   writes unless `--dry-run`, as `harness install` does (`MILE-220`).
-- **A hook urzua did not write is extended, never replaced, and only where the block will run.** The install puts a
-  block between `# >>> urzua-hooks begin` and `# <<< urzua-hooks end` after the hook's last command, or before it when
-  that command is a top-level `exit` or `exec`. It refuses, writing nothing and naming the one line to add and where,
-  a hook that could end before the block (an `exit` or `exec` anywhere else, a `trap`, or a last command that is a
-  compound such as `fi`), a hook in another language (a Node or Python script), a hook file without the execute bit, a
-  symlinked hook file wherever it points, and a hooks directory that resolves outside the working tree and the git
-  directory (a linked worktree's and a submodule's git directory are inside) or cannot be written. "Wired" means the
-  call can run: a block after an unconditional top-level `exit` or `exec` is reported as unreachable.
+- **A hook urzua did not write gets a block at its top, so urzua runs first.** The install puts a block between
+  `# >>> urzua-hooks begin` and `# <<< urzua-hooks end` right after the shebang, any leading comment lines and a husky
+  v8 source line (so it runs once, inside husky's re-run), and leaves the rest of the hook untouched; the hook's own
+  behaviour and exit status are unchanged, and `uninstall` restores its bytes. The block was first placed at the end,
+  before a final `exit` or `exec`, but a hook's text cannot be analysed reliably to find where it ends (`return`,
+  `false; exit $?`, line continuations, functions, `set -e` and the like each defeated it), so urzua no longer tries:
+  running first needs no analysis at all. The block is written for POSIX sh and works under `set -e`, `set -u` and
+  husky v9's `sh -e`. The install refuses, writing nothing and naming the one line to add, a hook in another language
+  (a Node or Python script), a hook file without the execute bit, a symlinked hook file wherever it points, and a hooks
+  directory that resolves outside the working tree and the git directory (a linked worktree's and a submodule's git
+  directory are inside) or cannot be written; `uninstall` applies the same guards. "Wired" means urzua can prove the
+  call runs: its own block as installed, or a hand-written call that is the script's first command. Any other
+  hand-written call is reported as present but unverified, with `urzua hooks install` as the fix.
 - **The hook runs a read-only check named in configuration.** The block calls `urzua hooks run <hook>`, which runs
   `hooks.pre-commit` (default `check --base HEAD`: the changes since HEAD, the scope the Decision gives the commit) or
   `hooks.pre-push` (default `check`) and prints the count and each blocking finding's rule, file and message, and the
   command for the full report, on stderr (`ADR-101`, amendment of 2026-11-15). Only `check` and its alias `audit` may be
-  named: another subcommand could write files, reach the network or call the hook again on every commit. `check --base
+  named, without `--config`, `--stdin-path` or `--actors`: another subcommand could write files, reach the network or
+  call the hook again on every commit, and a flag naming another file could print it. `check --base
   HEAD` took about 9 seconds with a release build on this repository, which has about 670 records; a repository that
   finds that too slow can name a cheaper check.
 - **When urzua cannot run, the hook warns by default.** When urzua is not found (`URZUA_BIN`, then `PATH`), is a
@@ -103,3 +109,4 @@ Easy to extend and to relax. The decision adds `doctor` reporting and a rule tha
 > | 2026-11-04 | Status changed from Proposed to Accepted. **Why:** Maintainer decision, 2026-11-04. | **substantive** |
 > | 2026-11-16 | Amendment added: `urzua hooks install` is the one-step install, and an installed hook blocks when urzua cannot run. **Why:** the maintainer asked on 2026-11-16 for the one-command fix of `MILE-220`; decided by the builder, pending maintainer review. | **substantive** |
 > | 2026-11-16 | The amendment of 2026-11-16 revised before merge: an installed hook warns by default when urzua cannot run (the orchestrator's decision, pending maintainer review), with the rationale corrected; hooks run only `check`; the block is placed or refused so it always runs, and a block that cannot run is reported unreachable; nothing is written through a symlink or outside the repository; the measured cost of the pre-commit check is stated. **Why:** an independent review of the pull request found a block that could never run reported as wired, writes through symlinks, and a blocking default that would stop contributors who never installed urzua. | **substantive** |
+> | 2026-11-16 | The amendment of 2026-11-16 revised again before merge: the block goes at the top of a hook, so urzua runs first and the rest of the hook is untouched (the orchestrator's decision, pending maintainer review), replacing placement before a final `exit` or `exec` and the refusals that came with it; "wired" means a call urzua can prove runs; `uninstall` applies `install`'s guards. **Why:** a re-check of the pull request found that reading a hook's text to find where it ends failed on `return`, `false; exit $?`, line continuations and `set -e`, and that `uninstall` wrote outside the repository. | **substantive** |

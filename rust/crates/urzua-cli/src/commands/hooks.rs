@@ -3,10 +3,11 @@
 //! `doctor` asks for, wherever the repository keeps its hooks, and runs the
 //! configured check from them.
 //!
-//! A hook file urzua did not write is extended with a marked block, never
-//! replaced, and only where the block is certain to run; `uninstall` removes
-//! only that block, or a file that held nothing else. Nothing is written
-//! through a symlink or outside the repository and its git directory.
+//! A hook file urzua did not write gets a marked block at its top, so urzua
+//! runs first and the rest of the hook is untouched: a hook's text cannot be
+//! analysed reliably to find where it ends. `uninstall` removes only that
+//! block, restoring the bytes. Nothing is written through a symlink or
+//! outside the repository and its git directory.
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -24,7 +25,9 @@ pub(crate) const INSTALL: &str = "urzua hooks install";
 const FRAMEWORK_CONFIG: &str = ".pre-commit-config.yaml";
 const SHEBANG: &str = "#!/bin/sh\n";
 const INSTALL_DOC: &str = "https://github.com/urzuahq/urzua/blob/main/docs/reference/install.md";
-const VERSION: &str = env!("CARGO_PKG_VERSION");
+/// The first release that has `hooks run`; an older one is told to upgrade
+/// to it.
+const FIRST_VERSION: &str = "0.5.0";
 /// `hooks run` exits with this when urzua did not run and the policy is
 /// `block`, so the block can tell it from a blocking finding (1) and from an
 /// older urzua's usage error (2).
@@ -208,11 +211,13 @@ pub(crate) enum HookState {
     InstalledNotRunningUrzua,
     /// Present but without the execute bit, which git silently ignores.
     InstalledNotExecutable,
-    /// The call to urzua sits after an unconditional top-level `exit` or
-    /// `exec`, so it never runs.
-    InstalledUnreachable,
+    /// A hand-written call to urzua that is not the script's first command:
+    /// urzua cannot tell whether it runs.
+    InstalledPresentUnverified,
     /// The block carries a not-run policy the configuration no longer names.
     InstalledStalePolicy,
+    /// The block differs from what `install` writes.
+    InstalledStaleBlock,
     /// More than one marked block.
     InstalledDuplicated,
 }
@@ -224,8 +229,9 @@ impl HookState {
             HookState::NotInstalled => "missing",
             HookState::InstalledNotRunningUrzua => "not-wired",
             HookState::InstalledNotExecutable => "not-executable",
-            HookState::InstalledUnreachable => "unreachable",
+            HookState::InstalledPresentUnverified => "present-unverified",
             HookState::InstalledStalePolicy => "stale-policy",
+            HookState::InstalledStaleBlock => "stale-block",
             HookState::InstalledDuplicated => "duplicated",
         }
     }
@@ -407,54 +413,78 @@ fn content_state(path: &Path, content: &str, decl: &HooksDecl) -> (HookState, St
             ),
         );
     }
-    let at = if blocks == 1 {
-        content.lines().position(|l| l.contains(BEGIN))
-    } else {
-        invocation_line(content, None, false)
-    };
-    let Some(at) = at else {
-        return (
-            HookState::InstalledNotRunningUrzua,
-            format!("{shown} does not run urzua -- `{INSTALL}` adds a marked block that does, after what is there"),
-        );
-    };
-    if shell_hook(content).is_ok() {
-        if let Some(stop) = unconditional_stop_before(content, at) {
+    if blocks == 1 {
+        let marker = Marker::read(content);
+        let expected = remove_blocks(content)
+            .map(|rest| insert_block(&rest, marker.created, decl.on_not_run, &marker.hook));
+        if expected.as_deref() == Ok(content) {
             return (
-                HookState::InstalledUnreachable,
+                HookState::InstalledRunningUrzua,
+                format!("{shown} runs urzua first"),
+            );
+        }
+        if marker.policy != decl.on_not_run.as_str() {
+            return (
+                HookState::InstalledStalePolicy,
                 format!(
-                    "{shown} calls urzua on line {}, after the unconditional `{}` on line {}, so it never runs -- move the call before that line, or remove the block and run `{INSTALL}`",
-                    at + 1,
-                    stop.1,
-                    stop.0 + 1
+                    "{shown} was written with on_not_run: {}, but the configuration says {} -- run `{INSTALL}` to rewrite it",
+                    marker.policy,
+                    decl.on_not_run.as_str()
                 ),
             );
         }
+        return (
+            HookState::InstalledStaleBlock,
+            format!("{shown} has an urzua block that differs from what `{INSTALL}` writes, or is not at the top -- run `{INSTALL}` to rewrite it"),
+        );
     }
-    if blocks == 1 {
-        if let Some(baked) = baked_policy(content) {
-            if baked != decl.on_not_run.as_str() {
-                return (
-                    HookState::InstalledStalePolicy,
-                    format!(
-                        "{shown} was written with on_not_run: {baked}, but the configuration says {} -- run `{INSTALL}` to rewrite it",
-                        decl.on_not_run.as_str()
-                    ),
-                );
-            }
-        }
+    let binaries = urzua_variables(content);
+    if first_command(content).is_some_and(|l| line_invokes(l, &binaries, None, false)) {
+        return (
+            HookState::InstalledRunningUrzua,
+            format!("{shown} runs urzua as its first command"),
+        );
+    }
+    if invokes_urzua(content, None, false) {
+        let fix = if shell_hook(content).is_ok() {
+            format!("run `{INSTALL}` to add the managed block at the top, which always runs")
+        } else {
+            "make the call the script's first statement".to_string()
+        };
+        return (
+            HookState::InstalledPresentUnverified,
+            format!("{shown} calls urzua, but not as its first command, so urzua cannot tell whether that line runs -- {fix}"),
+        );
     }
     (
-        HookState::InstalledRunningUrzua,
-        format!("{shown} runs urzua"),
+        HookState::InstalledNotRunningUrzua,
+        format!("{shown} does not run urzua -- `{INSTALL}` adds a marked block at its top"),
     )
 }
 
-/// The not-run policy written into a block's first line.
-fn baked_policy(content: &str) -> Option<&str> {
-    let line = content.lines().find(|l| l.contains(BEGIN))?;
-    let rest = line.split("on_not_run: ").nth(1)?;
-    rest.split(|c: char| !c.is_ascii_alphabetic()).next()
+/// What a block's begin marker records.
+struct Marker {
+    policy: String,
+    created: bool,
+    hook: String,
+}
+
+impl Marker {
+    fn read(content: &str) -> Marker {
+        let line = content.lines().find(|l| l.contains(BEGIN)).unwrap_or("");
+        let field = |name: &str| {
+            line.split(&format!("{name}: "))
+                .nth(1)
+                .and_then(|r| r.split([';', ')']).next())
+                .unwrap_or("")
+                .to_string()
+        };
+        Marker {
+            policy: field("on_not_run"),
+            created: field("created") == "yes",
+            hook: field("hook"),
+        }
+    }
 }
 
 /// A framework hook is wired when its config runs urzua at that stage and the
@@ -483,7 +513,8 @@ fn framework_wiring(
             Some(format!("{INSTALL} --write-config")),
         ));
     }
-    if let Some(baked) = baked_policy(&text).filter(|b| *b != decl.on_not_run.as_str()) {
+    let baked = Marker::read(&text).policy;
+    if text.contains(BEGIN) && baked != decl.on_not_run.as_str() {
         return Ok(wired(
             hook,
             config,
@@ -608,136 +639,99 @@ pub(crate) fn invokes_urzua(content: &str, subcommand: Option<&str>, accept_acti
     invocation_line(content, subcommand, accept_action).is_some()
 }
 
-fn words(code: &str) -> Vec<&str> {
-    code.split(|c: char| c.is_whitespace() || ";&|()`".contains(c))
-        .filter(|t| !t.is_empty())
-        .collect()
+/// The first command of a script: after the shebang, blank and comment lines
+/// (`#`, and `//` for a script in another language), and a husky v8 source
+/// line.
+fn first_command(content: &str) -> Option<&str> {
+    command_start(content).1
 }
 
-/// The lines of a shell hook that are commands: blank and comment lines, and
-/// the marked block, dropped. (0-based index, code without a trailing comment.)
-fn command_lines(content: &str) -> Vec<(usize, &str)> {
-    let mut out = Vec::new();
-    let mut in_block = false;
-    for (i, line) in content.lines().enumerate() {
-        if line.contains(BEGIN) {
-            in_block = true;
-        }
-        let skip = in_block || line.trim().is_empty() || line.trim_start().starts_with('#');
-        if line.contains(END) {
-            in_block = false;
-        }
+/// (byte offset of the first command's line, that line): the place the block
+/// goes and the line a hand-written call must be.
+fn command_start(content: &str) -> (usize, Option<&str>) {
+    let mut at = 0;
+    let mut husky_seen = false;
+    for (i, raw) in content.split_inclusive('\n').enumerate() {
+        let line = raw.trim_end_matches(['\n', '\r']);
+        let t = line.trim();
+        let skip = (i == 0 && t.starts_with("#!"))
+            || t.is_empty()
+            || (t.starts_with('#') && !t.starts_with("#!"))
+            || t.starts_with("//")
+            || (!husky_seen && is_husky_source(t));
         if !skip {
-            out.push((i, line.find(" #").map_or(line, |at| &line[..at])));
+            return (at, Some(line));
         }
+        husky_seen |= is_husky_source(t);
+        at += raw.len();
     }
-    out
+    (at, None)
 }
 
-/// Nesting change of one line: `if`/`case`/loops and `{` open, `fi`/`esac`/
-/// `done` and `}` close.
-fn depth_delta(code: &str) -> i32 {
-    let mut d = 0;
-    for w in code.split(|c: char| c.is_whitespace() || c == ';') {
-        match w {
-            "if" | "case" | "while" | "until" | "for" | "{" => d += 1,
-            "fi" | "esac" | "done" | "}" => d -= 1,
-            _ if w.ends_with('{') => d += 1,
-            _ if w.starts_with('}') => d -= 1,
-            _ => {}
-        }
-    }
-    d
-}
-
-/// The first unconditional top-level `exit` or `exec` before line `at`, as
-/// (0-based line, word).
-fn unconditional_stop_before(content: &str, at: usize) -> Option<(usize, &'static str)> {
-    let mut depth = 0;
-    for (i, code) in command_lines(content) {
-        if i >= at {
-            break;
-        }
-        if depth == 0 {
-            match words(code).first() {
-                Some(&"exit") => return Some((i, "exit")),
-                Some(&"exec") => return Some((i, "exec")),
-                _ => {}
-            }
-        }
-        depth += depth_delta(code);
-    }
-    None
-}
-
-/// Where the block goes in a hook urzua did not write: after the last
-/// command, or before it when it is a top-level `exit` or `exec`. `Err` names
-/// the line that could end the hook before the block, or the compound command
-/// it would follow, when no place is certain to run.
-fn insertion_point(content: &str) -> Result<usize, (usize, String)> {
-    let lines = command_lines(content);
-    let Some(&(last, last_code)) = lines.last() else {
-        return Ok(content.lines().count());
-    };
-    for &(i, code) in &lines {
-        let w = words(code);
-        if w.first() == Some(&"trap") {
-            return Err((i, "a `trap` can end the hook on its own".to_string()));
-        }
-        let stops = w.iter().any(|t| *t == "exit" || *t == "exec");
-        let final_stop = i == last && matches!(w.first(), Some(&"exit") | Some(&"exec"));
-        if final_stop {
-            return Ok(i);
-        }
-        if stops {
-            return Err((
-                i,
-                "an `exit` or `exec` here can end the hook before the block".to_string(),
-            ));
-        }
-    }
-    let ends_compound = words(last_code)
-        .last()
-        .is_some_and(|t| matches!(*t, "fi" | "done" | "esac") || t.ends_with('}'));
-    if ends_compound {
-        return Err((last, "the hook ends in a compound command".to_string()));
-    }
-    Ok(content.lines().count())
+/// husky v8's `. "$(dirname -- "$0")/_/husky.sh"` and its variants.
+fn is_husky_source(t: &str) -> bool {
+    (t.starts_with(". ") || t.starts_with("source ")) && t.contains("husky.sh")
 }
 
 /// The marked shell block a hook runs urzua from. The binary is found as the
-/// harness finds it: `URZUA_BIN`, then `PATH`. `hooks run` reads the not-run
-/// policy from the configuration when it runs; `on_not_run` here is the
-/// policy for the cases it cannot ask urzua: no binary, or one without
-/// `hooks run`.
-pub(crate) fn shell_block(hook: &str, on_not_run: HookOnNotRun) -> String {
+/// harness finds it: `URZUA_BIN`, then `PATH`. Correct under `set -e`,
+/// `set -u` and plain POSIX sh: every status is captured with `||`, every
+/// name is prefixed `urzua_` and unset at the end. `hooks run` reads the
+/// not-run policy from the configuration; the block passes its own for when
+/// the configuration cannot be read, and applies it itself when urzua is
+/// missing or has no `hooks run`.
+pub(crate) fn shell_block(hook: &str, on_not_run: HookOnNotRun, created: bool, nl: &str) -> String {
     let verb = if hook == "pre-push" { "push" } else { "commit" };
+    let policy = on_not_run.as_str();
     let stop = match on_not_run {
         HookOnNotRun::Block => format!(
             "echo \"{hook}: to {verb} without the check once: git {verb} --no-verify\" >&2; exit 1"
         ),
         HookOnNotRun::Warn => ":".to_string(),
     };
-    format!(
-        "{BEGIN} (on_not_run: {policy}; written by `{INSTALL}`; `urzua hooks uninstall` removes it)\n\
-urzua_bin=\"${{URZUA_BIN:-}}\"\n\
-[ -n \"$urzua_bin\" ] || urzua_bin=\"$(command -v urzua 2>/dev/null || true)\"\n\
-if [ -z \"$urzua_bin\" ]; then\n\
-\x20 echo \"{hook}: urzua did not run (not installed: URZUA_BIN unset, not on PATH), so the records were NOT checked; install it: {INSTALL_DOC} -- CI will check them\" >&2\n\
-\x20 {stop}\n\
-else\n\
-\x20 urzua_out=\"$(\"$urzua_bin\" hooks run {hook} 2>&1 >/dev/null)\"\n\
-\x20 urzua_code=$?\n\
-\x20 case \"$urzua_code\" in\n\
-\x20   0|1|{NOT_RUN_BLOCK}) [ -z \"$urzua_out\" ] || printf '%s\\n' \"$urzua_out\" >&2 ;;\n\
-\x20   *) echo \"{hook}: urzua did not run: $urzua_bin has no \\`hooks run\\` (exit $urzua_code); upgrade urzua to {VERSION} or later. The records were NOT checked -- CI will check them\" >&2\n\
-\x20      {stop} ;;\n\
-\x20 esac\n\
-\x20 case \"$urzua_code\" in 1|{NOT_RUN_BLOCK}) exit 1 ;; esac\n\
-fi\n\
-{END}",
-        policy = on_not_run.as_str()
-    )
+    let created = if created { "yes" } else { "no" };
+    let lines = [
+        format!("{BEGIN} (hook: {hook}; on_not_run: {policy}; created: {created}; written by `{INSTALL}`; `urzua hooks uninstall` removes it)"),
+        "urzua_bin=\"${URZUA_BIN:-}\"".to_string(),
+        "if [ -z \"$urzua_bin\" ]; then urzua_bin=\"$(command -v urzua 2>/dev/null)\" || urzua_bin=\"\"; fi".to_string(),
+        "urzua_code=0".to_string(),
+        "if [ -z \"$urzua_bin\" ]; then urzua_code=127; urzua_out=\"\"; else".to_string(),
+        format!("  urzua_out=\"$(URZUA_HOOKS_ON_NOT_RUN={policy} \"$urzua_bin\" hooks run {hook} 2>&1 >/dev/null)\" || urzua_code=$?"),
+        "fi".to_string(),
+        "case \"$urzua_code\" in".to_string(),
+        format!("  0|1|{NOT_RUN_BLOCK}) if [ -n \"$urzua_out\" ]; then printf '%s\\n' \"$urzua_out\" >&2; fi ;;"),
+        format!("  126|127) echo \"{hook}: urzua did not run (not installed, or not executable: URZUA_BIN, then PATH), so the records were NOT checked; install it: {INSTALL_DOC} -- CI will check them\" >&2"),
+        format!("    {stop} ;;"),
+        format!("  *) echo \"{hook}: urzua did not run: $urzua_bin has no \\`hooks run\\` (exit $urzua_code); upgrade urzua to {FIRST_VERSION} or later. The records were NOT checked -- CI will check them\" >&2"),
+        format!("    {stop} ;;"),
+        "esac".to_string(),
+        format!("case \"$urzua_code\" in 1|{NOT_RUN_BLOCK}) exit 1 ;; esac"),
+        "unset urzua_bin urzua_out urzua_code".to_string(),
+        END.to_string(),
+    ];
+    lines.join(nl)
+}
+
+/// `content` with the block at its top (after the shebang, leading comments
+/// and a husky v8 source line), in the file's own line endings. A file that
+/// ends without a newline at that point gets one before the block, recorded
+/// so `remove_blocks` takes it out again.
+fn insert_block(content: &str, created: bool, on_not_run: HookOnNotRun, hook: &str) -> String {
+    let nl = if content.contains("\r\n") {
+        "\r\n"
+    } else {
+        "\n"
+    };
+    let (at, _) = command_start(content);
+    let mut block = shell_block(hook, on_not_run, created, nl);
+    let joined = at == content.len() && !content.is_empty() && !content.ends_with('\n');
+    if joined {
+        block = format!(
+            "{nl}{}",
+            block.replacen(" (hook:", " (joined: yes; hook:", 1)
+        );
+    }
+    format!("{}{block}{nl}{}", &content[..at], &content[at..])
 }
 
 /// `s` as a YAML single-quoted scalar.
@@ -782,15 +776,25 @@ pub(crate) fn framework_stanza(indent: &str, on_not_run: HookOnNotRun) -> String
     out
 }
 
-/// (start, end) of the first marked block in `text`, `end` past the end
-/// marker's line.
+/// (start, end) of the first marked block in `text`: from the start of the
+/// begin marker's line (or the newline before it, when the block recorded
+/// adding one) to past the end marker's line ending.
 fn span(text: &str) -> Result<Option<(usize, usize)>, String> {
     match (text.find(BEGIN), text.find(END)) {
         (None, None) => Ok(None),
         (Some(b), Some(e)) if b < e => {
-            let start = text[..b].rfind('\n').map_or(0, |i| i + 1);
+            let mut start = text[..b].rfind('\n').map_or(0, |i| i + 1);
+            let line_end = text[b..].find('\n').map_or(text.len(), |i| b + i);
+            if text[b..line_end].contains("joined: yes") && start > 0 {
+                start -= 1;
+                if text[..start].ends_with('\r') {
+                    start -= 1;
+                }
+            }
             let mut end = e + END.len();
-            if text[end..].starts_with('\n') {
+            if text[end..].starts_with("\r\n") {
+                end += 2;
+            } else if text[end..].starts_with('\n') {
                 end += 1;
             }
             Ok(Some((start, end)))
@@ -801,10 +805,32 @@ fn span(text: &str) -> Result<Option<(usize, usize)>, String> {
     }
 }
 
-/// `Err` with the interpreter a hook's shebang names, for a non-shell one.
+/// `Err` with the interpreter a hook's shebang names, for a non-shell one;
+/// a hook with no shebang is shell unless its first command reads as
+/// JavaScript or Python.
 fn shell_hook(content: &str) -> Result<(), String> {
     let Some(first) = content.lines().next().filter(|l| l.starts_with("#!")) else {
-        return Ok(());
+        let foreign = first_command(content).is_some_and(|l| {
+            [
+                "import ",
+                "from ",
+                "const ",
+                "let ",
+                "var ",
+                "require(",
+                "'use strict'",
+                "\"use strict\"",
+                "def ",
+                "console.",
+            ]
+            .iter()
+            .any(|p| l.trim_start().starts_with(p))
+        });
+        return if foreign {
+            Err("non-shell".to_string())
+        } else {
+            Ok(())
+        };
     };
     let words: Vec<&str> = first[2..].split_whitespace().collect();
     let interp = match words.as_slice() {
@@ -841,37 +867,6 @@ fn remove_blocks(content: &str) -> Result<String, String> {
     let mut out = content.to_string();
     while let Some((b, e)) = span(&out)? {
         out = format!("{}{}", &out[..b], &out[e..]);
-    }
-    Ok(out)
-}
-
-/// `content` with `block` set: every existing block removed and one put in
-/// its place, or inserted at `insertion_point`. `Err` is the refusal.
-fn place_block(content: &str, block: &str, hook: &str) -> Result<String, String> {
-    if let Some((b, _)) = span(content)? {
-        let rest = remove_blocks(content)?;
-        return Ok(format!("{}{block}\n{}", &rest[..b], &rest[b..]));
-    }
-    let at = insertion_point(content).map_err(|(line, why)| {
-        format!(
-            "{why} (line {}: `{}`), so a block urzua appends might never run; add this line where it runs on every path, before line {}: {}",
-            line + 1,
-            content.lines().nth(line).unwrap_or("").trim(),
-            line + 1,
-            shell_line(hook)
-        )
-    })?;
-    let lines: Vec<&str> = content.lines().collect();
-    let mut out = String::new();
-    for l in &lines[..at] {
-        out.push_str(l);
-        out.push('\n');
-    }
-    out.push_str(block);
-    out.push('\n');
-    for l in &lines[at..] {
-        out.push_str(l);
-        out.push('\n');
     }
     Ok(out)
 }
@@ -1086,14 +1081,15 @@ fn plan_hook(
     report: &mut HooksReport,
     hook: &'static str,
     path: &Path,
-    block: &str,
+    decl: &HooksDecl,
     target: &Target,
 ) -> Result<Option<(String, &'static str)>, String> {
     if let Some(why) = symlink_problem(hook, path) {
         return Err(why);
     }
     let Some(content) = read_optional(path)? else {
-        return Ok(Some((format!("{SHEBANG}{block}\n"), "created")));
+        let new = insert_block(SHEBANG, true, decl.on_not_run, hook);
+        return Ok(Some((new, "created")));
     };
     if target.needs_exec {
         if let Ok(meta) = std::fs::metadata(path) {
@@ -1107,11 +1103,13 @@ fn plan_hook(
         }
     }
     if content.contains(BEGIN) || content.contains(END) {
-        let new =
-            place_block(&content, block, hook).map_err(|m| format!("{} {m}", path.display()))?;
+        let created = Marker::read(&content).created;
+        let rest = remove_blocks(&content).map_err(|m| format!("{} {m}", path.display()))?;
+        let new = insert_block(&rest, created, decl.on_not_run, hook);
         return Ok((new != content).then_some((new, "updated")));
     }
-    if invokes_urzua(&content, None, false) {
+    let binaries = urzua_variables(&content);
+    if first_command(&content).is_some_and(|l| line_invokes(l, &binaries, None, false)) {
         report.item(hook, path, "wired");
         return Ok(None);
     }
@@ -1122,8 +1120,10 @@ fn plan_hook(
             foreign_line(&interp, hook)
         ));
     }
-    let new = place_block(&content, block, hook).map_err(|m| format!("{}: {m}", path.display()))?;
-    Ok(Some((new, "extended")))
+    Ok(Some((
+        insert_block(&content, false, decl.on_not_run, hook),
+        "extended",
+    )))
 }
 
 fn install_files(report: &mut HooksReport, decl: &HooksDecl, target: &Target, dry_run: bool) {
@@ -1131,13 +1131,7 @@ fn install_files(report: &mut HooksReport, decl: &HooksDecl, target: &Target, dr
     for hook in HOOKS {
         let path = target.dir.join(hook);
         let before = report.items.len();
-        match plan_hook(
-            report,
-            hook,
-            &path,
-            &shell_block(hook, decl.on_not_run),
-            target,
-        ) {
+        match plan_hook(report, hook, &path, decl, target) {
             Err(why) => report.refuse(why),
             Ok(None) if report.items.len() == before => report.item(hook, &path, "unchanged"),
             Ok(None) => {}
@@ -1162,7 +1156,7 @@ fn install_files(report: &mut HooksReport, decl: &HooksDecl, target: &Target, dr
             report.item(w.hook, &w.path, &would(w.state));
             continue;
         }
-        if let Err(e) = write_hook(&w.path, &w.content) {
+        if let Err(e) = write_atomic(&w.path, &w.content) {
             report.refuse(format!("could not write {}: {e}", w.path.display()));
             continue;
         }
@@ -1181,19 +1175,36 @@ fn would(state: &str) -> String {
     }
 }
 
-fn write_hook(path: &Path, content: &str) -> std::io::Result<()> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    std::fs::write(path, content)?;
+/// Writes `content` to a temporary file beside `path` and renames it over
+/// `path`, keeping `path`'s mode (a new file is executable). The rename is
+/// refused when `path` is no longer a regular file, so a symlink swapped in
+/// after the checks is never written through.
+fn write_atomic(path: &Path, content: &str) -> std::io::Result<()> {
+    let dir = path.parent().unwrap_or(Path::new("."));
+    std::fs::create_dir_all(dir)?;
+    let existing = std::fs::symlink_metadata(path).ok();
+    let tmp = dir.join(format!(
+        ".{}.urzua-{}",
+        path.file_name().and_then(|n| n.to_str()).unwrap_or("hook"),
+        std::process::id()
+    ));
+    std::fs::write(&tmp, content)?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        let mut perms = std::fs::metadata(path)?.permissions();
-        perms.set_mode(perms.mode() | 0o755);
-        std::fs::set_permissions(path, perms)?;
+        let mode = existing
+            .as_ref()
+            .map_or(0o755, |m| m.permissions().mode() & 0o7777);
+        std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(mode))?;
     }
-    Ok(())
+    let now = std::fs::symlink_metadata(path).ok();
+    if now.as_ref().is_some_and(|m| !m.file_type().is_file()) {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(std::io::Error::other(
+            "it is no longer a regular file; nothing was written",
+        ));
+    }
+    std::fs::rename(&tmp, path)
 }
 
 /// The indentation of the `repos:` list items when `repos:` is the config's
@@ -1319,7 +1330,7 @@ fn append_stanza(
     new.push('\n');
     if dry_run {
         report.item("pre-commit-framework", config, "would-extend");
-    } else if let Err(e) = std::fs::write(config, new) {
+    } else if let Err(e) = write_atomic(config, &new) {
         report.refuse(format!("could not write {}: {e}", config.display()));
         return false;
     } else {
@@ -1334,24 +1345,55 @@ pub fn run_uninstall(config: Option<PathBuf>, dry_run: bool) -> ExitCode {
         Err(m) => return not_run(m),
     };
     let mut report = HooksReport::new("uninstall", dry_run, &layout);
-    let framework = matches!(layout, Layout::Framework { .. });
-    let files: Vec<(&str, PathBuf)> = match &layout {
-        Layout::Framework { config, .. } => vec![("pre-commit-framework", config.clone())],
-        Layout::Files { dir, .. } => HOOKS.iter().map(|h| (*h, dir.join(h))).collect(),
+    let (files, unwritable): (Vec<(&str, PathBuf)>, Option<String>) = match &layout {
+        Layout::Framework { config, .. } => (vec![("pre-commit-framework", config.clone())], None),
+        Layout::Files {
+            dir, unwritable, ..
+        } => (
+            HOOKS.iter().map(|h| (*h, dir.join(h))).collect(),
+            unwritable.clone(),
+        ),
     };
+    let framework = matches!(layout, Layout::Framework { .. });
     for (hook, path) in files {
-        uninstall_one(&mut report, hook, &path, framework, dry_run);
+        uninstall_one(
+            &mut report,
+            hook,
+            &path,
+            unwritable.as_deref(),
+            framework,
+            dry_run,
+        );
     }
     emit(&report)
 }
 
+/// Removes the blocks from one file, under the same guards as `install`: a
+/// symlinked file or a directory urzua will not write is refused, naming the
+/// lines to remove by hand.
 fn uninstall_one(
     report: &mut HooksReport,
     hook: &str,
     path: &Path,
+    unwritable: Option<&str>,
     framework: bool,
     dry_run: bool,
 ) {
+    let by_hand = |why: &str| {
+        format!(
+            "{why}; remove the lines from `{BEGIN}` to `{END}` in {} by hand",
+            path.display()
+        )
+    };
+    if let Some(why) = unwritable {
+        return report.refuse(by_hand(why));
+    }
+    if std::fs::symlink_metadata(path).is_ok_and(|m| m.file_type().is_symlink()) {
+        return report.refuse(by_hand(&format!(
+            "{} is a symlink; urzua never writes through a symlink",
+            path.display()
+        )));
+    }
     let content = match read_optional(path) {
         Ok(Some(c)) => c,
         Ok(None) => return report.item(hook, path, "absent"),
@@ -1360,14 +1402,12 @@ fn uninstall_one(
     if !content.contains(BEGIN) && !content.contains(END) {
         return report.item(hook, path, "not-ours");
     }
-    if let Some(why) = symlink_problem(hook, path) {
-        return report.refuse(why.replace("add this line to", "remove the urzua block from"));
-    }
+    let created = Marker::read(&content).created;
     let rest = match remove_blocks(&content) {
         Ok(r) => r,
         Err(m) => return report.refuse(format!("{} {m}", path.display())),
     };
-    let delete = !framework && (rest.trim().is_empty() || rest == SHEBANG);
+    let delete = !framework && created && rest == SHEBANG;
     let state = if delete { "removed" } else { "block-removed" };
     if dry_run {
         return report.item(hook, path, &would(state));
@@ -1375,7 +1415,7 @@ fn uninstall_one(
     let done = if delete {
         std::fs::remove_file(path)
     } else {
-        std::fs::write(path, rest)
+        write_atomic(path, &rest)
     };
     match done {
         Ok(()) => report.item(hook, path, state),
@@ -1394,7 +1434,7 @@ pub fn run_hook(config: Option<PathBuf>, hook: String) -> ExitCode {
             return not_run_hook(
                 &hook,
                 &format!("the configuration could not be read: {}", e.message),
-                HookOnNotRun::default(),
+                fallback_policy(),
             )
         }
     };
@@ -1451,6 +1491,14 @@ pub fn run_hook(config: Option<PathBuf>, hook: String) -> ExitCode {
                 decl.on_not_run,
             )
         }
+    }
+}
+
+/// The policy the block passes for when the configuration cannot be read.
+fn fallback_policy() -> HookOnNotRun {
+    match std::env::var("URZUA_HOOKS_ON_NOT_RUN").as_deref() {
+        Ok("block") => HookOnNotRun::Block,
+        _ => HookOnNotRun::default(),
     }
 }
 
@@ -1516,53 +1564,45 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_trailing_exec_or_exit_keeps_the_block_before_it() {
-        let hook = "npx lint-staged\nexec node scripts/check.js \"$@\"\n";
-        let out = place_block(hook, "B", "pre-commit").unwrap();
-        assert_eq!(
-            out,
-            "npx lint-staged\nB\nexec node scripts/check.js \"$@\"\n"
-        );
-        let out = place_block("#!/bin/sh\necho a\nexit 0\n", "B", "pre-commit").unwrap();
-        assert_eq!(out, "#!/bin/sh\necho a\nB\nexit 0\n");
-    }
-
-    #[test]
-    fn the_block_goes_after_existing_content_and_is_replaced_in_place() {
-        let once = place_block("#!/bin/sh\nmake lint\n", "B1", "pre-commit").unwrap();
-        assert_eq!(once, "#!/bin/sh\nmake lint\nB1\n");
-        let block = format!("{BEGIN}\nx\n{END}");
-        let first = place_block("make lint\n", &block, "pre-commit").unwrap();
-        let again = place_block(&first, &block, "pre-commit").unwrap();
-        assert_eq!(first, again);
-        assert_eq!(remove_blocks(&first).unwrap(), "make lint\n");
-    }
-
-    #[test]
-    fn a_hook_that_can_leave_early_has_no_insertion_point() {
-        for (hook, line) in [
-            ("if x; then exec y; fi\n", 0),
-            ("f() { exec y; }\nf\n", 0),
-            ("trap 'exit 1' EXIT\nx\n", 0),
-            ("a\nexit 0\nb\n", 1),
-            ("if x; then\n  y\nfi\n", 2),
-            ("a || exit 1\n", 0),
+    fn the_block_goes_at_the_top_and_comes_out_byte_for_byte() {
+        for (content, before) in [
+            ("#!/bin/sh\n# c\nmake lint\nexit 0\n", "#!/bin/sh\n# c\n"),
+            ("make lint\n", ""),
+            (
+                "#!/usr/bin/env sh\n. \"$(dirname -- \"$0\")/_/husky.sh\"\n\nnpx x\n",
+                "#!/usr/bin/env sh\n. \"$(dirname -- \"$0\")/_/husky.sh\"\n\n",
+            ),
+            ("#!/bin/sh", "#!/bin/sh"),
+            ("", ""),
+            ("#!/bin/sh\r\necho a\r\n", "#!/bin/sh\r\n"),
         ] {
-            assert_eq!(insertion_point(hook).map_err(|e| e.0), Err(line), "{hook}");
+            let out = insert_block(content, false, HookOnNotRun::Warn, "pre-commit");
+            assert!(out.starts_with(before), "{content:?}: {out:?}");
+            assert!(
+                out[before.len()..]
+                    .trim_start_matches(['\r', '\n'])
+                    .starts_with(BEGIN),
+                "{content:?}"
+            );
+            assert_eq!(remove_blocks(&out).unwrap(), content, "{content:?}");
+            assert_eq!(Marker::read(&out).hook, "pre-commit");
         }
     }
 
     #[test]
-    fn an_unconditional_stop_is_found_only_at_top_level() {
+    fn the_first_command_skips_comments_and_the_husky_line_only() {
         assert_eq!(
-            unconditional_stop_before("exit 0\nB\n", 1),
-            Some((0, "exit"))
+            first_command("#!/bin/sh\n# x\n\nurzua check\n"),
+            Some("urzua check")
         );
         assert_eq!(
-            unconditional_stop_before("if x; then\n  exit 0\nfi\nB\n", 3),
-            None
+            first_command("#!/bin/sh\nset -e\nurzua check\n"),
+            Some("set -e")
         );
-        assert_eq!(unconditional_stop_before("echo exit\nB\n", 1), None);
+        assert_eq!(
+            first_command("#!/usr/bin/env node\n// x\nrun()\n"),
+            Some("run()")
+        );
     }
 
     #[test]

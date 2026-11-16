@@ -86,86 +86,6 @@ fn commit_with(dir: &Path, bin: &str) -> Output {
         .unwrap()
 }
 
-fn commit_broken(dir: &Path) -> Output {
-    std::fs::write(dir.join("docs/adr/ADR-2-b.md"), BROKEN).unwrap();
-    common::git(dir, &["add", "-A"]);
-    commit_with(dir, env!("CARGO_BIN_EXE_urzua"))
-}
-
-#[test]
-fn a_trailing_exit_gets_the_block_before_it_and_a_broken_commit_is_blocked() {
-    for tail in ["exit 0", "exit $?"] {
-        let dir = fixture("exit");
-        let hook = dir.join(".git/hooks/pre-commit");
-        write_exec(&hook, &format!("#!/bin/sh\necho orig\n{tail}\n"));
-        let (code, report) = urzua(&dir, &["hooks", "install"]);
-        assert_eq!(code, 0, "{report}");
-        let text = std::fs::read_to_string(&hook).unwrap();
-        assert!(
-            text.find("urzua-hooks begin").unwrap() < text.find(tail).unwrap(),
-            "{text}"
-        );
-        assert!(text.ends_with(&format!("{tail}\n")), "{text}");
-        assert_eq!(pre_commit_check(&dir)["status"], "ok");
-        let out = commit_broken(&dir);
-        assert!(
-            !out.status.success(),
-            "{}",
-            String::from_utf8_lossy(&out.stderr)
-        );
-    }
-}
-
-#[test]
-fn a_hook_that_can_leave_early_is_refused_with_the_line_and_where() {
-    for (body, at) in [
-        ("if true; then exec true; fi\n", "line 2"),
-        ("main() { exec true; }\nmain\n", "line 2"),
-        ("main(){ exec true; }; main\n", "line 2"),
-        ("trap 'exit 0' EXIT\necho hi\n", "line 2"),
-        ("echo a\nexit 0\necho b\n", "line 3"),
-        ("if true; then\n  echo a\nfi\n", "line 4"),
-    ] {
-        let dir = fixture("early");
-        let hook = dir.join(".git/hooks/pre-commit");
-        let original = format!("#!/bin/sh\n{body}");
-        write_exec(&hook, &original);
-        let (code, report) = urzua(&dir, &["hooks", "install"]);
-        assert_eq!(code, 2, "{body}: {report}");
-        let problems = report["problems"].to_string();
-        assert!(
-            problems.contains("hooks run pre-commit || exit $?"),
-            "{problems}"
-        );
-        assert!(problems.contains(at), "{body}: {problems}");
-        assert_eq!(std::fs::read_to_string(&hook).unwrap(), original);
-        assert_ne!(pre_commit_check(&dir)["status"], "ok", "{body}");
-    }
-}
-
-#[test]
-fn a_block_after_an_unconditional_exit_is_reported_unreachable() {
-    for before in ["exit 0\n", "exec true\n"] {
-        let dir = fixture("unreachable");
-        write_exec(&dir.join(".git/hooks/pre-commit"), "#!/bin/sh\n");
-        let (code, _) = urzua(&dir, &["hooks", "install"]);
-        assert_eq!(code, 0);
-        let hook = dir.join(".git/hooks/pre-commit");
-        let text = std::fs::read_to_string(&hook).unwrap();
-        std::fs::write(
-            &hook,
-            text.replacen("#!/bin/sh\n", &format!("#!/bin/sh\n{before}"), 1),
-        )
-        .unwrap();
-        let check = pre_commit_check(&dir);
-        assert_eq!(check["status"], "warn", "{check}");
-        assert_eq!(check["state"], "installed-unreachable", "{check}");
-        let (code, status) = urzua(&dir, &["hooks", "status"]);
-        assert_eq!(code, 1);
-        assert_eq!(states(&status)[0], "pre-commit=unreachable");
-    }
-}
-
 #[test]
 fn a_symlinked_hook_is_never_written_through() {
     let dir = fixture("symlink");
@@ -231,9 +151,15 @@ fn old_urzua(dir: &Path) -> String {
 #[test]
 fn a_binary_without_hooks_run_is_not_run_and_obeys_the_policy() {
     let dir = fixture("old-binary");
+    // `set -e`, as husky v9 runs hooks: the block must still reach its policy.
+    write_exec(
+        &dir.join(".git/hooks/pre-commit"),
+        "#!/bin/sh\nset -e\necho orig\n",
+    );
     let (code, _) = urzua(&dir, &["hooks", "install"]);
     assert_eq!(code, 0);
-    let old = old_urzua(&common::TempDir::new("urzua-hooks-old"));
+    let old_dir = common::TempDir::new("urzua-hooks-old");
+    let old = old_urzua(&old_dir);
     std::fs::write(
         dir.join("docs/adr/ADR-2-b.md"),
         "---\nStatus: Draft\n---\n# B\n",
@@ -244,7 +170,11 @@ fn a_binary_without_hooks_run_is_not_run_and_obeys_the_policy() {
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(out.status.success(), "{stderr}");
     assert!(stderr.contains("upgrade urzua"), "{stderr}");
-    assert!(stderr.contains(env!("CARGO_PKG_VERSION")), "{stderr}");
+    assert!(
+        stderr.contains("upgrade urzua to 0.5.0 or later"),
+        "{stderr}"
+    );
+    assert!(stderr.contains("orig"), "{stderr}");
     assert!(!stderr.contains("unrecognized subcommand"), "{stderr}");
     assert!(!String::from_utf8_lossy(&out.stdout).contains("not-run"));
 
@@ -257,42 +187,6 @@ fn a_binary_without_hooks_run_is_not_run_and_obeys_the_policy() {
     common::git(&dir, &["add", "-A"]);
     let out = commit_with(&dir, &old);
     assert!(!out.status.success());
-}
-
-#[test]
-fn every_line_urzua_prints_as_the_fix_is_recognised_as_wired() {
-    let dir = fixture("roundtrip-outside");
-    let outside = common::TempDir::new("urzua-hooks-roundtrip-target");
-    common::git(
-        &dir,
-        &["config", "core.hooksPath", outside.to_str().unwrap()],
-    );
-    let (_, report) = urzua(&dir, &["hooks", "install"]);
-    let problems = report["problems"].as_array().unwrap();
-    for (hook, problem) in ["pre-commit", "pre-push"].iter().zip(problems) {
-        let line = problem
-            .as_str()
-            .unwrap()
-            .rsplit(": ")
-            .next()
-            .unwrap()
-            .to_string();
-        write_exec(&outside.join(hook), &format!("#!/bin/sh\n{line}\n"));
-    }
-    let (code, status) = urzua(&dir, &["hooks", "status"]);
-    assert_eq!(code, 0, "{status}");
-
-    for shebang in ["#!/usr/bin/env node", "#!/usr/bin/env python3"] {
-        let dir = fixture("roundtrip-foreign");
-        let hook = dir.join(".git/hooks/pre-commit");
-        write_exec(&hook, &format!("{shebang}\n"));
-        let (code, report) = urzua(&dir, &["hooks", "install"]);
-        assert_eq!(code, 2);
-        let problem = report["problems"][0].as_str().unwrap();
-        let line = problem.split("add this line to it: ").nth(1).unwrap();
-        write_exec(&hook, &format!("{shebang}\n{line}\n"));
-        assert_eq!(pre_commit_check(&dir)["status"], "ok", "{line}");
-    }
 }
 
 #[test]
@@ -408,4 +302,355 @@ fn a_linked_worktree_and_a_submodule_write_into_their_git_directory() {
         outer.join(".git/modules/sub/hooks/pre-commit").is_file(),
         "{report}"
     );
+}
+
+#[test]
+fn every_line_urzua_prints_as_the_fix_is_recognised_as_wired() {
+    let dir = fixture("roundtrip-outside");
+    let outside = common::TempDir::new("urzua-hooks-roundtrip-target");
+    common::git(
+        &dir,
+        &["config", "core.hooksPath", outside.to_str().unwrap()],
+    );
+    let (_, report) = urzua(&dir, &["hooks", "install"]);
+    let problems = report["problems"].as_array().unwrap();
+    for (hook, problem) in ["pre-commit", "pre-push"].iter().zip(problems) {
+        let line = problem
+            .as_str()
+            .unwrap()
+            .rsplit(": ")
+            .next()
+            .unwrap()
+            .to_string();
+        write_exec(&outside.join(hook), &format!("#!/bin/sh\n{line}\n"));
+    }
+    let (code, status) = urzua(&dir, &["hooks", "status"]);
+    assert_eq!(code, 0, "{status}");
+
+    for shebang in ["#!/usr/bin/env node", "#!/usr/bin/env python3"] {
+        let dir = fixture("roundtrip-foreign");
+        let hook = dir.join(".git/hooks/pre-commit");
+        write_exec(&hook, &format!("{shebang}\n"));
+        let (code, report) = urzua(&dir, &["hooks", "install"]);
+        assert_eq!(code, 2);
+        let problem = report["problems"][0].as_str().unwrap();
+        let line = problem.split("add this line to it: ").nth(1).unwrap();
+        write_exec(&hook, &format!("{shebang}\n{line}\n"));
+        assert_eq!(pre_commit_check(&dir)["status"], "ok", "{line}");
+    }
+}
+
+/// One original hook body, with `{R}` standing for a command whose status
+/// decides whether the original hook passes (`true`) or fails (`false`).
+const SHAPES: &[(&str, &str)] = &[
+    ("exit-status", "echo orig\n{R}\nexit $?\n"),
+    ("exit-literal", "echo orig\n{R} && exit 0\nexit 1\n"),
+    ("exec-args", "echo orig\nexec {R} \"$@\"\n"),
+    ("if-exec", "if true; then exec {R}; fi\n"),
+    ("function-call", "main() { echo orig; {R}; }\nmain\n"),
+    ("trap-exit", "trap 'echo bye' EXIT\n{R}\n"),
+    ("case-exit", "case x in x) {R}; exit $? ;; esac\n"),
+    ("or-exit", "{R} || exit 1\n"),
+    ("continuation", "{R} || \\\n  exit 1\n"),
+    ("heredoc", "cat <<EOF >/dev/null\nexit 0\nEOF\n{R}\n"),
+    ("exec-redirect", "exec 2>&1\necho orig\n{R}\n"),
+    ("return", "{R} || return 1\nreturn 0\n"),
+    ("one-line", "{R}\n"),
+    ("set-e", "set -e\necho orig\n{R}\n"),
+    ("set-u", "set -u\n{R}\n"),
+];
+
+fn record(dir: &Path, name: &str, broken: bool) {
+    let body = if broken {
+        BROKEN
+    } else {
+        "---\nStatus: Draft\n---\n# C\n"
+    };
+    std::fs::write(dir.join(format!("docs/adr/{name}.md")), body).unwrap();
+    common::git(dir, &["add", "-A"]);
+}
+
+fn commit(dir: &Path) -> Output {
+    commit_with(dir, env!("CARGO_BIN_EXE_urzua"))
+}
+
+/// Install into `hook` (already written), and check the four promises: the
+/// original's outcome is unchanged, a broken record is stopped with its
+/// finding printed, a second install changes nothing, and uninstall restores
+/// the bytes.
+fn assert_round_trip(dir: &Path, hook: &Path, label: &str) {
+    let original = std::fs::read(hook).unwrap();
+    record(dir, "ADR-10-before", false);
+    let before = commit(dir).status.success();
+    let (code, report) = urzua(dir, &["hooks", "install"]);
+    assert_eq!(code, 0, "{label}: {report}");
+    record(dir, "ADR-11-after", false);
+    let out = commit(dir);
+    assert_eq!(
+        out.status.success(),
+        before,
+        "{label}: the original outcome changed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    record(dir, "ADR-12-broken", true);
+    let out = commit(dir);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(!out.status.success(), "{label}: {stderr}");
+    assert!(
+        stderr.contains("header.required-fields docs/adr/ADR-12-broken.md"),
+        "{label}: {stderr}"
+    );
+    std::fs::remove_file(dir.join("docs/adr/ADR-12-broken.md")).unwrap();
+    common::git(dir, &["add", "-A"]);
+    let (_, again) = urzua(dir, &["hooks", "install"]);
+    assert!(
+        states(&again).iter().all(|s| s.ends_with("=unchanged")),
+        "{label}: {again}"
+    );
+    urzua(dir, &["hooks", "uninstall"]);
+    assert_eq!(std::fs::read(hook).unwrap(), original, "{label}");
+}
+
+#[test]
+fn every_shape_runs_urzua_first_and_keeps_the_hooks_own_outcome() {
+    for (name, body) in SHAPES {
+        for r in ["true", "false"] {
+            let dir = fixture(name);
+            let hook = dir.join(".git/hooks/pre-commit");
+            write_exec(&hook, &format!("#!/bin/sh\n{}", body.replace("{R}", r)));
+            assert_round_trip(&dir, &hook, &format!("{name}/{r}"));
+        }
+    }
+}
+
+#[test]
+fn shebang_only_empty_crlf_and_no_trailing_newline_are_restored_exactly() {
+    for (label, content) in [
+        ("shebang-only", "#!/bin/sh\n"),
+        ("shebang-no-newline", "#!/bin/sh"),
+        ("empty", ""),
+        ("crlf", "#!/bin/sh\r\necho orig\r\n"),
+        ("no-trailing-newline", "#!/bin/sh\necho orig"),
+    ] {
+        let dir = fixture(label);
+        let hook = dir.join(".git/hooks/pre-commit");
+        write_exec(&hook, content);
+        let (code, report) = urzua(&dir, &["hooks", "install"]);
+        assert_eq!(code, 0, "{label}: {report}");
+        assert_eq!(pre_commit_check(&dir)["status"], "ok", "{label}");
+        let (_, again) = urzua(&dir, &["hooks", "install"]);
+        assert_eq!(states(&again)[0], "pre-commit=unchanged", "{label}");
+        urzua(&dir, &["hooks", "uninstall"]);
+        assert_eq!(std::fs::read_to_string(&hook).unwrap(), content, "{label}");
+    }
+    let dir = fixture("shebang-commit");
+    let hook = dir.join(".git/hooks/pre-commit");
+    write_exec(&hook, "#!/bin/sh\n");
+    assert_round_trip(&dir, &hook, "shebang-only");
+}
+
+/// husky v8: `.husky/_/husky.sh` re-runs the hook under `sh -e`, so a block
+/// above the source line would run twice.
+const HUSKY_SH: &str = "if [ -z \"$husky_skip_init\" ]; then\n  readonly husky_skip_init=1\n  export husky_skip_init\n  sh -e \"$0\" \"$@\"\n  exitCode=\"$?\"\n  exit $exitCode\nfi\n";
+
+#[test]
+fn husky_v8_runs_the_block_once_after_its_source_line() {
+    for r in ["true", "false"] {
+        let dir = fixture("husky-v8");
+        write_exec(&dir.join(".husky/_/husky.sh"), HUSKY_SH);
+        let hook = dir.join(".husky/pre-commit");
+        write_exec(
+            &hook,
+            &format!("#!/usr/bin/env sh\n. \"$(dirname -- \"$0\")/_/husky.sh\"\n\n{r}\n"),
+        );
+        common::git(&dir, &["config", "core.hooksPath", ".husky"]);
+        urzua(&dir, &["hooks", "install"]);
+        let text = std::fs::read_to_string(&hook).unwrap();
+        assert!(
+            text.find("husky.sh").unwrap() < text.find("urzua-hooks begin").unwrap(),
+            "{text}"
+        );
+        urzua(&dir, &["hooks", "uninstall"]);
+        assert_round_trip(&dir, &hook, &format!("husky-v8/{r}"));
+        record(&dir, "ADR-20-once", false);
+        let out = commit(&dir);
+        let runs = String::from_utf8_lossy(&out.stderr)
+            .matches("no blocking findings")
+            .count();
+        assert!(runs <= 1, "the block ran {runs} times");
+    }
+}
+
+#[test]
+fn husky_v9_under_sh_e_prints_findings_and_keeps_the_outcome() {
+    for r in ["true", "false"] {
+        let dir = fixture("husky-v9");
+        write_exec(
+            &dir.join(".husky/_/pre-commit"),
+            "#!/usr/bin/env sh\nsh -e \"$(dirname \"$0\")/../$(basename \"$0\")\" \"$@\"\n",
+        );
+        let hook = dir.join(".husky/pre-commit");
+        std::fs::write(&hook, format!("echo orig\n{r}\n")).unwrap();
+        common::git(&dir, &["config", "core.hooksPath", ".husky/_"]);
+        assert_round_trip(&dir, &hook, &format!("husky-v9/{r}"));
+    }
+}
+
+fn status_of(dir: &Path, content: &str) -> serde_json::Value {
+    write_exec(&dir.join(".git/hooks/pre-commit"), content);
+    pre_commit_check(dir)
+}
+
+#[test]
+fn only_a_call_urzua_can_prove_runs_is_ok() {
+    let dir = fixture("status");
+    let call = "\"${URZUA_BIN:-urzua}\" hooks run pre-commit || exit $?";
+    let first = status_of(&dir, &format!("#!/bin/sh\n# gate\n{call}\nexit 0\n"));
+    assert_eq!(first["status"], "ok", "{first}");
+    for before in [
+        "true && exit 0",
+        "if true; then exit 0; fi",
+        "return 0",
+        "exec 2>&1",
+    ] {
+        let c = status_of(&dir, &format!("#!/bin/sh\n{before}\n{call}\n"));
+        assert_eq!(c["state"], "installed-present-unverified", "{before}: {c}");
+        assert_eq!(c["status"], "warn");
+        assert_eq!(c["fix"], "urzua hooks install");
+        assert!(
+            c["message"].as_str().unwrap().contains("cannot tell"),
+            "{c}"
+        );
+    }
+    urzua(&dir, &["hooks", "uninstall"]);
+    write_exec(&dir.join(".git/hooks/pre-commit"), "#!/bin/sh\necho a\n");
+    urzua(&dir, &["hooks", "install"]);
+    let hook = dir.join(".git/hooks/pre-commit");
+    let text = std::fs::read_to_string(&hook).unwrap();
+    std::fs::write(&hook, text.replace("urzua_code=0", "urzua_code=0; true")).unwrap();
+    assert_eq!(pre_commit_check(&dir)["state"], "installed-stale-block");
+
+    let node = "require(\"child_process\").execFileSync(process.env.URZUA_BIN || \"urzua\", [\"hooks\", \"run\", \"pre-commit\"], { stdio: \"inherit\" });";
+    let first = status_of(&dir, &format!("#!/usr/bin/env node\n// gate\n{node}\n"));
+    assert_eq!(first["status"], "ok", "{first}");
+    let later = status_of(
+        &dir,
+        &format!("#!/usr/bin/env node\nprocess.exit(0);\n{node}\n"),
+    );
+    assert_eq!(later["state"], "installed-present-unverified", "{later}");
+}
+
+/// Points a repository's hooks at an outside directory.
+type Setup = dyn Fn(&Path, &Path);
+
+#[test]
+fn uninstall_never_writes_outside_the_repository() {
+    let block_file = |dir: &Path| {
+        let probe = fixture("uninstall-probe");
+        urzua(&probe, &["hooks", "install"]);
+        let text = std::fs::read_to_string(probe.join(".git/hooks/pre-commit")).unwrap();
+        write_exec(&dir.join("pre-commit"), &text);
+        text
+    };
+    let cases: Vec<(&str, Box<Setup>)> = vec![
+        (
+            "symlinked-dir",
+            Box::new(|repo, out| {
+                std::os::unix::fs::symlink(out, repo.join("myhooks")).unwrap();
+                common::git(repo, &["config", "core.hooksPath", "myhooks"]);
+            }),
+        ),
+        (
+            "husky-symlink",
+            Box::new(|repo, out| {
+                std::os::unix::fs::symlink(out, repo.join(".husky")).unwrap();
+                common::git(repo, &["config", "core.hooksPath", ".husky"]);
+            }),
+        ),
+        (
+            "symlinked-parent",
+            Box::new(|repo, out| {
+                std::fs::create_dir_all(out.join("hooks")).unwrap();
+                std::fs::rename(out.join("pre-commit"), out.join("hooks/pre-commit")).unwrap();
+                std::os::unix::fs::symlink(out, repo.join("link")).unwrap();
+                common::git(repo, &["config", "core.hooksPath", "link/hooks"]);
+            }),
+        ),
+        (
+            "absolute",
+            Box::new(|repo, out| {
+                common::git(repo, &["config", "core.hooksPath", out.to_str().unwrap()]);
+            }),
+        ),
+    ];
+    for (label, setup) in cases {
+        let repo = fixture(label);
+        let outside = common::TempDir::new("urzua-hooks-uninstall-outside");
+        block_file(&outside);
+        setup(&repo, &outside);
+        let file = if label == "symlinked-parent" {
+            outside.join("hooks/pre-commit")
+        } else {
+            outside.join("pre-commit")
+        };
+        let before = std::fs::read(&file).unwrap();
+        let (code, report) = urzua(&repo, &["hooks", "uninstall"]);
+        assert_eq!(code, 2, "{label}: {report}");
+        assert!(
+            report["problems"].to_string().contains("by hand"),
+            "{label}: {report}"
+        );
+        assert_eq!(std::fs::read(&file).unwrap(), before, "{label}");
+    }
+
+    let repo = fixture("uninstall-symlinked-file");
+    let shared = common::TempDir::new("urzua-hooks-uninstall-shared");
+    block_file(&shared);
+    std::fs::create_dir_all(repo.join(".git/hooks")).unwrap();
+    std::os::unix::fs::symlink(
+        shared.join("pre-commit"),
+        repo.join(".git/hooks/pre-commit"),
+    )
+    .unwrap();
+    let before = std::fs::read(shared.join("pre-commit")).unwrap();
+    let (code, _) = urzua(&repo, &["hooks", "uninstall"]);
+    assert_eq!(code, 2);
+    assert_eq!(std::fs::read(shared.join("pre-commit")).unwrap(), before);
+}
+
+#[test]
+fn an_unreadable_config_still_blocks_when_block_was_installed() {
+    let dir = fixture("unreadable");
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        format!("{CONFIG}hooks:\n  on_not_run: block\n"),
+    )
+    .unwrap();
+    urzua(&dir, &["hooks", "install"]);
+    std::fs::write(dir.join(".urzua/config.yaml"), "schema_version: [\n").unwrap();
+    record(&dir, "ADR-30-x", false);
+    let out = commit(&dir);
+    assert!(
+        !out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
+
+#[test]
+fn hooks_may_not_read_another_file() {
+    let dir = fixture("config-flag");
+    for bad in [
+        "[check, --config, /etc/passwd]",
+        "[check, --stdin-path, x.md]",
+    ] {
+        std::fs::write(
+            dir.join(".urzua/config.yaml"),
+            format!("{CONFIG}hooks:\n  pre-commit: {bad}\n"),
+        )
+        .unwrap();
+        let (code, report) = urzua(&dir, &["hooks", "status"]);
+        assert_eq!(code, 2, "{bad}: {report}");
+        assert!(!report.to_string().contains("root:"), "{report}");
+    }
 }

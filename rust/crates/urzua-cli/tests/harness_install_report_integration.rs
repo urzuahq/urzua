@@ -208,10 +208,12 @@ fn doctor_reads_a_real_call_in_a_hook_not_a_word_in_a_comment_or_a_make_target()
         &dir,
         "#!/bin/sh\nbin=\"$(git rev-parse --show-toplevel)/target/release/urzua\"\n\"$bin\" check\n",
     );
+    // The call is seen through the variable, but it is not the first command,
+    // so urzua cannot prove it runs (`MILE-220`).
     let (_, d) = urzua(&dir, &["doctor"]);
     assert_eq!(
         check_of(&d, "hook-wired")["state"],
-        "installed-running-urzua",
+        "installed-present-unverified",
         "{d}"
     );
 }

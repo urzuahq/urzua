@@ -151,10 +151,10 @@ inside the repository, or `.husky/` for husky. The pre-commit hook runs `urzua c
 records changed since the last commit, staged or not, with the diff rules; about 9 seconds with a release
 build on urzua's own repository of about 670 records) and the pre-push hook runs `urzua check`;
 `hooks:` in the config changes either to another `check`, such as a cheaper one. An existing hook is never
-replaced: urzua adds a marked block after its last command (before it when that is an `exit` or `exec`),
-and `urzua hooks uninstall` removes only that block. A hook the block might not run in (an `exit` or `exec`
-elsewhere, a `trap`, a final `fi`), a Node or Python hook, a symlinked hook, or a hooks path outside the
-repository is refused with the line to add.
+replaced: urzua adds a marked block at its top, so urzua runs first and the rest of the hook, its behaviour
+and its exit status are unchanged, and `urzua hooks uninstall` removes only that block, restoring the file. A
+Node or Python hook, a symlinked hook, or a hooks path outside the repository is refused with the line to add.
+`urzua doctor` reports a hand-written call to urzua as wired only when it is the hook's first command.
 
 With the [pre-commit framework](https://pre-commit.com), add this under `repos:` in
 `.pre-commit-config.yaml` (or run `urzua hooks install --write-config`), then

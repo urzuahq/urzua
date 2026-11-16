@@ -165,7 +165,8 @@ fn a_versioned_hooks_path_is_extended_in_place() {
     assert_eq!(states(&report), ["pre-commit=extended", "pre-push=created"]);
     let text = std::fs::read_to_string(dir.join("tools/hooks/pre-commit")).unwrap();
     assert!(
-        text.starts_with("#!/usr/bin/env bash\nmake lint\n# >>> urzua-hooks begin"),
+        text.starts_with("#!/usr/bin/env bash\n# >>> urzua-hooks begin")
+            && text.ends_with("# <<< urzua-hooks end\nmake lint\n"),
         "{text}"
     );
     assert!(!dir.join(".git/hooks/pre-push").exists());
@@ -183,7 +184,7 @@ fn a_versioned_hooks_path_is_extended_in_place() {
 }
 
 #[test]
-fn husky_hooks_get_the_block_before_a_trailing_exec() {
+fn husky_hooks_get_the_block_at_the_top() {
     let dir = fixture("husky");
     std::fs::create_dir_all(dir.join(".husky/_")).unwrap();
     std::fs::write(
@@ -198,9 +199,9 @@ fn husky_hooks_get_the_block_before_a_trailing_exec() {
     assert_eq!(states(&report), ["pre-commit=extended", "pre-push=created"]);
     let text = std::fs::read_to_string(dir.join(".husky/pre-commit")).unwrap();
     let block = text.find("# >>> urzua-hooks begin").unwrap();
-    let exec = text.find("exec node").unwrap();
+    let exec = text.find("npx lint-staged").unwrap();
     assert!(
-        text.starts_with("npx lint-staged\n") && block < exec,
+        text.starts_with("# >>> urzua-hooks begin") && block < exec,
         "{text}"
     );
     assert!(text.ends_with("exec node scripts/verify.js\n"), "{text}");
@@ -211,7 +212,7 @@ fn husky_hooks_get_the_block_before_a_trailing_exec() {
 #[test]
 fn a_hook_that_already_runs_urzua_is_left_alone() {
     let dir = fixture("wired");
-    let original = "#!/bin/sh\nbin=\"$HOME/bin/urzua\"\n\"$bin\" check --base HEAD\n";
+    let original = "#!/bin/sh\n# runs the gate\n\"$HOME/bin/urzua\" check --base HEAD\n";
     write_exec(&dir.join(".git/hooks/pre-commit"), original);
     let (code, report) = urzua(&dir, &["hooks", "install"]);
     assert_eq!(code, 0, "{report}");

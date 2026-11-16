@@ -424,11 +424,11 @@ Wires the git hooks `doctor` reports. `install` finds where the hooks live (`.gi
 `core.hooksPath` inside the repository, husky's `.husky/`, or the pre-commit framework) and makes the
 pre-commit hook run `urzua hooks run pre-commit` and the pre-push hook `urzua hooks run pre-push`. A
 missing hook is created; an existing shell hook gets a block between `# >>> urzua-hooks begin` and
-`# <<< urzua-hooks end` after its last command (before it when that is a top-level `exit` or `exec`); a hook
-that already runs urzua is left alone. It refuses, writing nothing and printing the line to add and where,
-a hook that could end before the block (another `exit` or `exec`, a `trap`, a last command ending in `fi`,
-`done`, `esac` or `}`), a Node or Python hook, a hook without the execute bit, a symlinked hook file, and a
-hooks directory that resolves outside the repository and its git directory or cannot be written. With the pre-commit
+`# <<< urzua-hooks end` at its top (after the shebang, comments and a husky v8 source line), so urzua runs
+first and the rest of the hook is unchanged; a hook whose first command already runs urzua is left alone. It
+refuses, writing nothing and printing the line to add, a Node or Python hook, a hook without the execute bit,
+a symlinked hook file, and a hooks directory that resolves outside the repository and its git directory or
+cannot be written. With the pre-commit
 framework it writes no hook file: the report's `stanza` is the `repo: local` entry to add, and
 `--write-config` appends it to `.pre-commit-config.yaml`.
 
@@ -441,9 +441,11 @@ and that CI will check them, and lets the commit through (`hooks.on_not_run: blo
 [CI](ci.md#local-hooks).
 
 Output: `status` (`ok`, `drift` from `status` when a hook is `missing`, `not-wired`, `not-executable`,
-`unreachable`, `stale-policy` or `duplicated`, `not-run` when `install` refused),
+`present-unverified` (urzua is called, but not first, so it cannot tell whether that runs), `stale-policy`,
+`stale-block` or `duplicated`, `not-run` when `install` or `uninstall` refused),
 `action`, `dry_run`, `layout`, `items` (`{hook, path, state}`), `stanza`, `problems`. `uninstall` removes
-only the blocks, and a hook file it created. Exit 0, 1 (`status` found a hook not wired) or 2 (refused).
+only the blocks, restoring the file byte for byte, deletes only a hook file it created, and refuses where
+`install` would. Exit 0, 1 (`status` found a hook not wired) or 2 (refused).
 
 ## audit
 

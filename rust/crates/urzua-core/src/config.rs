@@ -3114,7 +3114,7 @@ pub fn parse_with_document_models(
     Ok((config, models))
 }
 
-/// A hook runs only a read-only check: another subcommand could write files
+/// A hook runs only a read-only check of this repository: another subcommand could write files
 /// (`fix --apply`), reach the network (`refs`) or call the hook again
 /// (`hooks run`) on every commit.
 fn validate_hooks(hooks: &HooksDecl) -> Result<(), ConfigError> {
@@ -3127,6 +3127,20 @@ fn validate_hooks(hooks: &HooksDecl) -> Result<(), ConfigError> {
                 reason: format!(
                     "'{name}' must run `check` (or its alias `audit`) with its flags, for example [check, --base, HEAD]; got [{}]",
                     args.join(", ")
+                ),
+            });
+        }
+        // A flag that makes check read another file could print that file's
+        // contents in its error on every commit.
+        if let Some(flag) = args.iter().find(|a| {
+            ["--config", "--stdin-path", "--actors"]
+                .iter()
+                .any(|f| *a == f || a.starts_with(&format!("{f}=")))
+        }) {
+            return Err(ConfigError::InvalidHooks {
+                reason: format!(
+                    "'{name}' may not pass `{}`: a hook checks the repository's own records with its own configuration",
+                    flag.split('=').next().unwrap_or(flag)
                 ),
             });
         }

@@ -3,7 +3,7 @@ Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
 Version: '0.153'
 Date: 2026-08-20
 Status: Shipped
-Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:8a96d6d3905f67eac1659a77e14ea643554d1690ad234316609da5cd6e8a7d04, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:09c2431a269316741c35b51dabd5766ecd3d50fab2b98069314bb1bc8857767d, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:255395e7d2caa34947cef28f463e2ec050e3eba798a4dc7573a3cad946fee1ae
+Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:4285ca9e44587198227632d7f1030f4b42fbce48971b876a366ef6735509f08e, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:09c2431a269316741c35b51dabd5766ecd3d50fab2b98069314bb1bc8857767d, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:255395e7d2caa34947cef28f463e2ec050e3eba798a4dc7573a3cad946fee1ae
 Embodiment: Verified
 Author: beauwilliams
 Subject: '`.urzua/config.yaml` -- the schema for record types, required/known fields, and per-type behavior.'
@@ -1189,7 +1189,10 @@ hooks:
 
 - **Absent means the defaults above**, and any key left out takes its default. `pre-commit` checks the records
   changed since `HEAD`, staged or not, with the diff rules; `pre-push` checks the whole tree, as CI does.
-- **Only a read-only check.** Each list starts with `check` (or its deprecated alias `audit`) followed by its flags.
+- **Only a read-only check.** Each list starts with `check` (or its deprecated alias `audit`) followed by its flags,
+  except `--config`, `--stdin-path` and `--actors`, which make it read another file whose contents an error could
+  print. The flags that narrow or widen what is checked (paths, `--base`, `--rules`, `--fail-on`) are allowed, and so
+  can weaken the hook, which is why `.urzua/config.yaml` is a protected path in a repository that gates it.
   Any other subcommand is a load error (exit 2) naming the key: `fix --apply` or `harness install` would write files,
   `refs` would reach the network and `hooks run` would call the hook again, on every commit. `check --base HEAD` took
   about 9 seconds with a release build on this repository; a cheaper check (for example `[check, docs/adr]`) can be
@@ -2754,3 +2757,5 @@ proves this configuration produces the three findings.
 > | 2026-11-16 | Pin recomputed on merge (attested by beauwilliams, identity: gh-verified, actor: agent): both merged sides re-pinned, `rust/crates/urzua-core/src/config.rs` 0b3481a4fe1c and a7b0b06e70f3 -> d893e7e95cb8; the new hash is the merged file's, which is git's automatic merge of the two re-pinned commits. No person wrote a reason for the merged state. **Why:** `urzua fix --conflicts` resolved a conflict that lay only in re-pin lines; a reviewer of the pull request should confirm the merged pin. | **structural** |
 > | 2026-11-16 | `hooks` revised before merge: `on_not_run` defaults to `warn` and is read when the hook runs, and each hook may run only `check` or `audit`; the measured cost of the pre-commit check is stated. **Why:** review of `MILE-220`'s pull request: a blocking default stops contributors who never installed urzua, and any other subcommand could write, reach the network or recurse. | **substantive** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` d893e7e95cb8 -> 8a96d6d3905f. Reason: config.rs: the hooks key's on_not_run now defaults to warn and validate_hooks allows only check or audit as the hook command; every other key and default is unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-16 | `hooks` may not pass `--config`, `--stdin-path` or `--actors`, and the flags that narrow a hook's check are named as able to weaken it. **Why:** a re-check of `MILE-220`'s pull request: a flag naming another file could print it on every commit. | **substantive** |
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 8a96d6d3905f -> 4285ca9e4458. Reason: config.rs: validate_hooks also rejects --config, --stdin-path and --actors in a hook's check arguments; every other key and default is unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |

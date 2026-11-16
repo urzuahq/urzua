@@ -181,7 +181,7 @@ urzua doctor
 ```
 
 `install` finds where your hooks live (`.git/hooks`, `core.hooksPath`, husky or the pre-commit framework)
-and adds a call to urzua without replacing what is there; `doctor` then reports both `hook-wired` checks as
+and adds a call to urzua at the top of each hook without changing the rest; `doctor` then reports both `hook-wired` checks as
 `ok`. The pre-commit hook runs `urzua check --base HEAD`, which took about 9 seconds with a release build on
 urzua's own repository of about 670 records; name a cheaper check under `hooks.pre-commit` in the config if
 that is too slow. When urzua is not installed, the hooks warn and let the commit through (CI still checks).

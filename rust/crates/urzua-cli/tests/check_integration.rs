@@ -4250,10 +4250,12 @@ fn repo_root() -> std::path::PathBuf {
 }
 
 /// `doctor` run in a repository wired the way `make hooks-install` wires this
-/// one (`core.hooksPath` set to the committed `.git-hooks`) reports both hooks
-/// as installed and running urzua. The hooks are this repository's own files,
-/// copied byte for byte, so a change to a hook that stops it running urzua, or
-/// to `doctor`'s reading of how a hook runs it, fails here.
+/// one (`core.hooksPath` set to the committed `.git-hooks`) sees both hooks
+/// call urzua. Each calls it after guard code rather than as its first
+/// command, so `doctor` cannot prove the call runs and says so
+/// (`present-unverified`, `MILE-220`); it reports `ok` once the call is the
+/// first command or `urzua hooks install` adds the managed block. The hooks
+/// are this repository's own files, copied byte for byte.
 #[test]
 fn doctor_reports_this_repositorys_committed_hooks_as_wired() {
     let dir = hook_fixture("hook-committed");
@@ -4265,7 +4267,7 @@ fn doctor_reports_this_repositorys_committed_hooks_as_wired() {
     for layer in ["pre-commit", "pre-push"] {
         assert_eq!(
             hook_state(&dir, layer),
-            ("installed-running-urzua".into(), "ok".into()),
+            ("installed-present-unverified".into(), "warn".into()),
             "{layer}"
         );
     }
