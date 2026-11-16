@@ -19,6 +19,7 @@ The maintainer reported on 2026-11-16 that every acceptance ends with the agent 
 
 - `ADR-102` is accepted, and `ADR-89` carries an amendment stating what an approval given in chat proves and does not prove.
 - On the Claude Code adapter a recorded test shows what a hook receives as the person's answer to a structured question, whether the agent can supply that answer itself, and whether a hook's confirmation prompt is shown in each permission mode; the adapter offers only what those results support.
+- Where the host supports a tool that requires the person's interaction on every call, an urzua tool asks for the acceptance with a prompt urzua wrote, and on approval makes the status change and writes the receipt itself (`ADR-102`, amendment of 2026-11-16); the chat question is offered only where the host has no such tool.
 - With the mode on, an agent's move to a reserved status with no approval is refused with the instruction to ask, and after the person chooses accept the same edit is allowed once, shown by a test.
 - An approval is refused for another record, another status, a changed body, another session or after its expiry, shown by a test per case.
 - The agent cannot write an approval: an edit or shell write to where approvals are kept is refused or reported like any protected harness state.
@@ -31,3 +32,4 @@ The maintainer reported on 2026-11-16 that every acceptance ends with the agent 
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-16 | Initial record, `Status: Planned`. **Why:** The maintainer asked for acceptance by a question in the chat on 2026-11-16; `ADR-102` is drafted as Proposed and this tracks the build. | **structural** |
+> | 2026-11-16 | Added a Done-means item for the approval tool as the first mechanism. **Why:** `ADR-102`'s amendment of 2026-11-16, accepted by the maintainer, makes it the primary route and the chat question the fallback. | **substantive** |
