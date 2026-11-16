@@ -102,6 +102,151 @@ pub struct Config {
         skip_serializing_if = "Option::is_none"
     )]
     pub authority: Option<crate::authority::AuthorityDecl>,
+    /// What the git hooks `urzua hooks install` wires run (`ADR-71` amendment
+    /// of 2026-11-16, `MILE-220`, `SPEC-3`). Absent means `check --base HEAD`
+    /// at pre-commit, `check` at pre-push, and a hook that warns when urzua
+    /// cannot run.
+    #[serde(default, skip_serializing_if = "HooksDecl::is_default")]
+    pub hooks: HooksDecl,
+}
+
+/// The `hooks` key: the urzua arguments each git hook runs, and what a hook
+/// does when urzua is missing or cannot run.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct HooksDecl {
+    #[serde(rename = "pre-commit", default)]
+    pub pre_commit: HookDecl,
+    #[serde(rename = "pre-push", default)]
+    pub pre_push: HookDecl,
+    #[serde(default)]
+    pub on_not_run: HookOnNotRun,
+    /// Seconds `urzua hooks verify --run` lets one hook run before it stops
+    /// the hook and everything it started. Default 600.
+    #[serde(default = "HooksDecl::default_verify_timeout")]
+    pub verify_timeout_seconds: u64,
+}
+
+/// One hook: the urzua arguments it runs and who maintains the hook file.
+/// Written as a list (the arguments alone) or as `{command, managed}`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct HookDecl {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub command: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "HookManaged::is_default")]
+    pub managed: HookManaged,
+}
+
+/// `block` (the default): urzua writes and maintains a marked block in the
+/// hook. `declared`: the repository maintains the hook itself and asserts it
+/// runs urzua; urzua writes nothing to it, and `urzua hooks verify --run`
+/// proves the assertion by running it.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HookManaged {
+    #[default]
+    Block,
+    Declared,
+}
+
+impl HookManaged {
+    fn is_default(&self) -> bool {
+        *self == HookManaged::Block
+    }
+}
+
+impl<'de> Deserialize<'de> for HookDecl {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct Full {
+            #[serde(default)]
+            command: Option<Vec<String>>,
+            #[serde(default)]
+            managed: HookManaged,
+        }
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Raw {
+            Command(Vec<String>),
+            Full(Full),
+        }
+        Ok(match Raw::deserialize(d).map_err(|_| {
+            serde::de::Error::custom(
+                "a hook is a list of urzua arguments, or {command: [...], managed: block | declared}",
+            )
+        })? {
+            Raw::Command(c) => HookDecl {
+                command: Some(c),
+                managed: HookManaged::Block,
+            },
+            Raw::Full(f) => HookDecl {
+                command: f.command,
+                managed: f.managed,
+            },
+        })
+    }
+}
+
+/// `warn` (the default) says loudly that the records were not checked and
+/// lets the commit or push through, since CI remains the guarantee; `block`
+/// stops it and names how to skip once. A blocking finding always blocks.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HookOnNotRun {
+    Block,
+    #[default]
+    Warn,
+}
+
+impl HookOnNotRun {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            HookOnNotRun::Block => "block",
+            HookOnNotRun::Warn => "warn",
+        }
+    }
+}
+
+impl Default for HooksDecl {
+    fn default() -> Self {
+        HooksDecl {
+            pre_commit: HookDecl::default(),
+            pre_push: HookDecl::default(),
+            on_not_run: HookOnNotRun::default(),
+            verify_timeout_seconds: Self::default_verify_timeout(),
+        }
+    }
+}
+
+impl HooksDecl {
+    fn default_verify_timeout() -> u64 {
+        600
+    }
+    pub fn is_default(&self) -> bool {
+        *self == HooksDecl::default()
+    }
+    fn hook(&self, hook: &str) -> Option<&HookDecl> {
+        match hook {
+            "pre-commit" => Some(&self.pre_commit),
+            "pre-push" => Some(&self.pre_push),
+            _ => None,
+        }
+    }
+    /// The urzua arguments the named git hook runs (`check --base HEAD` at
+    /// pre-commit and `check` at pre-push unless declared), or `None` for a
+    /// hook this key does not govern.
+    pub fn args(&self, hook: &str) -> Option<Vec<String>> {
+        let decl = self.hook(hook)?;
+        Some(decl.command.clone().unwrap_or_else(|| match hook {
+            "pre-commit" => ["check", "--base", "HEAD"].map(String::from).to_vec(),
+            _ => vec!["check".to_string()],
+        }))
+    }
+    /// Who maintains the named hook's file.
+    pub fn managed(&self, hook: &str) -> HookManaged {
+        self.hook(hook).map_or(HookManaged::Block, |d| d.managed)
+    }
 }
 
 /// A map whose keys are all distinct. A repeated key is a load error naming the
@@ -1915,6 +2060,8 @@ pub enum ConfigError {
         option: &'static str,
         reason: String,
     },
+    #[error("hooks: {reason}")]
+    InvalidHooks { reason: String },
     #[error("embodiment: {reason}")]
     InvalidEmbodiment { reason: String },
     #[error("locator_resolvers: {reason}")]
@@ -3122,7 +3269,45 @@ pub fn parse_with_document_models(
     validate_code_comment_prefixes(&config)?;
     validate_vocabulary_options(&config)?;
     validate_rule_fields(&config)?;
+    validate_hooks(&config.hooks)?;
     Ok((config, models))
+}
+
+/// A hook runs only a read-only check of this repository: another subcommand could write files
+/// (`fix --apply`), reach the network (`refs`) or call the hook again
+/// (`hooks run`) on every commit.
+fn validate_hooks(hooks: &HooksDecl) -> Result<(), ConfigError> {
+    if hooks.verify_timeout_seconds == 0 {
+        return Err(ConfigError::InvalidHooks {
+            reason: "'verify_timeout_seconds' must be at least 1".to_string(),
+        });
+    }
+    for name in ["pre-commit", "pre-push"] {
+        let args = hooks.args(name).unwrap_or_default();
+        if !matches!(args.first().map(String::as_str), Some("check" | "audit")) {
+            return Err(ConfigError::InvalidHooks {
+                reason: format!(
+                    "'{name}' must run `check` (or its alias `audit`) with its flags, for example [check, --base, HEAD]; got [{}]",
+                    args.join(", ")
+                ),
+            });
+        }
+        // A flag that makes check read another file could print that file's
+        // contents in its error on every commit.
+        if let Some(flag) = args.iter().find(|a| {
+            ["--config", "--stdin-path", "--actors"]
+                .iter()
+                .any(|f| *a == f || a.starts_with(&format!("{f}=")))
+        }) {
+            return Err(ConfigError::InvalidHooks {
+                reason: format!(
+                    "'{name}' may not pass `{}`: a hook checks the repository's own records with its own configuration",
+                    flag.split('=').next().unwrap_or(flag)
+                ),
+            });
+        }
+    }
+    Ok(())
 }
 
 /// Record types: the values that reach filenames and discovery (directories,

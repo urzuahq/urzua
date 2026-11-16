@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5DB4YPSWZ6MQV85PQ7
-Version: '0.21'
+Version: '0.22'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/commands/explain.rs@sha256:a199dc863fdbf6c579a3815ee0805f9ec8e3e055a588d19a0abc6376e64f3718, code:rust/crates/urzua-cli/src/commands/graph.rs@sha256:1f510a65fa597717f5b31e64dc28a316592f003c82b717d5c159c1546c6b43da, code:rust/crates/urzua-core/src/graph.rs@sha256:509c4a10a5da28970b562606282ef0f52dc9a40f8045382f6df3fabdcdb89ac9, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs@sha256:dc29b51bde5a2ba79d95c5e0a09466a54e816e8e2cc4a86a80e4459be477a447
+Realized-by: code:rust/crates/urzua-cli/src/commands/explain.rs@sha256:a199dc863fdbf6c579a3815ee0805f9ec8e3e055a588d19a0abc6376e64f3718, code:rust/crates/urzua-cli/src/commands/graph.rs@sha256:1f510a65fa597717f5b31e64dc28a316592f003c82b717d5c159c1546c6b43da, code:rust/crates/urzua-core/src/graph.rs@sha256:02ace1051d4b28eeddbf2e9315734e2712f262e2a5d094558e278e254ce90dda, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs@sha256:dc29b51bde5a2ba79d95c5e0a09466a54e816e8e2cc4a86a80e4459be477a447
 Author: beauwilliams
 Subject: '`urzua explain`/`urzua graph` -- read-only relationship queries over already-parsed data.'
 Implements: ADR-24, ADR-44
@@ -176,3 +176,4 @@ Both are stdout-JSON-always (ADR-23) and never write. `graph` reads `pointer_fie
 > | 2026-11-16 | Bumped to `0.20`. The pins re-baselined above follow code changed for `MILE-266` and `MILE-267` (printed next actions that run as printed, a revision log in every built-in template); nothing this spec states changes. **Why:** the re-pin rows are structural and `revision-log.version-bump-required` asks for a bump. | **structural** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/graph.rs` 03f7eed2679c -> 509c4a10a5da. Reason: graph.rs only gains rejected_values and waiver_fields in a test fixture's RecordTypeConfig literal. The claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Bumped to `0.21`. Re-pinned the evidence `MILE-233` changed (the rule vocabulary read from configuration); what this spec states is unchanged. **Why:** a re-pinned versioned spec carries a version above main's. | **structural** |
+> | 2026-11-16 | Bumped to `0.22`. Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/graph.rs` 509c4a10a5da -> 02ace1051d4b. Reason: graph.rs: the only change on this branch is one added `hooks: Default::default()` field in a Config struct literal, needed by the new optional hooks key, merged with main's own change to the file; behaviour this record cites is unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |

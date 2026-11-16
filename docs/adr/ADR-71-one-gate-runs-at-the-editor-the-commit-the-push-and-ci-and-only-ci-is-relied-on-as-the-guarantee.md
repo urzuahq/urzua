@@ -40,6 +40,64 @@ In the context of a records gate that must hold whether or not a contributor ins
 - **Diff-level checks run where a diff exists.** A check about a pull request's cumulative change (`MILE-142`) runs in CI, not per commit.
 - **Not decided here.** Whether an absent binary fails or warns a hook (`MILE-179`), and what the hook does with a non-blocking finding (`MILE-99`).
 
+## Amendment (2026-11-16): `urzua hooks install` is the one-step install, and an installed hook warns when urzua cannot run
+
+Decided by the builder on 2026-11-16, pending maintainer review; the not-run default was decided by the orchestrator the
+same day, also pending maintainer review. The Decision is unchanged; this settles the one-step install the Decision
+requires and one of the two questions it left open (`MILE-179`). The maintainer asked for it on 2026-11-16, from a
+repository whose every agent session started with the hook warning: "that's the one command fix in mile 220 that you
+need to do".
+
+- **The install is a command.** `urzua hooks install` wires the pre-commit and pre-push hooks wherever the repository
+  keeps them: `.git/hooks`, a `core.hooksPath` inside the repository, husky's `.husky/`, or the pre-commit framework's
+  `.pre-commit-config.yaml` (a `repo: local` stanza, appended only with `--write-config`). `hooks status` reports the
+  same wiring `doctor` and the session-start check read, and `hooks uninstall` removes only what the install added. It
+  writes unless `--dry-run`, as `harness install` does (`MILE-220`).
+- **A hook urzua did not write gets a block at its top, so urzua runs first.** The install puts a block between
+  `# >>> urzua-hooks begin` and `# <<< urzua-hooks end` right after the shebang, any leading comment lines and a husky
+  v8 source line (so it runs once, inside husky's re-run), and leaves the rest of the hook untouched; the hook's own
+  behaviour and exit status are unchanged, and `uninstall` restores its bytes. The block was first placed at the end,
+  before a final `exit` or `exec`, but a hook's text cannot be analysed reliably to find where it ends (`return`,
+  `false; exit $?`, line continuations, functions, `set -e` and the like each defeated it), so urzua no longer tries:
+  running first needs no analysis at all. The block is written for POSIX sh and works under `set -e`, `set -u` and
+  husky v9's `sh -e`. The install refuses, writing nothing and naming the one line to add, a hook in another language
+  (a Node or Python script), a hook file without the execute bit, a symlinked hook file wherever it points, and a hooks
+  directory that resolves outside the working tree and the git directory (a linked worktree's and a submodule's git
+  directory are inside) or cannot be written; `uninstall` applies the same guards. From a hook's text
+  alone, only urzua's own block, exactly as installed for that hook, is reported as wired.
+- **A hook the repository maintains itself is declared, and proven by running it.** Decided by the orchestrator on
+  2026-11-16, pending maintainer review, after the maintainer said of this repository's own hooks reporting that urzua
+  could not tell whether they run: "If we are getting this, then this is a bug. Other people can have [it]. So, we need to think about ways around it. And how we can enable configuration for support. For this, and our setup and others." Reading a hook's text can never prove a line runs (`exit 0; urzua check`,
+  `urzua check || true` and `if false; then urzua check; fi` all mention urzua and never gate), so text is no longer
+  evidence of anything except the managed block, and any other mention of urzua is reported as an unmanaged call.
+  A repository declares a hook it maintains (`hooks.<hook>.managed: declared`): `install` then writes nothing to it,
+  and `doctor`, `hooks status` and the session-start check report it `ok (declared)` while the file exists, is
+  executable and mentions urzua, and warn when the declaration is plainly false. The declaration is the repository's
+  assertion, which is why `.urzua/config.yaml` is a protected path in a gated repository. `urzua hooks verify --run`
+  proves it by behaviour: it runs each hook once, for real, as git runs it (`git hook run`), with a probe directory
+  named in its environment. Any urzua the hook starts writes a marker there and then does exactly what it would have
+  done anyway: the check runs with its real result. `verify` reports `reached` per hook and exits 1 when one is not.
+  There is no mode in which urzua skips its check: an earlier design let the probe make urzua exit without checking,
+  and however its trigger was guarded a spoofed trigger landed a broken commit, so the probe now only records. Without
+  `--run`, `verify` runs nothing and says that `--run` executes the repository's hooks.
+- **The hook runs a read-only check named in configuration.** The block calls `urzua hooks run <hook>`, which runs
+  `hooks.pre-commit` (default `check --base HEAD`: the changes since HEAD, the scope the Decision gives the commit) or
+  `hooks.pre-push` (default `check`) and prints the count and each blocking finding's rule, file and message, and the
+  command for the full report, on stderr (`ADR-101`, amendment of 2026-11-15). Only `check` and its alias `audit` may be
+  named, without `--config`, `--stdin-path` or `--actors`: another subcommand could write files, reach the network or
+  call the hook again on every commit, and a flag naming another file could print it. `check --base
+  HEAD` took about 9 seconds with a release build on this repository, which has about 670 records; a repository that
+  finds that too slow can name a cheaper check.
+- **When urzua cannot run, the hook warns by default.** When urzua is not found (`URZUA_BIN`, then `PATH`), is a
+  release without `hooks run`, or the check cannot run, the hook says loudly that urzua did not run, that the records
+  were NOT checked, how to install it and that CI will check them, and lets the commit or push through.
+  `hooks.on_not_run: block` stops it instead and names `--no-verify` to skip once. A blocking finding always blocks.
+  Warning is the default because, in a versioned layout (husky, an in-repo `core.hooksPath`), one person's install is
+  committed and would otherwise stop every contributor who never installed urzua on their next commit after a pull,
+  and because CI remains the guarantee; this repository's own versioned hooks warn for the same reason. `hooks run`
+  reads the policy from the configuration when it runs; the block carries it only for the cases where it cannot ask
+  urzua, and `hooks status` reports a block whose policy differs from the configuration.
+
 ## Reversibility
 
 Easy to extend and to relax. The decision adds `doctor` reporting and a rule that layers share one command; dropping a local layer changes nothing for CI. The cost of being wrong is a layer that is installed but loose.
@@ -63,3 +121,8 @@ Easy to extend and to relax. The decision adds `doctor` reporting and a rule tha
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | Status changed from Proposed to Accepted. **Why:** Maintainer decision, 2026-11-04. | **substantive** |
+> | 2026-11-16 | Amendment added: `urzua hooks install` is the one-step install, and an installed hook blocks when urzua cannot run. **Why:** the maintainer asked on 2026-11-16 for the one-command fix of `MILE-220`; decided by the builder, pending maintainer review. | **substantive** |
+> | 2026-11-16 | The amendment of 2026-11-16 revised before merge: an installed hook warns by default when urzua cannot run (the orchestrator's decision, pending maintainer review), with the rationale corrected; hooks run only `check`; the block is placed or refused so it always runs, and a block that cannot run is reported unreachable; nothing is written through a symlink or outside the repository; the measured cost of the pre-commit check is stated. **Why:** an independent review of the pull request found a block that could never run reported as wired, writes through symlinks, and a blocking default that would stop contributors who never installed urzua. | **substantive** |
+> | 2026-11-16 | The amendment of 2026-11-16 revised again before merge: the block goes at the top of a hook, so urzua runs first and the rest of the hook is untouched (the orchestrator's decision, pending maintainer review), replacing placement before a final `exit` or `exec` and the refusals that came with it; "wired" means a call urzua can prove runs; `uninstall` applies `install`'s guards. **Why:** a re-check of the pull request found that reading a hook's text to find where it ends failed on `return`, `false; exit $?`, line continuations and `set -e`, and that `uninstall` wrote outside the repository. | **substantive** |
+> | 2026-11-16 | The amendment of 2026-11-16 gains the declare-and-prove design (the orchestrator's decision, pending maintainer review, quoting the maintainer): text proves nothing but the managed block; a hook the repository maintains is declared under `hooks:` and proven by `urzua hooks verify --run`. **Why:** a third review found hand-written lines reported as wired that never ran urzua (`exit 0; urzua check`), and the maintainer asked for configuration that supports repositories, this one included, whose hooks run urzua after guard code. | **substantive** |
+> | 2026-11-16 | The amendment of 2026-11-16: `urzua hooks verify --run` runs each hook for real, urzua's check included; the probe only records that urzua was reached and never changes what it does (the orchestrator's decision, pending maintainer review). **Why:** a fourth review landed a broken commit by spoofing the trigger of the earlier design, in which the probe made urzua skip its check. | **substantive** |

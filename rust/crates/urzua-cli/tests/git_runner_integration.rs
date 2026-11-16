@@ -17,9 +17,14 @@ const RUNNER: &str = "urzua-io/src/git.rs";
 
 /// Non-literal `Command::new(<expr>)` sites that are legitimate, as
 /// (file relative to the crates directory, whitespace-free argument expression).
-/// Each entry needs a comment saying what it runs. There are none today: the
-/// only non-literal spawn (running the urzua binary) is inside a test module.
-const ALLOWED_NON_LITERAL: &[(&str, &str)] = &[];
+/// Each entry needs a comment saying what it runs.
+const ALLOWED_NON_LITERAL: &[(&str, &str)] = &[
+    // `urzua hooks run` re-runs this same binary (`current_exe`) with the
+    // configured check arguments, to read its JSON report.
+    ("urzua-cli/src/commands/hooks.rs", "exe"),
+    // `urzua hooks verify --run` runs a hook file as git would.
+    ("urzua-cli/src/commands/hooks_verify.rs", "hook_path"),
+];
 
 fn find(hay: &[u8], needle: &[u8]) -> Option<usize> {
     hay.windows(needle.len()).position(|w| w == needle)

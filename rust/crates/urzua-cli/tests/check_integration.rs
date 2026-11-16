@@ -4179,6 +4179,8 @@ fn doctor_reports_a_hook_that_is_not_installed() {
 
 #[test]
 fn doctor_reports_a_hook_that_runs_urzua() {
+    // Text cannot prove a line runs (`MILE-220`): only the managed block, or a
+    // declaration in the configuration, is `ok`.
     let dir = hook_fixture("hook-running");
     plant_hook(
         &dir.join(".git/hooks/pre-commit"),
@@ -4187,7 +4189,7 @@ fn doctor_reports_a_hook_that_runs_urzua() {
     );
     assert_eq!(
         hook_state(&dir, "pre-commit"),
-        ("installed-running-urzua".into(), "ok".into())
+        ("installed-unmanaged-call".into(), "warn".into())
     );
 }
 
@@ -4232,7 +4234,7 @@ fn doctor_follows_core_hooks_path() {
     git(&dir, &["config", "core.hooksPath", ".githooks"]);
     assert_eq!(
         hook_state(&dir, "pre-commit"),
-        ("installed-running-urzua".into(), "ok".into())
+        ("installed-unmanaged-call".into(), "warn".into())
     );
     assert_eq!(
         hook_state(&dir, "pre-push"),
@@ -4250,10 +4252,11 @@ fn repo_root() -> std::path::PathBuf {
 }
 
 /// `doctor` run in a repository wired the way `make hooks-install` wires this
-/// one (`core.hooksPath` set to the committed `.git-hooks`) reports both hooks
-/// as installed and running urzua. The hooks are this repository's own files,
-/// copied byte for byte, so a change to a hook that stops it running urzua, or
-/// to `doctor`'s reading of how a hook runs it, fails here.
+/// one (`core.hooksPath` set to the committed `.git-hooks`) sees both hooks
+/// call urzua outside a managed block, which text cannot prove runs
+/// (`unmanaged-call`, `MILE-220`). Declaring the hooks under `hooks:` makes them
+/// `ok (declared)`; `hooks_verify_integration` proves it by running them. The
+/// hooks are this repository's own files, copied byte for byte.
 #[test]
 fn doctor_reports_this_repositorys_committed_hooks_as_wired() {
     let dir = hook_fixture("hook-committed");
@@ -4265,7 +4268,7 @@ fn doctor_reports_this_repositorys_committed_hooks_as_wired() {
     for layer in ["pre-commit", "pre-push"] {
         assert_eq!(
             hook_state(&dir, layer),
-            ("installed-running-urzua".into(), "ok".into()),
+            ("installed-unmanaged-call".into(), "warn".into()),
             "{layer}"
         );
     }

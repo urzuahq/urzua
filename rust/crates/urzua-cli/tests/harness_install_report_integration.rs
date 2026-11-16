@@ -181,10 +181,11 @@ fn doctor_reads_a_real_call_in_a_hook_not_a_word_in_a_comment_or_a_make_target()
         &dir,
         "#!/bin/sh\n# runs urzua check before every commit\necho \"urzua check passed\"\n",
     );
+    // A mention outside a comment is never `ok`: text proves nothing (`MILE-220`).
     let (_, d) = urzua(&dir, &["doctor"]);
     assert_eq!(
         check_of(&d, "hook-wired")["state"],
-        "installed-not-running-urzua",
+        "installed-unmanaged-call",
         "{d}"
     );
 
@@ -200,7 +201,7 @@ fn doctor_reads_a_real_call_in_a_hook_not_a_word_in_a_comment_or_a_make_target()
     let (_, d) = urzua(&dir, &["doctor"]);
     assert_eq!(
         check_of(&d, "hook-wired")["state"],
-        "installed-running-urzua",
+        "installed-unmanaged-call",
         "{d}"
     );
 
@@ -208,10 +209,12 @@ fn doctor_reads_a_real_call_in_a_hook_not_a_word_in_a_comment_or_a_make_target()
         &dir,
         "#!/bin/sh\nbin=\"$(git rev-parse --show-toplevel)/target/release/urzua\"\n\"$bin\" check\n",
     );
+    // The call is seen through the variable; text cannot prove it runs
+    // (`MILE-220`).
     let (_, d) = urzua(&dir, &["doctor"]);
     assert_eq!(
         check_of(&d, "hook-wired")["state"],
-        "installed-running-urzua",
+        "installed-unmanaged-call",
         "{d}"
     );
 }
