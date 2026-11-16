@@ -146,14 +146,17 @@ fn a_finding_carries_the_action_its_variant_declares() {
     );
 
     // The finding sits on the claimant; the edit belongs on the counterpart,
-    // and carries the id to append.
+    // names the id to add, and offers the `urzua fix` command that writes it.
     let pair = findings(&report, "relation.pair-reciprocity");
     assert_eq!(
         on(&pair, "NOTE-1-a.md")["suggested_action"],
         serde_json::json!({
-            "kind": "edit-field",
-            "op": "append",
-            "target": { "file": "docs/notes/NOTE-2-b.md", "field": "Blocked-by" },
+            "kind": "run-command",
+            "target": {
+                "argv": ["urzua", "fix", "--apply", "--ids", "docs/notes/NOTE-2-b.md"],
+                "file": "docs/notes/NOTE-2-b.md",
+                "field": "Blocked-by"
+            },
             "value": "NOTE-1"
         }),
         "{report}"
