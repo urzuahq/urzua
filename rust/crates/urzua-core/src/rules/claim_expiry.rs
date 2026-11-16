@@ -506,9 +506,42 @@ fn claim_standing_findings(
     findings
 }
 
+/// `text` read as a record of `record_type`: the type's resolved document model
+/// decides where the header fields are (front matter, a blockquote, bare
+/// `Key: value` lines), as the loader reads the record. Parsing every copy as
+/// front matter made the renewal check blind to a prefix-lines type.
+fn header_in_text(config: &Config, record_type: &str, text: &str) -> crate::header::Header {
+    let Some(type_config) = config.record_types.get(record_type) else {
+        return crate::header::parse(text);
+    };
+    let model = crate::document_model::declared_model(record_type, type_config)
+        .ok()
+        .flatten()
+        .and_then(|m| m.resolve().ok())
+        .unwrap_or_default();
+    let prefix = type_config
+        .prefix
+        .clone()
+        .unwrap_or_else(|| record_type.to_ascii_uppercase());
+    Record::parse_with_model(
+        PathBuf::new(),
+        record_type.to_string(),
+        text,
+        type_config.header_shape,
+        prefix,
+        &model,
+    )
+    .header
+}
+
 /// The anchor date of a record's text, `None` when the field is absent or not a date.
-fn anchor_in_text(text: &str, field: &str) -> Option<(String, i64)> {
-    let header = crate::header::parse(text);
+fn anchor_in_text(
+    config: &Config,
+    record_type: &str,
+    text: &str,
+    field: &str,
+) -> Option<(String, i64)> {
+    let header = header_in_text(config, record_type, text);
     let value = header.get(field)?.trim().to_string();
     let unix = date_unix(&value).ok()?;
     Some((value, unix))
@@ -516,8 +549,8 @@ fn anchor_in_text(text: &str, field: &str) -> Option<(String, i64)> {
 
 /// The trimmed, non-empty value the text writes for `field`, `None` when the
 /// field is absent or blank.
-fn header_value(text: &str, field: &str) -> Option<String> {
-    let header = crate::header::parse(text);
+fn header_value(config: &Config, record_type: &str, text: &str, field: &str) -> Option<String> {
+    let header = header_in_text(config, record_type, text);
     let value = header.get(field)?.trim();
     (!value.is_empty()).then(|| value.to_string())
 }
@@ -725,12 +758,13 @@ fn renewal_problem(
     now_text: &str,
     then_text: &str,
 ) -> Option<String> {
-    let now = anchor_in_text(now_text, field);
-    let then = anchor_in_text(then_text, field);
+    let ty = record.record_type.as_str();
+    let now = anchor_in_text(config, ty, now_text, field);
+    let then = anchor_in_text(config, ty, then_text, field);
     match (&now, &then) {
         (None, Some((date, _))) => {
-            let present = crate::header::parse(now_text).get(field).is_some();
-            Some(match (header_value(now_text, field), present) {
+            let present = header_in_text(config, ty, now_text).get(field).is_some();
+            Some(match (header_value(config, ty, now_text, field), present) {
                 (Some(value), _) => format!(
                     "the anchor field {field} ('{value}') is malformed, not a date: it carried {date} at the merge base, and an unreadable date is not a way back to an earlier first-cycle offset"
                 ),

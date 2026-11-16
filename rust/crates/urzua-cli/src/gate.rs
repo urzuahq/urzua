@@ -21,14 +21,19 @@
 /// whose declared rules read no record exits 0 and says `0` where a reader
 /// sees it. MILE-106's opt-in rule is what turns that disclosure into a
 /// verdict for adopters who want one.
-pub(crate) fn any_rule_looked(executed: &[urzua_core::report::RuleExecution]) -> bool {
+pub(crate) fn any_rule_looked(
+    executed: &[urzua_core::report::RuleExecution],
+    named: &dyn Fn(&str) -> bool,
+) -> bool {
     use urzua_core::report::RuleStatus;
-    // A rule that is on for every configuration looked at the corpus whether or
-    // not the repository declared a rule, so it does not count: a configuration
-    // that declares none still reports `not-run`.
-    executed
-        .iter()
-        .any(|e| e.status == RuleStatus::Ran && urzua_core::rules::default_on(&e.rule).is_none())
+    // A rule that is on for every configuration runs whether or not the
+    // repository asked for it, so it counts only when the configuration declares
+    // it or `--rules` selects it: a configuration that declares no rule still
+    // reports `not-run`.
+    executed.iter().any(|e| {
+        e.status == RuleStatus::Ran
+            && (urzua_core::rules::default_on(&e.rule).is_none() || named(&e.rule))
+    })
 }
 
 /// The verdict of a `check` run, from what it established. Pure, so each
@@ -50,6 +55,7 @@ pub(crate) fn derive_status(
     empty_diff: bool,
     examined: usize,
     executed: &[urzua_core::report::RuleExecution],
+    named: &dyn Fn(&str) -> bool,
     active_findings: usize,
 ) -> urzua_core::report::ReportStatus {
     use urzua_core::report::ReportStatus;
@@ -60,9 +66,9 @@ pub(crate) fn derive_status(
     };
     if blocking {
         ReportStatus::FindingsPresent
-    } else if empty_diff && any_rule_looked(executed) {
+    } else if empty_diff && any_rule_looked(executed, named) {
         from_findings
-    } else if examined == 0 || !any_rule_looked(executed) {
+    } else if examined == 0 || !any_rule_looked(executed, named) {
         ReportStatus::NotRun
     } else {
         from_findings
@@ -105,7 +111,7 @@ mod tests {
         ];
         for (blocking, empty, examined, executed, active, expected) in table {
             assert_eq!(
-                derive_status(blocking, empty, examined, executed, active),
+                derive_status(blocking, empty, examined, executed, &|_| false, active),
                 expected,
                 "blocking={blocking} empty_diff={empty} examined={examined} active={active}"
             );

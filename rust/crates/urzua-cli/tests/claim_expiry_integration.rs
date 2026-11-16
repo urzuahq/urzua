@@ -1179,3 +1179,77 @@ fn a_record_with_neither_a_locator_field_nor_item_evidence_stays_not_examined() 
     let parsed = json(&run_urzua(&dir, &["check"]));
     assert!(findings(&parsed, EXPIRED).is_empty(), "{parsed}");
 }
+
+/// A prefix-lines type: bare `Key: value` lines, no front matter.
+fn prefix_lines_config(extra_rules: &str) -> String {
+    format!(
+        "schema_version: 2\nrules:\n  embodiment.claim-expired:\n    level: warn\n    anchor_field: Last-audited\n    require_pin: []\n    periods:\n      - {{type: adr, status: [Accepted], days: 90}}\n{extra_rules}\
+         record_types:\n  adr:\n    dir: docs/adr\n    prefix: ADR\n    \
+         required_fields: [Status]\n    known_fields: [Embodiment, Realized-by, Last-audited]\n    \
+         identity: {{from: filename, pattern: '^(?P<prefix>ADR)-(?P<number>\\d+)-(?P<slug>.+)$'}}\n    \
+         fields: {{from: prefix-lines}}\n    \
+         statuses:\n      values: [Proposed, Accepted]\n      success: [Accepted]\n"
+    )
+}
+
+fn prefix_lines_record(audited: &str) -> String {
+    format!(
+        "# ADR-1. T\n\nStatus: Accepted\nLast-audited: {audited}\nRealized-by: code:src/a.rs\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Initial. | **structural** |\n"
+    )
+}
+
+#[test]
+fn a_hand_typed_audit_date_on_a_prefix_lines_type_is_reported_by_the_companion_rule() {
+    // The companion rule read both copies with the front-matter header, which
+    // finds no field in a prefix-lines record, so the date moved unseen.
+    let extra = "  embodiment.claim-renewal-unattested: warn\n";
+    let dir = fixture("unattested-prefix-lines", &prefix_lines_config(extra));
+    let old = day_days_ago(20);
+    std::fs::write(dir.join(A1), prefix_lines_record(&old)).unwrap();
+    commit_all(&dir, 20);
+    git(&dir, &["branch", "-M", "main"]);
+    git(&dir, &["checkout", "-q", "-b", "topic"]);
+    let today = day_days_ago(0);
+    let text = std::fs::read_to_string(dir.join(A1)).unwrap();
+    std::fs::write(dir.join(A1), text.replace(&old, &today)).unwrap();
+    commit_all(&dir, 0);
+    let parsed = json(&run_urzua(&dir, &["check", "--base", "main"]));
+    let found = findings(&parsed, "embodiment.claim-renewal-unattested");
+    assert_eq!(found.len(), 1, "{parsed}");
+    assert_eq!(found[0]["file"], A1);
+    assert!(
+        found[0]["message"]
+            .as_str()
+            .unwrap()
+            .contains("Re-verified"),
+        "{found:?}"
+    );
+}
+
+#[test]
+fn removing_the_audit_date_from_a_prefix_lines_record_is_reported() {
+    let extra = "  embodiment.claim-renewal-unattested: warn\n";
+    let dir = fixture(
+        "unattested-prefix-lines-removed",
+        &prefix_lines_config(extra),
+    );
+    let old = day_days_ago(20);
+    std::fs::write(dir.join(A1), prefix_lines_record(&old)).unwrap();
+    commit_all(&dir, 20);
+    git(&dir, &["branch", "-M", "main"]);
+    git(&dir, &["checkout", "-q", "-b", "topic"]);
+    let text = std::fs::read_to_string(dir.join(A1)).unwrap();
+    std::fs::write(
+        dir.join(A1),
+        text.replace(&format!("Last-audited: {old}\n"), ""),
+    )
+    .unwrap();
+    commit_all(&dir, 0);
+    let parsed = json(&run_urzua(&dir, &["check", "--base", "main"]));
+    let found = findings(&parsed, "embodiment.claim-renewal-unattested");
+    assert_eq!(found.len(), 1, "{parsed}");
+    assert!(
+        found[0]["message"].as_str().unwrap().contains("removed"),
+        "{found:?}"
+    );
+}

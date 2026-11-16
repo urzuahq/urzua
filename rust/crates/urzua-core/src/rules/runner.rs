@@ -159,6 +159,9 @@ pub struct RuleCtx<'a> {
     pub refs_snapshot: &'a Result<crate::refs_snapshot::RefsSnapshot, String>,
     /// Every discovered path, staged deletions included.
     pub tracked_paths: &'a [PathBuf],
+    /// The stale `@sha256` evidence pins of every record, read by the caller
+    /// (`embodiment.pin-stale`); empty and examining nothing when the rule is off.
+    pub stale_pins: &'a StalePinScan,
     /// Tracked record files that are symlinks out of their governed tree;
     /// never loaded (`identity.record-symlink-escapes`).
     pub escaping_records: &'a [EscapingRecord],
@@ -185,6 +188,16 @@ pub fn effective_level(config: &Config, id: &str) -> crate::config::RuleLevel {
         .map(|s| s.level)
         .or_else(|| super::default_on(id).map(|d| d.level))
         .unwrap_or(RuleLevel::Off)
+}
+
+/// What the caller read of the evidence pins of every record, for
+/// `embodiment.pin-stale`: the census over the records with evidence and the
+/// records whose pinned locators now hash differently (`fix --rebaseline`'s own
+/// detection). The core opens no file.
+#[derive(Debug, Clone, Default)]
+pub struct StalePinScan {
+    pub population: Option<crate::report::Population>,
+    pub found: Vec<crate::fix::Rebaseline>,
 }
 
 /// A rule the repository has not declared does not run at all -- it is not run

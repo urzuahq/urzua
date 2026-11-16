@@ -1,0 +1,16 @@
+id: a-stale-pin-on-a-record-that-states-no-embodiment-is-reported
+corpus: corpus-g
+# A record whose `Realized-by` pins src/cache.rs at a hash the file does not have
+# is reported by `embodiment.pin-stale`, which this corpus's config does not
+# declare: the rule is on by default. The record states no `Embodiment`, so
+# `embodiment.consistency` could not judge it.
+commits:
+  - write:
+      records/ADR-0010-pinned.md: "---\nStatus: Accepted\nEmbodiment: Implemented\nRealized-by: code:src/cache.rs@sha256:0000000000000000000000000000000000000000000000000000000000000000\n---\n# ADR-0010 — Pinned\n"
+invocation: [check]
+expect_exit: 1
+expect_findings:
+  - rule: embodiment.pin-stale
+    file: records/ADR-0010-pinned.md
+    severity: warning
+    message_contains: "src/cache.rs"

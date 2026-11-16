@@ -68,6 +68,13 @@ fn run_checked(config_path: Option<PathBuf>, args: ReverifyArgs) -> Result<ExitC
         records,
         ..
     } = Session::open(config_path).map_err(refuse)?;
+    if args.apply {
+        config
+            .attestation
+            .reason
+            .check(&reason)
+            .map_err(|e| refuse(format!("urzua reverify --apply: {e}")))?;
+    }
     if !rule_enabled(&config, rules::RULE_EMBODIMENT_CLAIM_EXPIRED) {
         return Err(refuse(
             "urzua reverify renews the claims that embodiment.claim-expired judges, and that rule is off or undeclared in the configuration: declare it (ADR-97) first",

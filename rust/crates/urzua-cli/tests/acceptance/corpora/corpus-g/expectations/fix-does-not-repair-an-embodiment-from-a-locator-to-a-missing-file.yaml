@@ -1,0 +1,16 @@
+id: fix-does-not-repair-an-embodiment-from-a-locator-to-a-missing-file
+corpus: corpus-g
+bugs: [BUG-196]
+# A record states `Embodiment: Not started` and cites a test file that does not
+# exist. Counting that locator as evidence would compute `Verified` and `fix
+# --apply` would write it; only locators that resolve are evidence, so `fix` has
+# nothing to repair. (`fix` is a command, not a rule: the case proves no rule.)
+mutation_exempt: "fix is a command, not a rule, so there is no rule to switch off"
+commits:
+  - write:
+      records/ADR-0011-missing-evidence.md: "---\nStatus: Accepted\nEmbodiment: Not started\nRealized-by: test:tests/does-not-exist.rs\n---\n# ADR-0011 — Missing evidence\n"
+invocation: [fix, records/ADR-0011-missing-evidence.md]
+expect_exit: 0
+expect_json:
+  - {at: /status, equals: ok}
+  - {at: /repairs, equals: []}

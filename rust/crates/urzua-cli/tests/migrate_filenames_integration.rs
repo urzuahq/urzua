@@ -374,3 +374,50 @@ fn a_pin_on_a_rewritten_record_is_reported_stale_not_silently_repinned() {
     );
     assert_eq!(applied["stale_pins"].as_array().unwrap().len(), 2);
 }
+
+#[test]
+fn a_dot_slash_citation_from_a_file_in_another_directory_is_rewritten() {
+    let dir = fixture("dot-slash", Some(PATTERN));
+    bare_corpus(&dir);
+    write(
+        &dir,
+        "docs/guide/g.md",
+        "Read ./docs/adr/0001-first-thing.md first.\n",
+    );
+    commit(&dir);
+    let (code, report) = run(&dir, &["migrate", "filenames", "--apply"]);
+    assert_eq!(code, Some(0), "{report}");
+    assert!(
+        report["rewrites"].as_array().unwrap().iter().any(
+            |r| r["file"] == "docs/guide/g.md" && r["from"] == "./docs/adr/0001-first-thing.md"
+        ),
+        "{report}"
+    );
+    assert_eq!(
+        std::fs::read_to_string(dir.join("docs/guide/g.md")).unwrap(),
+        "Read ./docs/adr/ADR-0001-first-thing.md first.\n"
+    );
+}
+
+#[test]
+fn the_report_states_how_many_records_were_examined_even_when_every_one_is_skipped() {
+    let dir = fixture("examined", Some(PATTERN));
+    write(&dir, "docs/adr/README.md", "# Index\n");
+    write(&dir, "docs/adr/NOTES.md", "# Notes\n");
+    commit(&dir);
+    let (code, report) = run(&dir, &["migrate", "filenames"]);
+    assert_eq!(code, Some(0), "{report}");
+    assert_eq!(report["status"], "ok");
+    assert_eq!(report["skipped"].as_array().unwrap().len(), 2, "{report}");
+    let population = &report["population"];
+    assert_eq!(population["unit"], "record", "{report}");
+    assert_eq!(population["eligible"], 2, "{report}");
+    assert_eq!(population["examined"], 2, "{report}");
+    // A corpus of conforming names is examined too: nothing to rename is not nothing looked at.
+    let dir = fixture("examined-clean", Some(PATTERN));
+    write(&dir, "docs/adr/ADR-0001-a.md", &record(1, "A", "x"));
+    commit(&dir);
+    let (_, report) = run(&dir, &["migrate", "filenames"]);
+    assert_eq!(report["population"]["examined"], 1, "{report}");
+    assert!(report["renames"].as_array().unwrap().is_empty());
+}

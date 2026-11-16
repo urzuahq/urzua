@@ -319,6 +319,9 @@ fn every_rule_greenfield_proposes_examines_a_record() {
         .iter()
         .filter(|r| r["status"] == "ran" && r["population"]["examined"] == 0)
         .map(|r| r["rule"].as_str().unwrap().to_string())
+        // A rule on for every configuration is not one init proposes; here it
+        // finds no evidence pin to examine.
+        .filter(|rule| urzua_core::rules::default_on(rule).is_none())
         .collect();
     assert!(idle.is_empty(), "ran over zero records: {idle:?}");
 }
