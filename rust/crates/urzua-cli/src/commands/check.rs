@@ -714,7 +714,7 @@ fn symlink_refusal_off_notice(config: &Config) -> Option<Notice> {
 }
 
 /// A configuration that turns the pin attestation rule off is told so on every
-/// run: a pin can then be changed by hand with no row and no reason (SPEC-8).
+/// run: a pin can then be changed by hand with no row and no reason (SPEC-2).
 fn pin_attestation_off_notice(config: &Config) -> Option<Notice> {
     let id = rules::RULE_DIFF_PIN_CHANGED_UNATTESTED;
     (rules::effective_level(config, id) == RuleLevel::Off).then(|| Notice {

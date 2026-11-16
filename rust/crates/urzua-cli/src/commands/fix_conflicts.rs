@@ -263,22 +263,8 @@ impl Ctx<'_> {
             Ok(r) => r,
             Err(e) => return Ok(refused(e)),
         };
-        if let Some(refusal) = write.and_then(|w| {
-            urzua_core::authority::path_gate_refusal(
-                self.config.authority.as_ref(),
-                path,
-                Some(&w.attestation),
-            )
-        }) {
-            return Ok(refused(refusal));
-        }
-        if write.is_some() {
-            urzua_io::write_atomic_in(
-                self.repo_root,
-                &self.repo_root.join(path),
-                &resolved.content,
-            )
-            .map_err(|e| format!("could not write: {e}"))?;
+        if let Some(why) = self.write_resolved(path, write, &resolved.content)? {
+            return Ok(refused(why));
         }
         Ok(Conflict {
             record: path.to_path_buf(),
@@ -294,6 +280,28 @@ impl Ctx<'_> {
             rows_kept: resolved.rows_kept,
             waits_on: Vec::new(),
         })
+    }
+
+    /// Writes the resolved record when `write` carries the identity: `Ok(Some)`
+    /// is the refusal of a path gate over it, and nothing is written.
+    fn write_resolved(
+        &self,
+        path: &Path,
+        write: Option<&ResolvedAttestation>,
+        content: &str,
+    ) -> Result<Option<String>, String> {
+        let Some(w) = write else {
+            return Ok(None);
+        };
+        let gate = self.config.authority.as_ref();
+        if let Some(refusal) =
+            urzua_core::authority::path_gate_refusal(gate, path, Some(&w.attestation))
+        {
+            return Ok(Some(refusal));
+        }
+        urzua_io::write_atomic_in(self.repo_root, &self.repo_root.join(path), content)
+            .map_err(|e| format!("could not write: {e}"))?;
+        Ok(None)
     }
 
     /// The merged hash of each pin both sides moved, by its index; a refused
