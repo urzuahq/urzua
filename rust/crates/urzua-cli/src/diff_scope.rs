@@ -204,13 +204,15 @@ pub(crate) fn renamed_from(
     notices: &mut Vec<Notice>,
 ) -> Option<PathBuf> {
     let identity = rules::rename_identity(record)?;
+    let status_field =
+        rules::relation_field_name(config, &record.record_type, RelationRole::Status);
     let mut warned = HashSet::new();
     let mut paired = deleted_copies(
         repo_root,
         config,
         None,
         &record.record_type,
-        "Status",
+        status_field,
         changes,
         UnreadableCopy::PinPairing,
         notices,
