@@ -271,25 +271,37 @@ fn a_type_that_admits_neither_field_drafts_one_per_rule_and_file() {
     assert_eq!(drafts[0]["findings"]["count"], 3);
 }
 
-/// This repository's own `WAIVER-0052` was written for the milestone `WontDo`
-/// exemption finding and hid every other `type.dir-matches-nothing` finding in
-/// the config, a misdeclared `condition` directory included. It names its finding.
+const WONTDO_WAIVER: &str = "---
+Stable-Id: 01M7WAIVERWONTDOEXEMPTION0
+Rule: type.dir-matches-nothing
+Scope: .urzua/config.yaml
+Reason: \"The exemption is kept on purpose: a WontDo milestone will never be done.\"
+Expires: 2099-01-01
+Variant: exempt-status-matches-nothing
+Key-path: [record_types, milestone, sections, exempt_statuses]
+---
+# The milestone type's WontDo exemption matches no record
+
+## What this covers
+
+The `milestone` type declares `WontDo` as exempt and no milestone holds it.
+
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | 2026-11-14 | Filed. | **substantive** |
+";
+
+/// A waiver written for the milestone `WontDo` exemption finding names that
+/// finding, so it does not hide any other `type.dir-matches-nothing` finding in
+/// this repository's config, a misdeclared `condition` directory included.
 #[test]
-fn the_own_wontdo_waiver_does_not_hide_a_misdeclared_directory() {
+fn a_waiver_for_the_wontdo_exemption_does_not_hide_a_misdeclared_directory() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
     let own = std::fs::read_to_string(root.join(".urzua/config.yaml")).unwrap();
     let anchor = "dir: \"docs/conditions\"";
     assert_eq!(own.matches(anchor).count(), 1, "the anchor line moved");
-    let waiver_record = std::fs::read_dir(root.join("docs/waiver"))
-        .unwrap()
-        .map(|e| e.unwrap().path())
-        .find(|p| {
-            p.file_name()
-                .unwrap()
-                .to_string_lossy()
-                .starts_with("WAIVER-0052-")
-        })
-        .expect("WAIVER-0052 exists");
 
     let dir = common::TempDir::new("urzua-waiver-variant-own");
     common::git(&dir, &["init", "-q"]);
@@ -303,10 +315,9 @@ fn the_own_wontdo_waiver_does_not_hide_a_misdeclared_directory() {
         own.replace(anchor, "dir: \"docs/conditionz\""),
     )
     .unwrap();
-    std::fs::copy(
-        &waiver_record,
-        dir.join("docs/waiver")
-            .join(waiver_record.file_name().unwrap()),
+    std::fs::write(
+        dir.join("docs/waiver/WAIVER-0001-wontdo-exemption.md"),
+        WONTDO_WAIVER,
     )
     .unwrap();
     std::fs::write(
@@ -340,11 +351,11 @@ fn the_own_wontdo_waiver_does_not_hide_a_misdeclared_directory() {
         by_key("record_types.milestone.sections.exempt_statuses")["waived"]
             .as_str()
             .unwrap()
-            .contains("WAIVER-0052"),
+            .contains("WAIVER-0001"),
         "{report}"
     );
     assert!(
         by_key("record_types.condition.dir").get("waived").is_none(),
-        "WAIVER-0052 must not hide the condition directory finding: {report}"
+        "the WontDo waiver must not hide the condition directory finding: {report}"
     );
 }

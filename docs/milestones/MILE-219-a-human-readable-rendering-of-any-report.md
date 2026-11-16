@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M7FVRGR4Y1DMDV15PB98SV6R
-Status: Planned
+Status: WontDo
 Phase: '1'
 Track: discoverability
 Blocked-on: null
@@ -28,3 +28,4 @@ the audit of 2026-11-15 found that output is JSON only, by `ADR-23` and `ADR-26`
 > |---|---|---|
 > | 2026-11-15 | Initial record, `Status: Planned`. **Why:** Filed from the audits of 2026-11-15; the maintainer committed to the work in conversation that day. | **structural** |
 > | 2026-11-16 | Decided: this milestone will not be done. **Why:** The maintainer decided on 2026-11-16: "we just always output JSON. Only agents use this software." Output stays JSON only (`ADR-23`, `ADR-26`). The Status moves to WontDo in a follow-up, because the first WontDo milestone retires `WAIVER-0052` and the places that cite it. | **substantive** |
+> | 2026-11-16 | `Status` moved from `Planned` to `WontDo`, recording the decision of the row above. **Why:** the maintainer decided on 2026-11-16: "we just always output JSON. Only agents use this software." This is the first `WontDo` milestone, so the `milestone` type's `WontDo` exemption is exercised and the waiver that excused it matching no record is retired, with `SPEC-10` (0.24) updated. | **structural** |
