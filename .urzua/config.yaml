@@ -686,7 +686,6 @@ roadmap:
 # their own guard code, so they are declared rather than managed: urzua does not edit
 # them, and `urzua hooks verify --run` is how to prove they reach it.
 hooks:
-  path: .git-hooks
   pre-commit: {managed: declared}
   pre-push: {managed: declared}
 
