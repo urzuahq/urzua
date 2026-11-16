@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5C6BXVCRM0Y2JS1DT5
-Version: '0.18'
+Version: '0.19'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/commands/audit.rs@sha256:7f54effa99c27c74c39869d05b39f69b13b2c030c24d2bd56db72fde59e86817, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs@sha256:dc29b51bde5a2ba79d95c5e0a09466a54e816e8e2cc4a86a80e4459be477a447, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:6d2ad3bf88308769fb6dfa67352f5323dc6968b98b54fa5f0726b76eeaa94658
+Realized-by: code:rust/crates/urzua-cli/src/commands/audit.rs@sha256:7f54effa99c27c74c39869d05b39f69b13b2c030c24d2bd56db72fde59e86817, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs@sha256:dc29b51bde5a2ba79d95c5e0a09466a54e816e8e2cc4a86a80e4459be477a447, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:03a0f940f65ee1c72b668ce6fc307f6c20250f7de6c65a1fc865328c36345797
 Author: beauwilliams
 Subject: '`urzua audit` -- a deprecated alias of `urzua check` over the configured rules, with no rule set of its own.'
 Implements: ADR-30
@@ -96,3 +96,5 @@ warning. The only difference between an `audit` report and the `check` report is
 > | 2026-11-14 | Bumped to `0.17`. Evidence pins re-baselined for this change (the `Re-baselined` row above); the specification text is unchanged. **Why:** a revision-log entry that adds a structural change bumps `Version`. | **structural** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/check_integration.rs` 919b855ba25b -> 6d2ad3bf8830. Reason: Read the diff of each re-pinned file against main: check_integration.rs fix fixtures create the file their record cites. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Bumped to `0.18`. Evidence pins re-baselined for this change (the `Re-baselined` row above); the specification text is unchanged. **Why:** a revision-log entry that adds a structural change bumps `Version`. | **structural** |
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/check_integration.rs` 6d2ad3bf8830 -> 03a0f940f65e. Reason: check_integration.rs gains a test that migrate ids refuses a path-gated record; the record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-16 | Bumped to `0.19`. Re-pinned the evidence `MILE-288`, `MILE-289` and `MILE-290` changed (the pin attestation rule, path gates on write commands, one definition of blank); what this spec states is unchanged. **Why:** a re-pinned versioned spec carries a version above main's. | **structural** |

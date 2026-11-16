@@ -2,7 +2,7 @@
 Stable-Id: 01M6R3NK4CFP9CSWVTMWMZ9460
 Status: Accepted
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/main.rs@sha256:a3ea4cf4a35cc1a3956d200abbab4660348560c8b4247056a5e474b2f185ac08, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:6d2ad3bf88308769fb6dfa67352f5323dc6968b98b54fa5f0726b76eeaa94658
+Realized-by: code:rust/crates/urzua-cli/src/main.rs@sha256:a3ea4cf4a35cc1a3956d200abbab4660348560c8b4247056a5e474b2f185ac08, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:03a0f940f65ee1c72b668ce6fc307f6c20250f7de6c65a1fc865328c36345797
 Date: 2026-09-06
 Accepted-on: 2026-09-06
 Author: beauwilliams
@@ -103,3 +103,4 @@ which motivates deciding this now rather than after v1.0.0.
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/main.rs` c2b7e51e110f -> 5432f340afcc. Reason: main.rs adds the always-present next_action_inputs key beside next_action and next_action_reason, the panic report included; the record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/main.rs` c2b7e51e110f -> 7222c8760164. Reason: main.rs adds the --conflicts flag to fix and passes it through; every other command and flag is unchanged. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Pin recomputed on merge (attested by beauwilliams, identity: gh-verified, actor: agent): both merged sides re-pinned, `rust/crates/urzua-cli/src/main.rs` 5432f340afcc and 7222c8760164 -> a3ea4cf4a35c; the new hash is the merged file's, which is git's automatic merge of the two re-pinned commits. No person wrote a reason for the merged state. **Why:** `urzua fix --conflicts` resolved a conflict that lay only in re-pin lines; a reviewer of the pull request should confirm the merged pin. | **structural** |
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/check_integration.rs` 6d2ad3bf8830 -> 03a0f940f65e. Reason: check_integration.rs gains a test that migrate ids refuses a path-gated record; the record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
