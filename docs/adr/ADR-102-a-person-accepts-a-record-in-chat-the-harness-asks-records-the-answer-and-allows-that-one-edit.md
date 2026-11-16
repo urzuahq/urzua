@@ -1,6 +1,7 @@
 ---
 Stable-Id: 01M7GX5MEZDHKE1NH9CZGNSE8D
-Status: Proposed
+Status: Accepted
+Accepted-on: 2026-11-16
 Date: 2026-11-16
 Author: beauwilliams
 Deciders: beauwilliams
@@ -98,3 +99,4 @@ Receipts already written stay valid records of what happened.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-16 | Drafted as Proposed. **Why:** The maintainer reported on 2026-11-16 that every acceptance ends with the agent saying it has no permission and asked for approval by a question in the chat. | **substantive** |
+> | 2026-11-16 | Status changed from Proposed to Accepted. **Why:** Accepted by the maintainer on 2026-11-16. | **substantive** |
