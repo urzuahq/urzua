@@ -555,6 +555,13 @@ pub struct RuleSetting {
     /// level of its findings and the rule's `level` only enables the rule.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub boundaries: Option<Vec<Boundary>>,
+    /// Whether a marker line that names an id the matcher cannot read
+    /// (`Implements: (ADR-1)`) is a finding at the rule's level (`report`) or,
+    /// undeclared, an `info` notice that counts and lists it. Only meaningful to
+    /// `embodiment.back-pointer-resolution` and
+    /// `embodiment.back-pointer-decision-accepted`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unread_markers: Option<UnreadMarkers>,
     /// The text that, on a line inside a boundary, excuses that line alone
     /// (`ADR-80`). Declared, never compiled in. Meaningful to
     /// `boundary.published-path-reference` and, for a back-pointer on the line,
@@ -823,6 +830,23 @@ pub struct IssueRefs {
     /// are read. A name no record type declares is refused at load.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fields: Option<Vec<String>>,
+    /// How many pages of the listing `urzua refs refresh` requests at once
+    /// (`ADR-101` amendment of 2026-11-15: a network setting is configuration).
+    /// Absent, [`REFS_WORKERS_DEFAULT`]; at most [`REFS_WORKERS_MAX`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workers: Option<u32>,
+}
+
+/// The pages `urzua refs refresh` requests at once when `workers` is not declared.
+pub const REFS_WORKERS_DEFAULT: u32 = 4;
+/// The most `workers` may be: GitHub asks clients to keep concurrent requests few.
+pub const REFS_WORKERS_MAX: u32 = 16;
+
+impl IssueRefs {
+    /// The declared `workers`, else the default.
+    pub fn workers(&self) -> u32 {
+        self.workers.unwrap_or(REFS_WORKERS_DEFAULT)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
@@ -2571,6 +2595,13 @@ fn issue_refs_problem(refs: &IssueRefs) -> Option<String> {
     if refs.forms.is_empty() {
         return Some("declares no forms; give 'number', 'url' or both".to_string());
     }
+    if let Some(w) = refs.workers {
+        if !(1..=REFS_WORKERS_MAX).contains(&w) {
+            return Some(format!(
+                "declares 'workers: {w}'; it is the pages requested at once, from 1 to {REFS_WORKERS_MAX}"
+            ));
+        }
+    }
     if let Some(fields) = &refs.fields {
         if fields.is_empty() || fields.iter().any(|f| f.trim().is_empty()) {
             return Some("declares an empty or blank 'fields' entry".to_string());
@@ -2836,6 +2867,30 @@ fn strip_generic_head(text: &str, prefix: &str) -> String {
     }
     out.push_str(rest);
     out
+}
+
+/// The `unread_markers` option: what a back-pointer rule does with a marker line
+/// it cannot read an id from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum UnreadMarkers {
+    /// A finding at the rule's level.
+    Report,
+}
+
+/// `unread_markers` belongs to the two back-pointer rules.
+fn validate_unread_markers(config: &Config) -> Result<(), ConfigError> {
+    for (name, setting) in &config.rules {
+        if setting.unread_markers.is_some()
+            && !crate::rules::rule_accepts_option(name, "unread_markers")
+        {
+            return Err(ConfigError::OptionNotApplicable {
+                rule: name.clone(),
+                option: "unread_markers".to_string(),
+            });
+        }
+    }
+    Ok(())
 }
 
 /// The declared `ignore_marker` (`ADR-80`): only the boundary rule and the two
@@ -3746,6 +3801,7 @@ fn validate_boundaries(config: &mut Config) -> Result<(), ConfigError> {
     // path. A boundary that cannot be matched would be a rule that never
     // reports, so every reason is a load error.
     validate_ignore_markers(config)?;
+    validate_unread_markers(config)?;
     for (name, setting) in config.rules.iter_mut() {
         let owner = crate::rules::rule_accepts_option(name, "boundaries");
         if setting.boundaries.is_some() && !owner {
@@ -6867,6 +6923,40 @@ record_types:
     }
 
     #[test]
+    fn issue_refs_workers_is_optional_and_bounded() {
+        let with = |workers: &str| {
+            parse(&issue_config(&format!(
+                "    issue_refs: {{snapshot: s.json, repository: o/r, forms: [number]{workers}}}\n"
+            )))
+        };
+        for ok in ["", ", workers: 1", ", workers: 4", ", workers: 16"] {
+            assert!(with(ok).is_ok(), "{ok}");
+        }
+        for bad in [", workers: 0", ", workers: 17"] {
+            let err = with(bad).unwrap_err().to_string();
+            assert!(err.contains("workers"), "{bad}: {err}");
+        }
+        for bad in [", workers: -1", ", workers: two"] {
+            assert!(with(bad).is_err(), "{bad}");
+        }
+        let range = with(", workers: 99").unwrap_err().to_string();
+        assert!(range.contains("1 to 16"), "{range}");
+        // Absent, it is the number refresh used before the key existed.
+        let config = with("").unwrap();
+        let refs = config.rules["citation.issue-exists"]
+            .issue_refs
+            .as_ref()
+            .unwrap();
+        assert_eq!(refs.workers(), 4);
+        let config = with(", workers: 2").unwrap();
+        let refs = config.rules["citation.issue-exists"]
+            .issue_refs
+            .as_ref()
+            .unwrap();
+        assert_eq!(refs.workers(), 2);
+    }
+
+    #[test]
     fn issue_refs_fields_must_be_declared_header_fields_and_never_blank() {
         let base = |fields: &str| {
             format!(
@@ -7099,6 +7189,7 @@ mod option_table_tests {
         "drift",
         "boundaries",
         "ignore_marker",
+        "unread_markers",
         "scope",
         "code_comment_prefixes",
     ];

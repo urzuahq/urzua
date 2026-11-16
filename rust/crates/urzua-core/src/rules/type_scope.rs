@@ -466,6 +466,7 @@ mod tests {
             population: None,
             status: RuleStatus::NotEnabled,
             examined_records: Vec::new(),
+            unread_markers: Vec::new(),
         }];
         let (exec, findings) =
             config_scope_matches_nothing(&executed, std::path::Path::new(".urzua/config.yaml"));

@@ -332,6 +332,11 @@ pub struct RuleExecution {
     /// filename and an external assertion are not records read.
     #[serde(skip)]
     pub examined_records: Vec<PathBuf>,
+    /// `file:line` of each marker line the rule could not read an id from and
+    /// reported as a notice, not a finding (`unread_markers` undeclared). Not
+    /// serialized: `check` turns it into one info notice.
+    #[serde(skip)]
+    pub unread_markers: Vec<String>,
 }
 
 impl RuleExecution {
@@ -347,7 +352,14 @@ impl RuleExecution {
             population: Some(population),
             status: RuleStatus::Ran,
             examined_records,
+            unread_markers: Vec::new(),
         }
+    }
+
+    /// This execution with the marker lines it reported as a notice.
+    pub fn with_unread_markers(mut self, lines: Vec<String>) -> Self {
+        self.unread_markers = lines;
+        self
     }
 
     /// A rule that did not apply: it was handed nothing it could judge.
@@ -366,6 +378,7 @@ impl RuleExecution {
             population: None,
             status,
             examined_records: Vec::new(),
+            unread_markers: Vec::new(),
         }
     }
 }
@@ -1764,18 +1777,21 @@ mod tests {
                 population: Some(Population::of(PopulationUnit::Field, 4, 4)),
                 status: RuleStatus::Ran,
                 examined_records: vec![path("a.md"), path("b.md")],
+                unread_markers: Vec::new(),
             },
             RuleExecution {
                 rule: "identity.collision".to_string(),
                 population: Some(Population::of(PopulationUnit::Record, 2, 2)),
                 status: RuleStatus::Ran,
                 examined_records: vec![path("a.md"), path("b.md")],
+                unread_markers: Vec::new(),
             },
             RuleExecution {
                 rule: "type.no-declared-spec".to_string(),
                 population: Some(Population::of(PopulationUnit::RecordType, 1, 1)),
                 status: RuleStatus::Ran,
                 examined_records: vec![],
+                unread_markers: Vec::new(),
             },
         ];
 
@@ -1853,6 +1869,7 @@ mod tests {
             population: None,
             status: RuleStatus::NotEnabled,
             examined_records: vec![std::path::PathBuf::from("a.md")],
+            unread_markers: Vec::new(),
         }];
         assert_eq!(records_read_by_any_rule(&executed), 0);
     }

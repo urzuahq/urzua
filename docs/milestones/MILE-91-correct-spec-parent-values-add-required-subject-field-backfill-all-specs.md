@@ -5,7 +5,7 @@ Phase: '0'
 Track: schema-governance
 Implements: BUG-10
 Blocked-on: —
-Realized-by: code:.urzua/config.yaml@sha256:b3876c284bd26e4ee0cb445eac50cdda6122c308901f633a9d95e7a8206c918d, code:.github/workflows/checks.yml@sha256:e166badec9b1eac84bcd921aaf137fc7552a48d8a35b96a4c36fac4bd2b3cb84, spec:docs/bugs/BUG-10-parent-field-defaults-to-spec-1-across-most-specs-without-a-real-relationship.md, spec:docs/specs/SPEC-18-the-spec-record-type.md
+Realized-by: code:.urzua/config.yaml@sha256:169fd605713992b1e68ae1bbc0899f84248449fea4d9f10c3094bd60acbd33b0, code:.github/workflows/checks.yml@sha256:e166badec9b1eac84bcd921aaf137fc7552a48d8a35b96a4c36fac4bd2b3cb84, spec:docs/bugs/BUG-10-parent-field-defaults-to-spec-1-across-most-specs-without-a-real-relationship.md, spec:docs/specs/SPEC-18-the-spec-record-type.md
 ---
 # 91 — Correct spec Parent values, add required Subject field, backfill all specs
 
@@ -44,8 +44,8 @@ type, no new mechanism or rule.
 
 ## Done means
 
-- `spec` requires a one-line `Subject` field in `.urzua/config.yaml`. — evidence: code:.urzua/config.yaml@sha256:b3876c284bd26e4ee0cb445eac50cdda6122c308901f633a9d95e7a8206c918d
-- Every spec carries a `Subject`, and `urzua check` reports no missing `Subject`. — evidence: code:.urzua/config.yaml@sha256:b3876c284bd26e4ee0cb445eac50cdda6122c308901f633a9d95e7a8206c918d, code:.github/workflows/checks.yml@sha256:e166badec9b1eac84bcd921aaf137fc7552a48d8a35b96a4c36fac4bd2b3cb84
+- `spec` requires a one-line `Subject` field in `.urzua/config.yaml`. — evidence: code:.urzua/config.yaml@sha256:169fd605713992b1e68ae1bbc0899f84248449fea4d9f10c3094bd60acbd33b0
+- Every spec carries a `Subject`, and `urzua check` reports no missing `Subject`. — evidence: code:.urzua/config.yaml@sha256:169fd605713992b1e68ae1bbc0899f84248449fea4d9f10c3094bd60acbd33b0, code:.github/workflows/checks.yml@sha256:e166badec9b1eac84bcd921aaf137fc7552a48d8a35b96a4c36fac4bd2b3cb84
 - The corrected `Parent` values from `BUG-10` are in place on all specs. — evidence: spec:docs/bugs/BUG-10-parent-field-defaults-to-spec-1-across-most-specs-without-a-real-relationship.md
 - `SPEC-18` documents both. — evidence: spec:docs/specs/SPEC-18-the-spec-record-type.md
 
@@ -77,3 +77,4 @@ type, no new mechanism or rule.
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.github/workflows/checks.yml` 0a3547c3f12a -> e166badec9b1. Reason: checks.yml: the stale-pin step's suggested re-pin command now includes --actor (agent or human), required under a gh-verified identity; the rest of the workflow this record cites is unchanged **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-15 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` e544107a6abb -> 1690790d0bdc. Reason: config.yaml: adds harness.limits with hook_timeout_seconds: 120, the built-in value, under harness; no other key changed. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` 1690790d0bdc -> b3876c284bd2. Reason: Read the diff of each re-pinned file against main: config.yaml declares embodiment.pin-stale: warn with a two-line comment; no other key changed. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` b3876c284bd2 -> 169fd6057139. Reason: Read the diff of each re-pinned file against main. .urzua/config.yaml: `unread_markers: report` on embodiment.back-pointer-resolution; no other key changed. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |

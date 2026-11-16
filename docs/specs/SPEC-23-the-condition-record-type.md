@@ -2,9 +2,9 @@
 Stable-Id: 01M6NNNZJ92WC419AF3NQP471H
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:.urzua/config.yaml@sha256:b3876c284bd26e4ee0cb445eac50cdda6122c308901f633a9d95e7a8206c918d, code:rust/crates/urzua-core/src/rules/roadmap.rs@sha256:aeadbc1397d70dc3f7ab6422c160c4dc009592306c8a3743da44ad020983fb02, test:rust/crates/urzua-cli/tests/condition_type_integration.rs@sha256:fbf4c6b9927dfc724c1429040d48b4cda315bf2003da4f2c56af0356ef6af392, test:rust/crates/urzua-cli/tests/work_types_integration.rs@sha256:a319f14dc8d4b79971183ee16cf78de55366234377abe3d77e1fb3b5a0ebe7b2
+Realized-by: code:.urzua/config.yaml@sha256:169fd605713992b1e68ae1bbc0899f84248449fea4d9f10c3094bd60acbd33b0, code:rust/crates/urzua-core/src/rules/roadmap.rs@sha256:aeadbc1397d70dc3f7ab6422c160c4dc009592306c8a3743da44ad020983fb02, test:rust/crates/urzua-cli/tests/condition_type_integration.rs@sha256:fbf4c6b9927dfc724c1429040d48b4cda315bf2003da4f2c56af0356ef6af392, test:rust/crates/urzua-cli/tests/work_types_integration.rs@sha256:a319f14dc8d4b79971183ee16cf78de55366234377abe3d77e1fb3b5a0ebe7b2
 Date: 2026-11-05
-Version: '0.22'
+Version: '0.23'
 Author: beauwilliams
 Subject: 'The `condition` record type -- a dependency on a fact that is observed rather than built, declared in configuration alone.'
 Parent: —
@@ -159,3 +159,5 @@ whether the Signal is precise is a reviewer's judgement, as for any section (`SP
 > | 2026-11-15 | Bumped to `0.21`. A pinned file (`.urzua/config.yaml`, which now declares `harness.limits`) changed; the pin is re-baselined in the row above and the specified behaviour is unchanged. **Why:** `MILE-232`; a re-baseline row is structural, so the version moves with it. | **structural** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` 1690790d0bdc -> b3876c284bd2. Reason: Read the diff of each re-pinned file against main: config.yaml declares embodiment.pin-stale: warn with a two-line comment; no other key changed. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Bumped to `0.22`. Evidence pins re-baselined for this change (the `Re-baselined` row above); the specification text is unchanged. **Why:** a revision-log entry that adds a structural change bumps `Version`. | **structural** |
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` b3876c284bd2 -> 169fd6057139. Reason: Read the diff of each re-pinned file against main. .urzua/config.yaml: `unread_markers: report` on embodiment.back-pointer-resolution; no other key changed. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-16 | Bumped to `0.23`. A pinned evidence file (`.urzua/config.yaml`) was re-baselined in this change; this spec's text is unchanged. **Why:** a revision-log entry that adds a structural change bumps `Version`. | **structural** |

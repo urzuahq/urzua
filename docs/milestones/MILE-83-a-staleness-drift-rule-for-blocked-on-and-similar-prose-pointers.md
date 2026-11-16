@@ -5,7 +5,7 @@ Phase: '1'
 Track: schema-governance
 Implements: ADR-42
 Blocked-on: —
-Realized-by: code:.urzua/config.yaml@sha256:b3876c284bd26e4ee0cb445eac50cdda6122c308901f633a9d95e7a8206c918d, code:rust/crates/urzua-core/src/rules/pointer.rs@sha256:2d164d27a2e9d20a589adeee671eaae8db4d5e6529b3e705e9df1d1b0ed6e5ae, test:rust/crates/urzua-core/src/rules/narrative.rs#a_blocked_on_pointer_to_a_terminal_bug_is_a_stale_finding@sha256:6a29cc6cc16f6aa9b5b2ac71337ca9514d6e800f1ee8593067ed50ba0fb72265, code:rust/crates/urzua-core/src/rules/narrative.rs@sha256:b34355340066c63614438add0c4da8230a9aafd84c991834a59414eaa09eaa74, test:rust/crates/urzua-core/src/rules/narrative.rs#a_blocked_on_pointer_to_a_non_terminal_record_is_not_stale@sha256:0ab576c334c88153e9f5dcb7fbbd8fbe88c9fd7a1a0b41ad035d6e9bca42633a
+Realized-by: code:.urzua/config.yaml@sha256:169fd605713992b1e68ae1bbc0899f84248449fea4d9f10c3094bd60acbd33b0, code:rust/crates/urzua-core/src/rules/pointer.rs@sha256:2d164d27a2e9d20a589adeee671eaae8db4d5e6529b3e705e9df1d1b0ed6e5ae, test:rust/crates/urzua-core/src/rules/narrative.rs#a_blocked_on_pointer_to_a_terminal_bug_is_a_stale_finding@sha256:6a29cc6cc16f6aa9b5b2ac71337ca9514d6e800f1ee8593067ed50ba0fb72265, code:rust/crates/urzua-core/src/rules/narrative.rs@sha256:b34355340066c63614438add0c4da8230a9aafd84c991834a59414eaa09eaa74, test:rust/crates/urzua-core/src/rules/narrative.rs#a_blocked_on_pointer_to_a_non_terminal_record_is_not_stale@sha256:0ab576c334c88153e9f5dcb7fbbd8fbe88c9fd7a1a0b41ad035d6e9bca42633a
 ---
 # 83 — A staleness drift rule for Blocked-on and similar prose pointers
 
@@ -30,11 +30,11 @@ the blocker at all.
 
 ## Done means
 
-- `Blocked-on` is a checked header field of the milestone type, declared a narrative field in config. — evidence: code:.urzua/config.yaml@sha256:b3876c284bd26e4ee0cb445eac50cdda6122c308901f633a9d95e7a8206c918d
+- `Blocked-on` is a checked header field of the milestone type, declared a narrative field in config. — evidence: code:.urzua/config.yaml@sha256:169fd605713992b1e68ae1bbc0899f84248449fea4d9f10c3094bd60acbd33b0
 - `pointer.resolution` reports a `Blocked-on` reference that does not resolve. — evidence: code:rust/crates/urzua-core/src/rules/pointer.rs@sha256:2d164d27a2e9d20a589adeee671eaae8db4d5e6529b3e705e9df1d1b0ed6e5ae
 - The opt-in rule `narrative-field.stale` reports a resolved reference whose target has reached a terminal status; a fixture covers a stale blocker. — evidence: test:rust/crates/urzua-core/src/rules/narrative.rs#a_blocked_on_pointer_to_a_terminal_bug_is_a_stale_finding@sha256:6a29cc6cc16f6aa9b5b2ac71337ca9514d6e800f1ee8593067ed50ba0fb72265, code:rust/crates/urzua-core/src/rules/narrative.rs@sha256:b34355340066c63614438add0c4da8230a9aafd84c991834a59414eaa09eaa74
 - `narrative-field.stale` is silent on a live blocker; a fixture covers one. — evidence: test:rust/crates/urzua-core/src/rules/narrative.rs#a_blocked_on_pointer_to_a_non_terminal_record_is_not_stale@sha256:0ab576c334c88153e9f5dcb7fbbd8fbe88c9fd7a1a0b41ad035d6e9bca42633a
-- Urzua's own milestones carry `Blocked-on` in the header and run the rule. — evidence: code:.urzua/config.yaml@sha256:b3876c284bd26e4ee0cb445eac50cdda6122c308901f633a9d95e7a8206c918d
+- Urzua's own milestones carry `Blocked-on` in the header and run the rule. — evidence: code:.urzua/config.yaml@sha256:169fd605713992b1e68ae1bbc0899f84248449fea4d9f10c3094bd60acbd33b0
 
 > **Revision log**
 >
@@ -62,3 +62,4 @@ the blocker at all.
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` 6ed60a01c6e8 -> e544107a6abb. Reason: Read the diff of each pinned file against main and the claim still holds. config.yaml: only the waiver type gained two known_fields, Variant and Key-path, with a comment; no other key changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-15 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` e544107a6abb -> 1690790d0bdc. Reason: config.yaml: adds harness.limits with hook_timeout_seconds: 120, the built-in value, under harness; no other key changed. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` 1690790d0bdc -> b3876c284bd2. Reason: Read the diff of each re-pinned file against main: config.yaml declares embodiment.pin-stale: warn with a two-line comment; no other key changed. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` b3876c284bd2 -> 169fd6057139. Reason: Read the diff of each re-pinned file against main. .urzua/config.yaml: `unread_markers: report` on embodiment.back-pointer-resolution; no other key changed. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |

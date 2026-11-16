@@ -381,6 +381,7 @@ mod tests {
             population: None,
             status: RuleStatus::Ran,
             examined_records: Vec::new(),
+            unread_markers: Vec::new(),
         }
     }
 

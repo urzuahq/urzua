@@ -1,9 +1,9 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.149'
+Version: '0.150'
 Date: 2026-08-20
 Status: Shipped
-Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:305844777dc8bc2ec33e63a2c644171f6d7d97e8fa5435690f0de39f49ded0dc, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:09c2431a269316741c35b51dabd5766ecd3d50fab2b98069314bb1bc8857767d, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:255395e7d2caa34947cef28f463e2ec050e3eba798a4dc7573a3cad946fee1ae
+Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:7207b798837c05f8190919092228e00717c9201b7b1b6946d2b1392ba1097f22, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:09c2431a269316741c35b51dabd5766ecd3d50fab2b98069314bb1bc8857767d, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:255395e7d2caa34947cef28f463e2ec050e3eba798a4dc7573a3cad946fee1ae
 Embodiment: Verified
 Author: beauwilliams
 Subject: '`.urzua/config.yaml` -- the schema for record types, required/known fields, and per-type behavior.'
@@ -746,6 +746,7 @@ rules:
       repository: "owner/name"
       forms: [number, url]
       fields: ["Found-in"]   # optional
+      workers: 4             # optional
 ```
 
 - `snapshot` is the file, relative to the repository root. `repository` is the GitHub repository it
@@ -759,6 +760,12 @@ rules:
 - A number is held to the snapshot's issues and pull requests together, since GitHub shares one
   number space and redirects either kind of URL to the other.
 - `skip_revision_log` behaves as for `citation.path-exists`.
+- `workers` (optional, default 4) is how many pages of the listing `urzua refs refresh` requests at once
+  when the first answer names its last page; an integer from 1 to 16, anything else a load-time error.
+  It is a network setting, so it is configuration and not a constant (`ADR-101`, amendment of
+  2026-11-15). A configuration without it requests four at once, as before the key existed. The last
+  link is only a hint: when the last page it names still says another follows, the listing is followed
+  one page at a time from there.
 - `fields` (optional, absent by default) names header fields, as a type declares them, whose values
   are read for the same `forms` in addition to the `reference_sections`: a number in `Found-in` is
   held to the snapshot as one under `## References` is. A finding names the field and its header
@@ -2172,6 +2179,8 @@ rules:
   `Not started`. A record stating any other value there is not judged and stays unexamined in the
   census. `urzua fix` repairs the cited records only.
 
+`unread_markers: report` belongs to `embodiment.back-pointer-resolution` and `embodiment.back-pointer-decision-accepted` (any other rule refuses it at load). A marker line naming an id it cannot read (`Implements: (ADR-12)`) is, undeclared, an `info` notice listing the count and at most 20 `file:line` entries; with the option it is a finding at the rule's level. The rule's `ignore_marker` excuses such a line either way (`ADR-101`).
+
 `test_paths` belongs to `embodiment.back-pointer-resolution` and to `embodiment.locator-on-back-pointer-path`
 (below); on any other rule it is the usual option-on-a-rule-that-does-not-take-it load error.
 
@@ -2692,3 +2701,8 @@ proves this configuration produces the three findings.
 > | 2026-11-16 | Bumped to `0.148`. Documents `attestation.reason` (`min_words`, default 3; `min_chars`, default 12), the reason minimum of `fix --rebaseline --apply` and `reverify --apply`. **Why:** the ADR-101 amendment of 2026-11-15: configuration owns behaviour, and a fixed minimum in code was not configurable. | **substantive** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 9b216fd928bd -> 305844777dc8. Reason: Read the diff of each re-pinned file since its previous pin: config.rs adds attestation.reason (ReasonMinimum: min_words default 3, min_chars default 12, and its check) with a unit test. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Bumped to `0.149`. Documents `harness.report_outside_writes` (default `false`): an allowed write outside the repository is silent unless it is `true`. The default is a new behaviour, decided by the maintainer on 2026-11-16 ("yes hook should be silent by default and n config"), and stated as an exception to `ADR-101`'s rule that a key's default is today's value; under `shared` it is a gated move or protected path in a linked worktree that is refused, and any other linked-worktree file, a record included, is allowed with a notice (`MILE-278`). | **substantive** |
+> | 2026-11-14 | Bumped to `0.150`. Documents `unread_markers: report` on the two back-pointer rules: undeclared, a marker line naming an id the matcher cannot read is an `info` notice (count and at most 20 `file:line`); declared, a finding at the rule's level; `ignore_marker` excuses it either way. **Why:** the adopter switchover found markers silently read as no back-pointer (`ADR-101`); a finding by default would change existing configurations.  `citation.issue-exists`'s `issue_refs` takes an optional `workers` (default 4, 1 to 16). | **substantive** |
+> | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 9b216fd928bd -> 76578456015b. Reason: Read the diff of each re-pinned file against main. the UnreadMarkers enum, the unread_markers RuleSetting option, its field-name list entry and its load validation (validate_unread_markers) were added; nothing else changed. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 9b216fd928bd -> 76578456015b. Reason: Read the diff of each re-pinned file against main. config.rs: the `unread_markers` rule option was added (UnreadMarkers enum, its field-name list entry and the load check validate_unread_markers that refuses it on any rule but the two back-pointer rules); nothing else changed. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 76578456015b -> 26b96561f2fa. Reason: Read the diff of each re-pinned file against main. config.rs: the `unread_markers` rule option (UnreadMarkers, its field-name entry, validate_unread_markers) and `issue_refs.workers` (IssueRefs::workers, REFS_WORKERS_DEFAULT/MAX, a 1-to-16 check in issue_refs_problem); nothing else. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 305844777dc8 -> 7207b798837c. Reason: Read the diff of each re-pinned file against main. config.rs: the `unread_markers` rule option (UnreadMarkers, its field-name entry, validate_unread_markers) and `issue_refs.workers` (IssueRefs::workers, REFS_WORKERS_DEFAULT/MAX, a 1-to-16 check in issue_refs_problem); nothing else. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |

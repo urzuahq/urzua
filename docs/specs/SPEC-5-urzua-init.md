@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5PKKQRJF9WFZJA105B
-Version: '0.31'
+Version: '0.32'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/commands/init.rs@sha256:3b79d9cdc7698a0729345b5aca2d7c09878b4deb15260cb673f94692a17ef837, test:rust/crates/urzua-cli/tests/init_adopt_integration.rs@sha256:f7562c0496e1b1fabf25fa5a272499cdcc43149150abaf3980c22e3af9d35af4, code:rust/crates/urzua-cli/src/commands/init_greenfield.rs@sha256:5ef5edc7661c3fdc9614e7bed051785f1fdddcd8b2fa2c0cdd5cf24c44c1b75f, test:rust/crates/urzua-cli/tests/init_greenfield_integration.rs@sha256:98517eae0c2e6942f2fffe8dfda1991d89f3eb5054d069e9e57ed8ad7125f97f
+Realized-by: code:rust/crates/urzua-cli/src/commands/init.rs@sha256:2a3bec5a675214fc3708a97db213500bb1fe777f67f1120e5381da3597c95233, test:rust/crates/urzua-cli/tests/init_adopt_integration.rs@sha256:11f72d46590a2ea22f519f1744af3309d1faff6954992dd01a0242e3acb9d6c1, code:rust/crates/urzua-cli/src/commands/init_greenfield.rs@sha256:5ef5edc7661c3fdc9614e7bed051785f1fdddcd8b2fa2c0cdd5cf24c44c1b75f, test:rust/crates/urzua-cli/tests/init_greenfield_integration.rs@sha256:98517eae0c2e6942f2fffe8dfda1991d89f3eb5054d069e9e57ed8ad7125f97f
 Author: beauwilliams
 Subject: '`urzua init` -- the adopt-existing-corpus path, greenfield type selection with built-in profiles, and the `.urzua/` layout.'
 Implements: RFC-1
@@ -154,6 +154,10 @@ entry lists `exclude_files`; a directory with no README writes no `exclude_files
 `init` also proposes `harness: {outside_writes: shared}`. It enables no guardrail; it makes a guardrail the
 adopter turns on later also judge the files of a linked worktree of the repository (`ADR-89` amendment of
 2026-11-09, outside writes; `SPEC-3`).
+
+## The waiver declaration is withheld, not proposed
+
+A waiver type makes records suppress findings, so it is the adopter's to opt into: `init` infers no `role` from a directory's name and proposes no `role: suppression` type. The `rule-applicability` notice that withholds `waiver.matches-nothing` names what to declare: a record type with `role: suppression` and `effective_requires: [Reason, Expires]` (or `permanent`), the form `waive --from-report` accepts. `harness.outside_writes` is proposed, as above, because alone it enables nothing.
 
 ## Proposed rules
 
@@ -342,3 +346,7 @@ None open. The four questions `MILE-114` carried are decided or recorded:
 > | 2026-11-14 | Bumped to `0.30`. A pinned evidence file was re-baselined for the symlinked-record refusal (`ADR-89` amendment of 2026-11-14); this spec's text is unchanged. | **structural** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/init_greenfield_integration.rs` 39ddaa9e8476 -> 98517eae0c2e. Reason: Read the diff of each re-pinned file against main: init_greenfield_integration.rs leaves rules on for every configuration out of the every-rule-examines-a-record test. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Bumped to `0.31`. Evidence pins re-baselined for this change (the `Re-baselined` row above); the specification text is unchanged. **Why:** a revision-log entry that adds a structural change bumps `Version`. | **structural** |
+> | 2026-11-14 | Bumped to `0.32`. States that the waiver declaration is withheld rather than proposed, and that the withheld notice names `role: suppression` with `effective_requires: [Reason, Expires]` or `permanent`. **Why:** the adopter switchover (items 3 and 13): `init` proposed nothing for waivers and `waive --from-report` then refused the hand-written type; `harness.outside_writes` was already proposed. | **substantive** |
+> | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/init.rs` 31e687bccdc4 -> 77c67b7da3c6, `rust/crates/urzua-cli/tests/init_adopt_integration.rs` f7562c0496e1 -> 11f72d46590a. Reason: Read the diff of each re-pinned file against main. init.rs changed only in its unit test, which now also asserts that the withheld waiver declaration names effective_requires; no production code changed; a test was added for the withheld waiver declaration; the existing tests are unchanged. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/init.rs` 3b79d9cdc769 -> 2a3bec5a6752, `rust/crates/urzua-cli/tests/init_adopt_integration.rs` f7562c0496e1 -> 11f72d46590a. Reason: Read the diff of each re-pinned file against main. init.rs: only its unit test changed (one added needle, effective_requires: [Reason, Expires]); no production code changed; init_adopt_integration.rs: one test added (init_withholds_the_waiver_declaration_and_names_its_keys); no existing test changed. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/init.rs` 3b79d9cdc769 -> 2a3bec5a6752, `rust/crates/urzua-cli/tests/init_adopt_integration.rs` f7562c0496e1 -> 11f72d46590a. Reason: Read the diff of each re-pinned file against main. init.rs: only its unit test changed (one added needle, effective_requires: [Reason, Expires]); no production code changed; init_adopt_integration.rs: one test added (init_withholds_the_waiver_declaration_and_names_its_keys); no existing test changed. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |

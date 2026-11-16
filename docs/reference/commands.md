@@ -376,7 +376,7 @@ urzua refs refresh
 Fetches every issue and pull request number of the declared repository from the GitHub REST API and
 rewrites the snapshot file that `citation.issue-exists` checks citations against. It is the only
 command whose job is to reach the network (`check` never does; [which commands do](#what-uses-the-network)).
-It reads `GITHUB_TOKEN` or `GH_TOKEN` when set and needs `curl`. A failed fetch writes nothing and exits 2. Commit the snapshot afterwards.
+It reads `GITHUB_TOKEN` or `GH_TOKEN` when set and needs `curl`. When GitHub's first answer names the last page, the other pages are requested `issue_refs.workers` at a time (default 4, 1 to 16); the output is the same either way. A failed fetch writes nothing and exits 2. Commit the snapshot afterwards.
 
 ## harness
 

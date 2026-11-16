@@ -425,3 +425,43 @@ fn adopt_withholds_the_section_structure_rules_and_names_the_key_each_needs() {
         }
     }
 }
+
+/// A waiver type suppresses findings, so `init` does not turn it on for a
+/// corpus that has a directory of waivers: it proposes `harness.outside_writes`
+/// (which enables nothing alone) and withholds the waiver declaration, naming
+/// the keys that make `waive --from-report` work (the adopter switchover, items
+/// 3 and 13).
+#[test]
+fn init_withholds_the_waiver_declaration_and_names_its_keys() {
+    let dir = common::TempDir::new("urzua-cli-test-waiver-withheld");
+    git(&dir, &["init", "-q"]);
+    git(&dir, &["config", "user.email", "test@example.com"]);
+    git(&dir, &["config", "user.name", "test"]);
+    write(
+        &dir,
+        "docs/adr/ADR-0001-a.md",
+        "---\nStatus: Accepted\n---\n# A\n",
+    );
+    write(
+        &dir,
+        "docs/waiver/WAIVER-0001-a.md",
+        "---\nRule: x.y\nScope: a\nReason: r\n---\n# W\n",
+    );
+    git(&dir, &["add", "-A"]);
+    git(&dir, &["commit", "-q", "-m", "fixture"]);
+    let out = run_urzua(&dir, &["init", "--dry-run"]);
+    let report = json(&out);
+    let yaml = report["config_yaml"].as_str().unwrap();
+    assert!(yaml.contains("outside_writes: shared"), "{yaml}");
+    assert!(
+        !yaml.contains("role:"),
+        "no waiver role is inferred: {yaml}"
+    );
+    assert!(!yaml.contains("waiver.matches-nothing"), "{yaml}");
+    let notices = report["notices"].to_string();
+    assert!(notices.contains("role: suppression"), "{notices}");
+    assert!(
+        notices.contains("effective_requires: [Reason, Expires]"),
+        "{notices}"
+    );
+}

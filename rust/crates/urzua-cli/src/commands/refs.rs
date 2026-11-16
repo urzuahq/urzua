@@ -60,10 +60,12 @@ pub fn run_refresh(config_path: Option<PathBuf>) -> ExitCode {
         .filter(|v| !v.is_empty())
         .unwrap_or_else(|| DEFAULT_API.to_string());
 
-    let (issues, pulls) = match collect_numbers(&Curl, &base, &refs.repository, token.as_deref()) {
-        Ok(found) => found,
-        Err(e) => return emit(&CouldNotRun::from(e)),
-    };
+    let workers = refs.workers() as usize;
+    let (issues, pulls) =
+        match collect_numbers(&Curl, &base, &refs.repository, token.as_deref(), workers) {
+            Ok(found) => found,
+            Err(e) => return emit(&CouldNotRun::from(e)),
+        };
     let snapshot = RefsSnapshot::new(&refs.repository, &urzua_io::today(), issues, pulls);
     let mut text = serde_json::to_string_pretty(&snapshot).expect("snapshot serializes");
     text.push('\n');
@@ -140,7 +142,7 @@ impl Response {
 
 /// The one seam to the network, so the paging and failure handling are tested
 /// against recorded responses.
-pub(crate) trait Fetch {
+pub(crate) trait Fetch: Sync {
     fn get(&self, url: &str, token: Option<&str>) -> Result<Response, String>;
 }
 
@@ -231,45 +233,159 @@ pub(crate) fn parse_response(raw: &str) -> Result<Response, String> {
     })
 }
 
+/// The numbers one page of the listing holds, and whether it says more follow.
+struct Page {
+    issues: Vec<u64>,
+    pulls: Vec<u64>,
+    /// The page was empty or carried no `rel="next"`: the listing ends here.
+    last: bool,
+    /// The page count from `rel="last"`, when the answer carries one.
+    page_count: Option<usize>,
+}
+
+fn read_page(
+    fetch: &dyn Fetch,
+    (base, repository): (&str, &str),
+    token: Option<&str>,
+    page: usize,
+) -> Result<Page, String> {
+    let url = format!("{base}/repos/{repository}/issues?state=all&per_page={PER_PAGE}&page={page}");
+    let response = fetch.get(&url, token)?;
+    check_status(&response, repository, token.is_some())?;
+    let items: Vec<serde_json::Value> = serde_json::from_str(&response.body)
+        .map_err(|e| format!("GitHub's answer for page {page} was not a JSON list: {e}"))?;
+    let (mut issues, mut pulls) = (Vec::new(), Vec::new());
+    for item in &items {
+        let number = item
+            .get("number")
+            .and_then(|n| n.as_u64())
+            .ok_or_else(|| format!("an entry on page {page} carries no number"))?;
+        if item.get("pull_request").is_some() {
+            pulls.push(number);
+        } else {
+            issues.push(number);
+        }
+    }
+    let link = response.header("link");
+    let more = link.is_some_and(|l| l.contains("rel=\"next\""));
+    Ok(Page {
+        issues,
+        pulls,
+        last: items.is_empty() || !more,
+        page_count: link.and_then(last_page),
+    })
+}
+
+/// The `page=N` of the `rel="last"` entry of a `Link` header. Only the number
+/// is read: the URL is never followed.
+fn last_page(link: &str) -> Option<usize> {
+    let entry = link.split(',').find(|e| e.contains("rel=\"last\""))?;
+    let url = entry.split_once('<')?.1.split_once('>')?.0;
+    url.split(['?', '&'])
+        .find_map(|kv| kv.strip_prefix("page="))
+        .and_then(|n| n.parse().ok())
+}
+
 /// Every issue and pull request number of `repository`, as
 /// `(issues, pulls)`, fetched a page at a time with `page=N`. The listing's
 /// `Link: rel="next"` is read only as the signal that another page exists: its
 /// URL is not followed, so the token is only ever sent to `base`.
+///
+/// When the first answer also carries `rel="last"`, the page count is known and
+/// pages 2 onward are fetched by `workers` threads at once (`issue_refs.workers`;
+/// GitHub asks clients to keep concurrent requests few); the pages are merged in
+/// page order, so the result does not depend on which answered first. The last
+/// link is a hint, not the end: when its last page still says another follows,
+/// the listing is followed one page at a time from there, as it is when the first
+/// answer carries no `rel="last"`.
 pub(crate) fn collect_numbers(
     fetch: &dyn Fetch,
     base: &str,
     repository: &str,
     token: Option<&str>,
+    workers: usize,
 ) -> Result<(Vec<u64>, Vec<u64>), String> {
-    let (mut issues, mut pulls) = (Vec::new(), Vec::new());
-    for page in 1..=MAX_PAGES {
-        let url =
-            format!("{base}/repos/{repository}/issues?state=all&per_page={PER_PAGE}&page={page}");
-        let response = fetch.get(&url, token)?;
-        check_status(&response, repository, token.is_some())?;
-        let items: Vec<serde_json::Value> = serde_json::from_str(&response.body)
-            .map_err(|e| format!("GitHub's answer for page {page} was not a JSON list: {e}"))?;
-        for item in &items {
-            let number = item
-                .get("number")
-                .and_then(|n| n.as_u64())
-                .ok_or_else(|| format!("an entry on page {page} carries no number"))?;
-            if item.get("pull_request").is_some() {
-                pulls.push(number);
-            } else {
-                issues.push(number);
-            }
+    let at = (base, repository);
+    let first = read_page(fetch, at, token, 1)?;
+    let (mut issues, mut pulls) = (first.issues, first.pulls);
+    if first.last {
+        return Ok((issues, pulls));
+    }
+    let too_long = || format!("the listing of {repository} did not end after {MAX_PAGES} pages");
+    let mut next_page = 2;
+    if let Some(count) = first.page_count.filter(|n| *n >= 2) {
+        if count > MAX_PAGES {
+            return Err(too_long());
         }
-        let more = response
-            .header("link")
-            .is_some_and(|l| l.contains("rel=\"next\""));
-        if items.is_empty() || !more {
+        let mut ended = false;
+        for page in fetch_pages_at_once(fetch, at, token, 2..=count, workers)? {
+            ended = page.last;
+            issues.extend(page.issues);
+            pulls.extend(page.pulls);
+        }
+        if ended {
+            return Ok((issues, pulls));
+        }
+        next_page = count + 1;
+    }
+    for page in next_page..=MAX_PAGES {
+        let read = read_page(fetch, at, token, page)?;
+        issues.extend(read.issues);
+        pulls.extend(read.pulls);
+        if read.last {
             return Ok((issues, pulls));
         }
     }
-    Err(format!(
-        "the listing of {repository} did not end after {MAX_PAGES} pages"
-    ))
+    Err(too_long())
+}
+
+/// The listing's pages in `range`, in page order, fetched by up to `workers`
+/// threads. The first failure in page order is the error returned, and the
+/// pages not yet started when any fails are skipped.
+fn fetch_pages_at_once(
+    fetch: &dyn Fetch,
+    at: (&str, &str),
+    token: Option<&str>,
+    range: std::ops::RangeInclusive<usize>,
+    workers: usize,
+) -> Result<Vec<Page>, String> {
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+    use std::sync::Mutex;
+
+    let (first, last) = (*range.start(), *range.end());
+    let next = AtomicUsize::new(first);
+    let failed = AtomicBool::new(false);
+    let slots: Mutex<Vec<Option<Result<Page, String>>>> =
+        Mutex::new((first..=last).map(|_| None).collect());
+    std::thread::scope(|scope| {
+        for _ in 0..workers.max(1).min(last - first + 1) {
+            scope.spawn(|| loop {
+                let page = next.fetch_add(1, Ordering::SeqCst);
+                if page > last || failed.load(Ordering::SeqCst) {
+                    return;
+                }
+                let read = read_page(fetch, at, token, page);
+                if read.is_err() {
+                    failed.store(true, Ordering::SeqCst);
+                }
+                slots.lock().unwrap()[page - first] = Some(read);
+            });
+        }
+    });
+    let mut pages = Vec::new();
+    let mut skipped = false;
+    for slot in slots.into_inner().unwrap() {
+        match slot {
+            Some(Ok(page)) => pages.push(page),
+            Some(Err(e)) => return Err(e),
+            // Skipped after a failure, which comes later in page order.
+            None => skipped = true,
+        }
+    }
+    if skipped {
+        return Err("a page of the listing was not fetched; nothing was written".to_string());
+    }
+    Ok(pages)
 }
 
 fn check_status(r: &Response, repository: &str, with_token: bool) -> Result<(), String> {
@@ -319,7 +435,7 @@ fn check_status(r: &Response, repository: &str, with_token: bool) -> Result<(), 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::cell::RefCell;
+    use std::sync::Mutex;
 
     const BASE: &str = "https://api.test";
 
@@ -334,15 +450,15 @@ mod tests {
 
     /// Replays recorded responses in order and remembers what was asked.
     struct Replay {
-        responses: RefCell<Vec<String>>,
-        asked: RefCell<Vec<(String, Option<String>)>>,
+        responses: Mutex<Vec<String>>,
+        asked: Mutex<Vec<(String, Option<String>)>>,
     }
 
     impl Replay {
         fn of(names: &[&str]) -> Self {
             Self {
-                responses: RefCell::new(names.iter().rev().map(|n| fixture(n)).collect()),
-                asked: RefCell::new(Vec::new()),
+                responses: Mutex::new(names.iter().rev().map(|n| fixture(n)).collect()),
+                asked: Mutex::new(Vec::new()),
             }
         }
     }
@@ -350,11 +466,13 @@ mod tests {
     impl Fetch for Replay {
         fn get(&self, url: &str, token: Option<&str>) -> Result<Response, String> {
             self.asked
-                .borrow_mut()
+                .lock()
+                .unwrap()
                 .push((url.to_string(), token.map(String::from)));
             let raw = self
                 .responses
-                .borrow_mut()
+                .lock()
+                .unwrap()
                 .pop()
                 .expect("more requests than recorded responses");
             parse_response(&raw)
@@ -368,10 +486,11 @@ mod tests {
             "issues-page2.http",
             "issues-page3.http",
         ]);
-        let (issues, pulls) = collect_numbers(&replay, BASE, "urzuahq/urzua", Some("tok")).unwrap();
+        let (issues, pulls) =
+            collect_numbers(&replay, BASE, "urzuahq/urzua", Some("tok"), 4).unwrap();
         assert_eq!(issues, vec![217]);
         assert_eq!(pulls, vec![224, 223, 222, 221, 220, 219, 218, 216]);
-        let asked = replay.asked.borrow();
+        let asked = replay.asked.lock().unwrap();
         assert_eq!(asked.len(), 3);
         assert_eq!(
             asked[0].0,
@@ -381,6 +500,145 @@ mod tests {
         assert!(asked.iter().all(|(_, t)| t.as_deref() == Some("tok")));
     }
 
+    /// A listing of `pages` pages that names its last page, answering each page
+    /// slowly and later pages sooner, so the order of arrival is not the order
+    /// of the pages. Remembers the most requests it had in flight at once.
+    struct Listing {
+        pages: usize,
+        in_flight: std::sync::atomic::AtomicUsize,
+        most: std::sync::atomic::AtomicUsize,
+        asked: Mutex<Vec<usize>>,
+        fail_page: Option<usize>,
+        /// The page count the `rel="last"` link claims, when it is not `pages`.
+        claimed_last: Option<usize>,
+    }
+
+    impl Listing {
+        fn of(pages: usize) -> Self {
+            Self {
+                pages,
+                in_flight: Default::default(),
+                most: Default::default(),
+                asked: Mutex::new(Vec::new()),
+                fail_page: None,
+                claimed_last: None,
+            }
+        }
+    }
+
+    impl Fetch for Listing {
+        fn get(&self, url: &str, _: Option<&str>) -> Result<Response, String> {
+            use std::sync::atomic::Ordering::SeqCst;
+            let page: usize = url.rsplit("page=").next().unwrap().parse().unwrap();
+            self.asked.lock().unwrap().push(page);
+            let now = self.in_flight.fetch_add(1, SeqCst) + 1;
+            self.most.fetch_max(now, SeqCst);
+            std::thread::sleep(std::time::Duration::from_millis(
+                5 * (self.pages - page) as u64 + 20,
+            ));
+            self.in_flight.fetch_sub(1, SeqCst);
+            if self.fail_page == Some(page) {
+                return Ok(Response {
+                    status: 404,
+                    headers: Vec::new(),
+                    body: String::new(),
+                });
+            }
+            // Page p holds numbers 10p-9..=10p, every third one a pull request.
+            let items: Vec<String> = (10 * page - 9..=10 * page)
+                .map(|n| {
+                    if n % 3 == 0 {
+                        format!("{{\"number\":{n},\"pull_request\":{{}}}}")
+                    } else {
+                        format!("{{\"number\":{n}}}")
+                    }
+                })
+                .collect();
+            let mut headers = Vec::new();
+            if page < self.pages {
+                let base = "https://api.test/repos/o/r/issues?state=all&per_page=100";
+                headers.push((
+                    "link".to_string(),
+                    format!(
+                        "<{base}&page={}>; rel=\"next\", <{base}&page={}>; rel=\"last\"",
+                        page + 1,
+                        self.claimed_last.unwrap_or(self.pages)
+                    ),
+                ));
+            }
+            Ok(Response {
+                status: 200,
+                headers,
+                body: format!("[{}]", items.join(",")),
+            })
+        }
+    }
+
+    #[test]
+    fn a_listing_that_names_its_last_page_is_fetched_several_pages_at_once() {
+        let listing = Listing::of(12);
+        let (issues, pulls) = collect_numbers(&listing, BASE, "o/r", None, 4).unwrap();
+        let most = listing.most.load(std::sync::atomic::Ordering::SeqCst);
+        assert!(most > 1, "the pages were fetched one at a time");
+        assert!(most <= 4, "{most} requests at once");
+        let mut asked = listing.asked.lock().unwrap().clone();
+        asked.sort_unstable();
+        assert_eq!(asked, (1..=12).collect::<Vec<_>>());
+        // Merged in page order, whichever page answered first.
+        let all: Vec<u64> = (1..=120).collect();
+        let expected_pulls: Vec<u64> = all.iter().copied().filter(|n| n % 3 == 0).collect();
+        let expected_issues: Vec<u64> = all.iter().copied().filter(|n| n % 3 != 0).collect();
+        assert_eq!((issues, pulls), (expected_issues, expected_pulls));
+    }
+
+    #[test]
+    fn the_configured_workers_bound_the_requests_in_flight() {
+        for workers in [1usize, 2, 8] {
+            let listing = Listing::of(12);
+            collect_numbers(&listing, BASE, "o/r", None, workers).unwrap();
+            let most = listing.most.load(std::sync::atomic::Ordering::SeqCst);
+            assert!(
+                most <= workers,
+                "{most} requests at once with {workers} workers"
+            );
+            if workers > 1 {
+                assert!(most > 1, "no parallelism with {workers} workers");
+            }
+        }
+    }
+
+    #[test]
+    fn a_listing_longer_than_its_last_link_claims_is_followed_to_its_real_end() {
+        let mut listing = Listing::of(7);
+        listing.claimed_last = Some(4);
+        let (issues, pulls) = collect_numbers(&listing, BASE, "o/r", None, 4).unwrap();
+        let mut asked = listing.asked.lock().unwrap().clone();
+        asked.sort_unstable();
+        assert_eq!(asked, (1..=7).collect::<Vec<_>>());
+        let all: Vec<u64> = (1..=70).collect();
+        let expected_pulls: Vec<u64> = all.iter().copied().filter(|n| n % 3 == 0).collect();
+        let expected_issues: Vec<u64> = all.iter().copied().filter(|n| n % 3 != 0).collect();
+        assert_eq!((issues, pulls), (expected_issues, expected_pulls));
+    }
+
+    #[test]
+    fn a_failing_page_among_parallel_ones_is_the_error_and_nothing_is_returned() {
+        let mut listing = Listing::of(9);
+        listing.fail_page = Some(5);
+        let err = collect_numbers(&listing, BASE, "o/r", None, 4).unwrap_err();
+        assert!(err.contains("no repository 'o/r'"), "{err}");
+    }
+
+    #[test]
+    fn the_last_page_is_read_from_the_link_header_only() {
+        assert_eq!(
+            last_page("<https://x/i?per_page=100&page=2>; rel=\"next\", <https://x/i?per_page=100&page=57>; rel=\"last\""),
+            Some(57)
+        );
+        assert_eq!(last_page("<https://x/i?page=2>; rel=\"next\""), None);
+        assert_eq!(last_page("<https://x/i?per_page=3>; rel=\"last\""), None);
+    }
+
     #[test]
     fn the_snapshot_a_refresh_builds_is_sorted_whatever_order_the_api_used() {
         let replay = Replay::of(&[
@@ -388,7 +646,7 @@ mod tests {
             "issues-page2.http",
             "issues-page3.http",
         ]);
-        let (issues, pulls) = collect_numbers(&replay, BASE, "urzuahq/urzua", None).unwrap();
+        let (issues, pulls) = collect_numbers(&replay, BASE, "urzuahq/urzua", None, 4).unwrap();
         let snap = RefsSnapshot::new("urzuahq/urzua", "2026-11-04", issues, pulls);
         assert_eq!(snap.pulls, vec![216, 218, 219, 220, 221, 222, 223, 224]);
         assert_eq!(snap.newest(), Some(224));
@@ -397,7 +655,7 @@ mod tests {
     #[test]
     fn a_rate_limited_answer_fails_with_the_reset_time_and_writes_nothing() {
         let replay = Replay::of(&["issues-page1.http", "rate-limited.http"]);
-        let err = collect_numbers(&replay, BASE, "urzuahq/urzua", None).unwrap_err();
+        let err = collect_numbers(&replay, BASE, "urzuahq/urzua", None, 4).unwrap_err();
         assert!(err.contains("rate limit"), "{err}");
         assert!(err.contains("1793792528"), "{err}");
         assert!(err.contains("GITHUB_TOKEN"), "{err}");
@@ -406,16 +664,18 @@ mod tests {
 
     #[test]
     fn a_missing_repository_and_a_bad_token_are_named() {
-        let err = collect_numbers(&Replay::of(&["not-found.http"]), BASE, "o/r", None).unwrap_err();
-        assert!(err.contains("'o/r'") && err.contains("private"), "{err}");
         let err =
-            collect_numbers(&Replay::of(&["not-found.http"]), BASE, "o/r", Some("t")).unwrap_err();
+            collect_numbers(&Replay::of(&["not-found.http"]), BASE, "o/r", None, 4).unwrap_err();
+        assert!(err.contains("'o/r'") && err.contains("private"), "{err}");
+        let err = collect_numbers(&Replay::of(&["not-found.http"]), BASE, "o/r", Some("t"), 4)
+            .unwrap_err();
         assert!(err.contains("token can read it"), "{err}");
         let err = collect_numbers(
             &Replay::of(&["bad-credentials.http"]),
             BASE,
             "o/r",
             Some("t"),
+            4,
         )
         .unwrap_err();
         assert!(err.contains("rejected the token"), "{err}");
@@ -429,7 +689,7 @@ mod tests {
                 Err("could not reach x: curl exit status: 6: Could not resolve host".to_string())
             }
         }
-        let err = collect_numbers(&Down, BASE, "o/r", None).unwrap_err();
+        let err = collect_numbers(&Down, BASE, "o/r", None, 4).unwrap_err();
         assert!(err.contains("Could not resolve host"), "{err}");
     }
 
