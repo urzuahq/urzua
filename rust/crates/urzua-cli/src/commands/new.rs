@@ -111,16 +111,20 @@ pub fn run(
 
     emit(&NewReport {
         status: ReportStatus::Ok,
-        path: file_path
-            .strip_prefix(&repo_root)
-            .unwrap_or(&file_path)
-            .to_path_buf(),
+        // An untracked record is not examined unless the repository opts in
+        // (`ADR-92`), so `check` would read it as nothing until it is staged.
+        stage: !config.discovery.include_untracked,
+        path: repo_relative(&repo_root, &file_path),
         display_number,
         stable_id: Some(stable_id.as_str().to_string()),
         pull_refs: pull,
         skipped,
         notices,
     })
+}
+
+fn repo_relative(repo_root: &std::path::Path, path: &std::path::Path) -> PathBuf {
+    path.strip_prefix(repo_root).unwrap_or(path).to_path_buf()
 }
 
 /// The type prefix and the file name of the new record.

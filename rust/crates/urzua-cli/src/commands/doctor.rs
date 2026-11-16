@@ -135,6 +135,7 @@ impl Report for DoctorReport {
                 c.fix.clone().map(|command| NextAction {
                     command,
                     reason: c.message.clone(),
+                    inputs: Vec::new(),
                 })
             })
     }

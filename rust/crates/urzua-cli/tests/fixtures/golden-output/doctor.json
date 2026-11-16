@@ -50,6 +50,7 @@
       }
     ],
     "next_action": "urzua hooks install",
+    "next_action_inputs": [],
     "next_action_reason": "no pre-commit hook at <ROOT>/.git/hooks/pre-commit -- `urzua hooks install` adds one that runs urzua; CI remains the guarantee (ADR-71)",
     "status": "warn"
   }

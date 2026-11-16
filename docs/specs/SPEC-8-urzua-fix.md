@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5Q0XVK27P5T8FN72BN
-Version: '0.55'
+Version: '0.56'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/commands/fix.rs@sha256:8453a75ad47bc044f2502ebeef09f6399bf02efaf9d15cc5f9ac7bc7a67933e2, code:rust/crates/urzua-core/src/fix.rs@sha256:c2f3551e24eb0e77698e9299b4e9bd97d6fc62d8baf036191016e08d31d7a8ab, test:rust/crates/urzua-cli/tests/fix_paths_integration.rs@sha256:73cb06a1782f02abeaf6c0795632ed1d1939633d72f67033247120656c6927d2, test:rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs@sha256:9a053f2ed41dac449d16634b6c76070192f55863ace5a56d8aa096543e90b131, test:rust/crates/urzua-cli/tests/fix_drift_integration.rs@sha256:ff69343ca324400bde79c266372f9a213728d4d4ef8202beca6e12e54aa35352
+Realized-by: code:rust/crates/urzua-cli/src/commands/fix.rs@sha256:90200653f67b820be83351060cfffc25b75636394cb6401d7af3d5df85bf2666, code:rust/crates/urzua-core/src/fix.rs@sha256:b92d858d8b2c6ea49bb2c30d18c09e77dd12b78540d57760ec3a85448a570fa4, test:rust/crates/urzua-cli/tests/fix_paths_integration.rs@sha256:73cb06a1782f02abeaf6c0795632ed1d1939633d72f67033247120656c6927d2, test:rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs@sha256:9a053f2ed41dac449d16634b6c76070192f55863ace5a56d8aa096543e90b131, test:rust/crates/urzua-cli/tests/fix_drift_integration.rs@sha256:ff69343ca324400bde79c266372f9a213728d4d4ef8202beca6e12e54aa35352
 Author: beauwilliams
 Subject: '`urzua fix` -- detecting and applying Embodiment corrections computed from evidence.'
 Implements: ADR-15, ADR-18, ADR-19, ADR-20
@@ -79,7 +79,15 @@ the expected tier and reports a disagreement as a structured entry:
 A record whose `Realized-by` locator changed since the `Realized-by` line was last touched (ADR-32)
 computes to `Drift detected` regardless of the locators' tier, exactly as `check`'s
 `embodiment.consistency` does: `fix` reads the same drifted-record set `check` computes, so the two
-never disagree. The repair is written like any other Tier 1 repair, and a stated `Drift detected`
+never disagree. The repair is written like any other Tier 1 repair, except where the drift comes
+from a changed pinned file (a pinned locator of the record no longer hashes to its pin, as
+`--rebaseline` lists it, and the record computes to the drift state; drift on an unpinned locator
+beside a pin that still matches is repaired as before): `fix` does not write the drift state over a stale pin, since that would quiet
+`embodiment.consistency` while the pin stays stale. It reports the record in a warning notice,
+`embodiment-drift-pinned` (its `detail.records`), names `urzua fix --rebaseline --ids <records>` as
+`next_action`, and an `--ids` entry naming it fails with that reason (`MILE-266`, decided by the
+builder on 2026-11-16, pending maintainer review). After the re-pin the record computes to its tier
+again. A stated `Drift detected`
 that is no longer drifted (the `Realized-by` line was touched again) is repaired back to the
 tier-computed value. `fix` computes drift only when `embodiment.consistency` is enabled, as `check`
 does (`MILE-159`): with the rule off or undeclared there is no embodiment verdict to repair, so `fix`
@@ -258,7 +266,10 @@ Every one of the following is a hard gate — none are optional, none are defaul
 - **A missing Revision log section refuses that record's write outright, where the log is required.**
   A type declares `revision_log: {required: false}` (`MILE-159`, SPEC-3) to be written without a row;
   `true` is the default. The error names the record and the identity looked for. ADR-14's reversibility
-  clause is enforced per write, not assumed — a repair with nowhere to record itself is reported
+  clause is enforced per write, not assumed. A log whose table has its header and separator but no
+  row yet takes the tool's row as its first, after the separator, in the table's own prefix (`fix
+  --apply`, `fix --rebaseline --apply` and `reverify --apply`, `MILE-267`); a section with no table
+  at all is refused. A repair with nowhere to record itself is reported
   failed, and every other selected repair still proceeds independently. Partial failure is a
   first-class outcome, not a batch-wide abort.
 - **Re-verification at write time.** The exact file is re-read from disk immediately before writing;
@@ -636,3 +647,6 @@ asserted by test, not assumed by convention.
 > | 2026-11-16 | Bumped to `0.54`. The inverse repair keeps the field's written form (flow list, block list, quoted or plain scalar) and does not write a protected path; the `--tier` refusal names the Tier 2 repair that runs without the flag. **Why:** review of pull request 546: a bracketed or block list failed to apply, and the repair would have written a file the editor hook refuses an agent. | **substantive** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/fix.rs` 913bdc4281bf -> 8453a75ad47b, `rust/crates/urzua-core/src/fix.rs` ad8613947560 -> 88bdeae08fa5. Reason: cli fix.rs: the --tier refusal now says the one tier-2 repair runs without the flag and tier 3 is not built; nothing else changed; core fix.rs: the inverse repair records the ids it adds and appends them in the field's written form (flow list, block list, quoted or plain scalar) through the new append_ids; the Embodiment and Status repairs and their rows are unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Bumped to `0.55`. Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/fix.rs` 88bdeae08fa5 -> c2f3551e24eb. Reason: fix.rs: the only change on this branch is one added `hooks: Default::default()` field in a Config struct literal, needed by the new optional hooks key, merged with main's own change to the file; behaviour this record cites is unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-16 | Bumped to `0.55`. `fix` does not write the drift state over a stale pin and names the re-pin listing instead; a revision-log table with no row takes the first tool row (`fix --apply`, `fix --rebaseline --apply`, `reverify --apply`). Decided by the builder on 2026-11-16, pending maintainer review. **Why:** `MILE-266` and `MILE-267` -- a drift repair turned a changed pinned file green without a re-pin, and a record from a built-in template could not take a tool row. | **substantive** |
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/fix.rs` 8453a75ad47b -> 90200653f67b, `rust/crates/urzua-core/src/fix.rs` 88bdeae08fa5 -> 7ea3d709cad8. Reason: cli fix.rs reports records whose pinned file changed in a warning notice and fails an --ids entry naming one with the re-pin as the reason, computing which pins are actually stale and holding back the drift repair only for those records; core fix.rs no longer writes the drift state over a stale pin, lists those records for a notice, and appends a tool row to a revision-log table that has no row yet; the drift repair itself is no longer skipped in core, and the pinned-drift list now needs a pin that no longer hashes to its file; the record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-16 | Pin recomputed on merge (attested by beauwilliams, identity: gh-verified, actor: agent): both merged sides re-pinned, `rust/crates/urzua-core/src/fix.rs` 7ea3d709cad8 and c2f3551e24eb -> b92d858d8b2c; the new hash is the merged file's, which is git's automatic merge of the two re-pinned commits. No person wrote a reason for the merged state. **Why:** `urzua fix --conflicts` resolved a conflict that lay only in re-pin lines; a reviewer of the pull request should confirm the merged pin. | **structural** |

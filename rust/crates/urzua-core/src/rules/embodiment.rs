@@ -172,7 +172,7 @@ pub fn embodiment_pin_stale(scan: &StalePinScan) -> (RuleExecution, Vec<Finding>
                     &rebaseline.record.display().to_string(),
                 ]),
                 format!(
-                    "{} pinned evidence changed since it was pinned: {}; read the change, then re-pin with `urzua fix --rebaseline --apply --ids {} --by <you> --actor <agent|human> --reason <why the evidence still holds>`",
+                    "{} pinned evidence changed since it was pinned: {}; read the diff of each pinned file, then re-pin with `urzua fix --rebaseline --apply --ids {} --actor agent --reason \"<what changed in the pinned file>\"` (`--actor human` when a person runs it; `--by <name>` when no git or gh identity is configured)",
                     rebaseline.pins.len(),
                     pins.join(", "),
                     rebaseline.record.display()
@@ -654,7 +654,7 @@ pub fn embodiment_consistency(
     embodiment_consistency_at(
         records,
         config,
-        (drifted, fresh_drift),
+        (drifted, fresh_drift, &HashSet::new()),
         back_pointed,
         claim_age_days,
         i64::MAX,
@@ -662,11 +662,13 @@ pub fn embodiment_consistency(
 }
 
 /// [`embodiment_consistency`] as of `now_unix`, the clock a last-audit date is
-/// judged against: a date after it is reported and ignored.
+/// judged against: a date after it is reported and ignored. `stale_pinned`
+/// names the records whose pinned evidence changed (`embodiment.pin-stale`'s
+/// scan): their drift is answered by a re-pin.
 pub fn embodiment_consistency_at(
     records: &[Record],
     config: &Config,
-    (drifted, fresh_drift): (&HashSet<PathBuf>, &HashSet<PathBuf>),
+    (drifted, fresh_drift, stale_pinned): (&HashSet<PathBuf>, &HashSet<PathBuf>, &HashSet<PathBuf>),
     back_pointed: &BackPointerEvidence,
     claim_age_days: &HashMap<PathBuf, u64>,
     now_unix: i64,
@@ -675,6 +677,7 @@ pub fn embodiment_consistency_at(
     let mut findings = Vec::new();
     let judge = ConsistencyJudge {
         config,
+        stale_pinned,
         drifted,
         fresh_drift,
         back_pointed,
@@ -730,8 +733,10 @@ pub fn held_back_drift_that_would_report(
 ) -> HashSet<PathBuf> {
     let none_held = HashSet::new();
     let no_ages = HashMap::new();
+    let none_stale = HashSet::new();
     let judge = ConsistencyJudge {
         config,
+        stale_pinned: &none_stale,
         drifted: held_back,
         fresh_drift: &none_held,
         back_pointed,
@@ -770,6 +775,8 @@ pub fn held_back_drift_that_would_report(
 /// precomputed history and evidence, and the rule's own options.
 struct ConsistencyJudge<'a> {
     config: &'a Config,
+    /// Records with a pinned locator that no longer hashes to its pin.
+    stale_pinned: &'a HashSet<PathBuf>,
     drifted: &'a HashSet<PathBuf>,
     fresh_drift: &'a HashSet<PathBuf>,
     back_pointed: &'a BackPointerEvidence,
@@ -839,13 +846,14 @@ impl ConsistencyJudge<'_> {
             self.fresh_drift.contains(&record.path) && config.embodiment.is_drift(stated.trim());
         if stated.trim() != computed && !agrees_with_fresh_drift {
             let has_evidence = realized_by_value.is_some() || cited_by_code || cited_by_test;
+            let drift = DriftCause::of(config, computed, self.stale_pinned.contains(&record.path));
             findings.push(disagreement_finding(
                 record,
                 state_field,
-                stated.trim(),
-                computed,
+                (stated.trim(), computed),
                 &evidence,
                 has_evidence,
+                drift,
             ));
         }
         findings.extend(self.claim_age_finding(record, state_field));
@@ -894,30 +902,72 @@ impl ConsistencyJudge<'_> {
 fn disagreement_finding(
     record: &Record,
     state_field: &str,
-    stated: &str,
-    computed: &str,
+    (stated, computed): (&str, &str),
     evidence: &str,
     has_evidence: bool,
+    drift: DriftCause,
 ) -> Finding {
     Finding::new(
         RULE_EMBODIMENT_CONSISTENCY,
         FindingSeverity::Warning,
         record.path.clone(),
-        if has_evidence {
-            ActionSource::new("embodiment-drift").argv([
+        match drift {
+            _ if !has_evidence => ActionSource::new("embodiment-unevidenced").field(state_field),
+            DriftCause::Pin => ActionSource::new("embodiment-drift-pinned").argv([
                 "urzua",
                 "fix",
-                "--apply",
+                "--rebaseline",
                 "--ids",
                 &record.path.display().to_string(),
-            ])
-        } else {
-            ActionSource::new("embodiment-unevidenced").field(state_field)
+            ]),
+            DriftCause::None | DriftCause::History => {
+                ActionSource::new("embodiment-drift").argv([
+                    "urzua",
+                    "fix",
+                    "--apply",
+                    "--ids",
+                    &record.path.display().to_string(),
+                    "--actor",
+                    "agent",
+                ])
+            }
         },
-        format!(
-            "stated {state_field} '{stated}' disagrees with '{computed}', computed from {evidence}"
-        ),
+        match drift {
+            DriftCause::Pin => format!(
+                "stated {state_field} '{stated}' disagrees with '{computed}', computed from {evidence}: a pinned file changed since it was pinned, and `urzua fix --apply` does not write '{computed}' over it; read the diff of the pinned file, then re-pin with `urzua fix --rebaseline --apply --ids {} --actor agent --reason \"<what changed in the pinned file>\"` (the listing `urzua fix --rebaseline --ids {}` names each pin)",
+                record.path.display(),
+                record.path.display()
+            ),
+            DriftCause::None | DriftCause::History => format!(
+                "stated {state_field} '{stated}' disagrees with '{computed}', computed from {evidence}"
+            ),
+        },
     )
+}
+
+/// Why a record computes to its drift state, for the action a disagreement
+/// offers: a stale `@sha256` pin is re-pinned with a reason, never written over.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DriftCause {
+    None,
+    History,
+    Pin,
+}
+
+impl DriftCause {
+    /// The cause for a record that computes to `computed`: `Pin` when it
+    /// drifted and one of its pinned locators no longer hashes to its pin
+    /// (`stale_pin`), since only a re-pin answers that; drift on an unpinned
+    /// locator alone is `History`.
+    pub fn of(config: &Config, computed: &str, stale_pin: bool) -> DriftCause {
+        if !config.embodiment.is_drift(computed) {
+            DriftCause::None
+        } else if stale_pin {
+            DriftCause::Pin
+        } else {
+            DriftCause::History
+        }
+    }
 }
 
 /// The `Embodiment` values the repository declares as set by a human and not

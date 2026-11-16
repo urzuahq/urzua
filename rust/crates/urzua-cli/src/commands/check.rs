@@ -408,7 +408,7 @@ pub fn run(config_path: Option<PathBuf>, args: CheckArgs) -> ExitCode {
 fn validate_selection(
     config: &Config,
     requested: &[String],
-) -> Result<Option<Vec<String>>, String> {
+) -> Result<Option<Vec<String>>, Failure> {
     if requested.is_empty() {
         return Ok(None);
     }
@@ -416,23 +416,47 @@ fn validate_selection(
     for id in requested {
         let id = id.trim();
         if id.is_empty() {
-            return Err("urzua check --rules: an empty rule id (a stray comma?)".to_string());
+            return Err("urzua check --rules: an empty rule id (a stray comma?)".into());
         }
         if !rules::ALL_RULES.contains(&id) {
-            return Err(format!(
-                "urzua check --rules: '{id}' is not a rule this build ships (`urzua rules` lists them)"
-            ));
+            return Err(unknown_rule_failure(requested, id));
         }
         if !config.rules.contains_key(id) && urzua_core::rules::default_on(id).is_none() {
             return Err(format!(
                 "urzua check --rules: '{id}' is not declared in the configuration; --rules narrows the declared rules and never enables one"
-            ));
+            )
+            .into());
         }
         if !out.iter().any(|o| o == id) {
             out.push(id.to_string());
         }
     }
     Ok(Some(out))
+}
+
+/// An id `--rules` names that this build does not ship, with the nearest
+/// shipped id as the corrected selection when one is close.
+fn unknown_rule_failure(requested: &[String], id: &str) -> Failure {
+    let Some(nearest) = urzua_core::harness::nearest_name(id, rules::ALL_RULES.iter().copied())
+    else {
+        return format!(
+            "urzua check --rules: '{id}' is not a rule this build ships (`urzua rules` lists them)"
+        )
+        .into();
+    };
+    let corrected: Vec<&str> = requested
+        .iter()
+        .map(|r| if r.trim() == id { nearest } else { r.trim() })
+        .collect();
+    Failure::with_next(
+        format!(
+            "urzua check --rules: '{id}' is not a rule this build ships; did you mean '{nearest}'? (`urzua rules` lists them)"
+        ),
+        urzua_core::report::NextAction::runs_as_printed(
+            urzua_core::report::shell_command(&["urzua", "check", "--rules", &corrected.join(",")]),
+            format!("re-runs the selection with '{nearest}' for '{id}' (add back any path or flag the run had)"),
+        ),
+    )
 }
 
 /// Judges one record's proposed content in process, as `check --stdin-path`
@@ -1045,6 +1069,41 @@ fn permanent_waivers_notice(
     })
 }
 
+/// A `--base` that could not be diffed against, with the command that fixes
+/// the cause when there is one: fetching a ref of a configured remote that is
+/// not here, or the history a shallow clone lacks. A ref whose first segment is
+/// no remote (a local `feat/x`) gets none: nothing here can create it.
+fn base_failure(repo_root: &Path, e: urzua_io::DiscoveryError) -> Failure {
+    use urzua_core::report::{shell_command, NextAction};
+    let message = e.to_string();
+    match &e {
+        urzua_io::DiscoveryError::UnresolvedRef { base } => {
+            let remotes = urzua_io::git_remotes(repo_root);
+            match base
+                .split_once('/')
+                .filter(|(r, b)| !b.is_empty() && remotes.iter().any(|x| x == r))
+            {
+                Some((remote, branch)) => Failure::with_next(
+                    message,
+                    NextAction::runs_as_printed(
+                        shell_command(&["git", "fetch", remote, branch]),
+                        format!("fetches {branch} from {remote}, so --base {base} resolves"),
+                    ),
+                ),
+                None => Failure::from(message),
+            }
+        }
+        urzua_io::DiscoveryError::ShallowClone { .. } => Failure::with_next(
+            message,
+            NextAction::runs_as_printed(
+                "git fetch --unshallow",
+                "fetches the history a shallow clone lacks, so the merge base can be found",
+            ),
+        ),
+        _ => Failure::from(message),
+    }
+}
+
 /// Stage 1a: discovery, with argv paths overriding it (SPEC-2, BUG-24) and
 /// `--base` computing the changed set against the full tracked set.
 fn open_session(
@@ -1082,7 +1141,7 @@ fn open_session(
                 return Err(
                     "--base cannot be combined with a named file git does not track; \
                  drop --base or track the file"
-                        .to_string(),
+                        .into(),
                 );
             }
             if !extra.is_empty() {
@@ -1093,8 +1152,8 @@ fn open_session(
             }
         }
         if let Some(base) = base {
-            let mut changes =
-                urzua_io::changed_paths_since(repo_root, base).map_err(|e| e.to_string())?;
+            let mut changes = urzua_io::changed_paths_since(repo_root, base)
+                .map_err(|e| base_failure(repo_root, e))?;
             // An included untracked record has no merge-base copy: it is new
             // by definition, so the diff rules judge it as an addition
             // (`ADR-92` clause 6).
@@ -2793,7 +2852,10 @@ fn status_and_examined(
     }
     let empty_corpus = examined == 0 && corpus_has_no_record_yet(session);
     if empty_corpus {
-        notices.push(empty_corpus_notice());
+        let untracked = notices
+            .iter()
+            .any(|n| n.subject == crate::discovery::NOTICE_UNTRACKED_SKIPPED);
+        notices.push(empty_corpus_notice(untracked));
     }
     let active = findings.iter().filter(|f| f.waived.is_none());
     let blocking = active.clone().any(|f| f.severity == FindingSeverity::Error);
@@ -2841,14 +2903,20 @@ fn corpus_has_no_record_yet(session: &Session) -> bool {
             .any(|p| !hidden(p) && types.values().any(|rt| rt.owns_dir(p.parent())))
 }
 
-fn empty_corpus_notice() -> Notice {
+fn empty_corpus_notice(untracked: bool) -> Notice {
+    let message = if untracked {
+        "no tracked record exists yet under any declared record type directory, so no record was examined; \
+         `ok` here means the configuration loads and every declared directory is there, not that a record \
+         was judged. The untracked records named in discovery.untracked-skipped are examined once staged (`git add`)"
+    } else {
+        "no record exists yet under any declared record type directory, so no record was examined; \
+         `ok` here means the configuration loads and every declared directory is there, not that a record \
+         was judged. `urzua new` writes the first record"
+    };
     Notice {
         severity: NoticeSeverity::Info,
         subject: "empty-corpus".to_string(),
-        message: "no record exists yet under any declared record type directory, so no record was examined; \
-                  `ok` here means the configuration loads and every declared directory is there, not that a record \
-                  was judged. `urzua new` writes the first record"
-            .to_string(),
+        message: message.to_string(),
         detail: None,
     }
 }

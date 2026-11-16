@@ -453,6 +453,8 @@ fn delivery_finding(
                 "--apply",
                 "--ids",
                 &record.path.display().to_string(),
+                "--actor",
+                "agent",
             ]),
         ),
         // No single correct value exists and `fix` writes nothing for it,
@@ -475,6 +477,8 @@ fn delivery_finding(
                 "--apply",
                 "--ids",
                 &record.path.display().to_string(),
+                "--actor",
+                "agent",
             ]),
         ),
         // A derived-blocked record is not written a `progress` status

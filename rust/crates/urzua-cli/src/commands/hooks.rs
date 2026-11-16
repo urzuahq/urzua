@@ -954,6 +954,7 @@ impl HooksReport {
             self.next = Some(NextAction {
                 command,
                 reason: reason.to_string(),
+                inputs: Vec::new(),
             });
         }
     }
