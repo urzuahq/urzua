@@ -112,15 +112,76 @@ pub struct Config {
 
 /// The `hooks` key: the urzua arguments each git hook runs, and what a hook
 /// does when urzua is missing or cannot run.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct HooksDecl {
-    #[serde(rename = "pre-commit", default = "HooksDecl::default_pre_commit")]
-    pub pre_commit: Vec<String>,
-    #[serde(rename = "pre-push", default = "HooksDecl::default_pre_push")]
-    pub pre_push: Vec<String>,
+    #[serde(rename = "pre-commit", default)]
+    pub pre_commit: HookDecl,
+    #[serde(rename = "pre-push", default)]
+    pub pre_push: HookDecl,
     #[serde(default)]
     pub on_not_run: HookOnNotRun,
+}
+
+/// One hook: the urzua arguments it runs and who maintains the hook file.
+/// Written as a list (the arguments alone) or as `{command, managed}`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct HookDecl {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub command: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "HookManaged::is_default")]
+    pub managed: HookManaged,
+}
+
+/// `block` (the default): urzua writes and maintains a marked block in the
+/// hook. `declared`: the repository maintains the hook itself and asserts it
+/// runs urzua; urzua writes nothing to it, and `urzua hooks verify --run`
+/// proves the assertion by running it.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HookManaged {
+    #[default]
+    Block,
+    Declared,
+}
+
+impl HookManaged {
+    fn is_default(&self) -> bool {
+        *self == HookManaged::Block
+    }
+}
+
+impl<'de> Deserialize<'de> for HookDecl {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct Full {
+            #[serde(default)]
+            command: Option<Vec<String>>,
+            #[serde(default)]
+            managed: HookManaged,
+        }
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Raw {
+            Command(Vec<String>),
+            Full(Full),
+        }
+        Ok(match Raw::deserialize(d).map_err(|_| {
+            serde::de::Error::custom(
+                "a hook is a list of urzua arguments, or {command: [...], managed: block | declared}",
+            )
+        })? {
+            Raw::Command(c) => HookDecl {
+                command: Some(c),
+                managed: HookManaged::Block,
+            },
+            Raw::Full(f) => HookDecl {
+                command: f.command,
+                managed: f.managed,
+            },
+        })
+    }
 }
 
 /// `warn` (the default) says loudly that the records were not checked and
@@ -144,33 +205,29 @@ impl HookOnNotRun {
 }
 
 impl HooksDecl {
-    fn default_pre_commit() -> Vec<String> {
-        ["check", "--base", "HEAD"].map(String::from).to_vec()
-    }
-    fn default_pre_push() -> Vec<String> {
-        vec!["check".to_string()]
-    }
     pub fn is_default(&self) -> bool {
         *self == HooksDecl::default()
     }
-    /// The urzua arguments the named git hook runs, or `None` for a hook this
-    /// key does not govern.
-    pub fn args(&self, hook: &str) -> Option<&[String]> {
+    fn hook(&self, hook: &str) -> Option<&HookDecl> {
         match hook {
             "pre-commit" => Some(&self.pre_commit),
             "pre-push" => Some(&self.pre_push),
             _ => None,
         }
     }
-}
-
-impl Default for HooksDecl {
-    fn default() -> Self {
-        HooksDecl {
-            pre_commit: Self::default_pre_commit(),
-            pre_push: Self::default_pre_push(),
-            on_not_run: HookOnNotRun::default(),
-        }
+    /// The urzua arguments the named git hook runs (`check --base HEAD` at
+    /// pre-commit and `check` at pre-push unless declared), or `None` for a
+    /// hook this key does not govern.
+    pub fn args(&self, hook: &str) -> Option<Vec<String>> {
+        let decl = self.hook(hook)?;
+        Some(decl.command.clone().unwrap_or_else(|| match hook {
+            "pre-commit" => ["check", "--base", "HEAD"].map(String::from).to_vec(),
+            _ => vec!["check".to_string()],
+        }))
+    }
+    /// Who maintains the named hook's file.
+    pub fn managed(&self, hook: &str) -> HookManaged {
+        self.hook(hook).map_or(HookManaged::Block, |d| d.managed)
     }
 }
 
@@ -3202,10 +3259,8 @@ pub fn parse_with_document_models(
 /// (`fix --apply`), reach the network (`refs`) or call the hook again
 /// (`hooks run`) on every commit.
 fn validate_hooks(hooks: &HooksDecl) -> Result<(), ConfigError> {
-    for (name, args) in [
-        ("pre-commit", &hooks.pre_commit),
-        ("pre-push", &hooks.pre_push),
-    ] {
+    for name in ["pre-commit", "pre-push"] {
+        let args = hooks.args(name).unwrap_or_default();
         if !matches!(args.first().map(String::as_str), Some("check" | "audit")) {
             return Err(ConfigError::InvalidHooks {
                 reason: format!(

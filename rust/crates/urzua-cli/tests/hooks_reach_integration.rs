@@ -171,7 +171,7 @@ fn a_binary_without_hooks_run_is_not_run_and_obeys_the_policy() {
     assert!(out.status.success(), "{stderr}");
     assert!(stderr.contains("upgrade urzua"), "{stderr}");
     assert!(
-        stderr.contains("upgrade urzua to 0.5.0 or later"),
+        stderr.contains("upgrade urzua to 0.4.5 or later"),
         "{stderr}"
     );
     assert!(stderr.contains("orig"), "{stderr}");
@@ -305,39 +305,31 @@ fn a_linked_worktree_and_a_submodule_write_into_their_git_directory() {
 }
 
 #[test]
-fn every_line_urzua_prints_as_the_fix_is_recognised_as_wired() {
-    let dir = fixture("roundtrip-outside");
-    let outside = common::TempDir::new("urzua-hooks-roundtrip-target");
+fn the_line_printed_for_an_outside_hook_follows_the_not_run_policy() {
+    let dir = fixture("printed-line");
+    let outside = common::TempDir::new("urzua-hooks-printed-target");
     common::git(
         &dir,
         &["config", "core.hooksPath", outside.to_str().unwrap()],
     );
     let (_, report) = urzua(&dir, &["hooks", "install"]);
-    let problems = report["problems"].as_array().unwrap();
-    for (hook, problem) in ["pre-commit", "pre-push"].iter().zip(problems) {
-        let line = problem
-            .as_str()
-            .unwrap()
-            .rsplit(": ")
-            .next()
-            .unwrap()
-            .to_string();
-        write_exec(&outside.join(hook), &format!("#!/bin/sh\n{line}\n"));
+    let problem = report["problems"][0].as_str().unwrap().to_string();
+    let line = problem.split("to run urzua from it: ").nth(1).unwrap();
+    write_exec(&outside.join("pre-commit"), &format!("#!/bin/sh\n{line}\n"));
+    record(&dir, "ADR-41-x", false);
+    let out = common::isolated_git()
+        .args(["commit", "-q", "-m", "x"])
+        .env_remove("URZUA_BIN")
+        .env("PATH", "/usr/bin:/bin")
+        .current_dir(&dir)
+        .output()
+        .unwrap();
+    if Path::new("/usr/bin/urzua").exists() {
+        return;
     }
-    let (code, status) = urzua(&dir, &["hooks", "status"]);
-    assert_eq!(code, 0, "{status}");
-
-    for shebang in ["#!/usr/bin/env node", "#!/usr/bin/env python3"] {
-        let dir = fixture("roundtrip-foreign");
-        let hook = dir.join(".git/hooks/pre-commit");
-        write_exec(&hook, &format!("{shebang}\n"));
-        let (code, report) = urzua(&dir, &["hooks", "install"]);
-        assert_eq!(code, 2);
-        let problem = report["problems"][0].as_str().unwrap();
-        let line = problem.split("add this line to it: ").nth(1).unwrap();
-        write_exec(&hook, &format!("{shebang}\n{line}\n"));
-        assert_eq!(pre_commit_check(&dir)["status"], "ok", "{line}");
-    }
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(out.status.success(), "{stderr}");
+    assert!(stderr.contains("NOT checked"), "{stderr}");
 }
 
 /// One original hook body, with `{R}` standing for a command whose status
@@ -502,27 +494,38 @@ fn status_of(dir: &Path, content: &str) -> serde_json::Value {
 }
 
 #[test]
-fn only_a_call_urzua_can_prove_runs_is_ok() {
+fn text_proves_nothing_but_the_managed_block() {
     let dir = fixture("status");
-    let call = "\"${URZUA_BIN:-urzua}\" hooks run pre-commit || exit $?";
-    let first = status_of(&dir, &format!("#!/bin/sh\n# gate\n{call}\nexit 0\n"));
-    assert_eq!(first["status"], "ok", "{first}");
-    for before in [
-        "true && exit 0",
-        "if true; then exit 0; fi",
-        "return 0",
-        "exec 2>&1",
+    for hook in [
+        "\"${URZUA_BIN:-urzua}\" hooks run pre-commit || exit $?",
+        "exit 0; urzua check",
+        "x=\"urzua check\"",
+        ": urzua check",
+        "true || urzua check",
+        "if false; then urzua check; fi",
+        "urzua check &",
+        "urzua check || true",
+        "urzua version",
+        "urzua hooks status",
     ] {
-        let c = status_of(&dir, &format!("#!/bin/sh\n{before}\n{call}\n"));
-        assert_eq!(c["state"], "installed-present-unverified", "{before}: {c}");
+        let c = status_of(&dir, &format!("#!/bin/sh\n{hook}\n"));
+        assert_eq!(c["state"], "installed-unmanaged-call", "{hook}: {c}");
         assert_eq!(c["status"], "warn");
         assert_eq!(c["fix"], "urzua hooks install");
+        let m = c["message"].as_str().unwrap();
         assert!(
-            c["message"].as_str().unwrap().contains("cannot tell"),
-            "{c}"
+            m.contains("managed: declared") && m.contains("urzua hooks verify --run"),
+            "{m}"
         );
+        let (_, report) = urzua(&dir, &["hooks", "install"]);
+        assert_eq!(states(&report)[0], "pre-commit=extended", "{hook}");
+        record(&dir, "ADR-40-broken", true);
+        let out = commit(&dir);
+        assert!(!out.status.success(), "{hook}: a broken commit passed");
+        std::fs::remove_file(dir.join("docs/adr/ADR-40-broken.md")).unwrap();
+        common::git(&dir, &["add", "-A"]);
+        urzua(&dir, &["hooks", "uninstall"]);
     }
-    urzua(&dir, &["hooks", "uninstall"]);
     write_exec(&dir.join(".git/hooks/pre-commit"), "#!/bin/sh\necho a\n");
     urzua(&dir, &["hooks", "install"]);
     let hook = dir.join(".git/hooks/pre-commit");
@@ -530,14 +533,13 @@ fn only_a_call_urzua_can_prove_runs_is_ok() {
     std::fs::write(&hook, text.replace("urzua_code=0", "urzua_code=0; true")).unwrap();
     assert_eq!(pre_commit_check(&dir)["state"], "installed-stale-block");
 
-    let node = "require(\"child_process\").execFileSync(process.env.URZUA_BIN || \"urzua\", [\"hooks\", \"run\", \"pre-commit\"], { stdio: \"inherit\" });";
-    let first = status_of(&dir, &format!("#!/usr/bin/env node\n// gate\n{node}\n"));
-    assert_eq!(first["status"], "ok", "{first}");
-    let later = status_of(
-        &dir,
-        &format!("#!/usr/bin/env node\nprocess.exit(0);\n{node}\n"),
+    let push = std::fs::read_to_string(dir.join(".git/hooks/pre-push")).unwrap();
+    write_exec(&hook, &push);
+    assert_ne!(
+        pre_commit_check(&dir)["status"],
+        "ok",
+        "a pre-push block in pre-commit"
     );
-    assert_eq!(later["state"], "installed-present-unverified", "{later}");
 }
 
 /// Points a repository's hooks at an outside directory.

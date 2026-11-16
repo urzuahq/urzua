@@ -484,17 +484,13 @@ fn session(dir: &Path) -> serde_json::Value {
 }
 
 fn wire_git_hooks(dir: &Path) {
-    let hooks = dir.join(".git/hooks");
-    std::fs::create_dir_all(&hooks).unwrap();
-    for layer in ["pre-commit", "pre-push"] {
-        let p = hooks.join(layer);
-        std::fs::write(&p, "#!/bin/sh\nurzua check\n").unwrap();
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o755)).unwrap();
-        }
-    }
+    // The managed block is the only hook text urzua reads as wired (`MILE-220`).
+    let out = urzua()
+        .args(["hooks", "install"])
+        .current_dir(dir)
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(0), "{out:?}");
 }
 
 #[test]

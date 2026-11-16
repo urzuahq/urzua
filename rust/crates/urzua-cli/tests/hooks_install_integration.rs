@@ -210,21 +210,17 @@ fn husky_hooks_get_the_block_at_the_top() {
 }
 
 #[test]
-fn a_hook_that_already_runs_urzua_is_left_alone() {
+fn a_hand_written_call_gets_the_managed_block_too() {
     let dir = fixture("wired");
     let original = "#!/bin/sh\n# runs the gate\n\"$HOME/bin/urzua\" check --base HEAD\n";
     write_exec(&dir.join(".git/hooks/pre-commit"), original);
     let (code, report) = urzua(&dir, &["hooks", "install"]);
     assert_eq!(code, 0, "{report}");
-    assert_eq!(states(&report), ["pre-commit=wired", "pre-push=created"]);
-    assert_eq!(
-        std::fs::read_to_string(dir.join(".git/hooks/pre-commit")).unwrap(),
-        original
-    );
+    assert_eq!(states(&report), ["pre-commit=extended", "pre-push=created"]);
     let (_, removed) = urzua(&dir, &["hooks", "uninstall"]);
     assert_eq!(
         states(&removed),
-        ["pre-commit=not-ours", "pre-push=removed"]
+        ["pre-commit=block-removed", "pre-push=removed"]
     );
     assert_eq!(
         std::fs::read_to_string(dir.join(".git/hooks/pre-commit")).unwrap(),
@@ -280,7 +276,7 @@ fn a_hooks_path_outside_the_repository_is_refused_with_the_line_to_add() {
     let problems = report["problems"].to_string();
     assert!(problems.contains("outside the repository"), "{problems}");
     assert!(
-        problems.contains("hooks run pre-commit || exit $?"),
+        problems.contains("hooks run pre-commit || exit 1"),
         "{problems}"
     );
     assert!(!outside.join("pre-commit").exists());
@@ -290,7 +286,7 @@ fn a_hooks_path_outside_the_repository_is_refused_with_the_line_to_add() {
         checks[0]["message"]
             .as_str()
             .unwrap()
-            .contains("hooks run pre-commit || exit $?"),
+            .contains("hooks run pre-commit || exit 1"),
         "{checks:?}"
     );
     let (_, doctor) = urzua(&dir, &["doctor"]);

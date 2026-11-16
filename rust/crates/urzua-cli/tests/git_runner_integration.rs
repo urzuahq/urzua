@@ -22,6 +22,8 @@ const ALLOWED_NON_LITERAL: &[(&str, &str)] = &[
     // `urzua hooks run` re-runs this same binary (`current_exe`) with the
     // configured check arguments, to read its JSON report.
     ("urzua-cli/src/commands/hooks.rs", "exe"),
+    // `urzua hooks verify --run` runs a hook file as git would.
+    ("urzua-cli/src/commands/hooks_verify.rs", "hook_path"),
 ];
 
 fn find(hay: &[u8], needle: &[u8]) -> Option<usize> {

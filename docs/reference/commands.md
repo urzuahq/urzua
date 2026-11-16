@@ -424,6 +424,7 @@ Installs and runs the agent harness. See [the agent harness](agent-harness.md) f
 urzua hooks install [--dry-run] [--write-config]
 urzua hooks status
 urzua hooks uninstall [--dry-run]
+urzua hooks verify [<pre-commit | pre-push>] [--run]
 urzua hooks run <pre-commit | pre-push>
 ```
 
@@ -432,9 +433,10 @@ Wires the git hooks `doctor` reports. `install` finds where the hooks live (`.gi
 pre-commit hook run `urzua hooks run pre-commit` and the pre-push hook `urzua hooks run pre-push`. A
 missing hook is created; an existing shell hook gets a block between `# >>> urzua-hooks begin` and
 `# <<< urzua-hooks end` at its top (after the shebang, comments and a husky v8 source line), so urzua runs
-first and the rest of the hook is unchanged; a hook whose first command already runs urzua is left alone. It
+first and the rest of the hook is unchanged; a hook declared under `hooks.<hook>.managed: declared` is not
+written. It
 refuses, writing nothing and printing the line to add, a Node or Python hook, a hook without the execute bit,
-a symlinked hook file, and a hooks directory that resolves outside the repository and its git directory or
+a symlinked or hard-linked hook file, and a hooks directory that resolves outside the repository and its git directory or
 cannot be written. With the pre-commit
 framework it writes no hook file: the report's `stanza` is the `repo: local` entry to add, and
 `--write-config` appends it to `.pre-commit-config.yaml`.
@@ -448,11 +450,18 @@ and that CI will check them, and lets the commit through (`hooks.on_not_run: blo
 [CI](ci.md#local-hooks).
 
 Output: `status` (`ok`, `drift` from `status` when a hook is `missing`, `not-wired`, `not-executable`,
-`present-unverified` (urzua is called, but not first, so it cannot tell whether that runs), `stale-policy`,
-`stale-block` or `duplicated`, `not-run` when `install` or `uninstall` refused),
+`unmanaged-call` (urzua is mentioned outside the managed block, which text cannot prove runs), `stale-policy`,
+`stale-block`, `duplicated`, `declared-missing`, `declared-not-executable` or `declared-no-call`; a declared hook
+that is plausible is `declared`, which counts as wired), `not-run` when `install` or `uninstall` refused),
 `action`, `dry_run`, `layout`, `items` (`{hook, path, state}`), `stanza`, `problems`. `uninstall` removes
 only the blocks, restoring the file byte for byte, deletes only a hook file it created, and refuses where
 `install` would. Exit 0, 1 (`status` found a hook not wired) or 2 (refused).
+
+`verify` proves a hook reaches urzua by running it. Without `--run` it runs nothing and says what it would
+do. With `--run` it runs each hook once as git would, for real (a formatter in it rewrites files), with a
+probe that makes any urzua the hook starts record that it was reached and exit 0 without checking; the
+probe is honoured only inside that `verify` run. Output: `status` (`explained`, `ok`, `unreached`), `run`,
+`hooks` (`{hook, path, managed, reached, exit_code, note}`). Exit 1 when a hook is not reached.
 
 ## audit
 

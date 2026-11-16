@@ -174,16 +174,33 @@ Add the gate action so every pull request is checked. See [CI](ci.md).
 
 ## 9. Wire the git hooks
 
-Run the check before each commit and push:
+Run the check before each commit and push. Which step depends on the hooks you have:
+
+- **No hook yet:** `urzua hooks install` writes both hooks.
+- **An existing hook you want urzua to manage:** `urzua hooks install` adds a marked block at its top, so urzua runs
+  first and the rest of the hook is unchanged (`urzua hooks uninstall` takes it out again).
+- **A hook you maintain yourself** that already calls urzua: declare it in `.urzua/config.yaml`, so urzua does not
+  edit it, and prove it reaches urzua:
+
+  ```yaml
+  hooks:
+    pre-commit: {managed: declared}
+    pre-push: {managed: declared}
+  ```
+
+  ```bash
+  urzua hooks verify --run
+  ```
+
+  `verify --run` runs each hook once, for real, and reports `reached: true` when it gets to urzua.
 
 ```bash
 urzua hooks install
 urzua doctor
 ```
 
-`install` finds where your hooks live (`.git/hooks`, `core.hooksPath`, husky or the pre-commit framework)
-and adds a call to urzua at the top of each hook without changing the rest; `doctor` then reports both `hook-wired` checks as
-`ok`. The pre-commit hook runs `urzua check --base HEAD`, which took about 9 seconds with a release build on
+`install` finds where your hooks live (`.git/hooks`, `core.hooksPath`, husky or the pre-commit framework);
+`doctor` then reports both `hook-wired` checks as `ok`. The pre-commit hook runs `urzua check --base HEAD`, which took about 9 seconds with a release build on
 urzua's own repository of about 670 records; name a cheaper check under `hooks.pre-commit` in the config if
 that is too slow. When urzua is not installed, the hooks warn and let the commit through (CI still checks).
 See [Local hooks](ci.md#local-hooks).
@@ -255,4 +272,3 @@ What it does not check today, and why:
   withholds `identity.collision`. Rename the files and declare `prefix: ADR` to turn it on.
 
 To get the full rule set, give the records a YAML frontmatter header (step 1) and rename them.
-

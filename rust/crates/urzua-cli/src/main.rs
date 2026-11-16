@@ -469,6 +469,16 @@ enum HooksTarget {
         #[arg(long)]
         dry_run: bool,
     },
+    /// Prove a hook reaches urzua by running it: without `--run`, say what would
+    /// run; with it, run each hook once as git would (for real: its other
+    /// commands take effect) and report `reached`. Exit 1 when one does not.
+    Verify {
+        /// `pre-commit` or `pre-push`; both when left out.
+        hook: Option<String>,
+        /// Run the hooks.
+        #[arg(long)]
+        run: bool,
+    },
     /// Run what the configuration names for a hook, summarised on stderr: what
     /// the installed hooks call.
     Run {
@@ -637,6 +647,10 @@ fn install_panic_hook() {
 fn main() -> ExitCode {
     install_panic_hook();
 
+    if let Some(code) = commands::hooks_verify::probe_if_requested() {
+        return code;
+    }
+
     panic_if_requested();
 
     match parse_cli() {
@@ -803,6 +817,7 @@ fn dispatch_hooks(config: Option<PathBuf>, target: HooksTarget) -> ExitCode {
         HooksTarget::Status => commands::hooks::run_status(config),
         HooksTarget::Uninstall { dry_run } => commands::hooks::run_uninstall(config, dry_run),
         HooksTarget::Run { hook } => commands::hooks::run_hook(config, hook),
+        HooksTarget::Verify { hook, run } => commands::hooks_verify::run_verify(config, hook, run),
     }
 }
 

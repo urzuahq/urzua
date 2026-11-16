@@ -63,9 +63,20 @@ need to do".
   husky v9's `sh -e`. The install refuses, writing nothing and naming the one line to add, a hook in another language
   (a Node or Python script), a hook file without the execute bit, a symlinked hook file wherever it points, and a hooks
   directory that resolves outside the working tree and the git directory (a linked worktree's and a submodule's git
-  directory are inside) or cannot be written; `uninstall` applies the same guards. "Wired" means urzua can prove the
-  call runs: its own block as installed, or a hand-written call that is the script's first command. Any other
-  hand-written call is reported as present but unverified, with `urzua hooks install` as the fix.
+  directory are inside) or cannot be written; `uninstall` applies the same guards. From a hook's text
+  alone, only urzua's own block, exactly as installed for that hook, is reported as wired.
+- **A hook the repository maintains itself is declared, and proven by running it.** Decided by the orchestrator on
+  2026-11-16, pending maintainer review, after the maintainer said of this repository's own hooks reporting that urzua
+  could not tell whether they run: "If we are getting this, then this is a bug. Other people can have [it]. So, we need to think about ways around it. And how we can enable configuration for support. For this, and our setup and others." Reading a hook's text can never prove a line runs (`exit 0; urzua check`,
+  `urzua check || true` and `if false; then urzua check; fi` all mention urzua and never gate), so text is no longer
+  evidence of anything except the managed block, and any other mention of urzua is reported as an unmanaged call.
+  A repository declares a hook it maintains (`hooks.<hook>.managed: declared`): `install` then writes nothing to it,
+  and `doctor`, `hooks status` and the session-start check report it `ok (declared)` while the file exists, is
+  executable and mentions urzua, and warn when the declaration is plainly false. The declaration is the repository's
+  assertion, which is why `.urzua/config.yaml` is a protected path in a gated repository. `urzua hooks verify --run`
+  proves it by behaviour: it runs each hook once as git would, for real, with a probe that makes any urzua the hook
+  starts record that it was reached and exit 0; it reports `reached` per hook and exits 1 when one is not. The probe
+  is honoured only inside a running `verify` that set it, so it cannot turn a real check off.
 - **The hook runs a read-only check named in configuration.** The block calls `urzua hooks run <hook>`, which runs
   `hooks.pre-commit` (default `check --base HEAD`: the changes since HEAD, the scope the Decision gives the commit) or
   `hooks.pre-push` (default `check`) and prints the count and each blocking finding's rule, file and message, and the
@@ -110,3 +121,4 @@ Easy to extend and to relax. The decision adds `doctor` reporting and a rule tha
 > | 2026-11-16 | Amendment added: `urzua hooks install` is the one-step install, and an installed hook blocks when urzua cannot run. **Why:** the maintainer asked on 2026-11-16 for the one-command fix of `MILE-220`; decided by the builder, pending maintainer review. | **substantive** |
 > | 2026-11-16 | The amendment of 2026-11-16 revised before merge: an installed hook warns by default when urzua cannot run (the orchestrator's decision, pending maintainer review), with the rationale corrected; hooks run only `check`; the block is placed or refused so it always runs, and a block that cannot run is reported unreachable; nothing is written through a symlink or outside the repository; the measured cost of the pre-commit check is stated. **Why:** an independent review of the pull request found a block that could never run reported as wired, writes through symlinks, and a blocking default that would stop contributors who never installed urzua. | **substantive** |
 > | 2026-11-16 | The amendment of 2026-11-16 revised again before merge: the block goes at the top of a hook, so urzua runs first and the rest of the hook is untouched (the orchestrator's decision, pending maintainer review), replacing placement before a final `exit` or `exec` and the refusals that came with it; "wired" means a call urzua can prove runs; `uninstall` applies `install`'s guards. **Why:** a re-check of the pull request found that reading a hook's text to find where it ends failed on `return`, `false; exit $?`, line continuations and `set -e`, and that `uninstall` wrote outside the repository. | **substantive** |
+> | 2026-11-16 | The amendment of 2026-11-16 gains the declare-and-prove design (the orchestrator's decision, pending maintainer review, quoting the maintainer): text proves nothing but the managed block; a hook the repository maintains is declared under `hooks:` and proven by `urzua hooks verify --run`. **Why:** a third review found hand-written lines reported as wired that never ran urzua (`exit 0; urzua check`), and the maintainer asked for configuration that supports repositories, this one included, whose hooks run urzua after guard code. | **substantive** |

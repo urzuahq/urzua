@@ -1200,17 +1200,9 @@ fn without_the_engine_or_the_interpreter_the_command_states_that_the_edit_was_no
 // ---------------------------------------------------------- session start
 
 fn wire_git_hooks(dir: &Path) {
-    let hooks = dir.join(".git/hooks");
-    std::fs::create_dir_all(&hooks).unwrap();
-    for layer in ["pre-commit", "pre-push"] {
-        let p = hooks.join(layer);
-        std::fs::write(&p, "#!/bin/sh\nurzua check\n").unwrap();
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o755)).unwrap();
-        }
-    }
+    // The managed block is the only hook text urzua reads as wired (`MILE-220`).
+    let out = urzua(dir, &["hooks", "install"]).output().unwrap();
+    assert_eq!(out.status.code(), Some(0), "{out:?}");
 }
 
 fn session_start(dir: &Path, path: &Path, project_dir: bool) -> serde_json::Value {

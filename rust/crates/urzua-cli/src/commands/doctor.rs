@@ -74,7 +74,7 @@ fn hook_checks(
             let (status, state, message, fix) = match w {
                 Err(message) => (DoctorStatus::Error, None, message, None),
                 Ok(w) => (
-                    if w.state == HookState::InstalledRunningUrzua {
+                    if w.state.is_ok() {
                         DoctorStatus::Ok
                     } else {
                         DoctorStatus::Warn

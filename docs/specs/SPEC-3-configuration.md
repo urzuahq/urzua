@@ -3,7 +3,7 @@ Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
 Version: '0.155'
 Date: 2026-08-20
 Status: Shipped
-Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:e56be4912522ef6af4adb79ab9e77d18e80bfda6cea821a4061a922819d6d914, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:09c2431a269316741c35b51dabd5766ecd3d50fab2b98069314bb1bc8857767d, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:255395e7d2caa34947cef28f463e2ec050e3eba798a4dc7573a3cad946fee1ae
+Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:f74531f49e9c33f6d72ee3ca1c75409fc59a968f80200119782e8af639276a0d, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:09c2431a269316741c35b51dabd5766ecd3d50fab2b98069314bb1bc8857767d, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:255395e7d2caa34947cef28f463e2ec050e3eba798a4dc7573a3cad946fee1ae
 Embodiment: Verified
 Author: beauwilliams
 Subject: '`.urzua/config.yaml` -- the schema for record types, required/known fields, and per-type behavior.'
@@ -1227,14 +1227,23 @@ authority:
 ## Git hooks: `hooks`
 
 A top-level `hooks` key names what the git hooks `urzua hooks install` wires run (`ADR-71`, amendment of
-2026-11-16; `MILE-220`; `SPEC-15`). Each value is the urzua arguments, starting with a subcommand:
+2026-11-16; `MILE-220`; `SPEC-15`). Each hook is the urzua arguments it runs, written as a list, or a map with
+`command` (those arguments) and `managed`:
 
 ```yaml
 hooks:
   pre-commit: [check, --base, HEAD]   # the default
-  pre-push: [check]                   # the default
+  pre-push: {command: [check], managed: block}   # the same as [check], the default
   on_not_run: warn                    # the default; or block
 ```
+
+- **`managed`** is `block` (the default: `urzua hooks install` writes and maintains a marked block at the top of the
+  hook) or `declared`: the repository maintains the hook file itself and asserts that it runs urzua. `install` then
+  writes nothing to that hook, and `doctor`, `urzua hooks status` and the session-start check report it `ok`
+  (`declared`) while the file exists, is executable and mentions urzua, and warn (`declared-missing`,
+  `declared-not-executable`, `declared-no-call`) when the declaration is plainly false. The declaration is an
+  assertion by the repository, not something urzua reads from the hook: that is why `.urzua/config.yaml` is a
+  protected path in a gated repository, and `urzua hooks verify --run` is how to check it (`SPEC-15`).
 
 - **Absent means the defaults above**, and any key left out takes its default. `pre-commit` checks the records
   changed since `HEAD`, staged or not, with the diff rules; `pre-push` checks the whole tree, as CI does.
@@ -2813,3 +2822,5 @@ proves this configuration produces the three findings.
 > | 2026-11-16 | `hooks` may not pass `--config`, `--stdin-path` or `--actors`, and the flags that narrow a hook's check are named as able to weaken it. **Why:** a re-check of `MILE-220`'s pull request: a flag naming another file could print it on every commit. | **substantive** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 8a96d6d3905f -> 4285ca9e4458. Reason: config.rs: validate_hooks also rejects --config, --stdin-path and --actors in a hook's check arguments; every other key and default is unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 4285ca9e4458 -> e56be4912522. Reason: config.rs: validate_hooks also rejects --config, --stdin-path and --actors in a hook's check arguments; every other key and default is unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-16 | `hooks.<hook>` may be a map with `command` and `managed` (`block` or `declared`); a declared hook is the repository's assertion, checked by `urzua hooks verify --run`. **Why:** a third review of `MILE-220`'s pull request: reading a hook's text cannot prove a line runs, and the maintainer asked for configuration that supports hooks a repository maintains itself. | **substantive** |
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` e56be4912522 -> f74531f49e9c. Reason: config.rs: hooks.<hook> may be a map with command and managed (block or declared) as well as a list, and args() fills in each hook's default; every other key and default is unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |

@@ -12,7 +12,7 @@
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use urzua_core::config::{FailOn, HookOnNotRun, HooksDecl};
+use urzua_core::config::{FailOn, HookManaged, HookOnNotRun, HooksDecl};
 use urzua_core::report::{CouldNotRun, NextAction, Notice, NoticeSeverity, Report};
 
 use crate::emit;
@@ -25,9 +25,12 @@ pub(crate) const INSTALL: &str = "urzua hooks install";
 const FRAMEWORK_CONFIG: &str = ".pre-commit-config.yaml";
 const SHEBANG: &str = "#!/bin/sh\n";
 const INSTALL_DOC: &str = "https://github.com/urzuahq/urzua/blob/main/docs/reference/install.md";
-/// The first release that has `hooks run`; an older one is told to upgrade
-/// to it.
-const FIRST_VERSION: &str = "0.5.0";
+/// The first release that contains `hooks run`, named to a user of an older
+/// one. The release process keeps it right: a test fails while it is not newer
+/// than the workspace version before that release ships, and, once the
+/// CHANGELOG has a release mentioning `urzua hooks install`, while it is not
+/// that release.
+pub(crate) const FIRST_VERSION: &str = "0.4.5";
 /// `hooks run` exits with this when urzua did not run and the policy is
 /// `block`, so the block can tell it from a blocking finding (1) and from an
 /// older urzua's usage error (2).
@@ -211,28 +214,42 @@ pub(crate) enum HookState {
     InstalledNotRunningUrzua,
     /// Present but without the execute bit, which git silently ignores.
     InstalledNotExecutable,
-    /// A hand-written call to urzua that is not the script's first command:
-    /// urzua cannot tell whether it runs.
-    InstalledPresentUnverified,
+    /// urzua is mentioned outside the managed block: text cannot prove it runs.
+    InstalledUnmanagedCall,
     /// The block carries a not-run policy the configuration no longer names.
     InstalledStalePolicy,
-    /// The block differs from what `install` writes.
+    /// The block differs from what `install` writes for this hook.
     InstalledStaleBlock,
     /// More than one marked block.
     InstalledDuplicated,
+    /// `managed: declared`, and the hook exists, is executable and mentions
+    /// urzua: the repository's assertion, which `hooks verify --run` proves.
+    Declared,
+    DeclaredMissing,
+    DeclaredNotExecutable,
+    /// Declared, but the hook does not mention urzua anywhere.
+    DeclaredNoCall,
 }
 
 impl HookState {
+    pub(crate) fn is_ok(self) -> bool {
+        matches!(self, HookState::InstalledRunningUrzua | HookState::Declared)
+    }
+
     fn status_word(self) -> &'static str {
         match self {
             HookState::InstalledRunningUrzua => "ok",
             HookState::NotInstalled => "missing",
             HookState::InstalledNotRunningUrzua => "not-wired",
             HookState::InstalledNotExecutable => "not-executable",
-            HookState::InstalledPresentUnverified => "present-unverified",
+            HookState::InstalledUnmanagedCall => "unmanaged-call",
             HookState::InstalledStalePolicy => "stale-policy",
             HookState::InstalledStaleBlock => "stale-block",
             HookState::InstalledDuplicated => "duplicated",
+            HookState::Declared => "declared",
+            HookState::DeclaredMissing => "declared-missing",
+            HookState::DeclaredNotExecutable => "declared-not-executable",
+            HookState::DeclaredNoCall => "declared-no-call",
         }
     }
 }
@@ -249,9 +266,16 @@ pub(crate) struct Wiring {
     pub fix: Option<String>,
 }
 
-/// The line a hook urzua will not write must carry to run urzua.
-pub(crate) fn shell_line(hook: &str) -> String {
-    format!("\"${{URZUA_BIN:-urzua}}\" hooks run {hook} || exit $?")
+/// The one line a hook urzua will not write can carry to run urzua. Like the
+/// managed block, it follows the not-run policy when urzua is missing.
+pub(crate) fn shell_line(hook: &str, on_not_run: HookOnNotRun) -> String {
+    let stop = match on_not_run {
+        HookOnNotRun::Block => "; exit 1",
+        HookOnNotRun::Warn => "",
+    };
+    format!(
+        "if command -v \"${{URZUA_BIN:-urzua}}\" >/dev/null 2>&1; then \"${{URZUA_BIN:-urzua}}\" hooks run {hook} || exit 1; else echo \"{hook}: urzua did not run (not installed), so the records were NOT checked -- CI will check them\" >&2{stop}; fi"
+    )
 }
 
 /// `s` as one shell word, single-quoted.
@@ -291,13 +315,16 @@ pub(crate) fn wiring(layout: &Layout, decl: &HooksDecl) -> Vec<Result<Wiring, St
                 unwritable,
                 needs_exec,
                 ..
-            } => file_wiring(
-                hook,
-                &dir.join(hook),
-                *needs_exec,
-                unwritable.as_deref(),
-                decl,
-            ),
+            } => match decl.managed(hook) {
+                HookManaged::Declared => declared_wiring(hook, &dir.join(hook), *needs_exec),
+                HookManaged::Block => file_wiring(
+                    hook,
+                    &dir.join(hook),
+                    *needs_exec,
+                    unwritable.as_deref(),
+                    decl,
+                ),
+            },
             Layout::Framework { config, git_hooks } => {
                 framework_wiring(hook, config, git_hooks, decl)
             }
@@ -332,8 +359,8 @@ fn repair(
     match unwritable {
         Some(why) => (
             format!(
-                "{message}; {why}, so add `{}` to {}",
-                shell_line(hook),
+                "{message}; {why}, so add `{}` to {}, or declare it (hooks.{hook}.managed: declared) and prove it with `urzua hooks verify --run`",
+                shell_line(hook, HookOnNotRun::default()),
                 path.display()
             ),
             None,
@@ -383,7 +410,7 @@ fn file_wiring(
         ));
     }
     let content = read_optional(path)?.unwrap_or_default();
-    let (state, message) = content_state(path, &content, decl);
+    let (state, message) = content_state(hook, path, &content, decl);
     let fix = match state {
         HookState::InstalledRunningUrzua => None,
         HookState::InstalledDuplicated => Some(format!("urzua hooks uninstall && {INSTALL}")),
@@ -401,8 +428,62 @@ fn file_wiring(
     Ok(wired(hook, path, state, message, fix))
 }
 
-/// What a hook file's content says about its wiring.
-fn content_state(path: &Path, content: &str, decl: &HooksDecl) -> (HookState, String) {
+/// A declared hook: the repository maintains it and asserts it runs urzua.
+/// Only a plainly false declaration is reported; the assertion itself is
+/// proven by running the hook (`hooks verify --run`), never by its text.
+fn declared_wiring(hook: &'static str, path: &Path, needs_exec: bool) -> Result<Wiring, String> {
+    let shown = path.display();
+    let key = format!("hooks.{hook}.managed: declared");
+    let meta = match std::fs::metadata(path) {
+        Ok(m) if m.is_file() => m,
+        Ok(_) | Err(_) => {
+            return Ok(wired(
+                hook,
+                path,
+                HookState::DeclaredMissing,
+                format!("{key}, but there is no hook at {shown}: the declaration is false -- write the hook, or remove the declaration so `{INSTALL}` manages it"),
+                None,
+            ))
+        }
+    };
+    if needs_exec && !executable(&meta) {
+        return Ok(wired(
+            hook,
+            path,
+            HookState::DeclaredNotExecutable,
+            format!("{key}, but {shown} is not executable, so git ignores it"),
+            Some(format!("chmod +x {}", shell_quote(&path.to_string_lossy()))),
+        ));
+    }
+    let content = read_optional(path)?.unwrap_or_default();
+    if !mentions_urzua(&content) {
+        return Ok(wired(
+            hook,
+            path,
+            HookState::DeclaredNoCall,
+            format!("{key}, but {shown} does not mention urzua anywhere: the declaration is false -- add the call, or remove the declaration so `{INSTALL}` manages it"),
+            None,
+        ));
+    }
+    Ok(wired(
+        hook,
+        path,
+        HookState::Declared,
+        format!("{shown} is declared ({key}) and mentions urzua; this is the repository's assertion -- `urzua hooks verify --run` proves it by running the hook"),
+        None,
+    ))
+}
+
+/// Whether a line other than a comment mentions urzua.
+fn mentions_urzua(content: &str) -> bool {
+    content
+        .lines()
+        .any(|l| !l.trim_start().starts_with('#') && l.contains("urzua"))
+}
+
+/// What a hook file's content says about its wiring. From text alone only the
+/// managed block, exactly as `install` writes it for this hook, is `ok`.
+fn content_state(hook: &str, path: &Path, content: &str, decl: &HooksDecl) -> (HookState, String) {
     let shown = path.display();
     let blocks = content.matches(BEGIN).count();
     if blocks > 1 {
@@ -415,8 +496,14 @@ fn content_state(path: &Path, content: &str, decl: &HooksDecl) -> (HookState, St
     }
     if blocks == 1 {
         let marker = Marker::read(content);
+        if marker.hook != hook {
+            return (
+                HookState::InstalledStaleBlock,
+                format!("{shown} holds the urzua block written for {}, not {hook} -- run `{INSTALL}` to rewrite it", marker.hook),
+            );
+        }
         let expected = remove_blocks(content)
-            .map(|rest| insert_block(&rest, marker.created, decl.on_not_run, &marker.hook));
+            .map(|rest| insert_block(&rest, marker.created, decl.on_not_run, hook));
         if expected.as_deref() == Ok(content) {
             return (
                 HookState::InstalledRunningUrzua,
@@ -438,22 +525,10 @@ fn content_state(path: &Path, content: &str, decl: &HooksDecl) -> (HookState, St
             format!("{shown} has an urzua block that differs from what `{INSTALL}` writes, or is not at the top -- run `{INSTALL}` to rewrite it"),
         );
     }
-    let binaries = urzua_variables(content);
-    if first_command(content).is_some_and(|l| line_invokes(l, &binaries, None, false)) {
+    if mentions_urzua(content) {
         return (
-            HookState::InstalledRunningUrzua,
-            format!("{shown} runs urzua as its first command"),
-        );
-    }
-    if invokes_urzua(content, None, false) {
-        let fix = if shell_hook(content).is_ok() {
-            format!("run `{INSTALL}` to add the managed block at the top, which always runs")
-        } else {
-            "make the call the script's first statement".to_string()
-        };
-        return (
-            HookState::InstalledPresentUnverified,
-            format!("{shown} calls urzua, but not as its first command, so urzua cannot tell whether that line runs -- {fix}"),
+            HookState::InstalledUnmanagedCall,
+            format!("{shown} mentions urzua outside a managed block, and reading a hook cannot prove a line runs -- run `{INSTALL}` to add the managed block at the top, or, for a hook the repository maintains itself, declare it (hooks.{hook}.managed: declared) and prove it with `urzua hooks verify --run`"),
         );
     }
     (
@@ -646,26 +721,31 @@ fn first_command(content: &str) -> Option<&str> {
     command_start(content).1
 }
 
-/// (byte offset of the first command's line, that line): the place the block
-/// goes and the line a hand-written call must be.
+/// (byte offset where the block goes, the first command's line). The block
+/// goes after the shebang and leading comments, or right after a husky v8
+/// source line wherever it is, so it runs once, inside husky's re-run.
 fn command_start(content: &str) -> (usize, Option<&str>) {
     let mut at = 0;
-    let mut husky_seen = false;
+    let mut first: Option<(usize, &str)> = None;
     for (i, raw) in content.split_inclusive('\n').enumerate() {
         let line = raw.trim_end_matches(['\n', '\r']);
         let t = line.trim();
+        if is_husky_source(t) {
+            return (at + raw.len(), first.map(|f| f.1).or(Some(line)));
+        }
         let skip = (i == 0 && t.starts_with("#!"))
             || t.is_empty()
             || (t.starts_with('#') && !t.starts_with("#!"))
-            || t.starts_with("//")
-            || (!husky_seen && is_husky_source(t));
-        if !skip {
-            return (at, Some(line));
+            || t.starts_with("//");
+        if !skip && first.is_none() {
+            first = Some((at, line));
         }
-        husky_seen |= is_husky_source(t);
         at += raw.len();
     }
-    (at, None)
+    match first {
+        Some((offset, line)) => (offset, Some(line)),
+        None => (at, None),
+    }
 }
 
 /// husky v8's `. "$(dirname -- "$0")/_/husky.sh"` and its variants.
@@ -834,7 +914,16 @@ fn shell_hook(content: &str) -> Result<(), String> {
     };
     let words: Vec<&str> = first[2..].split_whitespace().collect();
     let interp = match words.as_slice() {
-        [env, name, ..] if env.ends_with("/env") => *name,
+        // `env` takes flags (`-S`, `-i`) and `NAME=value` before the program.
+        [env, rest @ ..] if env.ends_with("/env") || *env == "env" => {
+            match rest
+                .iter()
+                .find(|w| !w.starts_with('-') && !w.contains('='))
+            {
+                Some(name) => name.rsplit('/').next().unwrap_or(name),
+                None => return Ok(()),
+            }
+        }
         [path, ..] => path.rsplit('/').next().unwrap_or(path),
         [] => return Ok(()),
     };
@@ -988,7 +1077,7 @@ fn status(layout: &Layout, decl: &HooksDecl) -> HooksReport {
             Err(m) => report.refuse(m),
             Ok(w) => {
                 report.item(w.hook, &w.path, w.state.status_word());
-                if w.state != HookState::InstalledRunningUrzua {
+                if !w.state.is_ok() {
                     report.problems.push(w.message);
                     if let Some(cmd) = w.fix {
                         report.next(cmd, "wires the git hooks that do not run urzua");
@@ -1056,20 +1145,33 @@ struct Write {
     state: &'static str,
 }
 
-/// Why urzua will not write `path` itself: it is a symlink, wherever it points.
-fn symlink_problem(hook: &str, path: &Path) -> Option<String> {
+/// Why urzua will not write `path` itself: it is a symlink, wherever it
+/// points, or a hard link, which a rename would silently split from its other
+/// names.
+fn link_problem(hook: &str, path: &Path, on_not_run: HookOnNotRun) -> Option<String> {
     let meta = std::fs::symlink_metadata(path).ok()?;
-    if !meta.file_type().is_symlink() {
-        return None;
+    let line = shell_line(hook, on_not_run);
+    if meta.file_type().is_symlink() {
+        let target = std::fs::read_link(path)
+            .map(|t| t.display().to_string())
+            .unwrap_or_else(|_| "an unreadable target".to_string());
+        return Some(format!(
+            "{} is a symlink to {target}; urzua never writes through a symlink, so add this line to the hook it points at: {line}",
+            path.display()
+        ));
     }
-    let target = std::fs::read_link(path)
-        .map(|t| t.display().to_string())
-        .unwrap_or_else(|_| "an unreadable target".to_string());
-    Some(format!(
-        "{} is a symlink to {target}; urzua never writes through a symlink, so add this line to the hook it points at: {}",
-        path.display(),
-        shell_line(hook)
-    ))
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        if meta.nlink() > 1 {
+            return Some(format!(
+                "{} is a hard link ({} names); rewriting it would split it from its other names, so add this line to it: {line}",
+                path.display(),
+                meta.nlink()
+            ));
+        }
+    }
+    None
 }
 
 /// What to write for one hook, `Ok(None)` when nothing changes, `Err` the
@@ -1081,7 +1183,15 @@ fn plan_hook(
     decl: &HooksDecl,
     target: &Target,
 ) -> Result<Option<(String, &'static str)>, String> {
-    if let Some(why) = symlink_problem(hook, path) {
+    if decl.managed(hook) == HookManaged::Declared {
+        report.item(hook, path, "declared");
+        report.notice(
+            NoticeSeverity::Info,
+            format!("hooks.{hook}.managed is declared: the repository maintains {} itself, so urzua writes nothing to it; `urzua hooks verify --run` proves it runs urzua", path.display()),
+        );
+        return Ok(None);
+    }
+    if let Some(why) = link_problem(hook, path, decl.on_not_run) {
         return Err(why);
     }
     let Some(content) = read_optional(path)? else {
@@ -1104,11 +1214,6 @@ fn plan_hook(
         let rest = remove_blocks(&content).map_err(|m| format!("{} {m}", path.display()))?;
         let new = insert_block(&rest, created, decl.on_not_run, hook);
         return Ok((new != content).then_some((new, "updated")));
-    }
-    let binaries = urzua_variables(&content);
-    if first_command(&content).is_some_and(|l| line_invokes(l, &binaries, None, false)) {
-        report.item(hook, path, "wired");
-        return Ok(None);
     }
     if let Err(interp) = shell_hook(&content) {
         return Err(format!(
@@ -1136,7 +1241,7 @@ fn install_files(report: &mut HooksReport, decl: &HooksDecl, target: &Target, dr
                 Some(why) => report.refuse(format!(
                     "{why}; add this line to {} to run urzua from it: {}",
                     path.display(),
-                    shell_line(hook)
+                    shell_line(hook, decl.on_not_run)
                 )),
                 None => writes.push(Write {
                     hook,
@@ -1172,36 +1277,78 @@ fn would(state: &str) -> String {
     }
 }
 
-/// Writes `content` to a temporary file beside `path` and renames it over
-/// `path`, keeping `path`'s mode (a new file is executable). The rename is
-/// refused when `path` is no longer a regular file, so a symlink swapped in
-/// after the checks is never written through.
+/// Writes `content` to a new temporary file beside `path`, under an
+/// unpredictable name created exclusively (so a symlink planted at that name
+/// is never followed), and renames it over `path`, keeping `path`'s mode (a
+/// new file is executable). The owner cannot be kept without privilege: the
+/// file belongs to whoever runs the command. The rename is refused when
+/// `path` is no longer a regular file with one name. The temporary file is
+/// removed on every failure.
 fn write_atomic(path: &Path, content: &str) -> std::io::Result<()> {
+    use std::io::Write as _;
     let dir = path.parent().unwrap_or(Path::new("."));
     std::fs::create_dir_all(dir)?;
     let existing = std::fs::symlink_metadata(path).ok();
-    let tmp = dir.join(format!(
-        ".{}.urzua-{}",
-        path.file_name().and_then(|n| n.to_str()).unwrap_or("hook"),
-        std::process::id()
-    ));
-    std::fs::write(&tmp, content)?;
+    let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("hook");
+    let tmp = dir.join(format!(".{name}.urzua-{}", random_hex()));
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&tmp)?;
+    let written = (|| {
+        file.write_all(content.as_bytes())?;
+        file.sync_all()?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = existing
+                .as_ref()
+                .map_or(0o755, |m| m.permissions().mode() & 0o7777);
+            std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(mode))?;
+        }
+        let now = std::fs::symlink_metadata(path).ok();
+        if now
+            .as_ref()
+            .is_some_and(|m| !m.file_type().is_file() || nlink(m) > 1)
+        {
+            return Err(std::io::Error::other(
+                "it is no longer a regular file with one name; nothing was written",
+            ));
+        }
+        std::fs::rename(&tmp, path)
+    })();
+    if written.is_err() {
+        let _ = std::fs::remove_file(&tmp);
+    }
+    written
+}
+
+fn nlink(meta: &std::fs::Metadata) -> u64 {
     #[cfg(unix)]
     {
-        use std::os::unix::fs::PermissionsExt;
-        let mode = existing
-            .as_ref()
-            .map_or(0o755, |m| m.permissions().mode() & 0o7777);
-        std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(mode))?;
+        use std::os::unix::fs::MetadataExt;
+        meta.nlink()
     }
-    let now = std::fs::symlink_metadata(path).ok();
-    if now.as_ref().is_some_and(|m| !m.file_type().is_file()) {
-        let _ = std::fs::remove_file(&tmp);
-        return Err(std::io::Error::other(
-            "it is no longer a regular file; nothing was written",
-        ));
+    #[cfg(not(unix))]
+    {
+        let _ = meta;
+        1
     }
-    std::fs::rename(&tmp, path)
+}
+
+/// 32 hex characters from the system's random source, or, where there is
+/// none, from the clock and process id (still unique, not secret).
+pub(crate) fn random_hex() -> String {
+    use std::io::Read as _;
+    let mut bytes = [0u8; 16];
+    let random = std::fs::File::open("/dev/urandom").and_then(|mut f| f.read_exact(&mut bytes));
+    if random.is_err() {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_nanos());
+        bytes = (nanos ^ (u128::from(std::process::id()) << 64)).to_le_bytes();
+    }
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
 /// The indentation of the `repos:` list items when `repos:` is the config's
@@ -1305,7 +1452,7 @@ fn append_stanza(
         );
         return false;
     }
-    if let Some(why) = symlink_problem("pre-commit", config) {
+    if let Some(why) = link_problem("pre-commit", config, decl.on_not_run) {
         report.refuse(why);
         return false;
     }
@@ -1385,11 +1532,13 @@ fn uninstall_one(
     if let Some(why) = unwritable {
         return report.refuse(by_hand(why));
     }
-    if std::fs::symlink_metadata(path).is_ok_and(|m| m.file_type().is_symlink()) {
-        return report.refuse(by_hand(&format!(
-            "{} is a symlink; urzua never writes through a symlink",
-            path.display()
-        )));
+    if let Ok(meta) = std::fs::symlink_metadata(path) {
+        if meta.file_type().is_symlink() || nlink(&meta) > 1 {
+            return report.refuse(by_hand(&format!(
+                "{} is a symlink or a hard link; urzua never writes through one",
+                path.display()
+            )));
+        }
     }
     let content = match read_optional(path) {
         Ok(Some(c)) => c,
@@ -1457,7 +1606,7 @@ pub fn run_hook(config: Option<PathBuf>, hook: String) -> ExitCode {
     if let Some(c) = &config {
         cmd.arg("--config").arg(c);
     }
-    let out = match cmd.args(args).current_dir(&ws.repo_root).output() {
+    let out = match cmd.args(&args).current_dir(&ws.repo_root).output() {
         Ok(o) => o,
         Err(e) => {
             return not_run_hook(
@@ -1474,7 +1623,7 @@ pub fn run_hook(config: Option<PathBuf>, hook: String) -> ExitCode {
             eprintln!("{hook}: {shown}: no blocking findings");
             ExitCode::SUCCESS
         }
-        Some(1) => blocked(&hook, &shown, &report, ws.config.fail_on),
+        Some(1) => blocked(&hook, &shown, &report, fail_on_of(&args, ws.config.fail_on)),
         _ => {
             let why = report
                 .get("message")
@@ -1488,6 +1637,21 @@ pub fn run_hook(config: Option<PathBuf>, hook: String) -> ExitCode {
                 decl.on_not_run,
             )
         }
+    }
+}
+
+/// The threshold the hook's own arguments set (`--fail-on`), else the
+/// configuration's, so the findings printed are the ones that blocked.
+fn fail_on_of(args: &[String], configured: FailOn) -> FailOn {
+    let value = args.iter().enumerate().find_map(|(i, a)| {
+        a.strip_prefix("--fail-on=")
+            .map(str::to_string)
+            .or_else(|| (a == "--fail-on").then(|| args.get(i + 1).cloned().unwrap_or_default()))
+    });
+    match value.as_deref() {
+        Some("warning" | "warn") => FailOn::Warning,
+        Some("error") => FailOn::Error,
+        _ => configured,
     }
 }
 
@@ -1567,7 +1731,7 @@ mod tests {
             ("make lint\n", ""),
             (
                 "#!/usr/bin/env sh\n. \"$(dirname -- \"$0\")/_/husky.sh\"\n\nnpx x\n",
-                "#!/usr/bin/env sh\n. \"$(dirname -- \"$0\")/_/husky.sh\"\n\n",
+                "#!/usr/bin/env sh\n. \"$(dirname -- \"$0\")/_/husky.sh\"\n",
             ),
             ("#!/bin/sh", "#!/bin/sh"),
             ("", ""),
@@ -1615,7 +1779,11 @@ mod tests {
 
     #[test]
     fn printed_lines_are_recognised() {
-        assert!(invokes_urzua(&shell_line("pre-commit"), None, false));
+        assert!(invokes_urzua(
+            &shell_line("pre-commit", HookOnNotRun::Warn),
+            None,
+            false
+        ));
         assert!(invokes_urzua(
             &foreign_line("node", "pre-commit"),
             None,
@@ -1627,6 +1795,68 @@ mod tests {
             false
         ));
         assert!(!invokes_urzua("console.log(\"urzua, check\")", None, false));
+    }
+
+    #[test]
+    fn env_flags_are_skipped_to_find_the_interpreter() {
+        assert!(shell_hook("#!/usr/bin/env -S bash -eu\n").is_ok());
+        assert!(shell_hook("#!/usr/bin/env -i PATH=/bin sh\n").is_ok());
+        assert_eq!(
+            shell_hook("#!/usr/bin/env -S node --x\n"),
+            Err("node".to_string())
+        );
+    }
+
+    #[test]
+    fn the_hooks_own_fail_on_decides_what_is_printed() {
+        let args = |a: &[&str]| a.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        assert_eq!(
+            fail_on_of(&args(&["check", "--fail-on", "warning"]), FailOn::Error),
+            FailOn::Warning
+        );
+        assert_eq!(
+            fail_on_of(&args(&["check", "--fail-on=error"]), FailOn::Warning),
+            FailOn::Error
+        );
+        assert_eq!(
+            fail_on_of(&args(&["check"]), FailOn::Warning),
+            FailOn::Warning
+        );
+    }
+
+    fn version(v: &str) -> Vec<u64> {
+        v.split('.').map(|p| p.parse().unwrap_or(0)).collect()
+    }
+
+    #[test]
+    fn first_version_names_the_release_that_ships_hooks_run() {
+        let changelog = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../../CHANGELOG.md"
+        ))
+        .expect("CHANGELOG.md");
+        let mut sections: Vec<(String, String)> = Vec::new();
+        for line in changelog.lines() {
+            if let Some(rest) = line.strip_prefix("## ") {
+                let v = rest.split_whitespace().next().unwrap_or("").to_string();
+                sections.push((v, String::new()));
+            } else if let Some(last) = sections.last_mut() {
+                last.1.push_str(line);
+                last.1.push('\n');
+            }
+        }
+        let shipped = sections
+            .iter()
+            .rev()
+            .find(|(_, body)| body.contains("urzua hooks install"));
+        match shipped {
+            Some((v, _)) => assert_eq!(FIRST_VERSION, v, "hooks run first shipped in {v}"),
+            None => assert!(
+                version(FIRST_VERSION) > version(env!("CARGO_PKG_VERSION")),
+                "FIRST_VERSION {FIRST_VERSION} must name the coming release, newer than {}",
+                env!("CARGO_PKG_VERSION")
+            ),
+        }
     }
 
     #[test]
