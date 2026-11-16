@@ -16,8 +16,8 @@
     ".claude/commands/rfc.md": "sha256:d8b3308af758e3e4e7835d8bae793811c585aad0fb64f312c0f2f1a087f83fca",
     ".claude/commands/spec.md": "sha256:3b7fcb49f0893a3b6388c75406ac5f8d1be5ccb5ca2dc9c59fc3dee08079a96c",
     ".claude/commands/waiver.md": "sha256:188690a392b5a9734644b848814b5c569d436dcd6dbdd8e68087c8d13304b287",
-    ".claude/hooks/urzua-claude-code.py": "sha256:b6247db658ec37687de6ec3193af26bd3b064658b9de1e5c6033628a437921ba",
-    ".claude/hooks/urzua-record.sh": "sha256:026601eb03882d9611f46c7ac52811c33e0f5d9c4bdb1d0ecadc0ba571a04a72"
+    ".claude/hooks/urzua-claude-code.py": "sha256:7938ef8ac23ccd5820bfbd0ab8ec5f08640ab578dd209994a030c379f8f87d69",
+    ".claude/hooks/urzua-record.sh": "sha256:785163edb59c2ab7099e90a9f56b32ef8e2223a14bd87ec82e8513542fcb9485"
   },
   "entries": [
     {
@@ -25,20 +25,20 @@
       "event": "PostToolUse",
       "matcher": "Bash",
       "handler": "post-command",
-      "hash": "sha256:cd4c474826b8b4a713d60be868c926e41709c149ecf98f6094a3f978be34e4ca"
+      "hash": "sha256:6c726a56876612ae28b5a18b4c70de74cbee8c2591170e37ad908f34ba6af3a3"
     },
     {
       "file": ".claude/settings.json",
       "event": "PreToolUse",
       "matcher": "Write|Edit|MultiEdit|NotebookEdit|mcp__.*",
       "handler": "edit",
-      "hash": "sha256:ed22f4b87183c5841394adba15c9033116c8293cbba88eb26cff4b95f03b0e51"
+      "hash": "sha256:7b116eca8532ba3a44ada087a1f6961d1add2066f08239ba147701567df479b7"
     },
     {
       "file": ".claude/settings.json",
       "event": "SessionStart",
       "handler": "session-start",
-      "hash": "sha256:83790d26b86642839446da2af796571c2dcd9d618fd95c5f304b6608f12ae714"
+      "hash": "sha256:b12431f6d0f8f7dd98e68e752062980f8f394e438ce36f6a651717d2e6150b13"
     }
   ],
   "blocks": [
