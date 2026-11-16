@@ -4,6 +4,36 @@ All notable changes to `urzua` are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/). Written for the person installing it — what changed
 for you — not a commit dump.
 
+## 0.4.6 (2026-11-16)
+
+### Features
+
+- `urzua hooks install`, `status`, `uninstall` and `run` wire the pre-commit and pre-push git hooks that `doctor` reports, in `.git/hooks`, a `core.hooksPath` inside the repository, husky's `.husky/` or the pre-commit framework. An existing hook gets a marked block at its top, so urzua runs first and the rest of the hook is unchanged; `uninstall` restores it byte for byte. A non-shell hook, a symlinked hook or a hooks directory outside the repository is refused with the line to add. `doctor`, `harness status` and the session-start check read the same layouts, read only urzua's own block as wired (any other mention of urzua is reported as an unmanaged call), and name the command that wires a missing hook. `hooks:` in the config names the `check` each hook runs and `on_not_run` (default `warn`: the hook says the records were not checked and lets the commit through; a blocking finding always blocks). A hook the repository maintains itself is declared (`hooks.<hook>.managed: declared`) and proven by `urzua hooks verify --run`, which runs it once, for real, urzua's check included, and reports whether it reached urzua; nothing in urzua skips its check.
+
+#### Three evidence guards. **An upgrade can surface findings.** On `urzua check --base` the new rule
+
+`diff.pin-changed-unattested`, on by default at `error`, requires every pin of a record the base holds to be
+unchanged or carry the row a pinning tool writes, so a pin edited, added, moved or removed by hand now fails.
+The command for each case: a stale pin, `urzua fix --rebaseline --apply`; a first pin, the new
+`urzua fix --pin --apply`; a new scope or a renamed file, `urzua fix --pin --apply --replace OLD=NEW`; a dropped
+pinned locator, `urzua fix --pin --apply --remove OLD` (each with `--ids <record> --actor agent --reason "<...>"`).
+A renamed record is judged against its old copy (paired by `Stable-Id`, record id, then git's rename detection; a
+changed or dropped `Stable-Id` is reported), unchanged pins are matched wherever they sit, a pull request that turns
+the rule off or moves the config file is still judged at the base revision's level, and `check --base` lists every
+pin replaced or removed with `fix --pin`. When a pinned file was merged by hand, `fix --conflicts` names the sequence
+that works: take the merged-in side's record, then `fix --rebaseline --apply`. `fix --pin` works on any record, with no
+expiry period. An agent's `urzua fix --apply` on a path-gated record is now refused: `fix --apply`,
+`fix --rebaseline --apply`, `fix --conflicts --apply`, `fix --pin --apply` and `reverify --apply` write a record
+under a path gate only for `--actor human` under a `gh`-verified login in the gate's group (`--actor` is a claim:
+this rests on that login), and `waive --apply`, `index --apply`, `migrate ids --apply`, `migrate filenames --apply`
+and `new` refuse under a path gate, however the path is spelled. A required suppression field, or an override
+log's `Reviewed-by` cell, with no letter or digit (`—`, `-`, `…`, an emoji, a link with no text) is blank, so
+such a waiver no longer takes effect.
+
+### Fixes
+
+- The gate action's usage example, its `version` input description and the messages of its installer name `v0.4.5`, the current release, as the example of an exact release tag.
+
 ## 0.4.5 (2026-11-16)
 
 ### Features
