@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5GM1RYRRX2XVMZ0ZAK
-Version: '0.174'
+Version: '0.175'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs@sha256:5ca1cc33ce62df541db0b977e02948d56020c96b9581448b0e755693eca8c2d4, code:rust/crates/urzua-core/src/rules.rs@sha256:8e3fdcd0ddb6e6a4c265cb8ad57e1221ec843e310870d95bb3d7d8be1936b7b2, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:6d2ad3bf88308769fb6dfa67352f5323dc6968b98b54fa5f0726b76eeaa94658, test:rust/crates/urzua-cli/tests/fail_on_integration.rs@sha256:2232e4cec5c3987d9f082f2a42b70838ac88fa82377b1cd4eb409aa9c513c201
@@ -777,8 +777,13 @@ does not replace them. `urzua mcp` tools return the same reports and so carry th
 - `fix`. A detect run that lists repairs says `urzua fix --apply --ids <the records of the repairs>`, reason `writes N repair(s)`. A run
   that applied writes says `urzua check`, reason `re-checks the corpus after N write(s)`. Every other
   `fix` status is `null`.
-- Every other command (`graph`, `explain`, `export`, `index`, `rules`, `doctor`, `new`, `init`,
-  `waive`, `reverify`, `migrate`, `roadmap`, `refs`, the harness commands) and every `not-run`
+- `init` and `doctor` (`MILE-265`, decided by the builder on 2026-11-16, pending maintainer review).
+  An adopt `init` that finds no record directory refuses (`not-run`) with `urzua init --types adr`,
+  reason naming greenfield mode. `doctor` with no config says `urzua init` when adopt would propose a
+  type there, the same greenfield command when there is nothing to adopt, and `null` when adopt cannot
+  write a config (`SPEC-5`). Every other `init` and `doctor` report is `null`.
+- Every other command (`graph`, `explain`, `export`, `index`, `rules`, `new`,
+  `waive`, `reverify`, `migrate`, `roadmap`, `refs`, the harness commands) and every other `not-run`
   report, including a panic, emit both keys as `null` until a later decision gives them a derivation.
 
 ### Suggested action
@@ -1479,3 +1484,4 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/check.rs` 47afea49d94d -> c121e0e0c258. Reason: commands/check.rs adds one session notice naming records git lists as unmerged; no rule or verdict changes. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/check.rs` c121e0e0c258 -> 5ca1cc33ce62. Reason: commands/check.rs adds the unmerged-records session notice and, under --base, the pins-recomputed-on-merge notice listing merge rows the diff adds; no rule or verdict changes. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Bumped to `0.174`. An unechoed claim whose counterpart is a protected path is the variant `supersession-unreciprocated-protected` or `pair-unreciprocated-protected`, offering `edit-field` `append` for a decider instead of the `urzua fix` command. **Why:** review of pull request 546: the command would have written a file the editor hook refuses an agent. | **substantive** |
+> | 2026-11-16 | Bumped to `0.175`. `init`'s refusal when there is nothing to adopt and `doctor`'s missing-config check carry a `next_action` (the greenfield command, or `urzua init` when adopt would propose a type), and `filename.identity-pattern`'s rename guidance for a file with no number names `exclude_files` as the alternative. Decided by the builder on 2026-11-16, pending maintainer review. **Why:** `MILE-265` -- `doctor` sent the user back to an `init` that refused, and nothing named `exclude_files` for a `README.md` read as a record. | **substantive** |

@@ -1131,7 +1131,11 @@ pub struct CouldNotRun {
 
 impl CouldNotRun {
     /// The command that gets past this refusal, for `next_action`.
-    pub fn with_next_action(mut self, command: impl Into<String>, reason: impl Into<String>) -> Self {
+    pub fn with_next_action(
+        mut self,
+        command: impl Into<String>,
+        reason: impl Into<String>,
+    ) -> Self {
         self.next = Some(NextAction {
             command: command.into(),
             reason: reason.into(),

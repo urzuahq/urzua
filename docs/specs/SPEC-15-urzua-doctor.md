@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5E1D23JRXBPTP54NSG
-Version: '0.30'
+Version: '0.31'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/commands/doctor.rs@sha256:9a3f5ddc016fe0514d84ce1b2884f2aa25b3062613fc1086d490706a1deb6a59, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs@sha256:dc29b51bde5a2ba79d95c5e0a09466a54e816e8e2cc4a86a80e4459be477a447, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:6d2ad3bf88308769fb6dfa67352f5323dc6968b98b54fa5f0726b76eeaa94658
+Realized-by: code:rust/crates/urzua-cli/src/commands/doctor.rs@sha256:0c55fbfc4a26973c23cc172810f0dfdfb24b38469f44d9c3f7aefea2442bc9a8, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs@sha256:dc29b51bde5a2ba79d95c5e0a09466a54e816e8e2cc4a86a80e4459be477a447, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:6d2ad3bf88308769fb6dfa67352f5323dc6968b98b54fa5f0726b76eeaa94658
 Author: beauwilliams
 Subject: '`urzua doctor` -- diagnosing whether checks are actually wired to CI/hooks, not just present.'
 Implements: —
@@ -55,7 +55,7 @@ empty, same as every other command's report.
 
 | `check` id | Meaning |
 |---|---|
-| `config-exists` | `.urzua/config.yaml` is present. `error` if missing (short-circuits, exit 2). |
+| `config-exists` | `.urzua/config.yaml` is present. `error` if missing (short-circuits, exit 2); the message then says what `urzua init` would do in this repository today, and `next_action` carries the step: `urzua init` when adopt proposes a type, `urzua init --types adr` when there is nothing to adopt, `null` with adopt's reason when it cannot write a config. It never sends the user to an `init` that refuses (`MILE-265`, decided by the builder on 2026-11-16, pending maintainer review). |
 | `config-parses` | The config parses with no unrecognized keys (`deny_unknown_fields` — a typo'd key is a hard parse error, not a silently-ignored one, and so is a `harness.guardrails` name the build does not ship). `error` if not (short-circuits, exit 1). Unrecognized entries inside the `harness` table still load; the message then counts them and `harness-config` names them. |
 | `harness-outside-writes` | `warn` when `harness` enables a guardrail and `outside_writes` is undeclared: a write into a linked worktree of the repository at a commit with no gates is then not judged by this repository's gates; recommends `shared` (`ADR-89` amendment of 2026-11-09, `SPEC-3`). |
 | `harness-installed` | `warn` when `harness` declares an adapter, a guardrail or an instructions file and `.urzua/harness.lock` is missing or the installed bundle has drifted from it. A `harness` block that declares none of the three (only `outside_writes` and `allow_paths`, as `urzua init` writes it) installs nothing, so a missing lock is not reported. |
@@ -143,3 +143,5 @@ than compounded:
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/check_integration.rs` 3441046fd344 -> 919b855ba25b. Reason: Read the diff of each pinned file against main and the claim still holds. check_integration.rs: the init-then-check blockquote test also enables header.required-fields after declaring required_fields, because adopt now withholds that rule; other tests unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/check_integration.rs` 919b855ba25b -> 6d2ad3bf8830. Reason: Read the diff of each re-pinned file against main: check_integration.rs fix fixtures create the file their record cites. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Bumped to `0.30`. Evidence pins re-baselined for this change (the `Re-baselined` row above); the specification text is unchanged. **Why:** a revision-log entry that adds a structural change bumps `Version`. | **structural** |
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/doctor.rs` 9a3f5ddc016f -> 0c55fbfc4a26. Reason: doctor.rs: the missing-config check now names the step init would take here and sets next_action; the other checks are unchanged **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-16 | Bumped to `0.31`. A missing config's `config-exists` message and `next_action` name the step `init` would take here instead of always "run `urzua init`". Decided by the builder on 2026-11-16, pending maintainer review. **Why:** `MILE-265` -- after `init` refused a headerless corpus, `doctor` sent the user back to it, a loop. | **substantive** |

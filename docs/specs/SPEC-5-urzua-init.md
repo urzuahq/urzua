@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5PKKQRJF9WFZJA105B
-Version: '0.32'
+Version: '0.33'
 Date: 2026-08-20
 Status: Accepted
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/commands/init.rs@sha256:2a3bec5a675214fc3708a97db213500bb1fe777f67f1120e5381da3597c95233, test:rust/crates/urzua-cli/tests/init_adopt_integration.rs@sha256:11f72d46590a2ea22f519f1744af3309d1faff6954992dd01a0242e3acb9d6c1, code:rust/crates/urzua-cli/src/commands/init_greenfield.rs@sha256:5ef5edc7661c3fdc9614e7bed051785f1fdddcd8b2fa2c0cdd5cf24c44c1b75f, test:rust/crates/urzua-cli/tests/init_greenfield_integration.rs@sha256:98517eae0c2e6942f2fffe8dfda1991d89f3eb5054d069e9e57ed8ad7125f97f
+Realized-by: code:rust/crates/urzua-cli/src/commands/init.rs@sha256:ded385eeb996d31636a40ad723735abbb450aca06e81d3e20d22b703d10c5067, test:rust/crates/urzua-cli/tests/init_adopt_integration.rs@sha256:566bb95965e79f45324b1ce9dcd6acff2d3f8628cfe1cf169e1fa0a64cd5ffc1, code:rust/crates/urzua-cli/src/commands/init_greenfield.rs@sha256:15c7e38151488d293ca6eb8cb5f99e753b5599f68408ce25b7f5bb0a008feb10, test:rust/crates/urzua-cli/tests/init_greenfield_integration.rs@sha256:98517eae0c2e6942f2fffe8dfda1991d89f3eb5054d069e9e57ed8ad7125f97f
 Author: beauwilliams
 Subject: '`urzua init` -- the adopt-existing-corpus path, greenfield type selection with built-in profiles, and the `.urzua/` layout.'
 Implements: RFC-1
@@ -135,7 +135,8 @@ directory is never mentioned.) Neither mode changes its exit code for these.
 
 ## Proposed header shape
 
-`init` proposes `header_shape: yaml-frontmatter` for every type, the only shape with a reader (the
+`init` proposes `header_shape: yaml-frontmatter` for every type whose records carry a header (a type
+whose records carry none is the next section), the only shape with a reader (the
 `blockquote` and `bold-list` shapes were removed, `MILE-85`). For each proposed type it parses the
 existing records with the real header parser and counts those whose header is YAML frontmatter at the
 very start of the record; a record written in a removed form, or with no readable header, is counted
@@ -145,9 +146,34 @@ until its header is rewritten as YAML frontmatter. The proposed config declares 
 record carries (`required_fields: [Status]`) on the type, after which `header.required-fields` reports
 each one. A type whose records are all frontmatter gets no notice. A type with no records is proposed
 `yaml-frontmatter`.
-Each `proposed` entry reports the chosen `header_shape`. When a proposed directory holds a `README.md`
-directly, which is never a record, the type is written with `exclude_files: [README.md]` and its `proposed`
-entry lists `exclude_files`; a directory with no README writes no `exclude_files`.
+Each `proposed` entry reports the chosen `header_shape`. A file directly in a proposed directory that is
+not a record is written under the type's `exclude_files` and named in the entry's `notes`: an index page
+(`README.md` or `index.md`, any letter case, written as spelled) and, in a directory of numbered records,
+a markdown file with no number. A directory with none writes no `exclude_files`. `filename.identity-pattern`'s
+rename guidance for a file with no number names `exclude_files` as the alternative (`SPEC-2`).
+
+## A corpus whose records have no header
+
+A numbered directory none of whose files has a header block (the common ADR style: `0001-title.md`, a
+`# 1. Title` heading, a `Date:` line and `## Status`/`## Context`/`## Decision`/`## Consequences`
+sections) is proposed with `header_shape: none` when at least two of its files share a `##` heading
+carried by at least 80% of them. Those headings, in the corpus's own order, are written as
+`sections.required` (`from: headings`) and listed in the entry's `required_sections`, so `section.required`
+reports a file that lacks one. A directory whose files share no such heading holds numbered pages more
+often than records and is not proposed; the `init-scan` notice names it as before.
+
+The entry's `notes` say what the proposal observed and what it cannot express: the threshold and the
+headings that met it, each required heading's missing files by path, the headings below the threshold,
+that no field is read (a `Status:` or `Date:` line in the body included), that a `## Status` section is
+checked for presence only and not read as a status (`MILE-255`), that a reference written in prose (`ADR
+0007`) is not read as a reference (`MILE-268`), and, for file names with no type prefix, the number's
+width and padding, that urzua gives no identity to such a name (`ADR-36`; an `identity.pattern` must
+capture a prefix), and every number more than one file carries, which `check` cannot report under the
+proposed config. No prefix is invented. The threshold and the section rule were decided by the builder
+on 2026-11-16, pending maintainer review (`MILE-265`).
+
+A directory where some files carry a header and some do not stays `yaml-frontmatter` with its
+`header-shape` notice. In a mixed corpus each directory is proposed by what it holds.
 
 ## Proposed harness key
 
@@ -164,7 +190,10 @@ A waiver type makes records suppress findings, so it is the adopter's to opt int
 `init` proposes each shipped rule at `warn`, except a rule that cannot examine anything on the corpus it
 just adopted or on the one greenfield writes: a rule that needs options it cannot supply, a rule that needs declared `relation_pairs`,
 a rule that resolves identity on a corpus where no type has a prefix, a rule that reads a per-type
-declaration `init` does not write, and `header.scaffold-mismatch` (`MILE-103`), which asks whether a
+declaration `init` does not write, `identity.collision` and `identity.open-pr-collision` where no
+proposed type has a prefix (each reads a record's number from the file name's prefix), and, where no
+proposed type has a header, every rule whose table entry is `header_none: OutOfScope`; and
+`header.scaffold-mismatch` (`MILE-103`), which asks whether a
 record was written with `urzua new` and which no record of a just-adopted corpus was, so it would warn
 on the first record each author adds by hand; an adopter turns it on once they use `new`. Unlike the
 others it is named in `init`, not derived from the rule table, and no notice lists it. The last group is not a fixed list: it is every rule whose entry in the
@@ -181,7 +210,10 @@ its profiles carry (fields, status values and transitions, and for `spec` the re
 `type.no-declared-spec`, which would warn about the `spec` pointer of every type it just wrote while no spec
 exists yet; the notice names it, and the rule is enabled once a type declares `spec: SPEC-N`. A `rule-applicability` notice
 (severity `info`) lists the withheld rules, grouped by declaration, so the adopter knows what to declare on
-a record type before enabling the rule.
+a record type before enabling the rule. Adopt writes `sections.required` only for a headerless type, so
+then it proposes `section.required` and still withholds `section.shape`, which judges only an entry with
+a `shape`; further `rule-applicability` notices name `section.shape`, the prefix-reading rules and the
+header-reading rules it withheld for those reasons.
 
 `init` also writes `authority: {decider_table: base, waivable: never}`: no deciders and no gates, which no
 corpus can supply, only the choice that who may decide is read from a pull request's base revision (`SPEC-3`,
@@ -215,6 +247,15 @@ The real, shipped shape (`InitReport`/ADR-46):
   "written": true
 }
 ```
+
+An entry also carries `exclude_files`, `required_sections` and `notes` when it has any.
+
+When adopt finds no record directory the refusal names greenfield mode: its `error` ends with the
+exact command, `urzua init --types adr`, and the built-in profiles, and its top-level `next_action` is
+that command (`SPEC-2`). `urzua doctor` with no config states what `init` would do there today: the
+number of types adopt proposes (`next_action: urzua init`), greenfield's command when there is nothing
+to adopt, or adopt's reason when it cannot write a config (`next_action: null`); it never sends the
+user to an `init` that refuses.
 
 Greenfield mode adds `templates`, a list of `{type, path, state}` where `state` is `written`, `kept` or
 `would-write`, and `directories`, a list of `{type, path, state}` for each type's record directory with the same
@@ -350,3 +391,5 @@ None open. The four questions `MILE-114` carried are decided or recorded:
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/init.rs` 31e687bccdc4 -> 77c67b7da3c6, `rust/crates/urzua-cli/tests/init_adopt_integration.rs` f7562c0496e1 -> 11f72d46590a. Reason: Read the diff of each re-pinned file against main. init.rs changed only in its unit test, which now also asserts that the withheld waiver declaration names effective_requires; no production code changed; a test was added for the withheld waiver declaration; the existing tests are unchanged. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/init.rs` 3b79d9cdc769 -> 2a3bec5a6752, `rust/crates/urzua-cli/tests/init_adopt_integration.rs` f7562c0496e1 -> 11f72d46590a. Reason: Read the diff of each re-pinned file against main. init.rs: only its unit test changed (one added needle, effective_requires: [Reason, Expires]); no production code changed; init_adopt_integration.rs: one test added (init_withholds_the_waiver_declaration_and_names_its_keys); no existing test changed. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/init.rs` 3b79d9cdc769 -> 2a3bec5a6752, `rust/crates/urzua-cli/tests/init_adopt_integration.rs` f7562c0496e1 -> 11f72d46590a. Reason: Read the diff of each re-pinned file against main. init.rs: only its unit test changed (one added needle, effective_requires: [Reason, Expires]); no production code changed; init_adopt_integration.rs: one test added (init_withholds_the_waiver_declaration_and_names_its_keys); no existing test changed. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-16 | Bumped to `0.33`. Adopt proposes a numbered directory whose files carry no header as `header_shape: none` with the `##` headings at least 80% of its files share as `sections.required`, names in `notes` what it cannot express (missing sections by file, duplicate numbers, the unread `## Status` and prose references, no identity without a prefix), withholds the header-reading rules when no type has a header and the prefix-reading collision rules when no type has a prefix, excludes `index.md` and numberless files beside numbered records, and names `urzua init --types adr` as the next step when there is nothing to adopt; `doctor` names a working step. Decided by the builder on 2026-11-16, pending maintainer review. **Why:** `MILE-265` -- a walkthrough of 2026-11-15 found `init` refusing the common ADR style and `doctor` sending the user back to it. | **substantive** |
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/init.rs` 2a3bec5a6752 -> ded385eeb996, `rust/crates/urzua-cli/tests/init_adopt_integration.rs` 11f72d46590a -> 566bb95965e7, `rust/crates/urzua-cli/src/commands/init_greenfield.rs` 5ef5edc7661c -> 15c7e3815148. Reason: init.rs: adopt proposes header_shape none with sections.required for a numbered headerless directory, excludes index.md and numberless files, and withholds rules that would examine nothing there; init_greenfield.rs: the greenfield proposal initializer gains empty required_sections and notes fields; greenfield output is unchanged; init_adopt_integration.rs: adds tests for the headerless corpus, mixed corpus, index exclusions, rename hint and migrate ids; existing tests are unchanged **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |

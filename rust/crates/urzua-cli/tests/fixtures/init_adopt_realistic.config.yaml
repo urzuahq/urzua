@@ -17,8 +17,6 @@ record_types:
 rules:
   header.case-variant-key: warn
   type.dir-matches-nothing: warn
-  identity.collision: warn
-  identity.open-pr-collision: warn
   type.record-outside-declared-dir: warn
   type.no-declared-spec: warn
   config.companion-declaration-missing: warn

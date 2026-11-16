@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5EEDKBJSNGJHTYE0QZ
-Version: '0.22'
+Version: '0.23'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/commands/migrate.rs@sha256:64623ff25255245f76441431c47ee2aae52dd3d1353476f60d0d86a7879a3f31, code:rust/crates/urzua-core/src/migrate.rs@sha256:a8b30583f9658b1ffdcd5920fb2bd08adf9e41bd55d406ac94aaaaf5f59fe768, test:rust/crates/urzua-core/src/migrate.rs@sha256:a8b30583f9658b1ffdcd5920fb2bd08adf9e41bd55d406ac94aaaaf5f59fe768, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:6d2ad3bf88308769fb6dfa67352f5323dc6968b98b54fa5f0726b76eeaa94658, code:rust/crates/urzua-cli/src/commands/migrate_filenames.rs@sha256:f317e30385e418b49c3c76cf9088d69a98a2bb5c0cc0f3bbf945c44fbd67e93e, code:rust/crates/urzua-core/src/migrate_filenames.rs@sha256:2f2909ef551648a13fdd38bc2d6623473ed22348ddb17d99fb245a2ac191f150, test:rust/crates/urzua-core/src/migrate_filenames.rs@sha256:2f2909ef551648a13fdd38bc2d6623473ed22348ddb17d99fb245a2ac191f150, test:rust/crates/urzua-cli/tests/migrate_filenames_integration.rs@sha256:751e8533f5cac45a5b93fbb9e232d06db4bb35bfe880283d0a5805dbf2691483
+Realized-by: code:rust/crates/urzua-cli/src/commands/migrate.rs@sha256:7d227819d3a9115e9376c3011c1c121e84101ae5644f17ee86fc95d766c0901b, code:rust/crates/urzua-core/src/migrate.rs@sha256:a8b30583f9658b1ffdcd5920fb2bd08adf9e41bd55d406ac94aaaaf5f59fe768, test:rust/crates/urzua-core/src/migrate.rs@sha256:a8b30583f9658b1ffdcd5920fb2bd08adf9e41bd55d406ac94aaaaf5f59fe768, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:6d2ad3bf88308769fb6dfa67352f5323dc6968b98b54fa5f0726b76eeaa94658, code:rust/crates/urzua-cli/src/commands/migrate_filenames.rs@sha256:f317e30385e418b49c3c76cf9088d69a98a2bb5c0cc0f3bbf945c44fbd67e93e, code:rust/crates/urzua-core/src/migrate_filenames.rs@sha256:2f2909ef551648a13fdd38bc2d6623473ed22348ddb17d99fb245a2ac191f150, test:rust/crates/urzua-core/src/migrate_filenames.rs@sha256:2f2909ef551648a13fdd38bc2d6623473ed22348ddb17d99fb245a2ac191f150, test:rust/crates/urzua-cli/tests/migrate_filenames_integration.rs@sha256:751e8533f5cac45a5b93fbb9e232d06db4bb35bfe880283d0a5805dbf2691483
 Author: beauwilliams
 Subject: '`urzua migrate ids`/`urzua migrate filenames`/`urzua migrate schema`/`urzua migrate config` -- backfilling stable IDs, renaming record files to the declared filename convention, previewing schema changes and rewriting a config to the current schema version.'
 Implements: ADR-21, ADR-22, ADR-77
@@ -42,6 +42,7 @@ since nothing in the schema currently reads or sorts by a stable ID's embedded t
   "status": "ok",
   "apply": true,
   "missing": ["docs/adr/0001-x.md"],
+  "written": 1,
   "results": [
     { "record": "docs/adr/0001-x.md", "outcome": "applied" }
   ]
@@ -57,6 +58,13 @@ code agree. `--apply` takes the lock `fix --apply` takes (`.urzua/cache/fix.lock
 right before writing and fails that record, writing nothing, if it changed since it was read, and
 replaces each file through a temporary file and a rename, so it cannot overwrite a concurrent edit or
 leave a truncated record. `migrate config` replaces the config the same way.
+
+`written` counts the records `--apply` wrote (`0` on a dry run), so a run that wrote nothing reads as one
+(`SPEC-1`, no silent no-op). A record of a type declaring `header_shape: none` has no header to hold a
+`Stable-Id`: its result is `skipped` with an `error` naming the type and `header_shape: none`, and a
+`migrate-ids` warning notice counts such records and names their types, on a dry run (`--apply` writes
+nothing to them) and on `--apply` (nothing was written to them). Decided by the builder on 2026-11-16,
+pending maintainer review (`MILE-265`).
 
 ## `urzua migrate filenames`
 
@@ -233,3 +241,5 @@ path of a rename or a move; `value` is what an added or changed key now holds; `
 > | 2026-11-14 | Bumped to `0.21`. Evidence pins re-baselined for this change (the `Re-baselined` row above); the specification text is unchanged. **Why:** a revision-log entry that adds a structural change bumps `Version`. | **structural** |
 > | 2026-11-14 | Bumped to `0.22`. `migrate filenames` also reads a `./` citation as a repository path from a file in another directory, and its report gains `population`, the number of records examined. **Why:** an external review found `./docs/adr/...` citations missed and a run that skipped everything reported `ok` with no count. | **substantive** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/check_integration.rs` 919b855ba25b -> 6d2ad3bf8830, `rust/crates/urzua-cli/src/commands/migrate_filenames.rs` f5b90c25b3a3 -> f317e30385e4, `rust/crates/urzua-core/src/migrate_filenames.rs` a7126c7f473c -> 2f2909ef5516, `rust/crates/urzua-cli/tests/migrate_filenames_integration.rs` 91cda512bee8 -> 751e8533f5ca. Reason: Read the diff of each re-pinned file against main: cli migrate_filenames.rs reports population; check_integration.rs fix fixtures create the file their record cites; migrate_filenames_integration.rs adds the ./ citation and population tests; core migrate_filenames.rs reads ./ citations as repository paths and counts population. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-16 | Bumped to `0.23`. `migrate ids` reports `written`, and a record of a `header_shape: none` type is skipped with a reason naming it and a warning notice, instead of `ok` with "no header-shaped region found". Decided by the builder on 2026-11-16, pending maintainer review. **Why:** `MILE-265` -- the walkthrough of 2026-11-15 saw `migrate ids --apply` report `ok` on a headerless corpus and write nothing. | **substantive** |
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/migrate.rs` 64623ff25255 -> 7d227819d3a9. Reason: migrate.rs: migrate ids now reports a written count and skips a header_shape none record with a reason and a warning notice; the backfill of headed records is unchanged **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |

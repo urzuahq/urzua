@@ -2,7 +2,7 @@
 Stable-Id: 01M37DNT002P07Y8HC0KQG96N3
 Status: Fixed
 Found-in: "A /code-review v0.3.0...main pass, round 27"
-Realized-by: test:rust/crates/urzua-cli/src/commands/init.rs#a_corpus_with_no_prefix_is_not_offered_rules_that_cannot_fire@sha256:4ae5d14d012a51fd22eda16f0777961109a6d4e0fbbfcbfd3f5d71c80b374236
+Realized-by: test:rust/crates/urzua-cli/src/commands/init.rs#a_corpus_with_no_prefix_is_not_offered_rules_that_cannot_fire@sha256:4f31ce6c47c3d21f7427ecf02e36827eae08384a00a50524807bb01e1dc2ba12
 ---
 # 149 — IDENTITY_DEPENDENT_RULES omits relation.target-status-undeclared
 
@@ -41,3 +41,4 @@ Added `RULE_RELATION_TARGET_STATUS_UNDECLARED` to `IDENTITY_DEPENDENT_RULES`.
 > | 2026-11-05 | `Regression-test` moved into `Realized-by` as 1 `test:` locator and the field retired (ADR-84). **Why:** ADR-84 makes `Realized-by` the one evidence field for every record type, so `status.delivery-agreement` can hold this record's `Status` to it. | **structural** |
 > | 2026-11-08 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/init.rs#a_corpus_with_no_prefix_is_not_offered_rules_that_cannot_fire` (lines 991-1023) ff03c4b54c4a -> 6ef287fc50cf. Reason: the pinned test span's only change is the added `exclude_files: vec![]` fixture field; the behaviour this record relies on is unchanged **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/init.rs#a_corpus_with_no_prefix_is_not_offered_rules_that_cannot_fire` (lines 1138-1170) 6ef287fc50cf -> 4ae5d14d012a. Reason: Read the diff of each pinned file against main and the claim still holds. the test now asserts header.case-variant-key is still proposed instead of header.required-fields, which adopt withholds; its other assertions are unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/init.rs#a_corpus_with_no_prefix_is_not_offered_rules_that_cannot_fire` (lines 1516-1550) 4ae5d14d012a -> 4f31ce6c47c3. Reason: init.rs: adopt proposes header_shape none with sections.required for a numbered headerless directory, excludes index.md and numberless files, and withholds rules that would examine nothing there **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
