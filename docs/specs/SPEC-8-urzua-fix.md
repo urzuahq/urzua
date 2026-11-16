@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5Q0XVK27P5T8FN72BN
-Version: '0.56'
+Version: '0.57'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/commands/fix.rs@sha256:90200653f67b820be83351060cfffc25b75636394cb6401d7af3d5df85bf2666, code:rust/crates/urzua-core/src/fix.rs@sha256:82fdfdfb91767c334293abade07193e7a0a7d085b319564cc5a2036ec70eac6f, test:rust/crates/urzua-cli/tests/fix_paths_integration.rs@sha256:73cb06a1782f02abeaf6c0795632ed1d1939633d72f67033247120656c6927d2, test:rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs@sha256:9a053f2ed41dac449d16634b6c76070192f55863ace5a56d8aa096543e90b131, test:rust/crates/urzua-cli/tests/fix_drift_integration.rs@sha256:ff69343ca324400bde79c266372f9a213728d4d4ef8202beca6e12e54aa35352
+Realized-by: code:rust/crates/urzua-cli/src/commands/fix.rs@sha256:90200653f67b820be83351060cfffc25b75636394cb6401d7af3d5df85bf2666, code:rust/crates/urzua-core/src/fix.rs@sha256:63b1ef559223a07e7a17cde09306a7b3e11b21f0d8548bf1ff6a1e3a205fd243, test:rust/crates/urzua-cli/tests/fix_paths_integration.rs@sha256:73cb06a1782f02abeaf6c0795632ed1d1939633d72f67033247120656c6927d2, test:rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs@sha256:9a053f2ed41dac449d16634b6c76070192f55863ace5a56d8aa096543e90b131, test:rust/crates/urzua-cli/tests/fix_drift_integration.rs@sha256:ff69343ca324400bde79c266372f9a213728d4d4ef8202beca6e12e54aa35352
 Author: beauwilliams
 Subject: '`urzua fix` -- detecting and applying Embodiment corrections computed from evidence.'
 Implements: ADR-15, ADR-18, ADR-19, ADR-20
@@ -650,3 +650,4 @@ asserted by test, not assumed by convention.
 > | 2026-11-16 | Bumped to `0.55`. `fix` does not write the drift state over a stale pin and names the re-pin listing instead; a revision-log table with no row takes the first tool row (`fix --apply`, `fix --rebaseline --apply`, `reverify --apply`). Decided by the builder on 2026-11-16, pending maintainer review. **Why:** `MILE-266` and `MILE-267` -- a drift repair turned a changed pinned file green without a re-pin, and a record from a built-in template could not take a tool row. | **substantive** |
 > | 2026-11-16 | Bumped to `0.56`. Re-pinned the evidence `MILE-233` changed (the rule vocabulary read from configuration); what this spec states is unchanged. **Why:** a re-pinned versioned spec carries a version above main's. | **structural** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/fix.rs` 7ea3d709cad8 -> 82fdfdfb9176. Reason: fix.rs only gains rejected_values and waiver_fields in a test fixture's RecordTypeConfig literal. The claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-16 | Bumped to `0.57`. Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/fix.rs` 82fdfdfb9176 -> 63b1ef559223. Reason: fix.rs: the only change on this branch is one added `hooks: Default::default()` field in a Config struct literal, needed by the new optional hooks key, merged with main's own change to the file; behaviour this record cites is unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
