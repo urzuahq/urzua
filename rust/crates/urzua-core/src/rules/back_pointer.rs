@@ -904,23 +904,7 @@ pub fn embodiment_back_pointer_resolution(
         Outcome::Examined
     });
 
-    let held_and_unread = (files, sources.unread());
-    findings.extend(uncovered_source_paths(
-        RULE_ID,
-        "back-pointer-uncovered-path",
-        held_and_unread,
-        source_paths,
-        config_path,
-    ));
-    findings.extend(uncovered_paths(
-        RULE_ID,
-        "back-pointer-uncovered-test-path",
-        config_path,
-        held_and_unread,
-        test_paths,
-        ("test path", "test_paths"),
-        Some(source_paths),
-    ));
+    findings.extend(resolution_uncovered(sources, config_path));
 
     (
         RuleExecution::ran(
@@ -933,6 +917,33 @@ pub fn embodiment_back_pointer_resolution(
         .with_unread_markers(unread),
         findings,
     )
+}
+
+/// The resolution rule's findings for a declared source or test path that
+/// covers no tracked file.
+fn resolution_uncovered(
+    sources: &BackPointerSources,
+    config_path: &std::path::Path,
+) -> Vec<Finding> {
+    const RULE_ID: &str = RULE_EMBODIMENT_BACK_POINTER_RESOLUTION;
+    let held_and_unread = (&sources.files[..], sources.unread());
+    let mut findings = uncovered_source_paths(
+        RULE_ID,
+        "back-pointer-uncovered-path",
+        held_and_unread,
+        &sources.back_pointer_paths,
+        config_path,
+    );
+    findings.extend(uncovered_paths(
+        RULE_ID,
+        "back-pointer-uncovered-test-path",
+        config_path,
+        held_and_unread,
+        &sources.test_paths,
+        ("test path", "test_paths"),
+        Some(&sources.back_pointer_paths),
+    ));
+    findings
 }
 
 /// The resolution rule's findings about the markers of one file that carry no
