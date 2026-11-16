@@ -506,7 +506,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         actions: &[
             VariantAction::new("supersession-unresolved", ActionDecl::FIELD_SET),
             VariantAction::new("supersession-untracked", ActionDecl::Exempt("the repair is `git add` on the named file, and no action kind addresses git: `run-command` is closed to `urzua` commands and `edit-config` edits configuration")),
-            VariantAction::new("supersession-unreciprocated", ActionDecl::FIELD_APPEND),
+            VariantAction::new("supersession-unreciprocated", ActionDecl::RUN_COMMAND),
         ],
         phase: Phase::Main,
         companion: None,
@@ -530,7 +530,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         actions: &[
             VariantAction::new("pair-unresolved", ActionDecl::FIELD_SET),
             VariantAction::new("pair-untracked", ActionDecl::Exempt("the repair is `git add` on the named file, and no action kind addresses git: `run-command` is closed to `urzua` commands and `edit-config` edits configuration")),
-            VariantAction::new("pair-unreciprocated", ActionDecl::FIELD_APPEND),
+            VariantAction::new("pair-unreciprocated", ActionDecl::RUN_COMMAND),
         ],
         phase: Phase::Main,
         companion: None,

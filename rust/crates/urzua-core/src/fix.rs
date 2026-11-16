@@ -37,6 +37,25 @@ pub struct Repair {
     /// (RFC-0008 §6) -- a reader can disagree with the derivation, not just
     /// trust it.
     pub evidence: String,
+    /// Set when the repair writes the missing other half of a declared
+    /// relation rather than recomputing a value (`MILE-XXX`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub inverse: Option<InverseOf>,
+}
+
+pub mod inverse;
+
+/// What an inverse repair answers: the claim that asks for it, and the
+/// `Status` the repair leaves alone.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct InverseOf {
+    pub claimant: std::path::PathBuf,
+    pub claimant_field: String,
+    /// The field is not written in the record yet, so the repair adds its line.
+    pub field_absent: bool,
+    /// The record's status field, which the repair never writes.
+    pub status_field: String,
+    pub status: String,
 }
 
 /// Tier 1 repairs for `Embodiment`: the only tool-writable field this MVP
@@ -168,6 +187,7 @@ impl RepairScan<'_> {
                     if cited_by_test { "test" } else { "source" }
                 ),
             },
+            inverse: None,
         });
         (Outcome::Examined, repair)
     }
@@ -199,6 +219,7 @@ impl RepairScan<'_> {
             computed_value: set_status,
             tier: 1,
             evidence: format!("{} computes to {}", judged.evidence, judged.tier),
+            inverse: None,
         });
         (Outcome::Examined, repair)
     }
@@ -448,24 +469,11 @@ pub fn apply_repair(
     log_required: bool,
 ) -> Result<String, String> {
     let mut doc = LineDoc::parse(content);
-
-    // Edit by field position: the value after `Field:` on the field's own line,
-    // never a substring match (an empty or null stated value is a substring of
-    // everything and would be inserted at column 0).
-    let (field_line, edited_line) = (1..)
-        .map_while(|n| doc.line(n).map(|l| (n, l)))
-        .find_map(|(n, line)| {
-            replace_field_value(line, &repair.field, &repair.current_value, &repair.computed_value)
-                .map(|edited| (n, edited))
-        })
-        .ok_or_else(|| {
-            format!(
-                "could not find a '{}:' line stating {} to edit -- the record may have changed since detect ran",
-                repair.field,
-                describe_stated(&repair.current_value)
-            )
-        })?;
-    doc.replace_line(field_line, edited_line);
+    if repair.inverse.as_ref().is_some_and(|i| i.field_absent) {
+        insert_header_field(&mut doc, &repair.field, &repair.computed_value)?;
+    } else {
+        replace_stated(&mut doc, repair)?;
+    }
 
     if !log_required {
         return Ok(doc.to_string());
@@ -491,19 +499,82 @@ pub fn apply_repair(
         .and_then(table_row_prefix)
         .unwrap_or("> ")
         .to_string();
-    let narrative = format!(
-        "Tool-authored (by {}): recomputed `{}` from `{}` -- stated {} disagreed with the computed value `{}`.",
-        attestation.label(),
-        repair.field,
-        repair.evidence,
-        describe_stated(&repair.current_value),
-        repair.computed_value
-    );
+    let narrative = match &repair.inverse {
+        Some(inv) => format!(
+            "Tool-authored (by {}): wrote `{}: {}`, the inverse that {} requires (stated {}). {} is not changed here.",
+            attestation.label(),
+            repair.field,
+            repair.computed_value,
+            repair.evidence,
+            describe_stated(&repair.current_value),
+            inv.status_field
+        ),
+        None => format!(
+            "Tool-authored (by {}): recomputed `{}` from `{}` -- stated {} disagreed with the computed value `{}`.",
+            attestation.label(),
+            repair.field,
+            repair.evidence,
+            describe_stated(&repair.current_value),
+            repair.computed_value
+        ),
+    };
     let new_row = log_row(&prefix, log.layout, shape, today, &narrative)?;
     let last_line = last_entry.line;
     doc.insert_after(last_line, new_row);
 
     Ok(doc.to_string())
+}
+
+/// Adds `field: value` as the last line of a front-matter header. Fails when
+/// the record has no front matter, or already writes the field (it changed
+/// since detect ran).
+fn insert_header_field(doc: &mut LineDoc, field: &str, value: &str) -> Result<(), String> {
+    if doc.line(1).map(str::trim_end) != Some("---") {
+        return Err(format!(
+            "could not add '{field}:' -- the record has no front-matter header to add it to"
+        ));
+    }
+    let mut n = 2;
+    while let Some(line) = doc.line(n) {
+        if line.trim_end() == "---" {
+            doc.insert_after(n - 1, format!("{field}: {value}"));
+            return Ok(());
+        }
+        if line
+            .strip_prefix(field)
+            .is_some_and(|rest| rest.starts_with(':'))
+        {
+            return Err(format!(
+                "'{field}:' is now written in the record -- it changed since detect ran"
+            ));
+        }
+        n += 1;
+    }
+    Err(format!(
+        "could not add '{field}:' -- the record's front-matter header is not closed"
+    ))
+}
+
+/// Replaces the stated value of the repair's field on the field's own line.
+fn replace_stated(doc: &mut LineDoc, repair: &Repair) -> Result<(), String> {
+    // Edit by field position: the value after `Field:` on the field's own line,
+    // never a substring match (an empty or null stated value is a substring of
+    // everything and would be inserted at column 0).
+    let (field_line, edited_line) = (1..)
+        .map_while(|n| doc.line(n).map(|l| (n, l)))
+        .find_map(|(n, line)| {
+            replace_field_value(line, &repair.field, &repair.current_value, &repair.computed_value)
+                .map(|edited| (n, edited))
+        })
+        .ok_or_else(|| {
+            format!(
+                "could not find a '{}:' line stating {} to edit -- the record may have changed since detect ran",
+                repair.field,
+                describe_stated(&repair.current_value)
+            )
+        })?;
+    doc.replace_line(field_line, edited_line);
+    Ok(())
 }
 
 /// The lines a scoped pin resolved to, shown to the reviewer so they diff
@@ -1378,6 +1449,7 @@ mod tests {
             computed_value: "Verified".to_string(),
             tier: 1,
             evidence: "Realized-by: code:src/lib.rs, test:tests/it.rs".to_string(),
+            inverse: None,
         }
     }
 
@@ -1733,6 +1805,7 @@ mod tests {
             computed_value: "Done".to_string(),
             tier: 1,
             evidence: "Realized-by computes to Implemented".to_string(),
+            inverse: None,
         };
         let result = apply_repair(
             content,

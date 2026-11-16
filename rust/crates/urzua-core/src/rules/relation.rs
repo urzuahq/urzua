@@ -43,6 +43,24 @@ pub fn supersession_reciprocity(
     )
 }
 
+/// The `urzua fix` command that writes the missing inverse on `target`.
+pub fn inverse_fix_argv(target: &Path) -> Vec<String> {
+    ["urzua", "fix", "--apply", "--ids"]
+        .iter()
+        .map(|w| w.to_string())
+        .chain([target.display().to_string()])
+        .collect()
+}
+
+/// The way forward an unechoed claim's message ends with.
+fn inverse_hint(target: &Path, field: &str, id: &str) -> String {
+    format!(
+        "; add {id} to {field} in {} (`{} --by <you> --actor <agent|human>` writes it; it never changes a Status)",
+        target.display(),
+        inverse_fix_argv(target).join(" ")
+    )
+}
+
 /// What `relation.supersession-reciprocity` resolves a claim against.
 struct SupersessionCheck<'a> {
     config: &'a Config,
@@ -152,9 +170,11 @@ impl SupersessionCheck<'_> {
                 ActionSource::new("supersession-unreciprocated")
                     .file(target.path.clone())
                     .field(target_field)
-                    .text(id.clone()),
+                    .text(id.clone())
+                    .argv(inverse_fix_argv(&target.path)),
                 format!(
-                    "{field} claims a relation with {reference}, but {reference}'s {target_field} does not reciprocally name {id}"
+                    "{field} claims a relation with {reference}, but {reference}'s {target_field} does not reciprocally name {id}{}",
+                    inverse_hint(&target.path, target_field, id)
                 ),
             ));
         }
@@ -540,10 +560,12 @@ impl PairReciprocityCheck<'_> {
                 ActionSource::new("pair-unreciprocated")
                     .file(target.path.clone())
                     .field(echo)
-                    .text(id.clone()),
+                    .text(id.clone())
+                    .argv(inverse_fix_argv(&target.path)),
                 format!(
-                    "{field} claims a relation with {reference} (pair '{}'), but {reference}'s {echo} does not reciprocally name {id}{note}",
-                    slot.pair.name
+                    "{field} claims a relation with {reference} (pair '{}'), but {reference}'s {echo} does not reciprocally name {id}{note}{}",
+                    slot.pair.name,
+                    inverse_hint(&target.path, echo, &id)
                 ),
             )
             .declared_opt(declared_severity));
