@@ -4,6 +4,7 @@
 pub mod audit;
 pub mod check;
 pub mod doctor;
+pub(crate) mod evidence_log;
 pub mod explain;
 pub mod export;
 pub mod fix;

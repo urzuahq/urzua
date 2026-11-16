@@ -15,6 +15,7 @@ use urzua_core::record::Record;
 use urzua_core::report::{ActionInput, AttestationReport, FixFailure, NextAction, Notice, Report};
 use urzua_core::reverify::{apply_reverify, review_locators, FirstPin, ReverifyPlan};
 
+use super::evidence_log::{evidence_log, with_evidence_log, EvidenceLog, LogHistory};
 use super::fix::{refuse, resolve_attestation, validate_reason, Refusal};
 use crate::emit;
 use crate::session::Session;
@@ -29,6 +30,7 @@ pub(crate) struct PinArgs<'a> {
     pub reason: Option<&'a str>,
     pub replace: Option<&'a str>,
     pub remove: Option<&'a str>,
+    pub base: Option<&'a str>,
 }
 
 #[derive(serde::Serialize)]
@@ -39,6 +41,9 @@ struct PinEntryReport {
     /// `code:` and `test:` locators left unpinned, each with why.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     not_pinned: Vec<String>,
+    /// Whether the record has no revision log and the write creates one.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    creates_revision_log: bool,
 }
 
 #[derive(serde::Serialize)]
@@ -50,6 +55,10 @@ struct PinReport {
     identity: Option<AttestationReport>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     notices: Vec<Notice>,
+    #[serde(skip)]
+    failure_action: Option<NextAction>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    revision_log_base: Option<urzua_core::report::RevisionLogBase>,
 }
 
 impl Report for PinReport {
@@ -60,6 +69,9 @@ impl Report for PinReport {
         ExitCode::from(u8::from(!self.failed.is_empty()))
     }
     fn next_action(&self) -> Option<NextAction> {
+        if let Some(next) = &self.failure_action {
+            return Some(next.clone());
+        }
         if self.status != "pins-available" {
             return None;
         }
@@ -142,17 +154,29 @@ pub(crate) fn run(config_path: Option<PathBuf>, args: PinArgs<'_>) -> Result<Exi
         .collect();
     let mut done = Vec::new();
     let mut notices: Vec<Notice> = Vec::new();
+    let history = LogHistory::resolve(repo_root, args.base)
+        .map_err(|e| refuse(format!("urzua fix --pin: {e}")))?;
     let write = identity.as_ref().map(|w| Write {
+        history: &history,
         session: &session,
         attestation: &w.attestation,
         reason: &reason,
     });
+    let mut failure_action = None;
     for record in selected {
-        let outcome = match (args.replace, args.remove) {
-            (Some(spec), _) => replace(record, config, &read, spec, write.as_ref()),
-            (_, Some(old)) => remove(record, config, old, write.as_ref()),
-            _ => first_pins(record, config, &read, write.as_ref(), !args.ids.is_empty()),
+        let dispatch = |write: Option<&Write<'_>>| match (args.replace, args.remove) {
+            (Some(spec), _) => replace(record, config, &read, spec, write),
+            (_, Some(old)) => remove(record, config, old, write),
+            _ => first_pins(record, config, &read, write, !args.ids.is_empty()),
         };
+        let outcome = planned_outcome(
+            &history,
+            config,
+            record,
+            &dispatch,
+            write.as_ref(),
+            &mut failure_action,
+        );
         if let Ok(Some(entry)) = &outcome {
             notices.extend(uncommitted_notices(repo_root, entry));
         }
@@ -165,22 +189,75 @@ pub(crate) fn run(config_path: Option<PathBuf>, args: PinArgs<'_>) -> Result<Exi
             }),
         }
     }
-    let status = match (args.apply, done.is_empty(), failed.is_empty()) {
+    let created = done.iter().any(|e| e.creates_revision_log);
+    Ok(emit(&PinReport {
+        status: report_status(args.apply, done.is_empty(), failed.is_empty()),
+        records: done,
+        failed,
+        identity: identity.map(|i| i.report),
+        notices: notices.into_iter().chain(history.notice(created)).collect(),
+        failure_action,
+        revision_log_base: history.report(created),
+    }))
+}
+
+fn report_status(apply: bool, none_done: bool, none_failed: bool) -> &'static str {
+    match (apply, none_done, none_failed) {
         (_, _, false) => "partial-failure",
         (true, _, true) => "applied",
         (false, true, true) => "ok",
         (false, false, true) => "pins-available",
+    }
+}
+
+type PinOutcome = Result<Option<PinEntryReport>, String>;
+
+/// One record's outcome. The listing runs first, writing nothing, so a record
+/// the log plan refuses is never written and is refused the same way in both
+/// modes; the refusal's command, if any, fills `failure_action` once.
+fn planned_outcome(
+    history: &LogHistory<'_>,
+    config: &Config,
+    record: &Record,
+    dispatch: &dyn Fn(Option<&Write<'_>>) -> PinOutcome,
+    write: Option<&Write<'_>>,
+    failure_action: &mut Option<NextAction>,
+) -> PinOutcome {
+    let entry = match dispatch(None) {
+        Ok(Some(entry)) => entry,
+        other => return other,
     };
-    Ok(emit(&PinReport {
-        status,
-        records: done,
-        failed,
-        identity: identity.map(|i| i.report),
-        notices,
+    let content =
+        urzua_io::read_to_string(&history.repo_root().join(&record.path)).unwrap_or_default();
+    let plan = evidence_log(
+        history,
+        config,
+        Some(&record.record_type),
+        &record.path,
+        &content,
+        "write",
+    );
+    let creates = match plan {
+        EvidenceLog::Refused(error, next) => {
+            if failure_action.is_none() {
+                *failure_action = next;
+            }
+            return Err(error);
+        }
+        plan => matches!(plan, EvidenceLog::Create(_)),
+    };
+    let written = match write {
+        Some(w) => dispatch(Some(w))?,
+        None => Some(entry),
+    };
+    Ok(written.map(|e| PinEntryReport {
+        creates_revision_log: creates,
+        ..e
     }))
 }
 
 struct Write<'a> {
+    history: &'a LogHistory<'a>,
     session: &'a Session,
     attestation: &'a Attestation,
     reason: &'a str,
@@ -204,8 +281,21 @@ impl Write<'_> {
         let full = self.session.repo_root.join(&record.path);
         let fresh =
             urzua_io::read_to_string(&full).map_err(|e| format!("could not re-read: {e}"))?;
+        let (fresh, created) = with_evidence_log(
+            self.history,
+            config,
+            Some(&record.record_type),
+            &record.path,
+            &fresh,
+            "write",
+        )?;
         let today = urzua_io::today();
-        let new = edit(&fresh, (&today, self.attestation, self.reason))?;
+        let reason = if created {
+            format!("{} {}", self.reason, self.history.row_note())
+        } else {
+            self.reason.to_string()
+        };
+        let new = edit(&fresh, (&today, self.attestation, &reason))?;
         urzua_io::write_atomic_in(&self.session.repo_root, &full, &new)
             .map_err(|e| format!("could not write: {e}"))
     }
@@ -278,6 +368,7 @@ fn first_pins(
             .map(|p| format!("{}@sha256:{}", p.display, p.hash))
             .collect(),
         not_pinned,
+        creates_revision_log: false,
     }))
 }
 
@@ -355,6 +446,7 @@ fn replace(
         action: "replace",
         pins: vec![old.text(), new.text()],
         not_pinned: Vec::new(),
+        creates_revision_log: false,
     }))
 }
 
@@ -376,6 +468,7 @@ fn remove(
         action: "remove",
         pins: vec![old.text()],
         not_pinned: Vec::new(),
+        creates_revision_log: false,
     }))
 }
 
