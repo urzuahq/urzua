@@ -1549,6 +1549,10 @@ pub struct RevisionLogDecl {
     /// `version_bump.classes`, a re-pin does not bump the version.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub evidence_class: Option<String>,
+    /// The header cell of the narrative column in a log `urzua fix` creates.
+    /// Absent: `DEFAULT_REVISION_LOG_NARRATIVE_COLUMN`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub narrative_column: Option<String>,
 }
 
 /// A type's version-bump requirement: a revision-log row of one of `classes`
@@ -1571,6 +1575,8 @@ pub struct VersionBumpDecl {
 /// The default marker line: what every repository used before the identity
 /// was declared.
 pub const DEFAULT_REVISION_LOG_MARKER: &str = "**Revision log**";
+/// The narrative column's header cell in a log `urzua fix` creates.
+pub const DEFAULT_REVISION_LOG_NARRATIVE_COLUMN: &str = "Change";
 
 /// The default class vocabulary of a revision log, held in the engine so a type
 /// that declares no `classes` behaves as every type did before `ADR-94`. This
@@ -1603,6 +1609,8 @@ pub struct RevisionLogShape {
     /// The class of the rows that move evidence pins; `tool_class` unless
     /// declared.
     pub evidence_class: String,
+    /// The narrative column's header cell in a log `urzua fix` creates.
+    pub narrative_column: String,
 }
 
 impl RevisionLogShape {
@@ -1627,6 +1635,7 @@ impl Default for RevisionLogShape {
             date_column: None,
             tool_class: DEFAULT_REVISION_LOG_TOOL_CLASS.to_string(),
             evidence_class: DEFAULT_REVISION_LOG_TOOL_CLASS.to_string(),
+            narrative_column: DEFAULT_REVISION_LOG_NARRATIVE_COLUMN.to_string(),
         }
     }
 }
@@ -1715,6 +1724,7 @@ impl RecordTypeConfig {
                 .or_else(|| name(&decl.tool_class))
                 .unwrap_or_else(|| default.tool_class.clone()),
             tool_class: name(&decl.tool_class).unwrap_or(default.tool_class),
+            narrative_column: name(&decl.narrative_column).unwrap_or(default.narrative_column),
         }
     }
 
@@ -2198,7 +2208,8 @@ fn revision_log_identity_problem(decl: &RevisionLogDecl) -> Option<&'static str>
                 || decl.class_column.is_some()
                 || decl.date_column.is_some()
                 || decl.tool_class.is_some()
-                || decl.evidence_class.is_some() =>
+                || decl.evidence_class.is_some()
+                || decl.narrative_column.is_some() =>
         {
             None
         }
@@ -2212,6 +2223,34 @@ fn revision_log_identity_problem(decl: &RevisionLogDecl) -> Option<&'static str>
         }
         _ => None,
     }
+}
+
+/// A blank name, or a column name a table header cell cannot hold.
+fn named_key_problem(decl: &RevisionLogDecl) -> Option<String> {
+    for (key, value) in [
+        ("class_column", &decl.class_column),
+        ("date_column", &decl.date_column),
+        ("tool_class", &decl.tool_class),
+        ("evidence_class", &decl.evidence_class),
+        ("narrative_column", &decl.narrative_column),
+    ] {
+        if value
+            .as_deref()
+            .is_some_and(|v| strip_emphasis(v).is_empty())
+        {
+            return Some(format!("a blank `{key}` -- it names nothing"));
+        }
+        if key.ends_with("_column")
+            && value
+                .as_deref()
+                .is_some_and(|v| v.contains(['|', '\n', '\r']))
+        {
+            return Some(format!(
+                "a `{key}` holding `|` or a line break -- a table header cell cannot"
+            ));
+        }
+    }
+    None
 }
 
 /// Why a type's `revision_log` declaration cannot be used, or `None`: the
@@ -2266,18 +2305,8 @@ fn revision_log_problem(decl: &RevisionLogDecl) -> Option<String> {
             }
         }
     }
-    for (key, value) in [
-        ("class_column", &decl.class_column),
-        ("date_column", &decl.date_column),
-        ("tool_class", &decl.tool_class),
-        ("evidence_class", &decl.evidence_class),
-    ] {
-        if value
-            .as_deref()
-            .is_some_and(|v| strip_emphasis(v).is_empty())
-        {
-            return Some(format!("a blank `{key}` -- it names nothing"));
-        }
+    if let Some(problem) = named_key_problem(decl) {
+        return Some(problem);
     }
     if let (Some(class), Some(date)) = (&decl.class_column, &decl.date_column) {
         if strip_emphasis(class) == strip_emphasis(date) {
@@ -6058,6 +6087,7 @@ rules:
             date_column: None,
             tool_class: "structural".into(),
             evidence_class: "structural".into(),
+            narrative_column: "Change".into(),
         };
         assert_eq!(RevisionLogShape::default(), want);
         let c = parse(LOG_BASE).unwrap();
@@ -6147,6 +6177,16 @@ rules:
         assert_eq!(shape.tool_class, "structural");
         // With the vocabulary undeclared the tool class is not checked.
         assert!(log_shape("{tool_class: whatever}").is_ok());
+        for key in ["narrative_column", "date_column", "class_column"] {
+            let err = log_shape(&format!("{{{key}: \"a|b\"}}"))
+                .unwrap_err()
+                .to_string();
+            assert!(err.contains(key) && err.contains('|'), "{err}");
+            assert!(
+                log_shape(&format!("{{{key}: \"a\\nb\"}}")).is_err(),
+                "{key}"
+            );
+        }
     }
 
     #[test]
