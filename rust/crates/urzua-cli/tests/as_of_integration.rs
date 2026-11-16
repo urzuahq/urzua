@@ -201,7 +201,7 @@ fn a_write_is_refused_with_as_of_and_nothing_is_written() {
             "--by",
             "x",
             "--reason",
-            "r",
+            "Read the cited code and tests: r",
             "--as-of",
             "2030-01-02",
         ],

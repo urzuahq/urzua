@@ -43,7 +43,7 @@ pub fn parse_sections(body: &str, first_line: usize) -> Vec<Section> {
 /// file-relative numbers. Text before the first heading belongs to no section.
 /// Duplicate headings are kept as separate sections; reporting them is a
 /// rule's job. Only ATX headings count: a heading inside a fenced code block,
-/// or indented four or more spaces, is not one. A heading deeper than `depth`
+/// an HTML comment (`<!-- ... -->`, on one line or several), or indented four or more spaces, is not one. A heading deeper than `depth`
 /// is body text of the sections around it. Lines may end `\n` or `\r\n`.
 pub fn parse_sections_to_depth(body: &str, first_line: usize, depth: u8) -> Vec<Section> {
     let deepest = depth.saturating_add(1);
@@ -57,16 +57,23 @@ pub fn parse_sections_to_depth(body: &str, first_line: usize, depth: u8) -> Vec<
     // Indexes of the sections still open, shallowest first.
     let mut open: Vec<usize> = Vec::new();
     let mut fence: Option<Fence> = None;
+    let mut in_comment = false;
     for (i, raw) in lines.iter().enumerate() {
         let line = raw.strip_suffix('\r').unwrap_or(raw);
         let number = first_line + i;
         let mut heading = None;
-        if let Some(f) = fence {
+        if in_comment {
+            // Everything up to the closing `-->` is comment text, a `##` line
+            // included.
+            in_comment = still_in_comment(line, true);
+        } else if let Some(f) = fence {
             if f.is_closed_by(line) {
                 fence = None;
             }
         } else if let Some(f) = Fence::opening(line) {
             fence = Some(f);
+        } else if let Some(unclosed) = html_comment_opening(line) {
+            in_comment = unclosed;
         } else {
             heading = atx_heading(line).filter(|(level, _)| (2..=deepest).contains(level));
         }
@@ -93,6 +100,29 @@ pub fn parse_sections_to_depth(body: &str, first_line: usize, depth: u8) -> Vec<
         }
     }
     sections
+}
+
+/// `Some(true)` when `line` starts an HTML comment and ends inside one (its last
+/// `<!--` is not closed), `Some(false)` when every comment it opens is closed,
+/// `None` when it does not start with `<!--`.
+fn html_comment_opening(line: &str) -> Option<bool> {
+    let rest = indented_at_most_three(line)?.strip_prefix("<!--")?;
+    Some(still_in_comment(rest, true))
+}
+
+/// Whether a line that begins inside a comment (`inside`) or outside one ends
+/// inside one, following each `-->` and `<!--` in turn.
+fn still_in_comment(mut rest: &str, mut inside: bool) -> bool {
+    loop {
+        let marker = if inside { "-->" } else { "<!--" };
+        match rest.find(marker) {
+            Some(at) => {
+                rest = &rest[at + marker.len()..];
+                inside = !inside;
+            }
+            None => return inside,
+        }
+    }
 }
 
 /// An open fenced code block: the marker character and its run length.

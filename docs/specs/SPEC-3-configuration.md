@@ -1,9 +1,9 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.148'
+Version: '0.149'
 Date: 2026-08-20
 Status: Shipped
-Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:9b216fd928bd3f9899537d02dc64718b869ec42f36c6d041af0d27fe911a4936, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:09c2431a269316741c35b51dabd5766ecd3d50fab2b98069314bb1bc8857767d, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:255395e7d2caa34947cef28f463e2ec050e3eba798a4dc7573a3cad946fee1ae
+Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:305844777dc8bc2ec33e63a2c644171f6d7d97e8fa5435690f0de39f49ded0dc, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:09c2431a269316741c35b51dabd5766ecd3d50fab2b98069314bb1bc8857767d, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:255395e7d2caa34947cef28f463e2ec050e3eba798a4dc7573a3cad946fee1ae
 Embodiment: Verified
 Author: beauwilliams
 Subject: '`.urzua/config.yaml` -- the schema for record types, required/known fields, and per-type behavior.'
@@ -361,7 +361,8 @@ Two details carry weight:
     `section.required` reports a missing section; `section.shape` checks the shape of a present one.
     Both are opt-in and a type that declares no `required` has nothing eligible. Their population
     unit is `section`: one `(record, required section)` slot, so a record missing a section is
-    counted. A heading inside a fenced code block is not a section. A requirement is at the `##`
+    counted. A heading inside a fenced code block or an HTML comment (`<!-- ... -->`, on one line or
+    several) is not a section. A requirement is at the `##`
     level unless it declares otherwise (see `level` and `under`).
     - `y-statement` reads one block and requires `In the context of`, `facing`, `we decided`,
       `to achieve` and `accepting` in it, matched case-insensitively on word boundaries (the phrase
@@ -1239,6 +1240,9 @@ identity they attest under (`ADR-89` section 5, `MILE-201`):
 attestation:
   identity: gh-verified   # gh-verified | asserted; the default
   require_verified: false # the default
+  reason:                 # the least a --reason must hold
+    min_words: 3          # the default: runs holding a letter or digit
+    min_chars: 12         # the default: characters of the trimmed reason
 ```
 
 - **`gh-verified`** (the default, and what an absent key means) keeps the order `RFC-2` and `MILE-66` set: a
@@ -1256,6 +1260,10 @@ attestation:
   `fix --actor agent|human`. The actor kind is the caller's claim, not proof, with the standing of `--by`: a
   verified login names the account whose token ran the command, not whether a person or an agent held it
   (`RFC-2`, `BUG-16`).
+- **`reason`** sets the least an attestation's `--reason` must hold, for `fix --rebaseline --apply` and
+  `reverify --apply`: a reason with fewer than `min_words` words or `min_chars` characters is refused (exit 2,
+  nothing written). Either key may be left out and takes its default; an unknown key under `reason` is a load
+  error. Absent, the defaults apply, so `x`, `ok` or `r` is refused.
 - **Load errors** (exit 2), never a silent default: an `identity` value other than `gh-verified` and
   `asserted` (the message names both), an unknown key under `attestation`, and `require_verified: true` with
   `identity: asserted`, which verifies nothing to require.
@@ -1708,6 +1716,8 @@ One rule runs without being named: `identity.record-symlink-escapes` is on for e
 link without blocking, and `off` reads it through the link and reports no finding (every `check` then carries a
 warning notice naming the rule), which accepts the route `SPEC-2` and
 `ADR-89` (amendment of 2026-11-14) describe. `urzua init` writes no entry for it.
+`embodiment.pin-stale` is on for every configuration at `warn` too (maintainer decision, 2026-11-14: on by
+default); a repository declares another level, or `off`, under `rules:`, and `urzua init` writes no entry for it.
 
 ```yaml
 rules:
@@ -1776,8 +1786,9 @@ rules:
   that carries a `YYYY-MM-DD` date in that field is held back while that date is newer than the
   window, in place of the cited file's last commit, so the window counts from the day the evidence
   was last audited. A record without the field, or with a blank one, counts from the file's last
-  commit as before; a malformed date is a warning from `embodiment.consistency` naming the value
-  and falls back the same way. A blank name, an undeclared field, or the option without
+  commit as before; a malformed date, or one after today (UTC), is a warning from
+  `embodiment.consistency` naming the value and falls back the same way (a date written forward would hold
+  drift back for ever). A blank name, an undeclared field, or the option without
   `drift_grace_days` is a load error.
 - `claim_max_age_days` (whole days): a warning when the commit that last touched the record's
   `Realized-by` line is older than the limit, whether or not the evidence changed. Age is counted in
@@ -2677,5 +2688,7 @@ proves this configuration produces the three findings.
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 9b216fd928bd -> 6e7b740a88d5, `rust/crates/urzua-cli/tests/own_config_integration.rs` d6dcb432d05a -> 09c2431a2693. Reason: Pinned file(s) changed by the symlinked-record refusal: config.rs: default-on rules are known to the config (a rule on by default needs no declaration; its level or `off` is configurable); own_config_integration.rs: a revision row appended by an earlier re-pin in this change. The record's claim is unaffected by these changes. (Re-applied after merging main.) **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 6e7b740a88d5 -> 9b216fd928bd. Reason: Pinned file(s) changed by the symlinked-record refusal: config.rs: default-on rules are known to the config (a rule on by default needs no declaration; its level or `off` is configurable). The record's claim is unaffected by these changes. (Re-applied after the config change and merging main.) **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-15 | Bumped to `0.146`. Documents `harness.limits`: eleven keys with their defaults, the editor hook timeout as a floor of 120 with a ceiling of 600 (a host that kills the hook first lets the call proceed), the ten input caps as security floors, and the ceilings of the two recursion depths (256 and 1024) and of the MCP request line (64 MiB), a value below a floor or an unknown key under `limits` as a load error, `urzua harness limits`, and the installed timeout as drift. Adds `## Format invariants and security floors`, which lists the post-command cache paths and `.urzua/harness.lock` as format invariants and the ten harness input caps as security floors, each with its reason. **Why:** `ADR-101` amendment of 2026-11-15 (configuration owns behaviour), accepted by the maintainer; tracked by `MILE-232`; the maintainer's instruction for this change: "the input caps ... are SECURITY FLOORS. Today's value is both the default and the minimum". | **substantive** |
-> | 2026-11-16 | Bumped to `0.147`. Documents `harness.report_outside_writes` (default `false`): an allowed write outside the repository is silent unless it is `true`. The default is a new behaviour, decided by the maintainer on 2026-11-16 ("yes hook should be silent by default and n config"), and stated as an exception to `ADR-101`'s rule that a key's default is today's value (`MILE-278`). | **substantive** |
-> | 2026-11-16 | Bumped to `0.148`. Corrects `report_outside_writes`: under `shared` it is a gated move or protected path in a linked worktree that is refused; any other linked-worktree file, a record included, is allowed with a notice. | **substantive** |
+> | 2026-11-14 | Bumped to `0.147`. Documents that `embodiment.pin-stale` is on by default (maintainer decision, 2026-11-14: on by default), that a last-audit date after today is reported and ignored, and that a heading inside an HTML comment is not a section. **Why:** external review items 1.2, 1.5 and 1.7. | **substantive** |
+> | 2026-11-16 | Bumped to `0.148`. Documents `attestation.reason` (`min_words`, default 3; `min_chars`, default 12), the reason minimum of `fix --rebaseline --apply` and `reverify --apply`. **Why:** the ADR-101 amendment of 2026-11-15: configuration owns behaviour, and a fixed minimum in code was not configurable. | **substantive** |
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 9b216fd928bd -> 305844777dc8. Reason: Read the diff of each re-pinned file since its previous pin: config.rs adds attestation.reason (ReasonMinimum: min_words default 3, min_chars default 12, and its check) with a unit test. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-16 | Bumped to `0.149`. Documents `harness.report_outside_writes` (default `false`): an allowed write outside the repository is silent unless it is `true`. The default is a new behaviour, decided by the maintainer on 2026-11-16 ("yes hook should be silent by default and n config"), and stated as an exception to `ADR-101`'s rule that a key's default is today's value; under `shared` it is a gated move or protected path in a linked worktree that is refused, and any other linked-worktree file, a record included, is allowed with a notice (`MILE-278`). | **substantive** |
