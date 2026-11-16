@@ -97,21 +97,21 @@ archive that workflow did not build.
 A release has no checksum file. Compute the sha256 of an archive from the release you pin:
 
 ```sh
-gh release download v0.4.5 --repo urzuahq/urzua --pattern 'urzua-*.tar.gz'
+gh release download v0.4.6 --repo urzuahq/urzua --pattern 'urzua-*.tar.gz'
 sha256sum urzua-*.tar.gz # on macOS: shasum -a 256 urzua-*.tar.gz
 ```
 
-For `v0.4.5`, computed from the downloaded release assets:
+For `v0.4.6`, computed from the downloaded release assets:
 
 | Archive | sha256 |
 |---|---|
-| `urzua-x86_64-unknown-linux-gnu.tar.gz` | `cbbb4a15df8c84135b10f7e24fa4b57b0b8b73e53303e1aa5cf8a17b3ea4a18c` |
-| `urzua-aarch64-apple-darwin.tar.gz` | `79b413361bf629c32e44d31ccd76944564613bd57bf529ee5438860bb06671f1` |
+| `urzua-x86_64-unknown-linux-gnu.tar.gz` | `b4ebb3bad62561fb16ea6cf5a86622b4783e532289a0ebc5d8042a1c89cedcf7` |
+| `urzua-aarch64-apple-darwin.tar.gz` | `79b0c1521dcb57a96e66834c4efa565c78e7057a8da0d184c500cea4d27a8b51` |
 
 From a checkout of this repository, on x86_64 Linux, that release installs with the script on disk:
 
 ```sh
-sh scripts/install.sh --version v0.4.5 --sha256 cbbb4a15df8c84135b10f7e24fa4b57b0b8b73e53303e1aa5cf8a17b3ea4a18c
+sh scripts/install.sh --version v0.4.6 --sha256 b4ebb3bad62561fb16ea6cf5a86622b4783e532289a0ebc5d8042a1c89cedcf7
 ```
 
 There is no Intel Mac build and no Windows build. On an Intel Mac, build from source.

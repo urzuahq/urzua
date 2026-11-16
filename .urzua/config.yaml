@@ -685,7 +685,17 @@ roadmap:
 # Every rule this repository has turned on, and at what level. A rule that is
 # not named here does not run (ADR-53) and is reported as not-enabled rather
 # than omitted (ADR-7).
+# This repository's git hooks (.git-hooks/pre-commit and pre-push) call urzua after
+# their own guard code, so they are declared rather than managed: urzua does not edit
+# them, and `urzua hooks verify --run` is how to prove they reach it.
+hooks:
+  pre-commit: {managed: declared}
+  pre-push: {managed: declared}
+
 rules:
+  # A pin changes only with a row the tooling wrote (MILE-288). On by default; declared here
+  # so this repository exercises it by name.
+  diff.pin-changed-unattested: error
   override.unreviewed: warn
   embodiment.requires-accepted-status:
     level: warn
