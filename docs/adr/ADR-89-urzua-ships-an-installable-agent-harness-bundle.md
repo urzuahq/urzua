@@ -331,7 +331,6 @@ revision log):
     side branch from a linked worktree, is not seen by the post-command check (amendment of 2026-11-09,
     outside writes). `outside_writes: deny` refuses the write; CI sees the pull request.
 13. **A stale base.** when the base revision has no `authority` (for example a branch made before the gates were introduced), the head table is judged; a pull request whose head `authority` names its own author as a decider then passes, because that is indistinguishable from the first introduction of `authority`. Branch protection that requires an up-to-date branch, or a merge queue, removes this route by making the base current. (amendment of 2026-11-09, decider table; accepted by the maintainer on 2026-11-09).
-14. **The repository's own binary and its pin.** The hooks run `.urzua/bin/urzua` only while it is executable, untracked and hashes to the `binary` pin in `.urzua/harness.lock` (amendment of 2026-11-16, the repository's own binary). A shell command that writes the binary and rewrites the pin in the lock (or runs `urzua harness update` once the binary is there) is trusted from the next hook run: the post-command check reports it, once, and the lock's diff in the pull request shows it, but nothing prevents it. The file can also be swapped between the hash and the execution, and `URZUA_BIN`, `PATH`, the interpreter and the record helper's `rust/target/release/urzua` are not verified. Decided by the orchestrator on 2026-11-16, pending maintainer review.
 
 What is claimed is therefore only this: through the edit tools (Write, Edit, MultiEdit, NotebookEdit and any MCP tool
 that carries a file path and content) an agent cannot move a gated record or write a
@@ -907,35 +906,6 @@ so a row must not read as that person's own attestation when an agent ran the co
 
 The Decision is otherwise unchanged. The Status of this ADR stays Accepted.
 
-## Amendment (2026-11-16, the repository's own binary)
-
-Status of this amendment: decided by the orchestrator on 2026-11-16, pending maintainer review. It replaces the lookup
-the adopter switchover added (the hooks ran a file at `.urzua/bin/urzua` ahead of `PATH`), which let any file written
-there replace the judge; the rest of the Decision is unchanged.
-
-**The problem.** A repository may carry the binary it trusts, so the hooks look for `.urzua/bin/urzua`. The first form
-ran whatever executable file was there. A Bash command (or a checkout, or a pulled commit) that wrote a script
-answering `{"verdict":"allow","notices":[]}` made every later hook run that script: every edit allowed, `status` silent,
-and the post-command check run by the planted file itself. The edit tools refused the path, which a shell write does not
-meet.
-
-**The decision.** The lookup stays (a repository-local install is needed) in one safe form. The translator and the
-record helper run the file only when it is executable, git does not track it, and its sha256 equals the `binary` value
-of `.urzua/harness.lock`, checked before it is executed; `install` and `update` write that value when the file exists,
-and `install` adds `.urzua/bin/` to `.gitignore`. Otherwise it is not run, the person is told so, and `URZUA_BIN` or
-`PATH` is used; with neither, an edit is one that was not judged and `on_unjudged` decides. The post-command check hashes
-`.urzua/bin`, the lock and every file the lock names in every repository, whether or not the configuration declares a
-path gate, in the binary the translator chose after verifying it; `status`, `doctor` and the session-start check report a
-binary that is unpinned, replaced, tracked or not executable. `SPEC-24` states the rule and `SPEC-3` where it is
-configured (it is not: the pin is in the lock).
-
-**What it protects, and what it does not.** It stops a file a shell command, a checkout or a pulled commit put at
-`.urzua/bin/urzua` from being run. It does not stop the same shell command from also rewriting the pin, which is accepted
-risk 14: the lock is the engine's, refused to the edit tools, tracked by git and hashed by the post-command check, so the
-change is reported and visible in the diff and not prevented.
-
-The Decision is otherwise unchanged. The Status of this ADR stays Accepted.
-
 ## References
 
 - `ADR-69`, `ADR-70`, `ADR-71`: the hook, drafting commands and layered gate this extends; `ADR-70` gains an
@@ -982,4 +952,3 @@ The Decision is otherwise unchanged. The Status of this ADR stays Accepted.
 > | 2026-11-10 | Added an `## Amendment (2026-11-10, deletions)`, accepted by the maintainer on 2026-11-10: a record the diff deletes while its base `Status` is one a gate names is a gated move (`gated-deletion-without-decider`), judged like any other and reported by the post-command check; a rename pair is exempt; under `base`/`both` the base revision's type declaration also decides which deleted files are records of a gated type; gate statuses compare case-insensitively after trim and the status field is read case-insensitively for the gate. `Status` stays Accepted. **Why:** Maintainer decision, 2026-11-10, on the review that found a non-decider deleting an Accepted ADR with an ok check, and a lower-case `accepted` passing the gate. | **substantive** |
 > | 2026-11-14 | Added an `## Amendment (2026-11-14, leaving a gate)`, decided by the orchestrator on 2026-11-14, pending maintainer review: blanking an Accepted (gated) record, stripping its header, or moving it from a gate status to a status that gate does not name (an un-accept) is a gated move like deletion (`gated-departure-without-decider`), in `diff.decider-required` and in the editor hook; and, under a `gh-verified` identity, `fix --apply`, `fix --rebaseline --apply` and `reverify --apply` require `--actor`. The Decision is unchanged. `Status` stays Accepted. **Why:** the external review found blanking or un-accepting an Accepted ADR passing both gates while deletion is gated, and 208 re-pin rows attributing an agent's re-verification to the maintainer. | **substantive** |
 > | 2026-11-14 | Added an `## Amendment (2026-11-14, symlinked records)`, decided by the orchestrator on 2026-11-14, pending maintainer review: a tracked record file that is a symlink, or sits behind a symlinked directory, is refused by every command and reported by `check` as the unwaivable finding `identity.record-symlink-escapes`; no link is allowed, a same-directory alias included (`ADR-12.md` linked to `draft.txt`). The rule is on at `error` for every configuration; a configuration may set its level or `off`, and `off` raises a warning notice on every `check`. This closes the two-pull-request route (move a record out of the governed tree leaving a symlink, then accept the moved copy). The Decision is unchanged. `Status` stays Accepted. **Why:** an external review reproduced a non-decider landing an Accepted record through a symlink, and a follow-up review found the same-directory alias. | **substantive** |
-> | 2026-11-16 | Added an `## Amendment (2026-11-16, the repository's own binary)` and accepted risk 14, decided by the orchestrator on 2026-11-16, pending maintainer review: the hooks run `.urzua/bin/urzua` only while it is executable, untracked and hashed to the lock's `binary` pin, `install` ignores `.urzua/bin/` in git, the post-command check hashes the engine-owned files in every repository, and `status`, `doctor` and the session-start check report an unusable one; a shell write that re-pins the binary is reported, not prevented. `Status` stays Accepted. **Why:** the review of pull request 527 reproduced a shell-written script at `.urzua/bin/urzua` replacing the judge. | **substantive** |

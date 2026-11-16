@@ -35,6 +35,3 @@ build.log
 # Python
 __pycache__/
 *.pyc
-
-# The binary the harness hooks may run (pinned by hash in .urzua/harness.lock).
-.urzua/bin/

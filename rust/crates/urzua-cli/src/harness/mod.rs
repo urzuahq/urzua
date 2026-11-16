@@ -20,7 +20,6 @@ mod json;
 mod limits;
 mod lock;
 mod post_command;
-mod repo_bin;
 mod run;
 mod settings;
 
@@ -579,8 +578,7 @@ fn install(env: &Env, flag: Option<String>, dry_run: bool) -> HarnessReport {
     }
     report.problems.extend(unprovided);
 
-    let new_lock = install_lock(env, &want, adapters);
-    let ignore_write = plan_binary_and_ignore(env, &new_lock, dry_run, &mut report);
+    let new_lock = install_lock(&want, adapters);
     report.item(
         "lock",
         LOCK_PATH,
@@ -590,48 +588,10 @@ fn install(env: &Env, flag: Option<String>, dry_run: bool) -> HarnessReport {
     if dry_run {
         return report;
     }
-    match write_install(env, &plan, &new_lock, ignore_write.as_deref()) {
+    match write_install(env, &plan, &new_lock) {
         Ok(()) => report,
         Err(m) => report.refuse(m),
     }
-}
-
-/// The binary's pin and the `.gitignore` entry `install` adds for `.urzua/bin/`:
-/// their report items, and the new `.gitignore` text when it changes.
-fn plan_binary_and_ignore(
-    env: &Env,
-    new_lock: &Lock,
-    dry_run: bool,
-    report: &mut HarnessReport,
-) -> Option<String> {
-    let ignore_write = repo_bin::gitignore_with_entry(
-        &read(&env.root, ".gitignore")
-            .ok()
-            .flatten()
-            .unwrap_or_default(),
-    );
-    report.item(
-        "gitignore",
-        ".gitignore",
-        Some(repo_bin::IGNORE_LINE),
-        if ignore_write.is_some() {
-            past(dry_run, "added", "would-add")
-        } else {
-            "unchanged"
-        },
-    );
-    if new_lock.binary.is_some() {
-        report.item(
-            "binary",
-            repo_bin::BIN_PATH,
-            None,
-            past(dry_run, "pinned", "would-pin"),
-        );
-        if let Some(why) = repo_bin::refusal(repo_bin::state(&env.root, Some(new_lock))) {
-            report.notice(NoticeSeverity::Warning, why);
-        }
-    }
-    ignore_write
 }
 
 /// Whole files: create, or leave if identical. A different file is a person's
@@ -736,10 +696,9 @@ fn plan_install_block(
     Ok(())
 }
 
-fn install_lock(env: &Env, want: &Desired, adapters: Vec<String>) -> Lock {
+fn install_lock(want: &Desired, adapters: Vec<String>) -> Lock {
     let mut new_lock = Lock::new(adapters);
     new_lock.adapters.sort();
-    new_lock.binary = repo_bin::content_hash(&env.root);
     for (path, content) in &want.files {
         new_lock.files.insert(path.clone(), lock::hash(content));
     }
@@ -755,15 +714,7 @@ fn install_lock(env: &Env, want: &Desired, adapters: Vec<String>) -> Lock {
     new_lock
 }
 
-fn write_install(
-    env: &Env,
-    plan: &InstallPlan,
-    new_lock: &Lock,
-    gitignore: Option<&str>,
-) -> Result<(), String> {
-    if let Some(text) = gitignore {
-        write(&env.root, ".gitignore", text)?;
-    }
+fn write_install(env: &Env, plan: &InstallPlan, new_lock: &Lock) -> Result<(), String> {
     for (path, content) in &plan.file_writes {
         write(&env.root, path, content)?;
     }
@@ -815,7 +766,6 @@ fn status(env: &Env, lock: &Lock) -> HarnessReport {
     if let Err(m) = checked {
         return run.report.refuse(m);
     }
-    status_binary(env, lock, &mut run);
     let StatusRun { mut report, drift } = run;
     report.notice(
         NoticeSeverity::Info,
@@ -853,24 +803,6 @@ pub(super) fn version_is_older(a: &str, b: &str) -> bool {
     match numbers(a).cmp(&numbers(b)) {
         std::cmp::Ordering::Equal => a < b,
         order => order.is_lt(),
-    }
-}
-
-/// The repository's own binary: reported when it is there but not usable by the
-/// hooks, or pinned but gone.
-fn status_binary(env: &Env, lock: &Lock, run: &mut StatusRun) {
-    let state = repo_bin::state(&env.root, Some(lock));
-    match state {
-        repo_bin::BinState::Absent if lock.binary.is_some() => {
-            run.mark("binary", repo_bin::BIN_PATH, None, state.item_state());
-        }
-        repo_bin::BinState::Absent => {}
-        _ => {
-            run.mark("binary", repo_bin::BIN_PATH, None, state.item_state());
-            if let Some(why) = repo_bin::refusal(state) {
-                run.report.notice(NoticeSeverity::Warning, why);
-            }
-        }
     }
 }
 
@@ -1020,19 +952,6 @@ fn update(env: &Env, old: &Lock, force: bool, dry_run: bool) -> HarnessReport {
         shared: BTreeMap::new(),
         block_writes: Vec::new(),
     };
-    run.lock.binary = repo_bin::content_hash(&env.root);
-    if run.lock.binary.is_some() {
-        run.report.item(
-            "binary",
-            repo_bin::BIN_PATH,
-            None,
-            if run.lock.binary == old.binary {
-                "unchanged"
-            } else {
-                past(dry_run, "pinned", "would-pin")
-            },
-        );
-    }
     let planned = run
         .wanted_files()
         .and_then(|()| run.retired_files())
@@ -1663,14 +1582,11 @@ fn installed_checks(env: &Env) -> Vec<(Level, &'static str, String)> {
                 ));
             }
             for d in drifted {
-                let advice = if d.starts_with("binary ") {
-                    let why = repo_bin::refusal(repo_bin::state(&env.root, Some(&lock)))
-                        .unwrap_or_default();
-                    format!("{why} A person who installed it pins it with `urzua harness update`; otherwise delete it")
-                } else {
-                    "run `urzua harness status`; `urzua harness update` repairs it".to_string()
-                };
-                out.push((Level::Warn, "harness-installed", format!("{d} ({advice})")));
+                out.push((
+                    Level::Warn,
+                    "harness-installed",
+                    format!("{d} (run `urzua harness status`; `urzua harness update` repairs it)"),
+                ));
             }
         }
     }

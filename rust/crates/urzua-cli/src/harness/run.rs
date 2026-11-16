@@ -1317,21 +1317,14 @@ struct Problem {
     message: String,
 }
 
-/// Whether `name` resolves to an executable file on `PATH`.
+/// Whether `name` resolves to a file on `PATH`.
 fn on_path(name: &str) -> bool {
     std::env::var_os("PATH").is_some_and(|paths| {
-        std::env::split_paths(&paths).any(|dir| super::repo_bin::is_executable(&dir.join(name)))
+        std::env::split_paths(&paths).any(|dir| {
+            let p = dir.join(name);
+            p.is_file()
+        })
     })
-}
-
-/// Whether the hook commands can find `urzua`, in the order the translator and
-/// the record helper look: `URZUA_BIN`, the binary the repository carries at
-/// `.urzua/bin/urzua` when it is executable, untracked and pinned by the lock,
-/// then `PATH`.
-fn binary_found(root: &Path, lock: Option<&lock::Lock>) -> bool {
-    std::env::var_os("URZUA_BIN").is_some_and(|b| !b.is_empty())
-        || super::repo_bin::state(root, lock) == super::repo_bin::BinState::Verified
-        || on_path("urzua")
 }
 
 /// Moves into the session's own governed repository: the one that holds the
@@ -1589,7 +1582,6 @@ fn session_start(config: Option<PathBuf>) -> Verdict {
         // Before the baseline is retaken from the configuration as it is now.
         shrunk = super::post_command::protected_set_shrank(&ws.repo_root, &ws.config);
         super::post_command::seed_protected(&ws.repo_root, &ws.config_path, &ws.config);
-        super::post_command::seed_engine_owned(&ws.repo_root);
     }
     let mut problems: Vec<Problem> = Vec::new();
     if let Some(message) = shrunk {
@@ -1606,18 +1598,10 @@ fn session_start(config: Option<PathBuf>) -> Verdict {
     }
 
     // The binary: found on PATH, and the same version as the installed bundle.
-    let lock_now = super::installed_lock(&ws.repo_root).ok().flatten();
-    let own = super::repo_bin::state(&ws.repo_root, lock_now.as_ref());
-    if let Some(message) = super::repo_bin::refusal(own) {
+    if !on_path("urzua") {
         problems.push(Problem {
             check: "binary",
-            message,
-        });
-    }
-    if !binary_found(&ws.repo_root, lock_now.as_ref()) {
-        problems.push(Problem {
-            check: "binary",
-            message: "urzua is not at a pinned .urzua/bin/urzua or on PATH in this session, so the hook commands cannot find it (a build directory needs URZUA_BIN set)".to_string(),
+            message: "urzua is not on PATH in this session, so the hook commands cannot find it (a build directory needs URZUA_BIN set)".to_string(),
         });
     }
     let Some(lock) = installed_lock_problems(&ws.repo_root, &mut problems) else {

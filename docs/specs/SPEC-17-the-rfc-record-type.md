@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5FRHCY6MQ6VB26JKFC
-Version: '0.27'
+Version: '0.26'
 Date: 2026-09-08
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:.urzua/config.yaml@sha256:07b2b094255c2e54b1d5306bd7efa40e7298690f1f548f546b019d1131e237cf, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs@sha256:dc29b51bde5a2ba79d95c5e0a09466a54e816e8e2cc4a86a80e4459be477a447
+Realized-by: code:.urzua/config.yaml@sha256:1690790d0bdcb8446fa7c3ce6bb48d2114d1a330744fdfa6b32b25b8206f060e, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs@sha256:dc29b51bde5a2ba79d95c5e0a09466a54e816e8e2cc4a86a80e4459be477a447
 Author: beauwilliams
 Subject: 'The `rfc` record type -- schema, required fields, and lifecycle for proposals.'
 Parent: —
@@ -143,6 +143,3 @@ ADR's own `Deciders` field records.
 > | 2026-11-14 | Bumped to `0.25`. Evidence pins re-baselined for this change (the `Re-baselined` row above); the specification text is unchanged. **Why:** a revision-log entry that adds a structural change bumps `Version`. | **structural** |
 > | 2026-11-15 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` e544107a6abb -> 1690790d0bdc. Reason: config.yaml: adds harness.limits with hook_timeout_seconds: 120, the built-in value, under harness; no other key changed. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-15 | Bumped to `0.26`. A pinned file (`.urzua/config.yaml`, which now declares `harness.limits`) changed; the pin is re-baselined in the row above and the specified behaviour is unchanged. **Why:** `MILE-232`; a re-baseline row is structural, so the version moves with it. | **structural** |
-> | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` e544107a6abb -> 069d37e021e0. Reason: Read the diff of each re-pinned file against main. embodiment.back-pointer-resolution gained `unread_markers: report` and the protected-path gate gained `.urzua/bin`; no other line changed. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
-> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` 1690790d0bdc -> 07b2b094255c. Reason: Read the diff of each re-pinned file against main. .urzua/config.yaml: `.urzua/bin` joins the protected paths and embodiment.back-pointer-resolution gains `unread_markers: report`; no other key changed. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
-> | 2026-11-16 | Bumped to `0.27`. A pinned evidence file (`.urzua/config.yaml`) was re-baselined in this change; this spec's text is unchanged. **Why:** a revision-log entry that adds a structural change bumps `Version`. | **structural** |
