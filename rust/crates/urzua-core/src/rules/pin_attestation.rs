@@ -5,22 +5,55 @@
 use super::*;
 use crate::fix::pin::Replaced;
 use crate::report::{census, Outcome};
-use std::collections::BTreeMap;
 
-/// A pin occurrence: the locator as `display()` shows it (path and scope) and
-/// its position among the occurrences of that locator, in evidence order.
-type Key = (String, usize);
+/// One evidence citation: where it sits (the evidence field, or a Done-means
+/// item clause), the locator as `display()` shows it (path and scope) and the
+/// hash its pin holds (`None` when unpinned), in evidence order.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Pin {
+    in_item: bool,
+    locator: String,
+    hash: Option<String>,
+}
 
-/// Each evidence occurrence of a record with the hash its pin holds (`None`
-/// when unpinned), keyed occurrence by occurrence, so a hash copied from one
-/// occurrence to another is a change.
-fn occurrences(config: &Config, record: &Record) -> BTreeMap<Key, Option<String>> {
-    let mut seen: BTreeMap<String, usize> = BTreeMap::new();
-    let mut out = BTreeMap::new();
-    for (locator, pin) in claim_expiry::current_locator_pins(config, record) {
-        let n = seen.entry(locator.clone()).or_default();
-        out.insert((locator, *n), pin);
-        *n += 1;
+fn pins_of(text: &str, in_item: bool, out: &mut Vec<Pin>) {
+    for entry in crate::locator::realized_by_locators(text) {
+        let pin = match entry.parsed {
+            Ok(l) => Pin {
+                in_item,
+                locator: l.display(),
+                hash: match &l.anchor {
+                    Some(crate::locator::Anchor::Pin(h)) => Some(h.clone()),
+                    _ => None,
+                },
+            },
+            Err(_) => Pin {
+                in_item,
+                locator: entry.raw,
+                hash: None,
+            },
+        };
+        out.push(pin);
+    }
+}
+
+/// Every evidence citation of a record, field first, then the item clauses.
+fn citations(config: &Config, record: &Record) -> Vec<Pin> {
+    let field = relation_field_name(
+        config,
+        &record.record_type,
+        crate::config::RelationRole::EmbodimentLocator,
+    );
+    let mut out = Vec::new();
+    if let Some(v) = record.header.get(field) {
+        pins_of(v, false, &mut out);
+    }
+    if let Some(text) = record
+        .items
+        .as_ref()
+        .and_then(crate::done_items::DoneItems::locator_text)
+    {
+        pins_of(&text, true, &mut out);
     }
     out
 }
@@ -169,18 +202,13 @@ fn moved(events: &[Event], locator: &str, base: &str, head: &str) -> bool {
     }
 }
 
-fn base_has(base: &BTreeMap<Key, Option<String>>, locator: &str, hash: &str) -> bool {
+fn base_has(base: &[Pin], locator: &str, hash: &str) -> bool {
     base.iter()
-        .any(|((l, _), h)| l == locator && h.as_deref().is_some_and(|h| same(h, hash)))
+        .any(|p| p.locator == locator && p.hash.as_deref().is_some_and(|h| same(h, hash)))
 }
 
 /// A first pin, or the new side of a replacement whose old side the base held.
-fn added_ok(
-    events: &[Event],
-    base: &BTreeMap<Key, Option<String>>,
-    locator: &str,
-    head: &str,
-) -> bool {
+fn added_ok(events: &[Event], base: &[Pin], locator: &str, head: &str) -> bool {
     events.iter().any(|e| match e {
         Event::First { locator: l, to } => l == locator && same(to, head),
         Event::Replace(r) => {
@@ -209,20 +237,55 @@ struct Problem {
     what: String,
 }
 
-/// Every pin the head carries that is neither unchanged at its occurrence nor
-/// accounted for, and every base pin that went without a row. A locator added
-/// or removed without a pin is not judged.
-fn unattested(
-    base: &BTreeMap<Key, Option<String>>,
-    head: &BTreeMap<Key, Option<String>>,
-    events: &[Event],
-) -> Vec<Problem> {
+/// Pairs head pins with base pins: first an unused base pin at the same kind
+/// of site with the same locator and hash, then one with the same locator and
+/// hash anywhere (an unchanged pin is unchanged wherever it sits). Returns the
+/// pinned citations left unpaired on each side, by index.
+fn unpaired(base: &[Pin], head: &[Pin]) -> (Vec<usize>, Vec<usize>) {
+    let mut b_used: Vec<bool> = base.iter().map(|p| p.hash.is_none()).collect();
+    let mut h_left = Vec::new();
+    let mut h_rest: Vec<usize> = (0..head.len())
+        .filter(|&i| head[i].hash.is_some())
+        .collect();
+    for same_site in [true, false] {
+        let mut still = Vec::new();
+        for i in h_rest {
+            let h = &head[i];
+            let found = (0..base.len()).find(|&j| {
+                !b_used[j]
+                    && base[j].locator == h.locator
+                    && base[j].hash == h.hash
+                    && (!same_site || base[j].in_item == h.in_item)
+            });
+            match found {
+                Some(j) => b_used[j] = true,
+                None => still.push(i),
+            }
+        }
+        h_rest = still;
+    }
+    h_left.extend(h_rest);
+    let b_left = (0..base.len()).filter(|&j| !b_used[j]).collect();
+    (b_left, h_left)
+}
+
+/// Every pin the head carries that is neither unchanged nor accounted for, and
+/// every base pin that went without a row. After pairing unchanged pins, the
+/// pins left at one locator are compared in order: a base pin and a head pin
+/// left at the same locator are a change (so a current hash copied over a stale
+/// one is reported), a head pin left alone was added and a base pin left alone
+/// was removed. A citation added or removed without a pin is not judged.
+fn unattested(base: &[Pin], head: &[Pin], events: &[Event]) -> Vec<Problem> {
+    let (b_left, h_left) = unpaired(base, head);
     let mut out = Vec::new();
-    for ((locator, n), pin) in head {
-        let Some(h) = pin else { continue };
-        match base.get(&(locator.clone(), *n)) {
-            Some(Some(b)) if b == h => {}
-            Some(Some(b)) => {
+    let mut b_pool: Vec<usize> = b_left;
+    for i in h_left {
+        let locator = &head[i].locator;
+        let h = head[i].hash.as_deref().unwrap_or_default();
+        match b_pool.iter().position(|&j| base[j].locator == *locator) {
+            Some(k) => {
+                let j = b_pool.remove(k);
+                let b = base[j].hash.as_deref().unwrap_or_default();
                 if !moved(events, locator, b, h) {
                     out.push(Problem {
                         variant: "pin-changed-unattested",
@@ -235,7 +298,7 @@ fn unattested(
                     });
                 }
             }
-            _ => {
+            None => {
                 if !added_ok(events, base, locator, h) {
                     out.push(Problem {
                         variant: "pin-added-unattested",
@@ -249,21 +312,22 @@ fn unattested(
             }
         }
     }
-    for ((locator, n), pin) in base {
-        let Some(b) = pin else { continue };
-        let now = head.get(&(locator.clone(), *n));
-        if matches!(now, Some(Some(_))) || removed_ok(events, locator, b) {
+    for j in b_pool {
+        let locator = &base[j].locator;
+        let b = base[j].hash.as_deref().unwrap_or_default();
+        if removed_ok(events, locator, b) {
             continue;
         }
-        let what = match now {
-            Some(_) => format!(
+        let what = if head.iter().any(|p| p.locator == *locator) {
+            format!(
                 "the pin on '{locator}' was removed (it was {}): un-pinning weakens the evidence",
                 short(b)
-            ),
-            None => format!(
+            )
+        } else {
+            format!(
                 "the pinned locator '{locator}' ({}) was removed with no row",
                 short(b)
-            ),
+            )
         };
         out.push(Problem {
             variant: "pin-removed",
@@ -289,6 +353,25 @@ fn remedy(p: &Problem, record: &str) -> String {
             "restore the pin; if the record no longer rests on it, run `urzua fix --pin --apply --ids {record} --remove '{}' {tail}, or `--replace '{}=<new locator>'` when other evidence carries the claim",
             p.locator, p.locator
         ),
+    }
+}
+
+/// The `Stable-Id` the base copy carried and the head changed or dropped: a
+/// record's identity does not change, and a rename that changes it would be a
+/// way to look like a new record.
+fn stable_id_change(before: &Record, now: &Record) -> Option<String> {
+    let sid = |r: &Record| {
+        r.header
+            .get_reserved("Stable-Id")
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string)
+    };
+    let was = sid(before)?;
+    match sid(now) {
+        Some(is) if is == was => None,
+        Some(is) => Some(format!("its Stable-Id changed from {was} to {is} against the merge base's copy (paired by record id or by git's rename detection): a record keeps its Stable-Id; put {was} back")),
+        None => Some(format!("its Stable-Id {was} was removed against the merge base's copy (paired by record id or by git's rename detection): a record keeps its Stable-Id; put it back")),
     }
 }
 
@@ -321,9 +404,18 @@ pub fn diff_pin_changed_unattested(
         delivery_items::attach_done_items_to(&mut before, config, then);
         let events = added_events(config, record, now, then);
         let shown = record.path.display().to_string();
+        if let Some(message) = stable_id_change(&before, record) {
+            findings.push(Finding::new(
+                RULE_ID,
+                FindingSeverity::Error,
+                record.path.clone(),
+                ActionSource::new("stable-id-changed"),
+                message,
+            ));
+        }
         for p in unattested(
-            &occurrences(config, &before),
-            &occurrences(config, record),
+            &citations(config, &before),
+            &citations(config, record),
             &events,
         ) {
             findings.push(Finding::new(
@@ -350,15 +442,27 @@ mod tests {
     const B: &str = "bbbbbbbbbbbb2222222222222222222222222222222222222222222222222222";
     const C: &str = "cccccccccccc3333333333333333333333333333333333333333333333333333";
 
-    fn occ(entries: &[(&str, Option<&str>)]) -> BTreeMap<Key, Option<String>> {
-        let mut seen: BTreeMap<String, usize> = BTreeMap::new();
-        let mut out = BTreeMap::new();
-        for (l, h) in entries {
-            let n = seen.entry(l.to_string()).or_default();
-            out.insert((l.to_string(), *n), h.map(str::to_string));
-            *n += 1;
-        }
-        out
+    fn occ(entries: &[(&str, Option<&str>)]) -> Vec<Pin> {
+        entries
+            .iter()
+            .map(|(l, h)| Pin {
+                in_item: false,
+                locator: l.to_string(),
+                hash: h.map(str::to_string),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_pin_moved_between_the_field_and_an_item_or_reordered_is_unchanged() {
+        let base = occ(&[("src/a.rs", Some(A)), ("src/a.rs", Some(B))]);
+        let mut head = occ(&[
+            ("src/a.rs", None),
+            ("src/a.rs", Some(B)),
+            ("src/a.rs", Some(A)),
+        ]);
+        head[2].in_item = true;
+        assert!(unattested(&base, &head, &[]).is_empty());
     }
 
     fn mv(l: &str, from: &[&str], to: &str) -> Event {

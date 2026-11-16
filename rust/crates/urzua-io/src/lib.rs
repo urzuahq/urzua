@@ -329,6 +329,33 @@ pub fn changed_paths_since(repo_root: &Path, base: &str) -> Result<GitChanges, D
     })
 }
 
+/// The renames git detects between `merge_base` and the working tree, new path
+/// to old path: the last way a renamed record is paired with its base copy when
+/// neither its `Stable-Id` nor its record id matches one.
+pub fn renamed_paths_since(
+    repo_root: &Path,
+    merge_base: &str,
+) -> Result<std::collections::HashMap<PathBuf, PathBuf>, DiscoveryError> {
+    let diff = run_git(
+        repo_root,
+        &["diff", "--name-status", "-M", "-z", merge_base, "--"],
+    )?;
+    let mut out = std::collections::HashMap::new();
+    let mut fields = diff.split('\0').filter(|f| !f.is_empty());
+    while let Some(status) = fields.next() {
+        if status.starts_with('R') || status.starts_with('C') {
+            if let (Some(old), Some(new)) = (fields.next(), fields.next()) {
+                if status.starts_with('R') {
+                    out.insert(PathBuf::from(new), PathBuf::from(old));
+                }
+            }
+        } else {
+            fields.next();
+        }
+    }
+    Ok(out)
+}
+
 /// The files directly in each of `dirs` at each of `commits`, as repository-relative
 /// paths (`dir/name`), keyed by commit. One `git cat-file --batch-check` process
 /// resolves every `commit:dir` to a tree, and `git ls-tree` then runs once per

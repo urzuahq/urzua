@@ -153,6 +153,7 @@ fn load_base_text(
         return Ok(out);
     }
     let expiry: rules::ClaimExpiredOpts = config.rule_opts(rules::RULE_EMBODIMENT_CLAIM_EXPIRED);
+    let mut renames: Option<HashMap<PathBuf, PathBuf>> = None;
     for record in &session.records {
         let wanted_by_bump = bump
             && config
@@ -177,11 +178,16 @@ fn load_base_text(
         // name, so renaming a record is not a way past it.
         let base_path = if changes.added.contains(&record.path) {
             let renamed = pins.then(|| {
+                let renames = renames.get_or_insert_with(|| {
+                    urzua_io::renamed_paths_since(&session.repo_root, &changes.merge_base)
+                        .unwrap_or_default()
+                });
                 crate::diff_scope::renamed_from(
                     &session.repo_root,
                     config,
                     record,
                     changes,
+                    renames,
                     notices,
                 )
             });
@@ -1999,6 +2005,7 @@ fn read_diff_inputs(
     let base_text = load_base_text(session, changes, pin_level, notices)?;
     if let Some(changed) = scope.changed.as_ref() {
         notices.extend(merge_recomputed_notice(session, changed, &base_text));
+        notices.extend(pins_replaced_notice(session, changed, &base_text));
     }
     let base_drift = load_base_drift(session, changes, &base_text);
     let added_row_days = load_added_row_days(session, changes, &base_text);
@@ -3165,6 +3172,54 @@ fn merge_recomputed_notice(
         message: format!(
             "{} recomputed on merge by urzua fix --conflicts, with no reason written by a person: {}; confirm each merged pin in review",
             if items.len() == 1 { "1 record's pins were".to_string() } else { format!("{} records' pins were", items.len()) },
+            items.join("; ")
+        ),
+        detail: None,
+    })
+}
+
+/// The pins a pull request moved to another locator or removed with a tool row
+/// (`urzua fix --pin --replace` / `--remove`): the rule accepts each, and this
+/// notice puts every evidence swap in front of the reviewer without reading
+/// the log rows. First pins are not listed.
+fn pins_replaced_notice(
+    session: &Session,
+    changed: &urzua_io::GitChanges,
+    base_text: &HashMap<PathBuf, String>,
+) -> Option<Notice> {
+    use urzua_core::fix::pin::{parse_removed_row, parse_replaced_row};
+    let mut items: Vec<String> = Vec::new();
+    let mut paths: Vec<&PathBuf> = changed.changed.iter().collect();
+    paths.sort();
+    for path in paths {
+        let Some(now) = session.full_text.get(path) else {
+            continue;
+        };
+        let then = base_text.get(path).map(String::as_str).unwrap_or_default();
+        for row in now.lines().filter(|l| !then.lines().any(|t| t == *l)) {
+            if let Some(r) = parse_replaced_row(row) {
+                items.push(format!(
+                    "{}: {}@{} replaced by {}@{}",
+                    path.display(),
+                    r.from_locator,
+                    r.from_hash.get(..12).unwrap_or(&r.from_hash),
+                    r.to_locator,
+                    r.to_hash.get(..12).unwrap_or(&r.to_hash)
+                ));
+            } else if let Some((locator, hash)) = parse_removed_row(row) {
+                items.push(format!(
+                    "{}: {locator}@{} removed",
+                    path.display(),
+                    hash.get(..12).unwrap_or(&hash)
+                ));
+            }
+        }
+    }
+    (!items.is_empty()).then(|| Notice {
+        severity: NoticeSeverity::Warning,
+        subject: "pins-replaced-or-removed".to_string(),
+        message: format!(
+            "this change replaced or removed pinned evidence with urzua fix --pin: {}; confirm in review that the record's claim rests on what is pinned now",
             items.join("; ")
         ),
         detail: None,

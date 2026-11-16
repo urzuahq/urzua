@@ -2313,6 +2313,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
         population: PopulationUnit::Record,
         actions: &[
             VariantAction::new("pin-changed-unattested", ActionDecl::Exempt("putting the merge base's pin back is an edit inside the evidence clause that no action kind addresses; the message names the old hash and the re-pin command that writes the row")),
+            VariantAction::new("stable-id-changed", ActionDecl::Exempt("putting a record's Stable-Id back is a header edit to a value the base held, which the message names; no tool writes an identity")),
             VariantAction::new("pin-added-unattested", ActionDecl::Exempt("taking a hand-typed pin off is an edit inside the evidence clause that no action kind addresses; the message names the `urzua fix --pin` command that writes the first pin or the move with its row")),
             VariantAction::new("pin-removed", ActionDecl::Exempt("restoring a removed pin is an edit inside the evidence clause that no action kind addresses; the message names the hash it held")),
         ],

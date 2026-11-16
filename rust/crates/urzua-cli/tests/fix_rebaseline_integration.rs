@@ -914,3 +914,175 @@ fn a_pull_request_that_turns_the_rule_off_is_still_judged_at_the_base_level() {
         "{report}"
     );
 }
+
+/// `fixture` with `A`'s text changed on main by `edit` first, then a branch.
+fn branched_with(name: &str, edit: impl Fn(&str) -> String) -> common::TempDir {
+    let dir = fixture(name);
+    let text = std::fs::read_to_string(dir.join(A)).unwrap();
+    std::fs::write(dir.join(A), edit(&text)).unwrap();
+    commit_all(&dir);
+    git(&dir, &["branch", "-M", "main"]);
+    git(&dir, &["checkout", "-q", "-b", "work"]);
+    dir
+}
+
+fn with_sid(text: &str) -> String {
+    text.replacen("---\n", "---\nStable-Id: 01AAAAAAAAAAAAAAAAAAAAAA01\n", 1)
+}
+
+/// Renames `A` to `to` on the branch, applies `edit` and hand-types the
+/// current hash over the stale pin.
+fn rename_and_hand_pin(dir: &Path, to: &str, edit: impl Fn(&str) -> String) {
+    git(dir, &["mv", A, to]);
+    let text = std::fs::read_to_string(dir.join(to)).unwrap();
+    std::fs::write(dir.join(to), edit(&text).replace(&sha256(V1), &sha256(V2))).unwrap();
+    commit_all(dir);
+}
+
+fn messages(report: &serde_json::Value) -> Vec<String> {
+    unattested(report)
+        .iter()
+        .map(|f| f["message"].as_str().unwrap_or_default().to_string())
+        .collect()
+}
+
+#[test]
+fn a_rename_with_no_stable_id_field_is_paired_by_record_id() {
+    let dir = branched("rename-no-sid");
+    rename_and_hand_pin(&dir, "docs/adr/ADR-1-renamed.md", |t| t.to_string());
+    let report = check_base(&dir);
+    assert_eq!(messages(&report).len(), 1, "{report}");
+}
+
+#[test]
+fn a_rename_that_changes_or_removes_the_stable_id_is_paired_and_reported() {
+    for (name, edit) in [
+        (
+            "sid-changed",
+            Box::new(|t: &str| {
+                t.replace("01AAAAAAAAAAAAAAAAAAAAAA01", "01BBBBBBBBBBBBBBBBBBBBBB02")
+            }) as Box<dyn Fn(&str) -> String>,
+        ),
+        (
+            "sid-removed",
+            Box::new(|t: &str| t.replace("Stable-Id: 01AAAAAAAAAAAAAAAAAAAAAA01\n", "")),
+        ),
+    ] {
+        let dir = branched_with(name, with_sid);
+        rename_and_hand_pin(&dir, "docs/adr/ADR-1-renamed.md", &edit);
+        let report = check_base(&dir);
+        let m = messages(&report);
+        assert_eq!(m.len(), 2, "{name}: {report}");
+        assert!(m.iter().any(|m| m.contains("Stable-Id")), "{name}: {m:?}");
+    }
+}
+
+#[test]
+fn a_renumbered_record_with_the_same_stable_id_is_paired() {
+    let dir = branched_with("renumbered", with_sid);
+    rename_and_hand_pin(&dir, "docs/adr/ADR-7-a.md", |t| {
+        t.replace("# ADR-1:", "# ADR-7:")
+    });
+    let report = check_base(&dir);
+    assert_eq!(messages(&report).len(), 1, "{report}");
+}
+
+#[test]
+fn an_unpinned_citation_inserted_above_a_pinned_one_is_no_change() {
+    let dir = branched("inserted-citation");
+    let text = std::fs::read_to_string(dir.join(A)).unwrap();
+    std::fs::write(
+        dir.join(A),
+        text.replace(
+            "spec:docs/s.md, code:src/a.rs@",
+            "spec:docs/s.md, code:src/a.rs, code:src/a.rs@",
+        ),
+    )
+    .unwrap();
+    commit_all(&dir);
+    let report = check_base(&dir);
+    assert!(unattested(&report).is_empty(), "{report}");
+}
+
+#[test]
+fn reordering_two_pins_of_one_file_is_no_change_and_copying_one_over_the_other_is() {
+    let two = |t: &str| {
+        t.replace(
+            &format!("code:src/a.rs@sha256:{}", sha256(V1)),
+            &format!(
+                "code:src/a.rs@sha256:{}, code:src/a.rs@sha256:{}",
+                sha256(V1),
+                sha256(V2)
+            ),
+        )
+    };
+    let dir = branched_with("reorder", two);
+    let text = std::fs::read_to_string(dir.join(A)).unwrap();
+    let (p1, p2) = (
+        format!("src/a.rs@sha256:{}", sha256(V1)),
+        format!("src/a.rs@sha256:{}", sha256(V2)),
+    );
+    std::fs::write(
+        dir.join(A),
+        text.replace(&p1, "@X@")
+            .replace(&p2, &p1)
+            .replace("@X@", &p2),
+    )
+    .unwrap();
+    commit_all(&dir);
+    let report = check_base(&dir);
+    assert!(unattested(&report).is_empty(), "{report}");
+
+    let dir = branched_with("copy-over", two);
+    let text = std::fs::read_to_string(dir.join(A)).unwrap();
+    std::fs::write(dir.join(A), text.replace(&p1, &p2)).unwrap();
+    commit_all(&dir);
+    let report = check_base(&dir);
+    assert_eq!(unattested(&report).len(), 1, "{report}");
+}
+
+#[test]
+fn a_replaced_pin_is_listed_in_a_notice() {
+    let dir = branched("replace-notice");
+    std::fs::write(dir.join("src/zz.rs"), "fn zz() {}\n").unwrap();
+    commit_all(&dir);
+    let out = run_urzua(
+        &dir,
+        &[
+            "fix",
+            "--pin",
+            "--apply",
+            "--ids",
+            A,
+            "--replace",
+            "src/a.rs=src/zz.rs",
+            "--by",
+            "ana",
+            "--reason",
+            "zz.rs now carries the claim.",
+        ],
+    );
+    assert_eq!(json(&out)["status"], "applied", "{out:?}");
+    commit_all(&dir);
+    let report = check_base(&dir);
+    assert!(unattested(&report).is_empty(), "{report}");
+    let notice = report["notices"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|n| n["subject"] == "pins-replaced-or-removed")
+        .unwrap_or_else(|| panic!("{report}"));
+    let m = notice["message"].as_str().unwrap();
+    assert!(
+        m.contains("src/a.rs") && m.contains("src/zz.rs") && m.contains(A),
+        "{m}"
+    );
+}
+
+#[test]
+fn a_rename_that_changes_both_ids_is_paired_by_git_rename_detection() {
+    let dir = branched("git-rename");
+    rename_and_hand_pin(&dir, "docs/adr/ADR-9-other.md", |t| t.to_string());
+    let report = check_base(&dir);
+    assert_eq!(messages(&report).len(), 1, "{report}");
+}

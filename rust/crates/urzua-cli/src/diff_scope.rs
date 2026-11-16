@@ -190,39 +190,68 @@ impl UnreadableCopy {
 /// base copy has no readable one).
 type DeletedCopy = (PathBuf, Option<Identity>, Option<String>);
 
+/// A deleted record as the merge base held it.
+type DeletedRecord = (PathBuf, Record);
+
 /// The statuses of the deleted base copies, by pairing identity.
 type DeletedByIdentity = HashMap<Identity, Vec<Option<String>>>;
 
-/// The merge-base path `record`, added by the diff, was renamed from: the one
-/// deleted record of its type with the same `Stable-Id` and record id, the
-/// pairing `status.transition-allowed` uses. `None` for a record truly new.
+/// The merge-base path `record`, added by the diff, was renamed from, paired
+/// in order by: the same non-empty `Stable-Id`; the same record id (type and
+/// number), which pairs a rename that changed or dropped the `Stable-Id`; git's
+/// own rename detection (`renames`). Each step pairs only a unique match. `None`
+/// for a record that pairs with nothing: it is new.
 pub(crate) fn renamed_from(
     repo_root: &Path,
     config: &Config,
     record: &Record,
     changes: &urzua_io::GitChanges,
+    renames: &HashMap<PathBuf, PathBuf>,
     notices: &mut Vec<Notice>,
 ) -> Option<PathBuf> {
-    let identity = rules::rename_identity(record)?;
-    let status_field =
-        rules::relation_field_name(config, &record.record_type, RelationRole::Status);
     let mut warned = HashSet::new();
-    let mut paired = deleted_copies(
+    let copies = deleted_records(
         repo_root,
         config,
         None,
         &record.record_type,
-        status_field,
         changes,
         UnreadableCopy::PinPairing,
         notices,
         &mut warned,
-    )
-    .into_iter()
-    .filter(|(_, id, _)| id.as_ref() == Some(&identity))
-    .map(|(path, _, _)| path);
-    let first = paired.next()?;
-    paired.next().is_none().then_some(first)
+    );
+    let unique = |matches: Vec<&PathBuf>| (matches.len() == 1).then(|| matches[0].clone());
+    let sid = |h: &urzua_core::header::Header| {
+        h.get_reserved("Stable-Id")
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string)
+    };
+    let head_sid = sid(&record.header);
+    let head_id = rules::record_id(record);
+    let by_sid = head_sid.as_ref().and_then(|want| {
+        unique(
+            copies
+                .iter()
+                .filter(|c| sid(&c.1.header).as_ref() == Some(want))
+                .map(|c| &c.0)
+                .collect(),
+        )
+    });
+    let by_id = || {
+        head_id.as_ref().and_then(|want| {
+            unique(
+                copies
+                    .iter()
+                    .filter(|c| rules::record_id(&c.1).as_ref() == Some(want))
+                    .map(|c| &c.0)
+                    .collect(),
+            )
+        })
+    };
+    by_sid
+        .or_else(by_id)
+        .or_else(|| renames.get(&record.path).cloned())
 }
 
 /// The base copies of the records the diff deleted, by `Stable-Id`, for one
@@ -285,6 +314,31 @@ fn deleted_copies(
     notices: &mut Vec<Notice>,
     warned: &mut HashSet<PathBuf>,
 ) -> Vec<DeletedCopy> {
+    deleted_records(
+        repo_root, config, base_types, type_name, changes, reason, notices, warned,
+    )
+    .into_iter()
+    .map(|(path, old)| {
+        let status =
+            urzua_core::authority::gate_status(&old.header, status_field).map(str::to_string);
+        let identity = rules::rename_identity(&old);
+        (path, identity, status)
+    })
+    .collect()
+}
+
+/// Every record of one type the diff deleted, parsed as the base held it.
+#[allow(clippy::too_many_arguments)]
+fn deleted_records(
+    repo_root: &Path,
+    config: &Config,
+    base_types: Option<&BTreeMap<String, RecordTypeConfig>>,
+    type_name: &str,
+    changes: &urzua_io::GitChanges,
+    reason: UnreadableCopy,
+    notices: &mut Vec<Notice>,
+    warned: &mut HashSet<PathBuf>,
+) -> Vec<DeletedRecord> {
     let mut out = Vec::new();
     let declared: Vec<&RecordTypeConfig> = base_types
         .and_then(|t| t.get(type_name))
@@ -339,9 +393,7 @@ fn deleted_copies(
                 prefix,
             ),
         };
-        let status =
-            urzua_core::authority::gate_status(&old.header, status_field).map(str::to_string);
-        out.push((path.clone(), rules::rename_identity(&old), status));
+        out.push((path.clone(), old));
     }
     out
 }
