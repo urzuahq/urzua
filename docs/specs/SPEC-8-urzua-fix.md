@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5Q0XVK27P5T8FN72BN
-Version: '0.51'
+Version: '0.52'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/commands/fix.rs@sha256:8de563649d5c8534864f611377650542156797952df74c6912906fbca9b81878, code:rust/crates/urzua-core/src/fix.rs@sha256:4a03c290767b1f296c1561ecf2f1dfde2efeb42a21a4b0ffaf3036813b6a5c1d, test:rust/crates/urzua-cli/tests/fix_paths_integration.rs@sha256:73cb06a1782f02abeaf6c0795632ed1d1939633d72f67033247120656c6927d2, test:rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs@sha256:e20101f904c99aecdfdcf1830a0dba10d5ba8d2d72414681398919f2f895dde5, test:rust/crates/urzua-cli/tests/fix_drift_integration.rs@sha256:ff69343ca324400bde79c266372f9a213728d4d4ef8202beca6e12e54aa35352
+Realized-by: code:rust/crates/urzua-cli/src/commands/fix.rs@sha256:73f00d57886095b963d50b8682cee68197a5a7aa2157e356cb987538fc37fe46, code:rust/crates/urzua-core/src/fix.rs@sha256:958a755d87a6878082647133a691422d4b946969ea9e8ab849abd584742197f7, test:rust/crates/urzua-cli/tests/fix_paths_integration.rs@sha256:73cb06a1782f02abeaf6c0795632ed1d1939633d72f67033247120656c6927d2, test:rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs@sha256:e20101f904c99aecdfdcf1830a0dba10d5ba8d2d72414681398919f2f895dde5, test:rust/crates/urzua-cli/tests/fix_drift_integration.rs@sha256:ff69343ca324400bde79c266372f9a213728d4d4ef8202beca6e12e54aa35352
 Author: beauwilliams
 Subject: '`urzua fix` -- detecting and applying Embodiment corrections computed from evidence.'
 Implements: ADR-15, ADR-18, ADR-19, ADR-20
@@ -41,9 +41,27 @@ being wrong (RFC-12 §5). `fix` therefore *reports* the Embodiment mismatch (thi
 `check`'s own `embodiment.consistency` rule, surfaced here in repair-shaped form) but does not
 silently downgrade a stated value on `--apply` without the record being explicitly selected.
 
-Two further tiers are named, not built: completing a half-stated relationship additively (Tier 2),
-and repointing a stale locator only when the move is unambiguously recoverable (Tier 3). Each ships
-only once a real case demands it, in increasing order of nerve required.
+Two further tiers were named: completing a half-stated relationship additively (Tier 2), and repointing
+a stale locator only when the move is unambiguously recoverable (Tier 3). Tier 3 is not built.
+
+**Tier 2, the missing inverse of a relation (`MILE-287`).** A real case demanded it: an agent could make a
+reciprocal change to two records only through the shell. When `relation.pair-reciprocity` or
+`relation.supersession-reciprocity` is on and reports that record A claims a relation with B whose inverse
+field does not name A, `fix` lists a repair on B (`"tier": 2`) whose `computed_value` is B's field with A's id
+added, and an `inverse` object naming the claimant, its field, whether B writes the field yet
+(`field_absent`), and `status`, a note that `fix` never changes a `Status` and that a status move the relation
+implies (to `Superseded`, say) is a separate step, gated where the authority table names the status. The
+repair is read from the rules' own findings, so it covers exactly what `check` reports, in either direction
+(a written inverse with no forward claim gets the forward claim), for every claimant of a list-valued field.
+It is additive: an empty, `null`, `~` or `—` value is replaced, a reference list is appended to (inside `[...]`
+when bracketed), and a value that names no record is never overwritten: it is reported as a warning notice
+instead. A target that does not exist, a target whose type does not declare the field, a claim excluded by a
+pair's `types` or `cross_type`, and an acknowledged provisional claim get no repair; the first two are
+reported as notices. `--apply --ids <B>` writes it, adding the field's line at the end of the front matter
+when absent, with one tool-authored revision-log row naming the claim it answers. Either reciprocity rule
+being on is enough for `fix` to run. The `--tier` flag still accepts only 1; the Tier 2 repair runs with the
+default command, which is what the reciprocity findings print. Decided by the builder on 2026-11-16, pending
+maintainer review.
 
 ## Detect mode (default, read-only, CI-safe)
 
@@ -536,3 +554,5 @@ asserted by test, not assumed by convention.
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/fix.rs` 8108f0b26a58 -> 8e0c4f850c4d, `rust/crates/urzua-core/src/fix.rs` b5bfb2aa1386 -> 4a03c290767b, `rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs` 50ac84d1005f -> 29408f8d9f3c. Reason: Read the diff of each re-pinned file against main: cli fix.rs refuses a rebaseline --reason under 3 words or 12 characters; fix_rebaseline_integration.rs passes sentence reasons and adds the short-reason test; core fix.rs counts only resolving locators for Embodiment and Status and puts header-less types out of rebaseline scope. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Bumped to `0.51`. `fix --rebaseline` runs with neither `embodiment.consistency` nor `status.delivery-agreement` declared; the reason minimum is the configuration's `attestation.reason` (defaults 3 words, 12 characters) and applies to `reverify --apply` too. **Why:** a review found the re-pin `embodiment.pin-stale` suggests refused in a repository that declares neither repair rule, and the ADR-101 amendment of 2026-11-15 puts behaviour in configuration. | **substantive** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/fix.rs` 8e0c4f850c4d -> 8de563649d5c, `rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs` 29408f8d9f3c -> e20101f904c9. Reason: Read the diff of each re-pinned file since its previous pin: cli fix.rs runs --rebaseline before the repair-rule guard and reads the reason minimum from attestation.reason instead of two constants; fix_rebaseline_integration.rs adds the attestation.reason test. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-16 | Bumped to `0.52`. Tier 2 ships for one case: the missing inverse of a declared relation, listed and written by `fix`, never changing a `Status` or overwriting a different value. **Why:** an agent could make a paired change to two records only through the shell (`MILE-287`). | **substantive** |
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/fix.rs` 8de563649d5c -> 73f00d578860, `rust/crates/urzua-core/src/fix.rs` 4a03c290767b -> 958a755d87a6. Reason: cli fix.rs adds the missing-inverse repairs to the detect pass, lets fix run when only a reciprocity rule is on, and keeps a run that found an inverse repair from reading as not-run; the Embodiment, Status and rebaseline paths are unchanged; core fix.rs gains the inverse field and InverseOf type on Repair, splits apply_repair into replace-in-place and a front-matter insert for an absent inverse field, and words the revision row of an inverse repair; the Embodiment and Status repairs and their rows are unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |

@@ -1160,7 +1160,7 @@ fn judge_record(j: &Judging<'_>, content: String, request: &Request) -> Verdict 
 }
 
 /// Whether a finding is only the missing other half of a declared relation,
-/// which one edit of another record (or `urzua fix`) supplies (`MILE-XXX`).
+/// which one edit of another record (or `urzua fix`) supplies (`MILE-287`).
 fn pending_half(f: &Finding, rel: &Path) -> bool {
     let source = &f.action_source;
     urzua_core::fix::inverse::UNRECIPROCATED.contains(&source.variant)

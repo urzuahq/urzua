@@ -1,4 +1,4 @@
-//! The missing inverse of a declared relation (`MILE-XXX`): when record A
+//! The missing inverse of a declared relation (`MILE-287`): when record A
 //! claims a relation with B and B does not name A back, the other half is
 //! computable, so `urzua fix` lists it and `--apply` writes it on B.
 
@@ -199,7 +199,7 @@ fn repair_for(
             stated
         },
         computed_value: computed,
-        tier: 1,
+        tier: 2,
         evidence: claimants,
         inverse: Some(InverseOf {
             claimant: first.claimant.clone(),

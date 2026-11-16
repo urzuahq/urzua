@@ -30,15 +30,15 @@ pub struct Repair {
     pub line: usize,
     pub current_value: String,
     pub computed_value: String,
-    /// RFC-0008 §2's repair tiers. Only Tier 1 (recompute in place) exists
-    /// in this MVP.
+    /// RFC-0008 §2's repair tiers: 1 recomputes in place, 2 completes a
+    /// half-stated relation additively (`MILE-287`).
     pub tier: u8,
     /// The evidence the computation read, named in the record it produces
     /// (RFC-0008 §6) -- a reader can disagree with the derivation, not just
     /// trust it.
     pub evidence: String,
     /// Set when the repair writes the missing other half of a declared
-    /// relation rather than recomputing a value (`MILE-XXX`).
+    /// relation rather than recomputing a value (`MILE-287`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub inverse: Option<InverseOf>,
 }

@@ -152,7 +152,7 @@ fn edit_distance(a: &str, b: &str) -> usize {
 }
 
 /// What the editor hook does with an edit whose only new errors are the
-/// missing other half of a declared relation pair (`MILE-XXX`).
+/// missing other half of a declared relation pair (`MILE-287`).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum PendingPair {

@@ -1,4 +1,4 @@
-//! A paired change to two records without the shell (`MILE-XXX`): the editor
+//! A paired change to two records without the shell (`MILE-287`): the editor
 //! hook lets the first half of a reciprocal relation through and names the
 //! other half (`harness.guardrails.editor-hook.pending_pair`, default
 //! `allow`), or refuses it naming `urzua fix` (`refuse`); `urzua fix` writes a
