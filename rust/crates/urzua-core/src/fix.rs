@@ -770,12 +770,12 @@ pub fn detect_rebaselines(
     let mut failed = Vec::new();
     let population = census(PopulationUnit::Record, records.iter().collect(), |record| {
         // A type with no header has no evidence field to hold a pin (`ADR-50`).
-        if config
+        if let Some(t) = config
             .record_types
             .get(&record.record_type)
-            .is_some_and(|t| t.has_no_header())
+            .filter(|t| t.has_no_header())
         {
-            return Outcome::OutOfScopeNoHeader;
+            return t.header_out_of_scope();
         }
         let locator_field =
             relation_field_name(config, &record.record_type, RelationRole::EmbodimentLocator);

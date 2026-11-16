@@ -2,7 +2,7 @@
 Stable-Id: 01M6R3NK48R3KZZ3SZE3FYKSXA
 Status: Accepted
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-core/src/fix.rs@sha256:cf5aee142c59c3d9b72eb1727745c1f9eadc199eeb3d59b059b59a569dba8a98, test:rust/crates/urzua-core/src/fix.rs@sha256:cf5aee142c59c3d9b72eb1727745c1f9eadc199eeb3d59b059b59a569dba8a98
+Realized-by: code:rust/crates/urzua-core/src/fix.rs@sha256:fcc0a952e83dcb7dab77d94575021c4c26f3f9fe738a1a523da23c16e3561789, test:rust/crates/urzua-core/src/fix.rs@sha256:fcc0a952e83dcb7dab77d94575021c4c26f3f9fe738a1a523da23c16e3561789
 Date: 2026-09-05
 Accepted-on: 2026-09-05
 Author: beauwilliams
@@ -83,3 +83,4 @@ when they land.
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/fix.rs` 7ea3d709cad8 -> 6b93e753f499. Reason: fix.rs: a record of a header_shape none type is counted with the new no-header outcome, still out of scope; re-baselining logic unchanged **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/fix.rs` 7ea3d709cad8 -> 82fdfdfb9176. Reason: fix.rs only gains rejected_values and waiver_fields in a test fixture's RecordTypeConfig literal. The claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Pin recomputed on merge (attested by beauwilliams, identity: gh-verified, actor: agent): both merged sides re-pinned, `rust/crates/urzua-core/src/fix.rs` 6b93e753f499 and 82fdfdfb9176 -> cf5aee142c59; the new hash is the merged file's, which is git's automatic merge of the two re-pinned commits. No person wrote a reason for the merged state. **Why:** `urzua fix --conflicts` resolved a conflict that lay only in re-pin lines; a reviewer of the pull request should confirm the merged pin. | **structural** |
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/fix.rs` cf5aee142c59 -> fcc0a952e83d. Reason: fix.rs: a record of a header_shape none type is counted with its type's header_out_of_scope, still out of scope; re-baselining logic unchanged **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |

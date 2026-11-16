@@ -392,12 +392,12 @@ pub fn embodiment_claim_expired(
                 ExpiryCandidate::Entry => return Outcome::OutOfScope,
                 ExpiryCandidate::Record(record) => *record,
             };
-            if config
+            if let Some(t) = config
                 .record_types
                 .get(&record.record_type)
-                .is_some_and(|t| t.has_no_header())
+                .filter(|t| t.has_no_header())
             {
-                return Outcome::OutOfScopeNoHeader;
+                return t.header_out_of_scope();
             }
             let standing = match standing_of(record) {
                 Ok(s) => s,
