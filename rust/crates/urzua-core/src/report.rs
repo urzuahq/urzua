@@ -1221,7 +1221,8 @@ impl Report for CheckReport {
         if self.status == ReportStatus::NotRun {
             return None;
         }
-        stage_untracked(&self.notices)
+        unmerged_next_action(&self.notices)
+            .or_else(|| stage_untracked(&self.notices))
             .or_else(|| unshallow(&self.notices))
             .or_else(|| next_action_for_findings(&self.findings))
     }
@@ -1751,6 +1752,9 @@ impl Report for FixReport {
         }
     }
     fn next_action(&self) -> Option<NextAction> {
+        if let Some(next) = unmerged_next_action(&self.notices) {
+            return Some(next);
+        }
         match self.status {
             FixStatus::RepairsAvailable if !self.repairs.is_empty() => {
                 let ids = distinct_ids(self.repairs.iter().map(|r| &r.record))?;
@@ -2390,4 +2394,122 @@ mod tests {
         assert_eq!(next_action_for_findings(&[waived, info, human]), None);
         assert_eq!(next_action_for_findings(&[]), None);
     }
+}
+
+/// What `urzua fix --conflicts` found and did (`MILE-284`): every record git
+/// lists as unmerged, by kind of conflict, each resolvable, resolved or
+/// refused with its reason.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ConflictsReport {
+    pub status: ConflictsStatus,
+    pub as_of: AsOf,
+    pub conflicts: Vec<Conflict>,
+    /// Unmerged files that are not records: listed, never touched.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub other_unmerged: Vec<PathBuf>,
+    pub failed: Vec<FixFailure>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub identity: Option<AttestationReport>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub notices: Vec<Notice>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ConflictsStatus {
+    NotRun,
+    /// Git lists no unmerged file: there was nothing to look at.
+    NothingConflicted,
+    /// Unmerged files exist, none of them a record.
+    NoRecordConflicts,
+    /// Some records were refused (or an `--ids` entry matched none).
+    PartialFailure,
+    /// Every conflicted record is resolvable; nothing written yet.
+    Resolvable,
+    /// Every selected record was resolved and written.
+    Resolved,
+}
+
+/// The kind of conflict a record is in. `pin` is a conflict only in what a
+/// re-pin writes; more kinds are added beside it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ConflictKind {
+    Pin,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ConflictOutcome {
+    Resolvable,
+    Resolved,
+    Refused,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct Conflict {
+    pub record: PathBuf,
+    pub kind: ConflictKind,
+    pub outcome: ConflictOutcome,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub pins: Vec<crate::conflicts::PinOutcome>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
+    /// Revision-log rows the two sides appended, kept in date order.
+    pub rows_kept: usize,
+}
+
+impl Report for ConflictsReport {
+    fn notices(&self) -> &[Notice] {
+        &self.notices
+    }
+    fn exit_code(&self) -> ExitCode {
+        match self.status {
+            ConflictsStatus::NotRun => ExitCode::from(2),
+            ConflictsStatus::PartialFailure => ExitCode::from(1),
+            _ => ExitCode::from(0),
+        }
+    }
+    fn next_action(&self) -> Option<NextAction> {
+        let records = |o: ConflictOutcome| -> Vec<String> {
+            self.conflicts
+                .iter()
+                .filter(|c| c.outcome == o)
+                .map(|c| shell_word(&c.record.display().to_string()))
+                .collect()
+        };
+        match self.status {
+            ConflictsStatus::Resolvable => Some(NextAction::runs_as_printed(
+                "urzua fix --conflicts --apply --force --actor agent",
+                format!(
+                    "writes {}",
+                    plural(records(ConflictOutcome::Resolvable).len(), "resolution")
+                ),
+            )),
+            ConflictsStatus::Resolved => Some(NextAction::runs_as_printed(
+                format!("git add {}", records(ConflictOutcome::Resolved).join(" ")),
+                "fix --conflicts does not stage: stage the resolved records, then continue the merge or rebase",
+            )),
+            _ => None,
+        }
+    }
+}
+
+/// The subject of the notice `check` and `fix --rebaseline` raise when git
+/// lists records as unmerged (`MILE-284`).
+pub const UNMERGED_RECORDS: &str = "unmerged-records";
+
+/// The subject of the `check --base` notice listing the pins a diff
+/// recomputed on merge (`MILE-284`).
+pub const PINS_RECOMPUTED_ON_MERGE: &str = "pins-recomputed-on-merge";
+
+/// `urzua fix --conflicts` when a run noticed unmerged records: until they are
+/// resolved no other finding about them can be trusted.
+fn unmerged_next_action(notices: &[Notice]) -> Option<NextAction> {
+    notices
+        .iter()
+        .find(|n| n.subject == UNMERGED_RECORDS)
+        .map(|n| NextAction::runs_as_printed("urzua fix --conflicts", n.message.clone()))
 }

@@ -97,6 +97,58 @@ pin the grace window is not counted from the cited file's last commit, since tha
 about the scope; a scoped pin that no longer matches is drift immediately unless the record declares
 an audit date (`drift_audit_field`), which anchors the window as for a file-level pin.
 
+## Amendment (2026-11-16): `urzua fix --conflicts` resolves re-pin conflicts after a merge, and re-pin rows get their own class
+
+*Accepted by the maintainer on 2026-11-16. The Decision text above is unchanged.*
+
+When two branches each re-pin the same record, the second to merge conflicts in the pin, in `Version`
+and in the appended revision-log row, and had to be redone by hand (`MILE-284`).
+
+The maintainer was asked: "Should urzua get a command that resolves those conflicts itself: keep both
+pull requests' log rows, recompute the pin from the merged code, and add a row saying the pin was
+recomputed on merge? It would refuse any record that conflicts in its real content." The answer: "Yes,
+add the command".
+
+The maintainer was then asked: "Should fixing conflicts after a merge be one command under `fix`? It
+would do both jobs in one run: give a record whose number is now taken the next free number (renaming
+the file and rewriting every reference to it), and resolve records that conflict only in their evidence
+pins. Anything it can't safely fix, it lists and leaves alone." The answer: "`urzua fix --conflicts`".
+The maintainer's words before that: "Maybe there's one go-to command that fixes this whole class of
+problems of conflicts... Maybe this is just what the fix command should be used for."
+
+The maintainer was also asked: "Re-pins and spec versions: ... Should a re-pin stop bumping the spec's
+version?" The answer: "Yes, stop bumping".
+
+- **What it does.** `urzua fix --conflicts` looks at the records git lists as unmerged during a merge or
+  rebase and lists each by kind of conflict. Kind `pin`: when the two sides differ only in the evidence
+  field's pin hashes, the version field and rows appended to the revision log, `--apply` keeps both
+  sides' appended rows (de-duplicated, in date order), takes the higher version (bumped once more when
+  `version_bump` would otherwise fail against either side), recomputes each pin both sides moved to
+  different hashes, and appends one row saying the pin was recomputed on merge, naming both sides'
+  hashes, the new hash and the identity and actor as every attested row does. An edit only one side made
+  elsewhere in a conflicted record, such as another header field, is kept as git merged it.
+- **When a pin is recomputed.** Only when the merged file is git's own merge of two attested states: the
+  pinned file at our commit hashes, under the pin's scope, to our side's pin; at their commit to their
+  side's pin; and the index holds exactly git's automatic merge of the two, with the working tree equal
+  to it and the file not unmerged. A file changed on either side without a re-pin, or edited by hand
+  during the merge (staged or not), fails one of these, and the record is refused.
+- **What it refuses.** A record that conflicts anywhere else (body text, another header field, an
+  existing log row), a pin that fails the conditions above, a record with no merge-base, ours or theirs
+  version, and one resolved by hand are listed with the reason and left untouched; a refused pin needs an
+  ordinary re-pin with a person's reason. Identity is resolved exactly as for `--apply`. A stale pin that
+  did not conflict is not touched.
+- **The honest-reason rule.** A merge-recomputed pin carries a machine-written row that says no person
+  wrote a reason for the merged state. Each side's re-pin row, with its reason, is kept. `check --base`
+  lists every pin a pull request recomputed on merge as a notice, so its reviewer can confirm each one;
+  nothing enforces that a reviewer does.
+- **Re-pin rows get their own class.** A type may declare `revision_log.evidence_class`; the rows of
+  `fix --rebaseline --apply`, `reverify --apply` and `fix --conflicts --apply` carry it. Left out of
+  `version_bump.classes`, a re-pin no longer bumps a versioned record's version; the row is still
+  written. A type that declares none writes `tool_class` as before. Rows already in records keep their
+  class.
+- **Renumbering** a record whose number the merge made a duplicate will be the command's second kind
+  of conflict (`MILE-229`); it is not built yet.
+
 ## References
 
 - `ADR-32` -- the git-history drift this refines.
@@ -111,3 +163,4 @@ an audit date (`drift_audit_field`), which anchors the window as for a file-leve
 > | 2026-11-04 | Status changed from Proposed to Accepted, including the amendment of 2026-11-04. **Why:** Maintainer decision, 2026-11-04. | **substantive** |
 > | 2026-11-04 | `Implements: ADR-67` back-pointers added in `rust/crates/urzua-cli/src/discovery.rs` (the pin branch, the grace window, the audit anchor), `rust/crates/urzua-core/src/fix.rs` (`detect_rebaselines`, `apply_rebaseline`) and `rust/crates/urzua-cli/src/commands/fix.rs` (`run_rebaseline`). Comments only; no behaviour changes. **Why:** the drift review of 2026-11-04 found no back-pointer from the code to this record. | **structural** |
 > | 2026-11-04 | Amendment added: a locator may carry a scope between its path and its pin, and a scoped pin has no file-based grace window. **Why:** `ADR-74` (Accepted 2026-11-04) decides the scoped-locator grammar; `MILE-185` builds it. The Decision text is unchanged. | **substantive** |
+> | 2026-11-16 | Amendment added: `urzua fix --conflicts` resolves a record whose two sides conflict only in re-pin lines, recomputing a pin only from git's merge of two attested states, with a machine-written row, and refuses any other conflict; re-pin rows may carry a declared evidence class that does not bump the version. **Why:** maintainer decisions of 2026-11-16, quoted in the amendment; built by `MILE-284`. The Decision text is unchanged. | **substantive** |

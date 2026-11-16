@@ -26,6 +26,7 @@ pub struct FixArgs {
     pub actor: urzua_core::fix::ActorKind,
     pub force: bool,
     pub rebaseline: bool,
+    pub conflicts: bool,
     pub reason: Option<String>,
 }
 
@@ -51,6 +52,18 @@ pub(crate) fn rule_enabled(config: &Config, rule: &str) -> bool {
 /// `run` with every refusal as an `Err`, so each step can stop with `?`.
 fn run_checked(config_path: Option<PathBuf>, args: FixArgs) -> Result<ExitCode, Refusal> {
     let reason = check_usage(&args)?;
+    if args.conflicts {
+        return Ok(super::fix_conflicts::run(
+            config_path,
+            super::fix_conflicts::ConflictsArgs {
+                apply: args.apply,
+                ids: &args.ids,
+                force: args.force,
+                by: args.by.as_deref(),
+                actor: args.actor,
+            },
+        ));
+    }
     let Session {
         repo_root,
         config,
@@ -150,6 +163,16 @@ fn check_usage(args: &FixArgs) -> Result<String, Refusal> {
     {
         return Err(refuse(
             "urzua fix --force, --by and --actor belong to --apply: without it nothing is written, so they would be ignored (--ids alone narrows the dry-run report)",
+        ));
+    }
+    if args.conflicts
+        && (args.rebaseline
+            || args.stdin_path.is_some()
+            || args.reason.is_some()
+            || !args.paths.is_empty())
+    {
+        return Err(refuse(
+            "urzua fix --conflicts works on every record git lists as unmerged and writes no person's reason: it cannot be combined with --rebaseline, --stdin-path, --reason or PATHS (--ids narrows it)",
         ));
     }
     if args.rebaseline && args.stdin_path.is_some() {
@@ -824,7 +847,9 @@ fn rebaseline_checked(mut args: RebaselineArgs<'_>) -> Result<ExitCode, Refusal>
             failed: unmatched,
             identity: None,
             ran_apply: false,
-            extra_notices: Vec::new(),
+            extra_notices: super::fix_conflicts::unmerged_records_notice(repo_root, config)
+                .into_iter()
+                .collect(),
         })));
     };
     Ok(apply_rebaselines(&args, identity, scan, unmatched))

@@ -1584,8 +1584,13 @@ pub fn sha256_hex_of_file(path: &Path) -> Option<String> {
 /// Lowercase hex SHA-256 of a string's UTF-8 bytes (`ADR-74`: the pinned
 /// bytes of a scoped span).
 pub fn sha256_hex_of_str(text: &str) -> String {
+    sha256_hex_of_bytes(text.as_bytes())
+}
+
+/// The lowercase hex SHA-256 of `bytes`.
+pub fn sha256_hex_of_bytes(bytes: &[u8]) -> String {
     use sha2::{Digest, Sha256};
-    Sha256::digest(text.as_bytes())
+    Sha256::digest(bytes)
         .iter()
         .map(|b| format!("{b:02x}"))
         .collect()
