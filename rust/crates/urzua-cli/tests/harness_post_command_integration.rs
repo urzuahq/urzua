@@ -675,7 +675,7 @@ fn a_commit_the_command_makes_to_a_protected_path_is_still_reported() {
 }
 
 #[test]
-fn the_adapter_sends_findings_to_the_agent_only_and_a_protected_change_to_both_without_repeating() {
+fn the_adapter_sends_a_protected_change_to_the_person_and_a_short_line_to_the_agent_once() {
     let dir = fixture(
         "audiences",
         PROTECTED_CONFIG
@@ -934,4 +934,41 @@ fn payload_with(dir: &Path, response: serde_json::Value) -> String {
         "tool_input": {"command": "x"}, "tool_response": response,
     })
     .to_string()
+}
+
+const OWN_CONFIG: &str = "schema_version: 2\nrules: {header.required-fields: error}\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\", \"Date\"]\n    statuses:\n      values: [Proposed, Accepted, Rejected]\nharness:\n  adapters: [claude-code]\n  guardrails:\n    post-command: {enabled: true}\n";
+
+#[test]
+fn a_finding_in_the_sessions_own_commit_merged_from_a_branch_is_reported_once() {
+    let dir = fixture(
+        "own-merge",
+        OWN_CONFIG,
+        "---\nStatus: Proposed\nDate: 2026-01-01\n---\n# ADR-1: T\n\nprose\n",
+    );
+    git(&dir, &["branch", "-M", "main"]);
+    assert_eq!(post(&dir)["verdict"], "allow");
+    bash(
+        &dir,
+        &format!("git checkout -q -b side2 && sed -i '/^Date:/d' {PATH_1} && git commit -qam own && git checkout -q main"),
+    );
+    assert_eq!(post(&dir)["verdict"], "allow");
+    bash(&dir, "git merge -q side2");
+    let v = post(&dir);
+    let agent = v["agent"].as_str().unwrap();
+    assert!(
+        agent.contains("header.required-fields") && agent.contains(PATH_1),
+        "{v}"
+    );
+    bash(&dir, "ls >/dev/null");
+    assert_eq!(post(&dir)["verdict"], "allow");
+}
+
+#[test]
+fn a_gated_move_the_agent_committed_itself_is_worded_as_its_own_change() {
+    let dir = launder_fixture("own-commit-wording");
+    bash(&dir, &format!("{A} && git commit -qam b"));
+    let v = post(&dir);
+    let person = v["person"].as_str().unwrap();
+    assert!(person.contains("[acceptance]"), "{v}");
+    assert!(!person.contains("arrived by a git move"), "{v}");
 }

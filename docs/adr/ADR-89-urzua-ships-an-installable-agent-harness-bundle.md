@@ -925,7 +925,13 @@ post-command check reports a gated move, a gated deletion or a protected-path ch
 arrived, saying so when it arrived by a git move such as a pull, checkout, merge, reset or stash pop (the reflog and
 the stash are written by whoever runs git, so they choose only the wording); it absorbs only the ordinary findings of
 records such a move brought in, and says nothing for a command that changed nothing governed. It always runs the
-comparison and does not read the host's list of changed files. Section 4's "reports it to the agent" now reads: a short line to the agent, and a message to the
+comparison and does not read the host's list of changed files.
+
+Added to the accepted-risk list, decided by the orchestrator on 2026-11-16, pending maintainer review, and the same
+before this amendment: a shell command that commits a change and then rewrites or deletes the post-command baseline
+under `.urzua/cache` can lose the report of a gated move it made; and when the baseline was never seeded (the
+`session-start` guardrail is off, or the first command of a session) a gate event committed by that first command is
+missed. Pre-commit and CI remain the guarantee. Section 4's "reports it to the agent" now reads: a short line to the agent, and a message to the
 person for a gated move, a protected-path change, or a check that could not run; never the same text to both
 (`SPEC-24`).
 

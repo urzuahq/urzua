@@ -177,13 +177,14 @@ fn judge(config: Option<PathBuf>) -> PostVerdict {
     // The reflog and the stash are written by whoever runs git, the agent
     // included, so they choose only whether ordinary findings are absorbed and
     // how a gate event is worded; they never keep a gate event from the report.
-    let absorbed = match (&top, &last, &head) {
+    let (absorbed, mut arrived) = match (&top, &last, &head) {
         (Some(t), Some(l), Some(h)) if l != h && !committed.is_empty() => {
-            foreign_commits(t, l, h, &committed)
+            let elsewhere = not_own(&committed, own_files(t, l, h).as_ref());
+            let refs: Vec<&String> = elsewhere.iter().collect();
+            (same_as(t, h, &refs), elsewhere)
         }
-        _ => Vec::new(),
+        _ => (Vec::new(), Vec::new()),
     };
-    let mut arrived = committed.clone();
     if let Some(t) = &top {
         if let Some(oid) = read_stash(t) {
             arrived.extend(stash_matches(t, &oid));
@@ -210,48 +211,70 @@ fn judge(config: Option<PathBuf>) -> PostVerdict {
     v
 }
 
-/// The files of `committed` that a pull, checkout, merge, rebase or reset
-/// brought in between `last` and `head`, whose content on disk is still the
-/// commit's. Read from the reflog: a file only commits the command made
-/// (`commit`, `commit (amend)`) changed stays the command's. With no reflog
-/// entry for `last` the whole range stays the command's, as before.
-fn foreign_commits(top: &Path, last: &str, head: &str, committed: &[String]) -> Vec<String> {
-    let Ok(out) = GitRun::new()
-        .args(["--no-optional-locks", "reflog", "--format=%H%x00%gs"])
-        .arg(format!("-n{REFLOG_DEPTH}"))
-        .arg("HEAD")
-        .output()
-    else {
-        return Vec::new();
+/// The files the session's own commits between `last` and `head` changed. A
+/// commit is the session's own when the `HEAD` reflog has a commit-making entry
+/// for it (`commit`, its `amend`, `initial` and `merge` forms, `cherry-pick`,
+/// `revert`, a rebase pick), on whatever branch it was made, so merging or
+/// checking out a branch that holds it does not make it foreign. `None` when
+/// git cannot say: every commit then counts as the session's own.
+fn own_files(top: &Path, last: &str, head: &str) -> Option<HashSet<String>> {
+    let git = |args: &[&str]| {
+        GitRun::new()
+            .cwd(top)
+            .arg("--no-optional-locks")
+            .args(args)
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
     };
-    if !out.status.success() {
-        return Vec::new();
-    }
-    let text = String::from_utf8_lossy(&out.stdout);
-    let entries: Vec<(&str, &str)> = text.lines().filter_map(|l| l.split_once('\0')).collect();
-    if entries.first().map(|e| e.0) != Some(head) {
-        return Vec::new();
-    }
-    let Some(end) = entries.iter().position(|e| e.0 == last) else {
-        return Vec::new();
+    let depth = format!("-n{REFLOG_DEPTH}");
+    let reflog = git(&["reflog", "--format=%H%x00%gs", &depth, "HEAD"])?;
+    let made = |subject: &str| {
+        ["commit:", "commit (", "cherry-pick:", "revert:"]
+            .iter()
+            .any(|p| subject.starts_with(p))
+            || (subject.starts_with("rebase") && subject.contains("(pick)"))
     };
-    let own = |subject: &str| {
-        (subject.starts_with("commit:")
-            || subject.starts_with("commit (amend):")
-            || subject.starts_with("commit (initial):"))
-            && !subject.starts_with("commit (merge)")
-    };
-    if entries[..end].iter().all(|e| own(e.1)) {
-        return Vec::new();
+    let own: HashSet<&str> = reflog
+        .lines()
+        .filter_map(|l| l.split_once('\0'))
+        .filter(|(_, subject)| made(subject))
+        .map(|(h, _)| h)
+        .collect();
+    let range = git(&["rev-list", &format!("{last}..{head}")])?;
+    let mut files = HashSet::new();
+    for commit in range.lines().filter(|c| own.contains(c)) {
+        // `--cc` names, for a merge, only what the merge itself resolved.
+        let changed = git(&[
+            "diff-tree",
+            "-r",
+            "--root",
+            "--cc",
+            "--name-only",
+            "--no-commit-id",
+            commit,
+        ])?;
+        files.extend(
+            changed
+                .lines()
+                .filter(|l| !l.is_empty())
+                .map(str::to_string),
+        );
     }
-    let mut mine: HashSet<String> = HashSet::new();
-    for i in 0..end {
-        if own(entries[i].1) {
-            mine.extend(committed_since(entries[i + 1].0, entries[i].0).unwrap_or_default());
-        }
+    Some(files)
+}
+
+/// The files of `committed` that did not come from the session's own commits.
+fn not_own(committed: &[String], own: Option<&HashSet<String>>) -> Vec<String> {
+    match own {
+        Some(own) => committed
+            .iter()
+            .filter(|p| !own.contains(*p))
+            .cloned()
+            .collect(),
+        None => Vec::new(),
     }
-    let candidates: Vec<&String> = committed.iter().filter(|p| !mine.contains(*p)).collect();
-    same_as(top, head, &candidates)
 }
 
 /// The paths whose file on disk is the blob `rev` holds (both absent counts).
