@@ -17,17 +17,50 @@ set -euo pipefail
 root="$(git rev-parse --show-toplevel)"
 cd "$root"
 
+# The repository's own binary (.urzua/bin/urzua) is run only when it is executable,
+# git does not track it, and its sha256 is the one .urzua/harness.lock pins under
+# "binary"; it is hashed before it is executed. Otherwise it is not run, and the
+# person is told so.
+sha256_of() {
+  if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1
+  elif command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | cut -d' ' -f1
+  elif command -v openssl >/dev/null 2>&1; then openssl dgst -sha256 "$1" | sed 's/^.*= *//'
+  else return 1
+  fi
+}
+
+local_binary_refusal() {
+  local_bin="$root/.urzua/bin/urzua"
+  [ -x "$local_bin" ] || { echo "it has no execute bit"; return; }
+  if git ls-files --error-unmatch -- .urzua/bin/urzua >/dev/null 2>&1; then
+    echo "git tracks it, and a committed binary is code someone else chose"; return
+  fi
+  pin="$(sed -n 's/.*"binary": *"\(sha256:[0-9a-f]*\)".*/\1/p' "$root/.urzua/harness.lock" 2>/dev/null | head -n 1)"
+  [ -n "$pin" ] || { echo "\`.urzua/harness.lock\` pins no hash for it"; return; }
+  actual="$(sha256_of "$local_bin" 2>/dev/null || true)"
+  [ -n "$actual" ] || { echo "no sha256 tool is available to check it"; return; }
+  [ "sha256:$actual" = "$pin" ] || echo "its content is not the one \`.urzua/harness.lock\` pins"
+}
+
 # URZUA_BIN is the name the translator and the docs use; URZUA is still accepted.
 bin="${URZUA_BIN:-${URZUA:-}}"
 if [ -z "$bin" ]; then
-  if [ -x "$root/.urzua/bin/urzua" ]; then
-    bin="$root/.urzua/bin/urzua"
-  elif [ -x "$root/rust/target/release/urzua" ]; then
+  if [ -f "$root/.urzua/bin/urzua" ]; then
+    why="$(local_binary_refusal)"
+    if [ -z "$why" ]; then
+      bin="$root/.urzua/bin/urzua"
+    else
+      echo "urzua-record: .urzua/bin/urzua was NOT run: $why. Using URZUA_BIN or PATH instead; a person who installed it pins it with 'urzua harness update'." >&2
+    fi
+  fi
+fi
+if [ -z "$bin" ]; then
+  if [ -x "$root/rust/target/release/urzua" ]; then
     bin="$root/rust/target/release/urzua"
   elif command -v urzua >/dev/null 2>&1; then
     bin="$(command -v urzua)"
   else
-    echo "urzua-record: no urzua binary at .urzua/bin/urzua or on PATH; install urzua or set URZUA_BIN" >&2
+    echo "urzua-record: no usable urzua binary (a pinned .urzua/bin/urzua, URZUA_BIN or PATH); install urzua or set URZUA_BIN" >&2
     exit 2
   fi
 fi

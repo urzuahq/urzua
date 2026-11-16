@@ -177,9 +177,11 @@ commit, never a flaky run.
   replaces the default API origin `https://api.github.com` (GitHub Enterprise, and tests).
 - Pages of 100 are requested by `page=N` until the listing's `Link` header has no `rel="next"`; the
   `Link` URL itself is never followed, so the token only goes to the configured origin. When the first
-  answer's `Link` also names `rel="last"`, the remaining pages are requested four at a time and merged
-  in page order, so the snapshot does not depend on which answered first; without a `rel="last"`
-  the pages are followed one at a time. An entry
+  answer's `Link` also names `rel="last"`, the remaining pages are requested `issue_refs.workers` at a
+  time (`SPEC-3`; default 4, 1 to 16) and merged in page order, so the snapshot does not depend on
+  which answered first; the last link is a hint, so if its last page still says another follows the
+  listing is followed one page at a time from there. Without a `rel="last"` the pages are followed
+  one at a time. An entry
   with a `pull_request` key is a pull request, any other an issue.
 - Output is the snapshot, `{schema_version, repository, generated_at, issues, pulls}` (`generated_at`
   is the current UTC date), both lists
@@ -418,4 +420,4 @@ None. Every question this spec carried has been answered or routed:
 > | 2026-11-14 | Bumped to `0.46`. The test files this spec's evidence pins were hardened (exact exit codes, isolated git, visible root skips); the pins are re-baselined in the row above and the specified behaviour is unchanged. **Why:** the review's test findings; a re-baseline row is structural, so the version moves with it. | **structural** |
 > | 2026-11-14 | Bumped to `0.47`. The export's refusal of a record symlinked outside the repository is the guard every corpus command now applies, and it also covers a link to a file outside the record type's directory. **Why:** `ADR-89` amendment of 2026-11-14. | **substantive** |
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/export_integration.rs` 58ac0e2a0da0 -> 2bb508f31a96. Reason: Pinned file(s) changed by the symlinked-record refusal: export_integration.rs: a revision row appended by an earlier re-pin in this change. The record's claim is unaffected by these changes. (Re-applied after the follow-up review and merging main.) **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
-> | 2026-11-14 | Bumped to `0.48`. `urzua refs refresh` requests the pages of a listing four at a time when the first answer names its last page. **Why:** the adopter switchover (item 10): 5,700 numbers took about 75 s paged serially. | **substantive** |
+> | 2026-11-14 | Bumped to `0.48`. `urzua refs refresh` requests the pages of a listing `issue_refs.workers` (default 4) at a time when the first answer names its last page, and follows the listing on serially if that last page still has a next. **Why:** the adopter switchover (item 10): 5,700 numbers took about 75 s paged serially. | **substantive** |

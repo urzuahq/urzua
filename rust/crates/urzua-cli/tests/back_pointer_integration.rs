@@ -710,3 +710,74 @@ fn unread_markers_is_refused_on_a_rule_that_has_no_back_pointers() {
     assert_ne!(out.status.code(), Some(0));
     assert!(String::from_utf8_lossy(&out.stdout).contains("unread_markers"));
 }
+
+fn with_dangling_rule(dir: &common::TempDir) {
+    let config = std::fs::read_to_string(dir.join(".urzua/config.yaml")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        config.replace(
+            "rules:\n",
+            "rules:\n  code.dangling-bug-reference:\n    level: error\n    \
+             back_pointer_paths: [\"src\"]\n    extensions: [\"rs\"]\n",
+        ),
+    )
+    .unwrap();
+}
+
+/// An id followed by colons or by a note with no space (`ADR-1::note`) is read as the id.
+#[test]
+fn an_id_glued_to_a_colon_and_a_note_is_still_read() {
+    for marker in ["ADR-9::the why", "ADR-9:the why", "ADR-9::"] {
+        let dir = repo(
+            "colon-glued",
+            true,
+            &format!("// Implements: {marker}\nfn a() {{}}\n"),
+        );
+        let out = run_urzua(&dir, &["check"]);
+        let resolution = findings(&out, "embodiment.back-pointer-resolution");
+        assert_eq!(
+            resolution.len(),
+            1,
+            "{marker}: {}",
+            String::from_utf8_lossy(&out.stdout)
+        );
+        assert!(
+            resolution[0]["message"].as_str().unwrap().contains("ADR-9"),
+            "{marker}: {resolution:?}"
+        );
+        assert!(
+            notices_of(&out, "embodiment.back-pointer-resolution").is_empty(),
+            "{marker}: read, so not an unread marker"
+        );
+    }
+}
+
+/// With `unread_markers: report` and the comment-citation rule both on, a line the
+/// resolution rule reports as unread is one finding, not two; undeclared, the
+/// comment-citation rule still reports the dangling id (nothing is silent).
+#[test]
+fn an_unread_marker_reported_by_the_resolution_rule_is_not_reported_again_as_dangling() {
+    let source = "// Implements: (ADR-903)\nfn a() {}\n";
+    let dir = repo("unread-once", true, source);
+    with_unread_option(&dir, "    unread_markers: report\n");
+    with_dangling_rule(&dir);
+    let out = run_urzua(&dir, &["check"]);
+    let unread = findings(&out, "embodiment.back-pointer-resolution");
+    let dangling = findings(&out, "code.dangling-bug-reference");
+    assert_eq!(
+        (unread.len(), dangling.len()),
+        (1, 0),
+        "{}",
+        String::from_utf8_lossy(&out.stdout)
+    );
+
+    let quiet = repo("unread-once-undeclared", true, source);
+    with_dangling_rule(&quiet);
+    let out = run_urzua(&quiet, &["check"]);
+    assert_eq!(
+        findings(&out, "code.dangling-bug-reference").len(),
+        1,
+        "the dangling id is not lost when the unread marker is only a notice: {}",
+        String::from_utf8_lossy(&out.stdout)
+    );
+}

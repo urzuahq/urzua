@@ -78,6 +78,11 @@ rule runs and examines nothing; `check --stdin-path` treats the proposed record 
 The candidates it skips are counted in the rule's population as `deferred_by_scope`, with one `info`
 notice. `urzua explain --rule <id>` shows whether a rule has the option.
 
+`citation.issue-exists` takes the structured option `issue_refs` (`snapshot`, `repository`, `forms`, and
+optionally `fields` and `workers`). `workers` is how many pages of the issue listing `urzua refs refresh`
+requests at once when GitHub names the last page: an integer from 1 to 16, default 4, anything else a
+load error. A configuration without it behaves as it did before the key existed.
+
 To see what a rule judges, its options and their current values, ask the binary:
 
 ```sh

@@ -50,7 +50,19 @@ says deny, never silently cut short.
 It names the project to the engine: the directory it is installed in
 (`<dir>/.claude/hooks/`), as `project_dir`, when `<dir>` holds `.urzua/config.yaml`.
 The settings command checks this file's sha256 before running it.
+
+Which `urzua` runs: `URZUA_BIN`, else the binary the repository carries at
+`.urzua/bin/urzua`, else `urzua` on PATH. The repository's binary is run only
+when it is executable, git does not track it, and its sha256 is the one
+`.urzua/harness.lock` pins under `binary` (written by `urzua harness install` or
+`update`); before the file is executed, never after. Otherwise it is not run, the
+person is told so in the hook's message, and PATH is used: with no `urzua` there
+either, the edit is one that was not judged. The lock is the engine's, not this
+file's: it is a tracked file, so a change to it shows in git, and the post-command
+check hashes it with `.urzua/bin` and the hook scripts; a shell write that
+rewrites both the binary and the lock is reported after the fact, not prevented.
 """
+import hashlib
 import json
 import os
 import posixpath
@@ -96,8 +108,8 @@ def load_limits(argv, cwd):
     floor, leaves the floor: never unlimited. The session's project is asked first, as the
     engine judges every edit against it first."""
     exe = argv[0] if argv else "urzua"
-    if exe == "urzua" and os.environ.get("URZUA_BIN"):
-        exe = os.environ["URZUA_BIN"]
+    if exe == "urzua":
+        exe = resolve_urzua()
     try:
         p = subprocess.run([exe, "harness", "limits"], capture_output=True, text=True, cwd=PROJECT_DIR or cwd or None, timeout=10)
         limits = json.loads(p.stdout).get("limits")
@@ -130,7 +142,15 @@ def usable_dir(d):
     return isinstance(d, str) and bool(d) and os.path.isdir(d) and os.access(d, os.X_OK)
 
 
+# What the person is told about the binary the hooks would not run, once per run.
+BIN_NOTES = []
+
+
 def out(obj):
+    if BIN_NOTES and isinstance(obj, dict):
+        note = " ".join(BIN_NOTES)
+        del BIN_NOTES[:]
+        obj["systemMessage"] = note + "\n" + obj["systemMessage"] if obj.get("systemMessage") else note
     json.dump(obj, sys.stdout)
     sys.stdout.write("\n")
 
@@ -491,17 +511,77 @@ def proposed(tool, inp, path):
     return text
 
 
+def _file_sha256(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return "sha256:" + h.hexdigest()
+
+
+def _locked_binary_pin():
+    try:
+        with open(os.path.join(PROJECT_DIR, ".urzua", "harness.lock"), encoding="utf-8") as f:
+            pin = json.load(f).get("binary")
+        return pin if isinstance(pin, str) else None
+    except (OSError, ValueError, AttributeError):
+        return None
+
+
+def _git_tracks(path):
+    """Whether git tracks `path`; git that cannot be run counts as tracking (refuse)."""
+    try:
+        p = subprocess.run(["git", "-C", PROJECT_DIR, "ls-files", "--error-unmatch", "--", path], capture_output=True, timeout=10)
+        return p.returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return True
+
+
+def _local_binary_refusal(rel):
+    """Why the repository's own binary is not run, or None when it may be."""
+    local = os.path.join(PROJECT_DIR, rel)
+    if not os.access(local, os.X_OK):
+        return "it has no execute bit"
+    if _git_tracks(rel):
+        return "git tracks it, and a committed binary is code someone else chose"
+    pin = _locked_binary_pin()
+    if pin is None:
+        return "`.urzua/harness.lock` pins no hash for it"
+    try:
+        if _file_sha256(local) != pin:
+            return "its content is not the one `.urzua/harness.lock` pins"
+    except OSError:
+        return "it cannot be read"
+    return None
+
+
+RESOLVED = []
+
+
+def resolve_urzua():
+    """The `urzua` the hooks run: URZUA_BIN, else the repository's own binary when
+    it is verified (`_local_binary_refusal`), else `urzua` for PATH. Decided once."""
+    if RESOLVED:
+        return RESOLVED[0]
+    exe = "urzua"
+    rel = os.path.join(".urzua", "bin", "urzua")
+    if os.environ.get("URZUA_BIN"):
+        exe = os.environ["URZUA_BIN"]
+    elif PROJECT_DIR and os.path.isfile(os.path.join(PROJECT_DIR, rel)):
+        why = _local_binary_refusal(rel)
+        if why is None:
+            exe = os.path.join(PROJECT_DIR, rel)
+        else:
+            BIN_NOTES.append("urzua harness: .urzua/bin/urzua was NOT run: %s. The hooks use the urzua on PATH instead; with none, this call is not judged. A person who installed that binary pins it with `urzua harness update`; run `urzua harness status`." % why)
+    RESOLVED.append(exe)
+    return exe
+
+
 def engine(argv, request, cwd):
     """Runs the engine command with the request on stdin; returns the verdict object."""
     argv = list(argv)
-    # A binary that is not on PATH is named here: URZUA_BIN first, then the one the
-    # project carries at .urzua/bin/urzua (a pinned install), then PATH.
     if argv and argv[0] == "urzua":
-        local = os.path.join(PROJECT_DIR, ".urzua", "bin", "urzua") if PROJECT_DIR else None
-        if os.environ.get("URZUA_BIN"):
-            argv[0] = os.environ["URZUA_BIN"]
-        elif local and os.path.isfile(local) and os.access(local, os.X_OK):
-            argv[0] = local
+        argv[0] = resolve_urzua()
     p = subprocess.run(argv, input=json.dumps(request), capture_output=True, text=True, cwd=cwd or None)
     verdict = json.loads(p.stdout)
     if not isinstance(verdict, dict) or "verdict" not in verdict:
@@ -665,7 +745,10 @@ def main():
 
 if __name__ == "__main__":
     try:
-        sys.exit(main())
+        code = main()
+        if BIN_NOTES:
+            out({"systemMessage": " ".join(BIN_NOTES)})
+        sys.exit(code)
     except Exception as e:  # never a bare traceback and a blocking exit
         message = "urzua harness: the translator failed (%s), so this call was NOT judged" % e
         try:

@@ -41,6 +41,11 @@ pub struct Lock {
     pub entries: Vec<EntryHash>,
     #[serde(default)]
     pub blocks: Vec<BlockHash>,
+    /// The content hash of `.urzua/bin/urzua` when it existed at the last
+    /// install or update (`sha256:<hex>`). The hooks run that file only while
+    /// it still hashes to this.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub binary: Option<String>,
 }
 
 impl EntryHash {
@@ -64,6 +69,7 @@ impl Lock {
             files: BTreeMap::new(),
             entries: Vec::new(),
             blocks: Vec::new(),
+            binary: None,
         }
     }
 

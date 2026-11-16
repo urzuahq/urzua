@@ -778,6 +778,23 @@ pub struct IssueRefs {
     /// are read. A name no record type declares is refused at load.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fields: Option<Vec<String>>,
+    /// How many pages of the listing `urzua refs refresh` requests at once
+    /// (`ADR-101` amendment of 2026-11-15: a network setting is configuration).
+    /// Absent, [`REFS_WORKERS_DEFAULT`]; at most [`REFS_WORKERS_MAX`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workers: Option<u32>,
+}
+
+/// The pages `urzua refs refresh` requests at once when `workers` is not declared.
+pub const REFS_WORKERS_DEFAULT: u32 = 4;
+/// The most `workers` may be: GitHub asks clients to keep concurrent requests few.
+pub const REFS_WORKERS_MAX: u32 = 16;
+
+impl IssueRefs {
+    /// The declared `workers`, else the default.
+    pub fn workers(&self) -> u32 {
+        self.workers.unwrap_or(REFS_WORKERS_DEFAULT)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
@@ -2525,6 +2542,13 @@ fn issue_refs_problem(refs: &IssueRefs) -> Option<String> {
     }
     if refs.forms.is_empty() {
         return Some("declares no forms; give 'number', 'url' or both".to_string());
+    }
+    if let Some(w) = refs.workers {
+        if !(1..=REFS_WORKERS_MAX).contains(&w) {
+            return Some(format!(
+                "declares 'workers: {w}'; it is the pages requested at once, from 1 to {REFS_WORKERS_MAX}"
+            ));
+        }
     }
     if let Some(fields) = &refs.fields {
         if fields.is_empty() || fields.iter().any(|f| f.trim().is_empty()) {
@@ -6844,6 +6868,40 @@ record_types:
             .contains("does not take the option 'issue_refs'"));
         let off = issue_config("").replace("level: warn", "level: off");
         assert!(parse(&off).is_ok());
+    }
+
+    #[test]
+    fn issue_refs_workers_is_optional_and_bounded() {
+        let with = |workers: &str| {
+            parse(&issue_config(&format!(
+                "    issue_refs: {{snapshot: s.json, repository: o/r, forms: [number]{workers}}}\n"
+            )))
+        };
+        for ok in ["", ", workers: 1", ", workers: 4", ", workers: 16"] {
+            assert!(with(ok).is_ok(), "{ok}");
+        }
+        for bad in [", workers: 0", ", workers: 17"] {
+            let err = with(bad).unwrap_err().to_string();
+            assert!(err.contains("workers"), "{bad}: {err}");
+        }
+        for bad in [", workers: -1", ", workers: two"] {
+            assert!(with(bad).is_err(), "{bad}");
+        }
+        let range = with(", workers: 99").unwrap_err().to_string();
+        assert!(range.contains("1 to 16"), "{range}");
+        // Absent, it is the number refresh used before the key existed.
+        let config = with("").unwrap();
+        let refs = config.rules["citation.issue-exists"]
+            .issue_refs
+            .as_ref()
+            .unwrap();
+        assert_eq!(refs.workers(), 4);
+        let config = with(", workers: 2").unwrap();
+        let refs = config.rules["citation.issue-exists"]
+            .issue_refs
+            .as_ref()
+            .unwrap();
+        assert_eq!(refs.workers(), 2);
     }
 
     #[test]

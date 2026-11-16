@@ -49,6 +49,19 @@ It never overwrites a file that differs, refuses a settings file it cannot merge
 run twice produces identical bytes. Commit all of it. With no `harness` key and no `--adapter`,
 `install` writes nothing and says so. The hooks need `python3` on the machine the agent runs on.
 
+### A binary kept in the repository
+
+The hooks run `urzua` from `URZUA_BIN`, then from `.urzua/bin/urzua`, then from `PATH`. A file at
+`.urzua/bin/urzua` is run only when it is executable, git does not track it, and its sha256 is the
+`binary` value in `.urzua/harness.lock`. Install the binary, then run `urzua harness install` (or
+`update`): that writes the pin and adds `.urzua/bin/` to `.gitignore`. A file that fails any of the
+three checks is not run; the hook says so in its message and uses `URZUA_BIN` or `PATH`, and with
+neither the edit is one that was not judged. `status`, `doctor` and the session-start check report it.
+This stops a script a shell command wrote there, or one a checkout carried in, from replacing the
+judge. It does not stop a shell command that writes the binary *and* re-pins it: that is reported by the
+post-command check (which hashes `.urzua/bin`, the lock and the hook files in every repository) and
+shows in the lock's diff, not prevented.
+
 ## Keep it in sync
 
 | Command | Does |

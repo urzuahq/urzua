@@ -745,6 +745,7 @@ rules:
       repository: "owner/name"
       forms: [number, url]
       fields: ["Found-in"]   # optional
+      workers: 4             # optional
 ```
 
 - `snapshot` is the file, relative to the repository root. `repository` is the GitHub repository it
@@ -758,6 +759,12 @@ rules:
 - A number is held to the snapshot's issues and pull requests together, since GitHub shares one
   number space and redirects either kind of URL to the other.
 - `skip_revision_log` behaves as for `citation.path-exists`.
+- `workers` (optional, default 4) is how many pages of the listing `urzua refs refresh` requests at once
+  when the first answer names its last page; an integer from 1 to 16, anything else a load-time error.
+  It is a network setting, so it is configuration and not a constant (`ADR-101`, amendment of
+  2026-11-15). A configuration without it requests four at once, as before the key existed. The last
+  link is only a hint: when the last page it names still says another follows, the listing is followed
+  one page at a time from there.
 - `fields` (optional, absent by default) names header fields, as a type declares them, whose values
   are read for the same `forms` in addition to the `reference_sections`: a number in `Found-in` is
   held to the snapshot as one under `## References` is. A finding names the field and its header
@@ -939,6 +946,13 @@ harness:
 
 - **`adapters`** is a list of adapter names, each a directory of the bundle embedded in the binary
   (`urzua harness adapters` lists them). An adapter this build does not embed is refused at install.
+- **The repository's own binary** has no key: a binary kept at `.urzua/bin/urzua` is run by the hooks
+  only while it is executable, untracked by git and hashes to the `binary` value `urzua harness install`
+  or `update` wrote to `.urzua/harness.lock` (`SPEC-24`, `ADR-89` amendment of 2026-11-16). `install` adds
+  `.urzua/bin/` to `.gitignore`. The pin is not a configuration value because configuration is what an
+  agent's edit could be judged against; the lock is the engine's, refused to the edit tools and hashed
+  by the post-command check with `.urzua/bin` and the hook files in every repository, declared path gate
+  or not. A shell write that replaces the binary *and* the pin is reported, not prevented.
 - **`instructions_file`** is a repository-relative path. The install writes one block between
   `<!-- urzua-harness:begin -->` and `<!-- urzua-harness:end -->`, adds the markers once at the end of the
   file when absent, never touches the text outside them and, run twice, yields identical bytes. Without
@@ -2671,6 +2685,6 @@ proves this configuration produces the three findings.
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 9b216fd928bd -> 6e7b740a88d5, `rust/crates/urzua-cli/tests/own_config_integration.rs` d6dcb432d05a -> 09c2431a2693. Reason: Pinned file(s) changed by the symlinked-record refusal: config.rs: default-on rules are known to the config (a rule on by default needs no declaration; its level or `off` is configurable); own_config_integration.rs: a revision row appended by an earlier re-pin in this change. The record's claim is unaffected by these changes. (Re-applied after merging main.) **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 6e7b740a88d5 -> 9b216fd928bd. Reason: Pinned file(s) changed by the symlinked-record refusal: config.rs: default-on rules are known to the config (a rule on by default needs no declaration; its level or `off` is configurable). The record's claim is unaffected by these changes. (Re-applied after the config change and merging main.) **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-15 | Bumped to `0.146`. Documents `harness.limits`: eleven keys with their defaults, the editor hook timeout as a floor of 120 with a ceiling of 600 (a host that kills the hook first lets the call proceed), the ten input caps as security floors, and the ceilings of the two recursion depths (256 and 1024) and of the MCP request line (64 MiB), a value below a floor or an unknown key under `limits` as a load error, `urzua harness limits`, and the installed timeout as drift. Adds `## Format invariants and security floors`, which lists the post-command cache paths and `.urzua/harness.lock` as format invariants and the ten harness input caps as security floors, each with its reason. **Why:** `ADR-101` amendment of 2026-11-15 (configuration owns behaviour), accepted by the maintainer; tracked by `MILE-232`; the maintainer's instruction for this change: "the input caps ... are SECURITY FLOORS. Today's value is both the default and the minimum". | **substantive** |
-> | 2026-11-14 | Bumped to `0.147`. Documents `unread_markers: report` on the two back-pointer rules: undeclared, a marker line naming an id the matcher cannot read is an `info` notice (count and at most 20 `file:line`); declared, a finding at the rule's level; `ignore_marker` excuses it either way. **Why:** the adopter switchover found markers silently read as no back-pointer (`ADR-101`); a finding by default would change existing configurations. | **substantive** |
+> | 2026-11-14 | Bumped to `0.147`. Documents `unread_markers: report` on the two back-pointer rules: undeclared, a marker line naming an id the matcher cannot read is an `info` notice (count and at most 20 `file:line`); declared, a finding at the rule's level; `ignore_marker` excuses it either way. **Why:** the adopter switchover found markers silently read as no back-pointer (`ADR-101`); a finding by default would change existing configurations.  The pin of a repository-local `.urzua/bin/urzua` (no key, `SPEC-24`) is described with the harness, and `citation.issue-exists`'s `issue_refs` takes an optional `workers` (default 4, 1 to 16). | **substantive** |
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 9b216fd928bd -> 76578456015b. Reason: Read the diff of each re-pinned file against main. the UnreadMarkers enum, the unread_markers RuleSetting option, its field-name list entry and its load validation (validate_unread_markers) were added; nothing else changed. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 9b216fd928bd -> 76578456015b. Reason: Read the diff of each re-pinned file against main. config.rs: the `unread_markers` rule option was added (UnreadMarkers enum, its field-name list entry and the load check validate_unread_markers that refuses it on any rule but the two back-pointer rules); nothing else changed. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |

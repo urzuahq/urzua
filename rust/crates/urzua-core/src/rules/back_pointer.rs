@@ -524,8 +524,12 @@ fn cited_ids(rest: &str, prefixes: &[String]) -> Vec<String> {
                     depth += paren_delta(word);
                 } else {
                     let word = word.strip_suffix('.').unwrap_or(word);
-                    // `ADR-1:` reads as the id; what follows the colon is a note.
-                    let colon = word.strip_suffix(':').filter(|w| is_record_id(w, prefixes));
+                    // `ADR-1:` and `ADR-1::note` read as the id; what follows the
+                    // first colon is a note.
+                    let colon = word
+                        .split_once(':')
+                        .map(|(id, _)| id)
+                        .filter(|id| is_record_id(id, prefixes));
                     let word = colon.unwrap_or(word);
                     if is_record_id(word, prefixes) {
                         ids.push(word.to_string());

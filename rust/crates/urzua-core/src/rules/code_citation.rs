@@ -111,7 +111,8 @@ impl Judge<'_> {
     /// The findings of one file and the number of lines the marker excused.
     fn file(&self, file: &SourceFile, content: &str) -> (Vec<Finding>, usize) {
         const RULE_ID: &str = RULE_CODE_DANGLING_BUG_REFERENCE;
-        let judged_elsewhere = judged_by_resolution(self.resolution, file, content, self.prefixes);
+        let (judged_elsewhere, unread_elsewhere) =
+            judged_by_resolution(self.resolution, file, content, self.prefixes);
         let lines: Vec<&str> = content.lines().collect();
         let declared: Option<&[String]> = self.leaders.and_then(|m| {
             let ext = file.path.extension()?.to_str()?;
@@ -129,6 +130,7 @@ impl Judge<'_> {
                 continue;
             }
             if judged_elsewhere.contains(&(citation.line, citation.id.clone()))
+                || unread_elsewhere.contains(&citation.line)
                 || self.external.iter().any(|e| e.matches(&citation.id))
                 || self
                     .index
@@ -167,16 +169,20 @@ impl Judge<'_> {
 
 /// The `(line, id)` pairs `embodiment.back-pointer-resolution` judges in `file`:
 /// `Implements:` back-pointers under its paths, and `Verifies:` ones in its
-/// test class. Empty when that rule is off or does not cover the file.
+/// test class; and the lines it reports as unread markers, which it does only
+/// with `unread_markers: report` (otherwise they are a notice, and the ids on
+/// them are still this rule's to report). Empty when that rule is off or does
+/// not cover the file.
 fn judged_by_resolution(
     resolution: Option<&crate::config::RuleSetting>,
     file: &SourceFile,
     content: &str,
     prefixes: &[String],
-) -> BTreeSet<(usize, String)> {
+) -> (BTreeSet<(usize, String)>, BTreeSet<usize>) {
     let mut out = BTreeSet::new();
+    let mut unread = BTreeSet::new();
     let Some(setting) = resolution else {
-        return out;
+        return (out, unread);
     };
     let covered = setting
         .back_pointer_paths
@@ -184,8 +190,9 @@ fn judged_by_resolution(
         .flatten()
         .any(|e| path_is_published(&file.path, e));
     if !covered {
-        return out;
+        return (out, unread);
     }
+    let reports_unread = setting.unread_markers == Some(crate::config::UnreadMarkers::Report);
     let tests = setting.test_paths.clone().unwrap_or_default();
     let mut markers = vec![MARKER_IMPLEMENTS];
     if is_test_file(&file.path, &tests) {
@@ -195,6 +202,11 @@ fn judged_by_resolution(
         for p in scan_marker(&file.path, content, prefixes, marker) {
             out.insert((p.line, p.id));
         }
+        if reports_unread {
+            for u in scan_unread_markers(&file.path, content, prefixes, marker) {
+                unread.insert(u.line);
+            }
+        }
     }
-    out
+    (out, unread)
 }

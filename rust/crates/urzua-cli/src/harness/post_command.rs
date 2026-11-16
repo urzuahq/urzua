@@ -182,6 +182,9 @@ fn judge_changes(
     base: &str,
     committed: Vec<String>,
 ) -> PostVerdict {
+    // The files the harness owns, hashed whether or not the configuration
+    // gates any path (`.urzua/bin` is gitignored, so git cannot show it).
+    let engine_lines = top.map(|t| scan_engine_owned(t, true)).unwrap_or_default();
     // The gate: git's own view of the working tree, before any configuration.
     let mut tree = match changed_paths() {
         Ok(c) => c,
@@ -191,7 +194,11 @@ fn judge_changes(
     tree.extend(top.map(hidden_changes).unwrap_or_default());
     tree.sort();
     tree.dedup();
-    if tree.is_empty() && committed.is_empty() && protected_unchanged(top, config.as_deref()) {
+    if tree.is_empty()
+        && committed.is_empty()
+        && engine_lines.is_empty()
+        && protected_unchanged(top, config.as_deref())
+    {
         forget_all(top);
         return PostVerdict::quiet(format!("{P}: git shows no changed file; nothing to check"));
     }
@@ -202,7 +209,7 @@ fn judge_changes(
         config: loaded,
     } = match open_governed(config) {
         Ok(ws) => ws,
-        Err(verdict) => return *verdict,
+        Err(verdict) => return with_engine_lines(*verdict, &engine_lines),
     };
 
     // Protected files git does not show (ignored ones), by content hash.
@@ -214,6 +221,7 @@ fn judge_changes(
         remembered,
     } = select_unseen(&repo_root, &loaded, &paths, &scan.baseline_entries);
     protected.extend(shrink_lines(&repo_root, &config_path, &scan));
+    protected.extend(engine_lines);
     let deletions = gated_deletions(&repo_root, &loaded, &paths, base, &scan);
     let mut remembered = remembered;
     remember_deletions(&repo_root, &paths, &deletions, &mut remembered);
@@ -245,6 +253,18 @@ fn judge_changes(
     write_memory(&repo_root, &remembered);
 
     report_verdict(&fresh, protected, gated, (new, old), scan.note.as_deref())
+}
+
+/// A verdict that did not get as far as the configuration, with the engine-owned
+/// changes it would otherwise have swallowed.
+fn with_engine_lines(mut v: PostVerdict, lines: &[String]) -> PostVerdict {
+    if lines.is_empty() {
+        return v;
+    }
+    v.verdict = "allow-with-warnings";
+    v.protected_changes = lines.to_vec();
+    v.message = format!("{}\n{}", v.message, lines.join("\n"));
+    v
 }
 
 /// The verdict for a judged command: the findings `check` reported on the
@@ -731,6 +751,66 @@ fn protected_unchanged(top: Option<&Path>, config: Option<&Path>) -> bool {
     }
     let (found, truncated) = super::gate::walk_entries(top, &state.entries);
     !truncated && hash_files(top, &found) == state.files
+}
+
+const ENGINE_FILE: &str = ".urzua/cache/engine-owned-hashes.json";
+
+/// The files the harness owns that exist: `.urzua/bin`, the lock and every
+/// file the lock names (the hook scripts and the drafting commands).
+fn engine_owned_files(root: &Path) -> Vec<String> {
+    let mut entries = vec![
+        super::repo_bin::BIN_DIR.to_string(),
+        super::lock::LOCK_PATH.to_string(),
+    ];
+    if let Ok(Some(lock)) = super::installed_lock(root) {
+        entries.extend(lock.files.keys().cloned());
+    }
+    super::gate::walk_entries(root, &entries).0
+}
+
+/// Hashes the engine-owned files and returns one report line for each that
+/// differs from the baseline (changed, new or gone) when `report` is set; the
+/// baseline then becomes what is on disk. With no baseline nothing differs.
+/// This runs inside the engine the translator chose, which it has first checked
+/// against the lock, so a replaced `.urzua/bin/urzua` is not the one judging it.
+fn scan_engine_owned(root: &Path, report: bool) -> Vec<String> {
+    let now = hash_files(root, &engine_owned_files(root));
+    let path = root.join(ENGINE_FILE);
+    let old: Option<BTreeMap<String, String>> = std::fs::read_to_string(&path)
+        .ok()
+        .and_then(|t| serde_json::from_str(&t).ok());
+    let mut lines = Vec::new();
+    if let (true, Some(old)) = (report, &old) {
+        for (rel, hash) in &now {
+            if old.get(rel) != Some(hash) {
+                lines.push(engine_line(rel, "changed"));
+            }
+        }
+        for rel in old.keys().filter(|r| !now.contains_key(*r)) {
+            lines.push(engine_line(rel, "deleted"));
+        }
+    }
+    if let Ok(text) = serde_json::to_string(&now) {
+        if old.as_ref() != Some(&now) {
+            if let Some(dir) = path.parent() {
+                let _ = std::fs::create_dir_all(dir);
+            }
+            let _ = urzua_io::write_atomic(&path, &text);
+        }
+    }
+    lines
+}
+
+fn engine_line(rel: &str, what: &str) -> String {
+    format!(
+        "  {rel} [engine-owned] error: the command {what} a file the harness owns (`.urzua/bin`, `.urzua/harness.lock` and the files the lock names are hashed in every repository, whether or not the configuration gates paths). It was not prevented; the hooks run `.urzua/bin/urzua` only while it hashes to the lock's pin, and `urzua harness status` shows the drift."
+    )
+}
+
+/// Takes the engine-owned files' hashes as the baseline. The session-start
+/// check calls it.
+pub(super) fn seed_engine_owned(root: &Path) {
+    scan_engine_owned(root, false);
 }
 
 struct ProtectedScan {
