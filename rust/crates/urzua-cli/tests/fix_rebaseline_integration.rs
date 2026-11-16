@@ -519,3 +519,37 @@ fn the_reason_minimum_is_read_from_attestation_reason() {
         "{out:?}"
     );
 }
+
+/// A declared `evidence_class` is the class of a re-pin row, so a re-pin
+/// leaves a `version_bump` that does not name it alone.
+#[test]
+fn a_declared_evidence_class_is_the_class_of_the_re_pin_row() {
+    let dir = fixture("evidence-class");
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        CONFIG.replace(
+            "    required_fields: []\n",
+            "    required_fields: []\n    revision_log: {marker: \"**Revision log**\", classes: [substantive, structural, evidence], evidence_class: evidence}\n",
+        ),
+    )
+    .unwrap();
+    let out = run_urzua_with_gh(
+        &dir,
+        &[
+            "fix",
+            "--rebaseline",
+            "--apply",
+            "--ids",
+            A,
+            "--by",
+            "ana",
+            "--reason",
+            "Read the diff; the claim holds.",
+        ],
+        None,
+    );
+    assert_eq!(json(&out)["status"], "applied", "{out:?}");
+    let a = std::fs::read_to_string(dir.join(A)).unwrap();
+    let row = a.lines().find(|l| l.contains("Re-baselined")).unwrap();
+    assert!(row.ends_with("| **evidence** |"), "{row}");
+}

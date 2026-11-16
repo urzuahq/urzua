@@ -1317,6 +1317,11 @@ pub struct RevisionLogDecl {
     /// The class `urzua fix` writes. Absent: `DEFAULT_REVISION_LOG_TOOL_CLASS`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool_class: Option<String>,
+    /// The class of the rows that move evidence pins (`fix --rebaseline`,
+    /// `reverify`, `fix --conflicts`). Absent: `tool_class`. Left out of
+    /// `version_bump.classes`, a re-pin does not bump the version.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub evidence_class: Option<String>,
 }
 
 /// A type's version-bump requirement: a revision-log row of one of `classes`
@@ -1368,6 +1373,20 @@ pub struct RevisionLogShape {
     pub date_column: Option<String>,
     /// The class `urzua fix` writes.
     pub tool_class: String,
+    /// The class of the rows that move evidence pins; `tool_class` unless
+    /// declared.
+    pub evidence_class: String,
+}
+
+impl RevisionLogShape {
+    /// This shape with the evidence class as the class the tool writes, for
+    /// the commands that move pins.
+    pub fn for_evidence(&self) -> RevisionLogShape {
+        RevisionLogShape {
+            tool_class: self.evidence_class.clone(),
+            ..self.clone()
+        }
+    }
 }
 
 impl Default for RevisionLogShape {
@@ -1380,6 +1399,7 @@ impl Default for RevisionLogShape {
             class_column: None,
             date_column: None,
             tool_class: DEFAULT_REVISION_LOG_TOOL_CLASS.to_string(),
+            evidence_class: DEFAULT_REVISION_LOG_TOOL_CLASS.to_string(),
         }
     }
 }
@@ -1464,6 +1484,9 @@ impl RecordTypeConfig {
             }),
             class_column: name(&decl.class_column),
             date_column: name(&decl.date_column),
+            evidence_class: name(&decl.evidence_class)
+                .or_else(|| name(&decl.tool_class))
+                .unwrap_or_else(|| default.tool_class.clone()),
             tool_class: name(&decl.tool_class).unwrap_or(default.tool_class),
         }
     }
@@ -5466,6 +5489,7 @@ rules:
             class_column: None,
             date_column: None,
             tool_class: "structural".into(),
+            evidence_class: "structural".into(),
         };
         assert_eq!(RevisionLogShape::default(), want);
         let c = parse(LOG_BASE).unwrap();

@@ -807,7 +807,14 @@ pub fn apply_reverify(
     if let Some(renewal) = &plan.renewal {
         rows.push(reverified_row(attestation, review, renewal, reason));
     }
-    append_log_rows(&mut doc, log_id, shape, today, &rows, "write")?;
+    append_log_rows(
+        &mut doc,
+        log_id,
+        &shape.for_evidence(),
+        today,
+        &rows,
+        "write",
+    )?;
     Ok(doc.to_string())
 }
 

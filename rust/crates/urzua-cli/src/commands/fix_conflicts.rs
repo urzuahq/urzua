@@ -105,7 +105,7 @@ fn status_of(
         ConflictsStatus::NoRecordConflicts
     } else if !failed.is_empty() || found.iter().any(|c| c.outcome == ConflictOutcome::Refused) {
         ConflictsStatus::PartialFailure
-    } else if applied {
+    } else if applied || found.iter().all(|c| c.outcome == ConflictOutcome::Resolved) {
         ConflictsStatus::Resolved
     } else {
         ConflictsStatus::Resolvable
@@ -130,6 +130,51 @@ pub(crate) fn record_type<'c>(config: &'c Config, path: &Path) -> Option<&'c str
         .iter()
         .find(|(_, t)| crate::discovery::type_governs(t, path))
         .map(|(name, _)| name.as_str())
+}
+
+/// What a record's type declares that a resolution reads, owned.
+struct TypeShape {
+    evidence_field: String,
+    version_field: Option<String>,
+    log_id: urzua_core::config::RevisionLogId,
+    log_shape: urzua_core::config::RevisionLogShape,
+    bump_classes: Vec<String>,
+}
+
+impl TypeShape {
+    fn of(config: &Config, path: &Path) -> Self {
+        let t = record_type(config, path).unwrap_or_default();
+        let bump = config.record_types[t].version_bump();
+        TypeShape {
+            evidence_field: urzua_core::rules::relation_field_name(
+                config,
+                t,
+                RelationRole::EmbodimentLocator,
+            )
+            .to_string(),
+            version_field: bump.map(|b| b.field.trim().to_string()),
+            log_id: config.revision_log_id(t),
+            log_shape: config.revision_log_shape(t).for_evidence(),
+            bump_classes: bump
+                .map(|b| {
+                    b.classes
+                        .iter()
+                        .map(|c| urzua_core::config::strip_emphasis(c).to_string())
+                        .collect()
+                })
+                .unwrap_or_default(),
+        }
+    }
+
+    fn shape(&self) -> Shape<'_> {
+        Shape {
+            evidence_field: &self.evidence_field,
+            version_field: self.version_field.as_deref(),
+            log_id: &self.log_id,
+            log_shape: &self.log_shape,
+            bump_classes: &self.bump_classes,
+        }
+    }
 }
 
 struct Ctx<'a> {
@@ -159,22 +204,10 @@ impl Ctx<'_> {
         let working = urzua_io::read_to_string(&self.repo_root.join(path))
             .map_err(|e| format!("could not read: {e}"))?;
         if !conflicts::has_conflict_markers(&working) {
-            return Ok(refused("the working file carries no conflict markers: it was resolved by hand; stage it with git add".into()));
+            return Ok(self.without_markers(path, &working, refused));
         }
-        let t = record_type(self.config, path).unwrap_or_default();
-        let type_config = &self.config.record_types[t];
-        let log_id = self.config.revision_log_id(t);
-        let log_shape = self.config.revision_log_shape(t);
-        let shape = Shape {
-            evidence_field: urzua_core::rules::relation_field_name(
-                self.config,
-                t,
-                RelationRole::EmbodimentLocator,
-            ),
-            version_field: type_config.version_bump().map(|b| b.field.trim()),
-            log_id: &log_id,
-            log_shape: &log_shape,
-        };
+        let owned = TypeShape::of(self.config, path);
+        let shape = owned.shape();
         let Some((base, ours, theirs)) = self.stages(path) else {
             return Ok(refused("git has no merge-base, ours and theirs version of this record (added or deleted on one side)".into()));
         };
@@ -195,7 +228,7 @@ impl Ctx<'_> {
         };
         let mut recomputed = Vec::new();
         for pin in prepared.pins.iter().filter(|p| p.needs_recompute()) {
-            match self.merged_hash(&pin.spelling, &pin.path) {
+            match self.merged_hash(path, pin) {
                 Ok(h) => recomputed.push((pin.spelling.clone(), h)),
                 Err(e) => return Ok(refused(e)),
             }
@@ -240,6 +273,35 @@ impl Ctx<'_> {
         })
     }
 
+    /// A record git lists as unmerged whose working file has no markers: one
+    /// this command already resolved (a merge row neither side has), or one
+    /// resolved by hand.
+    fn without_markers(
+        &self,
+        path: &Path,
+        working: &str,
+        refused: impl Fn(String) -> Conflict,
+    ) -> Conflict {
+        let merge_rows = |text: &str| -> Vec<String> {
+            text.lines()
+                .filter(|l| conflicts::merge_row_locators(l).is_some())
+                .map(str::to_string)
+                .collect()
+        };
+        let sides: Vec<String> = self
+            .stages(path)
+            .map(|(_, o, t)| [merge_rows(&o), merge_rows(&t)].concat())
+            .unwrap_or_default();
+        if merge_rows(working).iter().any(|r| !sides.contains(r)) {
+            return Conflict {
+                outcome: ConflictOutcome::Resolved,
+                reason: Some("already resolved by fix --conflicts; stage it with git add".into()),
+                ..refused(String::new())
+            };
+        }
+        refused("the working file carries no conflict markers: it was resolved by hand; stage it with git add".into())
+    }
+
     /// The record's merge-base, ours and theirs index stages.
     fn stages(&self, path: &Path) -> Option<(String, String, String)> {
         let stage = |n: u8| {
@@ -253,64 +315,40 @@ impl Ctx<'_> {
         Some((stage(1)?, stage(2)?, stage(3)?))
     }
 
-    /// What the pin hashes to in the merged working tree; refused while the
-    /// pinned file is itself unmerged or unreadable.
-    fn merged_hash(&self, spelling: &str, path: &str) -> Result<String, String> {
-        let file = Path::new(path.split('#').next().unwrap_or(path));
-        if self.unmerged.contains(file) {
-            return Err(format!(
-                "the pinned file {path} is itself unmerged: resolve it first, then run fix --conflicts again"
-            ));
-        }
-        let locator = urzua_core::locator::parse_locator(spelling)
-            .map_err(|e| format!("could not read the pin on '{spelling}': {e}"))?;
-        let texts = crate::file_texts::FileTexts::new(self.repo_root.to_path_buf(), self.config);
-        match crate::pins::read_pin(self.repo_root, self.config, &texts, &locator) {
-            urzua_core::fix::PinRead::Current { hash, .. } => Ok(hash),
-            urzua_core::fix::PinRead::Failed(reason) => Err(format!(
-                "the pin on '{spelling}' cannot be recomputed: {reason}"
-            )),
-            urzua_core::fix::PinRead::Unreadable => Err(format!(
-                "the pinned file {path} is missing or unreadable in the merged tree"
-            )),
-        }
+    /// The merged pin hash when it is git's merge of two attested states;
+    /// the refusal names the condition that failed and the ordinary re-pin.
+    fn merged_hash(&self, path: &Path, pin: &conflicts::PinSides) -> Result<String, String> {
+        let why = super::merge_pins::heads(self.repo_root).and_then(|heads| {
+            super::merge_pins::verified_hash(
+                self.repo_root,
+                self.config,
+                self.unmerged,
+                &heads,
+                pin,
+            )
+        });
+        why.map_err(|e| format!(
+            "the pin on '{}' cannot be recomputed on merge: {e}. Resolve the record by hand and give that pin an ordinary re-pin with a person's reason: urzua fix --rebaseline --apply --ids {} --by <you> --reason \"<what changed in the pinned file>\"",
+            pin.spelling,
+            path.display()
+        ))
     }
 }
 
 /// The three-way merge of the normalised texts: `Err` with the first
 /// conflicting line when it does not merge cleanly.
 fn merge_file(prepared: &conflicts::Prepared) -> Result<Result<String, String>, String> {
-    static SEQ: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-    let n = SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    let dir = std::env::temp_dir().join(format!("urzua-conflicts-{}-{n}", std::process::id()));
-    std::fs::create_dir_all(&dir).map_err(|e| format!("could not create a scratch dir: {e}"))?;
-    let result = (|| {
-        for (name, text) in [
-            ("ours", &prepared.ours),
-            ("base", &prepared.base),
-            ("theirs", &prepared.theirs),
-        ] {
-            std::fs::write(dir.join(name), text).map_err(|e| format!("could not write: {e}"))?;
-        }
-        let out = urzua_io::git::GitRun::new()
-            .args(["merge-file", "-p", "ours", "base", "theirs"])
-            .cwd(&dir)
-            .output()
-            .map_err(|e| format!("could not run git: {}", e.into_io()))?;
-        let text = String::from_utf8_lossy(&out.stdout).into_owned();
-        match out.status.code() {
-            Some(0) => Ok(Ok(text)),
-            Some(n) if n > 0 => Ok(Err(
-                conflicts::first_conflict_line(&text).unwrap_or_default()
-            )),
-            _ => Err(format!(
-                "git merge-file failed: {}",
-                urzua_io::git::stderr_text(&out)
-            )),
-        }
-    })();
-    let _ = std::fs::remove_dir_all(&dir);
-    result
+    let (clean, out) = super::merge_pins::merge_three(
+        prepared.ours.as_bytes(),
+        prepared.base.as_bytes(),
+        prepared.theirs.as_bytes(),
+    )?;
+    let text = String::from_utf8_lossy(&out).into_owned();
+    Ok(if clean {
+        Ok(text)
+    } else {
+        Err(conflicts::first_conflict_line(&text).unwrap_or_default())
+    })
 }
 
 /// The notice `check` and `fix --rebaseline` raise when git lists records as

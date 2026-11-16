@@ -1837,6 +1837,9 @@ fn read_diff_inputs(
         .map(|p| head_changes_for(repo_root, &p.path));
     let changes = scope.changed.as_ref().or(head_changes.as_ref());
     let base_text = load_base_text(session, changes, notices)?;
+    if let Some(changed) = scope.changed.as_ref() {
+        notices.extend(merge_recomputed_notice(session, changed, &base_text));
+    }
     let base_drift = load_base_drift(session, changes, &base_text);
     let added_row_days = load_added_row_days(session, changes, &base_text);
     let added_paths: Option<Vec<PathBuf>> = changes.map(|c| {
@@ -2962,6 +2965,40 @@ fn load_refs_snapshot(
         .map_err(|e| format!("{} is not a valid snapshot: {e}", refs.snapshot))?;
     urzua_core::refs_snapshot::validate_snapshot(parsed, &refs.repository)
         .map_err(|why| format!("{} {why}", refs.snapshot))
+}
+
+/// The pins a `--base` diff recomputed on merge (`MILE-284`): every row
+/// `urzua fix --conflicts` wrote that the base copy lacks, so a reviewer sees
+/// each pin no person gave a reason for.
+fn merge_recomputed_notice(
+    session: &Session,
+    changed: &urzua_io::GitChanges,
+    base_text: &HashMap<PathBuf, String>,
+) -> Option<Notice> {
+    let mut items: Vec<String> = Vec::new();
+    let mut paths: Vec<&PathBuf> = changed.changed.iter().collect();
+    paths.sort();
+    for path in paths {
+        let Some(now) = session.full_text.get(path) else {
+            continue;
+        };
+        let then = base_text.get(path).map(String::as_str).unwrap_or_default();
+        for row in now.lines().filter(|l| !then.lines().any(|t| t == *l)) {
+            if let Some(locators) = urzua_core::conflicts::merge_row_locators(row) {
+                items.push(format!("{} ({})", path.display(), locators.join(", ")));
+            }
+        }
+    }
+    (!items.is_empty()).then(|| Notice {
+        severity: NoticeSeverity::Warning,
+        subject: urzua_core::report::PINS_RECOMPUTED_ON_MERGE.to_string(),
+        message: format!(
+            "{} recomputed on merge by urzua fix --conflicts, with no reason written by a person: {}; confirm each merged pin in review",
+            if items.len() == 1 { "1 record's pins were".to_string() } else { format!("{} records' pins were", items.len()) },
+            items.join("; ")
+        ),
+        detail: None,
+    })
 }
 
 #[cfg(test)]

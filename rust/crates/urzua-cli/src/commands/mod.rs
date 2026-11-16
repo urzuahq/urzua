@@ -13,6 +13,7 @@ pub mod index;
 pub mod init;
 pub mod init_greenfield;
 pub mod mcp;
+mod merge_pins;
 pub mod migrate;
 pub mod migrate_filenames;
 pub mod new;

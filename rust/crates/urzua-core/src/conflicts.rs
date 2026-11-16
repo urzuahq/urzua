@@ -23,7 +23,10 @@ pub struct Shape<'a> {
     pub evidence_field: &'a str,
     pub version_field: Option<&'a str>,
     pub log_id: &'a crate::config::RevisionLogId,
+    /// Already the evidence shape: its `tool_class` is the class written.
     pub log_shape: &'a crate::config::RevisionLogShape,
+    /// The classes `version_bump` names; empty when the type declares none.
+    pub bump_classes: &'a [String],
 }
 
 /// One pin of the evidence field, as each stage records it.
@@ -72,12 +75,27 @@ pub struct Prepared {
     /// in date order and then by text so the order is the same whichever
     /// side git calls ours (a rebase swaps them).
     pub appended: Vec<String>,
+    /// The classes of the rows only ours appended, and only theirs: a row the
+    /// other side lacks is a change against it, which a version bump may need.
+    pub one_sided_classes: (Vec<String>, Vec<String>),
+}
+
+/// A row with runs of whitespace collapsed, so padding does not make two
+/// copies of one row look different.
+fn row_key(row: &str) -> String {
+    row.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 /// Normalises the three stages: each evidence pin hash and the version value
 /// become a placeholder and appended log rows are lifted out, so a three-way
 /// merge of what is left conflicts exactly when the record's real content does.
 pub fn prepare(stages: &Stages<'_>, shape: &Shape<'_>) -> Result<Prepared, String> {
+    if [stages.base, stages.ours, stages.theirs]
+        .iter()
+        .any(|t| t.starts_with('\u{feff}'))
+    {
+        return Err("the record starts with a byte-order mark (BOM), which the line edits do not handle; remove it".into());
+    }
     let base = normalise(stages.base, shape, 0)?;
     let base_rows = base.rows_total;
     let ours = normalise(stages.ours, shape, base_rows)?;
@@ -106,10 +124,21 @@ pub fn prepare(stages: &Stages<'_>, shape: &Shape<'_>) -> Result<Prepared, Strin
             *slot = Some(hash.clone());
         }
     }
-    let mut appended: Vec<(String, String)> = Vec::new();
+    let only = |a: &[LogRow], b: &[LogRow]| -> Vec<String> {
+        a.iter()
+            .filter(|r| !b.iter().any(|o| row_key(&o.raw) == row_key(&r.raw)))
+            .map(|r| r.class.clone())
+            .collect()
+    };
+    let one_sided_classes = (
+        only(&ours.appended, &theirs.appended),
+        only(&theirs.appended, &ours.appended),
+    );
+    let mut appended: Vec<(String, String, String)> = Vec::new();
     for row in ours.appended.into_iter().chain(theirs.appended) {
-        if !appended.iter().any(|(_, r)| *r == row.1) {
-            appended.push(row);
+        let key = row_key(&row.raw);
+        if !appended.iter().any(|(_, k, _)| *k == key) {
+            appended.push((row.date, key, row.raw));
         }
     }
     appended.sort();
@@ -119,15 +148,22 @@ pub fn prepare(stages: &Stages<'_>, shape: &Shape<'_>) -> Result<Prepared, Strin
         theirs: theirs.text,
         pins,
         versions: (ours.version, theirs.version),
-        appended: appended.into_iter().map(|(_, r)| r).collect(),
+        appended: appended.into_iter().map(|(_, _, r)| r).collect(),
+        one_sided_classes,
     })
+}
+
+struct LogRow {
+    date: String,
+    raw: String,
+    class: String,
 }
 
 struct Normalised {
     text: String,
     pins: Vec<(String, String, String)>,
     version: Option<String>,
-    appended: Vec<(String, String)>,
+    appended: Vec<LogRow>,
     rows_total: usize,
 }
 
@@ -157,7 +193,11 @@ fn normalise(content: &str, shape: &Shape<'_>, base_rows: usize) -> Result<Norma
     let mut appended = Vec::new();
     for entry in log.entries.iter().skip(base_rows).rev() {
         let raw = doc.line(entry.line).unwrap_or_default().to_string();
-        appended.push((entry.date.clone(), raw));
+        appended.push(LogRow {
+            date: entry.date.clone(),
+            raw,
+            class: crate::config::strip_emphasis(&entry.change_class).to_string(),
+        });
         doc.remove_line(entry.line);
     }
     Ok(Normalised {
@@ -276,10 +316,8 @@ pub fn rebuild(
             recomputed: p.needs_recompute(),
         });
     }
-    let version = match &prepared.versions {
-        (Some(a), Some(b)) => Some(higher_version(a, b)?),
-        (a, b) => a.clone().or(b.clone()),
-    };
+    let merge_row = pins.iter().any(|p| p.recomputed);
+    let version = merged_version(prepared, shape, merge_row)?;
     if let Some(v) = &version {
         text = text.replace(VERSION_MARK, v);
     }
@@ -312,6 +350,68 @@ pub fn rebuild(
     })
 }
 
+/// The higher version, bumped once more when the rows this merge adds against
+/// a side are of a class `version_bump` names and the version would not
+/// otherwise differ from that side's (`revision-log.version-bump-required`).
+fn merged_version(
+    prepared: &Prepared,
+    shape: &Shape<'_>,
+    merge_row: bool,
+) -> Result<Option<String>, String> {
+    let bumps = |classes: &[String]| classes.iter().any(|c| shape.bump_classes.contains(c));
+    let written = merge_row && bumps(std::slice::from_ref(&shape.log_shape.tool_class));
+    let (ours_only, theirs_only) = &prepared.one_sided_classes;
+    let (ours, theirs) = &prepared.versions;
+    let (Some(o), Some(t)) = (ours, theirs) else {
+        return Ok(ours.clone().or(theirs.clone()));
+    };
+    let higher = higher_version(o, t)?;
+    let same = |a: &str, b: &str| numbers(a) == numbers(b);
+    let must_leave_ours = written || bumps(theirs_only);
+    let must_leave_theirs = written || bumps(ours_only);
+    if (must_leave_ours && same(&higher, o)) || (must_leave_theirs && same(&higher, t)) {
+        return Ok(Some(bump_version(&higher)));
+    }
+    Ok(Some(higher))
+}
+
+fn numbers(v: &str) -> Option<Vec<u64>> {
+    v.trim_matches(|c| c == '\'' || c == '"')
+        .split('.')
+        .map(|p| p.parse().ok())
+        .collect()
+}
+
+/// `v` with its last number incremented, quoting kept.
+pub fn bump_version(v: &str) -> String {
+    let at = v.rfind(|c: char| c.is_ascii_digit()).map_or(0, |i| i + 1);
+    let start = v[..at]
+        .rfind(|c: char| !c.is_ascii_digit())
+        .map_or(0, |i| i + 1);
+    let n: u64 = v[start..at].parse().unwrap_or(0);
+    format!("{}{}{}", &v[..start], n + 1, &v[at..])
+}
+
+/// What starts the row `fix --conflicts` writes; `merge_row_locators` parses it.
+pub const MERGE_ROW_PREFIX: &str = "Pin recomputed on merge (attested by ";
+
+/// The locators a merge row names as recomputed, or `None` when `row` is not one.
+pub fn merge_row_locators(row: &str) -> Option<Vec<String>> {
+    let at = row.find(MERGE_ROW_PREFIX)?;
+    let rest = &row[at..];
+    let list = rest
+        .split_once("re-pinned, ")?
+        .1
+        .split_once("; the new hash")?
+        .0;
+    Some(
+        list.split(", `")
+            .filter_map(|item| item.trim_start_matches('`').split_once('`'))
+            .map(|(loc, _)| loc.to_string())
+            .collect(),
+    )
+}
+
 fn merge_narrative(moved: &[&PinOutcome], attestation: &Attestation) -> String {
     let short = |h: &Option<String>| {
         h.as_deref()
@@ -321,18 +421,20 @@ fn merge_narrative(moved: &[&PinOutcome], attestation: &Attestation) -> String {
     let list = moved
         .iter()
         .map(|p| {
+            let mut sides = [short(&p.ours), short(&p.theirs)];
+            sides.sort();
             format!(
                 "`{}` {} and {} -> {}",
                 p.locator,
-                short(&p.ours),
-                short(&p.theirs),
+                sides[0],
+                sides[1],
                 short(&Some(p.merged.clone()))
             )
         })
         .collect::<Vec<_>>()
         .join(", ");
     format!(
-        "Pin recomputed on merge (attested by {}): both merged sides re-pinned, {list}; the new hash is the merged file's. No person wrote a reason for the merged state. **Why:** `urzua fix --conflicts` resolved a conflict that lay only in re-pin lines; the merged pin is covered by the pull request's review.",
+        "{MERGE_ROW_PREFIX}{}): both merged sides re-pinned, {list}; the new hash is the merged file's, which is git's automatic merge of the two re-pinned commits. No person wrote a reason for the merged state. **Why:** `urzua fix --conflicts` resolved a conflict that lay only in re-pin lines; a reviewer of the pull request should confirm the merged pin.",
         attestation.label()
     )
 }
@@ -375,6 +477,28 @@ mod tests {
         assert_eq!(pin("a", "a", "c").kept().as_deref(), Some("c"));
         assert_eq!(pin("a", "b", "a").kept().as_deref(), Some("b"));
         assert!(!pin("a", "b", "b").needs_recompute());
+    }
+
+    #[test]
+    fn a_version_bump_increments_the_last_number_and_keeps_quotes() {
+        assert_eq!(bump_version("'0.52'"), "'0.53'");
+        assert_eq!(bump_version("2"), "3");
+        assert_eq!(bump_version("1.9"), "1.10");
+    }
+
+    #[test]
+    fn a_merge_row_names_its_locators_and_other_rows_do_not() {
+        let row = format!("> | 2026-11-16 | {MERGE_ROW_PREFIX}t, identity: asserted, actor: agent): both merged sides re-pinned, `src/a.rs` aaa and bbb -> ccc, `src/b.rs#f` d and e -> f; the new hash is the merged file's. | **evidence** |");
+        assert_eq!(
+            merge_row_locators(&row).unwrap(),
+            vec!["src/a.rs", "src/b.rs#f"]
+        );
+        assert!(merge_row_locators("> | 2026-11-16 | Re-baselined. | **x** |").is_none());
+    }
+
+    #[test]
+    fn rows_differing_only_in_padding_are_one_row() {
+        assert_eq!(row_key("> |  a  | b |"), row_key("> | a | b |"));
     }
 
     #[test]

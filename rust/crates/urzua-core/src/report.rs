@@ -2305,6 +2305,10 @@ impl Report for ConflictsReport {
 /// lists records as unmerged (`MILE-284`).
 pub const UNMERGED_RECORDS: &str = "unmerged-records";
 
+/// The subject of the `check --base` notice listing the pins a diff
+/// recomputed on merge (`MILE-284`).
+pub const PINS_RECOMPUTED_ON_MERGE: &str = "pins-recomputed-on-merge";
+
 /// `urzua fix --conflicts` when a run noticed unmerged records: until they are
 /// resolved no other finding about them can be trusted.
 fn unmerged_next_action(notices: &[Notice]) -> Option<NextAction> {
