@@ -10,5 +10,6 @@
     "unreadable": 0
   },
   "next_action": null,
-  "next_action_reason": null
+  "next_action_reason": null,
+  "next_action_inputs": []
 }
