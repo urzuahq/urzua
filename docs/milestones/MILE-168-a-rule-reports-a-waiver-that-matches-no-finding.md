@@ -5,7 +5,7 @@ Phase: '0'
 Track: governance-process
 Implements: SPEC-1
 Blocked-on: —
-Realized-by: test:rust/crates/urzua-cli/tests/waiver_stale_integration.rs#a_whole_run_reports_the_stale_and_the_expired_waiver_but_not_the_live_one@sha256:57d141fb74f1a71d166722df1ebaa3183a462af600b6d3c970df438eca635d3b, code:.urzua/config.yaml@sha256:169fd605713992b1e68ae1bbc0899f84248449fea4d9f10c3094bd60acbd33b0, test:rust/crates/urzua-cli/tests/acceptance/corpora/corpus-zero/expectations/own-config-waiver-rules-run.yaml@sha256:bf7c2fc43bd71b102a99f5fc3ecf8291117f2080760bfb5a625414d7b92964a7
+Realized-by: test:rust/crates/urzua-cli/tests/waiver_stale_integration.rs#a_whole_run_reports_the_stale_and_the_expired_waiver_but_not_the_live_one@sha256:57d141fb74f1a71d166722df1ebaa3183a462af600b6d3c970df438eca635d3b, code:.urzua/config.yaml#rules::waiver.matches-nothing@sha256:80a96f99146d817e9deeb6cf138ab6dbcd6d3456ff3a3c0c47bf24935813525f, test:rust/crates/urzua-cli/tests/acceptance/corpora/corpus-zero/expectations/own-config-waiver-rules-run.yaml@sha256:bf7c2fc43bd71b102a99f5fc3ecf8291117f2080760bfb5a625414d7b92964a7
 ---
 # 168 — A rule reports a waiver that matches no finding
 
@@ -21,7 +21,7 @@ A stale waiver is a silent no-op today: the finding it covered is gone but the e
 
 - The rule names each waiver that matches nothing and the rule and target it claimed. — evidence: test:rust/crates/urzua-cli/tests/waiver_stale_integration.rs#a_whole_run_reports_the_stale_and_the_expired_waiver_but_not_the_live_one@sha256:57d141fb74f1a71d166722df1ebaa3183a462af600b6d3c970df438eca635d3b
 - A waiver that matches a finding is not reported. — evidence: test:rust/crates/urzua-cli/tests/waiver_stale_integration.rs#a_whole_run_reports_the_stale_and_the_expired_waiver_but_not_the_live_one@sha256:57d141fb74f1a71d166722df1ebaa3183a462af600b6d3c970df438eca635d3b
-- The rule is enabled in urzua's own `.urzua/config.yaml`. — evidence: code:.urzua/config.yaml@sha256:169fd605713992b1e68ae1bbc0899f84248449fea4d9f10c3094bd60acbd33b0
+- The rule is enabled in urzua's own `.urzua/config.yaml`. — evidence: code:.urzua/config.yaml#rules::waiver.matches-nothing@sha256:80a96f99146d817e9deeb6cf138ab6dbcd6d3456ff3a3c0c47bf24935813525f
 - `urzua check` is clean over this repository's waivers, not only in unit tests. — evidence: test:rust/crates/urzua-cli/tests/acceptance/corpora/corpus-zero/expectations/own-config-waiver-rules-run.yaml@sha256:bf7c2fc43bd71b102a99f5fc3ecf8291117f2080760bfb5a625414d7b92964a7
 
 > **Revision log**
@@ -52,3 +52,4 @@ A stale waiver is a silent no-op today: the finding it covered is gone but the e
 > | 2026-11-15 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` e544107a6abb -> 1690790d0bdc. Reason: config.yaml: adds harness.limits with hook_timeout_seconds: 120, the built-in value, under harness; no other key changed. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` 1690790d0bdc -> b3876c284bd2. Reason: Read the diff of each re-pinned file against main: config.yaml declares embodiment.pin-stale: warn with a two-line comment; no other key changed. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` b3876c284bd2 -> 169fd6057139. Reason: Read the diff of each re-pinned file against main. .urzua/config.yaml: `unread_markers: report` on embodiment.back-pointer-resolution; no other key changed. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-16 | Pinned (attested by beauwilliams, identity: gh-verified, actor: agent): 1 locators pinned, 0 file-level, 1 scoped. Evidence: .urzua/config.yaml#rules::waiver.matches-nothing@sha256:80a96f99146d Reason: Narrowed to rules::waiver.matches-nothing: the claim is that this rule is enabled, which is that one entry. **Why:** a claim is renewed only over pinned code and test evidence. | **structural** |

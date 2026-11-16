@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5Q0XVK27P5T8FN72BN
-Version: '0.51'
+Version: '0.52'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/commands/fix.rs@sha256:8de563649d5c8534864f611377650542156797952df74c6912906fbca9b81878, code:rust/crates/urzua-core/src/fix.rs@sha256:4a03c290767b1f296c1561ecf2f1dfde2efeb42a21a4b0ffaf3036813b6a5c1d, test:rust/crates/urzua-cli/tests/fix_paths_integration.rs@sha256:73cb06a1782f02abeaf6c0795632ed1d1939633d72f67033247120656c6927d2, test:rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs@sha256:e20101f904c99aecdfdcf1830a0dba10d5ba8d2d72414681398919f2f895dde5, test:rust/crates/urzua-cli/tests/fix_drift_integration.rs@sha256:ff69343ca324400bde79c266372f9a213728d4d4ef8202beca6e12e54aa35352
+Realized-by: code:rust/crates/urzua-cli/src/commands/fix.rs@sha256:f81c730e2417edf5ea89dffeb3e6604cf9600652aac46077a54618a5f03cd2eb, code:rust/crates/urzua-core/src/fix.rs@sha256:a2bf44749480a1a2499911d7e9d5f134c07e7e9f5a931ac45e4796ae61c3444a, test:rust/crates/urzua-cli/tests/fix_paths_integration.rs@sha256:73cb06a1782f02abeaf6c0795632ed1d1939633d72f67033247120656c6927d2, test:rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs@sha256:9a053f2ed41dac449d16634b6c76070192f55863ace5a56d8aa096543e90b131, test:rust/crates/urzua-cli/tests/fix_drift_integration.rs@sha256:ff69343ca324400bde79c266372f9a213728d4d4ef8202beca6e12e54aa35352
 Author: beauwilliams
 Subject: '`urzua fix` -- detecting and applying Embodiment corrections computed from evidence.'
 Implements: ADR-15, ADR-18, ADR-19, ADR-20
@@ -333,6 +333,75 @@ the same `PATHS` scoping.
   and no bare `\r`: `sed -n 'a,bp' file | tr -d '\r' | sed -z 's/\n$//' | sha256sum`.
 - It cannot be combined with `--stdin-path`, and `--reason` without `--rebaseline` is `not-run`.
 
+## Resolving conflicts after a merge (`--conflicts`)
+
+`urzua fix --conflicts` (`MILE-284`, `ADR-67` amendment of 2026-11-16) reads the paths git lists as
+unmerged (`git ls-files -u`) during a merge or rebase and judges each that a record type governs. It loads
+no records, so a record carrying conflict markers need not parse. It cannot be combined with
+`--rebaseline`, `--stdin-path`, `--reason` or `PATHS`; `--ids` narrows it.
+
+- **Detect** (no `--apply`, read-only): `conflicts` lists each unmerged record with `record`, `kind`,
+  `outcome` (`resolvable`, `resolved` or `refused`), the `reason` of a refusal, and for a resolvable one
+  its `pins` (`locator`, `base`, `ours`, `theirs`, `merged`, `recomputed`), the `version` it would write
+  and `rows_kept`. Unmerged files that are not records are listed under `other_unmerged`, never touched.
+- **Kind `pin`.** The three index stages are normalised: each evidence-field pin hash and the type's
+  `revision_log.version_bump` field become placeholders, and rows a side appended after the merge
+  base's last revision-log row are lifted out. A three-way merge of what is left (`git merge-file`)
+  that conflicts means the record conflicts in its real content, and it is refused, naming the first
+  conflicting line. An edit only one side made elsewhere is kept as git merged it. Otherwise the record
+  is rebuilt: a pin only one side moved keeps that side's hash; both sides' appended rows are kept,
+  de-duplicated (rows differing only in whitespace are one row), ordered by date and then by text so a
+  rebase gives the same order as a merge *(decided by the builder on 2026-11-16, pending maintainer review)*.
+- **A recomputed pin is git's merge of two attested states.** A pin both sides moved to different hashes
+  is recomputed only when all of these hold, and the record is refused naming the one that failed:
+  the pinned file at our commit (`HEAD`; stage 2 in a merge and a rebase alike) hashes under the pin's
+  scope to our side's pin; at their commit (`MERGE_HEAD`, or `REBASE_HEAD` / `CHERRY_PICK_HEAD`) to
+  their side's pin; the file is not unmerged; the working-tree file equals the index (stage 0); and the
+  index content equals `git merge-file` of the file at the two commits and their base (the merge base,
+  or the replayed commit's parent) *(decided by the builder on 2026-11-16, pending maintainer review)*. The pin is then the hash of the index content. A directory or
+  glob pin, or a file not UTF-8 or starting with a BOM under a scoped pin, is refused *(decided by the builder on 2026-11-16, pending maintainer review)*. The refusal
+  says the pin needs an ordinary re-pin with a person's reason (`fix --rebaseline --apply ... --reason`).
+- **Version.** The higher of the two versions (refused when either is not dot-separated numbers). When
+  the rows the merge adds against a side, or the merge row, are of a class `version_bump.classes`
+  names and the version would equal that side's, its last number is incremented once more, so the
+  record passes `revision-log.version-bump-required` against either branch *(decided by the builder on 2026-11-16, pending maintainer review)*.
+- **The merge row.** When a pin was recomputed one row of the type's evidence class is appended (see
+  below): `Pin recomputed on merge (attested by NAME, identity: SOURCE, actor: ACTOR): both merged sides
+  re-pinned, ...`, naming the two sides' hash prefixes in sorted order *(decided by the builder on 2026-11-16, pending maintainer review)* and the new one, saying the
+  new hash is git's automatic merge of the two re-pinned commits, that no person wrote a reason for the
+  merged state and that a reviewer should confirm it. The row's opening is the marker
+  `urzua_core::conflicts::merge_row_locators` parses *(decided by the builder on 2026-11-16, pending maintainer review)*.
+- **Refused and left untouched:** a conflict anywhere else, a pin failing the conditions above, a record
+  with no merge-base, ours or theirs stage, a record starting with a byte-order mark, and a record git
+  lists as unmerged whose working file has no conflict markers and no merge row of this command (resolved
+  by hand: stage it). One whose working file carries a merge row neither side has is reported
+  `resolved` ("already resolved by fix --conflicts") with exit 0 *(decided by the builder on 2026-11-16, pending maintainer review)*. A stale pin that did not conflict
+  is never moved.
+- **Apply** (`--conflicts --apply`): `--ids` or `--force`, never implied *(decided by the builder on 2026-11-16, pending maintainer review)*; identity resolved exactly
+  as for `--apply` (including the `--actor` requirement for a `gh-verified` identity); the lock is taken
+  before anything is read. Nothing is staged: `next_action` is `git add` of the resolved records, and
+  the merge or rebase is continued by the user.
+- **Status:** `nothing-conflicted` (git lists no unmerged file), `no-record-conflicts` (unmerged files,
+  none a record), `resolvable`, `resolved`, `partial-failure` (a record refused or an `--ids` entry
+  matching no unmerged record; exit 1), or `not-run`. So a run with nothing conflicted is told apart
+  from one that resolved nothing (`SPEC-1`).
+- **Suggested next action.** While git lists unmerged records, `check` and `fix --rebaseline` raise an
+  `unmerged-records` warning notice and their `next_action` is `urzua fix --conflicts`.
+- **Review notice.** `check --base` raises a `pins-recomputed-on-merge` warning notice listing every
+  record and locator whose merge row the diff adds, so a reviewer sees each pin no person gave a reason
+  for. A notice and not a finding: the row is legitimate, and the reviewer, not the gate, confirms it
+  *(decided by the builder on 2026-11-16, pending maintainer review)*.
+- **Kinds to come.** The report lists conflicts by `kind` so that renumbering a record whose number a
+  merge made a duplicate (`MILE-229`) slots in beside `pin`; it is not built yet.
+
+## The evidence class of re-pin rows
+
+A type may declare `revision_log.evidence_class` (maintainer decision of 2026-11-16, `ADR-67`
+amendment). The rows of `fix --rebaseline --apply`, `reverify --apply` and `fix --conflicts --apply`
+carry it in place of `tool_class`; the class must be in the type's `classes`. Left out of
+`version_bump.classes`, a re-pin does not bump the version, and the row is still written. A type that
+declares none writes `tool_class`, as before. Rows already in records keep their class.
+
 ## Renewing a claim (`urzua reverify`, `ADR-97`)
 
 `urzua reverify` is the one attributed way to renew a claim that `embodiment.claim-expired`
@@ -536,3 +605,6 @@ asserted by test, not assumed by convention.
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/fix.rs` 8108f0b26a58 -> 8e0c4f850c4d, `rust/crates/urzua-core/src/fix.rs` b5bfb2aa1386 -> 4a03c290767b, `rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs` 50ac84d1005f -> 29408f8d9f3c. Reason: Read the diff of each re-pinned file against main: cli fix.rs refuses a rebaseline --reason under 3 words or 12 characters; fix_rebaseline_integration.rs passes sentence reasons and adds the short-reason test; core fix.rs counts only resolving locators for Embodiment and Status and puts header-less types out of rebaseline scope. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Bumped to `0.51`. `fix --rebaseline` runs with neither `embodiment.consistency` nor `status.delivery-agreement` declared; the reason minimum is the configuration's `attestation.reason` (defaults 3 words, 12 characters) and applies to `reverify --apply` too. **Why:** a review found the re-pin `embodiment.pin-stale` suggests refused in a repository that declares neither repair rule, and the ADR-101 amendment of 2026-11-15 puts behaviour in configuration. | **substantive** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/fix.rs` 8e0c4f850c4d -> 8de563649d5c, `rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs` 29408f8d9f3c -> e20101f904c9. Reason: Read the diff of each re-pinned file since its previous pin: cli fix.rs runs --rebaseline before the repair-rule guard and reads the reason minimum from attestation.reason instead of two constants; fix_rebaseline_integration.rs adds the attestation.reason test. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-16 | Bumped to `0.52`. `fix --conflicts` lists the records a merge or rebase left unmerged by kind of conflict and, with `--apply`, resolves kind `pin` (sides differing only in evidence pins, the version and appended revision-log rows), recomputing a pin only when the merged file is git's automatic merge of two commits whose files hash to their sides' pins, with a machine-written row; any other conflict is refused and left untouched; `check` and `fix --rebaseline` suggest it while records are unmerged and `check --base` lists recomputed pins; `revision_log.evidence_class` is the class of re-pin rows. **Why:** `MILE-284`; maintainer decisions of 2026-11-16 recorded in the `ADR-67` amendment; a review found a hand edit during the merge and an unpinned change on the default branch pinned without a reason. | **substantive** |
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/fix.rs` 8de563649d5c -> f81c730e2417. Reason: commands/fix.rs dispatches --conflicts to its own module, refuses it beside --rebaseline, --stdin-path, --reason or PATHS, and adds the unmerged-records notice to the rebaseline listing; repair and re-pin logic is unchanged. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/fix.rs` 4a03c290767b -> a2bf44749480, `rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs` e20101f904c9 -> 9a053f2ed41d. Reason: core fix.rs: apply_rebaseline writes its row with the type's evidence class (tool_class unless evidence_class is declared) and a test shape literal gains evidence_class; the detect and re-pin logic is unchanged; fix_rebaseline_integration.rs adds a test that a declared evidence_class is the class of the re-pin row; existing tests are unchanged. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |

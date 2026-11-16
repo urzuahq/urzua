@@ -24,3 +24,9 @@ that an agent ran it, and it refuses an empty reason.
 
 2. Put every `Re-pin:` line this command printed in the pull request body, so a reviewer can check that
    each reason matches the code change. Run `urzua check` and report its result.
+
+If a merge or rebase conflicts in a record's pin, `Version` and re-pin rows, do not re-pin again by hand.
+Run `urzua fix --conflicts` and read the listing. Resolve the records it lists as resolvable with
+`urzua fix --conflicts --apply --ids <record,...> --actor agent`, `git add` them and continue the merge.
+A refused record (it conflicts elsewhere, or its pinned file is not git's clean merge of two re-pinned
+commits) is resolved by hand and then re-pinned here with a reason.
