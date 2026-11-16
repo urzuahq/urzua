@@ -18,7 +18,7 @@ On 2026-11-16, in an adopting repository, a re-pin of a record with a stale pin 
 ## Done means
 
 - `urzua fix --rebaseline --apply` on a record with a stale pin and no revision log writes the log section in the shape the configuration declares, with the re-pin row as its first row, shown by a test.
-- Where the configuration does not let the tool place the section, the refusal names the missing section and carries a `next_action` that creates it.
+- Where the record has no section the configured log identity line can follow (no body sections at all), the refusal names the missing section and carries a `next_action` that creates it.
 - The row written this way satisfies `diff.pin-changed-unattested` under `check --base`.
 
 > **Revision log**
