@@ -536,6 +536,18 @@ pub fn commits_changing_text(
         .collect())
 }
 
+/// The full ref name `rev` resolves to (`refs/remotes/origin/main`), or
+/// `None` when it names no ref (a commit id, an unknown name).
+pub fn symbolic_full_name(repo_root: &Path, rev: &str) -> Option<String> {
+    if rev.starts_with('-') {
+        return None;
+    }
+    run_git(repo_root, &["rev-parse", "--symbolic-full-name", rev])
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| s.starts_with("refs/"))
+}
+
 /// The merge base of `rev` and `HEAD`, or `None` when none is visible (no
 /// shared history, or a shallow clone that hides it).
 pub fn merge_base_with_head(repo_root: &Path, rev: &str) -> Option<String> {

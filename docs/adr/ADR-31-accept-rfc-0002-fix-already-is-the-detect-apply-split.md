@@ -2,7 +2,7 @@
 Stable-Id: 01M6R3NK4K2QQFBGS4V1FDFGWW
 Status: Accepted
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-io/src/lib.rs@sha256:dd2429c5e9ff9883635ae01bcbdefa007790f7c66bfcc4fa193d69dfd02cde33, test:rust/crates/urzua-io/src/lib.rs@sha256:dd2429c5e9ff9883635ae01bcbdefa007790f7c66bfcc4fa193d69dfd02cde33
+Realized-by: code:rust/crates/urzua-io/src/lib.rs@sha256:1fb59e2c3d3a42b1611d88a1987c6188016cb79f778a7672f3db357547be7136, test:rust/crates/urzua-io/src/lib.rs@sha256:1fb59e2c3d3a42b1611d88a1987c6188016cb79f778a7672f3db357547be7136
 Date: 2026-09-06
 Accepted-on: 2026-09-06
 Author: beauwilliams
@@ -147,3 +147,4 @@ surface.
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-io/src/lib.rs` 8001669b3386 -> 7d29eb5bd1b4. Reason: urzua-io lib.rs adds renamed_paths_since, git's rename detection between the merge base and the working tree; the record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-io/src/lib.rs` 7d29eb5bd1b4 -> 1d8aa0c99344. Reason: urzua-io lib.rs adds commits_changing_text, a git log -S lookup used only to find a committed copy of a record that had a revision log; the claim this record makes still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-io/src/lib.rs` 1d8aa0c99344 -> dd2429c5e9ff. Reason: urzua-io lib.rs makes commits_changing_text follow renames and return each commit path, and adds merge_base_with_head and markdown_files_containing_at; the claim this record makes still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-io/src/lib.rs` dd2429c5e9ff -> 1fb59e2c3d3a. Reason: urzua-io lib.rs adds symbolic_full_name, used to tell a remote-tracking base ref from a local one; the claim this record makes still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |

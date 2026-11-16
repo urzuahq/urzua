@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5Q0XVK27P5T8FN72BN
-Version: '0.65'
+Version: '0.66'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/commands/fix.rs@sha256:1c64ab73b1353473bd590d898664d7630d23964d8024e085f82544347a9e730d, code:rust/crates/urzua-core/src/fix.rs@sha256:a2c71a99c6e372be9b00ae924ecadc3705bdc9a08318d8d69006661689302fd3, test:rust/crates/urzua-cli/tests/fix_paths_integration.rs@sha256:efefbffa3dc1992d97ff18582c7a15df6ff789f2f036b4ec3b36bfb910a12ff6, test:rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs@sha256:e949db2be36d17f94964f2c154a726e2dd3c91434483c9f000c41c4a0fbcf30a, test:rust/crates/urzua-cli/tests/fix_drift_integration.rs@sha256:ff69343ca324400bde79c266372f9a213728d4d4ef8202beca6e12e54aa35352
+Realized-by: code:rust/crates/urzua-cli/src/commands/fix.rs@sha256:a24bc3d1b00e9103904d5c3535a8202106d71161f961366134b7e11dda7df24e, code:rust/crates/urzua-core/src/fix.rs@sha256:a2c71a99c6e372be9b00ae924ecadc3705bdc9a08318d8d69006661689302fd3, test:rust/crates/urzua-cli/tests/fix_paths_integration.rs@sha256:efefbffa3dc1992d97ff18582c7a15df6ff789f2f036b4ec3b36bfb910a12ff6, test:rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs@sha256:e34ae347e45e878fa39ddd00dba9e70264ec995ba6daee26a30cafec016accef, test:rust/crates/urzua-cli/tests/fix_drift_integration.rs@sha256:ff69343ca324400bde79c266372f9a213728d4d4ef8202beca6e12e54aa35352
 Author: beauwilliams
 Subject: '`urzua fix` -- detecting and applying Embodiment corrections computed from evidence.'
 Implements: ADR-15, ADR-18, ADR-19, ADR-20
@@ -355,10 +355,17 @@ the same `PATHS` scoping.
     merge base of the base ref (`--base <ref>`, default `origin/HEAD`) and `HEAD`, at the record's
     path, at its path before a rename git detects (`git diff -M`), or at the path whose `Stable-Id`
     it carries; when no merge base is visible (a shallow clone) the base ref's own copy is read.
-    With no base ref resolving, the record's history (`git log --follow -S`, the newest 20 commits
-    that added or removed the log identity's text) stands in, best effort, and the report carries a
-    `fix.revision-log-base` warning when such a run creates a log. Each record is looked up once per
-    run, shared by the listing and the write. The refusal names the copy (`<rev>:<path>`) and
+    When those copies show no log, the record's history (`git log --follow -S`, the newest 20
+    commits that added or removed the log identity's text) is read too, because a base may be the
+    caller's own commit, after the deletion. A run that plans or creates a log reports
+    `revision_log_base: {ref, commit, kind}` (`kind` is `remote-tracking` for a ref under
+    `refs/remotes/`, `local` for any other, `none` when no base ref resolves), in the listing and the
+    apply, and raises a `fix.revision-log-base` warning when no base ref resolves, the base is not
+    remote-tracking, no merge base is visible, or the merge base is `HEAD` itself. The row written
+    into a created log ends `Revision log created by the tool; base <ref>@<12-hex>.` (or `no base
+    ref.`), so the diff shows what was compared. Each record is looked up once per
+    run, shared by the listing and the write. In a batch, the first refusal's command becomes the
+    report's `next_action`. The refusal names the copy (`<rev>:<path>`) and
     `next_action` is the `git show` that prints it, to restore the log. A `--base` that names no
     commit is `not-run`. A record with no such copy gets its log as above.
 
@@ -813,3 +820,5 @@ asserted by test, not assumed by convention.
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/fix.rs` e80f15fd68a9 -> 372845c7b4a6, `rust/crates/urzua-core/src/fix.rs` 0b2c8b793c0f -> a2c71a99c6e3, `rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs` 8fde6c3306f1 -> 00d2df20a22b. Reason: cli fix.rs refuses to create a revision log when a committed copy had one, places a created log by the template order, and makes the heading next action run as printed; core fix.rs adds narrative_column to a test helper shape, with apply_rebaseline and the behaviour cited unchanged; fix_rebaseline_integration.rs adds tests for the restored-log refusal, template placement, the open fence, narrative_column and fix --pin listing; the claim this record makes still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-16 | Bumped to `0.65`. Before creating a revision log, `fix --rebaseline` and `fix --pin` read the record's copy at `HEAD` and at the merge base with the base ref (`--base`, default `origin/HEAD`; the base ref's own copy when no merge base is visible), following a detected rename or the record's `Stable-Id`, and refuse when either copy has a log. With no base ref resolving this falls back to the record's recent history and is best effort, said by a `fix.revision-log-base` warning. A log deleted by hand can still pass `check --base` when the record is not re-pinned; the durable guard is a diff rule reporting revision-log rows removed between base and head, tracked separately. Decided by the builder on 2026-11-16, pending maintainer review. **Why:** review of `MILE-310`'s pull request -- a log deleted on a branch behind a rename, a re-add, many commits or a shallow clone could be replaced by a tool-written one. | **substantive** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/fix.rs` 372845c7b4a6 -> 1c64ab73b135, `rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs` 00d2df20a22b -> e949db2be36d. Reason: cli fix.rs moves the revision-log creation helpers to a new evidence_log module, threads a shared LogHistory and the new --base option through the re-pin path, and adds its notice; fix_rebaseline_integration.rs adds tests refusing a log deleted behind marker toggles, a rename, a re-add by Stable-Id, a shallow clone and the earlier cases against --base main; the claim this record makes still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-16 | Bumped to `0.66`. The record's recent history is read even when a base ref resolves, so a base at or after the deletion (`--base HEAD`, the branch itself) no longer lets a log be replaced; a run that plans or creates a log reports `revision_log_base` and warns when the base is not remote-tracking or its merge base is `HEAD`; the created log's row names its base. In a batch the first refusal's command is the report's `next_action`. Decided by the builder on 2026-11-16, pending maintainer review. **Why:** review of `MILE-310`'s pull request -- an agent-chosen base silently disabled the restore check. | **substantive** |
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/fix.rs` 1c64ab73b135 -> a24bc3d1b00e, `rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs` e949db2be36d -> e34ae347e45e. Reason: cli fix.rs reports revision_log_base when a re-pin plans or creates a log and names the base in the created log row; fix_rebaseline_integration.rs adds tests that a base at or after the deletion is refused and that a created log records its base in the report and the row; the claim this record makes still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |

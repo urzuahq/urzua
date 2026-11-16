@@ -825,6 +825,7 @@ fn build_report(parts: ReportParts) -> FixReport {
             .chain(extra_notices)
             .collect(),
         failure_action: None,
+        revision_log_base: None,
     }
 }
 
@@ -958,6 +959,7 @@ fn rebaseline_checked(mut args: RebaselineArgs<'_>) -> Result<ExitCode, Refusal>
                 .collect(),
         });
         report.failure_action = failure_action;
+        report.revision_log_base = args.history.report(created);
         return Ok(emit(&report));
     };
     Ok(apply_rebaselines(&args, identity, scan, unmatched))
@@ -1009,6 +1011,7 @@ fn apply_rebaselines(
         extra_notices: args.history.notice(created).into_iter().collect(),
     });
     report.failure_action = failure_action;
+    report.revision_log_base = args.history.report(created);
     emit(&report)
 }
 
@@ -1045,12 +1048,17 @@ fn write_rebaseline(
     let log_shape = record_type
         .map(|t| args.config.revision_log_shape(t))
         .unwrap_or_default();
+    let reason = if created {
+        format!("{} {}", args.reason, args.history.row_note())
+    } else {
+        args.reason.to_string()
+    };
     let new = urzua_core::fix::apply_rebaseline(
         &fresh,
         rb,
         today,
         attestation,
-        args.reason,
+        &reason,
         &log_id,
         &log_shape,
     )?;

@@ -1751,11 +1751,104 @@ fn a_run_with_no_base_that_creates_a_log_says_so_and_an_unknown_base_is_refused(
             .any(|n| n["subject"] == "fix.revision-log-base"),
         "{parsed}"
     );
+    git(&dir, &["update-ref", "refs/remotes/origin/main", "main"]);
     let with_base = json(&run_urzua(
+        &dir,
+        &["fix", "--rebaseline", "--ids", A, "--base", "origin/main"],
+    ));
+    assert!(with_base.get("notices").is_none(), "{with_base}");
+    assert_eq!(
+        with_base["revision_log_base"]["kind"], "remote-tracking",
+        "{with_base}"
+    );
+    let unknown = json(&run_urzua(&dir, &["fix", "--rebaseline", "--base", "nope"]));
+    assert_eq!(unknown["status"], "not-run", "{unknown}");
+}
+
+#[test]
+fn a_base_at_or_after_the_deletion_does_not_let_a_log_be_replaced() {
+    for base in ["HEAD", "work", "HEAD~1"] {
+        let dir = laundering(&format!("own-base-{}", base.replace('~', "-")), "");
+        commit_all(&dir);
+        std::fs::write(dir.join("n.txt"), "n\n").unwrap();
+        commit_all(&dir);
+        let parsed = json(&run_urzua(
+            &dir,
+            &[
+                "fix",
+                "--rebaseline",
+                "--apply",
+                "--ids",
+                A,
+                "--base",
+                base,
+                "--by",
+                "ana",
+                "--reason",
+                "Read the diff; the claim holds.",
+            ],
+        ));
+        assert_eq!(parsed["status"], "partial-failure", "{base}: {parsed}");
+        assert!(
+            parsed["failed"][0]["error"]
+                .as_str()
+                .unwrap()
+                .contains("has a Revision log"),
+            "{base}: {parsed}"
+        );
+    }
+}
+
+#[test]
+fn a_created_log_records_its_base_in_the_report_and_the_row() {
+    let dir = logless("records-base", CONFIG, "# ADR-1: T\n\nBody.\n");
+    let listed = json(&run_urzua(
         &dir,
         &["fix", "--rebaseline", "--ids", A, "--base", "main"],
     ));
-    assert!(with_base.get("notices").is_none(), "{with_base}");
-    let unknown = json(&run_urzua(&dir, &["fix", "--rebaseline", "--base", "nope"]));
-    assert_eq!(unknown["status"], "not-run", "{unknown}");
+    assert_eq!(listed["revision_log_base"]["ref"], "main", "{listed}");
+    assert_eq!(listed["revision_log_base"]["kind"], "local", "{listed}");
+    let commit = listed["revision_log_base"]["commit"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let warned = |r: &serde_json::Value| {
+        r["notices"]
+            .as_array()
+            .is_some_and(|n| n.iter().any(|n| n["subject"] == "fix.revision-log-base"))
+    };
+    assert!(warned(&listed), "a local base warns: {listed}");
+    let parsed = json(&run_urzua(
+        &dir,
+        &[
+            "fix",
+            "--rebaseline",
+            "--apply",
+            "--ids",
+            A,
+            "--base",
+            "main",
+            "--by",
+            "ana",
+            "--reason",
+            "Read the diff; the claim holds.",
+        ],
+    ));
+    assert_eq!(parsed["status"], "applied", "{parsed}");
+    assert_eq!(
+        parsed["revision_log_base"]["commit"],
+        commit.as_str(),
+        "{parsed}"
+    );
+    assert!(warned(&parsed), "{parsed}");
+    let text = std::fs::read_to_string(dir.join(A)).unwrap();
+    assert!(
+        text.contains(&format!(
+            "Revision log created by the tool; base main@{}.",
+            &commit[..12]
+        )),
+        "{text}"
+    );
+    commit_all(&dir);
+    assert!(unattested(&check_base(&dir)).is_empty());
 }

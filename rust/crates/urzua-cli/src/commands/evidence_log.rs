@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 
 use urzua_core::config::{Config, RevisionLogId, RevisionLogShape};
 use urzua_core::fix::new_log::{self, LogPlan};
-use urzua_core::report::{NextAction, Notice, NoticeSeverity};
+use urzua_core::report::{NextAction, Notice, NoticeSeverity, RevisionLogBase};
 
 /// The notice a write that creates a log raises when no base copy was read.
 pub(crate) const NOTICE_LOG_BASE: &str = "fix.revision-log-base";
@@ -38,7 +38,8 @@ pub(crate) struct LogHistory<'a> {
     /// The commit whose copy of a record is read: the merge base of the base
     /// ref and `HEAD`, or the base ref itself when no merge base is visible.
     base: Option<String>,
-    /// Why no base copy, or only the base ref's own, is read.
+    report: RevisionLogBase,
+    /// Why the base copies alone may not show a deleted log.
     caveat: Option<String>,
     renames: OnceCell<HashMap<PathBuf, PathBuf>>,
     seen: RefCell<HashMap<PathBuf, Option<String>>>,
@@ -49,33 +50,81 @@ impl<'a> LogHistory<'a> {
     /// no commit is refused.
     pub(crate) fn resolve(repo_root: &'a Path, base: Option<&str>) -> Result<Self, String> {
         let name = base.unwrap_or(DEFAULT_BASE);
-        let (base, caveat) = match urzua_io::resolve_commit(repo_root, name).ok() {
-            None if base.is_some() => {
+        let Some(tip) = urzua_io::resolve_commit(repo_root, name).ok() else {
+            if base.is_some() {
                 return Err(format!("--base '{name}' names no commit"));
             }
+            return Ok(Self::new(repo_root, None, RevisionLogBase {
+                reference: None,
+                commit: None,
+                kind: "none",
+            }, Some(format!(
+                "no --base given and {DEFAULT_BASE} does not resolve, so a revision log deleted before HEAD is looked for only in the last {LOG_HISTORY_DEPTH} commits that changed its identity line; pass --base <ref>"
+            ))));
+        };
+        let remote = urzua_io::symbolic_full_name(repo_root, name)
+            .is_some_and(|r| r.starts_with("refs/remotes/"));
+        let (commit, caveat) = match urzua_io::merge_base_with_head(repo_root, name) {
+            Some(mb) if urzua_io::resolve_commit(repo_root, "HEAD").ok().as_ref() == Some(&mb) => {
+                let caveat = format!(
+                    "the merge base of {name} and HEAD is HEAD itself, so its copies cannot show a revision log deleted on this branch; the record's recent history is read too"
+                );
+                (mb, Some(caveat))
+            }
+            Some(mb) => (mb, None),
             None => (
-                None,
+                tip,
                 Some(format!(
-                    "no --base given and {DEFAULT_BASE} does not resolve, so a revision log deleted before HEAD is looked for only in the last {LOG_HISTORY_DEPTH} commits that changed its identity line; pass --base <ref>"
+                    "no merge base of {name} and HEAD is visible (a shallow clone?), so {name}'s own copy of a record is read instead"
                 )),
             ),
-            Some(tip) => match urzua_io::merge_base_with_head(repo_root, name) {
-                Some(mb) => (Some(mb), None),
-                None => (
-                    Some(tip),
-                    Some(format!(
-                        "no merge base of {name} and HEAD is visible (a shallow clone?), so {name}'s own copy of a record is read instead"
-                    )),
-                ),
-            },
         };
-        Ok(LogHistory {
+        let caveat = caveat.or_else(|| {
+            (!remote).then(|| {
+                format!(
+                    "--base {name} is not a remote-tracking ref, so its merge base may already lack a revision log deleted on this branch; the record's recent history is read too"
+                )
+            })
+        });
+        let report = RevisionLogBase {
+            reference: Some(name.to_string()),
+            commit: Some(commit.clone()),
+            kind: if remote { "remote-tracking" } else { "local" },
+        };
+        Ok(Self::new(repo_root, Some(commit), report, caveat))
+    }
+
+    fn new(
+        repo_root: &'a Path,
+        base: Option<String>,
+        report: RevisionLogBase,
+        caveat: Option<String>,
+    ) -> Self {
+        LogHistory {
             repo_root,
             base,
+            report,
             caveat,
             renames: OnceCell::new(),
             seen: RefCell::new(HashMap::new()),
-        })
+        }
+    }
+
+    /// What was checked, for a report that plans or creates a log.
+    pub(crate) fn report(&self, created: bool) -> Option<RevisionLogBase> {
+        created.then(|| self.report.clone())
+    }
+
+    /// The base as the tool's row names it: `<ref>@<short sha>`, or that
+    /// there was none.
+    pub(crate) fn row_note(&self) -> String {
+        match (&self.report.reference, &self.report.commit) {
+            (Some(r), Some(c)) => format!(
+                "Revision log created by the tool; base {r}@{}.",
+                c.get(..12).unwrap_or(c)
+            ),
+            _ => "Revision log created by the tool; no base ref.".to_string(),
+        }
     }
 
     pub(crate) fn repo_root(&self) -> &Path {
@@ -136,23 +185,29 @@ impl<'a> LogHistory<'a> {
         };
         let mut paths = vec![record.to_path_buf()];
         paths.extend(self.renames(base).get(record).cloned());
-        if let Some(sid) = stable_id.map(str::trim).filter(|s| !s.is_empty()) {
-            paths.extend(
-                urzua_io::markdown_files_containing_at(self.repo_root, base, sid)
-                    .into_iter()
-                    .filter(|p| {
-                        copy(base, p).is_some_and(|t| {
-                            urzua_core::header::parse(&t)
-                                .get_reserved("Stable-Id")
-                                .is_some_and(|v| v.trim() == sid)
-                        })
-                    }),
-            );
-        }
-        paths
+        let at_path = paths
             .iter()
             .find(|p| copy(base, p).is_some_and(|t| has_log(&t)))
-            .map(|p| spec(base, p))
+            .map(|p| spec(base, p));
+        let by_identity = || {
+            let sid = stable_id.map(str::trim).filter(|s| !s.is_empty())?;
+            urzua_io::markdown_files_containing_at(self.repo_root, base, sid)
+                .into_iter()
+                .find(|p| {
+                    copy(base, p).is_some_and(|t| {
+                        urzua_core::header::parse(&t)
+                            .get_reserved("Stable-Id")
+                            .is_some_and(|v| v.trim() == sid)
+                            && has_log(&t)
+                    })
+                })
+                .map(|p| spec(base, &p))
+        };
+        // The base may be the caller's own commit, after the deletion, so the
+        // record's history is read when the base copies show no log.
+        at_path
+            .or_else(by_identity)
+            .or_else(|| self.history(record, id, &copy, &has_log))
     }
 
     fn renames(&self, base: &str) -> &HashMap<PathBuf, PathBuf> {
@@ -160,8 +215,8 @@ impl<'a> LogHistory<'a> {
             .get_or_init(|| urzua_io::renamed_paths_since(self.repo_root, base).unwrap_or_default())
     }
 
-    /// Only without a base ref: at most `LOG_HISTORY_DEPTH` commits, once per
-    /// record that lacks a log.
+    /// At most `LOG_HISTORY_DEPTH` commits, once per record that lacks a log
+    /// and whose base copies show none.
     fn history(
         &self,
         record: &Path,

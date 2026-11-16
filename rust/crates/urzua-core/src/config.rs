@@ -2213,9 +2213,6 @@ fn revision_log_identity_problem(decl: &RevisionLogDecl) -> Option<&'static str>
     }
 }
 
-/// Why a type's `revision_log` declaration cannot be used, or `None`: the
-/// identity (`MILE-167`), the version bump (`BUG-51`) and the vocabulary,
-/// columns and tool class (`ADR-94`).
 /// A blank name, or a column name a table header cell cannot hold.
 fn named_key_problem(decl: &RevisionLogDecl) -> Option<String> {
     for (key, value) in [
@@ -2244,6 +2241,9 @@ fn named_key_problem(decl: &RevisionLogDecl) -> Option<String> {
     None
 }
 
+/// Why a type's `revision_log` declaration cannot be used, or `None`: the
+/// identity (`MILE-167`), the version bump (`BUG-51`) and the vocabulary,
+/// columns and tool class (`ADR-94`).
 fn revision_log_problem(decl: &RevisionLogDecl) -> Option<String> {
     let identity = revision_log_identity_problem(decl);
     if let Some(reason) = identity {

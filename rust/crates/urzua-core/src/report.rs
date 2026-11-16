@@ -1772,6 +1772,20 @@ pub struct FixReport {
     /// The command that clears a failure the caller must act on first.
     #[serde(skip)]
     pub failure_action: Option<NextAction>,
+    /// The base a planned or created revision log was checked against.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub revision_log_base: Option<RevisionLogBase>,
+}
+
+/// What a run that plans or creates a revision log compared committed copies
+/// against: the base ref, the commit read and whether the ref is
+/// remote-tracking, local or absent.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct RevisionLogBase {
+    #[serde(rename = "ref")]
+    pub reference: Option<String>,
+    pub commit: Option<String>,
+    pub kind: &'static str,
 }
 
 /// The identity `fix --apply` wrote under (`ADR-89` section 5).

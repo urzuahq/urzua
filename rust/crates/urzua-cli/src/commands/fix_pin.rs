@@ -57,6 +57,8 @@ struct PinReport {
     notices: Vec<Notice>,
     #[serde(skip)]
     failure_action: Option<NextAction>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    revision_log_base: Option<urzua_core::report::RevisionLogBase>,
 }
 
 impl Report for PinReport {
@@ -188,14 +190,14 @@ pub(crate) fn run(config_path: Option<PathBuf>, args: PinArgs<'_>) -> Result<Exi
         }
     }
     let created = done.iter().any(|e| e.creates_revision_log);
-    let status = report_status(args.apply, done.is_empty(), failed.is_empty());
     Ok(emit(&PinReport {
-        status,
+        status: report_status(args.apply, done.is_empty(), failed.is_empty()),
         records: done,
         failed,
         identity: identity.map(|i| i.report),
         notices: notices.into_iter().chain(history.notice(created)).collect(),
         failure_action,
+        revision_log_base: history.report(created),
     }))
 }
 
@@ -279,7 +281,7 @@ impl Write<'_> {
         let full = self.session.repo_root.join(&record.path);
         let fresh =
             urzua_io::read_to_string(&full).map_err(|e| format!("could not re-read: {e}"))?;
-        let (fresh, _) = with_evidence_log(
+        let (fresh, created) = with_evidence_log(
             self.history,
             config,
             Some(&record.record_type),
@@ -288,7 +290,12 @@ impl Write<'_> {
             "write",
         )?;
         let today = urzua_io::today();
-        let new = edit(&fresh, (&today, self.attestation, self.reason))?;
+        let reason = if created {
+            format!("{} {}", self.reason, self.history.row_note())
+        } else {
+            self.reason.to_string()
+        };
+        let new = edit(&fresh, (&today, self.attestation, &reason))?;
         urzua_io::write_atomic_in(&self.session.repo_root, &full, &new)
             .map_err(|e| format!("could not write: {e}"))
     }
