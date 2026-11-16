@@ -259,6 +259,7 @@ impl Server {
                 "notices": notices,
                 "next_action": null,
                 "next_action_reason": null,
+                "next_action_inputs": [],
             }),
             is_error: false,
         }
@@ -296,6 +297,7 @@ fn outcome<R: urzua_core::report::Report>(built: Result<R, Failure>) -> ToolResu
                 "error": message,
                 "next_action": null,
                 "next_action_reason": null,
+                "next_action_inputs": [],
             }),
             is_error: true,
         },

@@ -282,17 +282,17 @@ fn missing_config_step(
     match adopt_outlook(repo_root, config_path) {
         Ok(AdoptOutlook::Proposes(n)) => (
             format!("{missing} -- `urzua init` proposes {n} record type(s) for this corpus; run `urzua init --dry-run` to read the proposal, then `urzua init` to write it"),
-            Some(NextAction {
-                command: "urzua init".to_string(),
-                reason: format!("adopt proposes {n} record type(s) for the records found here"),
-            }),
+            Some(NextAction::runs_as_printed(
+                "urzua init".to_string(),
+                format!("adopt proposes {n} record type(s) for the records found here"),
+            )),
         ),
         Ok(AdoptOutlook::NothingToAdopt(why)) => (
             format!("{missing} -- `urzua init` has nothing to adopt here ({why}); run `{GREENFIELD_COMMAND}` to start, or write the config by hand"),
-            Some(NextAction {
-                command: GREENFIELD_COMMAND.to_string(),
-                reason: "no record directory to adopt; greenfield mode writes a config for the types --types names".to_string(),
-            }),
+            Some(NextAction::runs_as_printed(
+                GREENFIELD_COMMAND.to_string(),
+                "no record directory to adopt; greenfield mode writes a config for the types --types names".to_string(),
+            )),
         ),
         Ok(AdoptOutlook::Unwritable(why)) => (
             format!("{missing} -- `urzua init` cannot propose a config here: {why}"),

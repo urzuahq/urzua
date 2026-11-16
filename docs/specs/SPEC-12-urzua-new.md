@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5C0WX34AQKF79DQDS5
-Version: '0.32'
+Version: '0.33'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/commands/new.rs@sha256:92c75a760cc18b234040a3136cf0b886739e1016fe992fc78a074778b8616be5, code:rust/crates/urzua-core/src/new_record.rs@sha256:4f85670917b92d9e09fca2a839bfb9e6035e439dd7bf8081b6b03849c496578d, test:rust/crates/urzua-cli/tests/new_integration.rs@sha256:c319a5750aa11e1bd2b6be9fc6a2d707f34150c514d49c35290ad353f0ef61f7
+Realized-by: code:rust/crates/urzua-cli/src/commands/new.rs@sha256:1a54159935079af3211c815fe93091a3a1c922d63dd2c59c4ca422dfc05f27f2, code:rust/crates/urzua-core/src/new_record.rs@sha256:203bcd8b4321af5b754e647d3d75fe6d8fd3aaf037b7a10af7615663990cd6d1, test:rust/crates/urzua-cli/tests/new_integration.rs@sha256:c319a5750aa11e1bd2b6be9fc6a2d707f34150c514d49c35290ad353f0ef61f7
 Author: beauwilliams
 Subject: '`urzua new` -- generating a record''s initial content with a real stable ID assigned.'
 Implements: ADR-27
@@ -253,3 +253,5 @@ steps and in seconds, for each record type.
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/new.rs` 8cb79491eccb -> 2254e1c8067c. Reason: Read the diff since the old pin and the claim still holds. new.rs: read_type_filenames takes the notices list and records a missing type directory or extra_dirs entry as an info notice beside the existing stderr line; numbering, template, identity and write logic are unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-14 | Bumped to `0.31`. New section "Comparing a record with the header `new` writes": the opt-in `header.scaffold-mismatch` rule recomputes the header `new` would have written through the unchanged, pure `scaffold_record` and compares an added record with it, and two scripts (`replay-header-comparator.py`, `time-new-vs-hand.py`) measure whether `new` is the path taken and the faster one. `new`'s output is unchanged and carries no provenance stamp. **Why:** `MILE-103`, the maintainer's decision of 2026-11-13: a comparator and a replay, not a stamp. | **structural** |
 > | 2026-11-14 | Bumped to `0.32`. The unknown-record-type error points at `record_types:` in the configuration instead of a TOML table. **Why:** the first-run review, finding 6.6 (the `extra_dirs` notice in the JSON is the `0.30` row's). | **substantive** |
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/new.rs` 92c75a760cc1 -> 1a5415993507, `rust/crates/urzua-core/src/new_record.rs` 4f85670917b9 -> 203bcd8b4321. Reason: new.rs makes git add -- <path> the report's next action when untracked records are not examined, with a small path helper; new_record.rs dates a template revision-log row whose date cell is YYYY-MM-DD with the day the record is made; the record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-16 | Bumped to `0.33`. The pins re-baselined above follow code changed for `MILE-266` and `MILE-267` (printed next actions that run as printed, a revision log in every built-in template); nothing this spec states changes. **Why:** the re-pin rows are structural and `revision-log.version-bump-required` asks for a bump. | **structural** |

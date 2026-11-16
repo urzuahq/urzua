@@ -640,6 +640,38 @@ impl crate::report::Report for ReverifyReport {
             }
         }
     }
+    fn next_action(&self) -> Option<crate::report::NextAction> {
+        use crate::report::{FixStatus, NextAction};
+        match self.status {
+            FixStatus::RepairsAvailable if self.mode == "detect" => {
+                let ids = crate::report::distinct_ids(
+                    self.records
+                        .iter()
+                        .filter(|r| r.refused.is_empty())
+                        .map(|r| &r.record),
+                )?;
+                let mut prefix = vec!["urzua", "reverify"];
+                if self.pin_only {
+                    prefix.push("--pin-only");
+                }
+                Some(crate::report::attested_apply(
+                    &prefix,
+                    &ids,
+                    crate::report::RENEW_REASON_PLACEHOLDER,
+                    "one sentence on what you checked in the cited evidence that shows the claim still holds",
+                    format!(
+                        "renews {} once you have checked the evidence",
+                        if ids.len() == 1 { "1 record".to_string() } else { format!("{} records", ids.len()) }
+                    ),
+                ))
+            }
+            FixStatus::Applied => Some(NextAction::runs_as_printed(
+                "urzua check",
+                "re-checks the corpus after the renewal",
+            )),
+            _ => None,
+        }
+    }
 }
 
 /// What a renewal records.

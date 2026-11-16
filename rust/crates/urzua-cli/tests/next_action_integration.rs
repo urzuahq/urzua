@@ -66,7 +66,7 @@ fn a_mixed_fixable_and_judgment_check_suggests_urzua_fix() {
     let v = run(&dir, &["check"]);
     let (action, reason) = pair(&v);
     assert_eq!(
-        action, "urzua fix --apply --ids docs/adr/ADR-1-first.md",
+        action, "urzua fix --apply --ids docs/adr/ADR-1-first.md --actor agent",
         "{v}"
     );
     assert_eq!(reason, "repairs 1 of 2 findings", "{v}");
@@ -102,7 +102,7 @@ fn audit_derives_the_same_action_as_check() {
     let v = run(&dir, &["audit"]);
     assert_eq!(
         pair(&v).0,
-        "urzua fix --apply --ids docs/adr/ADR-1-first.md",
+        "urzua fix --apply --ids docs/adr/ADR-1-first.md --actor agent",
         "{v}"
     );
 }
@@ -114,7 +114,7 @@ fn fix_suggests_applying_then_checking() {
     assert_eq!(detect["status"], "repairs-available", "{detect}");
     assert_eq!(
         pair(&detect).0,
-        "urzua fix --apply --ids docs/adr/ADR-1-first.md",
+        "urzua fix --apply --ids docs/adr/ADR-1-first.md --actor agent",
         "{detect}"
     );
     assert_eq!(pair(&detect).1, "writes 1 repair", "{detect}");

@@ -949,7 +949,7 @@ fn check_tool_carries_a_runnable_next_action_when_a_finding_offers_one() {
     let reply = call_one(&dir, "urzua_check", json!({}));
     let report = &reply["result"]["structuredContent"];
     assert_eq!(
-        report["next_action"], "urzua fix --apply --ids docs/adr/ADR-1-a.md",
+        report["next_action"], "urzua fix --apply --ids docs/adr/ADR-1-a.md --actor agent",
         "{report}"
     );
     assert_eq!(

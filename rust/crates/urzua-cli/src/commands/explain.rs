@@ -74,13 +74,21 @@ impl Report for ExplainRuleReport {
 
 fn run_rule(config_path: Option<PathBuf>, id: &str) -> Result<ExitCode, Failure> {
     let Some(def) = rule_def(id) else {
-        let hint = nearest_name(id, RULE_TABLE.iter().map(|d| d.id))
-            .map(|valid| format!("; did you mean '{valid}'?"))
-            .unwrap_or_default();
-        return Err(format!(
-            "'{id}' is not a rule this build ships{hint} (`urzua rules` lists them)"
-        )
-        .into());
+        let Some(valid) = nearest_name(id, RULE_TABLE.iter().map(|d| d.id)) else {
+            return Err(format!(
+                "'{id}' is not a rule this build ships (`urzua rules` lists them)"
+            )
+            .into());
+        };
+        return Err(Failure::with_next(
+            format!(
+                "'{id}' is not a rule this build ships; did you mean '{valid}'? (`urzua rules` lists them)"
+            ),
+            urzua_core::report::NextAction::runs_as_printed(
+                urzua_core::report::shell_command(&["urzua", "explain", "--rule", valid]),
+                format!("explains '{valid}', the shipped rule nearest '{id}'"),
+            ),
+        ));
     };
     let Session { config, .. } = Session::open(config_path)?;
     let setting = config.rules.get(def.id);

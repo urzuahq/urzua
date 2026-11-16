@@ -389,6 +389,7 @@ fn run_config_inner(config_path: Option<PathBuf>) -> Result<ExitCode, Failure> {
         return Err(Failure {
             message: v.to_string(),
             schema_version: Some(Box::new(v)),
+            next: None,
         });
     }
 
