@@ -315,7 +315,7 @@ fn a_commit_made_inside_a_verify_run_is_checked() {
         &dir.join(".git/hooks/pre-push"),
         "#!/bin/sh\nprintf -- '---\\nDate: 2026-01-01\\n---\\n# B\\n' > docs/adr/ADR-9-inner.md\ngit add -A\ngit commit -q -m inner\n\"$URZUA_BIN\" check >/dev/null\n",
     );
-    let mut verify = std::process::Command::new(env!("CARGO_BIN_EXE_urzua"));
+    let mut verify = common::urzua();
     verify
         .args(["hooks", "verify", "--run", "pre-push"])
         .current_dir(&dir);
