@@ -276,7 +276,7 @@ fn unattested(
 
 /// The command that writes the row a problem lacks, for its message.
 fn remedy(p: &Problem, record: &str) -> String {
-    let tail = format!("--actor agent --reason \"<why the claim still holds>\"` (`--actor human` when a person runs it)");
+    let tail = "--actor agent --reason \"<why the claim still holds>\"` (`--actor human` when a person runs it)";
     match p.variant {
         "pin-changed-unattested" => format!(
             "put the merge base's pin back, then re-pin with `urzua fix --rebaseline --apply --ids {record} {tail}"

@@ -335,43 +335,58 @@ configuration (`ADR-89`, amendment of 2026-11-14).
 `--rules` selection that leaves it out. Upgrading to a build that has it can surface stale-evidence warnings in a repository
 whose pins went stale unseen; `urzua fix --rebaseline` lists them and `urzua fix --rebaseline --apply --ids <record> --reason <why>`
 clears each.
-`diff.pin-changed-unattested` (default `error`) is a third (decided by the builder on 2026-11-16, pending maintainer
-review). On a `--base` run it reads the merge-base copy of each changed record and reports a locator whose `@sha256` pin
-(in `Realized-by` or a Done-means item evidence clause) changed when the head's revision log gained no row the tooling
-writes for that change. Rows account for a change when they name the locator and form a chain from the base's pin to the
-head's: each row moves the pin from a hash the chain has reached to its own new hash, compared exactly (the 12-character
-prefix the rows carry), so a branch that re-pinned, merged and re-pinned again passes, and a row is never reused for
-another change. The rows:
+`diff.pin-changed-unattested` (default `error`) is a third (decided by the builder on 2026-11-16 and made stricter by
+the orchestrator on 2026-11-16, both pending maintainer review). Its principle: **in a record the merge base holds, every
+pin hash the head carries is either unchanged at the same occurrence or accounted for by rows the pinning tools write.**
+On a `--base` run it reads the merge-base copy of each changed record; a record the diff renamed is paired with its copy
+under the old name by `Stable-Id` and record id, as `status.transition-allowed` pairs a rename, so renaming a record is
+no way past it. Pins are compared occurrence by occurrence: the key is the locator (path and scope) and its position
+among that locator's occurrences in the evidence field and the Done-means item clauses, so a hash copied from one
+occurrence to another is a change.
 
-- a re-baseline row (`urzua fix --rebaseline --apply`): `` `locator` old -> new ``;
-- a merge row (`urzua fix --conflicts --apply`): the base's hash is one of its two sides and the head's the merged hash;
-- a renewal row (`urzua reverify --apply`): the locator is listed at the head's hash (a renewal re-hashes every locator
-  and carries no old hash).
+| Change between base and head | Reported | The command that writes the row |
+|---|---|---|
+| A pin's hash changed | yes, `pin-changed-unattested` | put the base's pin back, then `urzua fix --rebaseline --apply` |
+| A first pin on a locator that had none, or a new locator arriving with a pin | yes, `pin-added-unattested` | take the hand-typed pin off, then `urzua fix --pin --apply` |
+| A pin moved to another locator: a changed scope (`path` to `path#L2`), a pinned file renamed | yes, `pin-added-unattested` and `pin-removed` | restore the old locator, then `urzua fix --pin --apply --replace OLD=NEW` |
+| A pin removed, or a pinned locator removed | yes, `pin-removed` | restore it, then `urzua fix --pin --apply --remove OLD` (or `--replace`) |
+| A locator added or removed without a pin | no | |
+| A record new in the head | no: it has no base pin | |
+| A pin unchanged | no | |
 
-The rows are parsed by the functions that sit beside their writers (`fix::rebaseline_row_pins`,
-`conflicts::merge_row_pins`, `reverify::parse_reverified_row`); a row the base already held does not count. A person
-can type a row in that shape by hand: that is the same trust as a reason typed into the command, and the pull request
-shows the row to its reviewer. The edge cases:
+Every command takes `--ids <record> --actor agent --reason "<...>"` (`--actor human` when a person runs it), and the
+finding's message prints the one for its case. The rows that account for a change:
 
-| Change between base and head | Reported |
-|---|---|
-| A pin's hash changed, no accounting row | yes (`pin-changed-unattested`) |
-| A pin removed from a locator the record still lists | yes (`pin-removed`): un-pinning weakens the evidence |
-| A pin added to a locator that had none | no: a first pin is judged by `embodiment.pin-stale`, as before |
-| A locator added with a pin | no, for the same reason |
-| A locator removed | no: the record's claim changed, which the reviewer reads; the state rules recompute it |
-| A scope change (`path#A` to `path#B`) | no: a different locator, removed and added |
-| A record new in the head | no: it has no base pin |
+- a re-baseline row (`fix --rebaseline`) and a merge row (`fix --conflicts`): a chain of them leads from the base's hash
+  to the head's, each moving the pin from a hash the chain has reached to its own new hash, so a branch that re-pinned,
+  merged and re-pinned again passes and a row is never reused for another change;
+- a renewal row (`reverify --apply`): only when it acknowledged that locator's drift and lists it at the head's hash;
+- a `Pinned` row (`fix --pin`, or `reverify --pin-only`): a first pin of that locator at the head's hash;
+- a moved-pin row (`fix --pin --replace`): the old locator at the base's hash and the new one at the head's;
+- a removal row (`fix --pin --remove`): the locator at the base's hash.
 
-A configuration sets another level, or `off`, under `rules:`; `off` adds a warning notice (subject
-`diff.pin-changed-unattested`) to every `check`. `urzua init` writes no entry for it. It does not run under a `--rules`
-selection that leaves it out, and reports `not-applicable` with no `--base`. Its findings carry no action (putting the
-base's pin back is an edit inside an evidence clause no action kind addresses); the message names the base hash and the
-re-pin command, with `--actor agent`, that writes the row once the base's pin is back. Upgrading can surface findings: a
-pull request that edits a pin by hand now fails `check --base`.
+Hashes are matched on the full hash where a row carries it and on the 12-character form the re-baseline and merge rows
+write otherwise. Rows are parsed by the functions beside their writers; a row the base already held does not count.
+**What a typed row can and cannot do:** a person can type a row in a tool's shape by hand, and it then accounts for the
+change it names. That is the same trust as a reason typed into the command, and the pull request shows the row to its
+reviewer. A typed row cannot account for another change than the one it names: its locator and hashes must be the
+base's and the head's, and a renewal row with no old hash clears only a locator whose drift it acknowledged.
+
+**The level a pull request is judged at:** on a `--base` run the rule runs at the stricter of the head's level and the
+base revision's (its declared level, or `error` when its configuration does not declare the rule), read from the
+base's configuration as `diff.decider-required` reads the base's table under `authority.decider_table: base`. A pull
+request that turns the rule off or lowers it in the change it carries is still judged at the base's level, with an info
+notice saying so. A configuration sets another level, or `off`, under `rules:` for later changes; `off` adds a warning
+notice to every `check`. `urzua init` writes no entry for it. It does not run under a `--rules` selection that leaves it
+out, and reports `not-applicable` with no `--base`. Its findings carry no action (taking a typed pin off or putting a
+base pin back is an edit inside an evidence clause no action kind addresses); the message names the command. Upgrading
+can surface findings: a pull request that edits, adds, moves or removes a pin by hand now fails `check --base`. The
+scoped-locator-without-a-pin finding of `embodiment.locator-exists` suggests `urzua fix --pin --ids <record>`, which
+lists what it would pin and prints the apply form.
 
 **What "blank" means for a required suppression field and a `Reviewed-by` cell** (decided by the builder on 2026-11-16,
-pending maintainer review): a value with no letter or digit in any script is blank (`field_state::is_blank_value`).
+pending maintainer review): a value with no letter or digit in any script, once the targets of Markdown links are set
+aside, is blank (`field_state::is_blank_value`); `[](https://x)`, a link with no text, is blank.
 Whitespace, `-`, `--`, an em dash, an ellipsis and an emoji-only value are blank; `n/a` is not, because it has letters.
 A suppression record whose required field is blank by this definition does not take effect and is reported, and an
 override-log entry whose `Reviewed-by` cell is blank is unreviewed. Other header fields keep their reading: a lone em
@@ -1587,3 +1602,4 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/check.rs` d87770c88b52 -> e16af5ae5d74, `rust/crates/urzua-core/src/rules.rs` 8e3fdcd0ddb6 -> c582cc104858, `rust/crates/urzua-cli/tests/check_integration.rs` 6d2ad3bf8830 -> 03a0f940f65e. Reason: check.rs reads the merge-base copy of every changed record while diff.pin-changed-unattested is on and adds a warning notice when that rule is off; rules.rs registers the pin_attestation rule module; check_integration.rs gains a test that migrate ids refuses a path-gated record; the record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/check.rs` e16af5ae5d74 -> c02e3d3f1f1d. Reason: check.rs corrects the spec its pin-attestation notice comment cites; the record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Pin recomputed on merge (attested by beauwilliams, identity: gh-verified, actor: agent): both merged sides re-pinned, `rust/crates/urzua-cli/tests/check_integration.rs` (Realized-by) 03a0f940f65e and 828702780265 -> f2601b80e318; the new hash is the merged file's, which is git's automatic merge of the two re-pinned commits. No person wrote a reason for the merged state. `Version` is set to 0.179 by this merge, the next number above the higher side's 0.178, because `version_bump` requires a new version for the rows this merge combines. A row added on a branch states version 0.178, which was true there and is superseded by this merge. **Why:** `urzua fix --conflicts` resolved a conflict that lay only in re-pin lines; a reviewer of the pull request should confirm the merged pin. | **evidence** |
+> | 2026-11-16 | `diff.pin-changed-unattested` made stricter (decided by the orchestrator on 2026-11-16, pending maintainer review): every pin of a record the base holds is unchanged at its occurrence or accounted for; added, moved and removed pins are reported; a renamed record is paired with its base copy; pins are compared per occurrence; renewal rows clear only acknowledged drift; rows match on the full or 12-character hash; the level is the stricter of the head's and the base's. `urzua fix --pin` (first pin, `--replace`, `--remove`) writes the rows; a Markdown link with no text is blank. The rule-table rows are regenerated. **Why:** an independent review of the first build found a rename, a hash copied between occurrences, a scope change, a moved pin and turning the rule off in the same pull request each passing with no attestation. | **substantive** |

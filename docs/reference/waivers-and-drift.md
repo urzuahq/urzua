@@ -71,8 +71,8 @@ Notes that save time:
   the rule and scope it claimed.
 - **`effective_requires: [Reason, Expires]`** makes a waiver take effect only once every listed field
   holds a real value: not blank, not a placeholder such as `TBD`, and not a value the type declares
-  `pending`. A value with no letter or digit in any script is blank: `—`, `-`, `--`, `…` or an emoji
-  alone is not a reason (`n/a` has letters, so it counts). With `Expires` listed, a waiver with no date takes no effect, which is what you want
+  `pending`. A value with no letter or digit in any script is blank: `—`, `-`, `--`, `…`, an emoji
+  alone or a link with no text (`[](https://x)`) is not a reason (`n/a` has letters, so it counts). With `Expires` listed, a waiver with no date takes no effect, which is what you want
   unless you declare `permanent`. `waive --from-report` refuses to run unless the type lists `Expires`
   here or declares `permanent`, because a draft given only a `Reason` would otherwise become a
   permanent waiver.
@@ -198,8 +198,9 @@ build that has it, a repository whose pins went stale unseen shows those warning
 with the re-pin below, or waive a record you have chosen to leave.
 
 Re-pin with the tool, never by editing the hash: on a pull request, `diff.pin-changed-unattested` (on by
-default at `error`) reports a pin that changed without the row the re-pin writes, naming the locator and the
-old and new hash.
+default at `error`) reports a pin that changed, was added, moved or removed without the row a pinning tool
+writes. A first pin is `urzua fix --pin --apply --ids <record> --actor agent --reason "<...>"`; a pin moved to a
+new scope or a renamed file adds `--replace OLD=NEW`; a dropped pinned locator `--remove OLD`.
 
 Read the diff of the changed file, decide whether the claim still holds, and if it does re-pin:
 

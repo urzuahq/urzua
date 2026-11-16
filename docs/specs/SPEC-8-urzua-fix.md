@@ -587,15 +587,41 @@ maintainer review):
   and the `gh`-verified login (the identity itself, or the login verified beside an asserted name) is in the gate's group:
   the same identity and actor attestation the revision row records. Otherwise the record is failed (for `--conflicts`,
   `refused`) with a message naming the gate, its group and its logins, and saying that one of them runs the command with
-  `--actor human` under a `gh`-verified identity. An agent (`--actor agent`) is always refused, whoever's token it holds.
+  `--actor human` under a `gh`-verified identity. `--actor agent` is always refused. `fix --pin --apply` writes through
+  the same check.
 - **`waive --apply`**, **`index --apply`**, **`migrate ids --apply`**, **`migrate filenames --apply`** and **`new`** take
   no actor, so they cannot say who runs them: under a path gate they refuse, naming the group, and the change is made by
   hand by one of its members. `migrate filenames` checks every file it would rewrite or rename first and writes nothing
   when any is covered, so a migration never lands half done. `migrate config` takes no `--apply` and is unchanged.
 
-A repository with no path gate behaves exactly as before. The `--actor` value is the caller's claim, as everywhere else
-(`ADR-89`): the refusal stops an agent that says what it is, and CI's `diff.decider-required` judges the pull request
-that carries the change.
+A repository with no path gate behaves exactly as before. A path given as `./x`, `a//x`, `x/` or `a/../x` is
+normalised inside `path_gate_refusal`, so no caller's spelling escapes a gate.
+
+**What this gate rests on.** `--actor human` is the caller's claim, as everywhere else (`ADR-89`), so the gate rests on
+the `gh`-verified login being in the gate's group. An agent running under a maintainer's own token can pass
+`--actor human` and write, and the row then records `actor: human`. The gate stops an agent with its own identity or
+with no verified login, and an accidental write; it is weaker than the edit hook, which refuses the agent whatever it
+claims. CI's `diff.decider-required` judges the pull request that carries the change.
+
+## Pinning evidence with a row (`fix --pin`)
+
+`urzua fix --pin` is the attested way to change what a record's evidence pins, so `diff.pin-changed-unattested`
+(`SPEC-2`) can tell a reviewed change from a hand edit (decided by the builder on 2026-11-16, pending maintainer review).
+It works on any record of any type and status; no expiry period is needed.
+
+- `urzua fix --pin [--ids <record,...>]` lists every unpinned `code:` and `test:` locator whose file can be read, with the
+  hash it would write, and prints the apply form as `next_action` (its `<...>` reason in `next_action_inputs`).
+- `urzua fix --pin --apply --ids <record,...> --actor agent --reason "<why this evidence carries the claim>"` pins them
+  and appends a `Pinned` row naming each locator and its hash.
+- `--replace OLD=NEW` (one record) moves a pin to another locator, a new scope or a renamed file: `OLD` is the pinned
+  locator as `path` or `path#scope`, `NEW` the locator that replaces it (optionally `code:` or `test:`), hashed now. The
+  row names the old locator and hash and the new locator and hash, in full.
+- `--remove OLD` (one record) removes a pinned locator from the evidence, with a row naming it and its hash. A record's
+  only locator is removed by hand.
+
+Each write takes `--reason` (held to `attestation.reason`), an identity and `--actor`, takes the fix lock, re-reads the
+record and passes the path-gate check above. The finding of `diff.pin-changed-unattested` prints the command for its case,
+and the scoped-locator-without-a-pin finding of `embodiment.locator-exists` suggests the listing.
 
 ## The evaluation date (`--as-of`)
 
@@ -727,4 +753,4 @@ asserted by test, not assumed by convention.
 > | 2026-11-16 | Version set on merge (attested by beauwilliams, identity: gh-verified, actor: agent): `Version` is set to 0.59 by this merge, the next number above the higher side's 0.58, because `version_bump` requires a new version for the rows this merge combines. A row added on a branch states version 0.58 and 0.57, which was true there and is superseded by this merge. **Why:** `urzua fix --conflicts` resolved a conflict that lay only in re-pin lines; a person's row is never rewritten. | **structural** |
 > | 2026-11-16 | Bumped to `0.60`. Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/fix.rs` fcc0a952e83d -> af5e5c811c17. Reason: fix.rs: the only change on this branch is one added `hooks: Default::default()` field in a Config struct literal, needed by the new optional hooks key, merged with main's own change to the file; behaviour this record cites is unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Version set on merge (attested by beauwilliams, identity: gh-verified, actor: agent): `Version` is set to 0.61 by this merge, the next number above the higher side's 0.60, because `version_bump` requires a new version for the rows this merge combines. Rows added on the branches state versions 0.60 and 0.59, which were true there and are superseded by this merge. **Why:** `urzua fix --conflicts` resolved a conflict that lay only in re-pin lines; a person's row is never rewritten. | **evidence** |
-> | 2026-11-16 | Bumped to `0.62`. Adds "Path gates bind every command that writes for someone": `fix --apply`, `fix --rebaseline --apply`, `fix --conflicts --apply` and `reverify --apply` write a path-gated record only for `--actor human` under a `gh`-verified login in the gate's group; `waive`, `index`, `migrate ids`, `migrate filenames` and `new` refuse under a path gate; the refusal names who can make the change. A re-pin row is what `diff.pin-changed-unattested` (`SPEC-2`) reads. Decided by the builder on 2026-11-16, pending maintainer review. **Why:** `MILE-289` -- `fix --apply --actor agent` rewrote a path-gated record the edit hook would have refused. | **substantive** |
+> | 2026-11-16 | Bumped to `0.62`. Adds "Pinning evidence with a row (`fix --pin`)": a first pin, `--replace OLD=NEW` and `--remove OLD` on any record, each with a reason and a row `diff.pin-changed-unattested` reads; path-gate paths are normalised; "What this gate rests on" states that `--actor human` is a claim and the gate rests on the verified login. Adds "Path gates bind every command that writes for someone": `fix --apply`, `fix --rebaseline --apply`, `fix --conflicts --apply` and `reverify --apply` write a path-gated record only for `--actor human` under a `gh`-verified login in the gate's group; `waive`, `index`, `migrate ids`, `migrate filenames` and `new` refuse under a path gate; the refusal names who can make the change. A re-pin row is what `diff.pin-changed-unattested` (`SPEC-2`) reads. Decided by the builder on 2026-11-16, pending maintainer review. **Why:** `MILE-289` -- `fix --apply --actor agent` rewrote a path-gated record the edit hook would have refused. | **substantive** |

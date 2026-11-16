@@ -91,7 +91,10 @@ The commands that write records on someone's behalf honour path gates as the hoo
 `fix --rebaseline --apply`, `fix --conflicts --apply` and `reverify --apply` write a path-gated record only for
 `--actor human` under a `gh`-verified login in the gate's group, and refuse an agent; `waive --apply`, `index
 --apply`, `migrate ids --apply`, `migrate filenames --apply` and `new` take no actor and refuse under a path gate.
-Each refusal names the gate's group and its logins. A repository with no path gate is unaffected.
+Each refusal names the gate's group and its logins. A repository with no path gate is unaffected. `--actor human`
+is the caller's claim, so this rests on the `gh`-verified login being in the group: an agent running under a
+member's own token can pass `--actor human` and write. It stops an agent with its own identity or no verified
+login, and accidental writes; the edit hook, which refuses the agent whatever it claims, is the stronger guard.
 
 Any other new error in the same edit still refuses, and the gates are unchanged: an edit that writes the second
 half and moves the record to a gated status is still refused for the status. A pair left unmatched is still a
