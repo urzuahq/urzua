@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5Q0XVK27P5T8FN72BN
-Version: '0.57'
+Version: '0.58'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -389,8 +389,11 @@ no records, so a record carrying conflict markers need not parse. It cannot be c
   once hashes are masked (each item's text, its evidence clause's locators, paths, scopes and order,
   its waiver clause, and the order of the items), or the record is refused naming the first item that
   differs *(decided by the builder on 2026-11-16, pending maintainer review)*. A pin is matched across
-  the stages by its site (the evidence field, or the item's text) and its locator, so the same locator
-  in `Realized-by` and in an item, or in two items, are separate pins. A row of the base missing from
+  the stages by its site (the evidence field, or the item's text), its locator and its position among
+  that locator's occurrences in the site, so the same locator in `Realized-by` and in an item, in two
+  items, or twice in one clause, are separate pins, each restored at its own position. Multi-line
+  support covers the header evidence field only: an item clause continued onto a second line has the
+  pins of that line left in the text, so if they conflict the record is refused as a content conflict. A row of the base missing from
   either side (removed or rewritten) is refused: a re-pin only adds rows.
 - **Row order.** Rows are de-duplicated (rows differing only in whitespace are one row). The side being
   merged into this branch keeps its rows in its own order; each row only this branch has is placed after
@@ -401,10 +404,12 @@ no records, so a record carrying conflict markers need not parse. It cannot be c
   the base's rows need only be present on each side, not at the same positions, a later stop of a
   multi-commit rebase, whose `HEAD` holds the rows an earlier stop interleaved, resolves like the first
   *(decided by the builder on 2026-11-16, pending maintainer review)*.
-- **Index stages are the committed records.** When git names the two commits, stage 2 must equal the
-  record at our commit and stage 3 the record at their commit, byte for byte, or the record is refused:
-  stages written by hand (`git update-index --index-info`) would let the merge row claim a re-pin a side
-  never made *(decided by the builder on 2026-11-16, pending maintainer review)*.
+- **Index stages are the committed records.** When git names the two commits, stage 1 must equal the
+  record at a merge base (`git merge-base --all`; in a rebase or cherry-pick, the replayed commit's
+  parent), stage 2 the record at our commit and stage 3 the record at their commit, byte for byte, or
+  the record is refused: stages written by hand (`git update-index --index-info`) would let the merge
+  row claim a re-pin a side never made, or hide one. With several merge bases git's stage 1 is its
+  virtual merge of them, which is not read back, so a stage 1 matching none of them is refused *(decided by the builder on 2026-11-16, pending maintainer review)*.
 - **A recomputed pin is git's merge of two attested states.** A pin both sides moved to different hashes
   is recomputed only when all of these hold, and the record is refused naming the one that failed:
   the pinned file at our commit (`HEAD`; stage 2 in a merge and a rebase alike) hashes under the pin's
@@ -420,16 +425,20 @@ no records, so a record carrying conflict markers need not parse. It cannot be c
 - **A pinned file still unmerged.** When the pinned file is itself unmerged (for example a source file
   both sides edited), its merged content does not exist yet. The refusal says so, the conflict carries
   `waits_on` (the files), no re-pin is suggested, and when the run has such a record its `next_action`
-  is `urzua fix --conflicts` with the order of work as the reason: resolve and stage those files first,
-  then re-run *(decided by the builder on 2026-11-16, pending maintainer review)*.
+  is `git diff -- :/<file>...`, the first command a person can run, and its reason gives the rest of
+  the order of work as commands: resolve the conflicts in those files, run `git add -- :/<file>...`,
+  then `urzua fix --conflicts` *(decided by the builder on 2026-11-16, pending maintainer review)*.
 - **Version.** The higher of the two versions (refused when either is not dot-separated numbers). When
   the rows the merge adds against a side, or the merge row, are of a class `version_bump.classes`
   names and the version would equal that side's, its last number is incremented once more, so the
   record passes `revision-log.version-bump-required` against either branch *(decided by the builder on 2026-11-16, pending maintainer review)*.
-  A person's row is never rewritten. When a kept row names the version field or a bump together with a
-  side's version that is no longer the record's, the machine row ends by stating the final version and
-  that the earlier row's number was superseded by the merge; when no pin was recomputed, a row opening
-  `Version set on merge (attested by ...)` says only that *(decided by the builder on 2026-11-16,
+  A person's row is never rewritten. Only when the merge sets a version neither side had (the bump
+  above) does it say so: the machine row states the number, that it is the next above the higher
+  side's because `version_bump` requires a new version for the rows the merge combines, and, when a row
+  one side added (never a row already in the base) names the version field or a bump together with a
+  side's version, that this number was true on its branch and is superseded; when no pin was
+  recomputed, a row opening `Version set on merge (attested by ...)` says this alone. A version taken
+  from one side writes no such row *(decided by the builder on 2026-11-16,
   pending maintainer review)*.
 - **The merge row.** When a pin was recomputed one row of the type's evidence class is appended (see
   below): `Pin recomputed on merge (attested by NAME, identity: SOURCE, actor: ACTOR): both merged sides
@@ -689,3 +698,4 @@ asserted by test, not assumed by convention.
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/fix.rs` 7ea3d709cad8 -> 82fdfdfb9176. Reason: fix.rs only gains rejected_values and waiver_fields in a test fixture's RecordTypeConfig literal. The claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Bumped to `0.56`. `fix --conflicts` treats a pin in a Done-means item's evidence clause like one in the evidence field (items identical apart from hashes when one moved), keeps rows with the merged-in side first and this branch's last within a date in a merge and a rebase alike, resolves a later stop of a multi-commit rebase, checks index stages 2 and 3 against the two commits, refuses a symlink or mode change in the pinned file, names line-ending conversion and a pinned file still unmerged (with the order of work as `next_action`), states a version a kept row no longer tells truly in the machine row, and says the residual trust plainly. Decided by the builder on 2026-11-16, pending maintainer review. **Why:** in real use over six pull requests the command refused about 60 percent of conflicted records, nearly all for a pin inside a Done-means item; a security re-check found the stages unchecked. | **substantive** |
 > | 2026-11-16 | Version set on merge (attested by beauwilliams, identity: gh-verified, actor: agent): `Version` is now 0.57; an earlier row's version 0.56 was written before this merge and is superseded by it. **Why:** `urzua fix --conflicts` resolved a conflict that lay only in re-pin lines; a person's row is never rewritten. | **structural** |
+> | 2026-11-16 | Bumped to `0.58`. `fix --conflicts`: a locator repeated in one site is matched and restored by its position; stage 1 is checked against the merge bases; the version row is written only when the merge set a version neither side had, reads only rows a side added, and says nothing a reader could find false; a pinned file still unmerged gives `git diff` as the next action with the rest of the order in its reason; an item clause continued onto a second line is stated as not handled. Decided by the builder on 2026-11-16, pending maintainer review. **Why:** independent review of pull request 552. | **substantive** |

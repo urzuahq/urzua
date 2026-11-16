@@ -151,35 +151,7 @@ pub fn prepare(stages: &Stages<'_>, shape: &Shape<'_>) -> Result<Prepared, Strin
     if base.items != ours.items {
         base.pins.retain(|p| p.item.is_none());
     }
-    let mut pins: Vec<PinSides> = Vec::new();
-    for (side, found) in [(0, &base.pins), (1, &ours.pins), (2, &theirs.pins)] {
-        for f in found {
-            let at = match pins.iter().position(|p| {
-                p.key == f.key && p.spelling == f.spelling && p.occurrence == f.occurrence
-            }) {
-                Some(at) => at,
-                None => {
-                    pins.push(PinSides {
-                        spelling: f.spelling.clone(),
-                        site: f.site.clone(),
-                        path: f.path.clone(),
-                        key: f.key.clone(),
-                        occurrence: f.occurrence,
-                        base: None,
-                        ours: None,
-                        theirs: None,
-                    });
-                    pins.len() - 1
-                }
-            };
-            let slot = match side {
-                0 => &mut pins[at].base,
-                1 => &mut pins[at].ours,
-                _ => &mut pins[at].theirs,
-            };
-            *slot = Some(f.hash.clone());
-        }
-    }
+    let pins = pin_table([&base.pins, &ours.pins, &theirs.pins]);
     let only = |a: &[LogRow], b: &[LogRow]| -> Vec<String> {
         a.iter()
             .filter(|r| !b.iter().any(|o| row_key(&o.raw) == row_key(&r.raw)))
@@ -214,6 +186,40 @@ pub fn prepare(stages: &Stages<'_>, shape: &Shape<'_>) -> Result<Prepared, Strin
         one_sided_classes,
         item_mismatch,
     })
+}
+
+/// Each pin of the three stages, matched by site, locator and occurrence.
+fn pin_table(stages: [&[FoundPin]; 3]) -> Vec<PinSides> {
+    let mut pins: Vec<PinSides> = Vec::new();
+    for (side, found) in stages.into_iter().enumerate() {
+        for f in found {
+            let at = match pins.iter().position(|p| {
+                p.key == f.key && p.spelling == f.spelling && p.occurrence == f.occurrence
+            }) {
+                Some(at) => at,
+                None => {
+                    pins.push(PinSides {
+                        spelling: f.spelling.clone(),
+                        site: f.site.clone(),
+                        path: f.path.clone(),
+                        key: f.key.clone(),
+                        occurrence: f.occurrence,
+                        base: None,
+                        ours: None,
+                        theirs: None,
+                    });
+                    pins.len() - 1
+                }
+            };
+            let slot = match side {
+                0 => &mut pins[at].base,
+                1 => &mut pins[at].ours,
+                _ => &mut pins[at].theirs,
+            };
+            *slot = Some(f.hash.clone());
+        }
+    }
+    pins
 }
 
 /// The incoming side's rows, then each row only this branch has, placed after

@@ -160,8 +160,8 @@ above is unchanged; this adds to it.
 - **Done-means pins.** A pin in a Done-means item's evidence clause (`ADR-96`) is resolved like one in
   the evidence field, under the same conditions, provided the items of both sides are otherwise
   identical (text, waiver, locators and their order, the order of the items).
-- **Index stages.** The record's index stages 2 and 3 must equal the record at the two commits; stages
-  written by hand are refused.
+- **Index stages.** The record's index stages 1, 2 and 3 must equal the record at a merge base and at
+  the two commits; stages written by hand are refused.
 
 ## References
 
