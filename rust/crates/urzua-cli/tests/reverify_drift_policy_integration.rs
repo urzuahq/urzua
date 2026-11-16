@@ -149,7 +149,7 @@ fn a_spec_only_drift_under_block_or_undeclared_is_refused_naming_the_policy_obse
         let dir = fixture(name, drift, ADR);
         amend_adr(&dir);
         let before = read(&dir, RECORD);
-        let parsed = apply(&dir, "checked");
+        let parsed = apply(&dir, "Read the cited code and tests: checked");
         assert_eq!(parsed["status"], "partial-failure", "{parsed}");
         let error = parsed["failed"][0]["error"].as_str().unwrap();
         assert!(
@@ -173,7 +173,7 @@ fn a_code_drift_is_still_refused_when_only_spec_acknowledges_observed_failing() 
     std::fs::write(dir.join("src/a.rs"), "fn a() { let _ = 1; }\n").unwrap();
     commit_all(&dir, 1);
     let before = read(&dir, RECORD);
-    let parsed = apply(&dir, "checked");
+    let parsed = apply(&dir, "Read the cited code and tests: checked");
     let error = parsed["failed"][0]["error"].as_str().unwrap();
     assert!(
         error.contains("reverify --pin-only") && error.contains("fix --rebaseline"),
@@ -343,7 +343,7 @@ fn a_pinned_code_drift_under_block_keeps_its_stale_pin_refusal() {
     std::fs::write(dir.join("src/a.rs"), "fn a() { let _ = 1; }\n").unwrap();
     commit_all(&dir, 1);
     let before = read(&dir, RECORD);
-    let parsed = apply(&dir, "checked");
+    let parsed = apply(&dir, "Read the cited code and tests: checked");
     assert_eq!(parsed["status"], "partial-failure", "{parsed}");
     assert_eq!(read(&dir, RECORD), before);
 }

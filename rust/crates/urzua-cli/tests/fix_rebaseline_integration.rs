@@ -467,3 +467,55 @@ fn a_reason_too_short_or_not_a_sentence_is_refused_and_nothing_is_written() {
     );
     assert_eq!(out.status.code(), Some(0), "{out:?}");
 }
+
+/// The reason minimum is configuration: `attestation.reason` lowers or raises it,
+/// and the same declaration governs `reverify --apply`.
+#[test]
+fn the_reason_minimum_is_read_from_attestation_reason() {
+    let dir = fixture("reason-configured");
+    let low = format!(
+        "{CONFIG}attestation:\n  identity: asserted\n  reason: {{min_words: 1, min_chars: 1}}\n"
+    );
+    std::fs::write(dir.join(".urzua/config.yaml"), low).unwrap();
+    commit_all(&dir);
+    let out = run_urzua(
+        &dir,
+        &[
+            "fix",
+            "--rebaseline",
+            "--apply",
+            "--ids",
+            A,
+            "--by",
+            "ana",
+            "--reason",
+            "r",
+        ],
+    );
+    assert_eq!(json(&out)["status"], "applied", "{out:?}");
+    let dir = fixture("reason-raised");
+    let high = format!(
+        "{CONFIG}attestation:\n  identity: asserted\n  reason: {{min_words: 8, min_chars: 12}}\n"
+    );
+    std::fs::write(dir.join(".urzua/config.yaml"), high).unwrap();
+    commit_all(&dir);
+    let out = run_urzua(
+        &dir,
+        &[
+            "fix",
+            "--rebaseline",
+            "--apply",
+            "--ids",
+            A,
+            "--by",
+            "ana",
+            "--reason",
+            "Read the diff; claim holds.",
+        ],
+    );
+    assert_eq!(out.status.code(), Some(2), "{out:?}");
+    assert!(
+        json(&out).to_string().contains("at least 8 words"),
+        "{out:?}"
+    );
+}

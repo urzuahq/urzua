@@ -810,6 +810,8 @@ mod tests {
             "## Context\n\n<!-- ## Decision -->\n",
             "## Context\n\n<!--\n## Decision\nmore\n-->\n",
             "## Context\n\n   <!-- note\n## Decision --> trailing\n",
+            "## Context\n\n<!-- a --> <!-- b\n## Decision\n-->\n",
+            "## Context\n\n<!-- a\nb --> <!-- c\n## Decision\n-->\n",
         ] {
             let (_, f) = run(section_required, REQ, &doc("Accepted", body));
             assert_eq!(f.len(), 1, "{body:?}: {f:?}");

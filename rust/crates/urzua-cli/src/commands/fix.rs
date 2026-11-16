@@ -62,6 +62,13 @@ fn run_checked(config_path: Option<PathBuf>, args: FixArgs) -> Result<ExitCode, 
     // corpus a back-pointer resolves against stays whole. A path that matches
     // no record is a failure naming it, never a silent skip.
     let (scoped, unmatched, proposed) = select_scope(&repo_root, &config, &mut records, &args)?;
+    if args.rebaseline && args.apply {
+        config
+            .attestation
+            .reason
+            .check(&reason)
+            .map_err(|e| refuse(format!("urzua fix --rebaseline --apply: {e}")))?;
+    }
     // A re-pin compares hashes and needs neither repair rule: it is the fix
     // `embodiment.pin-stale` suggests, and that rule is on by default.
     if args.rebaseline {
@@ -161,9 +168,6 @@ fn check_usage(args: &FixArgs) -> Result<String, Refusal> {
         "urzua fix --rebaseline --apply: pass --reason <why the evidence still holds>; a re-pin without a reason is a rubber stamp",
     )
     .map_err(refuse)?;
-    if args.rebaseline && args.apply {
-        reason_says_something(&reason).map_err(refuse)?;
-    }
     if args.stdin_path.is_some()
         && (args.apply
             || args.force
@@ -411,28 +415,6 @@ pub(crate) fn validate_reason(
         ),
         (_, r) => Ok(r.unwrap_or_default().to_string()),
     }
-}
-
-/// The least a re-pin's `--reason` must hold: this many words and characters.
-const MIN_REASON_WORDS: usize = 3;
-const MIN_REASON_CHARS: usize = 12;
-
-/// A re-pin is an attestation that the evidence still holds, so its reason must
-/// say something a reviewer can check: at least [`MIN_REASON_WORDS`] words (runs
-/// of letters or digits) and [`MIN_REASON_CHARS`] characters. `x`, `ok` and
-/// `...` are refused.
-fn reason_says_something(reason: &str) -> Result<(), String> {
-    let words = reason
-        .split_whitespace()
-        .filter(|w| w.chars().any(char::is_alphanumeric))
-        .count();
-    if words >= MIN_REASON_WORDS && reason.trim().chars().count() >= MIN_REASON_CHARS {
-        return Ok(());
-    }
-    Err(format!(
-        "urzua fix --rebaseline --apply: --reason must say why the evidence still holds, in at least {MIN_REASON_WORDS} words and {MIN_REASON_CHARS} characters; '{}' does not",
-        reason.trim()
-    ))
 }
 
 /// The info notice that says how many lines a declared back-pointer

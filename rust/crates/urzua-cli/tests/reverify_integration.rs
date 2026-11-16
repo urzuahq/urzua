@@ -271,7 +271,10 @@ fn a_changed_pin_is_refused_and_nothing_is_written_observed_failing() {
     std::fs::write(dir.join("src/a.rs"), V2).unwrap();
     commit_all(&dir, 30);
     let before = read(&dir, &path(1));
-    let out = run_urzua(&dir, &apply_args(&path(1), "checked"));
+    let out = run_urzua(
+        &dir,
+        &apply_args(&path(1), "Read the cited code and tests: checked"),
+    );
     let parsed = json(&out);
     assert_eq!(out.status.code(), Some(1), "{parsed}");
     assert_eq!(parsed["status"], "partial-failure", "{parsed}");
@@ -290,7 +293,10 @@ fn a_locator_that_does_not_resolve_is_refused() {
     .unwrap();
     commit_all(&dir, 40);
     let before = read(&dir, &path(1));
-    let parsed = json(&run_urzua(&dir, &apply_args(&path(1), "checked")));
+    let parsed = json(&run_urzua(
+        &dir,
+        &apply_args(&path(1), "Read the cited code and tests: checked"),
+    ));
     assert_eq!(parsed["status"], "partial-failure", "{parsed}");
     assert!(
         parsed["failed"][0]["error"]
@@ -310,7 +316,10 @@ fn drift_on_an_unpinned_locator_refuses_the_renewal_and_pin_only_clears_it_obser
     std::fs::write(dir.join("src/a.rs"), V2).unwrap();
     commit_all(&dir, 1);
     let before = read(&dir, &path(1));
-    let parsed = json(&run_urzua(&dir, &apply_args(&path(1), "checked")));
+    let parsed = json(&run_urzua(
+        &dir,
+        &apply_args(&path(1), "Read the cited code and tests: checked"),
+    ));
     assert_eq!(parsed["status"], "partial-failure", "{parsed}");
     let error = parsed["failed"][0]["error"].as_str().unwrap();
     assert!(
@@ -382,7 +391,7 @@ fn pin_only_refuses_a_pinned_locator_whose_hash_differs() {
     commit_all(&dir, 30);
     let before = read(&dir, &path(1));
     let p1 = path(1);
-    let mut args = apply_args(&p1, "checked");
+    let mut args = apply_args(&p1, "Read the cited code and tests: checked");
     args.push("--pin-only");
     let parsed = json(&run_urzua(&dir, &args));
     assert_eq!(parsed["status"], "partial-failure", "{parsed}");
@@ -414,7 +423,7 @@ fn pin_only_with_nothing_unpinned_says_so_instead_of_doing_nothing() {
     .unwrap();
     commit_all(&dir, 40);
     let p1 = path(1);
-    let mut args = apply_args(&p1, "checked");
+    let mut args = apply_args(&p1, "Read the cited code and tests: checked");
     args.push("--pin-only");
     let out = run_urzua(&dir, &args);
     let parsed = json(&out);
@@ -460,7 +469,14 @@ fn the_gates_of_fix_apply_hold() {
     // --ids or --force, never implied.
     let out = run_urzua(
         &dir,
-        &["reverify", "--apply", "--by", "ana", "--reason", "r"],
+        &[
+            "reverify",
+            "--apply",
+            "--by",
+            "ana",
+            "--reason",
+            "Read the cited code and tests: r",
+        ],
     );
     assert_eq!(out.status.code(), Some(2), "{out:?}");
     // A reason is required, on one line, without a pipe.
@@ -475,7 +491,7 @@ fn the_gates_of_fix_apply_hold() {
     // The write flags belong to --apply.
     for flag in [
         vec!["--by", "ana"],
-        vec!["--reason", "r"],
+        vec!["--reason", "Read the cited code and tests: r"],
         vec!["--force"],
         vec!["--actor", "agent"],
     ] {
@@ -485,7 +501,13 @@ fn the_gates_of_fix_apply_hold() {
         assert_eq!(out.status.code(), Some(2), "{flag:?}: {out:?}");
     }
     // An --ids entry that matches nothing fails.
-    let out = run_urzua(&dir, &apply_args("docs/milestones/MILE-99-x.md", "r"));
+    let out = run_urzua(
+        &dir,
+        &apply_args(
+            "docs/milestones/MILE-99-x.md",
+            "Read the cited code and tests: r",
+        ),
+    );
     assert_eq!(out.status.code(), Some(1), "{out:?}");
     assert_eq!(json(&out)["status"], "partial-failure");
     assert_eq!(read(&dir, &p1), record(1, UNPINNED, ""));
@@ -497,7 +519,10 @@ fn a_batch_is_capped_names_its_records_and_shares_one_reason_observed_failing() 
     let all = (1..=4).map(path).collect::<Vec<_>>().join(",");
     let before: Vec<String> = (1..=4).map(|n| read(&dir, &path(n))).collect();
     // Four records against a cap of three: refused whole, nothing truncated.
-    let out = run_urzua(&dir, &apply_args(&all, "same words"));
+    let out = run_urzua(
+        &dir,
+        &apply_args(&all, "Read the cited code and tests: same words"),
+    );
     let parsed = json(&out);
     assert_eq!(out.status.code(), Some(2), "{parsed}");
     assert!(
@@ -511,7 +536,15 @@ fn a_batch_is_capped_names_its_records_and_shares_one_reason_observed_failing() 
     let out = run_urzua(
         &dir,
         &[
-            "reverify", "--apply", "--force", "--by", "ana", "--actor", "human", "--reason", "r",
+            "reverify",
+            "--apply",
+            "--force",
+            "--by",
+            "ana",
+            "--actor",
+            "human",
+            "--reason",
+            "Read the cited code and tests: r",
         ],
     );
     assert_eq!(out.status.code(), Some(2), "{out:?}");
@@ -548,7 +581,15 @@ fn force_with_a_single_candidate_is_accepted() {
     let out = run_urzua(
         &dir,
         &[
-            "reverify", "--apply", "--force", "--by", "ana", "--actor", "human", "--reason", "r",
+            "reverify",
+            "--apply",
+            "--force",
+            "--by",
+            "ana",
+            "--actor",
+            "human",
+            "--reason",
+            "Read the cited code and tests: r",
         ],
     );
     assert_eq!(json(&out)["status"], "applied", "{out:?}");
@@ -569,7 +610,7 @@ fn an_agent_may_renew_but_not_where_the_entrys_level_is_error() {
         "--actor",
         "agent",
         "--reason",
-        "r",
+        "Read the cited code and tests: r",
     ];
     let parsed = json(&run_urzua(&dir, &args));
     assert_eq!(parsed["status"], "partial-failure", "{parsed}");
@@ -592,7 +633,10 @@ fn an_agent_may_renew_but_not_where_the_entrys_level_is_error() {
 fn without_an_anchor_field_the_command_cannot_renew_and_says_so() {
     let rule = "    level: warn\n    require_pin: [code, test]\n    periods:\n      - {type: milestone, status: [Done], days: 30}\n";
     let dir = fixture("no-anchor", &config(rule, ""), 1);
-    let out = run_urzua(&dir, &apply_args(&path(1), "r"));
+    let out = run_urzua(
+        &dir,
+        &apply_args(&path(1), "Read the cited code and tests: r"),
+    );
     let parsed = json(&out);
     assert_eq!(parsed["status"], "partial-failure", "{parsed}");
     assert!(
@@ -628,7 +672,10 @@ fn a_record_with_no_revision_log_is_refused_and_untouched() {
     .unwrap();
     commit_all(&dir, 40);
     let before = read(&dir, &path(1));
-    let parsed = json(&run_urzua(&dir, &apply_args(&path(1), "r")));
+    let parsed = json(&run_urzua(
+        &dir,
+        &apply_args(&path(1), "Read the cited code and tests: r"),
+    ));
     assert_eq!(parsed["status"], "partial-failure", "{parsed}");
     assert_eq!(read(&dir, &path(1)), before);
 }
@@ -661,7 +708,10 @@ fn a_path_outside_the_repository_or_untracked_does_not_resolve_observed_failing(
         assert_eq!(loc["check"], "unresolved", "{l}: {loc}");
     }
     assert!(!rec["refused"].as_array().unwrap().is_empty(), "{rec}");
-    let parsed = json(&run_urzua(&dir, &apply_args(&path(1), "r")));
+    let parsed = json(&run_urzua(
+        &dir,
+        &apply_args(&path(1), "Read the cited code and tests: r"),
+    ));
     assert_eq!(parsed["status"], "partial-failure", "{parsed}");
     assert_eq!(read(&dir, &path(1)), before);
 }
@@ -681,7 +731,7 @@ fn an_unspecified_actor_is_refused_where_the_level_is_error_observed_failing() {
             "--by",
             "ana",
             "--reason",
-            "r",
+            "Read the cited code and tests: r",
         ],
     ));
     assert_eq!(parsed["status"], "partial-failure", "{parsed}");
@@ -712,7 +762,7 @@ fn force_with_ids_renews_only_the_named_record_observed_failing() {
             "--actor",
             "human",
             "--reason",
-            "r",
+            "Read the cited code and tests: r",
         ],
     );
     let parsed = json(&out);
@@ -807,7 +857,10 @@ fn an_item_only_milestone_is_renewed_with_pins_on_its_item_locators_observed_fai
 fn a_record_with_no_locator_field_and_no_item_evidence_is_refused_with_the_reason() {
     let dir = item_fixture("noevidence", "- It is built.\n");
     let before = read(&dir, &path(1));
-    let out = run_urzua(&dir, &apply_args(&path(1), "checked"));
+    let out = run_urzua(
+        &dir,
+        &apply_args(&path(1), "Read the cited code and tests: checked"),
+    );
     let text = format!(
         "{}{}",
         String::from_utf8_lossy(&out.stdout),
@@ -905,4 +958,29 @@ fn apply_renews_a_record_that_starts_with_a_byte_order_mark() {
     let text = read(&dir, &p1);
     assert!(text.starts_with('\u{feff}'), "the mark is kept: {text:?}");
     assert!(stamped_today(&text), "{text}");
+}
+
+/// `reverify --apply` holds its reason to the same `attestation.reason` minimum
+/// as a re-pin: 3 words and 12 characters by default, configurable.
+#[test]
+fn a_renewal_reason_below_the_configured_minimum_is_refused() {
+    let dir = fixture("reason-thin", &config(RULE, ""), 1);
+    let p1 = path(1);
+    let before = read(&dir, &p1);
+    let out = run_urzua(&dir, &apply_args(&p1, "ok"));
+    assert_eq!(out.status.code(), Some(2), "{out:?}");
+    let message = json(&out).to_string();
+    assert!(
+        message.contains("at least 3 words") && message.contains("12 characters"),
+        "{message}"
+    );
+    assert_eq!(read(&dir, &p1), before, "nothing is written");
+    let low = format!(
+        "{}attestation:\n  reason: {{min_words: 1, min_chars: 2}}\n",
+        config(RULE, "")
+    );
+    std::fs::write(dir.join(".urzua/config.yaml"), low).unwrap();
+    commit_all(&dir, 40);
+    let out = run_urzua(&dir, &apply_args(&p1, "ok"));
+    assert_eq!(json(&out)["status"], "applied", "{out:?}");
 }

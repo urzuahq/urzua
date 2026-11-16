@@ -65,7 +65,7 @@ pub fn parse_sections_to_depth(body: &str, first_line: usize, depth: u8) -> Vec<
         if in_comment {
             // Everything up to the closing `-->` is comment text, a `##` line
             // included.
-            in_comment = !line.contains("-->");
+            in_comment = still_in_comment(line, true);
         } else if let Some(f) = fence {
             if f.is_closed_by(line) {
                 fence = None;
@@ -102,11 +102,27 @@ pub fn parse_sections_to_depth(body: &str, first_line: usize, depth: u8) -> Vec<
     sections
 }
 
-/// `Some(true)` when `line` opens an HTML comment it does not close, `Some(false)`
-/// when it opens and closes one, `None` when it does not start with `<!--`.
+/// `Some(true)` when `line` starts an HTML comment and ends inside one (its last
+/// `<!--` is not closed), `Some(false)` when every comment it opens is closed,
+/// `None` when it does not start with `<!--`.
 fn html_comment_opening(line: &str) -> Option<bool> {
     let rest = indented_at_most_three(line)?.strip_prefix("<!--")?;
-    Some(!rest.contains("-->"))
+    Some(still_in_comment(rest, true))
+}
+
+/// Whether a line that begins inside a comment (`inside`) or outside one ends
+/// inside one, following each `-->` and `<!--` in turn.
+fn still_in_comment(mut rest: &str, mut inside: bool) -> bool {
+    loop {
+        let marker = if inside { "-->" } else { "<!--" };
+        match rest.find(marker) {
+            Some(at) => {
+                rest = &rest[at + marker.len()..];
+                inside = !inside;
+            }
+            None => return inside,
+        }
+    }
 }
 
 /// An open fenced code block: the marker character and its run length.
