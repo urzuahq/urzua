@@ -131,6 +131,27 @@ fn a_raised_hook_timeout_is_installed_and_a_changed_one_is_drift_until_update() 
         v.to_string().contains("is out-of-date"),
         "doctor names the drift: {v}"
     );
+    let start = {
+        let mut child = common::urzua()
+            .args(["harness", "run", "session-start"])
+            .current_dir(&dir)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let request = serde_json::json!({"event": "session-start", "cwd": dir.to_string_lossy()});
+        let _ = child
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(request.to_string().as_bytes());
+        child.wait_with_output().unwrap()
+    };
+    let start = String::from_utf8_lossy(&start.stdout);
+    assert!(
+        start.contains("is out of date") && start.contains("hook_timeout_seconds"),
+        "the session-start check names the drift: {start}"
+    );
     let (code, v, _) = urzua(&dir, &["harness", "update"]);
     assert_eq!(code, 0, "{v}");
     assert_eq!(timeouts(&dir), [200]);

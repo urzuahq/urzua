@@ -1415,6 +1415,28 @@ pub fn run_limits(config: Option<PathBuf>) -> ExitCode {
     }
 }
 
+/// The hash of each hook entry the bundle and configuration want now, keyed by
+/// (settings file, entry key), for the session-start check.
+pub(crate) fn wanted_entry_hashes(
+    root: &Path,
+    config: &urzua_core::config::Config,
+    adapters: &[String],
+) -> BTreeMap<(String, String), String> {
+    let env = Env {
+        root: root.to_path_buf(),
+        types: declared_types(config),
+        harness: config.harness.clone(),
+    };
+    desired(&env, adapters)
+        .map(|want| {
+            want.entries
+                .iter()
+                .map(|(file, e)| ((file.clone(), e.key()), e.hash()))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 /// The adapters the lock names, for `doctor` and `session-start`.
 pub(crate) fn installed_lock(root: &Path) -> Result<Option<Lock>, String> {
     read(root, LOCK_PATH)?.map(|t| Lock::parse(&t)).transpose()

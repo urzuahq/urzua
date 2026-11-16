@@ -124,7 +124,7 @@ enum Line {
 /// `max + 1` bytes: the rest of a longer line is read and dropped.
 fn read_line(input: &mut impl BufRead, buf: &mut Vec<u8>, max: usize) -> std::io::Result<Line> {
     buf.clear();
-    let limit = max as u64 + 1;
+    let limit = (max as u64).saturating_add(1);
     let n = (&mut *input).take(limit).read_until(b'\n', buf)?;
     if n == 0 {
         return Ok(Line::End);

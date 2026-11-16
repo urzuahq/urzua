@@ -93,12 +93,13 @@ MCP_LIMIT_KEYS = {"MCP_MAX_DEPTH": "input_depth", "MCP_MAX_PATH": "path_length",
 def load_limits(argv, cwd):
     """Raises the caps to the configured `harness.limits`, read from the engine
     (`urzua harness limits`). A value that cannot be obtained, or is below the
-    floor, leaves the floor: never unlimited."""
+    floor, leaves the floor: never unlimited. The session's project is asked first, as the
+    engine judges every edit against it first."""
     exe = argv[0] if argv else "urzua"
     if exe == "urzua" and os.environ.get("URZUA_BIN"):
         exe = os.environ["URZUA_BIN"]
     try:
-        p = subprocess.run([exe, "harness", "limits"], capture_output=True, text=True, cwd=cwd or None, timeout=30)
+        p = subprocess.run([exe, "harness", "limits"], capture_output=True, text=True, cwd=PROJECT_DIR or cwd or None, timeout=30)
         limits = json.loads(p.stdout).get("limits")
     except (OSError, ValueError, AttributeError, subprocess.SubprocessError):
         return
