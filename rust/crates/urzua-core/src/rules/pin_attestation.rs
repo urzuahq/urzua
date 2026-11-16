@@ -62,16 +62,28 @@ fn short(hash: &str) -> &str {
     hash.get(..12).unwrap_or(hash)
 }
 
-/// Whether a row accounts for `locator` moving from one of `base` to `head`:
-/// the row's hashes equal the base's and the head's exactly, so a row is not
-/// reused for another change. A renewal row carries no old hash and accounts
-/// for the hash it renewed at.
+/// Whether the rows account for `locator` moving from one of `base` to `head`:
+/// a chain of rows, each moving the pin from the hash the step before reached
+/// to its own new hash, leads from a base hash to the head's exactly (a branch
+/// that re-pinned, merged and re-pinned again writes three rows). A row's hashes
+/// must match exactly, so a row is not reused for another change. A renewal row
+/// carries no old hash and reaches the hash it renewed at.
 fn accounted(rows: &[RowPin], locator: &str, base: &[String], head: &str) -> bool {
-    rows.iter().any(|r| {
-        r.locator == locator
-            && r.to == short(head)
-            && (r.from.is_empty() || r.from.iter().any(|f| base.iter().any(|b| f == short(b))))
-    })
+    let mut reached: Vec<&str> = base.iter().map(|b| short(b)).collect();
+    let rows: Vec<&RowPin> = rows.iter().filter(|r| r.locator == locator).collect();
+    loop {
+        let before = reached.len();
+        for r in &rows {
+            let from_reached =
+                r.from.is_empty() || r.from.iter().any(|f| reached.contains(&f.as_str()));
+            if from_reached && !reached.contains(&r.to.as_str()) {
+                reached.push(&r.to);
+            }
+        }
+        if reached.len() == before {
+            return reached.contains(&short(head));
+        }
+    }
 }
 
 /// What a record's pins did between the base and the head that no added row
@@ -214,6 +226,21 @@ mod tests {
         )
         .is_empty());
         assert!(unattested(&base, &head, &[row("src/a.rs", &[], "bbbbbbbbbbbb")]).is_empty());
+        let chain = [
+            row("src/a.rs", &["aaaaaaaaaaaa"], "dddddddddddd"),
+            row(
+                "src/a.rs",
+                &["dddddddddddd", "eeeeeeeeeeee"],
+                "ffffffffffff",
+            ),
+            row("src/a.rs", &["ffffffffffff"], "bbbbbbbbbbbb"),
+        ];
+        assert!(unattested(&base, &head, &chain).is_empty());
+        assert_eq!(
+            unattested(&base, &head, &chain[1..]).len(),
+            1,
+            "a broken chain"
+        );
         for reused in [
             row("src/a.rs", &["cccccccccccc"], "bbbbbbbbbbbb"),
             row("src/a.rs", &["aaaaaaaaaaaa"], "cccccccccccc"),
