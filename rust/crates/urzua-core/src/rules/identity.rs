@@ -64,6 +64,61 @@ pub fn identity_collision(
     )
 }
 
+/// A tracked record file that is a symlink whose real location is outside the
+/// repository or outside its record type's directory. Found by the caller, which
+/// reads the filesystem; the core opens nothing. The file is never read.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EscapingRecord {
+    /// The tracked path, repository-relative.
+    pub path: PathBuf,
+    /// Where it resolves to and why that is refused, as one phrase.
+    pub reason: String,
+}
+
+/// A record that is a symlink out of its governed tree is refused, not read: it
+/// would disclose a file outside the repository, or let the content a gate
+/// judges live at a path no record type governs (`ADR-89` amendment of
+/// 2026-11-14). Reported rather than skipped in silence (`ADR-101`).
+pub fn identity_record_symlink_escapes(
+    config: &Config,
+    tracked: &[PathBuf],
+    escaping: &[EscapingRecord],
+) -> (RuleExecution, Vec<Finding>) {
+    const RULE_ID: &str = RULE_IDENTITY_RECORD_SYMLINK_ESCAPES;
+    let candidates: Vec<&PathBuf> = tracked
+        .iter()
+        .filter(|p| {
+            p.file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(crate::record::is_governed_record_filename)
+                && config.record_types.values().any(|t| t.owns_dir(p.parent()))
+        })
+        .collect();
+    let population = census(PopulationUnit::Path, candidates, |_| Outcome::Examined);
+    let mut sorted: Vec<&EscapingRecord> = escaping.iter().collect();
+    sorted.sort_by(|a, b| a.path.cmp(&b.path));
+    let findings = sorted
+        .into_iter()
+        .map(|e| {
+            Finding::new(
+                RULE_ID,
+                FindingSeverity::Error,
+                e.path.clone(),
+                ActionSource::new("record-symlink-escapes"),
+                format!(
+                    "is a symlink {}; urzua refuses to read it, so no rule judges its content. \
+                     Replace the link with the record itself, or remove it",
+                    e.reason
+                ),
+            )
+        })
+        .collect();
+    (
+        RuleExecution::ran(RULE_ID, population, Vec::new()),
+        findings,
+    )
+}
+
 /// Records by normalized identifier.
 pub type RecordIndex<'a> = HashMap<crate::values::RecordId, &'a Record>;
 

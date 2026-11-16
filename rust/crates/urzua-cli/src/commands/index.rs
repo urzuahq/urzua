@@ -38,7 +38,9 @@ pub fn run(config_path: Option<PathBuf>, apply: bool) -> ExitCode {
         records,
         full_text,
         ..
-    } = match Session::load(workspace, |_, _, _| Ok(())) {
+    } = match Session::load(workspace, |_, _, _| Ok(()))
+        .and_then(Session::refusing_escaping_records)
+    {
         Ok(session) => session,
         Err(e) => return emit(&CouldNotRun::from(e)),
     };

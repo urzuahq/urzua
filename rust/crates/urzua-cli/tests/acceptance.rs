@@ -146,6 +146,9 @@ struct Commit {
     rename: Vec<Rename>,
     #[serde(default)]
     remove: Vec<String>,
+    /// Symlinks to create, path to link target (as written in the link).
+    #[serde(default)]
+    symlink: std::collections::BTreeMap<String, String>,
 }
 
 #[derive(Deserialize)]
@@ -483,6 +486,11 @@ fn evaluate(case: &Case, corpus_dir: &Path, mutate: Option<&str>) -> Result<Vec<
                 let to = t.join(p);
                 std::fs::create_dir_all(to.parent().unwrap()).map_err(|e| e.to_string())?;
                 std::fs::write(&to, text).map_err(|e| e.to_string())?;
+            }
+            for (p, target) in &c.symlink {
+                let to = t.join(p);
+                std::fs::create_dir_all(to.parent().unwrap()).map_err(|e| e.to_string())?;
+                std::os::unix::fs::symlink(target, &to).map_err(|e| e.to_string())?;
             }
             git(&t, &["add", "-A"])?;
             git(&t, &["commit", "-q", "-m", &format!("change {}", n + 1)])?;

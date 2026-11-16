@@ -68,6 +68,10 @@ fn executed(v: &serde_json::Value) -> Vec<String> {
         .unwrap()
         .iter()
         .map(|e| e["rule"].as_str().unwrap().to_string())
+        // The refusal that cannot be turned off runs under every selection
+        // (`identity.record-symlink-escapes`, SPEC-2); these tests count the rules
+        // a selection chose.
+        .filter(|rule| rule != "identity.record-symlink-escapes")
         .collect()
 }
 

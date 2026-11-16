@@ -76,6 +76,21 @@ when it replaces an adopter's linter (`MILE-102`), runs green in two codebases w
 agent integration (`MILE-13`, `MILE-17`, `MILE-29`). Phase 3 is attestation, non-git identity and backfill (`MILE-19`, `MILE-20`,
 `MILE-31`). The milestones, not this ADR, carry the detail and the current state.
 
+## Amendment (2026-11-15): configuration owns behaviour is a standing principle
+
+Accepted by the maintainer on 2026-11-15. The Decision is unchanged; this adds one standing principle to the list above.
+
+- **Configuration owns behaviour.** Any value or vocabulary that shapes what a user or agent sees or can do is declared in
+  configuration, and the code default equals today's value, so a configuration that does not declare it behaves as before.
+  Hard-coding such a value is a defect unless it is a format invariant (a grammar other tools depend on) or a security floor (a
+  bound configuration may raise but never weaken), each listed with its reason in `SPEC-3`.
+
+"Opt-in configuration" covers a behaviour that is new. This principle covers the values and vocabularies the code already carries:
+limits, thresholds, status and field names, message vocabulary and network settings. The engine is general only as far as an
+adopter can change these without changing the code (`SPEC-1`), and a reviewer had no principle to cite when a change added a
+hard-coded one. The existing hard-coded values are moved into configuration by later changes, each keeping its current value as
+the default; until `SPEC-3` lists an exception with its reason, a hard-coded value of this kind is treated as a defect.
+
 ## Reversibility
 
 Easy to walk back, because it adds no code and no rule: it records a standard and cites the records that carry the behaviour. A
@@ -104,3 +119,4 @@ holding a proposal to a principle that has since moved, which the amendment requ
 > |---|---|---|
 > | 2026-11-14 | Drafted as Proposed. **Why:** Approved by the maintainer in conversation on 2026-11-14; Status moves to Accepted in a follow-up the maintainer approves. | **substantive** |
 > | 2026-11-14 | Status changed from Proposed to Accepted. **Why:** Accepted by the maintainer on 2026-11-14. | **substantive** |
+> | 2026-11-15 | Amendment added: "Configuration owns behaviour" is a standing principle. **Why:** Accepted by the maintainer on 2026-11-15; hard-coded values and vocabularies had no principle a review could cite. | **substantive** |

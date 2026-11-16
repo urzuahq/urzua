@@ -23,7 +23,12 @@
 /// verdict for adopters who want one.
 pub(crate) fn any_rule_looked(executed: &[urzua_core::report::RuleExecution]) -> bool {
     use urzua_core::report::RuleStatus;
-    executed.iter().any(|e| e.status == RuleStatus::Ran)
+    // A rule that is on for every configuration looked at the corpus whether or
+    // not the repository declared a rule, so it does not count: a configuration
+    // that declares none still reports `not-run`.
+    executed
+        .iter()
+        .any(|e| e.status == RuleStatus::Ran && urzua_core::rules::default_on(&e.rule).is_none())
 }
 
 /// The verdict of a `check` run, from what it established. Pure, so each
