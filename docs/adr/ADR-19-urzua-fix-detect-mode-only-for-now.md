@@ -2,7 +2,7 @@
 Stable-Id: 01M6R3NK48R3KZZ3SZE3FYKSXA
 Status: Accepted
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-core/src/fix.rs@sha256:0b2c8b793c0f780b808782771b755412e7385b7aea0b0be33a268cddaf6910dd, test:rust/crates/urzua-core/src/fix.rs@sha256:0b2c8b793c0f780b808782771b755412e7385b7aea0b0be33a268cddaf6910dd
+Realized-by: code:rust/crates/urzua-core/src/fix.rs@sha256:a2c71a99c6e372be9b00ae924ecadc3705bdc9a08318d8d69006661689302fd3, test:rust/crates/urzua-core/src/fix.rs@sha256:a2c71a99c6e372be9b00ae924ecadc3705bdc9a08318d8d69006661689302fd3
 Date: 2026-09-05
 Accepted-on: 2026-09-05
 Author: beauwilliams
@@ -87,3 +87,4 @@ when they land.
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/fix.rs` fcc0a952e83d -> af5e5c811c17. Reason: fix.rs: the only change on this branch is one added `hooks: Default::default()` field in a Config struct literal, needed by the new optional hooks key, merged with main's own change to the file; behaviour this record cites is unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/fix.rs` af5e5c811c17 -> f95de51150cf. Reason: core fix.rs adds the fix::pin module and moves a misplaced doc comment back onto apply_rebaseline; the record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/fix.rs` f95de51150cf -> 0b2c8b793c0f. Reason: core fix.rs declares the new_log module and adds a creates_revision_log field to Rebaseline, with apply_rebaseline itself unchanged; the claim this record makes still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/fix.rs` 0b2c8b793c0f -> a2c71a99c6e3. Reason: core fix.rs adds narrative_column to a test helper shape, with apply_rebaseline and the behaviour cited unchanged; the claim this record makes still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |

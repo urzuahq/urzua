@@ -499,6 +499,34 @@ fn list_trees<'a>(
     Ok(listed)
 }
 
+/// The commits, newest first and at most `limit`, that changed how often
+/// `text` occurs in `path` (`git log -S`): where a section naming it was added
+/// or removed.
+pub fn commits_changing_text(
+    repo_root: &Path,
+    path: &Path,
+    text: &str,
+    limit: usize,
+) -> Result<Vec<String>, DiscoveryError> {
+    let out = run_git(
+        repo_root,
+        &[
+            "--literal-pathspecs",
+            "log",
+            "--format=%H",
+            &format!("-n{limit}"),
+            &format!("-S{text}"),
+            "--",
+            &path.display().to_string(),
+        ],
+    )?;
+    Ok(out
+        .lines()
+        .filter(|l| !l.is_empty())
+        .map(str::to_string)
+        .collect())
+}
+
 /// A file as it was at `commit`: how a deleted record is read once it is
 /// gone from the tree.
 pub fn read_at_commit(

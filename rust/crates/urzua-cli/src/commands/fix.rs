@@ -1021,6 +1021,7 @@ fn write_rebaseline(
         args.repo_root,
         args.config,
         record_type,
+        &rb.record,
         &fresh,
         "re-baseline",
     )?;
@@ -1051,15 +1052,33 @@ fn record_type_of<'a>(records: &'a [Record], path: &Path) -> Option<&'a str> {
         .map(|r| r.record_type.as_str())
 }
 
-/// What an evidence write does about the revision log of a record of
-/// `record_type` whose text is `content`, and the empty section it would
-/// create: the type's template's own section, else the declared shape.
-pub(crate) fn evidence_log_plan(
+/// What an evidence write does about a record's revision log.
+pub(crate) enum EvidenceLog {
+    /// The record has one.
+    Present,
+    /// The record's text with an empty log placed in it.
+    Create(String),
+    /// Refused, with the command that clears it when there is one.
+    Refused(String, Option<NextAction>),
+}
+
+/// How many commits that changed the log identity's text are read for a copy
+/// of the record that had a log.
+const LOG_HISTORY_DEPTH: usize = 20;
+
+/// What an evidence write does about the revision log of `record` (of
+/// `record_type`, text `content`). A missing log is created in the type's
+/// template's shape, else the declared one, unless a committed copy of the
+/// record had one: a log deleted by hand must be restored, never replaced by a
+/// tool-written one that would hide what it held.
+pub(crate) fn evidence_log(
     repo_root: &Path,
     config: &Config,
     record_type: Option<&str>,
+    record: &Path,
     content: &str,
-) -> (LogPlan, urzua_core::config::RevisionLogId, Vec<String>) {
+    verb: &str,
+) -> EvidenceLog {
     let id = record_type
         .map(|t| config.revision_log_id(t))
         .unwrap_or_default();
@@ -1067,57 +1086,92 @@ pub(crate) fn evidence_log_plan(
         .map(|t| config.revision_log_shape(t))
         .unwrap_or_default();
     let plan = new_log::plan(content, &id, &shape);
-    let section = if plan == LogPlan::Create {
-        let template = record_type.and_then(|t| {
-            urzua_io::read_to_string(&repo_root.join(".urzua/templates").join(format!("{t}.md")))
-                .ok()
-        });
-        new_log::section(&id, &shape, template.as_deref())
-    } else {
-        Vec::new()
-    };
-    (plan, id, section)
+    if let Some(refusal) = new_log::refusal(&plan, &id, verb) {
+        let action = (plan == LogPlan::NoBody).then(|| add_heading_action(record));
+        return EvidenceLog::Refused(refusal, action);
+    }
+    if plan == LogPlan::Present {
+        return EvidenceLog::Present;
+    }
+    if let Some(rev) = committed_log(repo_root, record, &id, &shape) {
+        let spec = format!("{rev}:{}", record.display());
+        return EvidenceLog::Refused(
+            format!(
+                "the committed copy {spec} has a Revision log ({}) that the record no longer has -- refusing to {verb} into a new log; restore that section first",
+                id.describe()
+            ),
+            Some(NextAction::runs_as_printed(
+                urzua_core::report::shell_command(&["git", "show", spec.as_str()]),
+                format!("shows the copy of {} whose Revision log to restore", record.display()),
+            )),
+        );
+    }
+    let template = record_type.and_then(|t| {
+        urzua_io::read_to_string(&repo_root.join(".urzua/templates").join(format!("{t}.md"))).ok()
+    });
+    let section = new_log::section(&id, &shape, template.as_deref());
+    EvidenceLog::Create(new_log::insert(content, &section, &id, template.as_deref()))
 }
 
-/// `content` with an empty revision log appended when it has none, and
-/// whether one was; refused when the record has no body section for the log
-/// to follow. Only for writes whose rows are evidence rows.
+/// The revision (`HEAD`, or a commit that added or removed the log identity's
+/// text, or its parent) at which `record` had a revision log, if any.
+fn committed_log(
+    repo_root: &Path,
+    record: &Path,
+    id: &urzua_core::config::RevisionLogId,
+    shape: &urzua_core::config::RevisionLogShape,
+) -> Option<String> {
+    let commits = urzua_io::commits_changing_text(repo_root, record, id.name(), LOG_HISTORY_DEPTH)
+        .unwrap_or_default();
+    std::iter::once("HEAD".to_string())
+        .chain(commits.iter().flat_map(|c| [format!("{c}^"), c.clone()]))
+        .find(|rev| {
+            matches!(
+                urzua_io::read_at_commit_if_present(repo_root, rev, record),
+                Ok(Some(text)) if new_log::plan(&text, id, shape) == LogPlan::Present
+            )
+        })
+}
+
+/// `content` with an empty revision log placed in it when it has none, and
+/// whether one was; refused as `evidence_log` refuses. Only for writes whose
+/// rows are evidence rows.
 pub(crate) fn with_evidence_log(
     repo_root: &Path,
     config: &Config,
     record_type: Option<&str>,
+    record: &Path,
     content: &str,
     verb: &str,
 ) -> Result<(String, bool), String> {
-    match evidence_log_plan(repo_root, config, record_type, content) {
-        (LogPlan::Present, _, _) => Ok((content.to_string(), false)),
-        (LogPlan::Create, _, section) => Ok((new_log::append(content, &section), true)),
-        (LogPlan::NoBody, id, _) => Err(new_log::no_body_refusal(&id, verb)),
+    match evidence_log(repo_root, config, record_type, record, content, verb) {
+        EvidenceLog::Present => Ok((content.to_string(), false)),
+        EvidenceLog::Create(text) => Ok((text, true)),
+        EvidenceLog::Refused(error, _) => Err(error),
     }
 }
 
-const HEADING_PLACEHOLDER: &str = "<heading>";
-
-/// The command that gives `record` a heading for a new revision log to follow.
-pub(crate) fn add_heading_action(record: &Path) -> NextAction {
+/// The command that gives `record` a heading, its file stem, for a new
+/// revision log to follow.
+fn add_heading_action(record: &Path) -> NextAction {
+    let stem = record
+        .file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let quoted = urzua_core::report::shell_command(&[stem]);
     let path = urzua_core::report::shell_command(&[record.display().to_string()]);
-    NextAction {
-        command: format!("printf '\\n# %s\\n' '{HEADING_PLACEHOLDER}' >> {path}"),
-        reason: format!(
-            "{} has no body section for a new revision log to follow; this appends a heading, then re-run the write",
+    NextAction::runs_as_printed(
+        format!("printf '\\n# %s\\n' {quoted} >> {path}"),
+        format!(
+            "{} has no body section for a new revision log to follow; this appends a heading named after the file (rename it as you like), then re-run the write",
             record.display()
         ),
-        inputs: vec![urzua_core::report::ActionInput {
-            placeholder: HEADING_PLACEHOLDER.to_string(),
-            flag: String::new(),
-            means: "the record's title, one line".to_string(),
-        }],
-    }
+    )
 }
 
 /// Marks each listed re-pin that would create its record's revision log, and
-/// moves one that could not (no body section) into `failed`, returning the
-/// command that clears the first such refusal.
+/// moves one that is refused into `failed`, returning the command that clears
+/// the first refusal that has one.
 fn plan_rebaseline_logs(
     args: &RebaselineArgs<'_>,
     found: Vec<Rebaseline>,
@@ -1129,15 +1183,24 @@ fn plan_rebaseline_logs(
         let content =
             urzua_io::read_to_string(&args.repo_root.join(&rb.record)).unwrap_or_default();
         let record_type = record_type_of(args.records, &rb.record);
-        match evidence_log_plan(args.repo_root, args.config, record_type, &content) {
-            (LogPlan::Present, _, _) => kept.push(rb),
-            (LogPlan::Create, _, _) => {
+        match evidence_log(
+            args.repo_root,
+            args.config,
+            record_type,
+            &rb.record,
+            &content,
+            "re-baseline",
+        ) {
+            EvidenceLog::Present => kept.push(rb),
+            EvidenceLog::Create(_) => {
                 rb.creates_revision_log = true;
                 kept.push(rb);
             }
-            (LogPlan::NoBody, id, _) => {
-                action.get_or_insert_with(|| add_heading_action(&rb.record));
-                failed.push((rb.record, new_log::no_body_refusal(&id, "re-baseline")));
+            EvidenceLog::Refused(error, next) => {
+                if action.is_none() {
+                    action = next;
+                }
+                failed.push((rb.record, error));
             }
         }
     }
@@ -1148,6 +1211,25 @@ fn plan_rebaseline_logs(
 mod tests {
     use super::*;
     use crate::session::{Session, Workspace};
+
+    #[test]
+    fn the_heading_action_quotes_a_file_stem_with_a_single_quote() {
+        let dir = std::env::temp_dir().join(format!("urzua-heading-quote-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let record = Path::new("it's a record.md");
+        std::fs::write(dir.join(record), "---\n---\n").unwrap();
+        let action = add_heading_action(record);
+        assert!(action.inputs.is_empty());
+        let ran = std::process::Command::new("sh")
+            .args(["-c", &action.command])
+            .current_dir(&dir)
+            .status()
+            .unwrap();
+        let text = std::fs::read_to_string(dir.join(record)).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(ran.success());
+        assert_eq!(text, "---\n---\n\n# it's a record\n");
+    }
 
     fn git(dir: &std::path::Path, args: &[&str]) {
         let status = std::process::Command::new("git")

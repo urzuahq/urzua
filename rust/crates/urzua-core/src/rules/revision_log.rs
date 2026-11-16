@@ -419,27 +419,48 @@ pub(crate) fn find_revision_log_entries(
     Some(parse_log_table(&lines, marker_idx, shape))
 }
 
-/// The index of the line that opens the log, outside any fenced code block.
-pub(crate) fn log_marker_line(lines: &[&str], id: &crate::config::RevisionLogId) -> Option<usize> {
-    let mut fence: Option<char> = None;
-    for (idx, line) in lines.iter().enumerate() {
+/// Fenced code blocks, tracked line by line: a fence opens on ```` ``` ```` or
+/// `~~~` after any blockquote marks and closes only on the same character, so
+/// every reader of a record's structure skips the same lines.
+#[derive(Debug, Default)]
+pub(crate) struct Fences {
+    open: Option<char>,
+}
+
+impl Fences {
+    /// Whether `line`, read next, is outside every fence and not a fence line.
+    pub(crate) fn is_prose(&mut self, line: &str) -> bool {
         let stripped = line.trim_start_matches(|c: char| c == '>' || c.is_whitespace());
         let fence_char = ["```", "~~~"]
             .iter()
             .find(|f| stripped.starts_with(**f))
             .and_then(|f| f.chars().next());
-        match (fence, fence_char) {
-            (None, Some(c)) => fence = Some(c),
-            (Some(open), Some(c)) if open == c => fence = None,
-            (Some(_), _) => {}
-            (None, None) => {
-                if id.opens_at(line) {
-                    return Some(idx);
-                }
+        match (self.open, fence_char) {
+            (None, Some(c)) => {
+                self.open = Some(c);
+                false
             }
+            (Some(open), Some(c)) if open == c => {
+                self.open = None;
+                false
+            }
+            (Some(_), _) => false,
+            (None, None) => true,
         }
     }
-    None
+
+    /// Whether the lines read so far end inside a fence.
+    pub(crate) fn is_open(&self) -> bool {
+        self.open.is_some()
+    }
+}
+
+/// The index of the line that opens the log, outside any fenced code block.
+pub(crate) fn log_marker_line(lines: &[&str], id: &crate::config::RevisionLogId) -> Option<usize> {
+    let mut fences = Fences::default();
+    lines
+        .iter()
+        .position(|line| fences.is_prose(line) && id.opens_at(line))
 }
 
 /// The layout of a log from its header row "Date | Change | Class".

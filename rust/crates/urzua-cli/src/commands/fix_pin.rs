@@ -15,7 +15,7 @@ use urzua_core::record::Record;
 use urzua_core::report::{ActionInput, AttestationReport, FixFailure, NextAction, Notice, Report};
 use urzua_core::reverify::{apply_reverify, review_locators, FirstPin, ReverifyPlan};
 
-use super::fix::{refuse, resolve_attestation, validate_reason, Refusal};
+use super::fix::{refuse, resolve_attestation, validate_reason, EvidenceLog, Refusal};
 use crate::emit;
 use crate::session::Session;
 
@@ -39,6 +39,9 @@ struct PinEntryReport {
     /// `code:` and `test:` locators left unpinned, each with why.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     not_pinned: Vec<String>,
+    /// Whether the record has no revision log and the write creates one.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    creates_revision_log: bool,
 }
 
 #[derive(serde::Serialize)]
@@ -50,6 +53,8 @@ struct PinReport {
     identity: Option<AttestationReport>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     notices: Vec<Notice>,
+    #[serde(skip)]
+    failure_action: Option<NextAction>,
 }
 
 impl Report for PinReport {
@@ -60,6 +65,9 @@ impl Report for PinReport {
         ExitCode::from(u8::from(!self.failed.is_empty()))
     }
     fn next_action(&self) -> Option<NextAction> {
+        if let Some(next) = &self.failure_action {
+            return Some(next.clone());
+        }
         if self.status != "pins-available" {
             return None;
         }
@@ -147,11 +155,49 @@ pub(crate) fn run(config_path: Option<PathBuf>, args: PinArgs<'_>) -> Result<Exi
         attestation: &w.attestation,
         reason: &reason,
     });
+    let mut failure_action = None;
     for record in selected {
-        let outcome = match (args.replace, args.remove) {
-            (Some(spec), _) => replace(record, config, &read, spec, write.as_ref()),
-            (_, Some(old)) => remove(record, config, old, write.as_ref()),
-            _ => first_pins(record, config, &read, write.as_ref(), !args.ids.is_empty()),
+        let dispatch = |write: Option<&Write<'_>>| match (args.replace, args.remove) {
+            (Some(spec), _) => replace(record, config, &read, spec, write),
+            (_, Some(old)) => remove(record, config, old, write),
+            _ => first_pins(record, config, &read, write, !args.ids.is_empty()),
+        };
+        // The listing runs first, writing nothing, so a record the log plan
+        // refuses is never written and is refused the same way in both modes.
+        let outcome = match dispatch(None) {
+            Ok(Some(entry)) => {
+                let content =
+                    urzua_io::read_to_string(&repo_root.join(&record.path)).unwrap_or_default();
+                match super::fix::evidence_log(
+                    repo_root,
+                    config,
+                    Some(&record.record_type),
+                    &record.path,
+                    &content,
+                    "write",
+                ) {
+                    EvidenceLog::Refused(error, next) => {
+                        if failure_action.is_none() {
+                            failure_action = next;
+                        }
+                        Err(error)
+                    }
+                    plan => {
+                        let creates = matches!(plan, EvidenceLog::Create(_));
+                        let written = match &write {
+                            Some(w) => dispatch(Some(w)),
+                            None => Ok(Some(entry)),
+                        };
+                        written.map(|e| {
+                            e.map(|e| PinEntryReport {
+                                creates_revision_log: creates,
+                                ..e
+                            })
+                        })
+                    }
+                }
+            }
+            other => other,
         };
         if let Ok(Some(entry)) = &outcome {
             notices.extend(uncommitted_notices(repo_root, entry));
@@ -177,6 +223,7 @@ pub(crate) fn run(config_path: Option<PathBuf>, args: PinArgs<'_>) -> Result<Exi
         failed,
         identity: identity.map(|i| i.report),
         notices,
+        failure_action,
     }))
 }
 
@@ -208,6 +255,7 @@ impl Write<'_> {
             &self.session.repo_root,
             config,
             Some(&record.record_type),
+            &record.path,
             &fresh,
             "write",
         )?;
@@ -285,6 +333,7 @@ fn first_pins(
             .map(|p| format!("{}@sha256:{}", p.display, p.hash))
             .collect(),
         not_pinned,
+        creates_revision_log: false,
     }))
 }
 
@@ -362,6 +411,7 @@ fn replace(
         action: "replace",
         pins: vec![old.text(), new.text()],
         not_pinned: Vec::new(),
+        creates_revision_log: false,
     }))
 }
 
@@ -383,6 +433,7 @@ fn remove(
         action: "remove",
         pins: vec![old.text()],
         not_pinned: Vec::new(),
+        creates_revision_log: false,
     }))
 }
 

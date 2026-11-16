@@ -2007,6 +2007,7 @@ mod tests {
             date_column: date_column.map(str::to_string),
             tool_class: tool_class.to_string(),
             evidence_class: tool_class.to_string(),
+            narrative_column: "Change".to_string(),
         }
     }
 

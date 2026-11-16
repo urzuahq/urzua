@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5Q0XVK27P5T8FN72BN
-Version: '0.63'
+Version: '0.64'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/commands/fix.rs@sha256:e80f15fd68a9ec273993d7501f4423c20c0b5f9ba3a9b8ba128210c201b31dc0, code:rust/crates/urzua-core/src/fix.rs@sha256:0b2c8b793c0f780b808782771b755412e7385b7aea0b0be33a268cddaf6910dd, test:rust/crates/urzua-cli/tests/fix_paths_integration.rs@sha256:efefbffa3dc1992d97ff18582c7a15df6ff789f2f036b4ec3b36bfb910a12ff6, test:rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs@sha256:8fde6c3306f1251941663caa1ea02f71b7a4adc6f03b0074762d8aea01375384, test:rust/crates/urzua-cli/tests/fix_drift_integration.rs@sha256:ff69343ca324400bde79c266372f9a213728d4d4ef8202beca6e12e54aa35352
+Realized-by: code:rust/crates/urzua-cli/src/commands/fix.rs@sha256:372845c7b4a6743c80fe87d61163fa8e38aea57051a1be489a28965c5843b213, code:rust/crates/urzua-core/src/fix.rs@sha256:a2c71a99c6e372be9b00ae924ecadc3705bdc9a08318d8d69006661689302fd3, test:rust/crates/urzua-cli/tests/fix_paths_integration.rs@sha256:efefbffa3dc1992d97ff18582c7a15df6ff789f2f036b4ec3b36bfb910a12ff6, test:rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs@sha256:00d2df20a22b8a76a986a2580e0d2aacbb4b0a285ed46993cf2c33b5a7618795, test:rust/crates/urzua-cli/tests/fix_drift_integration.rs@sha256:ff69343ca324400bde79c266372f9a213728d4d4ef8202beca6e12e54aa35352
 Author: beauwilliams
 Subject: '`urzua fix` -- detecting and applying Embodiment corrections computed from evidence.'
 Implements: ADR-15, ADR-18, ADR-19, ADR-20
@@ -337,18 +337,31 @@ the same `PATHS` scoping.
   optional `, verified login: LOGIN`. The row ends `**Why:** the pinned evidence changed and ... re-verified that the claim still holds`, naming who re-verified by the actor kind: `an agent`, to be confirmed by a reviewer in the PR, for `agent`; `a person` for `human`; `the attesting actor` for `unspecified`. Earlier rows, `Re-baselined (attested by NAME): ...`, are left
   as they are.
 - **A record with no revision log gets one** (`MILE-310`). A re-pin row is an evidence row, so a
-  record with no log section is not refused: the write appends the section at the end of the record,
-  after one blank line, and the re-pin row is its first row. The section is the type's template's own
-  (`.urzua/templates/<type>.md`, its identity line through the header's separator row, without the
-  template's rows) when the template has a readable one, else one built from the declared
-  `revision_log` identity (a marker as a blockquote, a heading as `##`) and the declared date and
-  class columns with `Change` between them. Detect marks such a record `creates_revision_log: true`, as
-  does the applied entry. A record with no Markdown heading below its header has no body section a
-  log can follow and is refused in both modes, naming the missing section, with a `next_action` that
-  appends a `<heading>` to the record. `fix --pin` (first pin, `--replace`, `--remove`) creates the
-  log the same way; a write whose row is not an evidence row (a Tier 1 or 2 repair, `reverify`)
-  still refuses a record with no log where the log is required. *(Decided by the builder on
-  2026-11-16, pending maintainer review.)*
+  record with no log section is not refused: the write creates the section and the re-pin row is its
+  first row. The section is the type's template's own (`.urzua/templates/<type>.md`, its identity
+  line through the header's separator row, without the template's rows) when the template has a
+  readable one, else one built from the declared `revision_log` identity (a marker as a blockquote, a
+  heading as `##`) and the declared date, narrative (`narrative_column`, default `Change`) and class
+  columns. It is placed where the template places its log: before the record's first heading that
+  the template puts after the log's identity line, set off by blank lines, so `section.order` holds;
+  with no template, no log in it or no such heading in the record, at the end after one blank line.
+  Detect marks such a record `creates_revision_log: true`, as does the applied entry. Detect and
+  apply refuse the same records, writing nothing:
+  - a record with no Markdown heading below its header has no body section a log can follow; the
+    refusal names it and `next_action` is a `printf` that appends a heading named after the file;
+  - a record that ends inside an open code fence, where a new log would read as code; the refusal
+    names the fence's line, with no `next_action`;
+  - a record whose committed copy had a log: `HEAD`, or either side of a commit (the newest 20) that
+    added or removed the log identity's text in the file. A log deleted by hand is restored, never
+    replaced by a tool-written one that would hide its rows; the refusal names the copy and
+    `next_action` is the `git show <rev>:<path>` that prints it. A record new to the repository gets
+    its log as above.
+
+  `fix --pin` (first pin, `--replace`, `--remove`) plans the log the same way in its listing and its
+  apply, with the same refusals and `creates_revision_log`. A write whose row is not an evidence row
+  (a Tier 1 or 2 repair, `reverify`) still refuses a record with no log where the log is required.
+  *(Placement by the template's order, and the history depth of 20 commits, decided by the builder
+  on 2026-11-16, pending maintainer review.)*
 - **The record is the selector.** All of a record's stale pins move together; per-locator selection
   is not offered. A second run finds nothing to re-pin.
 - **Scope of the baseline.** Only pinned locators are re-baselined. Drift on an unpinned locator
@@ -787,3 +800,5 @@ asserted by test, not assumed by convention.
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs` a3485ebbfc5e -> e99a142c76d0. Reason: fix_rebaseline_integration.rs adds tests for rename pairing, reordered and inserted citations, the swaps notice, a moved config and fix --pin's listing; the record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-16 | Bumped to `0.63`. `fix --rebaseline --apply` and `fix --pin --apply` create the revision log, in the type's template's or declared shape, on a record that has none, with the evidence row as its first row; detect marks it `creates_revision_log`; a record with no body section is refused with a `next_action` that adds a heading. Decided by the builder on 2026-11-16, pending maintainer review. **Why:** `MILE-310` -- in an adopting repository nearly every first re-pin met a record with no log and the log was written by hand, the edit `diff.pin-changed-unattested` exists to tell apart from a tool-written row. | **substantive** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/fix.rs` 317aab0052ff -> e80f15fd68a9, `rust/crates/urzua-core/src/fix.rs` f95de51150cf -> 0b2c8b793c0f, `rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs` e99a142c76d0 -> 8fde6c3306f1. Reason: cli fix.rs creates the revision log for a re-pin on a record with none, marks it creates_revision_log, and refuses a record with no body section with a next_action; core fix.rs declares the new_log module and adds a creates_revision_log field to Rebaseline, with apply_rebaseline itself unchanged; fix_rebaseline_integration.rs adds tests for a created log on re-pin and first pin and for the refused bodiless record; the claim this record makes still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-16 | Bumped to `0.64`. A created log is placed by the template's section order; a record ending inside an open fence, or whose committed copy had a log, is refused in detect and apply; the no-body `next_action` runs as printed; `fix --pin` lists `creates_revision_log` and refuses as `--rebaseline` does; the narrative header cell is `revision_log.narrative_column`. Decided by the builder on 2026-11-16, pending maintainer review. **Why:** review of `MILE-310`'s pull request -- a hand-deleted log could be replaced by a tool row and pass `check --base`, and a log appended last broke `section.order`. | **substantive** |
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/fix.rs` e80f15fd68a9 -> 372845c7b4a6, `rust/crates/urzua-core/src/fix.rs` 0b2c8b793c0f -> a2c71a99c6e3, `rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs` 8fde6c3306f1 -> 00d2df20a22b. Reason: cli fix.rs refuses to create a revision log when a committed copy had one, places a created log by the template order, and makes the heading next action run as printed; core fix.rs adds narrative_column to a test helper shape, with apply_rebaseline and the behaviour cited unchanged; fix_rebaseline_integration.rs adds tests for the restored-log refusal, template placement, the open fence, narrative_column and fix --pin listing; the claim this record makes still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
