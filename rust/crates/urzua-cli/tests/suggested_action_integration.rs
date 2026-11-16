@@ -153,7 +153,7 @@ fn a_finding_carries_the_action_its_variant_declares() {
         serde_json::json!({
             "kind": "run-command",
             "target": {
-                "argv": ["urzua", "fix", "--apply", "--ids", "docs/notes/NOTE-2-b.md"],
+                "argv": ["urzua", "fix", "--apply", "--ids", "docs/notes/NOTE-2-b.md", "--actor", "agent"],
                 "file": "docs/notes/NOTE-2-b.md",
                 "field": "Blocked-by"
             },

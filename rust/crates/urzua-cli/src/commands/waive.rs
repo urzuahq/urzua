@@ -329,8 +329,14 @@ fn filters(repo_root: &Path, rules: Vec<String>, paths: &[PathBuf]) -> Result<Fi
             return Err("urzua waive --rule: an empty rule id (a stray comma?)".to_string());
         }
         if !urzua_core::rules::ALL_RULES.contains(&id.as_str()) {
+            let hint = urzua_core::harness::nearest_name(
+                &id,
+                urzua_core::rules::ALL_RULES.iter().copied(),
+            )
+            .map(|n| format!("; did you mean '{n}'?"))
+            .unwrap_or_default();
             return Err(format!(
-                "urzua waive --rule: '{id}' is not a rule this build ships (`urzua rules` lists them)"
+                "urzua waive --rule: '{id}' is not a rule this build ships{hint} (`urzua rules` lists them)"
             ));
         }
         if !out.rules.contains(&id) {

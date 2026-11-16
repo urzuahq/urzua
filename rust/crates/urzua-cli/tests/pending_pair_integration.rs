@@ -139,7 +139,7 @@ fn refuse_blocks_each_half_and_names_the_fix_command_that_makes_check_clean() {
     let (code, v) = edit(&dir, A, &half_a);
     assert_eq!((code, v["verdict"].as_str().unwrap()), (1, "block"), "{v}");
     assert_eq!(rules(&v), ["relation.pair-reciprocity"], "{v}");
-    let fix = format!("urzua fix --apply --ids {B}");
+    let fix = format!("urzua fix --apply --ids {B} --actor agent");
     assert!(message(&v).contains(&fix), "{v}");
     assert!(
         message(&v).contains("add ADR-1 to Superseded-by in docs/adr/ADR-2-old.md"),

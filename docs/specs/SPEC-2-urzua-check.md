@@ -1,9 +1,9 @@
 ---
 Stable-Id: 01M6R3NK5GM1RYRRX2XVMZ0ZAK
-Version: '0.175'
+Version: '0.176'
 Date: 2026-08-20
 Status: Shipped
-Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs@sha256:0a458ab90132142012dd52f92a8eb5681839a6a4267709dda703dc5fea3e4074, code:rust/crates/urzua-core/src/rules.rs@sha256:8e3fdcd0ddb6e6a4c265cb8ad57e1221ec843e310870d95bb3d7d8be1936b7b2, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:6d2ad3bf88308769fb6dfa67352f5323dc6968b98b54fa5f0726b76eeaa94658, test:rust/crates/urzua-cli/tests/fail_on_integration.rs@sha256:2232e4cec5c3987d9f082f2a42b70838ac88fa82377b1cd4eb409aa9c513c201
+Realized-by: code:rust/crates/urzua-cli/src/commands/check.rs@sha256:b80aadc837728e371253f7998117b6b00b94519dc0225094d207bff149cb7232, code:rust/crates/urzua-core/src/rules.rs@sha256:8e3fdcd0ddb6e6a4c265cb8ad57e1221ec843e310870d95bb3d7d8be1936b7b2, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:6d2ad3bf88308769fb6dfa67352f5323dc6968b98b54fa5f0726b76eeaa94658, test:rust/crates/urzua-cli/tests/fail_on_integration.rs@sha256:2232e4cec5c3987d9f082f2a42b70838ac88fa82377b1cd4eb409aa9c513c201
 Embodiment: Verified
 Author: beauwilliams
 Subject: '`urzua check` -- discovery, rule execution, and the JSON output contract.'
@@ -781,6 +781,51 @@ does not replace them. `urzua mcp` tools return the same reports and so carry th
   `waive`, `reverify`, `migrate`, `roadmap`, `refs`, the harness commands) and every `not-run`
   report, including a panic, emit both keys as `null` until a later decision gives them a derivation.
 
+#### Amendment (2026-11-16): every next action runs as printed (`MILE-266`)
+
+Decided by the builder on 2026-11-16, pending maintainer review. A walkthrough that followed only the
+user documentation found printed commands that did not run; this amends the list above and supersedes
+it where they differ.
+
+- **A third key, `next_action_inputs`**, always present and always an array. Empty means
+  `next_action` runs as printed. Otherwise each entry is `{placeholder, flag, means}`: a word of the
+  command written `<...>` (shell-quoted in the command) that the caller replaces, the flag it belongs to
+  and what to put there. A `<...>` word not listed there is a defect. No rule's `suggested_action`
+  `argv` carries a placeholder: a write that needs a reason is offered as its listing, and the
+  listing's report names the apply form with its placeholder.
+- **Every printed apply carries `--actor agent`** (`urzua fix --apply --ids <records> --actor agent`):
+  under a `gh`-verified identity `fix --apply` is `not-run` without `--actor`, and the consumers are
+  agents. A person passes `--actor human`.
+- **Printed paths** are independent of the current directory: `git add` takes `:/`-prefixed
+  pathspecs (read from the repository root), and `--ids` takes repository-relative paths, which urzua
+  matches from any directory.
+- **`check`'s order** is: `git add -- :/<paths>` when untracked records under a declared directory
+  were not examined (`discovery.untracked-skipped` carries them in `detail.records`); `git fetch
+  --unshallow` when a drift notice says the clone is shallow; then the findings' tools, in order
+  `urzua fix --apply`, `urzua fix --rebaseline` (the re-pin listing), `urzua reverify` (the renewal
+  listing), `urzua index`, `urzua migrate`. Findings that each name `--ids` share one command whose
+  `--ids` is the union of their records.
+- **A changed pinned file** (an `embodiment.consistency` disagreement that computes the drift state
+  with a pinned locator that no longer hashes to its pin, as `embodiment.pin-stale` reads it; drift on
+  an unpinned locator beside a pin that still matches stays `embodiment-drift`) is variant `embodiment-drift-pinned`, whose action is the
+  re-pin listing `urzua fix --rebaseline --ids <record>`, the same as `embodiment.pin-stale`'s, and
+  whose message gives the apply form and says to read the diff. `fix --apply` does not write the drift
+  state over it (`SPEC-8`), so following next actions cannot turn that drift green without a re-pin
+  and its reason. Drift by the git-history rule alone keeps `embodiment-drift` and `fix --apply`.
+- **`fix`**: a `--rebaseline` listing names `urzua fix --rebaseline --apply --ids <records> --actor
+  agent --reason '<what changed in the pinned file>'` with that input; a run whose only drift is on a
+  stale pin names the listing. **`reverify`**: a detect run with renewable records names `urzua
+  reverify --apply --ids <records> --actor agent --reason '<what you checked>'` with that input, and
+  an apply names `urzua check`. **`new`**: `git add -- :/<path>` when `discovery.include_untracked` is
+  off (the default). **`not-run`**: a mistyped `check --rules` or `explain --rule` id names the
+  command with the nearest shipped id; an unresolvable `--base <remote>/<branch>`, where
+  `<remote>` is one `git remote` lists, names `git fetch <remote> <branch>` (a local `feat/x` gets
+  `null`) (the error says which ref did not resolve instead of a raw `git
+  merge-base` error); a shallow clone with no merge base names `git fetch --unshallow`. It stays
+  `null`, with the reason in `error`, where the remedy is an edit or a choice the tool cannot make:
+  an unknown configuration key (the error lists the valid ones), a path outside the repository or a
+  directory that is not a git repository.
+
 ### Suggested action
 
 `ADR-73` decides this field; this section reproduces its vocabulary. A finding may carry one
@@ -1479,5 +1524,6 @@ different states, and collapsing them is how "0 errors" comes to mean "never exe
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/check.rs` 47afea49d94d -> c121e0e0c258. Reason: commands/check.rs adds one session notice naming records git lists as unmerged; no rule or verdict changes. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/check.rs` c121e0e0c258 -> 5ca1cc33ce62. Reason: commands/check.rs adds the unmerged-records session notice and, under --base, the pins-recomputed-on-merge notice listing merge rows the diff adds; no rule or verdict changes. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Bumped to `0.174`. An unechoed claim whose counterpart is a protected path is the variant `supersession-unreciprocated-protected` or `pair-unreciprocated-protected`, offering `edit-field` `append` for a decider instead of the `urzua fix` command. **Why:** review of pull request 546: the command would have written a file the editor hook refuses an agent. | **substantive** |
-> | 2026-11-16 | Bumped to `0.175`. The generated rule table names the vocabulary options: `closing_verbs` on `claim.status-agreement`; `implements_marker`, `verifies_marker`, `comment_leaders` and `trailing_comment_leaders` on `embodiment.back-pointer-resolution`, read by every rule that reads a back-pointer; `rejected_values` on `override.unreviewed`; and, read by `field.quality`, `section.shape` and `waiver.matches-nothing`, a type's `statuses.placeholders`, a `y-statement` shape's `phrases` and the suppression type's `rejected_values`. Without them each rule reads as before. **Why:** `MILE-233`, `ADR-101` amendment of 2026-11-15. | **substantive** |
-> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/check.rs` 5ca1cc33ce62 -> 0a458ab90132. Reason: check.rs passes the configured back-pointer vocabulary into the path-scoped read. The claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/check.rs` 5ca1cc33ce62 -> b80aadc83772. Reason: check.rs gives a mistyped --rules id the nearest shipped id as next action, maps an unresolvable --base to a git fetch next action, and words the empty-corpus notice for untracked records, offering the fetch only when the ref's first segment is a configured remote; the record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-16 | Bumped to `0.175`. Amendment of 2026-11-16 to the next-action section: a third key `next_action_inputs` lists the `<...>` placeholders a printed command carries (empty when it runs as printed); every printed apply carries `--actor agent`; `check` names `git add` for untracked records and `git fetch --unshallow` for a shallow clone before the findings' tools, and the tools are `fix --apply`, the re-pin and renewal listings, `index`, `migrate`; a disagreement whose drift is a changed pinned file is variant `embodiment-drift-pinned` with the re-pin listing as its action; `fix`, `reverify`, `new` and some `not-run` reports gain a next action. Decided by the builder on 2026-11-16, pending maintainer review. Printed `git add` paths take `:/` pathspecs, a `--base` fetch is offered only for a configured remote, and the pinned-drift variant needs a pin that no longer matches its file. **Why:** `MILE-266` -- printed commands failed for want of `--actor`, a new untracked record read as a clean check, and the drift action wrote the drift state over a stale pin. | **substantive** |
+> | 2026-11-16 | Bumped to `0.176`. The generated rule table names the vocabulary options: `closing_verbs` on `claim.status-agreement`; `implements_marker`, `verifies_marker`, `comment_leaders` and `trailing_comment_leaders` on `embodiment.back-pointer-resolution`, read by every rule that reads a back-pointer; `rejected_values` on `override.unreviewed`; and, read by `field.quality`, `section.shape` and `waiver.matches-nothing`, a type's `statuses.placeholders`, a `y-statement` shape's `phrases` and the suppression type's `rejected_values`. Without them each rule reads as before. **Why:** `MILE-233`, `ADR-101` amendment of 2026-11-15. | **substantive** |

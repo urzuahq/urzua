@@ -56,13 +56,13 @@ fn assert_not_run(out: &Output, error: &str, what: &str) {
         .unwrap_or_else(|e| panic!("{what}: stdout is not JSON ({e}): {out:?}"));
     assert_eq!(
         json,
-        serde_json::json!({ "status": "not-run", "error": error, "next_action": null, "next_action_reason": null }),
+        serde_json::json!({ "status": "not-run", "error": error, "next_action": null, "next_action_reason": null, "next_action_inputs": [] }),
         "{what}"
     );
 }
 
 const NEEDS_A_GIT_REPOSITORY: &str =
-    "urzua needs a git repository: no .git directory found above the given path";
+    "urzua needs a git repository: no .git directory found above the given path; run urzua from inside the repository's working tree, with any path argument inside it (`git init` makes a directory a repository)";
 
 #[test]
 fn every_command_that_reads_a_repository_exits_2_outside_one_observed_failing() {

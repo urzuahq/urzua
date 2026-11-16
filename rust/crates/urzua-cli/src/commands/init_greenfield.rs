@@ -113,7 +113,23 @@ pub(crate) const PROFILES: &[Profile] = &[
     },
 ];
 
-const ADR_TEMPLATE: &str = "---
+/// The revision log every built-in template ships, with its first row: the
+/// tools append to it (`fix --apply`, `reverify --apply`), and `urzua new`
+/// dates the row.
+macro_rules! revision_log {
+    () => {
+        "
+> **Revision log**
+>
+> | Date | Change | Class |
+> |---|---|---|
+> | YYYY-MM-DD | Initial record. | **structural** |
+"
+    };
+}
+
+const ADR_TEMPLATE: &str = concat!(
+    "---
 Stable-Id: assigned by `urzua new`; never written by hand
 Status: Proposed | Accepted | Rejected | Superseded
 Date: YYYY-MM-DD
@@ -141,9 +157,12 @@ The choice, already made. A direction still open for comment is an RFC, not an A
 ## Consequences
 
 What becomes true, easier, harder or newly required, including the bad ones.
-";
+",
+    revision_log!()
+);
 
-const RFC_TEMPLATE: &str = "---
+const RFC_TEMPLATE: &str = concat!(
+    "---
 Stable-Id: assigned by `urzua new`; never written by hand
 Status: Draft | Discussion | Accepted | Rejected | Superseded
 Date: YYYY-MM-DD
@@ -166,9 +185,12 @@ The design, concrete enough to review.
 ## Open questions
 
 What is genuinely unresolved.
-";
+",
+    revision_log!()
+);
 
-const SPEC_TEMPLATE: &str = "---
+const SPEC_TEMPLATE: &str = concat!(
+    "---
 Stable-Id: assigned by `urzua new`; never written by hand
 Status: Draft | Accepted | Shipped
 Date: YYYY-MM-DD
@@ -181,14 +203,12 @@ Subject: one line on what this specification covers
 ## Purpose
 
 What this specification covers and why it exists.
+",
+    revision_log!()
+);
 
-> **Revision log**
->
-> | Date | Change | Class |
-> |---|---|---|
-";
-
-const PRD_TEMPLATE: &str = "---
+const PRD_TEMPLATE: &str = concat!(
+    "---
 Stable-Id: assigned by `urzua new`; never written by hand
 Status: Draft | Review | Approved | Rejected | Superseded
 Date: YYYY-MM-DD
@@ -212,7 +232,9 @@ What the product must do, each testable.
 ## Open questions
 
 What is still unresolved.
-";
+",
+    revision_log!()
+);
 
 fn profile(name: &str) -> Option<&'static Profile> {
     PROFILES.iter().find(|p| p.name == name)

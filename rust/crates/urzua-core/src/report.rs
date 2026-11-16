@@ -962,7 +962,8 @@ pub trait Report: serde::Serialize {
     fn notices(&self) -> &[Notice];
     fn exit_code(&self) -> ExitCode;
     /// The one command worth running next, given the whole report (`MILE-72`).
-    /// Only `check`/`audit` and `fix` derive one; every other report has none.
+    /// `check`/`audit`, `fix`, `reverify`, `new` and a could-not-run with a
+    /// known remedy derive one; every other report has none.
     fn next_action(&self) -> Option<NextAction> {
         None
     }
@@ -976,17 +977,108 @@ pub trait Report: serde::Serialize {
 pub struct NextAction {
     pub command: String,
     pub reason: String,
+    /// The placeholders in `command` the caller must replace before running
+    /// it, each a word written `<...>` (`next_action_inputs`). Empty when the
+    /// command runs as printed.
+    pub inputs: Vec<ActionInput>,
+}
+
+impl NextAction {
+    /// A command that runs as printed.
+    pub fn runs_as_printed(command: impl Into<String>, reason: impl Into<String>) -> Self {
+        NextAction {
+            command: command.into(),
+            reason: reason.into(),
+            inputs: Vec::new(),
+        }
+    }
+}
+
+/// One value a `next_action` needs before it runs: the placeholder word as it
+/// appears in the command, the flag it belongs to and what to put there.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct ActionInput {
+    pub placeholder: String,
+    pub flag: String,
+    pub means: String,
+}
+
+/// The `--reason` placeholder of a re-pin's apply form.
+pub const REPIN_REASON_PLACEHOLDER: &str = "<what changed in the pinned file>";
+/// The `--reason` placeholder of a renewal's apply form.
+pub const RENEW_REASON_PLACEHOLDER: &str = "<what you checked>";
+
+/// The info notice naming the untracked records a run did not examine
+/// (`ADR-92`); its `detail.records` lists them for `check`'s `next_action`.
+pub const NOTICE_UNTRACKED_SKIPPED: &str = "discovery.untracked-skipped";
+
+/// The `detail` key a drift notice carries when the clone is shallow; the
+/// report's `next_action` is then `git fetch --unshallow`.
+pub const DETAIL_SHALLOW: &str = "shallow";
+
+/// `fix`'s notice naming the records whose pinned evidence changed; its
+/// `detail.records` lists them for the report's `next_action`.
+pub const NOTICE_PINNED_DRIFT: &str = "embodiment-drift-pinned";
+
+/// `git add -- :/<path>...` for repository-relative paths: the `:/` pathspec
+/// magic reads each from the repository root, so the printed command runs
+/// from any directory of the working tree.
+pub fn git_add<'a>(paths: impl IntoIterator<Item = &'a str>) -> Vec<String> {
+    let mut words = vec!["git".to_string(), "add".to_string(), "--".to_string()];
+    words.extend(paths.into_iter().map(|p| format!(":/{p}")));
+    words
+}
+
+/// `words` as one shell command line, each word quoted only when it must be.
+pub fn shell_command<S: AsRef<str>>(words: &[S]) -> String {
+    words
+        .iter()
+        .map(|w| shell_word(w.as_ref()))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// The apply form of a listing, as a `next_action` with its placeholder:
+/// `--apply --ids <ids> --actor agent --reason <placeholder>` after `prefix`.
+pub fn attested_apply(
+    prefix: &[&str],
+    ids: &[String],
+    placeholder: &str,
+    means: &str,
+    reason: String,
+) -> NextAction {
+    let mut words: Vec<String> = prefix.iter().map(|w| w.to_string()).collect();
+    words.extend(["--apply", "--ids"].map(String::from));
+    words.push(ids.join(","));
+    words.extend(["--actor", "agent", "--reason", placeholder].map(String::from));
+    NextAction {
+        command: shell_command(&words),
+        reason,
+        inputs: vec![ActionInput {
+            placeholder: placeholder.to_string(),
+            flag: "--reason".to_string(),
+            means: means.to_string(),
+        }],
+    }
 }
 
 /// The tools a finding's `run-command` action can lead to, in the order
 /// `next_action` prefers them: the first one any unwaived blocking finding
 /// offers wins, so a run with fix-able and index-able findings says
 /// `urzua fix --apply ...`. A finding's `argv` selects its entry by prefix.
+/// Every argv a rule offers runs as printed: an apply that needs a reason is
+/// offered as its listing, whose report's `next_action` is the apply form.
 /// `urzua refs refresh` is not here: no rule offers it as an action
 /// (`ADR-73`: it needs the network and may not apply to a typo).
-const NEXT_ACTION_ORDER: [(&[&str], &str); 2] = [
-    (&["urzua", "fix"], "repairs"),
+const NEXT_ACTION_ORDER: [(&[&str], &str); 5] = [
+    (&["urzua", "fix", "--apply"], "repairs"),
+    (
+        &["urzua", "fix", "--rebaseline"],
+        "lists the stale pins behind",
+    ),
+    (&["urzua", "reverify"], "lists the claims to renew behind"),
     (&["urzua", "index"], "regenerates the index for"),
+    (&["urzua", "migrate"], "migrates the configuration for"),
 ];
 
 /// A word of a command as a shell reads it back unchanged: bare when it is
@@ -1004,39 +1096,29 @@ fn shell_word(word: &str) -> String {
 }
 
 /// The runnable command that does everything the chosen tool's findings
-/// offer: `fix` findings each name `--ids <record>`, so the command takes the
-/// union of the records, in first-seen order; any other tool's findings carry
-/// the same argv, so the first stands for all. `None` when a record path
-/// holds a comma, which `--ids` could not carry.
-fn union_command(tool: &[&str], argvs: &[&Vec<String>]) -> Option<String> {
-    let words: Vec<String> = if tool == ["urzua", "fix"] {
-        let mut ids: Vec<&str> = Vec::new();
-        for argv in argvs {
-            let at = argv.iter().position(|w| w == "--ids")?;
-            let id = argv.get(at + 1)?.as_str();
-            if id.is_empty() || id.contains(',') {
-                return None;
-            }
-            if !ids.contains(&id) {
-                ids.push(id);
-            }
-        }
-        let mut words: Vec<String> = ["urzua", "fix", "--apply", "--ids"]
-            .iter()
-            .map(|w| w.to_string())
-            .collect();
-        words.push(ids.join(","));
-        words
-    } else {
-        argvs.first()?.to_vec()
+/// offer: findings that each name `--ids <record>` take the union of the
+/// records, in first-seen order, in the first finding's argv; any other
+/// tool's findings carry the same argv, so the first stands for all. `None`
+/// when a record path holds a comma, which `--ids` could not carry.
+fn union_command(argvs: &[&Vec<String>]) -> Option<String> {
+    let first = argvs.first()?;
+    let Some(at) = first.iter().position(|w| w == "--ids") else {
+        return Some(shell_command(first));
     };
-    Some(
-        words
-            .iter()
-            .map(|w| shell_word(w))
-            .collect::<Vec<_>>()
-            .join(" "),
-    )
+    let mut ids: Vec<&str> = Vec::new();
+    for argv in argvs {
+        let at = argv.iter().position(|w| w == "--ids")?;
+        let id = argv.get(at + 1)?.as_str();
+        if id.is_empty() || id.contains(',') {
+            return None;
+        }
+        if !ids.contains(&id) {
+            ids.push(id);
+        }
+    }
+    let mut words = first.to_vec();
+    *words.get_mut(at + 1)? = ids.join(",");
+    Some(shell_command(&words))
 }
 
 /// `check`'s `next_action` (`MILE-72`): over the unwaived error and warning
@@ -1067,18 +1149,65 @@ pub fn next_action_for_findings(findings: &[Finding]) -> Option<NextAction> {
         if argvs.is_empty() {
             continue;
         }
-        let command = union_command(prefix, &argvs)?;
+        let command = union_command(&argvs)?;
         let noun = if blocking.len() == 1 {
             "finding"
         } else {
             "findings"
         };
-        return Some(NextAction {
+        return Some(NextAction::runs_as_printed(
             command,
-            reason: format!("{verb} {} of {} {noun}", argvs.len(), blocking.len()),
-        });
+            format!("{verb} {} of {} {noun}", argvs.len(), blocking.len()),
+        ));
     }
     None
+}
+
+/// `git add` of the untracked records a run did not examine (`ADR-92`): they
+/// come first, since a finding about them cannot be reported until they are
+/// staged.
+fn stage_untracked(notices: &[Notice]) -> Option<NextAction> {
+    let paths = notice_records(notices, NOTICE_UNTRACKED_SKIPPED)?;
+    let words = git_add(paths.iter().map(String::as_str));
+    Some(NextAction::runs_as_printed(
+        shell_command(&words),
+        format!(
+            "stages {} this run did not examine",
+            plural(paths.len(), "untracked record")
+        ),
+    ))
+}
+
+/// `git fetch --unshallow` when a notice says the clone is shallow: drift
+/// read from truncated history cannot be trusted, so a clean result is not.
+fn unshallow(notices: &[Notice]) -> Option<NextAction> {
+    notices
+        .iter()
+        .any(|n| {
+            n.detail
+                .as_ref()
+                .is_some_and(|d| d.contains_key(DETAIL_SHALLOW))
+        })
+        .then(|| {
+            NextAction::runs_as_printed(
+                "git fetch --unshallow",
+                "fetches the full history that embodiment drift reads; a shallow clone hides drift",
+            )
+        })
+}
+
+/// The non-empty `detail.records` list of the notice with `subject`, with no
+/// path holding a comma (`--ids` could not carry it).
+fn notice_records<'a>(notices: &'a [Notice], subject: &str) -> Option<&'a Vec<String>> {
+    let notice = notices.iter().find(|n| n.subject == subject)?;
+    match notice.detail.as_ref()?.get("records") {
+        Some(DetailValue::List(paths))
+            if !paths.is_empty() && paths.iter().all(|p| !p.contains(',')) =>
+        {
+            Some(paths)
+        }
+        _ => None,
+    }
 }
 
 fn plural(n: usize, noun: &str) -> String {
@@ -1100,7 +1229,10 @@ impl Report for CheckReport {
         if self.status == ReportStatus::NotRun {
             return None;
         }
-        unmerged_next_action(&self.notices).or_else(|| next_action_for_findings(&self.findings))
+        unmerged_next_action(&self.notices)
+            .or_else(|| stage_untracked(&self.notices))
+            .or_else(|| unshallow(&self.notices))
+            .or_else(|| next_action_for_findings(&self.findings))
     }
 }
 
@@ -1123,6 +1255,10 @@ pub struct CouldNotRun {
     pub schema_version_error: Option<crate::schema_version::SchemaVersionError>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub notices: Vec<Notice>,
+    /// The command that removes the cause, when one does; serialized as the
+    /// report's `next_action`.
+    #[serde(skip)]
+    pub next: Option<NextAction>,
 }
 
 impl CouldNotRun {
@@ -1130,12 +1266,14 @@ impl CouldNotRun {
         let Failure {
             message,
             schema_version,
+            next,
         } = error.into();
         CouldNotRun {
             status: ReportStatus::NotRun,
             error: message,
             schema_version_error: schema_version.map(|boxed| *boxed),
             notices: Vec::new(),
+            next: next.map(|boxed| *boxed),
         }
     }
 }
@@ -1149,6 +1287,19 @@ pub struct Failure {
     pub message: String,
     /// Boxed so a `Result<_, Failure>` stays small on the success path.
     pub schema_version: Option<Box<crate::schema_version::SchemaVersionError>>,
+    /// The command that removes the cause, when one does.
+    pub next: Option<Box<NextAction>>,
+}
+
+impl Failure {
+    /// A failure whose cause `next` removes.
+    pub fn with_next(message: impl Into<String>, next: NextAction) -> Self {
+        Failure {
+            message: message.into(),
+            schema_version: None,
+            next: Some(Box::new(next)),
+        }
+    }
 }
 
 impl std::fmt::Display for Failure {
@@ -1162,6 +1313,7 @@ impl From<String> for Failure {
         Failure {
             message,
             schema_version: None,
+            next: None,
         }
     }
 }
@@ -1184,6 +1336,9 @@ impl Report for CouldNotRun {
     }
     fn exit_code(&self) -> ExitCode {
         ExitCode::from(2)
+    }
+    fn next_action(&self) -> Option<NextAction> {
+        self.next.clone()
     }
 }
 
@@ -1382,6 +1537,10 @@ impl Report for ExportReport {
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct NewReport {
     pub status: ReportStatus,
+    /// Whether the record must be staged before `check` examines it
+    /// (`discovery.include_untracked` off, `ADR-92`): the `next_action`.
+    #[serde(skip)]
+    pub stage: bool,
     pub path: PathBuf,
     pub display_number: u32,
     /// `null` when the type's closed field set does not declare `Stable-Id`, so
@@ -1518,6 +1677,16 @@ impl Report for NewReport {
     fn exit_code(&self) -> ExitCode {
         ExitCode::from(0)
     }
+    fn next_action(&self) -> Option<NextAction> {
+        let path = self.path.display().to_string();
+        let words = git_add([path.as_str()]);
+        self.stage.then(|| {
+            NextAction::runs_as_printed(
+                shell_command(&words),
+                "stages the new record: check examines only tracked records unless discovery.include_untracked is set",
+            )
+        })
+    }
 }
 
 /// `urzua fix`'s report (SPEC-0008): `status` already carries the
@@ -1596,35 +1765,70 @@ impl Report for FixReport {
         }
         match self.status {
             FixStatus::RepairsAvailable if !self.repairs.is_empty() => {
-                let mut ids: Vec<String> = Vec::new();
-                for repair in &self.repairs {
-                    let id = repair.record.display().to_string();
-                    if id.contains(',') {
-                        return None;
-                    }
-                    if !ids.contains(&id) {
-                        ids.push(id);
-                    }
-                }
-                let words = ["urzua", "fix", "--apply", "--ids"]
-                    .iter()
-                    .map(|w| w.to_string())
-                    .chain(std::iter::once(ids.join(",")));
-                Some(NextAction {
-                    command: words.map(|w| shell_word(&w)).collect::<Vec<_>>().join(" "),
-                    reason: format!("writes {}", plural(self.repairs.len(), "repair")),
-                })
+                let ids = distinct_ids(self.repairs.iter().map(|r| &r.record))?;
+                let mut words: Vec<String> = ["urzua", "fix", "--apply", "--ids"]
+                    .map(String::from)
+                    .to_vec();
+                words.push(ids.join(","));
+                words.extend(["--actor", "agent"].map(String::from));
+                Some(NextAction::runs_as_printed(
+                    shell_command(&words),
+                    format!("writes {}", plural(self.repairs.len(), "repair")),
+                ))
             }
-            FixStatus::Applied => Some(NextAction {
-                command: "urzua check".to_string(),
-                reason: format!(
+            FixStatus::RepairsAvailable if !self.rebaselines.is_empty() => {
+                let ids = distinct_ids(self.rebaselines.iter().map(|r| &r.record))?;
+                Some(attested_apply(
+                    &["urzua", "fix", "--rebaseline"],
+                    &ids,
+                    REPIN_REASON_PLACEHOLDER,
+                    "one sentence on what changed in each pinned file and why the evidence still holds, after reading its diff",
+                    format!(
+                        "re-pins {} once you have read the change",
+                        plural(self.rebaselines.len(), "record")
+                    ),
+                ))
+            }
+            FixStatus::Ok | FixStatus::RepairsAvailable | FixStatus::PartialFailure => {
+                let paths = notice_records(&self.notices, NOTICE_PINNED_DRIFT)?;
+                let mut words: Vec<String> = ["urzua", "fix", "--rebaseline", "--ids"]
+                    .map(String::from)
+                    .to_vec();
+                words.push(paths.join(","));
+                Some(NextAction::runs_as_printed(
+                    shell_command(&words),
+                    format!(
+                        "lists the stale pins of {} whose pinned file changed",
+                        plural(paths.len(), "record")
+                    ),
+                ))
+            }
+            FixStatus::Applied => Some(NextAction::runs_as_printed(
+                "urzua check",
+                format!(
                     "re-checks the corpus after {}",
                     plural(self.repairs.len() + self.rebaselines.len(), "write")
                 ),
-            }),
+            )),
             _ => None,
         }
     }
+}
+
+/// The distinct record paths, in first-seen order, as `--ids` carries them;
+/// `None` when one holds a comma.
+pub fn distinct_ids<'a>(paths: impl Iterator<Item = &'a PathBuf>) -> Option<Vec<String>> {
+    let mut ids: Vec<String> = Vec::new();
+    for path in paths {
+        let id = path.display().to_string();
+        if id.contains(',') {
+            return None;
+        }
+        if !ids.contains(&id) {
+            ids.push(id);
+        }
+    }
+    Some(ids)
 }
 
 /// `urzua index`'s report (`MILE-152`): each declared index artifact, and
@@ -2285,17 +2489,22 @@ impl Report for ConflictsReport {
                 .collect()
         };
         match self.status {
-            ConflictsStatus::Resolvable => Some(NextAction {
-                command: "urzua fix --conflicts --apply --force --actor agent".to_string(),
-                reason: format!(
+            ConflictsStatus::Resolvable => Some(NextAction::runs_as_printed(
+                "urzua fix --conflicts --apply --force --actor agent",
+                format!(
                     "writes {}",
                     plural(records(ConflictOutcome::Resolvable).len(), "resolution")
                 ),
-            }),
-            ConflictsStatus::Resolved => Some(NextAction {
-                command: format!("git add {}", records(ConflictOutcome::Resolved).join(" ")),
-                reason: "fix --conflicts does not stage: stage the resolved records, then continue the merge or rebase".to_string(),
-            }),
+            )),
+            ConflictsStatus::Resolved => Some(NextAction::runs_as_printed(
+                shell_command(&git_add(
+                    self.conflicts
+                        .iter()
+                        .filter(|c| c.outcome == ConflictOutcome::Resolved)
+                        .map(|c| c.record.to_str().unwrap_or_default()),
+                )),
+                "fix --conflicts does not stage: stage the resolved records, then continue the merge or rebase",
+            )),
             _ => None,
         }
     }
@@ -2315,8 +2524,5 @@ fn unmerged_next_action(notices: &[Notice]) -> Option<NextAction> {
     notices
         .iter()
         .find(|n| n.subject == UNMERGED_RECORDS)
-        .map(|n| NextAction {
-            command: "urzua fix --conflicts".to_string(),
-            reason: n.message.clone(),
-        })
+        .map(|n| NextAction::runs_as_printed("urzua fix --conflicts", n.message.clone()))
 }

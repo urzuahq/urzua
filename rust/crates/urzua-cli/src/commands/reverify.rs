@@ -515,7 +515,7 @@ impl ReviewScan<'_> {
             }
         }
         if self.disagreeing.contains(&record.path) {
-            refused.push("the stated Embodiment disagrees with the one its locators compute to (embodiment.consistency would report it): run `urzua fix` first".to_string());
+            refused.push("the stated Embodiment disagrees with the one its locators compute to (embodiment.consistency would report it): run `urzua fix` first (`urzua fix --rebaseline` when a pinned file changed)".to_string());
         }
         (acknowledged, repins)
     }
