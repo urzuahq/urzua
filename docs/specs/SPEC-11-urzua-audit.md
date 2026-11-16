@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5C6BXVCRM0Y2JS1DT5
-Version: '0.18'
+Version: '0.19'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -96,4 +96,4 @@ warning. The only difference between an `audit` report and the `check` report is
 > | 2026-11-14 | Bumped to `0.17`. Evidence pins re-baselined for this change (the `Re-baselined` row above); the specification text is unchanged. **Why:** a revision-log entry that adds a structural change bumps `Version`. | **structural** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/check_integration.rs` 919b855ba25b -> 6d2ad3bf8830. Reason: Read the diff of each re-pinned file against main: check_integration.rs fix fixtures create the file their record cites. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Bumped to `0.18`. Evidence pins re-baselined for this change (the `Re-baselined` row above); the specification text is unchanged. **Why:** a revision-log entry that adds a structural change bumps `Version`. | **structural** |
-> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/check_integration.rs` 6d2ad3bf8830 -> 12c7781d0054. Reason: check_integration.rs: the test of this repository's own hooks now expects present-unverified, since each calls urzua after guard code; the other tests are unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-16 | Bumped to `0.19`. Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/check_integration.rs` 6d2ad3bf8830 -> 12c7781d0054. Reason: check_integration.rs: the test of this repository's own hooks now expects present-unverified, since each calls urzua after guard code; the other tests are unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
