@@ -476,27 +476,60 @@ fn unsafe_hooks(repo_root: &Path, configured: &str) -> Vec<(String, String)> {
         .flatten()
         .filter_map(|e| {
             let path = e.path();
-            let target = std::fs::read_link(&path).ok()?;
-            // A dangling link is judged by where it points, so it is unsafe
-            // before its target exists.
-            let real = if path.exists() {
-                resolve(&path)
-            } else {
-                resolve(&path.parent().unwrap_or(&dir).join(&target))
-            };
-            let where_ = escapes(repo_root, &real)?;
+            let why = link_escape(repo_root, &path)?;
+            let what = if path.is_dir() { "a directory" } else { "a file" };
             Some((
                 e.file_name().to_string_lossy().into_owned(),
                 format!(
-                    "{} is a symlink to {}, {where_}, so git would run a file the repository does not commit",
-                    path.display(),
-                    real.display()
+                    "{} is a symlink that leads to {why}, so git would run {what} the repository does not commit",
+                    path.display()
                 ),
             ))
         })
         .collect();
     found.sort();
     found
+}
+
+/// `path` with `.` and `..` removed without touching the filesystem, for a
+/// link target that does not exist yet.
+fn lexical(path: &Path) -> PathBuf {
+    let mut out = PathBuf::new();
+    for c in path.components() {
+        match c {
+            std::path::Component::CurDir => {}
+            std::path::Component::ParentDir => {
+                out.pop();
+            }
+            other => out.push(other),
+        }
+    }
+    out
+}
+
+/// Where a symlink chain starting at `path` leaves the working tree or enters
+/// the git directory, hop by hop, so a dangling link is judged before its
+/// target exists. `None` when `path` is not a link or every hop stays inside.
+fn link_escape(repo_root: &Path, path: &Path) -> Option<String> {
+    const HOPS: usize = 40;
+    let mut cur = path.to_path_buf();
+    let mut linked = false;
+    for _ in 0..HOPS {
+        let Ok(target) = std::fs::read_link(&cur) else {
+            return None;
+        };
+        linked = true;
+        let base = cur.parent().map(Path::to_path_buf).unwrap_or_default();
+        cur = lexical(&base.join(target));
+        let real = resolve(&cur);
+        if let Some(where_) = escapes(repo_root, &real) {
+            return Some(format!("{}, {where_}", real.display()));
+        }
+        if std::fs::symlink_metadata(&cur).is_err() {
+            return None;
+        }
+    }
+    linked.then(|| format!("a chain of more than {HOPS} links, which git cannot follow to a file in the repository"))
 }
 
 /// `urzua hooks uninstall`, when running it would unset this clone's
@@ -522,11 +555,47 @@ pub(crate) fn report_wiring(
     layout: &Layout,
     decl: &HooksDecl,
 ) -> Vec<Result<Wiring, String>> {
+    let guarded = unsafe_wiring(repo_root, decl);
+    if guarded.iter().any(|w| w.state == HookState::UnsafeDir) {
+        return guarded.into_iter().map(Ok).collect();
+    }
     let mut all = pointer_wiring(repo_root, layout, decl);
+    for w in guarded {
+        match HOOKS.iter().position(|h| *h == w.hook) {
+            Some(at) => all[at] = Ok(w),
+            None => all.push(Ok(w)),
+        }
+    }
+    all
+}
+
+/// What makes the directory `hooks.path` names unsafe for git to run hooks
+/// from: the directory itself (`unsafe-dir`, one per hook) or each entry that
+/// links out (`unsafe-hook`). Every report and every install path reads this
+/// one list, so none can miss a guard the others apply.
+pub(crate) fn unsafe_wiring(repo_root: &Path, decl: &HooksDecl) -> Vec<Wiring> {
     let Some(p) = &decl.path else {
-        return all;
+        return Vec::new();
     };
     let pointed = matches!(unpointed(repo_root, decl), Ok(None));
+    if let Some(why) = hooks_dir_problem(repo_root, p) {
+        let (message, fix) = if pointed {
+            (
+                format!("{why}; this clone is pointed at {p}, so git runs hooks from there -- `urzua hooks uninstall` stops that"),
+                uninstall_fix(repo_root),
+            )
+        } else {
+            (
+                format!("{why}; urzua will not point this clone at it -- move the hooks into a directory inside the working tree and name it in hooks.path"),
+                None,
+            )
+        };
+        return every_hook(&repo_root.join(p), HookState::UnsafeDir, &message, fix)
+            .into_iter()
+            .flatten()
+            .collect();
+    }
+    let mut out = Vec::new();
     for (hook, why) in unsafe_hooks(repo_root, p) {
         let (message, fix) = if pointed {
             (
@@ -539,19 +608,15 @@ pub(crate) fn report_wiring(
                 None,
             )
         };
-        let unsafe_entry = Ok(wired(
+        out.push(wired(
             &hook,
             &repo_root.join(p).join(&hook),
             HookState::UnsafeHook,
             message,
             fix,
         ));
-        match HOOKS.iter().position(|h| *h == hook) {
-            Some(at) => all[at] = unsafe_entry,
-            None => all.push(unsafe_entry),
-        }
     }
-    all
+    out
 }
 
 fn pointer_wiring(
@@ -559,22 +624,6 @@ fn pointer_wiring(
     layout: &Layout,
     decl: &HooksDecl,
 ) -> Vec<Result<Wiring, String>> {
-    if let Some(p) = &decl.path {
-        if let Some(why) = hooks_dir_problem(repo_root, p) {
-            let (message, fix) = if matches!(unpointed(repo_root, decl), Ok(None)) {
-                (
-                    format!("{why}; this clone is pointed at {p}, so git runs hooks from there -- `urzua hooks uninstall` stops that"),
-                    uninstall_fix(repo_root),
-                )
-            } else {
-                (
-                    format!("{why}; urzua will not point this clone at it -- move the hooks into a directory inside the working tree and name it in hooks.path"),
-                    None,
-                )
-            };
-            return every_hook(&repo_root.join(p), HookState::UnsafeDir, &message, fix);
-        }
-    }
     let off = match unpointed(repo_root, decl) {
         Ok(None) => return wiring(layout, decl),
         Ok(Some(u)) => u,
@@ -637,15 +686,7 @@ fn planned(repo_root: &Path, off: &Unpointed, decl: &HooksDecl) -> (Layout, Hook
         needs_exec: true,
     };
     let mut report = HooksReport::new("install", true, &layout);
-    if let Some(why) = hooks_dir_problem(repo_root, &off.configured) {
-        report.refuse(why);
-        return (layout, report);
-    }
-    let unsafe_files = unsafe_hooks(repo_root, &off.configured);
-    if !unsafe_files.is_empty() {
-        for (_, why) in unsafe_files {
-            report.refuse(why);
-        }
+    if refuse_unsafe(&mut report, repo_root, decl) {
         return (layout, report);
     }
     if let Layout::Files {
@@ -1485,9 +1526,32 @@ pub fn run_install(config: Option<PathBuf>, dry_run: bool, write_config: bool) -
         Err(m) => return not_run(m),
     };
     let Some(off) = off else {
+        let mut guarded = HooksReport::new("install", dry_run, &layout);
+        if refuse_unsafe(&mut guarded, &ws.repo_root, decl) {
+            return emit(&guarded);
+        }
         return emit(&install(&layout, decl, dry_run, write_config));
     };
     emit(&point_and_install(&ws.repo_root, &off, decl, dry_run))
+}
+
+/// Refuses, listing each unsafe hook with the state and fix `status` gives it,
+/// when `unsafe_wiring` finds anything; `true` when it did.
+fn refuse_unsafe(report: &mut HooksReport, repo_root: &Path, decl: &HooksDecl) -> bool {
+    let guarded = unsafe_wiring(repo_root, decl);
+    for w in &guarded {
+        report.item(&w.hook, &w.path, w.state.status_word());
+        if !report.problems.contains(&w.message) {
+            report.refuse(w.message.clone());
+        }
+        if let Some(fix) = &w.fix {
+            report.next(
+                fix.clone(),
+                "stops git running hooks from a place the repository does not commit",
+            );
+        }
+    }
+    !guarded.is_empty()
 }
 
 /// Points this clone's `core.hooksPath` at the directory `hooks.path` names,
