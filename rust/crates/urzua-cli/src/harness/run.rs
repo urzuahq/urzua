@@ -580,11 +580,12 @@ fn steps(path: &Path) -> Vec<Step> {
 /// not exist yet: a write through it creates the target, so the target is the
 /// file written. `canonicalize` cannot do that, because it fails on a dangling
 /// link and the fallback of resolving the parent only then keeps the link's own
-/// name. `None` after more than 40 links (a loop).
+/// name. `None` after more than `harness.limits.symlink_hops` links (a loop).
 fn resolve_links(abs: &Path) -> Option<PathBuf> {
     let mut queue: std::collections::VecDeque<Step> = steps(abs).into();
     let mut cur = PathBuf::new();
     let mut followed = 0;
+    let hops = super::limits::get(urzua_core::harness::limits::SYMLINK_HOPS);
     while let Some(step) = queue.pop_front() {
         match step {
             Step::Reset(root) => cur = root,
@@ -595,7 +596,7 @@ fn resolve_links(abs: &Path) -> Option<PathBuf> {
                 let next = cur.join(&name);
                 if std::fs::symlink_metadata(&next).is_ok_and(|m| m.file_type().is_symlink()) {
                     followed += 1;
-                    if followed > 40 {
+                    if followed > hops {
                         return None;
                     }
                     let target = std::fs::read_link(&next).ok()?;
@@ -627,12 +628,15 @@ fn resolved_rel(repo_root: &Path, path: &Path) -> Option<PathBuf> {
     full.strip_prefix(&root).ok().map(PathBuf::from)
 }
 
-/// The most paths of one request that are judged. Each costs a search for the
-/// governed repositories that hold it, so a request with more is an edit that
-/// was not judged, as the translator's `MCP_MAX_ITEMS` makes a call with more
-/// files: the first `MAX_PATHS` are judged against the gates and the rest are
-/// refused under `on_unjudged: deny` where a guardrail covers one of them.
-const MAX_PATHS: usize = 512;
+/// The most paths of one request that are judged
+/// (`harness.limits.paths_per_call`). Each costs a search for the governed
+/// repositories that hold it, so a request with more is an edit that was not
+/// judged, as the translator makes a call with more files: the first are judged
+/// against the gates and the rest are refused under `on_unjudged: deny` where a
+/// guardrail covers one of them.
+fn max_paths() -> usize {
+    super::limits::get(urzua_core::harness::limits::PATHS_PER_CALL)
+}
 
 fn judge_edit(config: Option<PathBuf>, mut request: Request) -> Verdict {
     let actor = request.actor();
@@ -653,6 +657,12 @@ fn judge_edit(config: Option<PathBuf>, mut request: Request) -> Verdict {
             );
         }
     }
+    // The session's own configuration bounds how much of the request is read,
+    // whichever repository later judges each file.
+    super::limits::activate(&super::limits::of(
+        config.clone(),
+        request.project_dir.as_deref().map(Path::new),
+    ));
     let Ok(cwd) = std::env::current_dir() else {
         return judge_edit_in(config, request);
     };
@@ -670,8 +680,9 @@ fn judge_edit(config: Option<PathBuf>, mut request: Request) -> Verdict {
         actor: request.actor.clone(),
         ..Request::default()
     };
+    let max = max_paths();
     let why = format!(
-        "the request names {total} paths, more than the {MAX_PATHS} it judges in one call; the first {MAX_PATHS} were judged against the gates"
+        "the request names {total} paths, more than the {max} it judges in one call; the first {max} were judged against the gates"
     );
     if actor == Actor::Agent {
         adapter_failure(config.as_deref(), &rest, &why)
@@ -680,19 +691,20 @@ fn judge_edit(config: Option<PathBuf>, mut request: Request) -> Verdict {
     }
 }
 
-/// The paths of `request` beyond `MAX_PATHS`, made absolute against `cwd` and
+/// The paths of `request` beyond `max_paths()`, made absolute against `cwd` and
 /// removed from the request (with their proposed contents, when it has one for
 /// each path).
 fn take_overflow(request: &mut Request, cwd: &Path) -> Vec<String> {
-    if request.paths.len() <= MAX_PATHS {
+    let max = max_paths();
+    if request.paths.len() <= max {
         return Vec::new();
     }
     if request.contents.len() == request.paths.len() {
-        request.contents.truncate(MAX_PATHS);
+        request.contents.truncate(max);
     }
     request
         .paths
-        .split_off(MAX_PATHS)
+        .split_off(max)
         .iter()
         .map(|p| absolute(cwd, p).to_string_lossy().to_string())
         .collect()
@@ -1450,6 +1462,7 @@ fn adapter_problems(lock: &lock::Lock, problems: &mut Vec<Problem>) -> Vec<Strin
 fn hook_entry_problems(
     root: &Path,
     lock: &lock::Lock,
+    wanted: &std::collections::BTreeMap<(String, String), String>,
     docs: &mut SettingsDocs,
     problems: &mut Vec<Problem>,
 ) {
@@ -1466,6 +1479,10 @@ fn hook_entry_problems(
             Some(hook) if lock::hash(&hook.compact()) != e.hash => problems.push(Problem {
                 check: "hook-entry",
                 message: format!("the hook entry '{}' in {} is not the one the install wrote (its hash differs from {}): it may no longer run the guardrail (run `urzua harness status`, then `urzua harness update --force`)", e.key(), e.file, lock::LOCK_PATH),
+            }),
+            Some(_) if wanted.get(&(e.file.clone(), e.key())).is_some_and(|h| *h != e.hash) => problems.push(Problem {
+                check: "hook-entry",
+                message: format!("the hook entry '{}' in {} is out of date: the bundle or the configuration (such as harness.limits.hook_timeout_seconds) now renders it differently (run `urzua harness update`)", e.key(), e.file),
             }),
             Some(_) => {}
         }
@@ -1556,6 +1573,9 @@ fn session_start(config: Option<PathBuf>) -> Verdict {
         }
     };
     let harness = ws.config.harness.clone();
+    if let Some(h) = &harness {
+        super::limits::activate(&h.limits);
+    }
     if !harness.as_ref().is_some_and(|h| h.enabled("session-start")) {
         return Verdict::new(
             "allow",
@@ -1599,7 +1619,8 @@ fn session_start(config: Option<PathBuf>) -> Verdict {
     version_problem(&lock, &mut problems);
     let command_dirs = adapter_problems(&lock, &mut problems);
     let mut docs = SettingsDocs::new();
-    hook_entry_problems(&ws.repo_root, &lock, &mut docs, &mut problems);
+    let wanted = super::wanted_entry_hashes(&ws.repo_root, &ws.config, &lock.adapters);
+    hook_entry_problems(&ws.repo_root, &lock, &wanted, &mut docs, &mut problems);
     owned_file_problems(&ws.repo_root, &lock, &command_dirs, &mut problems);
     kill_switch_problems(&ws.repo_root, &lock, &mut docs, &mut problems);
 
@@ -1703,14 +1724,47 @@ mod tests {
     #[test]
     fn a_request_beyond_the_path_cap_hands_the_rest_back_as_absolute_paths() {
         let mut request = Request {
-            paths: (0..MAX_PATHS + 2).map(|n| format!("p{n}")).collect(),
+            paths: (0..514).map(|n| format!("p{n}")).collect(),
             ..Request::default()
         };
-        request.contents = vec![Some("x".into()); MAX_PATHS + 2];
+        request.contents = vec![Some("x".into()); 514];
         let rest = take_overflow(&mut request, Path::new("/work"));
-        assert_eq!(request.paths.len(), MAX_PATHS);
-        assert_eq!(request.contents.len(), MAX_PATHS);
+        assert_eq!(request.paths.len(), 512);
+        assert_eq!(request.contents.len(), 512);
         assert_eq!(rest, ["/work/p512", "/work/p513"]);
         assert!(take_overflow(&mut request, Path::new("/work")).is_empty());
+    }
+
+    #[test]
+    fn a_raised_path_cap_judges_more_paths_and_hands_back_only_the_rest() {
+        super::super::limits::raise_for_test("paths_per_call", 600);
+        let mut request = Request {
+            paths: (0..601).map(|n| format!("p{n}")).collect(),
+            ..Request::default()
+        };
+        let rest = take_overflow(&mut request, Path::new("/work"));
+        assert_eq!(request.paths.len(), 600);
+        assert_eq!(rest, ["/work/p600"]);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_raised_symlink_hop_count_follows_a_longer_chain() {
+        let dir = std::env::temp_dir().join(format!("urzua-hops-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("l0"), "x").unwrap();
+        for n in 1..=45 {
+            std::os::unix::fs::symlink(dir.join(format!("l{}", n - 1)), dir.join(format!("l{n}")))
+                .unwrap();
+        }
+        let top = dir.canonicalize().unwrap().join("l45");
+        assert_eq!(resolve_links(&top), None);
+        super::super::limits::raise_for_test("symlink_hops", 45);
+        assert_eq!(
+            resolve_links(&top),
+            Some(dir.canonicalize().unwrap().join("l0"))
+        );
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }

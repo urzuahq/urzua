@@ -146,6 +146,7 @@ fn judge(config: Option<PathBuf>) -> PostVerdict {
     if config.is_none() {
         super::run::enter_governed_cwd(request.project_dir.as_deref());
     }
+    super::limits::activate(&super::limits::of(config.clone(), None));
 
     // The commit the last check saw, and the files committed since: a command
     // that committed its own change leaves a clean tree, so the working tree

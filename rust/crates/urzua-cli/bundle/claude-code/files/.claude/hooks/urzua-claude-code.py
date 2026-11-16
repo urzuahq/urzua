@@ -73,8 +73,12 @@ MCP_WRITE_WORDS = MCP_PARTIAL_WORDS | {"write", "create", "save", "put", "overwr
 MCP_READ_WORDS = {"read", "get", "list", "search", "find", "stat", "view", "show", "cat", "head", "tail", "fetch", "query", "describe", "info", "tree", "grep", "glob", "exists", "diff", "status", "log", "count", "check", "lookup", "browse", "inspect"}
 # A key that names where a call puts its output, even for a tool named for reading.
 MCP_DEST_WORDS = {"output", "out", "outfile", "outpath", "dest", "destination", "target", "save", "saveas", "into", "sink"}
+# The caps below are the built-in floors of `harness.limits`; load_limits raises
+# them to the configured values. What lies beyond a cap is an edit that was not
+# judged.
 MCP_MAX_DEPTH = 24
 MCP_MAX_PATH = 4096
+MCP_MAX_STRING = 65536
 # The most distinct short strings of one call that are looked at as possible paths;
 # a call with more is not scanned in full, so it is an edit that was not judged
 # (refused where a gate denies), never one whose later strings are silently skipped.
@@ -83,6 +87,28 @@ MCP_MAX_LOOSE = 512
 # record check in the engine, so a call with more is an edit that was not judged.
 MCP_MAX_RECORDS = 8
 MCP_MAX_ITEMS = 512
+MCP_LIMIT_KEYS = {"MCP_MAX_DEPTH": "input_depth", "MCP_MAX_PATH": "path_length", "MCP_MAX_STRING": "string_length", "MCP_MAX_LOOSE": "loose_strings_per_call", "MCP_MAX_RECORDS": "records_per_call", "MCP_MAX_ITEMS": "paths_per_call"}
+
+
+def load_limits(argv, cwd):
+    """Raises the caps to the configured `harness.limits`, read from the engine
+    (`urzua harness limits`). A value that cannot be obtained, or is below the
+    floor, leaves the floor: never unlimited. The session's project is asked first, as the
+    engine judges every edit against it first."""
+    exe = argv[0] if argv else "urzua"
+    if exe == "urzua" and os.environ.get("URZUA_BIN"):
+        exe = os.environ["URZUA_BIN"]
+    try:
+        p = subprocess.run([exe, "harness", "limits"], capture_output=True, text=True, cwd=PROJECT_DIR or cwd or None, timeout=10)
+        limits = json.loads(p.stdout).get("limits")
+    except (OSError, ValueError, AttributeError, subprocess.SubprocessError):
+        return
+    if not isinstance(limits, dict):
+        return
+    for name, key in MCP_LIMIT_KEYS.items():
+        value = limits.get(key)
+        if isinstance(value, int) and not isinstance(value, bool) and value > globals()[name]:
+            globals()[name] = value
 
 
 def _project_dir():
@@ -331,7 +357,7 @@ def mcp_scan(inp):
             else:
                 target.append(p)
         for e in extras:
-            if e not in loose and e not in target and len(e) <= 65536:
+            if e not in loose and e not in target and len(e) <= MCP_MAX_STRING:
                 if len(loose) >= MCP_MAX_LOOSE:
                     state["deep"] = True
                 else:
@@ -599,6 +625,7 @@ def main():
         if not isinstance(tool, str) or not isinstance(inp, dict):
             return 0
         if tool.startswith("mcp__"):
+            load_limits(argv, cwd)
             target = mcp_write(tool, inp)
             if target is None:
                 return 0

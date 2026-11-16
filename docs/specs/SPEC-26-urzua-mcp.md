@@ -2,7 +2,7 @@
 Stable-Id: 01M7A8QGWXMR8WYFDC36XW8XEF
 Status: Draft
 Date: 2026-11-13
-Version: '0.5'
+Version: '0.6'
 Author: beauwilliams
 Subject: '`urzua mcp` -- a read-only MCP server over stdio that serves the reports urzua already builds.'
 Implements: ADR-99
@@ -35,7 +35,7 @@ urzua mcp [--root DIR] [--config FILE]
 
 stdio only. A frame is one JSON-RPC 2.0 message on one line, terminated by a newline, with no embedded newline. Stdout carries
 frames and nothing else; every line a client reads from it parses as a JSON-RPC message. A request line is read up to 1 MiB
-(1,048,576 bytes, newline excluded); a longer one is answered with `-32600` and skipped to its newline without being held in
+(1,048,576 bytes, newline excluded; `harness.limits.mcp_line_bytes`, `SPEC-3`, a floor configuration may raise, to at most 64 MiB, but never lower); a longer one is answered with `-32600` and skipped to its newline without being held in
 memory, and a line that is not UTF-8 is answered with `-32700`. The next line is served in both cases. Notices go to stderr as JSON, one per
 line. The pinned protocol revision is `2025-06-18`. The server answers `initialize` with that revision whatever the client
 offered; a client that cannot speak it ends the session. Streamable HTTP is not built.
@@ -148,3 +148,4 @@ The server is registered by a person in a user-owned file, with the snippet docu
 > | 2026-11-13 | Bumped to `0.3`. A request line is capped at 1 MiB and a non-UTF-8 line is answered, both without ending the session; `id` null is refused and a message without an `id` never runs a tool; the read-only guarantee no longer says the server spawns no process (it runs read-only `git`, which may refresh its own index) and states what the source scan covers. **Why:** the review of the server core. | **substantive** |
 > | 2026-11-13 | Bumped to `0.4`. `urzua_show_record`, `urzua_get_findings_for_path` and `urzua_get_graph` are built; the last two are renamed from `urzua_findings_for_path` and `urzua_graph` so each name carries a read word the editor hook recognises; the harness interaction tests and the registration documentation exist. **Why:** the second change of `MILE-29`; the hook test showed the first names were judged as edits. | **substantive** |
 > | 2026-11-14 | Bumped to `0.5`. A `not-run` report is an error result (`isError: true`); `urzua_list_records` leaves out the whole-corpus `roadmap` block; the `.git/index` note says git refreshes the index for any stat-dirty tracked file and may hold `index.lock`, not only for a racily clean one. **Why:** the external review's findings 4.3, 4.4 and 4.5; `ADR-46` says a result that established nothing is not a success. | **substantive** |
+> | 2026-11-15 | Bumped to `0.6`. The 1 MiB request-line cap is `harness.limits.mcp_line_bytes` (`SPEC-3`): the default, and a floor configuration may raise, to at most 64 MiB because a line up to the cap is held in memory, but never lower. **Why:** `ADR-101` amendment of 2026-11-15 (configuration owns behaviour), accepted by the maintainer; tracked by `MILE-232`. | **substantive** |

@@ -115,11 +115,11 @@ pub(super) fn fold_to_declared_dir(config: &Config, rel: &Path) -> PathBuf {
 }
 
 /// The files under the path-gate `entries` (relative to `root`), sorted, and
-/// whether the walk stopped at its cap. A plain entry names a file or a
+/// whether the walk stopped at its cap (`harness.limits.gate_walk_files`). A plain entry names a file or a
 /// directory; a glob entry is walked from the directory before its first glob
 /// character. `.git` is never entered and a symlinked directory is not followed.
 pub(super) fn walk_entries(root: &Path, entries: &[String]) -> (Vec<String>, bool) {
-    const CAP: usize = 50_000;
+    let cap = super::limits::get(urzua_core::harness::limits::GATE_WALK_FILES);
     let mut found = std::collections::BTreeSet::new();
     let mut visited = 0usize;
     let mut truncated = false;
@@ -144,7 +144,7 @@ pub(super) fn walk_entries(root: &Path, entries: &[String]) -> (Vec<String>, boo
         };
         let mut stack = vec![start];
         while let Some(rel) = stack.pop() {
-            if visited >= CAP {
+            if visited >= cap {
                 truncated = true;
                 break;
             }
@@ -741,5 +741,24 @@ mod tests {
         }
         assert_eq!(raw.covers(Path::new("docs/other/x.md"), None), None);
         assert_eq!(raw.covers(Path::new("docs/adrx/x.md"), None), None);
+    }
+
+    #[test]
+    fn the_gate_walk_stops_at_its_floor_and_a_raised_cap_walks_further() {
+        let root = std::env::temp_dir().join(format!("urzua-walk-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("g")).unwrap();
+        for n in 0..50_010 {
+            std::fs::File::create(root.join("g").join(n.to_string())).unwrap();
+        }
+        let entries = ["g".to_string()];
+        let (found, truncated) = walk_entries(&root, &entries);
+        assert!(truncated);
+        assert_eq!(found.len(), 49_999);
+        crate::harness::limits::raise_for_test("gate_walk_files", 60_000);
+        let (found, truncated) = walk_entries(&root, &entries);
+        assert!(!truncated);
+        assert_eq!(found.len(), 50_010);
+        std::fs::remove_dir_all(&root).unwrap();
     }
 }
