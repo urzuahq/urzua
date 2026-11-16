@@ -237,9 +237,14 @@ reviewer is shown it.
 
 If the pinned file is itself still conflicted (both branches edited the same lines of the source),
 resolve and `git add` that file first, then run `urzua fix --conflicts` again; the listing says which
-files it waits on. A record that conflicts anywhere else (including a Done-means item's text), whose
-pinned file was edited during the merge, or changed on a branch without a re-pin, is refused: resolve it
-by hand and re-pin with a reason (`urzua fix --rebaseline --apply --ids <record> --reason "..."`). While
+files it waits on. A record that conflicts anywhere else (including a Done-means item's text) is refused: resolve it by
+hand. A record whose pinned file was merged by hand, edited during the merge, or changed on a branch
+without a re-pin is refused too, and its `next_action` is the first step of the sequence that works: take
+the merged-in side's version of the record, whose pins are the base's (`git checkout --theirs --
+:/<record>` while merging, `--ours` while rebasing), `git add` it, then re-pin with a reason:
+`urzua fix --rebaseline --apply --ids <record> --actor agent --reason "<what the hand-merged code changed>"`.
+Keeping your branch's pin and re-pinning that instead leaves a chain that starts from your branch's hash,
+and `check --base` reports it. While
 records are unmerged, `urzua check` names `urzua fix --conflicts` as its next action.
 
 To tolerate a short lag between a code change and its record, set `drift_grace_days` on
