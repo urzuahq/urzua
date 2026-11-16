@@ -6,7 +6,10 @@
 # both postures -- wire it here AND in CI, or don't bother.
 set -e
 
-cd "$(git rev-parse --show-toplevel)/rust"
+# Resolved before the cd: git exports GIT_DIR to a hook in a linked worktree, and
+# with it set `--show-toplevel` answers with the current directory.
+root="$(git rev-parse --show-toplevel)"
+cd "$root/rust"
 
 echo "pre-push: cargo fmt --check"
 cargo fmt --all -- --check
@@ -18,7 +21,6 @@ cargo clippy --workspace --all-targets --locked -- -D warnings
 # `urzua check`, exactly as CI does; non-zero exits abort the push via
 # `set -e`. Like CI, it blocks on blocking findings only.
 echo "pre-push: urzua check"
-root="$(git rev-parse --show-toplevel)"
 make -C "$root" rust-build
 "$root/rust/target/release/urzua" check
 
