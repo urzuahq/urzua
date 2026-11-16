@@ -454,7 +454,7 @@ fn doctor_reads_the_repositorys_own_config_and_reports_the_unwired_hook_as_a_war
         hook["message"]
             .as_str()
             .unwrap()
-            .contains("no pre-commit hook"),
+            .contains("declared, but there is no hook"),
         "{hook}"
     );
 }
