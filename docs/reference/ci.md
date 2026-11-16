@@ -96,6 +96,13 @@ on by default (a repository sets another level, or `off`, under `rules:`); a rec
 a repository with the default `fail_on` makes a stale pin fail the job. It names each stale pin and
 the commands to fix it, and fails on a pin that cannot be read at all.
 
+**After upgrading to a build with `embodiment.pin-stale`:** the rule is on by default at `warn`, so a
+repository with `fail_on: warning` sees CI fail on every pin that went stale before the upgrade. Either
+re-pin each record after reading the change (`urzua fix --rebaseline` lists them, `urzua fix
+--rebaseline --apply --ids <record> --by <you> --actor <agent|human> --reason "<why>"` clears one), or
+set the rule's level under `rules:` (`embodiment.pin-stale: info` reports without failing the job,
+`off` turns it off).
+
 ```yaml
       - name: no stale evidence pins
         shell: bash -eo pipefail {0}

@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5Q0XVK27P5T8FN72BN
-Version: '0.50'
+Version: '0.51'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -61,7 +61,9 @@ never disagree. The repair is written like any other Tier 1 repair, and a stated
 that is no longer drifted (the `Realized-by` line was touched again) is repaired back to the
 tier-computed value. `fix` computes drift only when `embodiment.consistency` is enabled, as `check`
 does (`MILE-159`): with the rule off or undeclared there is no embodiment verdict to repair, so `fix`
-reports it could not run instead of computing a verdict from an empty drift set. It applies the same opt-in `@sha256:` locator pins and
+reports it could not run instead of computing a verdict from an empty drift set. `--rebaseline` (below) needs
+neither rule: it compares pin hashes and runs whenever the repository has pins, because it is the fix
+`embodiment.pin-stale`, on by default, suggests. It applies the same opt-in `@sha256:` locator pins and
 `drift_grace_days` window `check` does (`MILE-129`), so the two still never disagree; `fix` repairs `Embodiment` only; a pin is re-set
 by `--rebaseline` (below), never by a Tier 1 repair.
 
@@ -289,8 +291,10 @@ the same `PATHS` scoping.
   never implied; an `--ids` entry matching nothing fails; identity as above; lock; re-read before
   write; a missing revision log refuses that record). `--reason <text>` is required too: one line
   without `|` or a line break (`\n` or `\r`), because an attestation with no reason is the rubber stamp
-  `RFC-2` set out to prevent. The reason must also say something a reviewer can check: at least 3 words (runs of
-  letters or digits) and 12 characters, so `x`, `ok` and `...` are refused (exit 2, nothing written). The pin hashes are computed after the lock is taken, so evidence edited
+  `RFC-2` set out to prevent. The reason must also say something a reviewer can check: at least `attestation.reason.min_words`
+  words (runs holding a letter or digit, default 3) and `min_chars` characters (default 12) (`SPEC-3`), so by
+  default `x`, `ok` and `...` are refused (exit 2, nothing written). `reverify --apply` holds its reason to the
+  same minimum. The pin hashes are computed after the lock is taken, so evidence edited
   while the command started is pinned as it is then.
 - **What is written.** For each chosen record, every stale pin on the `Realized-by` line becomes the
   current hash and nothing else on the line, in the file or in any other record, moves. One
@@ -530,3 +534,4 @@ asserted by test, not assumed by convention.
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/fix.rs` 5d6f30edea8f -> 8108f0b26a58, `rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs` 27c91b75ad61 -> 50ac84d1005f. Reason: commands/fix.rs: resolve_attestation now refuses an apply with a gh-verified identity and no --actor; the detect, repair and re-pin logic this record cites is unchanged; fix_rebaseline_integration.rs: the gh-wins test now passes --actor agent and expects actor: agent; the rest is unchanged **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-14 | Bumped to `0.50`. `fix` (Tier 1 `Embodiment` and the `Status` repair) counts only the `Realized-by` locators that resolve (the test `embodiment.locator-exists` applies: tracked, present, a scope that resolves): a locator naming a file that is not there is no evidence, so it neither lifts a computed tier nor is written as `Verified`, `Implemented` or `Done`; a repair that lowers a claim names the locators it did not count in its `evidence`. `fix --rebaseline --apply` refuses a `--reason` of fewer than 3 words or 12 characters. **Why:** an external review found `fix --apply` writing `Verified` from a locator to a file that did not exist. | **substantive** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/fix.rs` 8108f0b26a58 -> 8e0c4f850c4d, `rust/crates/urzua-core/src/fix.rs` b5bfb2aa1386 -> 4a03c290767b, `rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs` 50ac84d1005f -> 29408f8d9f3c. Reason: Read the diff of each re-pinned file against main: cli fix.rs refuses a rebaseline --reason under 3 words or 12 characters; fix_rebaseline_integration.rs passes sentence reasons and adds the short-reason test; core fix.rs counts only resolving locators for Embodiment and Status and puts header-less types out of rebaseline scope. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-16 | Bumped to `0.51`. `fix --rebaseline` runs with neither `embodiment.consistency` nor `status.delivery-agreement` declared; the reason minimum is the configuration's `attestation.reason` (defaults 3 words, 12 characters) and applies to `reverify --apply` too. **Why:** a review found the re-pin `embodiment.pin-stale` suggests refused in a repository that declares neither repair rule, and the ADR-101 amendment of 2026-11-15 puts behaviour in configuration. | **substantive** |
