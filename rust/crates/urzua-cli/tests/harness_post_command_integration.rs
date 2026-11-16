@@ -666,73 +666,12 @@ fn a_command_that_edits_a_protected_path_is_reported_once_to_each_audience() {
 }
 
 #[test]
-fn a_pull_that_changes_a_protected_path_is_not_the_commands_and_is_not_repeated() {
-    let upstream = protected_fixture("pull-upstream");
-    let parent = common::TempDir::new("urzua-postcmd-pull");
-    let clone = parent.join("clone");
-    git(
-        &parent,
-        &[
-            "clone",
-            "-q",
-            upstream.to_str().unwrap(),
-            clone.to_str().unwrap(),
-        ],
-    );
-    git(&clone, &["config", "user.email", "t@example.com"]);
-    git(&clone, &["config", "user.name", "t"]);
-    std::fs::create_dir_all(clone.join(".urzua/cache")).unwrap();
-    assert_eq!(post(&clone)["verdict"], "allow");
-
-    std::fs::write(upstream.join("ops/deploy.sh"), "upstream\n").unwrap();
-    git(&upstream, &["commit", "-q", "-am", "upstream ops"]);
-    bash(&clone, "git pull -q --no-rebase");
-    let v = post(&clone);
-    assert_eq!(protected(&v), 0, "a pull is not the agent's edit: {v}");
-    assert_eq!(v["person"].as_str().unwrap_or(""), "", "{v}");
-    assert!(
-        v["adopted"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|p| p == "ops/deploy.sh"),
-        "{v}"
-    );
-    // A read-only command after it says nothing.
-    bash(&clone, "ls >/dev/null");
-    let v = post(&clone);
-    assert_eq!(v["verdict"], "allow", "{v}");
-    assert_eq!(protected(&v), 0, "{v}");
-}
-
-#[test]
 fn a_commit_the_command_makes_to_a_protected_path_is_still_reported() {
     let dir = protected_fixture("commit-own");
     post(&dir);
     bash(&dir, "echo mine > ops/deploy.sh && git commit -q -am mine");
     let v = post(&dir);
     assert_eq!(protected(&v), 1, "{v}");
-}
-
-#[test]
-fn a_stash_pop_restores_changes_that_are_not_the_commands() {
-    let dir = protected_fixture("stash");
-    post(&dir);
-    bash(&dir, "echo stashed > ops/deploy.sh && git stash -q");
-    assert_eq!(post(&dir)["verdict"], "allow");
-    bash(&dir, "git stash pop -q");
-    let v = post(&dir);
-    assert_eq!(protected(&v), 0, "{v}");
-    let v = post(&dir);
-    assert_eq!(protected(&v), 0, "{v}");
-}
-
-fn payload_with(dir: &Path, response: serde_json::Value) -> String {
-    serde_json::json!({
-        "hook_event_name": "PostToolUse", "tool_name": "Bash", "cwd": dir.to_string_lossy(),
-        "tool_input": {"command": "x"}, "tool_response": response,
-    })
-    .to_string()
 }
 
 #[test]
@@ -795,8 +734,182 @@ fn the_adapter_relays_a_finding_to_the_agent_alone() {
     assert!(agent.contains(PATH_1), "{v}");
 }
 
+// ------------------------------- MILE-278 review: gate events are never adopted
+
+const LAUNDER_CONFIG: &str = "schema_version: 2\nrecord_types:\n  adr:\n    dir: \"docs/adr\"\n    required_fields: [\"Status\"]\n    statuses:\n      values: [Proposed, Accepted, Rejected]\nharness:\n  adapters: [claude-code]\n  guardrails:\n    acceptance: {enabled: true}\n    protected-paths: {enabled: true}\n    post-command: {enabled: true}\nauthority:\n  deciders:\n    maintainers: {logins: [Alice]}\n  gates:\n    - {type: adr, to: [Accepted, Rejected], by: maintainers}\n    - {paths: [\".github/workflows\"], by: maintainers}\n";
+const A: &str = "sed -i 's/^Status: Proposed/Status: Accepted/' docs/adr/ADR-1-a.md";
+const W: &str = "echo evil >> .github/workflows/ci.yml";
+const BUILD_C: &str =
+    "git add -A && c=$(git commit-tree $(git write-tree) -p HEAD -m x) && git reset -q --hard HEAD";
+
+fn launder_fixture(name: &str) -> common::TempDir {
+    let dir = fixture(
+        name,
+        LAUNDER_CONFIG,
+        "---\nStatus: Proposed\n---\n# ADR-1: T\n\nprose\n",
+    );
+    std::fs::create_dir_all(dir.join(".github/workflows")).unwrap();
+    std::fs::write(dir.join(".github/workflows/ci.yml"), "name: ci\n").unwrap();
+    git(&dir, &["add", "-A"]);
+    git(&dir, &["commit", "-q", "-m", "gates"]);
+    git(&dir, &["branch", "-M", "main"]);
+    assert_eq!(post(&dir)["verdict"], "allow");
+    dir
+}
+
+/// Over the commands, the gated move and the protected change are each told to
+/// the person exactly once, and the read-only command after them says nothing.
+fn assert_reported_once(dir: &Path, commands: &[&str]) {
+    let mut person = String::new();
+    for cmd in commands {
+        bash(dir, cmd);
+        let v = post(dir);
+        person.push_str(v["person"].as_str().unwrap_or(""));
+    }
+    bash(dir, "ls >/dev/null");
+    let v = post(dir);
+    assert_eq!(v["verdict"], "allow", "the next command is silent: {v}");
+    assert_eq!(person.matches("[acceptance]").count(), 1, "{person}");
+    assert_eq!(
+        person.matches(".github/workflows/ci.yml").count(),
+        1,
+        "{person}"
+    );
+    assert!(person.contains("docs/adr/ADR-1-a.md"), "{person}");
+}
+
 #[test]
-fn a_host_list_of_changed_files_skips_the_engine_only_when_empty() {
+fn launder_by_stash_pop_is_reported() {
+    let dir = launder_fixture("l-stash");
+    assert_reported_once(
+        &dir,
+        &[&format!("{A} && {W} && git stash -q"), "git stash pop -q"],
+    );
+}
+
+#[test]
+fn launder_by_a_forged_stash_marker_is_reported() {
+    let dir = launder_fixture("l-marker");
+    assert_reported_once(
+        &dir,
+        &[&format!("{A} && {W} && git add -A && c=$(git commit-tree $(git write-tree) -p HEAD -m x) && git reset -q && echo $c > .urzua/cache/post-command-stash")],
+    );
+}
+
+#[test]
+fn launder_by_reset_hard_to_a_built_commit_is_reported() {
+    let dir = launder_fixture("l-reset");
+    assert_reported_once(
+        &dir,
+        &[
+            &format!("{A} && {W} && {BUILD_C} && echo $c > ../c-reset"),
+            "git reset -q --hard $(cat ../c-reset)",
+        ],
+    );
+}
+
+#[test]
+fn launder_by_fast_forward_merge_is_reported() {
+    let dir = launder_fixture("l-ff");
+    assert_reported_once(
+        &dir,
+        &[
+            &format!("{A} && {W} && {BUILD_C} && echo $c > ../c-ff"),
+            "git merge -q --ff-only $(cat ../c-ff)",
+        ],
+    );
+}
+
+#[test]
+fn launder_by_update_ref_is_reported() {
+    let dir = launder_fixture("l-ref");
+    assert_reported_once(
+        &dir,
+        &[&format!(
+            "{A} && {W} && {BUILD_C} && git update-ref refs/heads/main $c && git reset -q --hard"
+        )],
+    );
+}
+
+#[test]
+fn launder_by_pull_from_a_clone_is_reported() {
+    let dir = launder_fixture("l-pull");
+    assert_reported_once(
+        &dir,
+        &[&format!("rm -rf ../rem && git clone -q . ../rem && cd ../rem && git config user.email t@example.com && git config user.name t && {A} && {W} && git commit -qam x && cd - >/dev/null && git pull -q --ff-only ../rem main")],
+    );
+}
+
+#[test]
+fn launder_by_cherry_pick_is_reported() {
+    let dir = launder_fixture("l-pick");
+    assert_reported_once(
+        &dir,
+        &[&format!("git checkout -q -b side && {A} && {W} && git commit -qam x && git checkout -q main && git cherry-pick side >/dev/null")],
+    );
+}
+
+#[test]
+fn a_pull_of_a_protected_change_says_it_arrived_by_a_git_move_once() {
+    let dir = launder_fixture("pull-protected");
+    let parent = dir
+        .parent()
+        .unwrap()
+        .join(format!("{}-up", dir.file_name().unwrap().to_string_lossy()));
+    git(
+        dir.parent().unwrap(),
+        &[
+            "clone",
+            "-q",
+            dir.to_str().unwrap(),
+            parent.to_str().unwrap(),
+        ],
+    );
+    git(&parent, &["config", "user.email", "t@example.com"]);
+    git(&parent, &["config", "user.name", "t"]);
+    std::fs::write(parent.join(".github/workflows/ci.yml"), "name: upstream\n").unwrap();
+    git(&parent, &["commit", "-q", "-am", "upstream"]);
+    bash(
+        &dir,
+        &format!("git pull -q --ff-only {} main", parent.display()),
+    );
+    let v = post(&dir);
+    let person = v["person"].as_str().unwrap();
+    assert!(
+        person.contains(".github/workflows/ci.yml") && person.contains("arrived by a git move"),
+        "{v}"
+    );
+    bash(&dir, "ls >/dev/null");
+    assert_eq!(post(&dir)["verdict"], "allow");
+}
+
+#[test]
+fn a_pull_of_an_ordinary_record_finding_is_absorbed_quietly() {
+    let dir = fixture("pull-finding", CONFIG, GOOD);
+    let up = dir
+        .parent()
+        .unwrap()
+        .join(format!("{}-up", dir.file_name().unwrap().to_string_lossy()));
+    git(
+        dir.parent().unwrap(),
+        &["clone", "-q", dir.to_str().unwrap(), up.to_str().unwrap()],
+    );
+    git(&up, &["config", "user.email", "t@example.com"]);
+    git(&up, &["config", "user.name", "t"]);
+    assert_eq!(post(&dir)["verdict"], "allow");
+    std::fs::write(up.join(PATH_1), BAD).unwrap();
+    git(&up, &["commit", "-q", "-am", "bad upstream"]);
+    let branch = git(&dir, &["rev-parse", "--abbrev-ref", "HEAD"]);
+    bash(
+        &dir,
+        &format!("git pull -q --ff-only {} {}", up.display(), branch.trim()),
+    );
+    let v = post(&dir);
+    assert_eq!(v["verdict"], "allow", "{v}");
+}
+
+#[test]
+fn an_empty_bash_edit_diff_still_runs_the_comparison() {
     let dir = fixture("host-list", CONFIG, GOOD);
     install(&dir);
     git(&dir, &["add", "-A"]);
@@ -807,17 +920,8 @@ fn a_host_list_of_changed_files_skips_the_engine_only_when_empty() {
         &dir,
         &format!("sed -i 's/Implemented/Not started/' {PATH_1}"),
     );
-    // The host says nothing changed: the engine is not started (the record
-    // change waits for a command the host does not vouch for).
     let empty = payload_with(&dir, serde_json::json!({"stdout": "", "bashEditDiff": []}));
     let out = run_hook(&dir, &cmd, &empty, None);
-    assert!(out.stdout.is_empty(), "{out:?}");
-    // The host names the file: the engine runs and reports it.
-    let named = payload_with(
-        &dir,
-        serde_json::json!({"stdout": "", "bashEditDiff": [{"filePath": dir.join(PATH_1).to_string_lossy()}]}),
-    );
-    let out = run_hook(&dir, &cmd, &named, None);
     let v = json(&out);
     assert!(
         v["hookSpecificOutput"]["additionalContext"]
@@ -826,9 +930,12 @@ fn a_host_list_of_changed_files_skips_the_engine_only_when_empty() {
             .contains(PATH_1),
         "{v}"
     );
-    // A shape it does not know is the field being absent: the comparison runs.
-    bash(&dir, &format!("echo more >> {PATH_1}"));
-    let odd = payload_with(&dir, serde_json::json!({"stdout": "", "bashEditDiff": "x"}));
-    let out = run_hook(&dir, &cmd, &odd, None);
-    assert!(!out.stdout.is_empty(), "{out:?}");
+}
+
+fn payload_with(dir: &Path, response: serde_json::Value) -> String {
+    serde_json::json!({
+        "hook_event_name": "PostToolUse", "tool_name": "Bash", "cwd": dir.to_string_lossy(),
+        "tool_input": {"command": "x"}, "tool_response": response,
+    })
+    .to_string()
 }

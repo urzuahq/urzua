@@ -91,8 +91,9 @@ struct PostVerdict {
     /// What the person is told: only a gated move, a protected-path change, or
     /// a check that could not run; empty otherwise.
     person: String,
-    /// Paths a pull, checkout, merge, rebase or stash brought in, taken into the
-    /// baseline unreported.
+    /// Records whose ordinary findings were absorbed into the baseline unreported,
+    /// because a pull, checkout, merge or rebase brought them in. A gated move or
+    /// a protected change in them is still reported.
     adopted: Vec<String>,
 }
 
@@ -172,22 +173,31 @@ fn judge(config: Option<PathBuf>) -> PostVerdict {
         (Some(_), Some(l)) => l.clone(),
         _ => "HEAD".to_string(),
     };
-    let mut committed = committed.unwrap_or_default();
-    let mut foreign = match (&top, &last, &head) {
+    let committed = committed.unwrap_or_default();
+    // The reflog and the stash are written by whoever runs git, the agent
+    // included, so they choose only whether ordinary findings are absorbed and
+    // how a gate event is worded; they never keep a gate event from the report.
+    let absorbed = match (&top, &last, &head) {
         (Some(t), Some(l), Some(h)) if l != h && !committed.is_empty() => {
             foreign_commits(t, l, h, &committed)
         }
         _ => Vec::new(),
     };
-    committed.retain(|p| !foreign.contains(p));
+    let mut arrived = committed.clone();
     if let Some(t) = &top {
         if let Some(oid) = read_stash(t) {
-            foreign.extend(stash_matches(t, &oid));
+            arrived.extend(stash_matches(t, &oid));
         }
     }
-    foreign.sort();
-    foreign.dedup();
-    let v = judge_changes(&config, top.as_deref(), &base, committed, &foreign);
+    arrived.sort();
+    arrived.dedup();
+    let v = judge_changes(
+        &config,
+        top.as_deref(),
+        &base,
+        committed,
+        (&absorbed, &arrived),
+    );
     // The range is consumed once it has been judged; an unjudged run keeps it.
     if v.verdict != "allow-unjudged" {
         if let (Some(t), Some(h)) = (&top, &head) {
@@ -377,7 +387,7 @@ fn judge_changes(
     top: Option<&Path>,
     base: &str,
     committed: Vec<String>,
-    foreign: &[String],
+    (absorbed, arrived): (&[String], &[String]),
 ) -> PostVerdict {
     // The gate: git's own view of the working tree, before any configuration.
     let mut tree = match changed_paths() {
@@ -405,7 +415,6 @@ fn judge_changes(
     // Protected files git does not show (ignored ones), by content hash.
     let scan = scan_protected(&repo_root, &config_path, &loaded, true);
     let paths = changed_path_map(&repo_root, tree, committed, scan.changes.clone());
-    adopt(&repo_root, &paths, foreign);
     let Selected {
         fresh,
         mut protected,
@@ -414,9 +423,9 @@ fn judge_changes(
     protected.extend(shrink_lines(&repo_root, &config_path, &scan));
     let deletions = gated_deletions(&repo_root, &loaded, &paths, base, &scan);
     let mut remembered = remembered;
-    let adopted: Vec<String> = foreign
+    let adopted: Vec<String> = fresh
         .iter()
-        .filter(|p| paths.contains_key(*p))
+        .filter(|p| absorbed.contains(*p))
         .cloned()
         .collect();
     remember_deletions(&repo_root, &paths, &deletions, &mut remembered);
@@ -440,8 +449,15 @@ fn judge_changes(
     // never blocks. It does not depend on `check` being able to run.
     let mut gated = gated_moves(&repo_root, &loaded, &fresh, base, &scan);
     gated.extend(deletions);
+    let gated = mark_arrived(gated, arrived);
+    let protected = mark_arrived(protected, arrived);
+    let to_check: Vec<String> = fresh
+        .iter()
+        .filter(|p| !absorbed.contains(*p))
+        .cloned()
+        .collect();
 
-    let report = match run_check(config, &fresh, gated.is_empty() && protected.is_empty()) {
+    let report = match run_check(config, &to_check, gated.is_empty() && protected.is_empty()) {
         Ok(r) => r,
         Err(verdict) => return *verdict,
     };
@@ -449,34 +465,35 @@ fn judge_changes(
     let (old, new) = partition_by_head(config, &all, base);
     write_memory(&repo_root, &remembered);
 
-    let mut v = report_verdict(&fresh, protected, gated, (new, old), scan.note.as_deref());
+    let mut v = report_verdict(
+        &to_check,
+        protected,
+        gated,
+        (new, old),
+        scan.note.as_deref(),
+    );
     v.adopted = adopted;
     v
 }
 
-/// Takes the paths a pull, checkout, merge, rebase or stash brought in into the
-/// memory at their content now, so neither this check nor a later one reports
-/// them as the command's.
-fn adopt(repo_root: &Path, paths: &BTreeMap<String, bool>, foreign: &[String]) {
-    if foreign.is_empty() {
-        return;
-    }
-    let mut memory = read_memory(repo_root);
-    for rel in foreign {
-        let Some(deleted) = paths.get(rel) else {
-            continue;
-        };
-        let hash = if *deleted {
-            "deleted".to_string()
-        } else {
-            match std::fs::read(repo_root.join(rel)) {
-                Ok(bytes) => urzua_io::sha256_hex_of_str(&String::from_utf8_lossy(&bytes)),
-                Err(_) => continue,
+/// A report line whose path arrived with `HEAD` moving or matches the stash says
+/// so instead of reading as an edit. Only the wording changes.
+fn mark_arrived(lines: Vec<String>, arrived: &[String]) -> Vec<String> {
+    lines
+        .into_iter()
+        .map(|line| {
+            let head = line.trim_start();
+            let hit = arrived.iter().any(|p| {
+                head.strip_prefix(p.as_str())
+                    .is_some_and(|rest| rest.starts_with(' ') || rest.starts_with(':'))
+            });
+            if hit {
+                format!("{line} It arrived by a git move such as pull, checkout, merge, reset or stash pop, not by an edit tool; it is reported because a decider must make it.")
+            } else {
+                line
             }
-        };
-        memory.insert(rel.clone(), hash);
-    }
-    write_memory(repo_root, &memory);
+        })
+        .collect()
 }
 
 /// The verdict for a judged command: the findings `check` reported on the

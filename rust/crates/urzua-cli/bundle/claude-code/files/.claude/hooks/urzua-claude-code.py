@@ -159,27 +159,6 @@ def relay_post_command(person, agent):
     return 0
 
 
-def host_changed_files(payload):
-    """The files the host says the shell command changed, or None when it does
-    not say. Read from `tool_response.bashEditDiff` as a list of paths or of
-    objects with a path, or a mapping keyed by path; any other shape is None."""
-    resp = payload.get("tool_response")
-    if not isinstance(resp, dict) or "bashEditDiff" not in resp:
-        return None
-    diff = resp["bashEditDiff"]
-    if isinstance(diff, dict):
-        diff = list(diff.keys())
-    if not isinstance(diff, list):
-        return None
-    files = []
-    for entry in diff:
-        if isinstance(entry, dict):
-            entry = entry.get("filePath") or entry.get("file_path") or entry.get("path")
-        if not isinstance(entry, str) or not entry:
-            return None
-        files.append(entry)
-    return files
-
 
 def deny(message):
     out({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": message}})
@@ -650,11 +629,6 @@ def main():
     elif event == "post-command":
         # Any Bash command. The engine reads git, never the command.
         if payload.get("tool_name") != "Bash":
-            return 0
-        # The host saying the command changed no file is enough to skip the
-        # engine; a commit or a pull is still caught by the next command that
-        # runs it, since the engine compares with the commit it last saw.
-        if host_changed_files(payload) == []:
             return 0
         request = {"event": "post-command", "tool": "Bash", "paths": [], "content": None, "actor": "agent", "cwd": cwd, "project_dir": PROJECT_DIR}
     else:

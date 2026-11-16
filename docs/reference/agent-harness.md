@@ -101,10 +101,11 @@ nothing. Set `report_outside_writes: true` under `harness` to see the old notice
 this edit ... is outside the repository", for each such write. A refused write, and an edit inside the
 repository that urzua could not judge, are reported either way.
 
-The post-command check prints nothing for a command that changed nothing governed. What a `git pull`,
-`checkout`, `merge`, `rebase` or `stash pop` brought in is not reported as the agent's edit, and is not
-repeated after later commands. What the command itself changed is reported once: a short line to the
-agent, and a message to you only for a gated move, a protected-path change, or a check that could not run.
+The post-command check prints nothing for a command that changed nothing governed. A gated move or a
+protected-path change is reported once, to you, however it arrived; when it came in by a `git pull`,
+`checkout`, `merge`, `reset` or `stash pop` the message says so. Ordinary findings in records a pull or
+checkout brought in are not reported. The agent gets a short line; you get a message only for a gated
+move, a protected-path change, or a check that could not run.
 
 ## Limits
 
