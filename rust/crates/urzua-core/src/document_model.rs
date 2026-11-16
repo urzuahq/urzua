@@ -305,10 +305,14 @@ impl RequiredSection {
 /// it never judges whether the content is true or sensible.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SectionShape {
-    /// The five Y-statement phrases in one block (`MILE-5`). With a `marker`
+    /// The Y-statement phrases in one block (`MILE-5`). With a `marker`
     /// the block starts at the first line containing it; without, it is the
-    /// section's first paragraph.
-    YStatement { marker: Option<String> },
+    /// section's first paragraph. `phrases` replaces the five default ones
+    /// when declared (`MILE-233`).
+    YStatement {
+        marker: Option<String>,
+        phrases: Option<Vec<String>>,
+    },
     /// A table with at least `min_rows` non-empty data rows (`MILE-121`).
     TableMinRows { min_rows: usize },
 }
@@ -321,6 +325,8 @@ struct RawRequiredSection {
     shape: Option<String>,
     #[serde(default)]
     marker: Option<String>,
+    #[serde(default)]
+    phrases: Option<Vec<String>>,
     #[serde(default)]
     min_rows: Option<yaml_serde::Value>,
     #[serde(default)]
@@ -349,7 +355,15 @@ impl RawRequiredSection {
         };
         let under = resolve_under(self.under, level, &name)?;
         let preamble = self.preamble.unwrap_or(false);
-        if preamble && !matches!(shape, Some(SectionShape::YStatement { marker: Some(_) })) {
+        if preamble
+            && !matches!(
+                shape,
+                Some(SectionShape::YStatement {
+                    marker: Some(_),
+                    ..
+                })
+            )
+        {
             return Err(format!(
                 "section '{name}': `preamble` needs shape `y-statement` with a `marker`, which is how the block is found outside a section"
             ));
@@ -368,9 +382,9 @@ impl RawRequiredSection {
     fn resolve_shape(&self, name: &str) -> Result<Option<SectionShape>, String> {
         match self.shape.as_deref() {
             None => {
-                if self.marker.is_some() || self.min_rows.is_some() {
+                if self.marker.is_some() || self.min_rows.is_some() || self.phrases.is_some() {
                     return Err(format!(
-                        "section '{name}' sets `marker` or `min_rows` without a `shape`"
+                        "section '{name}' sets `marker`, `phrases` or `min_rows` without a `shape`"
                     ));
                 }
                 Ok(None)
@@ -388,12 +402,13 @@ impl RawRequiredSection {
                     Some(m) => Some(m.trim().to_string()),
                     None => None,
                 };
-                Ok(Some(SectionShape::YStatement { marker }))
+                let phrases = self.phrases.clone().map(|p| resolve_phrases(p, name)).transpose()?;
+                Ok(Some(SectionShape::YStatement { marker, phrases }))
             }
             Some("table-min-rows") => {
-                if self.marker.is_some() {
+                if self.marker.is_some() || self.phrases.is_some() {
                     return Err(format!(
-                        "section '{name}': `marker` belongs to shape `y-statement`"
+                        "section '{name}': `marker` and `phrases` belong to shape `y-statement`"
                     ));
                 }
                 let min_rows = self
@@ -415,6 +430,32 @@ impl RawRequiredSection {
             )),
         }
     }
+}
+
+/// The declared Y-statement phrases: at least one, none blank, none repeated
+/// once case and spacing are folded as the shape check folds them. An empty
+/// list would make every block pass, so it is refused (`MILE-233`).
+fn resolve_phrases(phrases: Vec<String>, name: &str) -> Result<Vec<String>, String> {
+    if phrases.is_empty() {
+        return Err(format!(
+            "section '{name}': `phrases` is empty, which would accept any block; declare at least one phrase or drop the shape"
+        ));
+    }
+    let fold = |p: &str| {
+        p.split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+            .to_lowercase()
+    };
+    for (i, p) in phrases.iter().enumerate() {
+        if p.trim().is_empty() {
+            return Err(format!("section '{name}': `phrases` lists a blank phrase"));
+        }
+        if phrases[..i].iter().any(|q| fold(q) == fold(p)) {
+            return Err(format!("section '{name}': `phrases` lists '{p}' twice"));
+        }
+    }
+    Ok(phrases.into_iter().map(|p| p.trim().to_string()).collect())
 }
 
 /// The trimmed aliases, none blank and none repeating the name or another alias.
@@ -872,7 +913,8 @@ mod tests {
         assert_eq!(
             s.required[1].shape,
             Some(SectionShape::YStatement {
-                marker: Some("TL;DR".into())
+                marker: Some("TL;DR".into()),
+                phrases: None,
             })
         );
         assert_eq!(

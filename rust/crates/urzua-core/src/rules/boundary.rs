@@ -203,6 +203,7 @@ pub fn published_path_reference(
     config_path: &std::path::Path,
 ) -> (RuleExecution, Vec<Finding>) {
     let prefixes = declared_prefixes(config);
+    let vocab = back_pointer_vocab(config);
     let mut findings = Vec::new();
 
     // Files are not records, so none is offered to `records_read_by_any_rule`:
@@ -231,6 +232,7 @@ pub fn published_path_reference(
             covering: &covering,
             prefixes: &prefixes,
             ignore_marker,
+            vocab: &vocab,
         };
         scan.scan(content, &mut findings);
         // A vendored boundary declares the path and prohibits nothing, so a
@@ -303,6 +305,7 @@ struct FileScan<'a> {
     covering: &'a [&'a ResolvedBoundary],
     prefixes: &'a [String],
     ignore_marker: Option<&'a str>,
+    vocab: &'a BackPointerVocab,
 }
 
 impl FileScan<'_> {
@@ -378,8 +381,8 @@ impl FileScan<'_> {
         here: &mut Vec<(String, Finding)>,
     ) {
         let entry = b.entry_for(self.path);
-        for marker in [MARKER_IMPLEMENTS, MARKER_VERIFIES] {
-            for pointer in scan_marker_line(line, self.prefixes, marker) {
+        for marker in [self.vocab.implements.as_str(), self.vocab.verifies.as_str()] {
+            for pointer in scan_marker_line(line, self.prefixes, marker, &self.vocab.syntax) {
                 keep_highest(here, format!("pointer {marker} {pointer}"), boundary_finding(
                     b,
                     self.path,
@@ -471,8 +474,13 @@ fn boundary_declaration_findings(
 /// The record identifiers a back-pointer comment on `line` cites with `marker`:
 /// the evidence collector's own narrow reader, so a `generated` boundary and
 /// the evidence rule agree on what a back-pointer is.
-fn scan_marker_line(line: &str, prefixes: &[String], marker: &str) -> Vec<String> {
-    scan_marker(std::path::Path::new(""), line, prefixes, marker)
+fn scan_marker_line(
+    line: &str,
+    prefixes: &[String],
+    marker: &str,
+    syntax: &CommentSyntax,
+) -> Vec<String> {
+    scan_marker(std::path::Path::new(""), line, prefixes, marker, syntax)
         .into_iter()
         .map(|p| p.id)
         .collect()

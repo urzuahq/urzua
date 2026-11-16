@@ -32,6 +32,7 @@ pub fn code_dangling_bug_reference(
     const RULE_ID: &str = RULE_CODE_DANGLING_BUG_REFERENCE;
     let prefixes = declared_prefixes(config);
     let setting = config.rules.get(RULE_ID);
+    let vocab = back_pointer_vocab(config);
     let external: Vec<ExternalId> = setting
         .and_then(|s| s.external_ids.as_ref())
         .into_iter()
@@ -49,6 +50,7 @@ pub fn code_dangling_bug_reference(
             .filter(|s| s.level != crate::config::RuleLevel::Off),
         index,
         leaders: setting.and_then(|s| s.code_comment_prefixes.as_ref()),
+        vocab: &vocab,
     };
     let mut findings = Vec::new();
     let mut excused_lines = 0;
@@ -105,6 +107,7 @@ struct Judge<'a> {
     index: &'a RecordIndex<'a>,
     /// The declared comment leaders per extension, where declared.
     leaders: Option<&'a std::collections::BTreeMap<String, Vec<String>>>,
+    vocab: &'a BackPointerVocab,
 }
 
 impl Judge<'_> {
@@ -112,13 +115,14 @@ impl Judge<'_> {
     fn file(&self, file: &SourceFile, content: &str) -> (Vec<Finding>, usize) {
         const RULE_ID: &str = RULE_CODE_DANGLING_BUG_REFERENCE;
         let (judged_elsewhere, unread_elsewhere) =
-            judged_by_resolution(self.resolution, file, content, self.prefixes);
+            judged_by_resolution(self.resolution, file, content, (self.prefixes, self.vocab));
         let lines: Vec<&str> = content.lines().collect();
         let declared: Option<&[String]> = self.leaders.and_then(|m| {
             let ext = file.path.extension()?.to_str()?;
             m.get(ext).map(Vec::as_slice)
         });
-        let citations = scan_comment_citations(content, self.prefixes, declared);
+        let citations =
+            scan_comment_citations(content, self.prefixes, declared, &self.vocab.syntax);
         let mut findings = Vec::new();
         let mut excused = BTreeSet::new();
         for citation in &citations {
@@ -177,7 +181,7 @@ fn judged_by_resolution(
     resolution: Option<&crate::config::RuleSetting>,
     file: &SourceFile,
     content: &str,
-    prefixes: &[String],
+    (prefixes, vocab): (&[String], &BackPointerVocab),
 ) -> (BTreeSet<(usize, String)>, BTreeSet<usize>) {
     let mut out = BTreeSet::new();
     let mut unread = BTreeSet::new();
@@ -194,16 +198,16 @@ fn judged_by_resolution(
     }
     let reports_unread = setting.unread_markers == Some(crate::config::UnreadMarkers::Report);
     let tests = setting.test_paths.clone().unwrap_or_default();
-    let mut markers = vec![MARKER_IMPLEMENTS];
+    let mut markers = vec![vocab.implements.as_str()];
     if is_test_file(&file.path, &tests) {
-        markers.push(MARKER_VERIFIES);
+        markers.push(vocab.verifies.as_str());
     }
     for marker in markers {
-        for p in scan_marker(&file.path, content, prefixes, marker) {
+        for p in scan_marker(&file.path, content, prefixes, marker, &vocab.syntax) {
             out.insert((p.line, p.id));
         }
         if reports_unread {
-            for u in scan_unread_markers(&file.path, content, prefixes, marker) {
+            for u in scan_unread_markers(&file.path, content, prefixes, marker, &vocab.syntax) {
                 unread.insert(u.line);
             }
         }
