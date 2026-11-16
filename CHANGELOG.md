@@ -4,6 +4,85 @@ All notable changes to `urzua` are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/). Written for the person installing it — what changed
 for you — not a commit dump.
 
+## 0.4.4 (2026-11-16)
+
+### Features
+
+#### `harness.limits` in `.urzua/config.yaml` sets the editor hook's timeout (`hook_timeout_seconds`,
+
+120 to 600, default 120) and the caps on how much of one agent call the harness reads: files and
+record checks per call, loose strings, input depth, path and string length, symlink hops, settings
+file depth, the `urzua mcp` request line and the path-gate walk. Each cap is a security floor:
+today's value is the default and the minimum, so you may raise it but a lower value, an unknown key
+or a non-number stops the config from loading with a message naming the key and the floor. A call
+beyond a cap is still an edit that was not judged, decided by `on_unjudged`. A config that declares
+none behaves exactly as before.
+
+`urzua harness limits` prints the values in force; the Claude Code translator reads them from it
+and keeps the built-in values when it cannot. The installed hook entry's timeout comes from the
+config at `urzua harness install`/`update`, and `harness status`, `doctor` and the session-start
+check report it out of date after the config changes it.
+
+#### The agent harness is quieter. The editor hook no longer prints "urzua did NOT judge this edit ... is
+
+outside the repository" for a write it allows outside the repository (a note or a scratch file): this is a
+new default, chosen by the maintainer, not today's behaviour. To get the message back, set
+`report_outside_writes: true` under `harness` in `.urzua/config.yaml`. A refused write and an edit inside
+the repository that urzua could not judge are still reported.
+
+The post-command check prints nothing for a command that changed nothing governed. A gated move or a
+protected-path change is reported once, to you, however it arrived; one that came in by `git pull`,
+`checkout`, `merge`, `reset` or `stash pop` is worded as such and is not repeated after later commands.
+Ordinary findings in records a pull or checkout brought in are not reported. The agent gets a short line
+and you get a message only for a gated move, a protected-path change or a check that could not run; the two
+never repeat each other. Run `urzua harness update` to install the new translator and hook commands.
+
+#### **Upgrading: `embodiment.pin-stale` is on by default, at `warn`.** `check` now reports a stale
+
+`@sha256` evidence pin on any record, whatever the record states. Until now only a record that
+states an `Embodiment`, an ADR for example, drew a finding when a pinned file changed; a bug or a
+milestone that pins code or a test drifted unseen. A repository whose pins went stale unseen sees
+those warnings on its first run after upgrading, and **a repository with `fail_on: warning` sees CI
+fail on them.** There are two ways out:
+
+- Re-pin each record after reading the change: `urzua fix --rebaseline` lists them (it runs whether
+  or not `embodiment.consistency` or `status.delivery-agreement` is declared), and `urzua fix
+  --rebaseline --apply --ids <record> --by <you> --actor <agent|human> --reason "<why the evidence
+  still holds>"` clears each. A record you choose to leave can be waived.
+- Or set the rule's level under `rules:`: `embodiment.pin-stale: info` keeps the report without
+  failing a `fail_on: warning` run, and `embodiment.pin-stale: off` turns it off.
+
+**New refusal: a short `--reason`.** `urzua fix --rebaseline --apply` and `urzua reverify --apply`
+refuse a `--reason` of fewer than 3 words or 12 characters (`--reason r` used to be accepted). The
+minimum is configuration: `attestation: {reason: {min_words: 3, min_chars: 12}}` are the defaults,
+and a repository may lower or raise either.
+
+Also fixed: `fix` counts only the `Realized-by` locators that resolve, so a locator naming a missing
+file no longer lifts a computed tier or is written as `Verified` or `Done`; the renewal check
+`embodiment.claim-renewal-unattested` reads the record type's own header layout, so it sees an audit
+date typed into a prefix-lines record; a `drift_audit_field` date after today is reported and
+ignored; a heading inside an HTML comment is not a section, however many comments open and close on
+one line; two records carrying one `Stable-Id` are reported by `identity.collision`; `urzua waive
+--from-report` drafts omit the optional `Category` and `Justified-by` keys; `urzua migrate filenames`
+rewrites `./` citations from files in other directories and reports how many records it examined;
+`urzua reverify --apply` accepts a record that starts with a byte-order mark; a source file that is
+not UTF-8 is named in a warning when `code.dangling-bug-reference` could not read it; and a usage
+error of `urzua mcp` is printed on stderr, never on stdout.
+
+### Fixes
+
+- Fixes found while switching an existing repository to urzua. A source comment marker whose id is followed by a colon (`Verifies: ADR-12: why`, also `ADR-12::why`) is read as a back-pointer, and a marker that names an id in a form urzua cannot read (`Implements: (ADR-12)`) is counted and listed in an info notice instead of being skipped; the new rule option `unread_markers: report` makes each one a finding, and then `code.dangling-bug-reference` leaves that line to it. `urzua waive --from-report` quotes the findings it drafts in a fenced block, so a drafted waiver no longer reports the dangling ids it quotes. `urzua init` names `effective_requires: [Reason, Expires]` (or `permanent`) as part of the waiver declaration it withholds. `urzua refs refresh` requests pages in parallel when GitHub names the last page (`issue_refs.workers`, default 4, 1 to 16) and follows on serially if that last page still has a next.
+
+#### A tracked record file that is a symlink, or sits behind a symlinked directory, is no longer read by
+
+any command. `check`, `audit` and the MCP check tool report it as a blocking
+`identity.record-symlink-escapes` finding naming the link and where it resolves, and every other
+command that loads the corpus stops with exit 2 naming it. No link is allowed, including one to
+another file in the same record directory (`ADR-12.md` linked to `draft.txt`) or a chain of links.
+The rule is on at `error` for every configuration, runs under every `--rules` selection, and no
+waiver excuses it. A configuration may set another level under `rules:`, or `off`; with `off` a
+record is read through the link and every `check` carries a warning notice saying so.
+
 ## 0.4.3 (2026-11-15)
 
 ### Features
