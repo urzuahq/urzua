@@ -17,8 +17,8 @@ Found on 2026-11-16 while urzua's own builders and reviewers used the tool to la
 
 ## Done means
 
-- A waiver whose `Reason` is `—`, `-` or other punctuation with no letter or digit does not take effect and is reported, shown by a test. — evidence: test:rust/crates/urzua-core/src/waiver.rs, code:rust/crates/urzua-core/src/waiver.rs#SuppressionType::field_state
-- The override log and the waiver judgement share one definition of a blank value. — evidence: code:rust/crates/urzua-core/src/field_state.rs#is_blank_value, code:rust/crates/urzua-core/src/rules/override_log.rs#reviewer_state, test:rust/crates/urzua-core/src/field_state.rs
+- A waiver whose `Reason` is `—`, `-` or other punctuation with no letter or digit does not take effect and is reported, shown by a test. — evidence: test:rust/crates/urzua-core/src/waiver.rs@sha256:d6cc43b080a82784348e1bc8acb0878119491029b3bea8542f4b8417d17101a6, code:rust/crates/urzua-core/src/waiver.rs#SuppressionType::field_state@sha256:9721f54466cb8a90bc28ba4328f0fda4b07c84f7ec5f68d81477669165a4eb95
+- The override log and the waiver judgement share one definition of a blank value. — evidence: code:rust/crates/urzua-core/src/field_state.rs#is_blank_value@sha256:c453f106d3371ed0268f0a06189843dd4a4539bff8480b1c864c50b9b0810719, code:rust/crates/urzua-core/src/rules/override_log.rs#reviewer_state@sha256:a0bb6f40f1f85826489245aaa4d46f5847f2afd1b69a112c9ca440c8df72ddb2, test:rust/crates/urzua-core/src/field_state.rs@sha256:bc254c840275fc62152ac3934b187ba07167d4d8228ec4ff93bbe0888c014fe9
 
 > **Revision log**
 >
@@ -26,3 +26,4 @@ Found on 2026-11-16 while urzua's own builders and reviewers used the tool to la
 > |---|---|---|
 > | 2026-11-16 | Initial record, `Status: Planned`. **Why:** Filed from friction met while using urzua on its own repository on 2026-11-16; the maintainer said that day that issues met in using and adopting the tool are improvement points. | **structural** |
 > | 2026-11-16 | Tool-authored (by beauwilliams, identity: gh-verified, actor: agent): recomputed `Status` from `the Done means items (2 of 2 items resolved) computes to Verified` -- stated `Planned` disagreed with the computed value `Done`. | **structural** |
+> | 2026-11-16 | Pinned (attested by beauwilliams, identity: gh-verified, actor: agent): 5 locators pinned, 2 file-level, 3 scoped. Evidence: rust/crates/urzua-core/src/waiver.rs@sha256:d6cc43b080a8, rust/crates/urzua-core/src/waiver.rs#SuppressionType::field_state@sha256:9721f54466cb, rust/crates/urzua-core/src/field_state.rs#is_blank_value@sha256:c453f106d337, rust/crates/urzua-core/src/rules/override_log.rs#reviewer_state@sha256:a0bb6f40f1f8, rust/crates/urzua-core/src/field_state.rs@sha256:bc254c840275 Reason: Pinned the tests and code each delivered Done-means item cites, as they stand in this pull request. **Why:** a claim is renewed only over pinned code and test evidence. | **evidence** |
