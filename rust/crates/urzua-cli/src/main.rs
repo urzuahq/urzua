@@ -383,6 +383,14 @@ enum Command {
         /// appends an attributed revision row.
         #[arg(long)]
         rebaseline: bool,
+        /// Resolve the records a merge or rebase left unmerged (`MILE-284`).
+        /// Without --apply it lists each by kind of conflict, resolvable or
+        /// refused with the reason; with --apply and --ids (or --force) and an
+        /// identity it writes the resolvable ones. Kind `pin`: the sides differ
+        /// only in evidence pins, the version and appended revision-log rows.
+        /// It never stages: `git add` the records it resolved.
+        #[arg(long)]
+        conflicts: bool,
         /// Why the evidence still holds, recorded in the revision row.
         /// Required by --rebaseline --apply.
         #[arg(long)]
@@ -669,6 +677,7 @@ fn dispatch(config: Option<PathBuf>, command: Command) -> ExitCode {
             actor,
             force,
             rebaseline,
+            conflicts,
             reason,
         } => commands::fix::run(
             config,
@@ -682,6 +691,7 @@ fn dispatch(config: Option<PathBuf>, command: Command) -> ExitCode {
                 actor: actor.map_or(urzua_core::fix::ActorKind::Unspecified, Into::into),
                 force,
                 rebaseline,
+                conflicts,
                 reason,
             },
         ),

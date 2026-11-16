@@ -26,6 +26,7 @@ pub struct FixArgs {
     pub actor: urzua_core::fix::ActorKind,
     pub force: bool,
     pub rebaseline: bool,
+    pub conflicts: bool,
     pub reason: Option<String>,
 }
 
@@ -51,6 +52,18 @@ pub(crate) fn rule_enabled(config: &Config, rule: &str) -> bool {
 /// `run` with every refusal as an `Err`, so each step can stop with `?`.
 fn run_checked(config_path: Option<PathBuf>, args: FixArgs) -> Result<ExitCode, Refusal> {
     let reason = check_usage(&args)?;
+    if args.conflicts {
+        return Ok(super::fix_conflicts::run(
+            config_path,
+            super::fix_conflicts::ConflictsArgs {
+                apply: args.apply,
+                ids: &args.ids,
+                force: args.force,
+                by: args.by.as_deref(),
+                actor: args.actor,
+            },
+        ));
+    }
     let Session {
         repo_root,
         config,
@@ -95,9 +108,10 @@ fn run_checked(config_path: Option<PathBuf>, args: FixArgs) -> Result<ExitCode, 
     // no drift, so `status.delivery-agreement` being on is enough to proceed.
     if !rule_enabled(&config, urzua_core::rules::RULE_EMBODIMENT_CONSISTENCY)
         && !rule_enabled(&config, urzua_core::rules::RULE_STATUS_DELIVERY_AGREEMENT)
+        && !urzua_core::fix::inverse::any_enabled(&config)
     {
         return Err(refuse(
-            "urzua fix repairs the Embodiment field that embodiment.consistency judges and the Status that status.delivery-agreement judges, and both rules are off or undeclared in the configuration: nothing to repair",
+            "urzua fix repairs the Embodiment field that embodiment.consistency judges, the Status that status.delivery-agreement judges and the missing inverse of a relation that relation.pair-reciprocity and relation.supersession-reciprocity judge, and those rules are off or undeclared in the configuration: nothing to repair",
         ));
     }
     let tree = Tree {
@@ -132,7 +146,7 @@ fn run_checked(config_path: Option<PathBuf>, args: FixArgs) -> Result<ExitCode, 
 fn check_usage(args: &FixArgs) -> Result<String, Refusal> {
     if args.tier != 1 {
         return Err(refuse(
-            "only tier 1 is implemented so far -- tiers 2 and 3 are not yet built",
+            "--tier accepts only 1: the one tier-2 repair built, the missing inverse of a relation, runs in every run without it, and tier 3 is not built",
         ));
     }
     if args.apply && args.ids.is_empty() && !args.force {
@@ -150,6 +164,16 @@ fn check_usage(args: &FixArgs) -> Result<String, Refusal> {
     {
         return Err(refuse(
             "urzua fix --force, --by and --actor belong to --apply: without it nothing is written, so they would be ignored (--ids alone narrows the dry-run report)",
+        ));
+    }
+    if args.conflicts
+        && (args.rebaseline
+            || args.stdin_path.is_some()
+            || args.reason.is_some()
+            || !args.paths.is_empty())
+    {
+        return Err(refuse(
+            "urzua fix --conflicts works on every record git lists as unmerged and writes no person's reason: it cannot be combined with --rebaseline, --stdin-path, --reason or PATHS (--ids narrows it)",
         ));
     }
     if args.rebaseline && args.stdin_path.is_some() {
@@ -274,6 +298,10 @@ fn detect_repairs_in(
             (population, repairs, notices)
         });
     notices.extend(with_excused_notice(unevidenced, &back_pointed));
+    let mut repairs = repairs;
+    let (inverses, inverse_notices) = urzua_core::fix::inverse::detect(records, scoped, config);
+    repairs.extend(inverses);
+    notices.extend(inverse_notices);
     Ok(Detected {
         population,
         repairs,
@@ -633,17 +661,20 @@ fn build_report(parts: ReportParts) -> FixReport {
         ran_apply,
         extra_notices,
     } = parts;
-    let status = if population.examined() == 0 && !ran_apply && failed.is_empty() {
-        FixStatus::NotRun
-    } else if !failed.is_empty() || !failed_pins.is_empty() {
-        FixStatus::PartialFailure
-    } else if repairs.is_empty() && rebaselines.is_empty() {
-        FixStatus::Ok
-    } else if ran_apply {
-        FixStatus::Applied
-    } else {
-        FixStatus::RepairsAvailable
-    };
+    // An inverse repair is found from the reciprocity rules, not from this
+    // population, so a run that found one ran.
+    let status =
+        if population.examined() == 0 && !ran_apply && failed.is_empty() && repairs.is_empty() {
+            FixStatus::NotRun
+        } else if !failed.is_empty() || !failed_pins.is_empty() {
+            FixStatus::PartialFailure
+        } else if repairs.is_empty() && rebaselines.is_empty() {
+            FixStatus::Ok
+        } else if ran_apply {
+            FixStatus::Applied
+        } else {
+            FixStatus::RepairsAvailable
+        };
 
     FixReport {
         as_of: crate::as_of(),
@@ -782,7 +813,9 @@ fn rebaseline_checked(mut args: RebaselineArgs<'_>) -> Result<ExitCode, Refusal>
             failed: unmatched,
             identity: None,
             ran_apply: false,
-            extra_notices: Vec::new(),
+            extra_notices: super::fix_conflicts::unmerged_records_notice(repo_root, config)
+                .into_iter()
+                .collect(),
         })));
     };
     Ok(apply_rebaselines(&args, identity, scan, unmatched))

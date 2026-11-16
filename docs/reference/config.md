@@ -177,6 +177,8 @@ revision_log:
   class_column: Class
   date_column: Date
   tool_class: structural       # the class tool-written rows carry
+  evidence_class: evidence     # optional: the class of re-pin rows (fix --rebaseline, reverify, fix --conflicts);
+                               # must be in classes; leave it out of version_bump.classes so a re-pin needs no bump
 ```
 
 Give exactly one of `marker` or `heading`. Omitted, the marker is `**Revision log**`. `version_bump:
