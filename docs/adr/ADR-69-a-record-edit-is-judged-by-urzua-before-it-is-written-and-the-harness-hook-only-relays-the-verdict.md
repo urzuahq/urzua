@@ -38,6 +38,28 @@ In the context of agents editing record fields that `urzua` computes, facing an 
 - **The contract is urzua's JSON.** Only a thin adapter is harness-specific. A second harness is a second adapter over the same call.
 - **Not decided here.** Where an override is persisted beyond the hook's output, whom an unacknowledged block routes to, and whether other computed fields join `Embodiment`. These stay `RFC-7`'s open questions (`MILE-12`).
 
+## Amendment (2026-11-16): the first half of a reciprocal relation is let through, naming the other half
+
+The verdict judges one record's proposed content, and some rules need two records to agree: under a relation pair
+(`relation.pair-reciprocity`) or the combined supersession field (`relation.supersession-reciprocity`), a record
+that claims a relation must be named back by the other record. Judged alone, the first half of such a change was
+refused because the other record did not point back yet, and the second half for the mirror reason, so the only way
+to make the change was the shell, which the harness cannot stop (`MILE-287`).
+
+The editor-hook guardrail takes `pending_pair: allow | refuse`. With `allow`, an edit whose only new error findings
+are such reciprocity findings, each satisfied by one edit of another record, is allowed, and the verdict names the
+record, the field and value still required, and the `urzua fix --apply --ids <record>` command that writes it. With
+`refuse`, the edit is refused as before, and the refusal names the same command. Any other new error still refuses.
+The acceptance and protected-path gates, `on_unjudged` and the override are unchanged, so an edit that writes the
+second half and moves a record to a gated status is still refused for the status. An unmatched pair left in the
+working tree is still a finding of `urzua check`, so the post-command hook reports it and pre-commit and CI block it.
+
+The default is `allow`, accepted by the maintainer on 2026-11-16 ("pad edit switch can be on by default", dictated
+for "paired edit switch"; confirmed the same day: "Yeah, it should be on by default"). This is a deliberate exception
+to the `ADR-101` amendment of 2026-11-15, under which a configuration that does not declare a new key behaves as
+before: a configuration that wants the earlier refusal sets `pending_pair: refuse`. The key's name, its values and
+the content of the follow-up message were decided by the builder on 2026-11-16, pending maintainer review.
+
 ## Reversibility
 
 Easy. The hook is configuration plus an adapter script; removing it returns to the instruction-only state with no data change. The cost of being wrong is a permissive hook that lets an unsupported value through to the commit and CI layers, or a strict one that is overridden often.
@@ -62,3 +84,4 @@ Easy. The hook is configuration plus an adapter script; removing it returns to t
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-04 | Status changed from Proposed to Accepted. **Why:** Maintainer decision, 2026-11-04. | **substantive** |
+> | 2026-11-16 | Amendment added: the editor hook lets the first half of a reciprocal relation through and names the other half (`pending_pair`, default `allow`). **Why:** an agent could make a paired change only through the shell (`MILE-287`). | **substantive** |
