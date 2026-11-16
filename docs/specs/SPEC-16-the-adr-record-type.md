@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5F9GRPBMYF7DMG289H
-Version: '0.25'
+Version: '0.26'
 Date: 2026-09-08
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:.urzua/config.yaml@sha256:e544107a6abb54527dc5c7df8a73d144a287f4379eace12faee92b45bfb53d40, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs@sha256:dc29b51bde5a2ba79d95c5e0a09466a54e816e8e2cc4a86a80e4459be477a447
+Realized-by: code:.urzua/config.yaml@sha256:1690790d0bdcb8446fa7c3ce6bb48d2114d1a330744fdfa6b32b25b8206f060e, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs@sha256:dc29b51bde5a2ba79d95c5e0a09466a54e816e8e2cc4a86a80e4459be477a447
 Author: beauwilliams
 Subject: 'The `adr` record type -- schema, required fields, and lifecycle for decision records.'
 Parent: —
@@ -160,3 +160,5 @@ the original Decision text never touched. This session amended `ADR-33`, `ADR-34
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` 7b42a98a69e4 -> 6ed60a01c6e8. Reason: Read the diff of .urzua/config.yaml against the pinned text and the claim still holds. The only change since the previous pin is the comment above header.scaffold-mismatch (it now says why the rule is at info) and its level, warn to info; no other entry changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` 6ed60a01c6e8 -> e544107a6abb. Reason: Read the diff of each pinned file against main and the claim still holds. config.yaml: only the waiver type gained two known_fields, Variant and Key-path, with a comment; no other key changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-14 | Bumped to `0.25`. Evidence pins re-baselined for this change (the `Re-baselined` row above); the specification text is unchanged. **Why:** a revision-log entry that adds a structural change bumps `Version`. | **structural** |
+> | 2026-11-15 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` e544107a6abb -> 1690790d0bdc. Reason: config.yaml: adds harness.limits with hook_timeout_seconds: 120, the built-in value, under harness; no other key changed. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-15 | Bumped to `0.26`. A pinned file (`.urzua/config.yaml`, which now declares `harness.limits`) changed; the pin is re-baselined in the row above and the specified behaviour is unchanged. **Why:** `MILE-232`; a re-baseline row is structural, so the version moves with it. | **structural** |
