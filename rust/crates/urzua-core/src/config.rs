@@ -3285,6 +3285,33 @@ pub fn parse_with_document_models(
     Ok((config, models))
 }
 
+/// Why `hooks.path` cannot name a committed directory inside the repository
+/// that git resolves to the same place, or `None`. git expands a leading `~`
+/// and reads a backslash or colon as a path separator or drive on some hosts,
+/// and `.git` matches case-insensitively on case-insensitive filesystems.
+fn hooks_path_problem(path: &str) -> Option<&'static str> {
+    if path.starts_with('~') {
+        return Some("may not begin with '~', which git expands to a home directory");
+    }
+    if path.starts_with('/') {
+        return Some("must be relative to the repository root");
+    }
+    for c in path.split('/') {
+        if c.is_empty() || c == "." || c == ".." {
+            return Some(
+                "must be written without '.', '..' or empty parts, for example .git-hooks",
+            );
+        }
+        if c.contains(['\\', ':']) || c.chars().any(char::is_control) {
+            return Some("may not contain a backslash, a colon or a control character");
+        }
+        if c.eq_ignore_ascii_case(".git") {
+            return Some("may not name .git in any part (compared case-insensitively), which is not committed");
+        }
+    }
+    None
+}
+
 /// A hook runs only a read-only check of this repository: another subcommand could write files
 /// (`fix --apply`), reach the network (`refs`) or call the hook again
 /// (`hooks run`) on every commit.
@@ -3295,24 +3322,9 @@ fn validate_hooks(hooks: &HooksDecl) -> Result<(), ConfigError> {
         });
     }
     if let Some(path) = &hooks.path {
-        let p = std::path::Path::new(path);
-        let inside = path
-            .split('/')
-            .all(|c| !c.is_empty() && c != "." && c != "..")
-            && p.components()
-                .all(|c| matches!(c, std::path::Component::Normal(_)));
-        if !inside {
+        if let Some(why) = hooks_path_problem(path) {
             return Err(ConfigError::InvalidHooks {
-                reason: format!(
-                    "'path' must be a directory inside the repository, relative to its root and written without '.', '..' or empty parts, for example .git-hooks; got '{path}'"
-                ),
-            });
-        }
-        if path.split('/').next() == Some(".git") {
-            return Err(ConfigError::InvalidHooks {
-                reason: format!(
-                    "'path' may not be under .git, which is not committed; got '{path}'"
-                ),
+                reason: format!("'path' {why}; got {path:?}"),
             });
         }
     }
