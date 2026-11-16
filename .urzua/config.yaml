@@ -130,10 +130,11 @@ record_types:
     revision_log:
       marker: "**Revision log**"
       required: true
-      classes: [substantive, structural]
+      classes: [substantive, structural, evidence]
       class_column: Class
       date_column: Date
       tool_class: structural
+      evidence_class: evidence
     # A type declares Embodiment and Realized-by together (BUG-41); this checks the type, not each record.
     companion_fields:
       - [embodiment_state, embodiment_locator]
@@ -197,10 +198,11 @@ record_types:
     revision_log:
       marker: "**Revision log**"
       required: true
-      classes: [substantive, structural]
+      classes: [substantive, structural, evidence]
       class_column: Class
       date_column: Date
       tool_class: structural
+      evidence_class: evidence
     pointer_fields:
       - "Implements"
       - "Amends"
@@ -272,10 +274,11 @@ record_types:
     revision_log:
       marker: "**Revision log**"
       required: true
-      classes: [substantive, structural]
+      classes: [substantive, structural, evidence]
       class_column: Class
       date_column: Date
       tool_class: structural
+      evidence_class: evidence
       version_bump: {field: "Version", classes: ["substantive", "structural"], initial: "0.1"}
     pointer_fields:
       - "Derives-from"
@@ -296,10 +299,11 @@ record_types:
     revision_log:
       marker: "**Revision log**"
       required: true
-      classes: [substantive, structural]
+      classes: [substantive, structural, evidence]
       class_column: Class
       date_column: Date
       tool_class: structural
+      evidence_class: evidence
     prefix: "MILE"
     required_fields:
       - "Status"
@@ -407,10 +411,11 @@ record_types:
     revision_log:
       marker: "**Revision log**"
       required: true
-      classes: [substantive, structural]
+      classes: [substantive, structural, evidence]
       class_column: Class
       date_column: Date
       tool_class: structural
+      evidence_class: evidence
     required_fields:
       - "Status"
       - "Found-in"
@@ -477,10 +482,11 @@ record_types:
     revision_log:
       marker: "**Revision log**"
       required: true
-      classes: [substantive, structural]
+      classes: [substantive, structural, evidence]
       class_column: Class
       date_column: Date
       tool_class: structural
+      evidence_class: evidence
     # The suppression type (BUG-74): the engine reads this declaration, not the
     # type name, so the records here suppress findings whatever the type is called.
     role: suppression
@@ -537,10 +543,11 @@ record_types:
     revision_log:
       marker: "**Revision log**"
       required: true
-      classes: [substantive, structural]
+      classes: [substantive, structural, evidence]
       class_column: Class
       date_column: Date
       tool_class: structural
+      evidence_class: evidence
     required_fields:
       - "Status"
       - "Stable-Id"
@@ -864,6 +871,8 @@ rules:
   # tier (MILE-146), so a record is computed Verified from the tests that cite
   # it rather than from a restated `test:` locator.
   embodiment.back-pointer-resolution:
+    implements_marker: "Implements:"
+    verifies_marker: "Verifies:"
     level: error
     back_pointer_paths: ["rust", "scripts", "ts", "platform"]
     test_paths: ["rust/crates/urzua-cli/tests", "rust/crates/*-core/tests"]

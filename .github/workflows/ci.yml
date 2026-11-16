@@ -167,12 +167,12 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
-          ref: v0.4.4
+          ref: v0.4.5
           path: corpus
       - uses: ./.github/actions/urzua-gate
         with:
-          version: v0.4.4
-          sha256: 173e59244c353d332fa49e9c5f1bdc720eef52c8bcf76382c5d789c8f7a3f110
+          version: v0.4.5
+          sha256: cbbb4a15df8c84135b10f7e24fa4b57b0b8b73e53303e1aa5cf8a17b3ea4a18c
           working-directory: corpus
           annotate: "false"
           comment: "false"
