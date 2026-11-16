@@ -243,7 +243,7 @@ pre-push hooks run it, and the harness and authority declarations.
 
 Output: `status` (`ok`, `warn` or `error`) and `checks`, each with `check`, `status` and `message`.
 A `hook-wired` check also carries `layer`, `state`, `hook_layout` (`default`, `hooks-path`, `husky` or
-`pre-commit-framework`) and, when the hook is not wired, `next_action`: the command that wires it,
+`pre-commit-framework`) and, when the hook is not wired, `fix`: the command that wires it,
 usually `urzua hooks install`. The report's `next_action` is the first such command.
 The `check` ids include `config-exists`, `config-parses`, `record-type-dir`, `ci-wired`, `hook-wired`,
 `authority-host` (whether the declared authority gates anything), `authority-decider-table`,

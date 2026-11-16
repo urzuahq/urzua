@@ -30,7 +30,7 @@ struct DoctorCheck {
     hook_layout: Option<&'static str>,
     /// The one command that repairs this check, when there is one.
     #[serde(skip_serializing_if = "Option::is_none")]
-    next_action: Option<String>,
+    fix: Option<String>,
 }
 
 /// What is wrong with the local git hook layers, as plain messages: the
@@ -56,7 +56,7 @@ fn hook_checks(repo_root: &std::path::Path) -> Vec<DoctorCheck> {
                     layer: Some((*layer).to_string()),
                     state: None,
                     hook_layout: None,
-                    next_action: None,
+                    fix: None,
                 })
                 .collect();
         }
@@ -65,7 +65,7 @@ fn hook_checks(repo_root: &std::path::Path) -> Vec<DoctorCheck> {
         .iter()
         .zip(hooks::wiring(&layout))
         .map(|(layer, w)| {
-            let (status, state, message, next_action) = match w {
+            let (status, state, message, fix) = match w {
                 Err(message) => (DoctorStatus::Error, None, message, None),
                 Ok(w) => (
                     if w.state == HookState::InstalledRunningUrzua {
@@ -75,7 +75,7 @@ fn hook_checks(repo_root: &std::path::Path) -> Vec<DoctorCheck> {
                     },
                     Some(w.state),
                     w.message,
-                    w.next_action,
+                    w.fix,
                 ),
             };
             DoctorCheck {
@@ -85,7 +85,7 @@ fn hook_checks(repo_root: &std::path::Path) -> Vec<DoctorCheck> {
                 layer: Some((*layer).to_string()),
                 state,
                 hook_layout: Some(layout.kind()),
-                next_action,
+                fix,
             }
         })
         .collect()
@@ -126,7 +126,7 @@ impl Report for DoctorReport {
             .iter()
             .filter(|c| c.status != DoctorStatus::Ok)
             .find_map(|c| {
-                c.next_action.clone().map(|command| NextAction {
+                c.fix.clone().map(|command| NextAction {
                     command,
                     reason: c.message.clone(),
                 })
@@ -144,7 +144,7 @@ impl DoctorCheck {
             layer: None,
             state: None,
             hook_layout: None,
-            next_action: None,
+            fix: None,
         }
     }
 }

@@ -139,7 +139,6 @@ fn every_other_command_and_a_could_not_run_emit_both_keys_as_null() {
     let outputs = [
         run(&dir, &["graph"]),
         run(&dir, &["rules"]),
-        run(&dir, &["doctor"]),
         run(&dir, &["export", "--format", "json"]),
         run(&dir, &["explain", "docs/adr/ADR-1-first.md"]),
         run(&dir, &["index"]),
@@ -152,6 +151,9 @@ fn every_other_command_and_a_could_not_run_emit_both_keys_as_null() {
             "{v}"
         );
     }
+    // `doctor` names the command that wires an unwired git hook (MILE-220).
+    let doctor = run(&dir, &["doctor"]);
+    assert_eq!(doctor["next_action"], "urzua hooks install", "{doctor}");
     // Outside any repository there is no config: still JSON, still both keys.
     let empty = common::TempDir::new("urzua-next-action-no-config");
     let v = run(&empty, &["check"]);

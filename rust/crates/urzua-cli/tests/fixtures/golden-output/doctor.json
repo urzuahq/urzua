@@ -32,19 +32,19 @@
       },
       {
         "check": "hook-wired",
+        "fix": "urzua hooks install",
         "hook_layout": "default",
         "layer": "pre-commit",
         "message": "no pre-commit hook at <ROOT>/.git/hooks/pre-commit -- `urzua hooks install` adds one that runs urzua; CI remains the guarantee (ADR-71)",
-        "next_action": "urzua hooks install",
         "state": "not-installed",
         "status": "warn"
       },
       {
         "check": "hook-wired",
+        "fix": "urzua hooks install",
         "hook_layout": "default",
         "layer": "pre-push",
         "message": "no pre-push hook at <ROOT>/.git/hooks/pre-push -- `urzua hooks install` adds one that runs urzua; CI remains the guarantee (ADR-71)",
-        "next_action": "urzua hooks install",
         "state": "not-installed",
         "status": "warn"
       }

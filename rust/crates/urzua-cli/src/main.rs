@@ -682,15 +682,7 @@ fn dispatch(config: Option<PathBuf>, command: Command) -> ExitCode {
         Command::Import { .. } => not_implemented("import"),
         init @ Command::Init { .. } => dispatch_init(config, init),
         Command::Harness { target } => dispatch_harness(config, target),
-        Command::Hooks { target } => match target {
-            HooksTarget::Install {
-                dry_run,
-                write_config,
-            } => commands::hooks::run_install(config, dry_run, write_config),
-            HooksTarget::Status => commands::hooks::run_status(config),
-            HooksTarget::Uninstall { dry_run } => commands::hooks::run_uninstall(config, dry_run),
-            HooksTarget::Run { hook } => commands::hooks::run_hook(config, hook),
-        },
+        Command::Hooks { target } => dispatch_hooks(config, target),
         Command::Doctor => commands::doctor::run(config),
         Command::Rules => commands::rules::run(),
         Command::Index { apply } => commands::index::run(config, apply),
@@ -797,6 +789,18 @@ fn dispatch_migrate(config: Option<PathBuf>, target: MigrateTarget) -> ExitCode 
         MigrateTarget::Schema { .. } => emit(&CouldNotRun::from(
             "pass --report --field <Name> (--assist-waivers and --apply are not implemented yet)",
         )),
+    }
+}
+
+fn dispatch_hooks(config: Option<PathBuf>, target: HooksTarget) -> ExitCode {
+    match target {
+        HooksTarget::Install {
+            dry_run,
+            write_config,
+        } => commands::hooks::run_install(config, dry_run, write_config),
+        HooksTarget::Status => commands::hooks::run_status(config),
+        HooksTarget::Uninstall { dry_run } => commands::hooks::run_uninstall(config, dry_run),
+        HooksTarget::Run { hook } => commands::hooks::run_hook(config, hook),
     }
 }
 

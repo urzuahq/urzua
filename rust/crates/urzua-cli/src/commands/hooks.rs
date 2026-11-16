@@ -186,7 +186,7 @@ pub(crate) struct Wiring {
     pub state: HookState,
     pub message: String,
     /// The one command that wires it, when it is not wired.
-    pub next_action: Option<String>,
+    pub fix: Option<String>,
 }
 
 /// The line a hook urzua will not write must carry to run urzua.
@@ -261,7 +261,7 @@ fn file_wiring(
                 "no {hook} hook at {} -- `{INSTALL}` adds one that runs urzua; CI remains the guarantee (ADR-71)",
                 path.display()
             ),
-            next_action: Some(fix(INSTALL.to_string())),
+            fix: Some(fix(INSTALL.to_string())),
         });
     };
     if needs_exec && !executable(&meta) {
@@ -273,7 +273,7 @@ fn file_wiring(
                 "{} is not executable, so git ignores it -- make it executable, then run `{INSTALL}`",
                 path.display()
             ),
-            next_action: Some(fix(format!("chmod +x {} && {INSTALL}", path.display()))),
+            fix: Some(fix(format!("chmod +x {} && {INSTALL}", path.display()))),
         });
     }
     let content = read_optional(path)?.unwrap_or_default();
@@ -283,7 +283,7 @@ fn file_wiring(
             path: path.to_path_buf(),
             state: HookState::InstalledRunningUrzua,
             message: format!("{} runs urzua", path.display()),
-            next_action: None,
+            fix: None,
         });
     }
     Ok(Wiring {
@@ -294,7 +294,7 @@ fn file_wiring(
             "{} does not run urzua -- `{INSTALL}` adds a marked block that does, after what is there",
             path.display()
         ),
-        next_action: Some(fix(INSTALL.to_string())),
+        fix: Some(fix(INSTALL.to_string())),
     })
 }
 
@@ -316,7 +316,7 @@ fn framework_wiring(hook: &'static str, config: &Path, git_hooks: &Path) -> Resu
                 "{} declares no hook that runs urzua at {hook} -- `{INSTALL} --write-config` adds the stanza",
                 config.display()
             ),
-            next_action: Some(format!("{INSTALL} --write-config")),
+            fix: Some(format!("{INSTALL} --write-config")),
         });
     }
     if !script.is_file() {
@@ -329,7 +329,7 @@ fn framework_wiring(hook: &'static str, config: &Path, git_hooks: &Path) -> Resu
                 config.display(),
                 script.display()
             ),
-            next_action: Some(format!("pre-commit install --hook-type {hook}")),
+            fix: Some(format!("pre-commit install --hook-type {hook}")),
         });
     }
     Ok(Wiring {
@@ -337,7 +337,7 @@ fn framework_wiring(hook: &'static str, config: &Path, git_hooks: &Path) -> Resu
         path: config.to_path_buf(),
         state: HookState::InstalledRunningUrzua,
         message: format!("{} runs urzua at {hook}", config.display()),
-        next_action: None,
+        fix: None,
     })
 }
 
@@ -669,7 +669,7 @@ fn status(layout: &Layout) -> HooksReport {
                     HookState::InstalledNotExecutable => "not-executable",
                 };
                 report.item(w.hook, &w.path, state);
-                if let Some(cmd) = w.next_action {
+                if let Some(cmd) = w.fix {
                     report.problems.push(w.message);
                     report.next(cmd, "wires the git hooks that do not run urzua");
                     if report.exit == 0 {

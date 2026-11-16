@@ -962,7 +962,7 @@ pub trait Report: serde::Serialize {
     fn notices(&self) -> &[Notice];
     fn exit_code(&self) -> ExitCode;
     /// The one command worth running next, given the whole report (`MILE-72`).
-    /// Only `check`/`audit` and `fix` derive one; every other report has none.
+    /// `check`/`audit`, `fix`, `doctor` and `hooks` derive one; every other report has none.
     fn next_action(&self) -> Option<NextAction> {
         None
     }

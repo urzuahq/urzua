@@ -103,9 +103,7 @@ fn default_layout_gets_both_hooks_and_doctor_then_passes() {
     let dir = fixture("default");
     let checks = hook_checks(&dir);
     assert!(
-        checks
-            .iter()
-            .all(|c| c["next_action"] == "urzua hooks install"),
+        checks.iter().all(|c| c["fix"] == "urzua hooks install"),
         "{checks:?}"
     );
     let (_, doctor) = urzua(&dir, &["doctor"]);
@@ -287,10 +285,7 @@ fn a_hooks_path_outside_the_repository_is_refused_with_the_line_to_add() {
     assert!(!outside.join("pre-commit").exists());
     let checks = hook_checks(&dir);
     assert!(
-        checks[0]["next_action"]
-            .as_str()
-            .unwrap()
-            .starts_with("add `"),
+        checks[0]["fix"].as_str().unwrap().starts_with("add `"),
         "{checks:?}"
     );
 }
@@ -332,7 +327,7 @@ fn the_pre_commit_framework_gets_a_stanza_not_hook_files() {
     let checks = hook_checks(&dir);
     assert!(checks
         .iter()
-        .all(|c| c["next_action"] == "urzua hooks install --write-config"));
+        .all(|c| c["fix"] == "urzua hooks install --write-config"));
 
     let (code, report) = urzua(&dir, &["hooks", "install", "--write-config"]);
     assert_eq!(code, 0, "{report}");
@@ -347,7 +342,7 @@ fn the_pre_commit_framework_gets_a_stanza_not_hook_files() {
     // The framework's own scripts are not installed yet.
     let checks = hook_checks(&dir);
     assert_eq!(
-        checks[0]["next_action"],
+        checks[0]["fix"],
         "pre-commit install --hook-type pre-commit"
     );
     write_exec(
