@@ -11,6 +11,7 @@
 
 pub mod authority;
 pub mod config;
+pub mod conflicts;
 pub mod document_model;
 pub mod done_items;
 pub mod embodiment_model;

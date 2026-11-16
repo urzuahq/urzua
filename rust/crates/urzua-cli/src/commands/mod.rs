@@ -7,6 +7,7 @@ pub mod doctor;
 pub mod explain;
 pub mod export;
 pub mod fix;
+pub(crate) mod fix_conflicts;
 pub mod graph;
 pub mod index;
 pub mod init;

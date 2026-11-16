@@ -208,6 +208,24 @@ urzua fix --rebaseline --apply --ids docs/adr/ADR-0001-use-postgres.md \
 that you checked, so write what you actually checked. If the claim no longer holds, fix the record
 instead.
 
+#### When your re-pins conflict
+
+Two branches that each change a pinned file and re-pin the same record conflict when the second
+merges: in the pin, in `Version` and in the revision-log row each appended. Do not redo the re-pin by
+hand. During the merge or rebase run:
+
+```sh
+urzua fix --conflicts                        # lists each unmerged record: resolvable, or refused and why
+urzua fix --conflicts --apply --force --by alex --actor human
+git add docs/adr/ADR-0001-use-postgres.md    # it never stages; then continue the merge or rebase
+```
+
+It keeps both branches' rows, takes the higher `Version`, recomputes the pin from the merged file and
+adds a row saying so, with no reason written by a person: the merge's pull request review covers it.
+A record that conflicts anywhere else, or whose pinned file is itself conflicted, is refused and left
+for you to resolve by hand. While records are unmerged, `urzua check` names `urzua fix --conflicts` as
+its next action.
+
 To tolerate a short lag between a code change and its record, set `drift_grace_days` on
 `embodiment.consistency`: drift is not reported until the file's last change is older than that many
 days.

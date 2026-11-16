@@ -663,6 +663,10 @@ fn session_notices(
         selection,
     ));
     notices.extend(symlink_refusal_off_notice(&session.config));
+    notices.extend(super::fix_conflicts::unmerged_records_notice(
+        &session.repo_root,
+        &session.config,
+    ));
     notices
 }
 

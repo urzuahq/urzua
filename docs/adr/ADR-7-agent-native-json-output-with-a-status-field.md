@@ -2,7 +2,7 @@
 Stable-Id: 01M6R3NK4S1K3KKMGNV0RC498S
 Status: Superseded
 Embodiment: Deprecated
-Realized-by: code:rust/crates/urzua-core/src/report.rs@sha256:5285d870dcf601bc0d5b58c4be42d9fb12845b16eb345526ee6e34d595e87215, spec:docs/specs/SPEC-2-urzua-check.md
+Realized-by: code:rust/crates/urzua-core/src/report.rs@sha256:fcc24738c1a0598bbf3239600e3468737e6e4089ce409a8453e89863d2b0b267, spec:docs/specs/SPEC-2-urzua-check.md
 Date: 2026-09-04
 Accepted-on: 2026-09-05
 Author: beauwilliams
@@ -87,3 +87,4 @@ Cheap to revise before v0 ships to any external user.
 > | 2026-11-14 | Amended: a repository with no record yet, every declared record directory present and empty of records, reports `ok` with `files_examined: 0` and an `empty-corpus` info notice; every other zero selection stays `not-run`. The Decision text is unchanged; `Status` stays `Accepted`. Decided by the orchestrator on 2026-11-14; wording pending maintainer review. **Why:** the first-run review (finding 6.1): `init`'s own output was `not-run` on an empty repository. | **substantive** |
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/report.rs` ab83ad474a70 -> 80282b91b96b. Reason: Read the diff of each pinned file against main and the claim still holds. report.rs: WaiveDraft gained optional variant and key_path, serialized only when present; nothing else changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/report.rs` 80282b91b96b -> 5285d870dcf6. Reason: Read the diff of each re-pinned file against main. report.rs: RuleExecution gained a non-serialized unread_markers list and with_unread_markers; its constructors and test literals initialise it empty; no other change. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/report.rs` 5285d870dcf6 -> fcc24738c1a0. Reason: report.rs adds the ConflictsReport type and makes check and fix name urzua fix --conflicts as next action when an unmerged-records notice is present; existing report shapes are unchanged. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |

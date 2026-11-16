@@ -59,6 +59,11 @@ impl LineDoc {
         self.lines[n - 1].0 = text;
     }
 
+    /// Removes the 1-indexed line `n`.
+    pub fn remove_line(&mut self, n: usize) {
+        self.lines.remove(n - 1);
+    }
+
     /// Inserts `text` as a new line immediately after the 1-indexed line
     /// `after` (`0` inserts at the top). A file without a trailing newline
     /// stays without one: inserting after its last line gives that line a

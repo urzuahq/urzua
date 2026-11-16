@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5Q0XVK27P5T8FN72BN
-Version: '0.51'
+Version: '0.52'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/commands/fix.rs@sha256:8de563649d5c8534864f611377650542156797952df74c6912906fbca9b81878, code:rust/crates/urzua-core/src/fix.rs@sha256:4a03c290767b1f296c1561ecf2f1dfde2efeb42a21a4b0ffaf3036813b6a5c1d, test:rust/crates/urzua-cli/tests/fix_paths_integration.rs@sha256:73cb06a1782f02abeaf6c0795632ed1d1939633d72f67033247120656c6927d2, test:rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs@sha256:e20101f904c99aecdfdcf1830a0dba10d5ba8d2d72414681398919f2f895dde5, test:rust/crates/urzua-cli/tests/fix_drift_integration.rs@sha256:ff69343ca324400bde79c266372f9a213728d4d4ef8202beca6e12e54aa35352
+Realized-by: code:rust/crates/urzua-cli/src/commands/fix.rs@sha256:f81c730e2417edf5ea89dffeb3e6604cf9600652aac46077a54618a5f03cd2eb, code:rust/crates/urzua-core/src/fix.rs@sha256:4a03c290767b1f296c1561ecf2f1dfde2efeb42a21a4b0ffaf3036813b6a5c1d, test:rust/crates/urzua-cli/tests/fix_paths_integration.rs@sha256:73cb06a1782f02abeaf6c0795632ed1d1939633d72f67033247120656c6927d2, test:rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs@sha256:e20101f904c99aecdfdcf1830a0dba10d5ba8d2d72414681398919f2f895dde5, test:rust/crates/urzua-cli/tests/fix_drift_integration.rs@sha256:ff69343ca324400bde79c266372f9a213728d4d4ef8202beca6e12e54aa35352
 Author: beauwilliams
 Subject: '`urzua fix` -- detecting and applying Embodiment corrections computed from evidence.'
 Implements: ADR-15, ADR-18, ADR-19, ADR-20
@@ -333,6 +333,46 @@ the same `PATHS` scoping.
   and no bare `\r`: `sed -n 'a,bp' file | tr -d '\r' | sed -z 's/\n$//' | sha256sum`.
 - It cannot be combined with `--stdin-path`, and `--reason` without `--rebaseline` is `not-run`.
 
+## Resolving conflicts after a merge (`--conflicts`)
+
+`urzua fix --conflicts` (`MILE-284`, `ADR-67` amendment of 2026-11-16) reads the paths git lists as
+unmerged (`git ls-files -u`) during a merge or rebase and judges each that a record type governs. It loads
+no records, so a record carrying conflict markers need not parse. It cannot be combined with
+`--rebaseline`, `--stdin-path`, `--reason` or `PATHS`; `--ids` narrows it.
+
+- **Detect** (no `--apply`, read-only): `conflicts` lists each unmerged record with `record`, `kind`,
+  `outcome` (`resolvable` or `refused`), the `reason` of a refusal, and for a resolvable one its `pins`
+  (`locator`, `base`, `ours`, `theirs`, `merged`, `recomputed`), the `version` it would write and
+  `rows_kept`. Unmerged files that are not records are listed under `other_unmerged`, never touched.
+- **Kind `pin`.** The three index stages are normalised: each evidence-field pin hash and the type's
+  `revision_log.version_bump` field become placeholders, and rows a side appended after the merge
+  base's last revision-log row are lifted out. A three-way merge of what is left (`git merge-file`)
+  that conflicts means the record conflicts in its real content, and it is refused, naming the first
+  conflicting line. Otherwise the record is rebuilt: a pin only one side moved keeps that side's hash;
+  a pin both sides moved to different hashes is recomputed from the merged working-tree file (refused
+  when that file is itself unmerged, missing or its scope does not resolve); the higher version is
+  taken (refused when either is not dot-separated numbers); both sides' appended rows are kept,
+  de-duplicated, ordered by date and then by text so a rebase (which swaps ours and theirs) gives the
+  same order; and when a pin was recomputed one row of the type's `tool_class` is appended:
+  `Pin recomputed on merge (attested by NAME, identity: SOURCE, actor: ACTOR): both merged sides
+  re-pinned, ...`, naming both sides' hash prefixes and the new one, saying that no person wrote a
+  reason for the merged state and that the merged pin is covered by the pull request's review.
+- **Refused and left untouched:** a conflict anywhere else, a record with no merge-base, ours or
+  theirs stage, and a record git lists as unmerged whose working file carries no conflict markers
+  (resolved by hand: stage it). A stale pin that did not conflict is never moved.
+- **Apply** (`--conflicts --apply`): `--ids` or `--force`, never implied; identity resolved exactly as
+  for `--apply` (including the `--actor` requirement for a `gh-verified` identity); the lock is taken
+  before anything is read. Nothing is staged: `next_action` is `git add` of the resolved records, and
+  the merge or rebase is continued by the user.
+- **Status:** `nothing-conflicted` (git lists no unmerged file), `no-record-conflicts` (unmerged files,
+  none a record), `resolvable`, `resolved`, `partial-failure` (a record refused or an `--ids` entry
+  matching no unmerged record; exit 1), or `not-run`. So a run with nothing conflicted is told apart
+  from one that resolved nothing (`SPEC-1`).
+- **Suggested next action.** While git lists unmerged records, `check` and `fix --rebaseline` raise an
+  `unmerged-records` warning notice and their `next_action` is `urzua fix --conflicts`.
+- **Kinds to come.** The report lists conflicts by `kind` so that renumbering a record whose number a
+  merge made a duplicate (`MILE-229`) slots in beside `pin`; it is not built yet.
+
 ## Renewing a claim (`urzua reverify`, `ADR-97`)
 
 `urzua reverify` is the one attributed way to renew a claim that `embodiment.claim-expired`
@@ -536,3 +576,5 @@ asserted by test, not assumed by convention.
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/fix.rs` 8108f0b26a58 -> 8e0c4f850c4d, `rust/crates/urzua-core/src/fix.rs` b5bfb2aa1386 -> 4a03c290767b, `rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs` 50ac84d1005f -> 29408f8d9f3c. Reason: Read the diff of each re-pinned file against main: cli fix.rs refuses a rebaseline --reason under 3 words or 12 characters; fix_rebaseline_integration.rs passes sentence reasons and adds the short-reason test; core fix.rs counts only resolving locators for Embodiment and Status and puts header-less types out of rebaseline scope. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Bumped to `0.51`. `fix --rebaseline` runs with neither `embodiment.consistency` nor `status.delivery-agreement` declared; the reason minimum is the configuration's `attestation.reason` (defaults 3 words, 12 characters) and applies to `reverify --apply` too. **Why:** a review found the re-pin `embodiment.pin-stale` suggests refused in a repository that declares neither repair rule, and the ADR-101 amendment of 2026-11-15 puts behaviour in configuration. | **substantive** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/fix.rs` 8e0c4f850c4d -> 8de563649d5c, `rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs` 29408f8d9f3c -> e20101f904c9. Reason: Read the diff of each re-pinned file since its previous pin: cli fix.rs runs --rebaseline before the repair-rule guard and reads the reason minimum from attestation.reason instead of two constants; fix_rebaseline_integration.rs adds the attestation.reason test. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-16 | Bumped to `0.52`. `fix --conflicts` lists the records a merge or rebase left unmerged by kind of conflict and, with `--apply`, resolves kind `pin` (sides differing only in evidence pins, the version and appended revision-log rows) with a machine-written row for each recomputed pin; any other conflict is refused and left untouched; `check` and `fix --rebaseline` suggest it while records are unmerged. **Why:** `MILE-284`; maintainer decisions of 2026-11-16 recorded in the `ADR-67` amendment. | **substantive** |
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/fix.rs` 8de563649d5c -> f81c730e2417. Reason: commands/fix.rs dispatches --conflicts to its own module, refuses it beside --rebaseline, --stdin-path, --reason or PATHS, and adds the unmerged-records notice to the rebaseline listing; repair and re-pin logic is unchanged. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |

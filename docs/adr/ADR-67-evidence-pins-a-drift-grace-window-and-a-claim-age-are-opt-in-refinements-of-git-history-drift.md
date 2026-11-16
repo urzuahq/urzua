@@ -97,6 +97,33 @@ pin the grace window is not counted from the cited file's last commit, since tha
 about the scope; a scoped pin that no longer matches is drift immediately unless the record declares
 an audit date (`drift_audit_field`), which anchors the window as for a file-level pin.
 
+## Amendment (2026-11-16): `urzua fix --conflicts` resolves re-pin conflicts after a merge
+
+*Accepted by the maintainer on 2026-11-16. The Decision text above is unchanged.*
+
+When two branches each re-pin the same record, the second to merge conflicts in the pin, in `Version`
+and in the appended revision-log row, and had to be redone by hand (`MILE-284`). Asked "Should urzua get a command that resolves those conflicts itself: keep both pull requests' log rows, recompute the pin from the merged code, and add a row saying the pin was recomputed on merge? It would refuse any record that conflicts in its real content.", the
+maintainer answered "Yes, add the command". Asked then "Should fixing conflicts after a merge be one command under `fix`? It would do both jobs in one run: give a record whose number is now taken the next free number (renaming the file and rewriting every reference to it), and resolve records that conflict only in their evidence pins. Anything it can't safely fix, it lists and leaves alone.", the maintainer answered "`urzua fix --conflicts`", having said before that
+"Maybe there's one go-to command that fixes this whole class of problems of conflicts... Maybe this is just what the fix command should be used for."
+
+- **What it does.** `urzua fix --conflicts` looks at the records git lists as unmerged during a merge or
+  rebase and lists each by kind of conflict. Kind `pin`: when the two sides differ only in the evidence
+  field's pin hashes, the version field and rows appended to the revision log, `--apply` keeps both
+  sides' appended rows (de-duplicated, in date order), takes the higher version, recomputes each pin
+  both sides moved to different hashes from the merged file in the working tree, and appends one row
+  saying the pin was recomputed on merge, naming both sides' hashes, the new hash and the identity and
+  actor as every attested row does.
+- **What it refuses.** A record that conflicts anywhere else (body text, another header field, an
+  existing log row), whose pinned file is itself unmerged or missing, which has no merge-base version,
+  or which was already resolved by hand is listed with the reason and left untouched. Identity is
+  resolved exactly as for `--apply`. A stale pin that did not conflict is not touched: it stays for an
+  ordinary re-pin with a person's reason.
+- **The honest-reason rule.** A merge-recomputed pin carries a machine-written row that says no person
+  wrote a reason for the merged state. Each side's re-pin row, with its reason, is kept; the merged
+  pin is covered by the review of the pull request that carries the merge.
+- **Renumbering** a record whose number the merge made a duplicate will be the command's second kind
+  of conflict (`MILE-229`); it is not built yet.
+
 ## References
 
 - `ADR-32` -- the git-history drift this refines.
@@ -111,3 +138,4 @@ an audit date (`drift_audit_field`), which anchors the window as for a file-leve
 > | 2026-11-04 | Status changed from Proposed to Accepted, including the amendment of 2026-11-04. **Why:** Maintainer decision, 2026-11-04. | **substantive** |
 > | 2026-11-04 | `Implements: ADR-67` back-pointers added in `rust/crates/urzua-cli/src/discovery.rs` (the pin branch, the grace window, the audit anchor), `rust/crates/urzua-core/src/fix.rs` (`detect_rebaselines`, `apply_rebaseline`) and `rust/crates/urzua-cli/src/commands/fix.rs` (`run_rebaseline`). Comments only; no behaviour changes. **Why:** the drift review of 2026-11-04 found no back-pointer from the code to this record. | **structural** |
 > | 2026-11-04 | Amendment added: a locator may carry a scope between its path and its pin, and a scoped pin has no file-based grace window. **Why:** `ADR-74` (Accepted 2026-11-04) decides the scoped-locator grammar; `MILE-185` builds it. The Decision text is unchanged. | **substantive** |
+> | 2026-11-16 | Amendment added: `urzua fix --conflicts` resolves a record whose two sides conflict only in re-pin lines, with a machine-written row for the recomputed pin, and refuses any other conflict. **Why:** maintainer decisions of 2026-11-16, quoted in the amendment; built by `MILE-284`. The Decision text is unchanged. | **substantive** |
