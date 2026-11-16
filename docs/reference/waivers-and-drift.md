@@ -220,14 +220,21 @@ urzua fix --conflicts --apply --ids docs/adr/ADR-0001-use-postgres.md --by alex 
 git add docs/adr/ADR-0001-use-postgres.md    # it never stages; then continue the merge or rebase
 ```
 
-It keeps both branches' rows, takes the higher `Version`, recomputes the pin from git's automatic merge
-of the pinned file and adds a row saying so, with no reason written by a person; `check --base` lists
-that pin so the pull request's reviewer can confirm it. It recomputes a pin only when the pinned file at
-each branch's commit matches that branch's pin and the merged file is exactly git's merge, untouched. A
-record that conflicts anywhere else, whose pinned file is conflicted, edited during the merge, or changed
-on a branch without a re-pin, is refused: resolve it by hand and re-pin with a reason
-(`urzua fix --rebaseline --apply --ids <record> --reason "..."`). While records are unmerged,
-`urzua check` names `urzua fix --conflicts` as its next action.
+It handles a pin in `Realized-by` and a pin in a Done-means item's `evidence:` clause alike. It keeps
+both branches' rows (the branch you merge in first, your own rows last within a date), takes the higher
+`Version`, recomputes the pin from git's automatic merge of the pinned file and adds a row saying so,
+with no reason written by a person; `check --base` lists that pin so the pull request's reviewer can
+confirm it. It recomputes a pin only when the pinned file at each branch's commit matches that branch's
+pin and the merged file is exactly git's merge, untouched. That still trusts each branch's pin as
+committed, and a clean merge of two reviewed changes is a state neither branch reviewed, which is why the
+reviewer is shown it.
+
+If the pinned file is itself still conflicted (both branches edited the same lines of the source),
+resolve and `git add` that file first, then run `urzua fix --conflicts` again; the listing says which
+files it waits on. A record that conflicts anywhere else (including a Done-means item's text), whose
+pinned file was edited during the merge, or changed on a branch without a re-pin, is refused: resolve it
+by hand and re-pin with a reason (`urzua fix --rebaseline --apply --ids <record> --reason "..."`). While
+records are unmerged, `urzua check` names `urzua fix --conflicts` as its next action.
 
 To tolerate a short lag between a code change and its record, set `drift_grace_days` on
 `embodiment.consistency`: drift is not reported until the file's last change is older than that many
