@@ -1,9 +1,9 @@
 ---
-Version: '0.7'
+Version: '0.8'
 Date: 2026-09-19
 Status: Accepted
 Embodiment: Verified
-Realized-by: code:Makefile@sha256:ccc04e61c2e32aad9ccd10166a12df24d31e8ccb1b24233f01c566d7058f382a
+Realized-by: code:Makefile@sha256:8ac4c5bd1ebd96dcb40aa74f83eb75eadd08fa800268c3f0003ac7bc5c6ea305
 Author: beauwilliams
 Stable-Id: 01M2VNAMK7V28A67T84JZ5NZPP
 Subject: 'What each top-level directory holds, and the rules the root obeys -- the living counterpart to ADR-4''s decision to organize by language.'
@@ -31,7 +31,7 @@ inventory attached to it, which is what this spec now holds.
 |---|---|
 | `rust/` | Cargo workspace: the `urzua` CLI and its crates (`urzua-cli`, `urzua-core`, `urzua-io`, `urzua-id`, `urzua-agdr`, `urzua-mcp`). |
 | `docs/` | Governance records -- ADRs, RFCs, specs, bugs, milestones, waivers. Language-agnostic by nature; the record format is the contract every language directory implements against. |
-| `scripts/` | Repository tooling belonging to no language directory. Currently `generate-dashboard.py` (`ADR-37`) and `generate-rule-table.py`. |
+| `scripts/` | Repository tooling belonging to no language directory. Currently `generate-dashboard.py` (`ADR-37`), `generate-rule-table.py`, and the install script `install.sh` with its tests `install-test.sh` (`MILE-217`). |
 | `ts/` | TypeScript/Node: agent-harness integrations, editor plugins, dashboard. **Reserved; holds a README only.** |
 | `platform/` | Deployment targets and infrastructure, per environment. **Reserved; holds a README only.** |
 | `.urzua/` | This repository's own `config.yaml` and record templates -- the tool's configuration of itself. |
@@ -95,3 +95,5 @@ the speculative reservation this spec exists to stop accumulating.
 > | 2026-11-10 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.github/workflows/checks.yml` a201f4e57f5f -> ad6ab57882df. Reason: checks.yml gained one additive, report-only step in the build job (no stale evidence pins: runs fix --rebaseline without --apply and fails unless the report status is ok); no existing step changed, so the claim still holds **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-10 | Bumped to `0.6`. The re-baseline row above records a structural change, which requires a version bump; the Decision and the pinned claim are unchanged. **Why:** the new stale-pin guard step changed the pinned `checks.yml`, so this record was re-pinned in the same pull request. | **structural** |
 > | 2026-11-13 | Bumped to `0.7`. Layout table amended to match the tree: added `.claude/`; the `scripts/` row names `generate-rule-table.py`; the `.github/` row lists `actions/`, `ISSUE_TEMPLATE/`, `PULL_REQUEST_TEMPLATE.md` and `scripts/`. Success criterion 1 is now enforced by `layout_table_integration.rs`, and its `Verifies: SPEC-21` back-pointer replaces the workflow file in `Realized-by`; the test compares against the entries git sees (tracked or untracked, gitignored excepted), so a developer's ignored `.DS_Store` or `.idea/` does not fail it. **Why:** a re-read found the table behind the repository again; the criterion existed but nothing ran it. | **substantive** |
+> | 2026-11-16 | Bumped to `0.8`. The `scripts/` row names `install.sh` and `install-test.sh`, the release install script and its tests. **Why:** `MILE-217` adds a one-line installer that is fetched by release tag from `scripts/install.sh`, so the layout table has to say it lives there. | **substantive** |
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `Makefile` ccc04e61c2e3 -> 8ac4c5bd1ebd. Reason: Read the diff of the Makefile: it only adds the install-script-test target (runs scripts/install-test.sh), lists it in .PHONY and in the ci target's prerequisites; the targets that dispatch the layout this record describes are unchanged, so the claim still holds **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
