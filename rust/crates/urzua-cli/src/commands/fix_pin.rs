@@ -36,6 +36,9 @@ struct PinEntryReport {
     record: PathBuf,
     action: &'static str,
     pins: Vec<String>,
+    /// `code:` and `test:` locators left unpinned, each with why.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    not_pinned: Vec<String>,
 }
 
 #[derive(serde::Serialize)]
@@ -138,6 +141,7 @@ pub(crate) fn run(config_path: Option<PathBuf>, args: PinArgs<'_>) -> Result<Exi
         })
         .collect();
     let mut done = Vec::new();
+    let mut notices: Vec<Notice> = Vec::new();
     let write = identity.as_ref().map(|w| Write {
         session: &session,
         attestation: &w.attestation,
@@ -149,6 +153,9 @@ pub(crate) fn run(config_path: Option<PathBuf>, args: PinArgs<'_>) -> Result<Exi
             (_, Some(old)) => remove(record, config, old, write.as_ref()),
             _ => first_pins(record, config, &read, write.as_ref(), !args.ids.is_empty()),
         };
+        if let Ok(Some(entry)) = &outcome {
+            notices.extend(uncommitted_notices(repo_root, entry));
+        }
         match outcome {
             Ok(Some(entry)) => done.push(entry),
             Ok(None) => {}
@@ -169,7 +176,7 @@ pub(crate) fn run(config_path: Option<PathBuf>, args: PinArgs<'_>) -> Result<Exi
         records: done,
         failed,
         identity: identity.map(|i| i.report),
-        notices: Vec::new(),
+        notices,
     }))
 }
 
@@ -228,11 +235,27 @@ fn first_pins(
 ) -> Result<Option<PinEntryReport>, String> {
     let review = review_locators(record, config, &["code".into(), "test".into()], read);
     let pins = FirstPin::from_review(&review.locators);
+    let not_pinned: Vec<String> = review
+        .locators
+        .iter()
+        .filter(|l| !l.pinned && l.check == urzua_core::reverify::LocatorCheck::Unresolved)
+        .filter(|l| ["code", "test"].contains(&l.category.as_str()))
+        .map(|l| {
+            format!(
+                "{}: {}",
+                l.locator,
+                l.reason.as_deref().unwrap_or("does not resolve")
+            )
+        })
+        .collect();
     if pins.is_empty() {
-        return if named {
-            Err("no unpinned code or test locator whose file can be read".to_string())
-        } else {
-            Ok(None)
+        return match (named, not_pinned.is_empty()) {
+            (_, false) => Err(format!(
+                "nothing could be pinned: {}",
+                not_pinned.join("; ")
+            )),
+            (true, true) => Err("no unpinned code or test locator".to_string()),
+            (false, true) => Ok(None),
         };
     }
     if let Some(w) = write {
@@ -254,6 +277,7 @@ fn first_pins(
             .iter()
             .map(|p| format!("{}@sha256:{}", p.display, p.hash))
             .collect(),
+        not_pinned,
     }))
 }
 
@@ -330,6 +354,7 @@ fn replace(
         record: record.path.clone(),
         action: "replace",
         pins: vec![old.text(), new.text()],
+        not_pinned: Vec::new(),
     }))
 }
 
@@ -350,5 +375,35 @@ fn remove(
         record: record.path.clone(),
         action: "remove",
         pins: vec![old.text()],
+        not_pinned: Vec::new(),
     }))
+}
+
+/// A pin is of the working tree at the time of pinning: a pinned file with
+/// uncommitted changes is named, so no one commits a pin that matches no
+/// committed content by accident.
+fn uncommitted_notices(repo_root: &std::path::Path, entry: &PinEntryReport) -> Vec<Notice> {
+    let skip = usize::from(entry.action == "replace");
+    entry
+        .pins
+        .iter()
+        .skip(skip)
+        .filter_map(|p| {
+            let spelling = p.split("@sha256:").next()?;
+            let spelling = spelling.split_once(':').map_or(spelling, |(c, rest)| {
+                if c == "code" || c == "test" { rest } else { spelling }
+            });
+            let path = parse_locator(spelling).ok()?.path;
+            let out = urzua_io::git::stdout_in(repo_root, &["status", "--porcelain", "--", &path]).ok()?;
+            (!out.is_empty()).then(|| {
+                Notice::new(
+                    urzua_core::report::NoticeSeverity::Warning,
+                    "pin-uncommitted".to_string(),
+                    format!(
+                        "{path} has uncommitted changes: the pin is of the working tree now; commit the file with the record so the pin matches committed content"
+                    ),
+                )
+            })
+        })
+        .collect()
 }

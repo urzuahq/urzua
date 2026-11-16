@@ -754,15 +754,36 @@ fn base_pin_level(
     let Some(changes) = changes else {
         return head;
     };
-    let Ok(rel) = crate::discovery::relative_to_root(&session.repo_root, &session.config_path)
-    else {
+    // The base's configuration at the path the base used: the default path,
+    // else the `--config` path if the base had a file there, so moving the
+    // file in the pull request does not lift the base's level.
+    let mut candidates = vec![PathBuf::from(".urzua/config.yaml")];
+    if let Ok(rel) = crate::discovery::relative_to_root(&session.repo_root, &session.config_path) {
+        if !candidates.contains(&rel) {
+            candidates.push(rel);
+        }
+    }
+    let found = candidates.iter().find_map(|rel| {
+        urzua_io::read_at_commit_if_present(&session.repo_root, &changes.merge_base, rel)
+            .ok()
+            .flatten()
+    });
+    let Some(text) = found else {
+        notices.push(Notice {
+            severity: NoticeSeverity::Info,
+            subject: rule.to_string(),
+            message: format!(
+                "the base revision has no configuration at {}: the head's level applies to {rule}",
+                candidates
+                    .iter()
+                    .map(|p| p.display().to_string())
+                    .collect::<Vec<_>>()
+                    .join(" or ")
+            ),
+            detail: None,
+        });
         return head;
     };
-    let text =
-        match urzua_io::read_at_commit_if_present(&session.repo_root, &changes.merge_base, &rel) {
-            Ok(Some(text)) => text,
-            _ => return head,
-        };
     let base = match urzua_core::authority::BaseGate::from_config_text(Some(&text), rule) {
         Ok(gate) => gate
             .rule

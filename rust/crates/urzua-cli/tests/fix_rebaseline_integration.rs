@@ -1086,3 +1086,54 @@ fn a_rename_that_changes_both_ids_is_paired_by_git_rename_detection() {
     let report = check_base(&dir);
     assert_eq!(messages(&report).len(), 1, "{report}");
 }
+
+#[test]
+fn moving_the_config_and_passing_config_does_not_lift_the_base_level() {
+    let dir = branched("moved-config");
+    std::fs::create_dir_all(dir.join("cfg")).unwrap();
+    git(&dir, &["mv", ".urzua/config.yaml", "cfg/u.yaml"]);
+    let cfg = std::fs::read_to_string(dir.join("cfg/u.yaml")).unwrap();
+    std::fs::write(
+        dir.join("cfg/u.yaml"),
+        cfg.replace(
+            "rules: {embodiment.consistency: error}",
+            "rules: {embodiment.consistency: error, diff.pin-changed-unattested: off}",
+        ),
+    )
+    .unwrap();
+    let text = std::fs::read_to_string(dir.join(A)).unwrap();
+    std::fs::write(dir.join(A), text.replace(&sha256(V1), &sha256(V2))).unwrap();
+    commit_all(&dir);
+    let report = json(&run_urzua(
+        &dir,
+        &["--config", "cfg/u.yaml", "check", "--base", "main"],
+    ));
+    assert_eq!(unattested(&report).len(), 1, "{report}");
+}
+
+#[test]
+fn fix_pin_lists_a_locator_it_cannot_pin_and_names_an_uncommitted_pinned_file() {
+    let dir = branched("pin-skips");
+    let text = std::fs::read_to_string(dir.join(A)).unwrap();
+    std::fs::write(
+        dir.join(A),
+        text.replace("test:t.rs", "test:t.rs, test:gone.rs"),
+    )
+    .unwrap();
+    commit_all(&dir);
+    std::fs::write(dir.join("t.rs"), "t edited\n").unwrap();
+    let listed = json(&run_urzua(&dir, &["fix", "--pin", "--ids", A]));
+    assert!(listed.to_string().contains("gone.rs"), "{listed}");
+    let notice = listed["notices"]
+        .as_array()
+        .and_then(|n| {
+            n.iter()
+                .find(|n| n["message"].as_str().unwrap_or_default().contains("t.rs"))
+                .cloned()
+        })
+        .unwrap_or_else(|| panic!("{listed}"));
+    assert!(
+        notice["message"].as_str().unwrap().contains("uncommitted"),
+        "{notice}"
+    );
+}
