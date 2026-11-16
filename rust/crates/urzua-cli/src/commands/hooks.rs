@@ -232,6 +232,9 @@ pub(crate) enum HookState {
     DeclaredNotExecutable,
     /// Declared, but the hook does not mention urzua anywhere.
     DeclaredNoCall,
+    /// `hooks.path` names a directory, and this clone's `core.hooksPath` is
+    /// not pointed at it.
+    NotPointed,
 }
 
 impl HookState {
@@ -253,6 +256,7 @@ impl HookState {
             HookState::DeclaredMissing => "declared-missing",
             HookState::DeclaredNotExecutable => "declared-not-executable",
             HookState::DeclaredNoCall => "declared-no-call",
+            HookState::NotPointed => "not-pointed",
         }
     }
 }
@@ -308,18 +312,91 @@ fn read_optional(path: &Path) -> Result<Option<String>, String> {
     }
 }
 
+fn hooks_path_value(repo_root: &Path) -> Result<Option<String>, String> {
+    let out = git(repo_root, &["config", "--get", "core.hooksPath"])?;
+    let value = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    Ok((out.status.success() && !value.is_empty()).then_some(value))
+}
+
+/// The directory `hooks.path` names, when this clone's `core.hooksPath` does
+/// not point at it, and the value it has instead.
+pub(crate) struct Unpointed {
+    configured: String,
+    dir: PathBuf,
+    current: Option<String>,
+}
+
+pub(crate) fn unpointed(repo_root: &Path, decl: &HooksDecl) -> Result<Option<Unpointed>, String> {
+    let Some(configured) = &decl.path else {
+        return Ok(None);
+    };
+    let dir = repo_root.join(configured);
+    let current = hooks_path_value(repo_root)?;
+    if current
+        .as_deref()
+        .is_some_and(|c| resolve(&absolute(repo_root, c)) == resolve(&dir))
+    {
+        return Ok(None);
+    }
+    Ok(Some(Unpointed {
+        configured: configured.clone(),
+        dir,
+        current,
+    }))
+}
+
+/// Every hook's wiring as the reports show it: when the clone is not pointed
+/// at the directory `hooks.path` names, that, since git runs none of the
+/// hooks committed there; otherwise the wiring in `layout`.
+pub(crate) fn report_wiring(
+    repo_root: &Path,
+    layout: &Layout,
+    decl: &HooksDecl,
+) -> Vec<Result<Wiring, String>> {
+    let off = match unpointed(repo_root, decl) {
+        Ok(None) => return wiring(layout, decl),
+        Ok(Some(u)) => u,
+        Err(m) => return HOOKS.iter().map(|_| Err(m.clone())).collect(),
+    };
+    let p = &off.configured;
+    let (message, fix) = match &off.current {
+        None => (
+            format!("this clone is not pointed at {p}, the directory hooks.path names: core.hooksPath is not set, so git does not run the hooks committed there -- `{INSTALL}` points this clone at {p}"),
+            INSTALL.to_string(),
+        ),
+        Some(c) => (
+            format!("this clone is not pointed at {p}, the directory hooks.path names: core.hooksPath is {c}, so git does not run the hooks committed in {p} -- if {c} is no longer wanted, unset it and run `{INSTALL}`"),
+            format!("git config --unset core.hooksPath && {INSTALL}"),
+        ),
+    };
+    HOOKS
+        .iter()
+        .map(|hook| {
+            Ok(wired(
+                hook,
+                &off.dir.join(hook),
+                HookState::NotPointed,
+                message.clone(),
+                Some(fix.clone()),
+            ))
+        })
+        .collect()
+}
+
 /// Every hook's wiring in `layout`, or why it cannot be read.
 pub(crate) fn wiring(layout: &Layout, decl: &HooksDecl) -> Vec<Result<Wiring, String>> {
     HOOKS
         .iter()
         .map(|hook| match layout {
             Layout::Files {
+                kind,
                 dir,
                 unwritable,
                 needs_exec,
-                ..
             } => match decl.managed(hook) {
-                HookManaged::Declared => declared_wiring(hook, &dir.join(hook), *needs_exec),
+                HookManaged::Declared => {
+                    declared_wiring(hook, &dir.join(hook), *needs_exec, *kind == "default")
+                }
                 HookManaged::Block => file_wiring(
                     hook,
                     &dir.join(hook),
@@ -434,11 +511,25 @@ fn file_wiring(
 /// A declared hook: the repository maintains it and asserts it runs urzua.
 /// Only a plainly false declaration is reported; the assertion itself is
 /// proven by running the hook (`hooks verify --run`), never by its text.
-fn declared_wiring(hook: &'static str, path: &Path, needs_exec: bool) -> Result<Wiring, String> {
+fn declared_wiring(
+    hook: &'static str,
+    path: &Path,
+    needs_exec: bool,
+    git_default: bool,
+) -> Result<Wiring, String> {
     let shown = path.display();
     let key = format!("hooks.{hook}.managed: declared");
     let meta = match std::fs::metadata(path) {
         Ok(m) if m.is_file() => m,
+        Ok(_) | Err(_) if git_default => {
+            return Ok(wired(
+                hook,
+                path,
+                HookState::DeclaredMissing,
+                format!("{key}, but core.hooksPath is not set, so git looks for the hook in the clone's own hooks directory and finds none -- if the repository commits its hooks in a directory, name it in hooks.path and run `{INSTALL}`; otherwise remove the declaration so `{INSTALL}` manages it"),
+                None,
+            ))
+        }
         Ok(_) | Err(_) => {
             return Ok(wired(
                 hook,
@@ -1075,12 +1166,12 @@ pub fn run_status(config: Option<PathBuf>) -> ExitCode {
         Ok(p) => p,
         Err(m) => return not_run(m),
     };
-    emit(&status(&layout, &ws.config.hooks))
+    emit(&status(&ws.repo_root, &layout, &ws.config.hooks))
 }
 
-fn status(layout: &Layout, decl: &HooksDecl) -> HooksReport {
+fn status(repo_root: &Path, layout: &Layout, decl: &HooksDecl) -> HooksReport {
     let mut report = HooksReport::new("status", false, layout);
-    for w in wiring(layout, decl) {
+    for w in report_wiring(repo_root, layout, decl) {
         match w {
             Err(m) => report.refuse(m),
             Ok(w) => {
@@ -1106,7 +1197,72 @@ pub fn run_install(config: Option<PathBuf>, dry_run: bool, write_config: bool) -
         Ok(p) => p,
         Err(m) => return not_run(m),
     };
-    emit(&install(&layout, &ws.config.hooks, dry_run, write_config))
+    let decl = &ws.config.hooks;
+    let off = match unpointed(&ws.repo_root, decl) {
+        Ok(o) => o,
+        Err(m) => return not_run(m),
+    };
+    let Some(off) = off else {
+        return emit(&install(&layout, decl, dry_run, write_config));
+    };
+    emit(&point_and_install(&ws.repo_root, &off, decl, dry_run))
+}
+
+/// Points this clone's `core.hooksPath` at the directory `hooks.path` names,
+/// then wires the hooks there. A value someone else set is never replaced.
+fn point_and_install(
+    repo_root: &Path,
+    off: &Unpointed,
+    decl: &HooksDecl,
+    dry_run: bool,
+) -> HooksReport {
+    let layout = Layout::Files {
+        kind: "hooks-path",
+        unwritable: write_problem(&off.dir, &allowed_roots(repo_root)),
+        dir: off.dir.clone(),
+        needs_exec: true,
+    };
+    let mut report = HooksReport::new("install", dry_run, &layout);
+    let p = &off.configured;
+    if let Some(c) = &off.current {
+        report.refuse(format!(
+            "core.hooksPath is already {c}, not {p}, the directory hooks.path names; urzua will not replace it -- if {c} is no longer wanted, run `git config --unset core.hooksPath`, then `{INSTALL}`"
+        ));
+        return report;
+    }
+    if dry_run {
+        report.item("core.hooksPath", &off.dir, "would-point");
+    } else {
+        match git(repo_root, &["config", "core.hooksPath", p]) {
+            Ok(o) if o.status.success() => report.item("core.hooksPath", &off.dir, "pointed"),
+            Ok(o) => {
+                report.refuse(format!(
+                    "git config core.hooksPath {p} failed: {}",
+                    String::from_utf8_lossy(&o.stderr).trim()
+                ));
+                return report;
+            }
+            Err(m) => {
+                report.refuse(m);
+                return report;
+            }
+        }
+    }
+    if let Layout::Files {
+        dir,
+        unwritable,
+        needs_exec,
+        ..
+    } = &layout
+    {
+        let target = Target {
+            dir,
+            unwritable: unwritable.as_deref(),
+            needs_exec: *needs_exec,
+        };
+        install_files(&mut report, decl, &target, dry_run);
+    }
+    report
 }
 
 fn install(layout: &Layout, decl: &HooksDecl, dry_run: bool, write_config: bool) -> HooksReport {
@@ -1496,7 +1652,7 @@ fn append_stanza(
 }
 
 pub fn run_uninstall(config: Option<PathBuf>, dry_run: bool) -> ExitCode {
-    let (_, layout) = match open(config) {
+    let (ws, layout) = match open(config) {
         Ok(p) => p,
         Err(m) => return not_run(m),
     };
@@ -1521,7 +1677,34 @@ pub fn run_uninstall(config: Option<PathBuf>, dry_run: bool) -> ExitCode {
             dry_run,
         );
     }
+    if report.exit == 0 {
+        unpoint(&mut report, &ws.repo_root, &ws.config.hooks, dry_run);
+    }
     emit(&report)
+}
+
+/// Unsets `core.hooksPath` only when it is the directory `hooks.path` names.
+fn unpoint(report: &mut HooksReport, repo_root: &Path, decl: &HooksDecl, dry_run: bool) {
+    let Some(configured) = &decl.path else {
+        return;
+    };
+    match unpointed(repo_root, decl) {
+        Err(m) => return report.refuse(m),
+        Ok(Some(_)) => return,
+        Ok(None) => {}
+    }
+    let dir = repo_root.join(configured);
+    if dry_run {
+        return report.item("core.hooksPath", &dir, "would-unset");
+    }
+    match git(repo_root, &["config", "--unset", "core.hooksPath"]) {
+        Ok(o) if o.status.success() => report.item("core.hooksPath", &dir, "unset"),
+        Ok(o) => report.refuse(format!(
+            "git config --unset core.hooksPath failed: {}",
+            String::from_utf8_lossy(&o.stderr).trim()
+        )),
+        Err(m) => report.refuse(m),
+    }
 }
 
 /// Removes the blocks from one file, under the same guards as `install`: a
@@ -1632,7 +1815,9 @@ pub fn run_hook(config: Option<PathBuf>, hook: String) -> ExitCode {
         serde_json::from_slice(&out.stdout).unwrap_or(serde_json::Value::Null);
     match out.status.code() {
         Some(0) => {
-            eprintln!("{hook}: {shown}: no blocking findings");
+            if decl.print_success {
+                eprintln!("{hook}: {shown}: no blocking findings");
+            }
             ExitCode::SUCCESS
         }
         Some(1) => blocked(&hook, &shown, &report, fail_on_of(&args, ws.config.fail_on)),

@@ -69,7 +69,7 @@ fn hook_checks(
     };
     hooks::HOOKS
         .iter()
-        .zip(hooks::wiring(&layout, decl))
+        .zip(hooks::report_wiring(repo_root, &layout, decl))
         .map(|(layer, w)| {
             let (status, state, message, fix) = match w {
                 Err(message) => (DoctorStatus::Error, None, message, None),

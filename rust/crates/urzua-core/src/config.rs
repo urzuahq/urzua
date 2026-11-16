@@ -125,6 +125,16 @@ pub struct HooksDecl {
     /// the hook and everything it started. Default 600.
     #[serde(default = "HooksDecl::default_verify_timeout")]
     pub verify_timeout_seconds: u64,
+    /// The directory, relative to the repository root, the hooks are
+    /// committed in. git's `core.hooksPath` is per clone, so `urzua hooks
+    /// install` points each clone at it and the reports name it when a clone
+    /// is not pointed there.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+    /// `urzua hooks run` prints a line when nothing blocks. Default false:
+    /// a clean run prints nothing.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub print_success: bool,
 }
 
 /// One hook: the urzua arguments it runs and who maintains the hook file.
@@ -215,6 +225,8 @@ impl Default for HooksDecl {
             pre_push: HookDecl::default(),
             on_not_run: HookOnNotRun::default(),
             verify_timeout_seconds: Self::default_verify_timeout(),
+            path: None,
+            print_success: false,
         }
     }
 }
@@ -3281,6 +3293,19 @@ fn validate_hooks(hooks: &HooksDecl) -> Result<(), ConfigError> {
         return Err(ConfigError::InvalidHooks {
             reason: "'verify_timeout_seconds' must be at least 1".to_string(),
         });
+    }
+    if let Some(path) = &hooks.path {
+        let p = std::path::Path::new(path);
+        let inside = p
+            .components()
+            .all(|c| matches!(c, std::path::Component::Normal(_)));
+        if path.trim().is_empty() || !inside {
+            return Err(ConfigError::InvalidHooks {
+                reason: format!(
+                    "'path' must be a directory inside the repository, relative to its root, for example .git-hooks; got '{path}'"
+                ),
+            });
+        }
     }
     for name in ["pre-commit", "pre-push"] {
         let args = hooks.args(name).unwrap_or_default();

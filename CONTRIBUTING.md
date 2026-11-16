@@ -10,9 +10,13 @@ genuinely open rather than settled.
 
 ```sh
 git clone https://github.com/urzuahq/urzua && cd urzua
-make build     # builds the binary and wires the git hooks (core.hooksPath=.git-hooks)
-make ci        # exactly what CI runs: fmt-check, clippy, build, test
+make build           # builds the binary and wires the git hooks (core.hooksPath=.git-hooks)
+urzua hooks install  # points this clone at .git-hooks, which .urzua/config.yaml names under hooks.path
+make ci              # exactly what CI runs: fmt-check, clippy, build, test
 ```
+
+`core.hooksPath` is set per clone, so a fresh clone runs none of the committed hooks until it is pointed at
+`.git-hooks`; `urzua hooks install` does that once, and `urzua doctor` says so until it has.
 
 The first `make build` of a clone wires the versioned hooks: `pre-commit` runs `urzua check --base HEAD`
 and `pre-push` runs fmt, clippy and `urzua check`. `make hooks-install` does only the wiring. When

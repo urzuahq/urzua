@@ -437,7 +437,9 @@ pre-commit hook run `urzua hooks run pre-commit` and the pre-push hook `urzua ho
 missing hook is created; an existing shell hook gets a block between `# >>> urzua-hooks begin` and
 `# <<< urzua-hooks end` at its top (after the shebang, comments and a husky v8 source line), so urzua runs
 first and the rest of the hook is unchanged; a hook declared under `hooks.<hook>.managed: declared` is not
-written. It
+written. When `hooks.path` names the directory the hooks are committed in, `install` first sets this clone's
+`core.hooksPath` to it, refusing when `core.hooksPath` already names another directory, and `uninstall` unsets it
+when it is that directory; `status` reports `not-pointed` until then. It
 refuses, writing nothing and printing the line to add, a Node or Python hook, a hook without the execute bit,
 a symlinked or hard-linked hook file, and a hooks directory that resolves outside the repository and its git directory or
 cannot be written. With the pre-commit
@@ -446,7 +448,8 @@ framework it writes no hook file: the report's `stanza` is the `repo: local` ent
 
 `run` is what the hooks call: it runs the arguments `hooks.pre-commit` or `hooks.pre-push` names in the
 config (default `check --base HEAD` and `check`; only `check` or `audit` may be named) and prints, on
-stderr, the blocking findings' rule, file and message and the command for the full report. A blocking
+stderr, the blocking findings' rule, file and message and the command for the full report. A clean run
+prints nothing (`hooks.print_success: true` prints `no blocking findings`). A blocking
 finding always stops the commit or push. When urzua is missing, is a release without `hooks run`, or
 cannot run, the hook prints one line saying the records were NOT checked, how to install or upgrade urzua
 and that CI will check them, and lets the commit through (`hooks.on_not_run: block` stops it instead). See
