@@ -5,7 +5,7 @@ Phase: '0'
 Track: roadmap-tracking
 Implements: ADR-34
 Blocked-on: —
-Realized-by: code:.urzua/config.yaml#record_types::milestone@sha256:cb0390de9bbe3d5dceb67db854f77f5c42b8eb04a5533c27e3f1ae4b143f0142, spec:docs/specs/SPEC-6-the-milestone-record-type.md, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs#a_milestone_must_state_its_done_means_unless_it_is_wontdo@sha256:25ce42b874d80cc7d3a2ab911a79c88c7494b512d80f465ad0b3f621af7e9a16
+Realized-by: code:.urzua/config.yaml#record_types::milestone@sha256:c11b3cc71ca8132c2fdeb97e2a5151b4015ad548977ccdd963b209799d447e91, spec:docs/specs/SPEC-6-the-milestone-record-type.md, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs#a_milestone_must_state_its_done_means_unless_it_is_wontdo@sha256:25ce42b874d80cc7d3a2ab911a79c88c7494b512d80f465ad0b3f621af7e9a16
 ---
 # 8 — Add the milestone record type
 
@@ -19,9 +19,9 @@ The backlog was accumulating in conversation history and an unstructured documen
 
 ## Done means
 
-- A `milestone` record type is configured in `.urzua/config.yaml` with `Status`, `Phase` and `Track` required and `Implements` a pointer field. — evidence: code:.urzua/config.yaml#record_types::milestone@sha256:cb0390de9bbe3d5dceb67db854f77f5c42b8eb04a5533c27e3f1ae4b143f0142
+- A `milestone` record type is configured in `.urzua/config.yaml` with `Status`, `Phase` and `Track` required and `Implements` a pointer field. — evidence: code:.urzua/config.yaml#record_types::milestone@sha256:c11b3cc71ca8132c2fdeb97e2a5151b4015ad548977ccdd963b209799d447e91
 - `SPEC-6` documents it. — evidence: spec:docs/specs/SPEC-6-the-milestone-record-type.md
-- `urzua check` examines every `docs/milestones/` record under it. — evidence: code:.urzua/config.yaml#record_types::milestone@sha256:cb0390de9bbe3d5dceb67db854f77f5c42b8eb04a5533c27e3f1ae4b143f0142, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs#a_milestone_must_state_its_done_means_unless_it_is_wontdo@sha256:25ce42b874d80cc7d3a2ab911a79c88c7494b512d80f465ad0b3f621af7e9a16
+- `urzua check` examines every `docs/milestones/` record under it. — evidence: code:.urzua/config.yaml#record_types::milestone@sha256:c11b3cc71ca8132c2fdeb97e2a5151b4015ad548977ccdd963b209799d447e91, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs#a_milestone_must_state_its_done_means_unless_it_is_wontdo@sha256:25ce42b874d80cc7d3a2ab911a79c88c7494b512d80f465ad0b3f621af7e9a16
 - Adding it needed no change to urzua-core. — waived: process-outcome -- a property of the change that added the type (commit 784fa758: a config declaration, a template and a spec, with two unrelated core defects fixed beside it), which no file can evidence now
 
 > **Revision log**
@@ -51,3 +51,4 @@ The backlog was accumulating in conversation history and an unstructured documen
 | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` 1690790d0bdc -> b3876c284bd2. Reason: Read the diff of each re-pinned file against main: config.yaml declares embodiment.pin-stale: warn with a two-line comment; no other key changed. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` b3876c284bd2 -> 169fd6057139. Reason: Read the diff of each re-pinned file against main. .urzua/config.yaml: `unread_markers: report` on embodiment.back-pointer-resolution; no other key changed. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 | 2026-11-16 | Pinned (attested by beauwilliams, identity: gh-verified, actor: agent): 1 locators pinned, 0 file-level, 1 scoped. Evidence: .urzua/config.yaml#record_types::milestone@sha256:cb0390de9bbe Reason: Narrowed to record_types::milestone: the milestone type's required fields, pointer fields and docs/milestones dir are all declared in that one entry. **Why:** a claim is renewed only over pinned code and test evidence. | **structural** |
+| 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml#record_types::milestone` (lines 296-407) cb0390de9bbe -> c11b3cc71ca8. Reason: config.yaml: every record type's revision_log gains the class evidence and evidence_class: evidence, so a re-pin row no longer bumps a version, and the rule embodiment.back-pointer-resolution declares its two markers at their default values; neither changes what this record claims **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
