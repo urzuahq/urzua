@@ -9,6 +9,7 @@ use std::process::ExitCode;
 
 use urzua_core::report::{CouldNotRun, NextAction, Notice, Report};
 
+use super::hooks::{self, invokes_urzua, HookState};
 use crate::discovery::{find_repo_root, load_config};
 use crate::emit;
 
@@ -23,163 +24,36 @@ struct DoctorCheck {
     /// The layer's wiring state, machine-readable (`hook-wired` only).
     #[serde(skip_serializing_if = "Option::is_none")]
     state: Option<HookState>,
-}
-
-/// How one local hook layer is wired (ADR-71: wiring is verifiable).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
-#[serde(rename_all = "kebab-case")]
-enum HookState {
-    NotInstalled,
-    InstalledRunningUrzua,
-    InstalledNotRunningUrzua,
-    /// Present but without the execute bit, which git silently ignores.
-    InstalledNotExecutable,
-}
-
-/// The local layers ADR-71 names; the editor layer is ADR-69's.
-const HOOK_LAYERS: [&str; 2] = ["pre-commit", "pre-push"];
-
-/// The directory git runs hooks from: `core.hooksPath` (relative paths are
-/// relative to the working tree root) or the repository's own hooks dir.
-fn hooks_dir(repo_root: &std::path::Path) -> Result<PathBuf, String> {
-    let git = |args: &[&str]| {
-        urzua_io::git::GitRun::new()
-            .args(args)
-            .cwd(repo_root)
-            .output()
-            .map_err(|e| format!("could not run git: {}", e.into_io()))
-    };
-    let configured = git(&["config", "--get", "core.hooksPath"])?;
-    let value = String::from_utf8_lossy(&configured.stdout)
-        .trim()
-        .to_string();
-    if configured.status.success() && !value.is_empty() {
-        let p = PathBuf::from(&value);
-        return Ok(if p.is_absolute() {
-            p
-        } else {
-            repo_root.join(p)
-        });
-    }
-    let out = git(&["rev-parse", "--git-path", "hooks"])?;
-    if !out.status.success() {
-        return Err(format!(
-            "git could not locate the hooks directory: {}",
-            String::from_utf8_lossy(&out.stderr).trim()
-        ));
-    }
-    let p = PathBuf::from(String::from_utf8_lossy(&out.stdout).trim());
-    Ok(if p.is_absolute() {
-        p
-    } else {
-        repo_root.join(p)
-    })
-}
-
-fn hook_state(path: &std::path::Path) -> Result<HookState, String> {
-    let meta = match std::fs::metadata(path) {
-        Ok(m) => m,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(HookState::NotInstalled),
-        Err(e) => return Err(format!("could not read {}: {e}", path.display())),
-    };
-    if !meta.is_file() {
-        return Ok(HookState::NotInstalled);
-    }
-    #[cfg(unix)]
-    let executable = {
-        use std::os::unix::fs::PermissionsExt;
-        meta.permissions().mode() & 0o111 != 0
-    };
-    // Windows has no execute bit; git runs the hook through its shell.
-    #[cfg(not(unix))]
-    let executable = true;
-    if !executable {
-        return Ok(HookState::InstalledNotExecutable);
-    }
-    let content =
-        std::fs::read(path).map_err(|e| format!("could not read {}: {e}", path.display()))?;
-    let content = String::from_utf8_lossy(&content);
-    Ok(if invokes_urzua(&content, None, false) {
-        HookState::InstalledRunningUrzua
-    } else {
-        HookState::InstalledNotRunningUrzua
-    })
-}
-
-/// Whether `content` runs urzua: a command position, not a word in a comment
-/// or an `echo`. A line's `#` comment is dropped, and a line that only prints
-/// (`echo`, `printf`) runs nothing. The executable is any path ending in
-/// `urzua`, followed by a subcommand (`subcommand` when given). With
-/// `accept_action`, a `uses:` line naming urzua's reusable gate action counts
-/// too. The engine knows no repository's wrapper script or make target, so a
-/// repository that wraps the call is seen only through the call itself.
-fn invokes_urzua(content: &str, subcommand: Option<&str>, accept_action: bool) -> bool {
-    // Variables assigned a path that ends in `urzua` (`bin="$root/.../urzua"`),
-    // so `"$bin" check` is seen as the call it is.
-    let mut binaries: Vec<String> = Vec::new();
-    for line in content.lines() {
-        let l = line.trim_start().trim_start_matches("export ");
-        if let Some((name, value)) = l.split_once('=') {
-            let value = value.trim().trim_matches(|c| c == '"' || c == '\'');
-            if !name.is_empty()
-                && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
-                && value.rsplit('/').next() == Some("urzua")
-            {
-                binaries.push(name.to_string());
-            }
-        }
-    }
-    for line in content.lines() {
-        let trimmed = line.trim_start();
-        if trimmed.starts_with('#') {
-            continue;
-        }
-        let code = match line.find(" #") {
-            Some(at) => &line[..at],
-            None => line,
-        };
-        let tokens: Vec<&str> = code
-            .split(|c: char| c.is_whitespace() || "\"'();&|`".contains(c))
-            .filter(|t| !t.is_empty())
-            .collect();
-        if matches!(tokens.first(), Some(&"echo") | Some(&"printf")) {
-            continue;
-        }
-        if accept_action && tokens.iter().any(|t| t.contains("actions/urzua-gate")) {
-            return true;
-        }
-        for pair in tokens.windows(2) {
-            let executable = pair[0].rsplit('/').next() == Some("urzua")
-                || binaries
-                    .iter()
-                    .any(|b| pair[0] == format!("${b}") || pair[0] == format!("${{{b}}}"));
-            let wanted = match subcommand {
-                Some(sub) => pair[1] == sub,
-                None => pair[1].starts_with(|c: char| c.is_ascii_alphabetic()),
-            };
-            if executable && wanted {
-                return true;
-            }
-        }
-    }
-    false
+    /// Where the hooks live: `default`, `hooks-path`, `husky` or
+    /// `pre-commit-framework` (`hook-wired` only).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    hook_layout: Option<&'static str>,
+    /// The one command that repairs this check, when there is one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    fix: Option<String>,
 }
 
 /// What is wrong with the local git hook layers, as plain messages: the
 /// session-start check of the harness reads the same wiring `doctor` does.
 pub(crate) fn git_hook_problems(repo_root: &std::path::Path) -> Vec<String> {
-    hook_checks(repo_root)
+    let decl = load_config(&crate::discovery::default_config_path(repo_root))
+        .map(|c| c.hooks)
+        .unwrap_or_default();
+    hook_checks(repo_root, &decl)
         .into_iter()
         .filter(|c| c.status != DoctorStatus::Ok)
         .map(|c| c.message)
         .collect()
 }
 
-fn hook_checks(repo_root: &std::path::Path) -> Vec<DoctorCheck> {
-    let dir = match hooks_dir(repo_root) {
-        Ok(d) => d,
+fn hook_checks(
+    repo_root: &std::path::Path,
+    decl: &urzua_core::config::HooksDecl,
+) -> Vec<DoctorCheck> {
+    let layout = match hooks::detect(repo_root) {
+        Ok(l) => l,
         Err(message) => {
-            return HOOK_LAYERS
+            return hooks::HOOKS
                 .iter()
                 .map(|layer| DoctorCheck {
                     check: "hook-wired".to_string(),
@@ -187,40 +61,28 @@ fn hook_checks(repo_root: &std::path::Path) -> Vec<DoctorCheck> {
                     message: format!("{layer}: {message} -- cannot tell whether the hook is wired"),
                     layer: Some((*layer).to_string()),
                     state: None,
+                    hook_layout: None,
+                    fix: None,
                 })
                 .collect();
         }
     };
-    HOOK_LAYERS
+    hooks::HOOKS
         .iter()
-        .map(|layer| {
-            let path = dir.join(layer);
-            let (status, state, message) = match hook_state(&path) {
-                Err(message) => (DoctorStatus::Error, None, message),
-                Ok(state) => {
-                    let (status, message) = match state {
-                        HookState::InstalledRunningUrzua => (
-                            DoctorStatus::Ok,
-                            format!("{} runs urzua", path.display()),
-                        ),
-                        HookState::NotInstalled => (
-                            DoctorStatus::Warn,
-                            format!(
-                                "no {layer} hook at {} -- add one that runs `urzua check`; CI remains the guarantee (ADR-71)",
-                                path.display()
-                            ),
-                        ),
-                        HookState::InstalledNotRunningUrzua => (
-                            DoctorStatus::Warn,
-                            format!("{} does not run urzua", path.display()),
-                        ),
-                        HookState::InstalledNotExecutable => (
-                            DoctorStatus::Warn,
-                            format!("{} is not executable, so git ignores it", path.display()),
-                        ),
-                    };
-                    (status, Some(state), message)
-                }
+        .zip(hooks::wiring(&layout, decl))
+        .map(|(layer, w)| {
+            let (status, state, message, fix) = match w {
+                Err(message) => (DoctorStatus::Error, None, message, None),
+                Ok(w) => (
+                    if w.state.is_ok() {
+                        DoctorStatus::Ok
+                    } else {
+                        DoctorStatus::Warn
+                    },
+                    Some(w.state),
+                    w.message,
+                    w.fix,
+                ),
             };
             DoctorCheck {
                 check: "hook-wired".to_string(),
@@ -228,6 +90,8 @@ fn hook_checks(repo_root: &std::path::Path) -> Vec<DoctorCheck> {
                 message,
                 layer: Some((*layer).to_string()),
                 state,
+                hook_layout: Some(layout.kind()),
+                fix,
             }
         })
         .collect()
@@ -267,7 +131,16 @@ impl Report for DoctorReport {
         ExitCode::from(self.exit_code)
     }
     fn next_action(&self) -> Option<NextAction> {
-        self.next.clone()
+        self.next.clone().or_else(|| {
+            self.checks
+                .iter()
+                .filter(|c| c.status != DoctorStatus::Ok)
+                .find_map(|c| {
+                    c.fix
+                        .clone()
+                        .map(|command| NextAction::runs_as_printed(command, c.message.clone()))
+                })
+        })
     }
 }
 
@@ -314,6 +187,8 @@ impl DoctorCheck {
             message,
             layer: None,
             state: None,
+            hook_layout: None,
+            fix: None,
         }
     }
 }
@@ -395,7 +270,7 @@ pub fn run(config: Option<PathBuf>) -> ExitCode {
     // a local layer is a convenience and only CI is the guarantee, so a clone
     // without hooks is reported but does not fail doctor. A hook directory
     // that cannot be read is an error: not-knowing is not the same as absent.
-    checks.extend(hook_checks(&repo_root));
+    checks.extend(hook_checks(&repo_root, &config.hooks));
 
     // The agent harness (ADR-89), when the configuration declares one.
     for (level, check, message) in crate::harness::doctor_checks(&repo_root, &config) {

@@ -9,6 +9,8 @@ pub mod export;
 pub mod fix;
 pub(crate) mod fix_conflicts;
 pub mod graph;
+pub mod hooks;
+pub mod hooks_verify;
 pub mod index;
 pub mod init;
 pub mod init_greenfield;

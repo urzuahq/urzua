@@ -261,6 +261,9 @@ exists, whether a CI workflow invokes `urzua check` or the gate action, whether 
 pre-push hooks run it, and the harness and authority declarations.
 
 Output: `status` (`ok`, `warn` or `error`) and `checks`, each with `check`, `status` and `message`.
+A `hook-wired` check also carries `layer`, `state`, `hook_layout` (`default`, `hooks-path`, `husky` or
+`pre-commit-framework`) and, when the hook is not wired, `fix`: the command that wires it,
+usually `urzua hooks install`. The report's `next_action` is the first such command.
 The `check` ids include `config-exists`, `config-parses`, `record-type-dir`, `ci-wired`, `hook-wired`,
 `authority-host` (whether the declared authority gates anything), `authority-decider-table`,
 `authority-waivable`, `harness-config` (the declared harness, and any key of it this build does not
@@ -417,6 +420,55 @@ urzua harness run <edit | session-start | post-command>
 ```
 
 Installs and runs the agent harness. See [the agent harness](agent-harness.md) for what each does.
+
+## hooks
+
+```text
+urzua hooks install [--dry-run] [--write-config]
+urzua hooks status
+urzua hooks uninstall [--dry-run]
+urzua hooks verify [<pre-commit | pre-push>] [--run] [--allow-outside]
+urzua hooks run <pre-commit | pre-push>
+```
+
+Wires the git hooks `doctor` reports. `install` finds where the hooks live (`.git/hooks`, a
+`core.hooksPath` inside the repository, husky's `.husky/`, or the pre-commit framework) and makes the
+pre-commit hook run `urzua hooks run pre-commit` and the pre-push hook `urzua hooks run pre-push`. A
+missing hook is created; an existing shell hook gets a block between `# >>> urzua-hooks begin` and
+`# <<< urzua-hooks end` at its top (after the shebang, comments and a husky v8 source line), so urzua runs
+first and the rest of the hook is unchanged; a hook declared under `hooks.<hook>.managed: declared` is not
+written. It
+refuses, writing nothing and printing the line to add, a Node or Python hook, a hook without the execute bit,
+a symlinked or hard-linked hook file, and a hooks directory that resolves outside the repository and its git directory or
+cannot be written. With the pre-commit
+framework it writes no hook file: the report's `stanza` is the `repo: local` entry to add, and
+`--write-config` appends it to `.pre-commit-config.yaml`.
+
+`run` is what the hooks call: it runs the arguments `hooks.pre-commit` or `hooks.pre-push` names in the
+config (default `check --base HEAD` and `check`; only `check` or `audit` may be named) and prints, on
+stderr, the blocking findings' rule, file and message and the command for the full report. A blocking
+finding always stops the commit or push. When urzua is missing, is a release without `hooks run`, or
+cannot run, the hook prints one line saying the records were NOT checked, how to install or upgrade urzua
+and that CI will check them, and lets the commit through (`hooks.on_not_run: block` stops it instead). See
+[CI](ci.md#local-hooks).
+
+Output: `status` (`ok`, `drift` from `status` when a hook is `missing`, `not-wired`, `not-executable`,
+`unmanaged-call` (urzua is mentioned outside the managed block, which text cannot prove runs), `stale-policy`,
+`stale-block`, `duplicated`, `declared-missing`, `declared-not-executable` or `declared-no-call`; a declared hook
+that is plausible is `declared`, which counts as wired), `not-run` when `install` or `uninstall` refused),
+`action`, `dry_run`, `layout`, `items` (`{hook, path, state}`), `stanza`, `problems`. `uninstall` removes
+only the blocks, restoring the file byte for byte, deletes only a hook file it created, and refuses where
+`install` would. Exit 0, 1 (`status` found a hook not wired) or 2 (refused).
+
+`verify` proves a hook reaches urzua by running it. Without `--run` it runs nothing and says that `--run`
+executes the repository's hooks. With `--run` it runs each hook once, for real, as git runs it (`git hook
+run`): urzua's check runs with its real result, and everything else in the hook happens (a formatter
+rewrites files). Any urzua the hook starts records in a probe directory that it was reached and otherwise
+behaves exactly as it always does. pre-push gets the remote `urzua-verify urzua-verify://not-a-remote` and
+empty stdin; a hook running longer than `hooks.verify_timeout_seconds` is stopped and reported; a
+`core.hooksPath` outside the repository needs `--allow-outside`. Output: `status` (`explained`, `ok`,
+`unreached`, `not-run`), `run`, `hooks` (`{hook, path, managed, reached, exit_code, timed_out, invocation,
+urzua_output, note}`). Exit 1 when a hook is not reached or timed out.
 
 ## audit
 

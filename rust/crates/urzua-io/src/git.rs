@@ -46,6 +46,7 @@ pub struct GitRun {
     unset_env: Vec<String>,
     stdin: Option<Vec<u8>>,
     discard_stderr: bool,
+    own_group: bool,
 }
 
 impl GitRun {
@@ -104,6 +105,13 @@ impl GitRun {
         self
     }
 
+    /// Starts git as the leader of a new process group, so a supervisor can
+    /// stop it and everything it started at once (Unix only; ignored elsewhere).
+    pub fn own_process_group(mut self) -> Self {
+        self.own_group = true;
+        self
+    }
+
     /// The command with its arguments, directory and environment, and nothing
     /// else set. This is the only `Command::new("git")` in production code.
     fn command(&self) -> Command {
@@ -117,6 +125,11 @@ impl GitRun {
         }
         for key in &self.unset_env {
             cmd.env_remove(key);
+        }
+        #[cfg(unix)]
+        if self.own_group {
+            use std::os::unix::process::CommandExt;
+            cmd.process_group(0);
         }
         cmd
     }

@@ -1,9 +1,9 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.154'
+Version: '0.155'
 Date: 2026-08-20
 Status: Shipped
-Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:af22a41210be5848af257fcdb372ac1848fa2724b3881055a0223a9762c6566a, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:09c2431a269316741c35b51dabd5766ecd3d50fab2b98069314bb1bc8857767d, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:255395e7d2caa34947cef28f463e2ec050e3eba798a4dc7573a3cad946fee1ae
+Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:04472363242c8fea612ce39fc1f6cdc08571a58cc760845d5fa9a193060a3cff, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:09c2431a269316741c35b51dabd5766ecd3d50fab2b98069314bb1bc8857767d, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:255395e7d2caa34947cef28f463e2ec050e3eba798a4dc7573a3cad946fee1ae
 Embodiment: Verified
 Author: beauwilliams
 Subject: '`.urzua/config.yaml` -- the schema for record types, required/known fields, and per-type behavior.'
@@ -1223,6 +1223,49 @@ authority:
   `CODEOWNERS` file are the host's settings, which the engine can neither read nor verify: `urzua doctor`
   says so and does not claim them, and names a distinct agent identity with `CODEOWNERS` on the protected
   paths as a future option and not as configured.
+
+## Git hooks: `hooks`
+
+A top-level `hooks` key names what the git hooks `urzua hooks install` wires run (`ADR-71`, amendment of
+2026-11-16; `MILE-220`; `SPEC-15`). Each hook is the urzua arguments it runs, written as a list, or a map with
+`command` (those arguments) and `managed`:
+
+```yaml
+hooks:
+  pre-commit: [check, --base, HEAD]   # the default
+  pre-push: {command: [check], managed: block}   # the same as [check], the default
+  on_not_run: warn                    # the default; or block
+  verify_timeout_seconds: 600         # the default
+```
+
+- **`verify_timeout_seconds`** is how long `urzua hooks verify --run` lets one hook run before it stops the hook and
+  everything it started and reports it `timed_out` (`SPEC-15`). At least 1; default 600, enough for a pre-push hook
+  that builds.
+
+- **`managed`** is `block` (the default: `urzua hooks install` writes and maintains a marked block at the top of the
+  hook) or `declared`: the repository maintains the hook file itself and asserts that it runs urzua. `install` then
+  writes nothing to that hook, and `doctor`, `urzua hooks status` and the session-start check report it `ok`
+  (`declared`) while the file exists, is executable and mentions urzua, and warn (`declared-missing`,
+  `declared-not-executable`, `declared-no-call`) when the declaration is plainly false. The declaration is an
+  assertion by the repository, not something urzua reads from the hook: that is why `.urzua/config.yaml` is a
+  protected path in a gated repository, and `urzua hooks verify --run` is how to check it (`SPEC-15`).
+
+- **Absent means the defaults above**, and any key left out takes its default. `pre-commit` checks the records
+  changed since `HEAD`, staged or not, with the diff rules; `pre-push` checks the whole tree, as CI does.
+- **Only a read-only check.** Each list starts with `check` (or its deprecated alias `audit`) followed by its flags,
+  except `--config`, `--stdin-path` and `--actors`, which make it read another file whose contents an error could
+  print. The flags that narrow or widen what is checked (paths, `--base`, `--rules`, `--fail-on`) are allowed, and so
+  can weaken the hook, which is why `.urzua/config.yaml` is a protected path in a repository that gates it.
+  Any other subcommand is a load error (exit 2) naming the key: `fix --apply` or `harness install` would write files,
+  `refs` would reach the network and `hooks run` would call the hook again, on every commit. `check --base HEAD` took
+  about 9 seconds with a release build on this repository; a cheaper check (for example `[check, docs/adr]`) can be
+  named.
+- **`on_not_run`** is what a hook does when urzua is not found, is a release without `hooks run`, or the check cannot
+  run: `warn` (the default) prints one loud line saying urzua did not run, the records were NOT checked, how to install
+  it and that CI will check them, and lets the commit or push through; `block` stops it and names `--no-verify` to skip
+  once. A blocking finding always blocks. `urzua hooks run` reads the value when it runs; the hook's block also carries
+  it, for when urzua is missing and cannot be asked, and `urzua hooks status` reports `stale-policy` when the two differ.
+- **Any other key under `hooks` is a load error** (exit 2).
 
 ## Editor hook blocking: `block_on`
 
@@ -2768,11 +2811,23 @@ proves this configuration produces the three findings.
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 9b216fd928bd -> 76578456015b. Reason: Read the diff of each re-pinned file against main. config.rs: the `unread_markers` rule option was added (UnreadMarkers enum, its field-name list entry and the load check validate_unread_markers that refuses it on any rule but the two back-pointer rules); nothing else changed. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 76578456015b -> 26b96561f2fa. Reason: Read the diff of each re-pinned file against main. config.rs: the `unread_markers` rule option (UnreadMarkers, its field-name entry, validate_unread_markers) and `issue_refs.workers` (IssueRefs::workers, REFS_WORKERS_DEFAULT/MAX, a 1-to-16 check in issue_refs_problem); nothing else. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 305844777dc8 -> 7207b798837c. Reason: Read the diff of each re-pinned file against main. config.rs: the `unread_markers` rule option (UnreadMarkers, its field-name entry, validate_unread_markers) and `issue_refs.workers` (IssueRefs::workers, REFS_WORKERS_DEFAULT/MAX, a 1-to-16 check in issue_refs_problem); nothing else. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-16 | Bumped to `0.155`. Added the `hooks` key: the urzua arguments the pre-commit and pre-push hooks run and `on_not_run`, defaulting to today's `check --base HEAD`, `check` and `block`. **Why:** `MILE-220` adds `urzua hooks install`, and `ADR-101` (amendment of 2026-11-15) puts values that shape behaviour in configuration. | **substantive** |
 > | 2026-11-16 | Bumped to `0.151`. Adds `harness.guardrails.editor-hook.pending_pair` (`allow` or `refuse`, default `allow` by the maintainer's decision of 2026-11-16, an exception to the `ADR-101` amendment of 2026-11-15). **Why:** an agent could make a paired change to two records only through the shell (`MILE-287`). | **substantive** |
 > | 2026-11-16 | Bumped to `0.151`. Documents the optional `revision_log.evidence_class`: the class of re-pin rows, defaulting to `tool_class`, a load error when not in `classes`; left out of `version_bump.classes`, a re-pin needs no bump. **Why:** maintainer decision of 2026-11-16 that a re-pin stops bumping a spec's version, recorded in the `ADR-67` amendment; built in `MILE-284`'s pull request. | **substantive** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 170c2efa746e -> a7b0b06e70f3. Reason: config.rs adds the optional revision_log.evidence_class key, RevisionLogShape.evidence_class defaulting to tool_class with for_evidence, and a load error when evidence_class is blank or not in classes; a config that declares none behaves as before. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 7207b798837c -> 0b3481a4fe1c. Reason: config.rs adds the optional top-level `hooks` key (HooksDecl, HookOnNotRun) with its load-time validation and error variant; every existing key and default is unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 7207b798837c -> 170c2efa746e. Reason: config.rs adds the optional revision_log.evidence_class key and RevisionLogShape.evidence_class (defaulting to tool_class) with for_evidence; a config that declares none behaves as before. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Bumped to `0.153`. Adds `## Rule vocabulary`: `implements_marker`, `verifies_marker`, `comment_leaders`, `trailing_comment_leaders`, `closing_verbs`, a `y-statement` shape's `phrases`, `statuses.placeholders`, `rejected_values` (on `override.unreviewed` and on the suppression type) and `waiver_fields`, each defaulting to the list compiled in before it; a declared list replaces the default except for the two `rejected_values`, which add to a floor; an empty list is a load error. Adds the pin marker, the scaffold placeholder, the override log columns, the managed-block markers and the waiver fields the matching grammar reads to the format invariants, and the reviewer and suppression rejection words to the security floors, each with its reason. **Why:** `ADR-101` amendment of 2026-11-15, accepted by the maintainer; tracked by `MILE-233`. The replace-or-add semantics and the empty-list refusal were decided by the builder on 2026-11-16, pending maintainer review. | **substantive** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` a7b0b06e70f3 -> ec1fb66a9d97. Reason: config.rs adds the vocabulary options (implements_marker, verifies_marker, comment_leaders, trailing_comment_leaders, closing_verbs, rejected_values, waiver_fields) with their load checks, a refusal of a null type rejected_values and of a colon-only marker. The claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` ec1fb66a9d97 -> af22a41210be. Reason: config.rs: RecordTypeConfig gains header_out_of_scope, choosing the quiet no-header cause only for a headerless type that declares no field; loading unchanged **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Bumped to `0.154`. Evidence pins re-baselined for `MILE-265` (the `Re-baselined` row above: `config.rs` gains `RecordTypeConfig::header_out_of_scope`); the specification text is unchanged. **Why:** a re-pinned versioned spec carries a version bump. | **structural** |
+> | 2026-11-16 | Pin recomputed on merge (attested by beauwilliams, identity: gh-verified, actor: agent): both merged sides re-pinned, `rust/crates/urzua-core/src/config.rs` 0b3481a4fe1c and a7b0b06e70f3 -> d893e7e95cb8; the new hash is the merged file's, which is git's automatic merge of the two re-pinned commits. No person wrote a reason for the merged state. **Why:** `urzua fix --conflicts` resolved a conflict that lay only in re-pin lines; a reviewer of the pull request should confirm the merged pin. | **structural** |
+> | 2026-11-16 | `hooks` revised before merge: `on_not_run` defaults to `warn` and is read when the hook runs, and each hook may run only `check` or `audit`; the measured cost of the pre-commit check is stated. **Why:** review of `MILE-220`'s pull request: a blocking default stops contributors who never installed urzua, and any other subcommand could write, reach the network or recurse. | **substantive** |
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` d893e7e95cb8 -> 8a96d6d3905f. Reason: config.rs: the hooks key's on_not_run now defaults to warn and validate_hooks allows only check or audit as the hook command; every other key and default is unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-16 | `hooks` may not pass `--config`, `--stdin-path` or `--actors`, and the flags that narrow a hook's check are named as able to weaken it. **Why:** a re-check of `MILE-220`'s pull request: a flag naming another file could print it on every commit. | **substantive** |
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 8a96d6d3905f -> 4285ca9e4458. Reason: config.rs: validate_hooks also rejects --config, --stdin-path and --actors in a hook's check arguments; every other key and default is unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 4285ca9e4458 -> e56be4912522. Reason: config.rs: validate_hooks also rejects --config, --stdin-path and --actors in a hook's check arguments; every other key and default is unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-16 | `hooks.<hook>` may be a map with `command` and `managed` (`block` or `declared`); a declared hook is the repository's assertion, checked by `urzua hooks verify --run`. **Why:** a third review of `MILE-220`'s pull request: reading a hook's text cannot prove a line runs, and the maintainer asked for configuration that supports hooks a repository maintains itself. | **substantive** |
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` e56be4912522 -> f74531f49e9c. Reason: config.rs: hooks.<hook> may be a map with command and managed (block or declared) as well as a list, and args() fills in each hook's default; every other key and default is unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-16 | Adds `hooks.verify_timeout_seconds` (default 600). **Why:** a fourth review of `MILE-220`'s pull request: `urzua hooks verify --run` ran a hook with no time limit. | **substantive** |
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` f74531f49e9c -> 04472363242c. Reason: config.rs: the hooks key gains verify_timeout_seconds (default 600, at least 1), and hooks.<hook> may be a map with command and managed; every other key and default is unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |

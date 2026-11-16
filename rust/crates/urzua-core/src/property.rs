@@ -222,6 +222,7 @@ mod tests {
                 discovery: Default::default(),
                 harness: None,
                 authority: None,
+                hooks: Default::default(),
                 rules: std::collections::BTreeMap::new(),
                 record_types: [(
                     "note".to_string(),
@@ -363,6 +364,7 @@ mod tests {
             discovery: Default::default(),
             harness: None,
             authority: None,
+            hooks: Default::default(),
             relation_pairs: vec![crate::config::RelationPair {
                 name: "follow".to_string(),
                 forward: "Follows".to_string(),
@@ -644,6 +646,7 @@ mod tests {
                 discovery: Default::default(),
                 harness: None,
                 authority: None,
+                hooks: Default::default(),
                 rules: std::collections::BTreeMap::new(),
                 record_types: [(
                     "note".to_string(),

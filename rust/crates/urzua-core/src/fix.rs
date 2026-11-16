@@ -1352,6 +1352,7 @@ mod tests {
             discovery: Default::default(),
             harness: None,
             authority: None,
+            hooks: Default::default(),
             rules: std::collections::BTreeMap::new(),
             record_types: std::collections::BTreeMap::new(),
         }
@@ -1483,6 +1484,7 @@ mod tests {
             discovery: Default::default(),
             harness: None,
             authority: None,
+            hooks: Default::default(),
             rules: std::collections::BTreeMap::new(),
             record_types: [(
                 "adr".to_string(),

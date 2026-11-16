@@ -767,6 +767,9 @@ fn status(env: &Env, lock: &Lock) -> HarnessReport {
         return run.report.refuse(m);
     }
     let StatusRun { mut report, drift } = run;
+    for message in crate::commands::doctor::git_hook_problems(&env.root) {
+        report.notice(NoticeSeverity::Warning, format!("git hook: {message}"));
+    }
     report.notice(
         NoticeSeverity::Info,
         "a local settings file next to the project settings file (settings.local.json) and the user-level settings are neither read nor written: a hook entry wired only there is not seen".to_string(),

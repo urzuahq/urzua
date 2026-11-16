@@ -139,6 +139,60 @@ GitHub-hosted runners. This is the step this repository's own CI runs.
 
 ## Local hooks
 
-A pre-commit hook that runs `urzua check` catches findings before they reach CI. `urzua doctor`
-checks for `pre-commit` and `pre-push` hooks in `.git/hooks` that invoke it and warns when they are
-missing. CI remains the guarantee: a hook can be skipped.
+A pre-commit hook that runs `urzua check` catches findings before they reach CI. One command wires
+both hooks:
+
+```bash
+urzua hooks install
+```
+
+It writes where git runs the hooks from: `.git/hooks`, the directory `core.hooksPath` names when it is
+inside the repository, or `.husky/` for husky. The pre-commit hook runs `urzua check --base HEAD` (the
+records changed since the last commit, staged or not, with the diff rules; about 9 seconds with a release
+build on urzua's own repository of about 670 records) and the pre-push hook runs `urzua check`;
+`hooks:` in the config changes either to another `check`, such as a cheaper one. An existing hook is never
+replaced: urzua adds a marked block at its top, so urzua runs first and the rest of the hook, its behaviour
+and its exit status are unchanged, and `urzua hooks uninstall` removes only that block, restoring the file. A
+Node or Python hook, a symlinked hook, or a hooks path outside the repository is refused with the line to add.
+`urzua doctor` reads only urzua's own block as wired: reading a hook cannot prove a line runs. A hook you
+maintain yourself is declared under `hooks:` (`pre-commit: {managed: declared}`) and proven with
+`urzua hooks verify --run`, which runs it once, for real (urzua's check included), and reports whether it
+reached urzua.
+
+With the [pre-commit framework](https://pre-commit.com), add this under `repos:` in
+`.pre-commit-config.yaml` (or run `urzua hooks install --write-config`), then
+`pre-commit install --hook-type pre-commit --hook-type pre-push`:
+
+```yaml
+  - repo: local
+    hooks:
+      - id: urzua-pre-commit
+        name: urzua (pre-commit)
+        entry: 'sh -c ''b="${URZUA_BIN:-urzua}"; if command -v "$b" >/dev/null 2>&1; then exec "$b" hooks run pre-commit; fi; echo "pre-commit: urzua did not run (not installed), so the records were NOT checked; install it: https://github.com/urzuahq/urzua/blob/main/docs/reference/install.md -- CI will check them" >&2; exit 0'''
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+      - id: urzua-pre-push
+        name: urzua (pre-push)
+        entry: 'sh -c ''b="${URZUA_BIN:-urzua}"; if command -v "$b" >/dev/null 2>&1; then exec "$b" hooks run pre-push; fi; echo "pre-push: urzua did not run (not installed), so the records were NOT checked; install it: https://github.com/urzuahq/urzua/blob/main/docs/reference/install.md -- CI will check them" >&2; exit 0'''
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+```
+
+The entry finds urzua as the other hooks do (`URZUA_BIN`, then `PATH`) and prints urzua's own message
+when it is missing, not the framework's "executable not found".
+
+A hook that finds blocking findings prints their count and each one's rule, file and message, and the
+command for the full report, and stops the commit. When urzua is not installed (neither `URZUA_BIN` nor
+`PATH` finds it), is a release without `hooks run`, or the check cannot run, the hook prints one line saying
+urzua did not run, the records were NOT checked, how to install or upgrade it and that CI will check them,
+and lets the commit through: one person's install can be committed with the hooks, and a contributor who
+never installed urzua must still be able to commit. Set `hooks.on_not_run: block` to stop the commit
+instead (the message then names `git commit --no-verify`).
+
+`urzua doctor`, `urzua hooks status` and the harness session-start check report each hook in any of these
+layouts, and name the command that wires one that is missing. CI remains the guarantee: a hook can be
+skipped.
