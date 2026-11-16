@@ -105,6 +105,10 @@ pub fn parse_override_log(text: &str) -> (Vec<OverrideEntry>, Vec<MalformedRow>)
 /// is judged by the pending vocabulary the repository's record types declare
 /// (`StatusDecl::is_pending_value`), and by the compiled-in match when none
 /// declares one. Only a cell that is `Present` names a reviewer.
+///
+/// The compiled-in words are a floor (`SPEC-3`): a type's own `placeholders`
+/// cannot make `TBD` a reviewer, and the rule's `rejected_values` only add to
+/// it (`MILE-233`).
 fn reviewer_state(cell: &str, config: &Config) -> crate::FieldState {
     use crate::field_state::classify_with;
     let value = cell.trim();
@@ -112,6 +116,18 @@ fn reviewer_state(cell: &str, config: &Config) -> crate::FieldState {
         && value
             .chars()
             .all(|c| matches!(c, '-' | '\u{2013}' | '\u{2014}'))
+    {
+        return crate::FieldState::Placeholder;
+    }
+    if let Some(floor) = crate::field_state::whole_value_default_state(value) {
+        return floor;
+    }
+    let rejected = config
+        .rule_opts::<OverrideUnreviewedOpts>(RULE_OVERRIDE_UNREVIEWED)
+        .rejected_values;
+    if rejected
+        .iter()
+        .any(|r| r.to_lowercase() == value.to_lowercase())
     {
         return crate::FieldState::Placeholder;
     }

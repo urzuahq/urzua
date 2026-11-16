@@ -330,7 +330,10 @@ pub fn template_missing_sections(
 /// Whether the declaration reads the preamble and the block's marker sits in
 /// it (case-insensitively, as the shape check finds it).
 fn preamble_carries_marker(required: &RequiredSection, preamble: &Section) -> bool {
-    let Some(SectionShape::YStatement { marker: Some(m) }) = &required.shape else {
+    let Some(SectionShape::YStatement {
+        marker: Some(m), ..
+    }) = &required.shape
+    else {
         return false;
     };
     required.preamble
@@ -531,12 +534,15 @@ pub fn section_alias_notices(
 /// `Err((line, message))` when `section` does not have `shape`.
 fn check_shape(section: &Section, shape: &SectionShape) -> Result<(), (usize, String)> {
     match shape {
-        SectionShape::YStatement { marker } => y_statement(section, marker.as_deref()),
+        SectionShape::YStatement { marker, phrases } => {
+            y_statement(section, marker.as_deref(), phrases.as_deref())
+        }
         SectionShape::TableMinRows { min_rows } => table_min_rows(section, *min_rows),
     }
 }
 
-const Y_PHRASES: [&str; 5] = [
+/// The phrases of a `y-statement` block when the shape declares no `phrases`.
+pub const DEFAULT_Y_PHRASES: [&str; 5] = [
     "in the context of",
     "facing",
     "we decided",
@@ -583,7 +589,11 @@ fn strip_quote(line: &str) -> &str {
     }
 }
 
-fn y_statement(section: &Section, marker: Option<&str>) -> Result<(), (usize, String)> {
+fn y_statement(
+    section: &Section,
+    marker: Option<&str>,
+    phrases: Option<&[String]>,
+) -> Result<(), (usize, String)> {
     // A blockquoted block keeps its `>` on every line; the marker is not part
     // of the prose, and left in it splits a phrase that wraps (BUG-181).
     let lines: Vec<(usize, &str)> = prose_lines(section)
@@ -648,10 +658,12 @@ fn y_statement(section: &Section, marker: Option<&str>) -> Result<(), (usize, St
         ));
     }
     let text = normalize(&block);
-    let missing: Vec<&str> = Y_PHRASES
+    let defaults = DEFAULT_Y_PHRASES.map(String::from);
+    let missing: Vec<&str> = phrases
+        .unwrap_or(&defaults)
         .iter()
-        .copied()
-        .filter(|p| !contains_phrase(&text, p))
+        .map(String::as_str)
+        .filter(|p| !contains_phrase(&text, &normalize(p)))
         .collect();
     if missing.is_empty() {
         Ok(())

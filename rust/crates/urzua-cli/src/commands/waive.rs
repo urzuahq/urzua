@@ -26,9 +26,6 @@ use super::new::{
 use crate::emit;
 use crate::session::Session;
 
-/// The one header field the draft writes only when the waiver template lists it
-/// and the type declares it (`MILE-205` decision of 2026-11-13).
-const OWNER_FIELD: &str = "Owner";
 const RULE_FIELD: &str = "Rule";
 const SCOPE_FIELD: &str = "Scope";
 /// Notice subject for a waiver type that lists neither `Variant` nor `Key-path`.
@@ -199,13 +196,13 @@ fn open_ctx(config_path: Option<PathBuf>, by: Option<String>) -> Result<Ctx, Fai
     let session = Session::open(config_path)?;
     let type_name = session.config.suppression_type().to_string();
     let type_config = lookup_record_type(&session.config, &type_name, &session.config_path)?;
-    require_fields_admitted(&type_name, type_config)?;
     let template_path = session
         .repo_root
         .join(".urzua/templates")
         .join(format!("{type_name}.md"));
     let template = urzua_io::read_to_string(&template_path).ok();
     let mut st = SuppressionType::from_config(&session.config);
+    require_fields_admitted(&type_name, type_config, st.reason_field())?;
     if let Some(text) = &template {
         st = st.with_template(text);
     }
@@ -222,7 +219,7 @@ fn open_ctx(config_path: Option<PathBuf>, by: Option<String>) -> Result<Ctx, Fai
             detail: None,
         });
     }
-    let owner = owner_declared(type_config, template.as_deref());
+    let owner = owner_declared(type_config, template.as_deref(), st.owner_field());
     let narrowing = narrowing_admitted(type_config);
     if narrowing
         != (Narrowing {
@@ -289,12 +286,16 @@ fn missing_narrowing_fields(narrowing: Narrowing) -> String {
 
 /// A closed field set that omits a field the draft writes would be reported by
 /// `header.field-set-consistency` on every draft; refuse instead.
-fn require_fields_admitted(type_name: &str, type_config: &RecordTypeConfig) -> Result<(), String> {
+fn require_fields_admitted(
+    type_name: &str,
+    type_config: &RecordTypeConfig,
+    reason_field: &str,
+) -> Result<(), String> {
     if type_config.known_fields.is_none() {
         return Ok(());
     }
     let declared = type_config.declared_fields();
-    for field in [RULE_FIELD, SCOPE_FIELD, waive::REASON_FIELD] {
+    for field in [RULE_FIELD, SCOPE_FIELD, reason_field] {
         if !declared.contains(&urzua_core::values::FieldName::new(field)) {
             return Err(format!(
                 "the {type_name} type declares a closed field set (`known_fields`) that does not list {field}, which every draft carries; add it to `required_fields` or `known_fields`"
@@ -304,17 +305,19 @@ fn require_fields_admitted(type_name: &str, type_config: &RecordTypeConfig) -> R
     Ok(())
 }
 
-fn owner_declared(type_config: &RecordTypeConfig, template: Option<&str>) -> bool {
+/// The owner field is written only when the waiver template lists it and the
+/// type declares it (`MILE-205` decision of 2026-11-13).
+fn owner_declared(type_config: &RecordTypeConfig, template: Option<&str>, owner: &str) -> bool {
     let listed = template
         .map(urzua_core::new_record::template_header_fields)
         .unwrap_or_default()
         .iter()
-        .any(|f| f == OWNER_FIELD);
+        .any(|f| f == owner);
     listed
         && (type_config.known_fields.is_none()
             || type_config
                 .declared_fields()
-                .contains(&urzua_core::values::FieldName::new(OWNER_FIELD)))
+                .contains(&urzua_core::values::FieldName::new(owner)))
 }
 
 /// `--rule` ids this build ships, and `--path` values as repository-relative paths.
@@ -530,7 +533,7 @@ fn scaffold(
         fields.push((urzua_core::waiver::KEY_PATH_FIELD, key_path));
     }
     if ctx.owner {
-        fields.push((OWNER_FIELD, &ctx.author));
+        fields.push((ctx.st.owner_field(), &ctx.author));
     }
     let body = findings_body(group);
     let note = format!(
@@ -539,8 +542,8 @@ fn scaffold(
         group.findings.len(),
         group.rule,
         group.scope,
-        waive::REASON_FIELD,
-        waive::REASON_FIELD,
+        ctx.st.reason_field(),
+        ctx.st.reason_field(),
     );
     let omit = omitted_fields(ctx);
     let omit: Vec<&str> = omit.iter().map(String::as_str).collect();
@@ -548,7 +551,7 @@ fn scaffold(
         &urzua_core::new_record::ScaffoldSpec {
             stable_id: stable_id.as_str(),
             omit_fields: &omit,
-            reason: Some(&ctx.pending.value),
+            reason: Some((ctx.st.reason_field(), &ctx.pending.value)),
             header_fields: &fields,
             extra_body: Some(&body),
             log_row: Some(&note),
@@ -573,7 +576,12 @@ fn omitted_fields(ctx: &Ctx) -> Vec<String> {
         .get(&ctx.type_name)
         .map(|t| t.required_fields.iter().map(String::as_str).collect())
         .unwrap_or_default();
-    let filled = [RULE_FIELD, SCOPE_FIELD, waive::REASON_FIELD, OWNER_FIELD];
+    let filled = [
+        RULE_FIELD,
+        SCOPE_FIELD,
+        ctx.st.reason_field(),
+        ctx.st.owner_field(),
+    ];
     for field in ctx
         .template
         .as_deref()
@@ -644,7 +652,7 @@ mod tests {
                 .filter(|f| *f != missing)
                 .collect();
             let t = waiver_type(&required, Some(&["Expires"]));
-            let err = require_fields_admitted("waiver", &t).unwrap_err();
+            let err = require_fields_admitted("waiver", &t, "Reason").unwrap_err();
             assert!(err.contains(&format!("does not list {missing}")), "{err}");
         }
     }
@@ -652,11 +660,16 @@ mod tests {
     #[test]
     fn a_closed_field_set_that_lists_them_and_an_open_one_are_accepted() {
         let all = [RULE_FIELD, SCOPE_FIELD, waive::REASON_FIELD];
-        assert!(require_fields_admitted("waiver", &waiver_type(&all, Some(&["Expires"]))).is_ok());
+        assert!(require_fields_admitted(
+            "waiver",
+            &waiver_type(&all, Some(&["Expires"])),
+            "Reason"
+        )
+        .is_ok());
         // Listed under `known_fields` rather than `required_fields` is declared too.
-        assert!(require_fields_admitted("waiver", &waiver_type(&[], Some(&all))).is_ok());
+        assert!(require_fields_admitted("waiver", &waiver_type(&[], Some(&all)), "Reason").is_ok());
         // No `known_fields` is an open set: nothing to refuse.
-        assert!(require_fields_admitted("waiver", &waiver_type(&[], None)).is_ok());
+        assert!(require_fields_admitted("waiver", &waiver_type(&[], None), "Reason").is_ok());
     }
 
     #[test]
@@ -666,12 +679,12 @@ mod tests {
         let closed_without = waiver_type(&["Rule"], Some(&["Expires"]));
         let closed_with = waiver_type(&["Rule"], Some(&["Owner"]));
         let open = waiver_type(&["Rule"], None);
-        assert!(owner_declared(&closed_with, Some(template)));
-        assert!(owner_declared(&open, Some(template)));
+        assert!(owner_declared(&closed_with, Some(template), "Owner"));
+        assert!(owner_declared(&open, Some(template), "Owner"));
         // The type does not declare it, or the template does not list it, or no template.
-        assert!(!owner_declared(&closed_without, Some(template)));
-        assert!(!owner_declared(&closed_with, Some(no_owner)));
-        assert!(!owner_declared(&closed_with, None));
+        assert!(!owner_declared(&closed_without, Some(template), "Owner"));
+        assert!(!owner_declared(&closed_with, Some(no_owner), "Owner"));
+        assert!(!owner_declared(&closed_with, None, "Owner"));
     }
 
     fn built(name: &str) -> Built {
