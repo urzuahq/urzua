@@ -25,6 +25,11 @@ curl -fsSL --proto '=https' --tlsv1.2 "https://raw.githubusercontent.com/urzuahq
 To install an exact release instead, set `tag` to its tag and run the second line. To
 read the script before running it, save it with `curl -fsSLO` and run `sh install.sh`.
 
+The script verifies the archive it downloads, but nothing verifies the script itself: it is fetched
+over HTTPS from the tag, and a tag can be moved. Where that matters, pin a commit sha in the URL in
+place of the tag, or save the script, read it, and then run it. The script also needs glibc on Linux
+and refuses a musl system such as Alpine before downloading anything.
+
 ### In CI, or anywhere without `gh`
 
 Pin the version and the archive's sha256, so the install fails if the archive is anything else. Take

@@ -123,7 +123,7 @@ nothing_installed() { [ ! -e "$dest/urzua" ] && { [ ! -d "$dest" ] || [ -z "$(ls
 
 lists_all() {
   for w in --version --dir --sha256 --no-attestation --no-verify URZUA_VERSION URZUA_INSTALL_DIR URZUA_SHA256; do
-    has "$tmp/out" -- "$w" || return 1
+    has "$tmp/out" "$w" || return 1
   done
 }
 
@@ -139,8 +139,8 @@ suite() {
   expect "$label install: stdout is exactly one parseable final line" $?
   [ "$(ls -ld "$dest/nested/bin/urzua" | cut -c1-10)" = "-rwxr-xr-x" ]
   expect "$label install: the binary is mode 0755" $?
-  has "$FAKE_LOG" -- "--signer-workflow urzuahq/urzua/.github/workflows/publish-release.yml" &&
-    has "$FAKE_LOG" -- "attestation verify .*urzua-$LINUX.tar.gz --repo urzuahq/urzua"
+  has "$FAKE_LOG" "--signer-workflow urzuahq/urzua/.github/workflows/publish-release.yml" &&
+    has "$FAKE_LOG" "attestation verify .*urzua-$LINUX.tar.gz --repo urzuahq/urzua"
   expect "$label install: the attestation is pinned to the repository and release workflow" $?
   ! has "$FAKE_LOG" binary-ran-before-verify && [ -e "$FAKE_RAN" ]
   expect "$label install: the binary runs only after verification" $?

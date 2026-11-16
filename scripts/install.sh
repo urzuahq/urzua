@@ -13,6 +13,9 @@
 # 2 bad usage.
 set -eu
 
+# The whole body is one function called on the last line, so a download cut
+# short while piped to sh runs nothing.
+main() {
 repo="urzuahq/urzua"
 base_url="${URZUA_RELEASE_BASE_URL:-https://github.com}"
 install_doc="https://github.com/$repo/blob/main/docs/reference/install.md"
@@ -64,7 +67,7 @@ while [ $# -gt 0 ]; do
       [ $# -ge 2 ] || usage_error "--dir needs a path"
       dir="$2"; shift 2 ;;
     --sha256)
-      [ $# -ge 2 ] || usage_error "--sha256 needs a 64-character hex digest"
+      [ $# -ge 2 ] && [ -n "$2" ] || usage_error "--sha256 needs a 64-character hex digest (an empty one would silently mean no checksum)"
       expected_sha="$2"; shift 2 ;;
     --no-attestation) no_attestation=1; shift ;;
     --no-verify) no_verify=1; shift ;;
@@ -102,6 +105,12 @@ case "$os/$arch" in
   *) fail "no published urzua build for $os/$arch (published: x86_64-unknown-linux-gnu, aarch64-apple-darwin); build from source: $install_doc#build-from-source" ;;
 esac
 
+# The published Linux build links glibc; on a musl system it would download
+# and then fail to run with a misleading message.
+if [ "$os" = Linux ] && [ -z "${URZUA_SKIP_LIBC_CHECK:-}" ] && ls /lib/ld-musl-* >/dev/null 2>&1; then
+  fail "this is a musl system (Alpine or similar) and the published Linux build needs glibc; build from source: $install_doc#build-from-source"
+fi
+
 if command -v curl >/dev/null 2>&1; then
   downloader=curl
 elif command -v wget >/dev/null 2>&1; then
@@ -112,13 +121,15 @@ fi
 
 # curl is held to https for the first request and every redirect. wget has no
 # such switch, so with wget a downgrade is caught only by the verification
-# below, which is why curl is preferred when both exist.
+# below (every mode but --no-verify), which is why curl is preferred when both
+# exist.
 fetch() { # url, destination file
   if [ "$downloader" = curl ]; then
     curl --fail --silent --show-error --location --retry 2 \
+      --connect-timeout 10 --max-time 300 \
       --proto '=https' --proto-redir '=https' --tlsv1.2 --output "$2" "$1"
   else
-    wget --quiet --max-redirect=5 --secure-protocol=TLSv1_2 -O "$2" "$1"
+    wget --quiet --tries=3 --timeout=30 --max-redirect=5 --secure-protocol=TLSv1_2 -O "$2" "$1"
   fi
 }
 
@@ -127,10 +138,11 @@ fetch() { # url, destination file
 latest_tag() {
   url="$base_url/$repo/releases/latest"
   if [ "$downloader" = curl ]; then
-    location="$(curl --silent --show-error --proto '=https' --proto-redir '=https' --tlsv1.2 \
+    location="$(curl --silent --show-error --connect-timeout 10 --max-time 30 \
+      --proto '=https' --proto-redir '=https' --tlsv1.2 \
       --output /dev/null --write-out '%{redirect_url}' "$url" || true)"
   else
-    location="$(wget --quiet --server-response --max-redirect=0 --secure-protocol=TLSv1_2 \
+    location="$(wget --quiet --tries=3 --timeout=30 --server-response --max-redirect=0 --secure-protocol=TLSv1_2 \
       -O /dev/null "$url" 2>&1 | sed -n 's/^ *[Ll]ocation: *//p' | tr -d '\r' | head -n 1 || true)"
   fi
   printf '%s' "${location##*/}"
@@ -210,8 +222,9 @@ else
   fail "cannot verify $archive_name: $gh_note. Install gh and log in (gh auth login), or pass the expected checksum with --sha256 <hex> (or URZUA_SHA256), or pass --no-verify to install without verification; nothing installed"
 fi
 
-mkdir -p "$dir" || fail "could not create the install directory $dir"
-dir="$(cd "$dir" && pwd)"
+mkdir -p -- "$dir" || fail "could not create the install directory $dir"
+dir="$(CDPATH= cd -- "$dir" && pwd)"
+[ ! -d "$dir/urzua" ] || fail "$dir/urzua is a directory; pass --dir with another directory"
 
 mkdir "$work/x"
 tar -xzf "$archive" -C "$work/x" "urzua-$target/urzua" 2>/dev/null ||
@@ -222,7 +235,7 @@ bin="$work/x/urzua-$target/urzua"
 # Staged beside the destination so the final rename is atomic, and checked
 # before it replaces anything: a binary that reports another version never
 # lands as `urzua`.
-staged="$dir/.urzua.$$.new"
+staged="$(mktemp "$dir/.urzua.XXXXXX")" || fail "could not write to $dir; pass --dir with a writable directory"
 cp "$bin" "$staged" && chmod 0755 "$staged" || fail "could not write to $dir; pass --dir with a writable directory"
 
 want="urzua ${version#v}"
@@ -241,3 +254,6 @@ esac
 
 printf 'installed urzua=%s target=%s sha256=%s verified=%s path=%s\n' \
   "$version" "$target" "$actual_sha" "$verified" "$dir/urzua"
+}
+
+main "$@"
