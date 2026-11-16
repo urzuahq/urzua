@@ -419,28 +419,33 @@ pub(crate) fn find_revision_log_entries(
     Some(parse_log_table(&lines, marker_idx, shape))
 }
 
-/// Fenced code blocks, tracked line by line: a fence opens on ```` ``` ```` or
-/// `~~~` after any blockquote marks and closes only on the same character, so
-/// every reader of a record's structure skips the same lines.
+/// Fenced code blocks, tracked line by line as CommonMark reads them: a fence
+/// opens on three or more backticks or tildes (after any blockquote marks) and
+/// closes only on a run of the same character at least as long, with nothing
+/// after it, so every reader of a record's structure skips the same lines.
 #[derive(Debug, Default)]
 pub(crate) struct Fences {
-    open: Option<char>,
+    open: Option<(char, usize)>,
 }
 
 impl Fences {
     /// Whether `line`, read next, is outside every fence and not a fence line.
     pub(crate) fn is_prose(&mut self, line: &str) -> bool {
         let stripped = line.trim_start_matches(|c: char| c == '>' || c.is_whitespace());
-        let fence_char = ["```", "~~~"]
-            .iter()
-            .find(|f| stripped.starts_with(**f))
-            .and_then(|f| f.chars().next());
-        match (self.open, fence_char) {
-            (None, Some(c)) => {
-                self.open = Some(c);
+        let fence = stripped
+            .chars()
+            .next()
+            .filter(|c| *c == '`' || *c == '~')
+            .map(|c| (c, stripped.chars().take_while(|x| *x == c).count()))
+            .filter(|(_, n)| *n >= 3);
+        match (self.open, fence) {
+            (None, Some((c, n))) => {
+                self.open = Some((c, n));
                 false
             }
-            (Some(open), Some(c)) if open == c => {
+            (Some((open, len)), Some((c, n)))
+                if c == open && n >= len && stripped[n..].trim().is_empty() =>
+            {
                 self.open = None;
                 false
             }
@@ -452,6 +457,32 @@ impl Fences {
     /// Whether the lines read so far end inside a fence.
     pub(crate) fn is_open(&self) -> bool {
         self.open.is_some()
+    }
+}
+
+#[cfg(test)]
+mod fence_tests {
+    use super::Fences;
+
+    fn prose(text: &str) -> Vec<bool> {
+        let mut f = Fences::default();
+        text.lines().map(|l| f.is_prose(l)).collect()
+    }
+
+    #[test]
+    fn a_shorter_fence_inside_a_longer_one_does_not_close_it() {
+        assert_eq!(
+            prose("````\n```\n# x\n````\n# y"),
+            [false, false, false, false, true]
+        );
+    }
+
+    #[test]
+    fn a_fence_line_with_an_info_string_does_not_close_a_fence() {
+        assert_eq!(
+            prose("```\n```rust\n# x\n```\n# y"),
+            [false, false, false, false, true]
+        );
     }
 }
 

@@ -1141,6 +1141,11 @@ fn fix_pin_lists_a_locator_it_cannot_pin_and_names_an_uncommitted_pinned_file() 
 /// One record pinning `src/a.rs` with `body` below its header and no revision
 /// log, committed on `main`; the pinned file then changes on a branch.
 fn logless(name: &str, config: &str, body: &str) -> common::TempDir {
+    logless_with(name, config, "", body)
+}
+
+/// `logless` with `header` lines added to the record's header.
+fn logless_with(name: &str, config: &str, header: &str, body: &str) -> common::TempDir {
     let dir = common::TempDir::new(&format!("urzua-rebase-logless-{name}"));
     std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
     std::fs::create_dir_all(dir.join("src")).unwrap();
@@ -1155,7 +1160,7 @@ fn logless(name: &str, config: &str, body: &str) -> common::TempDir {
     std::fs::write(
         dir.join(A),
         format!(
-            "---\nEmbodiment: Implemented\nRealized-by: 'spec:docs/s.md, code:src/a.rs@sha256:{}, test:t.rs'\n---\n{body}",
+            "---\n{header}Embodiment: Implemented\nRealized-by: 'spec:docs/s.md, code:src/a.rs@sha256:{}, test:t.rs'\n---\n{body}",
             sha256(V1)
         ),
     )
@@ -1551,4 +1556,206 @@ fn fix_pin_lists_a_log_it_would_create_and_refuses_a_record_with_no_body() {
         );
         assert_eq!(std::fs::read_to_string(dir.join(A)).unwrap(), before);
     }
+}
+
+const LOGGED: &str = "# ADR-1: T\n\nBody.\n\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Decided the thing. | **substantive** |\n";
+
+/// A record with a substantive log on `main`, the log cut on a branch.
+fn laundering(name: &str, header: &str) -> common::TempDir {
+    let dir = logless_with(name, CONFIG, header, LOGGED);
+    cut_log(&dir, A);
+    dir
+}
+
+fn cut_log(dir: &Path, record: &str) {
+    let text = std::fs::read_to_string(dir.join(record)).unwrap();
+    let cut = text.find("\n> **Revision log**").unwrap();
+    std::fs::write(dir.join(record), &text[..cut]).unwrap();
+}
+
+/// Re-pins `record` against `--base main`, asserts it is refused naming a base
+/// copy and leaves the record and `check --base main` as they were.
+fn assert_restore_refused(dir: &Path, record: &str) {
+    assert_restore_refused_then(dir, record, true);
+}
+
+fn assert_restore_refused_then(dir: &Path, record: &str, check: bool) {
+    let before = std::fs::read_to_string(dir.join(record)).unwrap();
+    let parsed = json(&run_urzua(
+        dir,
+        &[
+            "fix",
+            "--rebaseline",
+            "--apply",
+            "--ids",
+            record,
+            "--base",
+            "main",
+            "--by",
+            "ana",
+            "--reason",
+            "Read the diff; the claim holds.",
+        ],
+    ));
+    assert_eq!(parsed["status"], "partial-failure", "{parsed}");
+    let error = parsed["failed"][0]["error"].as_str().unwrap();
+    assert!(
+        error.contains("has a Revision log") && error.contains("restore"),
+        "{error}"
+    );
+    assert!(
+        parsed["next_action"]
+            .as_str()
+            .unwrap()
+            .starts_with("git show "),
+        "{parsed}"
+    );
+    assert_eq!(std::fs::read_to_string(dir.join(record)).unwrap(), before);
+    if check {
+        let report = check_base(dir);
+        assert!(unattested(&report).is_empty(), "{report}");
+    }
+}
+
+#[test]
+fn a_deleted_log_behind_many_marker_toggles_is_refused_against_the_base() {
+    let dir = laundering("toggles", "");
+    commit_all(&dir);
+    for i in 0..21 {
+        let text = std::fs::read_to_string(dir.join(A)).unwrap();
+        let next = if i % 2 == 0 {
+            format!("{text}\nSee **Revision log**.\n")
+        } else {
+            text.replace("\nSee **Revision log**.\n", "")
+        };
+        std::fs::write(dir.join(A), next).unwrap();
+        commit_all(&dir);
+    }
+    assert_restore_refused(&dir, A);
+}
+
+#[test]
+fn a_deleted_log_then_a_rename_is_refused_against_the_base() {
+    let dir = laundering("moved", "");
+    commit_all(&dir);
+    let moved = "docs/adr/ADR-1-moved.md";
+    git(&dir, &["mv", A, moved]);
+    commit_all(&dir);
+    assert_restore_refused(&dir, moved);
+}
+
+#[test]
+fn a_record_deleted_and_re_added_elsewhere_is_paired_by_its_stable_id() {
+    let dir = laundering("readded", "Stable-Id: 01TESTSTABLEID0000000000AA\n");
+    git(&dir, &["rm", "-q", "-f", A]);
+    std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
+    commit_all(&dir);
+    let new = "docs/adr/ADR-7-other.md";
+    std::fs::write(
+        dir.join(new),
+        format!(
+            "---\nStable-Id: 01TESTSTABLEID0000000000AA\nEmbodiment: Implemented\nRealized-by: 'spec:docs/s.md, code:src/a.rs@sha256:{}, test:t.rs'\n---\n# ADR-7: Entirely rewritten\n\nNothing alike.\n",
+            sha256(V1)
+        ),
+    )
+    .unwrap();
+    commit_all(&dir);
+    assert_restore_refused(&dir, new);
+}
+
+#[test]
+fn a_deleted_log_beyond_a_shallow_clones_depth_is_refused_against_the_base_ref() {
+    let origin = laundering("shallow-origin", "");
+    commit_all(&origin);
+    for i in 0..3 {
+        std::fs::write(origin.join(format!("n{i}.txt")), "n\n").unwrap();
+        commit_all(&origin);
+    }
+    let dir = common::TempDir::new("urzua-rebase-shallow-clone");
+    let url = format!("file://{}", origin.display());
+    let cloned = Command::new("git")
+        .args(["clone", "-q", "--depth", "1", "--branch", "work", &url, "."])
+        .current_dir(&dir)
+        .status()
+        .unwrap();
+    assert!(cloned.success());
+    git(
+        &dir,
+        &["fetch", "-q", "--depth", "1", "origin", "main:main"],
+    );
+    git(&dir, &["config", "user.email", "test@example.com"]);
+    git(&dir, &["config", "user.name", "test"]);
+    // `check --base` cannot run where the merge base is hidden; the record is
+    // left as it was, which is what it would judge.
+    assert_restore_refused_then(&dir, A, false);
+}
+
+#[test]
+fn the_cases_refused_without_a_base_stay_refused_with_one() {
+    // Deleted and committed.
+    let dir = laundering("base-commit", "");
+    commit_all(&dir);
+    assert_restore_refused(&dir, A);
+    // The marker kept in prose.
+    let dir = laundering("base-prose", "");
+    let text = std::fs::read_to_string(dir.join(A)).unwrap();
+    std::fs::write(
+        dir.join(A),
+        format!("{text}\nThe **Revision log** moved.\n"),
+    )
+    .unwrap();
+    commit_all(&dir);
+    assert_restore_refused(&dir, A);
+    // The marker changed slightly.
+    let dir = logless("base-marker", CONFIG, LOGGED);
+    let text = std::fs::read_to_string(dir.join(A)).unwrap();
+    std::fs::write(
+        dir.join(A),
+        text.replace("**Revision log**", "**Revision Log**"),
+    )
+    .unwrap();
+    commit_all(&dir);
+    assert_restore_refused(&dir, A);
+    // Squashed into the branch's one commit.
+    let dir = laundering("base-squash", "");
+    git(&dir, &["reset", "-q", "--soft", "main"]);
+    commit_all(&dir);
+    assert_restore_refused(&dir, A);
+    // Deleted, then re-added at the same path.
+    let dir = logless("base-readd", CONFIG, LOGGED);
+    let text = std::fs::read_to_string(dir.join(A)).unwrap();
+    git(&dir, &["rm", "-q", "-f", A]);
+    std::fs::create_dir_all(dir.join("docs/adr")).unwrap();
+    commit_all(&dir);
+    std::fs::write(
+        dir.join(A),
+        &text[..text.find("\n> **Revision log**").unwrap()],
+    )
+    .unwrap();
+    commit_all(&dir);
+    assert_restore_refused(&dir, A);
+    // Not committed at all.
+    let dir = laundering("base-uncommitted", "");
+    assert_restore_refused(&dir, A);
+}
+
+#[test]
+fn a_run_with_no_base_that_creates_a_log_says_so_and_an_unknown_base_is_refused() {
+    let dir = logless("no-base", CONFIG, "# ADR-1: T\n\nBody.\n");
+    let parsed = json(&run_urzua(&dir, &["fix", "--rebaseline", "--ids", A]));
+    assert!(
+        parsed["notices"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|n| n["subject"] == "fix.revision-log-base"),
+        "{parsed}"
+    );
+    let with_base = json(&run_urzua(
+        &dir,
+        &["fix", "--rebaseline", "--ids", A, "--base", "main"],
+    ));
+    assert!(with_base.get("notices").is_none(), "{with_base}");
+    let unknown = json(&run_urzua(&dir, &["fix", "--rebaseline", "--base", "nope"]));
+    assert_eq!(unknown["status"], "not-run", "{unknown}");
 }

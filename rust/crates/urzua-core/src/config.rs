@@ -2216,6 +2216,34 @@ fn revision_log_identity_problem(decl: &RevisionLogDecl) -> Option<&'static str>
 /// Why a type's `revision_log` declaration cannot be used, or `None`: the
 /// identity (`MILE-167`), the version bump (`BUG-51`) and the vocabulary,
 /// columns and tool class (`ADR-94`).
+/// A blank name, or a column name a table header cell cannot hold.
+fn named_key_problem(decl: &RevisionLogDecl) -> Option<String> {
+    for (key, value) in [
+        ("class_column", &decl.class_column),
+        ("date_column", &decl.date_column),
+        ("tool_class", &decl.tool_class),
+        ("evidence_class", &decl.evidence_class),
+        ("narrative_column", &decl.narrative_column),
+    ] {
+        if value
+            .as_deref()
+            .is_some_and(|v| strip_emphasis(v).is_empty())
+        {
+            return Some(format!("a blank `{key}` -- it names nothing"));
+        }
+        if key.ends_with("_column")
+            && value
+                .as_deref()
+                .is_some_and(|v| v.contains(['|', '\n', '\r']))
+        {
+            return Some(format!(
+                "a `{key}` holding `|` or a line break -- a table header cell cannot"
+            ));
+        }
+    }
+    None
+}
+
 fn revision_log_problem(decl: &RevisionLogDecl) -> Option<String> {
     let identity = revision_log_identity_problem(decl);
     if let Some(reason) = identity {
@@ -2265,19 +2293,8 @@ fn revision_log_problem(decl: &RevisionLogDecl) -> Option<String> {
             }
         }
     }
-    for (key, value) in [
-        ("class_column", &decl.class_column),
-        ("date_column", &decl.date_column),
-        ("tool_class", &decl.tool_class),
-        ("evidence_class", &decl.evidence_class),
-        ("narrative_column", &decl.narrative_column),
-    ] {
-        if value
-            .as_deref()
-            .is_some_and(|v| strip_emphasis(v).is_empty())
-        {
-            return Some(format!("a blank `{key}` -- it names nothing"));
-        }
+    if let Some(problem) = named_key_problem(decl) {
+        return Some(problem);
     }
     if let (Some(class), Some(date)) = (&decl.class_column, &decl.date_column) {
         if strip_emphasis(class) == strip_emphasis(date) {
@@ -6103,6 +6120,16 @@ rules:
         assert_eq!(shape.tool_class, "structural");
         // With the vocabulary undeclared the tool class is not checked.
         assert!(log_shape("{tool_class: whatever}").is_ok());
+        for key in ["narrative_column", "date_column", "class_column"] {
+            let err = log_shape(&format!("{{{key}: \"a|b\"}}"))
+                .unwrap_err()
+                .to_string();
+            assert!(err.contains(key) && err.contains('|'), "{err}");
+            assert!(
+                log_shape(&format!("{{{key}: \"a\\nb\"}}")).is_err(),
+                "{key}"
+            );
+        }
     }
 
     #[test]

@@ -2,7 +2,7 @@
 Stable-Id: 01M6R3NK4CFP9CSWVTMWMZ9460
 Status: Accepted
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/main.rs@sha256:0187ca6f99888093fe0564ad012f4bcae62af9e4bfae5ac7ed35a8e39773b8fb, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:f2601b80e3188008bc81729720946fcd700bfab20e3a2a1b6facd80b62e77686
+Realized-by: code:rust/crates/urzua-cli/src/main.rs@sha256:c8e0ab2035829d9e2937a001f84953ee6b6692f0055d752bfe3d3df653e4442e, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:f2601b80e3188008bc81729720946fcd700bfab20e3a2a1b6facd80b62e77686
 Date: 2026-09-06
 Accepted-on: 2026-09-06
 Author: beauwilliams
@@ -110,3 +110,4 @@ which motivates deciding this now rather than after v1.0.0.
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/check_integration.rs` 6d2ad3bf8830 -> 03a0f940f65e. Reason: check_integration.rs gains a test that migrate ids refuses a path-gated record; the record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Pin recomputed on merge (attested by beauwilliams, identity: gh-verified, actor: agent): both merged sides re-pinned, `rust/crates/urzua-cli/tests/check_integration.rs` (Realized-by) 03a0f940f65e and 828702780265 -> f2601b80e318; the new hash is the merged file's, which is git's automatic merge of the two re-pinned commits. No person wrote a reason for the merged state. **Why:** `urzua fix --conflicts` resolved a conflict that lay only in re-pin lines; a reviewer of the pull request should confirm the merged pin. | **evidence** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/main.rs` dd3aff2e71aa -> 0187ca6f9988. Reason: main.rs adds the --pin, --replace and --remove flags of urzua fix; the record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/main.rs` 0187ca6f9988 -> c8e0ab203582. Reason: main.rs adds the --base option to fix and moves the fix arm of dispatch into its own dispatch_fix function; the claim this record makes still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |

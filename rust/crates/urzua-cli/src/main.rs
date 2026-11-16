@@ -421,6 +421,11 @@ enum Command {
         /// With --pin: remove the pinned locator OLD from the evidence.
         #[arg(long, value_name = "OLD")]
         remove: Option<String>,
+        /// With --rebaseline or --pin: the ref whose merge base with HEAD is
+        /// read before a revision log is created, so a log deleted on the
+        /// branch is restored, not replaced (default origin/HEAD).
+        #[arg(long, value_name = "REF")]
+        base: Option<String>,
     },
 
     /// Renew an expired claim (`ADR-97`): re-resolve and re-hash every
@@ -741,40 +746,7 @@ fn dispatch(config: Option<PathBuf>, command: Command) -> ExitCode {
                 reason,
             },
         ),
-        Command::Fix {
-            paths,
-            stdin_path,
-            tier,
-            apply,
-            ids,
-            by,
-            actor,
-            force,
-            rebaseline,
-            conflicts,
-            reason,
-            pin,
-            replace,
-            remove,
-        } => commands::fix::run(
-            config,
-            commands::fix::FixArgs {
-                paths,
-                stdin_path,
-                tier,
-                apply,
-                ids,
-                by,
-                actor: actor.map_or(urzua_core::fix::ActorKind::Unspecified, Into::into),
-                force,
-                rebaseline,
-                conflicts,
-                reason,
-                pin,
-                replace,
-                remove,
-            },
-        ),
+        fix @ Command::Fix { .. } => dispatch_fix(config, fix),
     }
 }
 
@@ -794,6 +766,49 @@ fn dispatch_export(config: Option<PathBuf>, format: ExportFormat) -> ExitCode {
         ExportFormat::Json => commands::export::run(config),
         ExportFormat::Agdr => not_implemented("export"),
     }
+}
+
+fn dispatch_fix(config: Option<PathBuf>, fix: Command) -> ExitCode {
+    let Command::Fix {
+        paths,
+        stdin_path,
+        tier,
+        apply,
+        ids,
+        by,
+        actor,
+        force,
+        rebaseline,
+        conflicts,
+        reason,
+        pin,
+        replace,
+        remove,
+        base,
+    } = fix
+    else {
+        unreachable!("dispatch_fix is called only for the Fix command")
+    };
+    commands::fix::run(
+        config,
+        commands::fix::FixArgs {
+            paths,
+            stdin_path,
+            tier,
+            apply,
+            ids,
+            by,
+            actor: actor.map_or(urzua_core::fix::ActorKind::Unspecified, Into::into),
+            force,
+            rebaseline,
+            conflicts,
+            reason,
+            pin,
+            replace,
+            remove,
+            base,
+        },
+    )
 }
 
 fn dispatch_init(config: Option<PathBuf>, init: Command) -> ExitCode {

@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5Q0XVK27P5T8FN72BN
-Version: '0.64'
+Version: '0.65'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/commands/fix.rs@sha256:372845c7b4a6743c80fe87d61163fa8e38aea57051a1be489a28965c5843b213, code:rust/crates/urzua-core/src/fix.rs@sha256:a2c71a99c6e372be9b00ae924ecadc3705bdc9a08318d8d69006661689302fd3, test:rust/crates/urzua-cli/tests/fix_paths_integration.rs@sha256:efefbffa3dc1992d97ff18582c7a15df6ff789f2f036b4ec3b36bfb910a12ff6, test:rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs@sha256:00d2df20a22b8a76a986a2580e0d2aacbb4b0a285ed46993cf2c33b5a7618795, test:rust/crates/urzua-cli/tests/fix_drift_integration.rs@sha256:ff69343ca324400bde79c266372f9a213728d4d4ef8202beca6e12e54aa35352
+Realized-by: code:rust/crates/urzua-cli/src/commands/fix.rs@sha256:1c64ab73b1353473bd590d898664d7630d23964d8024e085f82544347a9e730d, code:rust/crates/urzua-core/src/fix.rs@sha256:a2c71a99c6e372be9b00ae924ecadc3705bdc9a08318d8d69006661689302fd3, test:rust/crates/urzua-cli/tests/fix_paths_integration.rs@sha256:efefbffa3dc1992d97ff18582c7a15df6ff789f2f036b4ec3b36bfb910a12ff6, test:rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs@sha256:e949db2be36d17f94964f2c154a726e2dd3c91434483c9f000c41c4a0fbcf30a, test:rust/crates/urzua-cli/tests/fix_drift_integration.rs@sha256:ff69343ca324400bde79c266372f9a213728d4d4ef8202beca6e12e54aa35352
 Author: beauwilliams
 Subject: '`urzua fix` -- detecting and applying Embodiment corrections computed from evidence.'
 Implements: ADR-15, ADR-18, ADR-19, ADR-20
@@ -351,17 +351,26 @@ the same `PATHS` scoping.
     refusal names it and `next_action` is a `printf` that appends a heading named after the file;
   - a record that ends inside an open code fence, where a new log would read as code; the refusal
     names the fence's line, with no `next_action`;
-  - a record whose committed copy had a log: `HEAD`, or either side of a commit (the newest 20) that
-    added or removed the log identity's text in the file. A log deleted by hand is restored, never
-    replaced by a tool-written one that would hide its rows; the refusal names the copy and
-    `next_action` is the `git show <rev>:<path>` that prints it. A record new to the repository gets
-    its log as above.
+  - a record a committed copy of which had a log. The copies read: `HEAD`'s, then the copy at the
+    merge base of the base ref (`--base <ref>`, default `origin/HEAD`) and `HEAD`, at the record's
+    path, at its path before a rename git detects (`git diff -M`), or at the path whose `Stable-Id`
+    it carries; when no merge base is visible (a shallow clone) the base ref's own copy is read.
+    With no base ref resolving, the record's history (`git log --follow -S`, the newest 20 commits
+    that added or removed the log identity's text) stands in, best effort, and the report carries a
+    `fix.revision-log-base` warning when such a run creates a log. Each record is looked up once per
+    run, shared by the listing and the write. The refusal names the copy (`<rev>:<path>`) and
+    `next_action` is the `git show` that prints it, to restore the log. A `--base` that names no
+    commit is `not-run`. A record with no such copy gets its log as above.
+
+  This guard is the tool's refusal only. A log deleted by hand and never re-pinned is not caught by
+  it; the durable guard is a diff rule reporting revision-log rows removed between base and head,
+  tracked separately.
 
   `fix --pin` (first pin, `--replace`, `--remove`) plans the log the same way in its listing and its
   apply, with the same refusals and `creates_revision_log`. A write whose row is not an evidence row
   (a Tier 1 or 2 repair, `reverify`) still refuses a record with no log where the log is required.
-  *(Placement by the template's order, and the history depth of 20 commits, decided by the builder
-  on 2026-11-16, pending maintainer review.)*
+  *(Placement by the template's order, the `origin/HEAD` default base and the 20-commit history
+  fallback, decided by the builder on 2026-11-16, pending maintainer review.)*
 - **The record is the selector.** All of a record's stale pins move together; per-locator selection
   is not offered. A second run finds nothing to re-pin.
 - **Scope of the baseline.** Only pinned locators are re-baselined. Drift on an unpinned locator
@@ -802,3 +811,5 @@ asserted by test, not assumed by convention.
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/fix.rs` 317aab0052ff -> e80f15fd68a9, `rust/crates/urzua-core/src/fix.rs` f95de51150cf -> 0b2c8b793c0f, `rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs` e99a142c76d0 -> 8fde6c3306f1. Reason: cli fix.rs creates the revision log for a re-pin on a record with none, marks it creates_revision_log, and refuses a record with no body section with a next_action; core fix.rs declares the new_log module and adds a creates_revision_log field to Rebaseline, with apply_rebaseline itself unchanged; fix_rebaseline_integration.rs adds tests for a created log on re-pin and first pin and for the refused bodiless record; the claim this record makes still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-16 | Bumped to `0.64`. A created log is placed by the template's section order; a record ending inside an open fence, or whose committed copy had a log, is refused in detect and apply; the no-body `next_action` runs as printed; `fix --pin` lists `creates_revision_log` and refuses as `--rebaseline` does; the narrative header cell is `revision_log.narrative_column`. Decided by the builder on 2026-11-16, pending maintainer review. **Why:** review of `MILE-310`'s pull request -- a hand-deleted log could be replaced by a tool row and pass `check --base`, and a log appended last broke `section.order`. | **substantive** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/fix.rs` e80f15fd68a9 -> 372845c7b4a6, `rust/crates/urzua-core/src/fix.rs` 0b2c8b793c0f -> a2c71a99c6e3, `rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs` 8fde6c3306f1 -> 00d2df20a22b. Reason: cli fix.rs refuses to create a revision log when a committed copy had one, places a created log by the template order, and makes the heading next action run as printed; core fix.rs adds narrative_column to a test helper shape, with apply_rebaseline and the behaviour cited unchanged; fix_rebaseline_integration.rs adds tests for the restored-log refusal, template placement, the open fence, narrative_column and fix --pin listing; the claim this record makes still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-16 | Bumped to `0.65`. Before creating a revision log, `fix --rebaseline` and `fix --pin` read the record's copy at `HEAD` and at the merge base with the base ref (`--base`, default `origin/HEAD`; the base ref's own copy when no merge base is visible), following a detected rename or the record's `Stable-Id`, and refuse when either copy has a log. With no base ref resolving this falls back to the record's recent history and is best effort, said by a `fix.revision-log-base` warning. A log deleted by hand can still pass `check --base` when the record is not re-pinned; the durable guard is a diff rule reporting revision-log rows removed between base and head, tracked separately. Decided by the builder on 2026-11-16, pending maintainer review. **Why:** review of `MILE-310`'s pull request -- a log deleted on a branch behind a rename, a re-add, many commits or a shallow clone could be replaced by a tool-written one. | **substantive** |
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/fix.rs` 372845c7b4a6 -> 1c64ab73b135, `rust/crates/urzua-cli/tests/fix_rebaseline_integration.rs` 00d2df20a22b -> e949db2be36d. Reason: cli fix.rs moves the revision-log creation helpers to a new evidence_log module, threads a shared LogHistory and the new --base option through the re-pin path, and adds its notice; fix_rebaseline_integration.rs adds tests refusing a log deleted behind marker toggles, a rename, a re-add by Stable-Id, a shallow clone and the earlier cases against --base main; the claim this record makes still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |

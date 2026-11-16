@@ -1,9 +1,9 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.156'
+Version: '0.157'
 Date: 2026-08-20
 Status: Shipped
-Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:9a0e556d71911bb11d0bcee7e9854afc874a9b33a85d3d0b28ea18549e3d4590, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:09c2431a269316741c35b51dabd5766ecd3d50fab2b98069314bb1bc8857767d, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:255395e7d2caa34947cef28f463e2ec050e3eba798a4dc7573a3cad946fee1ae
+Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:9b878358f929bf27e4f0f5f7d46a84c6e4c398197bb9fc88e57c89d327f01b7b, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:09c2431a269316741c35b51dabd5766ecd3d50fab2b98069314bb1bc8857767d, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:255395e7d2caa34947cef28f463e2ec050e3eba798a4dc7573a3cad946fee1ae
 Embodiment: Verified
 Author: beauwilliams
 Subject: '`.urzua/config.yaml` -- the schema for record types, required/known fields, and per-type behavior.'
@@ -166,7 +166,9 @@ Two details carry weight:
   undeclared), else a load error, and left out of `version_bump.classes` a re-pin needs no version
   bump (`ADR-67` amendment of 2026-11-16, `SPEC-8`). With `classes` undeclared, `version_bump.classes`
   is not checked against the default pair. A declared class absent from `version_bump.classes`
-  requires no bump. `narrative_column` (optional, default `Change`, not blank) names the middle
+  requires no bump. A `class_column`, `date_column` or `narrative_column` holding `|` or a line
+  break is a load error naming the key: a table header cell cannot hold one. `narrative_column`
+  (optional, default `Change`, not blank) names the middle
   header cell of a log `fix --rebaseline --apply` or `fix --pin --apply` creates on a record that has
   none and whose type's template has no log section to copy (`SPEC-8`). These keys are additive and
   optional, so `schema_version` is unchanged.
@@ -2837,3 +2839,5 @@ proves this configuration produces the three findings.
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` f74531f49e9c -> 04472363242c. Reason: config.rs: the hooks key gains verify_timeout_seconds (default 600, at least 1), and hooks.<hook> may be a map with command and managed; every other key and default is unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-16 | Bumped to `0.156`. Documents the optional `revision_log.narrative_column` (default `Change`): the narrative header cell of a log `fix` creates; it may stand alone. **Why:** `MILE-310` -- the created log's header comes from configuration, not an engine literal. | **substantive** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 04472363242c -> 9a0e556d7191. Reason: config.rs adds the optional revision_log.narrative_column key (default Change, not blank, may stand alone) to RevisionLogDecl and RevisionLogShape, leaving a config that omits it unchanged; the claim this record makes still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-16 | Bumped to `0.157`. A revision-log column-name key (`class_column`, `date_column`, `narrative_column`) holding `\|` or a line break is a load error. **Why:** review of `MILE-310`'s pull request -- such a name would break the header of a log `fix` creates. | **substantive** |
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 9a0e556d7191 -> 9b878358f929. Reason: config.rs rejects a pipe or line break in a revision-log column-name key and moves the per-key name checks into named_key_problem; the claim this record makes still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |

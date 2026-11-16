@@ -15,7 +15,8 @@ use urzua_core::record::Record;
 use urzua_core::report::{ActionInput, AttestationReport, FixFailure, NextAction, Notice, Report};
 use urzua_core::reverify::{apply_reverify, review_locators, FirstPin, ReverifyPlan};
 
-use super::fix::{refuse, resolve_attestation, validate_reason, EvidenceLog, Refusal};
+use super::evidence_log::{evidence_log, with_evidence_log, EvidenceLog, LogHistory};
+use super::fix::{refuse, resolve_attestation, validate_reason, Refusal};
 use crate::emit;
 use crate::session::Session;
 
@@ -29,6 +30,7 @@ pub(crate) struct PinArgs<'a> {
     pub reason: Option<&'a str>,
     pub replace: Option<&'a str>,
     pub remove: Option<&'a str>,
+    pub base: Option<&'a str>,
 }
 
 #[derive(serde::Serialize)]
@@ -150,7 +152,10 @@ pub(crate) fn run(config_path: Option<PathBuf>, args: PinArgs<'_>) -> Result<Exi
         .collect();
     let mut done = Vec::new();
     let mut notices: Vec<Notice> = Vec::new();
+    let history = LogHistory::resolve(repo_root, args.base)
+        .map_err(|e| refuse(format!("urzua fix --pin: {e}")))?;
     let write = identity.as_ref().map(|w| Write {
+        history: &history,
         session: &session,
         attestation: &w.attestation,
         reason: &reason,
@@ -163,7 +168,7 @@ pub(crate) fn run(config_path: Option<PathBuf>, args: PinArgs<'_>) -> Result<Exi
             _ => first_pins(record, config, &read, write, !args.ids.is_empty()),
         };
         let outcome = planned_outcome(
-            repo_root,
+            &history,
             config,
             record,
             &dispatch,
@@ -182,13 +187,14 @@ pub(crate) fn run(config_path: Option<PathBuf>, args: PinArgs<'_>) -> Result<Exi
             }),
         }
     }
+    let created = done.iter().any(|e| e.creates_revision_log);
     let status = report_status(args.apply, done.is_empty(), failed.is_empty());
     Ok(emit(&PinReport {
         status,
         records: done,
         failed,
         identity: identity.map(|i| i.report),
-        notices,
+        notices: notices.into_iter().chain(history.notice(created)).collect(),
         failure_action,
     }))
 }
@@ -208,7 +214,7 @@ type PinOutcome = Result<Option<PinEntryReport>, String>;
 /// the log plan refuses is never written and is refused the same way in both
 /// modes; the refusal's command, if any, fills `failure_action` once.
 fn planned_outcome(
-    repo_root: &std::path::Path,
+    history: &LogHistory<'_>,
     config: &Config,
     record: &Record,
     dispatch: &dyn Fn(Option<&Write<'_>>) -> PinOutcome,
@@ -219,9 +225,10 @@ fn planned_outcome(
         Ok(Some(entry)) => entry,
         other => return other,
     };
-    let content = urzua_io::read_to_string(&repo_root.join(&record.path)).unwrap_or_default();
-    let plan = super::fix::evidence_log(
-        repo_root,
+    let content =
+        urzua_io::read_to_string(&history.repo_root().join(&record.path)).unwrap_or_default();
+    let plan = evidence_log(
+        history,
         config,
         Some(&record.record_type),
         &record.path,
@@ -248,6 +255,7 @@ fn planned_outcome(
 }
 
 struct Write<'a> {
+    history: &'a LogHistory<'a>,
     session: &'a Session,
     attestation: &'a Attestation,
     reason: &'a str,
@@ -271,8 +279,8 @@ impl Write<'_> {
         let full = self.session.repo_root.join(&record.path);
         let fresh =
             urzua_io::read_to_string(&full).map_err(|e| format!("could not re-read: {e}"))?;
-        let (fresh, _) = super::fix::with_evidence_log(
-            &self.session.repo_root,
+        let (fresh, _) = with_evidence_log(
+            self.history,
             config,
             Some(&record.record_type),
             &record.path,
