@@ -993,17 +993,26 @@ harness:
   refusal names the same command. Any other new error refuses either way, and the gates, `on_unjudged` and the
   override are unaffected. An unmatched pair left in the tree is still a `urzua check` finding, so the
   post-command hook reports it and pre-commit and CI block it. The default is `allow`, accepted by the maintainer on 2026-11-16 ("pad edit switch can be on by default", dictated for "paired edit switch"; confirmed: "Yeah, it should be on by default"): a deliberate exception to the `ADR-101` amendment of 2026-11-15, under which a configuration that does not declare a new key behaves as before. A configuration that wants the earlier refusal sets `refuse`. The key's name and values were decided by the builder on 2026-11-16, pending maintainer review.
-- **`post-command.base`** and **`post-command.base_match`** set how the post-command report
+- **`post-command.base`** and **`post-command.base_match`** (`MILE-311`) set how the post-command report
   weighs a gated change (a gated status move, a gated deletion, or a change to a protected path) that holds
   exactly the content on a base ref. `base` is a git ref (default `origin/HEAD`, the remote's default branch
   as a clone records it); a blank value, or one starting with `-`, is a load error. After a command, each gated path the command changed
-  is hashed as git hashes it and compared with the blob `<base>:<path>`; a path absent from both matches, and
-  a status move matches only when the whole record file does. `base_match` is `info`, `warning` or `error`
+  matches when its working-tree mode (`120000` for a symlink, compared as its link text and never followed;
+  `100755` for an executable file; `100644` otherwise) and its blob, hashed as git hashes it, equal the entry
+  `git ls-tree <base> -- <path>` names; a path absent from both matches, and a status move matches only when
+  the whole record file does. A command that changed the configuration file is judged by the `base` and
+  `base_match` the baseline recorded before it, and nothing is lowered unless the configuration file itself
+  matches that base; with no recorded rule, nothing is lowered. `base_match` is `info`, `warning` or `error`
   (default `info`; anything else is a load error) and is the level a matching change is reported at. When
-  every gated change matches, the report is one sentence naming their count and the branch and saying that
-  nothing needs doing; a change that differs keeps level `error` and its full report, grouped under its gate
+  every gated change matches, the report is one sentence naming their count, up to five of the paths and then
+  how many more (all of them in the verdict's `base_match`), and the ref as configured (a remote-tracking ref
+  that names another adds the branch it points at, as `origin/HEAD (origin/main)`; any other ref is called a
+  local ref, as `the local ref HEAD`), and saying that nothing needs doing; a change that differs keeps level `error` and its full report, grouped under its gate
   with each gate named once, and the matching ones in the same command are summarised in one line. A base
-  that does not resolve compares nothing, so every change keeps level `error`. Every gated change is still
+  that does not resolve compares nothing, so every change keeps level `error`, and the report says there is no
+  base ref to compare with. An invalid value of either key is a load error, as for the other guardrail keys
+  (`on_unjudged`, `pending_pair`); the `NOT judged` report then names the changed paths the previous
+  baseline protected. Every gated change is still
   printed: the comparison uses local refs, which the agent the report is about can move or commit to, so it
   is advisory and lowers only how loudly a change is reported, never whether; CI's `diff.decider-required`
   against the real remote is the guarantee. No other guardrail takes these keys.

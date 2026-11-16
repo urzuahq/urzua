@@ -960,6 +960,23 @@ login, and an accidental write; it is weaker than the edit hook, which refuses t
 `x/`, `a/../x`), so no caller's spelling escapes a gate; `fix --pin --apply` passes through it too. The Decision is
 unchanged. `Status` stays Accepted.
 
+## Amendment (2026-11-16): the post-command report weighs a gate event by the base branch
+
+Decided by the orchestrator on 2026-11-16, pending maintainer review (`MILE-311`). The amendment above said the
+post-command check words a gate event as having arrived by a git move, with the reflog and the stash choosing only
+the wording. That wording is removed, and so is the stash tracking behind it: a fast-forward pull of the default
+branch printed one error paragraph per file, and the maintainer reported on 2026-11-16 that the report could not be
+understood. Each gate event is now compared with a configured base ref (`harness.guardrails.post-command.base`,
+default `origin/HEAD`): it matches when its working-tree mode and its blob equal that ref's tree entry (a symlink
+compared as its link text, never followed), or when it is absent from both. When every gate event of a command
+matches, the person is told one sentence at `base_match` (default `info`) naming the paths and the ref; a gate
+event that differs keeps `error` and its full report, each gate named once. A command that changed the
+configuration is judged by the comparison rule recorded before it, and nothing is lowered unless the
+configuration file itself matches that base. Every gate event is still reported: the base is a local ref the
+agent can move or commit to (`git update-ref`, a commit on the local base branch), so the comparison only lowers
+how loudly a change is reported, never whether, and CI's `diff.decider-required` against the real remote stays
+the guarantee. The reflog still chooses only whether ordinary findings are absorbed.
+
 ## References
 
 - `ADR-69`, `ADR-70`, `ADR-71`: the hook, drafting commands and layered gate this extends; `ADR-70` gains an
@@ -1010,3 +1027,4 @@ unchanged. `Status` stays Accepted.
 > | 2026-11-16 | Amendment of 2026-11-14 (symlinked records: a tracked record that is a symlink is refused; on by default; configurable; `off` raises a notice) accepted by the maintainer. `Status` stays Accepted. **Why:** Asked on 2026-11-16 whether to accept it as decided, the maintainer answered "Accept"; it had been decided by the orchestrator pending their review. | **substantive** |
 > | 2026-11-16 | Amendment of 2026-11-14 (leaving a gate: a move out of a gated status, or deleting such a record, is a gated move; `--actor` is required with `--apply` under a verified identity) accepted by the maintainer. `Status` stays Accepted. **Why:** Asked on 2026-11-16 whether to accept it as decided, the maintainer answered "Accept"; it had been decided by the orchestrator pending their review. | **substantive** |
 > | 2026-11-16 | Added an `## Amendment (2026-11-16): path gates bind the commands that write for someone`, decided by the builder on 2026-11-16, pending maintainer review: `fix --apply`, `fix --rebaseline --apply`, `fix --conflicts --apply` and `reverify --apply` write a path-gated record only for `--actor human` under a `gh`-verified login in the gate's group; `waive`, `index`, `migrate ids`, `migrate filenames` and `new` refuse under a path gate; the refusal says who can make the change; the gate rests on the verified login, since `--actor human` is a claim, and is weaker than the edit hook. `Status` stays Accepted. **Why:** `MILE-289` -- an agent's `fix --apply` wrote a record the edit hook would have refused. | **substantive** |
+> | 2026-11-16 | Added an `## Amendment (2026-11-16): the post-command report weighs a gate event by the base branch`: the "arrived by a git move" wording and the stash tracking are removed, and a gate event matching the configured base ref is reported in one sentence at a lower level, still printed. **Why:** `MILE-311`, decided by the orchestrator on 2026-11-16, pending maintainer review, after the maintainer reported on 2026-11-16 that the report after a pull could not be understood. | **substantive** |
