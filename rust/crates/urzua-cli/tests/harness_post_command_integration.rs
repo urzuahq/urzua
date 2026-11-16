@@ -802,8 +802,8 @@ fn launder_by_reset_hard_to_a_built_commit_is_reported() {
     assert_reported_once(
         &dir,
         &[
-            &format!("{A} && {W} && {BUILD_C} && echo $c > ../c-reset"),
-            "git reset -q --hard $(cat ../c-reset)",
+            &format!("{A} && {W} && {BUILD_C} && echo $c > .git/c-reset"),
+            "git reset -q --hard $(cat .git/c-reset)",
         ],
     );
 }
@@ -814,8 +814,8 @@ fn launder_by_fast_forward_merge_is_reported() {
     assert_reported_once(
         &dir,
         &[
-            &format!("{A} && {W} && {BUILD_C} && echo $c > ../c-ff"),
-            "git merge -q --ff-only $(cat ../c-ff)",
+            &format!("{A} && {W} && {BUILD_C} && echo $c > .git/c-ff"),
+            "git merge -q --ff-only $(cat .git/c-ff)",
         ],
     );
 }
@@ -836,7 +836,7 @@ fn launder_by_pull_from_a_clone_is_reported() {
     let dir = launder_fixture("l-pull");
     assert_reported_once(
         &dir,
-        &[&format!("rm -rf ../rem && git clone -q . ../rem && cd ../rem && git config user.email t@example.com && git config user.name t && {A} && {W} && git commit -qam x && cd - >/dev/null && git pull -q --ff-only ../rem main")],
+        &[&format!("rm -rf .git/rem && git clone -q . .git/rem && cd .git/rem && git config user.email t@example.com && git config user.name t && {A} && {W} && git commit -qam x && cd - >/dev/null && git pull -q --ff-only .git/rem main")],
     );
 }
 
@@ -852,12 +852,10 @@ fn launder_by_cherry_pick_is_reported() {
 #[test]
 fn a_pull_of_a_protected_change_says_it_arrived_by_a_git_move_once() {
     let dir = launder_fixture("pull-protected");
-    let parent = dir
-        .parent()
-        .unwrap()
-        .join(format!("{}-up", dir.file_name().unwrap().to_string_lossy()));
+    let up_dir = common::TempDir::new("urzua-postcmd-up");
+    let parent = up_dir.join("up");
     git(
-        dir.parent().unwrap(),
+        &up_dir,
         &[
             "clone",
             "-q",
@@ -886,12 +884,10 @@ fn a_pull_of_a_protected_change_says_it_arrived_by_a_git_move_once() {
 #[test]
 fn a_pull_of_an_ordinary_record_finding_is_absorbed_quietly() {
     let dir = fixture("pull-finding", CONFIG, GOOD);
-    let up = dir
-        .parent()
-        .unwrap()
-        .join(format!("{}-up", dir.file_name().unwrap().to_string_lossy()));
+    let up_dir = common::TempDir::new("urzua-postcmd-up");
+    let up = up_dir.join("up");
     git(
-        dir.parent().unwrap(),
+        &up_dir,
         &["clone", "-q", dir.to_str().unwrap(), up.to_str().unwrap()],
     );
     git(&up, &["config", "user.email", "t@example.com"]);
