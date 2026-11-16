@@ -26,3 +26,4 @@ On 2026-11-15 and 2026-11-16 one pull request re-pinned about 85 records and ano
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-16 | Initial record, `Status: Planned`. **Why:** Found while landing parallel pull requests on 2026-11-15 and 2026-11-16. | **structural** |
+> | 2026-11-16 | Whole-file pins on `.urzua/config.yaml` narrowed to key paths. Before: 114 whole-file locators in 55 records, 74 scoped locators in 32 records. After: 5 whole-file locators in 2 records (MILE-177, MILE-178, whose claims rest on the whole config), 209 scoped locators in 84 records. A one-line change under `rules:` made 55 records stale before and 5 after (the 2 whole-file records and the 3 pinned to `rules` as a whole). The Done means item on whole central files is not marked: other central files are not yet narrowed. **Why:** Measured for the second Done means item. | **substantive** |

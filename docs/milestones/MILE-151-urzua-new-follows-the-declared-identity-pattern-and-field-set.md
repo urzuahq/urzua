@@ -5,7 +5,7 @@ Phase: '0'
 Track: schema-governance
 Implements: SPEC-1
 Blocked-on: —
-Realized-by: test:rust/crates/urzua-cli/tests/new_integration.rs#new_over_a_padded_identity_pattern_passes_check_with_no_edit_observed_failing@sha256:037056b7b5b15eb088207e5d6dad10da14802a378f408054e5a31dbd22c3fac0, test:rust/crates/urzua-cli/tests/new_integration.rs#new_numbers_from_the_declared_pattern@sha256:3ebc2e4d6db0bd29621bb94d8c9a16470bc08b8c82d17d5938fc44c68e2a1099, code:.urzua/config.yaml@sha256:169fd605713992b1e68ae1bbc0899f84248449fea4d9f10c3094bd60acbd33b0
+Realized-by: test:rust/crates/urzua-cli/tests/new_integration.rs#new_over_a_padded_identity_pattern_passes_check_with_no_edit_observed_failing@sha256:037056b7b5b15eb088207e5d6dad10da14802a378f408054e5a31dbd22c3fac0, test:rust/crates/urzua-cli/tests/new_integration.rs#new_numbers_from_the_declared_pattern@sha256:3ebc2e4d6db0bd29621bb94d8c9a16470bc08b8c82d17d5938fc44c68e2a1099, code:.urzua/config.yaml#record_types@sha256:eb1050f4107932cb5735fe652140f9bd14a215c8759500bc69d75409f95adb0b
 ---
 # 151 — Urzua new follows the declared identity pattern and field set
 
@@ -21,7 +21,7 @@ The adopter's authoring commands cannot adopt `urzua new` until it produces a re
 
 - `urzua new` run against a type with a padded numeric pattern writes a file and H1 that pass `filename.identity-pattern`, `header.required-fields` and `field.quality` with no manual edit. — evidence: test:rust/crates/urzua-cli/tests/new_integration.rs#new_over_a_padded_identity_pattern_passes_check_with_no_edit_observed_failing@sha256:037056b7b5b15eb088207e5d6dad10da14802a378f408054e5a31dbd22c3fac0
 - That behaviour is covered by a test over a pattern that is not the default. — evidence: test:rust/crates/urzua-cli/tests/new_integration.rs#new_numbers_from_the_declared_pattern@sha256:3ebc2e4d6db0bd29621bb94d8c9a16470bc08b8c82d17d5938fc44c68e2a1099, test:rust/crates/urzua-cli/tests/new_integration.rs#new_over_a_padded_identity_pattern_passes_check_with_no_edit_observed_failing@sha256:037056b7b5b15eb088207e5d6dad10da14802a378f408054e5a31dbd22c3fac0
-- The capability is exercised by urzua's own `.urzua/config.yaml` and records in this repository, not only by unit tests. — evidence: code:.urzua/config.yaml@sha256:169fd605713992b1e68ae1bbc0899f84248449fea4d9f10c3094bd60acbd33b0
+- The capability is exercised by urzua's own `.urzua/config.yaml` and records in this repository, not only by unit tests. — evidence: code:.urzua/config.yaml#record_types@sha256:eb1050f4107932cb5735fe652140f9bd14a215c8759500bc69d75409f95adb0b
 
 > **Revision log**
 >
@@ -50,3 +50,4 @@ The adopter's authoring commands cannot adopt `urzua new` until it produces a re
 > | 2026-11-15 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` e544107a6abb -> 1690790d0bdc. Reason: config.yaml: adds harness.limits with hook_timeout_seconds: 120, the built-in value, under harness; no other key changed. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` 1690790d0bdc -> b3876c284bd2. Reason: Read the diff of each re-pinned file against main: config.yaml declares embodiment.pin-stale: warn with a two-line comment; no other key changed. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` b3876c284bd2 -> 169fd6057139. Reason: Read the diff of each re-pinned file against main. .urzua/config.yaml: `unread_markers: report` on embodiment.back-pointer-resolution; no other key changed. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-16 | Pinned (attested by beauwilliams, identity: gh-verified, actor: agent): 1 locators pinned, 0 file-level, 1 scoped. Evidence: .urzua/config.yaml#record_types@sha256:eb1050f41079 Reason: Narrowed to record_types: urzua new follows the identity pattern, status vocabulary and field set each type declares under record_types. **Why:** a claim is renewed only over pinned code and test evidence. | **structural** |
