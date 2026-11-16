@@ -1,6 +1,7 @@
 ---
 Stable-Id: 01M7GX5MEZDHKE1NH9CZGNSE8D
-Status: Proposed
+Status: Accepted
+Accepted-on: 2026-11-16
 Date: 2026-11-16
 Author: beauwilliams
 Deciders: beauwilliams
@@ -68,6 +69,35 @@ The person named in a receipt comes from the configured identity for the session
 does not prove which person clicked. A repository that needs that proof keeps acceptance in a pull request, where the host
 names the actor.
 
+## Amendment (2026-11-16): the approval is asked for by an urzua tool first, and by a chat question as the fallback
+
+Accepted by the maintainer on 2026-11-16. The Decision is unchanged: acceptance in the conversation stays an opt-in mode, the
+approval is single-use and bound to what the person was shown, and the harness writes the receipt. This changes which
+mechanism is tried first, after a review on 2026-11-16 of what agent hosts document.
+
+The review found two weaknesses in asking through the agent's own question tool, which points 2 and 3 of the Decision make
+the primary route. The agent writes the question's wording, so the hook sees which choice was picked but cannot know what
+text the person read, and "a hash of the record body the person was shown" cannot be established from it. And on the host
+reviewed, the answer to such a question can be supplied by something other than a person: another hook, a host program, or
+an idle timeout, and a free-text reply exists beside the offered choices.
+
+The order of mechanisms is therefore:
+
+1. **An urzua tool that asks.** Where the host lets a tool require the person's interaction on every call, in a way no hook
+   and no permission mode can skip, the agent calls an urzua tool naming the record and the move. urzua reads the record,
+   writes the prompt itself (the record's id, title, the move and what it means), the host shows it to the person, and on
+   approval urzua makes the status change and writes the receipt itself. No approval is stored between the answer and the
+   edit, so there is nothing for an agent to forge or replay.
+2. **A chat question, as the fallback.** Where the host has no such tool, points 2 to 5 of the Decision apply, with these
+   limits: only a question whose wording urzua generated, carrying a value the agent cannot guess, counts; only one of the
+   offered choices counts, never free text, a timeout or a dismissal; and the mode is refused in a session where another
+   hook or a host program can answer questions or permission prompts.
+3. **The host's confirmation prompt**, point 6 of the Decision, remains the last fallback, and an uncertain permission mode
+   still refuses.
+
+An adapter states which of the three it supports, each verified on the host by a test and not taken from its
+documentation. The refusal of point 2 of the Decision names the mechanism the adapter supports.
+
 ## Reversibility
 
 Easy to walk back: the mode is opt-in, and removing it returns every repository to refuse. The cost of getting it wrong is an
@@ -98,3 +128,5 @@ Receipts already written stay valid records of what happened.
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-16 | Drafted as Proposed. **Why:** The maintainer reported on 2026-11-16 that every acceptance ends with the agent saying it has no permission and asked for approval by a question in the chat. | **substantive** |
+> | 2026-11-16 | Status changed from Proposed to Accepted. **Why:** Accepted by the maintainer on 2026-11-16. | **substantive** |
+> | 2026-11-16 | Amendment added: an urzua tool that requires the person's interaction is the first mechanism and the chat question the fallback. **Why:** Accepted by the maintainer on 2026-11-16, after a review of agent hosts found that the agent writes a chat question's wording and that something other than a person can answer it. | **substantive** |
