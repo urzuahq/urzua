@@ -151,12 +151,37 @@ fn edit_distance(a: &str, b: &str) -> usize {
     row[b.len()]
 }
 
+/// What the editor hook does with an edit whose only new errors are the
+/// missing other half of a declared relation pair (`MILE-287`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PendingPair {
+    /// Refuse it, naming the `urzua fix` command that writes the other half.
+    Refuse,
+    /// Allow it and name the other half that is now required. The default by
+    /// the maintainer's decision of 2026-11-16, an exception to `ADR-101`'s
+    /// "a code default equals the behaviour before the key".
+    #[default]
+    Allow,
+}
+
+impl PendingPair {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            PendingPair::Refuse => "refuse",
+            PendingPair::Allow => "allow",
+        }
+    }
+}
+
 /// One guardrail as the repository declared it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Guardrail {
     pub enabled: bool,
     /// `None` is the guardrail's default (`GuardrailInfo::default_on_unjudged`).
     pub on_unjudged: Option<OnUnjudged>,
+    /// `editor-hook` only; `None` is `allow`.
+    pub pending_pair: Option<PendingPair>,
 }
 
 /// The `harness` key. An absent key is `None` in `Config`: it installs and
@@ -218,7 +243,9 @@ const HARNESS_KEYS: &[&str] = &[
 impl GuardrailInfo {
     /// The keys a guardrail's mapping reads.
     fn keys(&self) -> &'static [&'static str] {
-        if self.takes_on_unjudged {
+        if self.name == "editor-hook" {
+            &["enabled", "on_unjudged", "pending_pair"]
+        } else if self.takes_on_unjudged {
             &["enabled", "on_unjudged"]
         } else {
             &["enabled"]
@@ -240,6 +267,59 @@ impl HarnessDecl {
         });
     }
 
+    /// One guardrail's mapping: `enabled`, and the keys the guardrail takes.
+    fn read_guardrail<'de, D: serde::Deserializer<'de>>(
+        &mut self,
+        name: &str,
+        info: &GuardrailInfo,
+        body: &yaml_serde::Mapping,
+    ) -> Result<Guardrail, D::Error> {
+        use serde::de::Error;
+        let mut guardrail = Guardrail {
+            enabled: false,
+            on_unjudged: None,
+            pending_pair: None,
+        };
+        for (k, val) in body {
+            match k.as_str().unwrap_or("?") {
+                "enabled" => {
+                    guardrail.enabled = val.as_bool().ok_or_else(|| {
+                        D::Error::custom(format!(
+                            "harness.guardrails.{name}.enabled must be true or false"
+                        ))
+                    })?
+                }
+                "on_unjudged" if info.takes_on_unjudged => {
+                    guardrail.on_unjudged = Some(match val.as_str() {
+                        Some("allow") => OnUnjudged::Allow,
+                        Some("deny") => OnUnjudged::Deny,
+                        _ => {
+                            return Err(D::Error::custom(format!(
+                                "harness.guardrails.{name}.on_unjudged must be allow or deny"
+                            )))
+                        }
+                    })
+                }
+                "pending_pair" if name == "editor-hook" => {
+                    guardrail.pending_pair = Some(match val.as_str() {
+                        Some("refuse") => PendingPair::Refuse,
+                        Some("allow") => PendingPair::Allow,
+                        _ => return Err(D::Error::custom(
+                            "harness.guardrails.editor-hook.pending_pair must be refuse or allow",
+                        )),
+                    })
+                }
+                other => self.note_unknown_key(
+                    format!("harness.guardrails.{name}"),
+                    other,
+                    info.keys(),
+                    "which it does not take",
+                ),
+            }
+        }
+        Ok(guardrail)
+    }
+
     /// The effective `outside_writes`: the declared value, else `allow`.
     pub fn outside_writes(&self) -> OutsideWrites {
         self.outside_writes.unwrap_or_default()
@@ -248,6 +328,14 @@ impl HarnessDecl {
     /// Whether any guardrail is enabled.
     pub fn any_enabled(&self) -> bool {
         self.guardrails.values().any(|g| g.enabled)
+    }
+
+    /// The effective `editor-hook.pending_pair`: the declared value, else `allow`.
+    pub fn pending_pair(&self) -> PendingPair {
+        self.guardrails
+            .get("editor-hook")
+            .and_then(|g| g.pending_pair)
+            .unwrap_or_default()
     }
 
     /// Whether the guardrail is named and on.
@@ -312,38 +400,7 @@ impl<'de> Deserialize<'de> for HarnessDecl {
                                 "harness.guardrails.{name} must be a mapping ({{enabled: true}})"
                             ))
                         })?;
-                        let mut guardrail = Guardrail {
-                            enabled: false,
-                            on_unjudged: None,
-                        };
-                        for (k, val) in body {
-                            match k.as_str().unwrap_or("?") {
-                                "enabled" => {
-                                    guardrail.enabled = val.as_bool().ok_or_else(|| {
-                                        D::Error::custom(format!(
-                                            "harness.guardrails.{name}.enabled must be true or false"
-                                        ))
-                                    })?
-                                }
-                                "on_unjudged" if info.takes_on_unjudged => {
-                                    guardrail.on_unjudged = Some(match val.as_str() {
-                                        Some("allow") => OnUnjudged::Allow,
-                                        Some("deny") => OnUnjudged::Deny,
-                                        _ => {
-                                            return Err(D::Error::custom(format!(
-                                                "harness.guardrails.{name}.on_unjudged must be allow or deny"
-                                            )))
-                                        }
-                                    })
-                                }
-                                other => decl.note_unknown_key(
-                                    format!("harness.guardrails.{name}"),
-                                    other,
-                                    info.keys(),
-                                    "which it does not take",
-                                ),
-                            }
-                        }
+                        let guardrail = decl.read_guardrail::<D>(&name, info, body)?;
                         decl.guardrails.insert(name, guardrail);
                     }
                 }
