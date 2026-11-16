@@ -468,21 +468,58 @@ fn judge_changes(
     // never blocks. It does not depend on `check` being able to run.
     let mut gated = gated_moves(&repo_root, &loaded, &fresh, base, &scan);
     gated.extend(deletions);
+    let gates = base_gates(
+        &repo_root,
+        &config_path,
+        &loaded,
+        &paths,
+        prior.as_ref(),
+        (gated, protected),
+    );
+    let to_check: Vec<String> = fresh
+        .iter()
+        .filter(|p| !absorbed.contains(*p))
+        .cloned()
+        .collect();
+
+    let report = match run_check(config, &to_check, gates.is_empty()) {
+        Ok(r) => r,
+        Err(verdict) => return *verdict,
+    };
+    let all = report.as_ref().map(live).unwrap_or_default();
+    let (old, new) = partition_by_head(config, &all, base);
+    write_memory(&repo_root, &remembered);
+
+    let mut v = report_verdict(&to_check, &gates, (new, old), scan.note.as_deref());
+    v.adopted = adopted;
+    v
+}
+
+/// The gated changes of one command, compared with the base ref the
+/// configuration names, or the one recorded before a command that changed it.
+fn base_gates(
+    repo_root: &Path,
+    config_path: &Path,
+    loaded: &Config,
+    paths: &BTreeMap<String, bool>,
+    prior: Option<&ProtectedState>,
+    (gated, protected): (Vec<GateEvent>, Vec<GateEvent>),
+) -> Gates {
     let harness = loaded.harness.as_ref();
     let config_rel = config_path
-        .strip_prefix(&repo_root)
-        .unwrap_or(&config_path)
+        .strip_prefix(repo_root)
+        .unwrap_or(config_path)
         .to_string_lossy()
         .to_string();
     let config_changed = paths.contains_key(&config_rel)
-        || prior.as_ref().is_some_and(|p| {
-            urzua_io::sha256_hex_of_file(&config_path).is_some_and(|sig| sig != p.config_sig)
+        || prior.is_some_and(|p| {
+            urzua_io::sha256_hex_of_file(config_path).is_some_and(|sig| sig != p.config_sig)
         });
     // A command that edits the configuration could set the comparison rule
     // that judges it (`base: HEAD`), so then the rule as it was before the
     // command is used, and the configuration file itself must match it.
     let (base_ref, level) = if config_changed {
-        match prior.as_ref().and_then(|p| {
+        match prior.and_then(|p| {
             p.post_base
                 .clone()
                 .zip(p.post_level.as_deref().and_then(level_of))
@@ -505,18 +542,18 @@ fn judge_changes(
     let matched = if base_ref.is_empty() {
         None
     } else {
-        matching_base(&repo_root, &base_ref, &event_paths)
+        matching_base(repo_root, &base_ref, &event_paths)
     };
     let compared = matched.is_some();
     let mut matched = matched.unwrap_or_default();
     if config_changed && !matched.contains(&config_rel) {
         matched.clear();
     }
-    let gates = Gates {
+    Gates {
         moves: gated,
         protected,
         matched,
-        base: describe_base(&repo_root, &base_ref),
+        base: describe_base(repo_root, &base_ref),
         level,
         unresolved: (!compared).then(|| {
             if base_ref.is_empty() {
@@ -525,24 +562,7 @@ fn judge_changes(
                 format!("no base ref to compare with: '{base_ref}' does not resolve")
             }
         }),
-    };
-    let to_check: Vec<String> = fresh
-        .iter()
-        .filter(|p| !absorbed.contains(*p))
-        .cloned()
-        .collect();
-
-    let report = match run_check(config, &to_check, gates.is_empty()) {
-        Ok(r) => r,
-        Err(verdict) => return *verdict,
-    };
-    let all = report.as_ref().map(live).unwrap_or_default();
-    let (old, new) = partition_by_head(config, &all, base);
-    write_memory(&repo_root, &remembered);
-
-    let mut v = report_verdict(&to_check, &gates, (new, old), scan.note.as_deref());
-    v.adopted = adopted;
-    v
+    }
 }
 
 /// The gated changes of one command, and which of them hold exactly the
