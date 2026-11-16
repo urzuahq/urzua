@@ -59,6 +59,9 @@ const P: &str = "urzua harness (post-command)";
 const CACHE: &str = ".urzua/cache/post-command.json";
 const HEAD_FILE: &str = ".urzua/cache/post-command-head";
 const PROTECTED_FILE: &str = ".urzua/cache/protected-hashes.json";
+const STASH_FILE: &str = ".urzua/cache/post-command-stash";
+/// How far back the reflog is read for the moves since the last check.
+const REFLOG_DEPTH: usize = 200;
 
 #[derive(Deserialize, Default)]
 struct Request {
@@ -83,6 +86,15 @@ struct PostVerdict {
     protected_changes: Vec<String>,
     /// The records `check` ran on this time. Empty when no check ran.
     checked: Vec<String>,
+    /// What the agent is told: a short report of what it should act on, or empty.
+    agent: String,
+    /// What the person is told: only a gated move, a protected-path change, or
+    /// a check that could not run; empty otherwise.
+    person: String,
+    /// Records whose ordinary findings were absorbed into the baseline unreported,
+    /// because a pull, checkout, merge or rebase brought them in. A gated move or
+    /// a protected change in them is still reported.
+    adopted: Vec<String>,
 }
 
 impl PostVerdict {
@@ -95,21 +107,21 @@ impl PostVerdict {
             gated_moves: Vec::new(),
             protected_changes: Vec::new(),
             checked: Vec::new(),
+            agent: String::new(),
+            person: String::new(),
+            adopted: Vec::new(),
         }
     }
 
     fn unjudged(why: &str) -> Self {
-        PostVerdict {
-            verdict: "allow-unjudged",
-            message: format!(
-                "{P}: the command's effect on records was NOT judged ({why}). Nothing was blocked and no success is claimed; run 'urzua check' before committing."
-            ),
-            findings: Vec::new(),
-            pre_existing: Vec::new(),
-            gated_moves: Vec::new(),
-            protected_changes: Vec::new(),
-            checked: Vec::new(),
-        }
+        let message = format!(
+            "{P}: the command's effect on records was NOT judged ({why}). Nothing was blocked and no success is claimed; run 'urzua check' before committing."
+        );
+        let mut v = PostVerdict::quiet(message.clone());
+        v.verdict = "allow-unjudged";
+        v.person = message;
+        v.agent = format!("{P}: NOT judged; run 'urzua check' before committing.");
+        v
     }
 }
 
@@ -161,19 +173,236 @@ fn judge(config: Option<PathBuf>) -> PostVerdict {
         (Some(_), Some(l)) => l.clone(),
         _ => "HEAD".to_string(),
     };
+    let committed = committed.unwrap_or_default();
+    // The reflog and the stash are written by whoever runs git, the agent
+    // included, so they choose only whether ordinary findings are absorbed and
+    // how a gate event is worded; they never keep a gate event from the report.
+    let (absorbed, mut arrived) = match (&top, &last, &head) {
+        (Some(t), Some(l), Some(h)) if l != h && !committed.is_empty() => {
+            let elsewhere = not_own(&committed, own_files(t, l, h).as_ref());
+            let refs: Vec<&String> = elsewhere.iter().collect();
+            (same_as(t, h, &refs), elsewhere)
+        }
+        _ => (Vec::new(), Vec::new()),
+    };
+    if let Some(t) = &top {
+        if let Some(oid) = read_stash(t) {
+            arrived.extend(stash_matches(t, &oid));
+        }
+    }
+    arrived.sort();
+    arrived.dedup();
     let v = judge_changes(
         &config,
         top.as_deref(),
         &base,
-        committed.unwrap_or_default(),
+        committed,
+        (&absorbed, &arrived),
     );
     // The range is consumed once it has been judged; an unjudged run keeps it.
     if v.verdict != "allow-unjudged" {
         if let (Some(t), Some(h)) = (&top, &head) {
             write_head(t, h);
         }
+        if let Some(t) = &top {
+            write_stash(t, stash_top().as_deref());
+        }
     }
     v
+}
+
+/// The files the session's own commits between `last` and `head` changed. A
+/// commit is the session's own when the `HEAD` reflog has a commit-making entry
+/// for it (`commit`, its `amend`, `initial` and `merge` forms, `cherry-pick`,
+/// `revert`, a rebase pick), on whatever branch it was made, so merging or
+/// checking out a branch that holds it does not make it foreign. `None` when
+/// git cannot say: every commit then counts as the session's own.
+fn own_files(top: &Path, last: &str, head: &str) -> Option<HashSet<String>> {
+    let git = |args: &[&str]| {
+        GitRun::new()
+            .cwd(top)
+            .arg("--no-optional-locks")
+            .args(args)
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
+    };
+    let depth = format!("-n{REFLOG_DEPTH}");
+    let reflog = git(&["reflog", "--format=%H%x00%gs", &depth, "HEAD"])?;
+    let made = |subject: &str| {
+        ["commit:", "commit (", "cherry-pick:", "revert:"]
+            .iter()
+            .any(|p| subject.starts_with(p))
+            || (subject.starts_with("rebase") && subject.contains("(pick)"))
+    };
+    let own: HashSet<&str> = reflog
+        .lines()
+        .filter_map(|l| l.split_once('\0'))
+        .filter(|(_, subject)| made(subject))
+        .map(|(h, _)| h)
+        .collect();
+    let range = git(&["rev-list", &format!("{last}..{head}")])?;
+    let mut files = HashSet::new();
+    for commit in range.lines().filter(|c| own.contains(c)) {
+        // `--cc` names, for a merge, only what the merge itself resolved.
+        let changed = git(&[
+            "diff-tree",
+            "-r",
+            "--root",
+            "--cc",
+            "--name-only",
+            "--no-commit-id",
+            commit,
+        ])?;
+        files.extend(
+            changed
+                .lines()
+                .filter(|l| !l.is_empty())
+                .map(str::to_string),
+        );
+    }
+    Some(files)
+}
+
+/// The files of `committed` that did not come from the session's own commits.
+fn not_own(committed: &[String], own: Option<&HashSet<String>>) -> Vec<String> {
+    match own {
+        Some(own) => committed
+            .iter()
+            .filter(|p| !own.contains(*p))
+            .cloned()
+            .collect(),
+        None => Vec::new(),
+    }
+}
+
+/// The paths whose file on disk is the blob `rev` holds (both absent counts).
+fn same_as(top: &Path, rev: &str, paths: &[&String]) -> Vec<String> {
+    if paths.is_empty() {
+        return Vec::new();
+    }
+    let Ok(out) = GitRun::new()
+        .cwd(top)
+        .args([
+            "--no-optional-locks",
+            "ls-tree",
+            "-r",
+            "-z",
+            "--full-tree",
+            rev,
+        ])
+        .output()
+    else {
+        return Vec::new();
+    };
+    // `<mode> <type> <oid>\t<path>`
+    let blobs: BTreeMap<String, String> = out
+        .stdout
+        .split(|b| *b == 0)
+        .filter_map(|e| {
+            let text = String::from_utf8_lossy(e).to_string();
+            let (meta, path) = text.split_once('\t')?;
+            Some((path.to_string(), meta.split(' ').nth(2)?.to_string()))
+        })
+        .collect();
+    let present: Vec<&String> = paths
+        .iter()
+        .copied()
+        .filter(|p| top.join(p.as_str()).symlink_metadata().is_ok())
+        .collect();
+    let mut same: Vec<String> = paths
+        .iter()
+        .filter(|p| top.join(p.as_str()).symlink_metadata().is_err() && !blobs.contains_key(**p))
+        .map(|p| (*p).clone())
+        .collect();
+    if present.is_empty() {
+        return same;
+    }
+    let list = present
+        .iter()
+        .map(|p| p.as_str())
+        .collect::<Vec<_>>()
+        .join("\n");
+    let oids: Vec<String> = GitRun::new()
+        .cwd(top)
+        .args(["--no-optional-locks", "hash-object", "--stdin-paths"])
+        .stdin(list.as_bytes())
+        .discard_stderr()
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .map(|o| {
+            String::from_utf8_lossy(&o.stdout)
+                .lines()
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default();
+    if oids.len() == present.len() {
+        for (p, oid) in present.iter().zip(&oids) {
+            if blobs.get(*p) == Some(oid) {
+                same.push((*p).clone());
+            }
+        }
+    }
+    same
+}
+
+/// The working-tree changes whose content is the stash entry that was on top at
+/// the last check: a `git stash pop` or `apply` restored them.
+fn stash_matches(top: &Path, oid: &str) -> Vec<String> {
+    let Ok(tree) = changed_paths() else {
+        return Vec::new();
+    };
+    let paths: Vec<String> = tree
+        .into_iter()
+        .filter(|(_, d)| !d)
+        .map(|(p, _)| p)
+        .collect();
+    let refs: Vec<&String> = paths.iter().collect();
+    // Untracked files a stash saved (`-u`) live in its third parent.
+    let mut same = same_as(top, oid, &refs);
+    same.extend(same_as(top, &format!("{oid}^3"), &refs));
+    same
+}
+
+fn stash_top() -> Option<String> {
+    let out = GitRun::new()
+        .args([
+            "--no-optional-locks",
+            "rev-parse",
+            "-q",
+            "--verify",
+            "refs/stash",
+        ])
+        .discard_stderr()
+        .output()
+        .ok()?;
+    let oid = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    (out.status.success() && !oid.is_empty()).then_some(oid)
+}
+
+fn read_stash(top: &Path) -> Option<String> {
+    let text = std::fs::read_to_string(top.join(STASH_FILE)).ok()?;
+    let text = text.trim();
+    (!text.is_empty()).then(|| text.to_string())
+}
+
+fn write_stash(top: &Path, oid: Option<&str>) {
+    let path = top.join(STASH_FILE);
+    match oid {
+        None => {
+            let _ = std::fs::remove_file(path);
+        }
+        Some(oid) if read_stash(top).as_deref() != Some(oid) => {
+            if let Some(dir) = path.parent() {
+                let _ = std::fs::create_dir_all(dir);
+            }
+            let _ = urzua_io::write_atomic(&path, oid);
+        }
+        Some(_) => {}
+    }
 }
 
 fn judge_changes(
@@ -181,6 +410,7 @@ fn judge_changes(
     top: Option<&Path>,
     base: &str,
     committed: Vec<String>,
+    (absorbed, arrived): (&[String], &[String]),
 ) -> PostVerdict {
     // The gate: git's own view of the working tree, before any configuration.
     let mut tree = match changed_paths() {
@@ -216,6 +446,11 @@ fn judge_changes(
     protected.extend(shrink_lines(&repo_root, &config_path, &scan));
     let deletions = gated_deletions(&repo_root, &loaded, &paths, base, &scan);
     let mut remembered = remembered;
+    let adopted: Vec<String> = fresh
+        .iter()
+        .filter(|p| absorbed.contains(*p))
+        .cloned()
+        .collect();
     remember_deletions(&repo_root, &paths, &deletions, &mut remembered);
     let deletions: Vec<String> = deletions.into_iter().map(|(_, line)| line).collect();
     if fresh.is_empty() && protected.is_empty() && deletions.is_empty() {
@@ -223,9 +458,11 @@ fn judge_changes(
         let mut v = PostVerdict::quiet(format!(
             "{P}: no governed record changed since the last check; no check ran"
         ));
+        v.adopted = adopted;
         if let Some(note) = &scan.note {
             v.verdict = "allow-with-warnings";
             v.message.push_str(&format!(" {note}"));
+            v.agent = format!("{P}: {note}");
         }
         return v;
     }
@@ -235,8 +472,15 @@ fn judge_changes(
     // never blocks. It does not depend on `check` being able to run.
     let mut gated = gated_moves(&repo_root, &loaded, &fresh, base, &scan);
     gated.extend(deletions);
+    let gated = mark_arrived(gated, arrived);
+    let protected = mark_arrived(protected, arrived);
+    let to_check: Vec<String> = fresh
+        .iter()
+        .filter(|p| !absorbed.contains(*p))
+        .cloned()
+        .collect();
 
-    let report = match run_check(config, &fresh, gated.is_empty() && protected.is_empty()) {
+    let report = match run_check(config, &to_check, gated.is_empty() && protected.is_empty()) {
         Ok(r) => r,
         Err(verdict) => return *verdict,
     };
@@ -244,7 +488,35 @@ fn judge_changes(
     let (old, new) = partition_by_head(config, &all, base);
     write_memory(&repo_root, &remembered);
 
-    report_verdict(&fresh, protected, gated, (new, old), scan.note.as_deref())
+    let mut v = report_verdict(
+        &to_check,
+        protected,
+        gated,
+        (new, old),
+        scan.note.as_deref(),
+    );
+    v.adopted = adopted;
+    v
+}
+
+/// A report line whose path arrived with `HEAD` moving or matches the stash says
+/// so instead of reading as an edit. Only the wording changes.
+fn mark_arrived(lines: Vec<String>, arrived: &[String]) -> Vec<String> {
+    lines
+        .into_iter()
+        .map(|line| {
+            let head = line.trim_start();
+            let hit = arrived.iter().any(|p| {
+                head.strip_prefix(p.as_str())
+                    .is_some_and(|rest| rest.starts_with(' ') || rest.starts_with(':'))
+            });
+            if hit {
+                format!("{line} It arrived by a git move such as pull, checkout, merge, reset or stash pop, not by an edit tool; it is reported because a decider must make it.")
+            } else {
+                line
+            }
+        })
+        .collect()
 }
 
 /// The verdict for a judged command: the findings `check` reported on the
@@ -270,8 +542,22 @@ fn report_verdict(
         if let Some(note) = note {
             v.verdict = "allow-with-warnings";
             v.message.push_str(&format!(" {note}"));
+            v.agent = format!("{P}: {note}");
         }
         return v;
+    }
+    v.agent = agent_line(&new, old.len(), &gated, &protected, note);
+    if !gated.is_empty() || !protected.is_empty() {
+        let mut person = format!(
+            "{P}: the command changed what the authority table reserves for a decider. It had already run, so nothing was prevented; CI's diff.decider-required checks who made it."
+        );
+        if !gated.is_empty() {
+            person.push_str(&format!("\n{}", gated.join("\n")));
+        }
+        if !protected.is_empty() {
+            person.push_str(&format!("\n{}", protected.join("\n")));
+        }
+        v.person = person;
     }
     v.verdict = "allow-with-warnings";
     v.message = findings_message(&FindingsSummary {
@@ -283,6 +569,40 @@ fn report_verdict(
         note,
     });
     v
+}
+
+/// The agent's report: the new findings to fix, one line each, and a short
+/// line for a decider's change it must not present as done.
+fn agent_line(
+    new: &[&Finding],
+    old: usize,
+    gated: &[String],
+    protected: &[String],
+    note: Option<&str>,
+) -> String {
+    let mut parts = Vec::new();
+    if !new.is_empty() {
+        parts.push(format!(
+            "{P}: {} new finding(s) in records the command changed:\n{}",
+            new.len(),
+            describe(new)
+        ));
+    } else if old > 0 && gated.is_empty() && protected.is_empty() {
+        parts.push(format!(
+            "{P}: {old} finding(s) the changed records already had before this command; none is new."
+        ));
+    }
+    if !gated.is_empty() || !protected.is_empty() {
+        parts.push(format!(
+            "{P}: the command made {} gated move(s) and {} protected-path change(s); a decider must make or approve these, and the person has been told.",
+            gated.len(),
+            protected.len()
+        ));
+    }
+    if let Some(note) = note {
+        parts.push(format!("{P}: {note}"));
+    }
+    parts.join("\n")
 }
 
 /// The report lines for what the command took out of the baseline's gates: a
@@ -948,6 +1268,7 @@ pub(super) fn seed_head(repo_root: &Path) {
     if std::env::set_current_dir(repo_root).is_ok() {
         if let (Some(top), Some(head)) = top_and_head() {
             write_head(&top, &head);
+            write_stash(&top, stash_top().as_deref());
         }
     }
     if let Some(p) = prev {

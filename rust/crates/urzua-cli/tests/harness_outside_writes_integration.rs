@@ -561,3 +561,53 @@ fn a_shared_worktree_denial_is_found_wherever_it_sits_in_a_multi_path_call() {
     let (code, v, _) = run_edit_paths(&proj, &[plain.as_path(), wt.join("b.txt").as_path()], "x\n");
     assert_eq!(code, 0, "{v}");
 }
+
+#[test]
+fn an_allowed_write_outside_the_repository_is_silent_unless_reported() {
+    let (parent, proj, _) = project("quiet", "  outside_writes: allow\n");
+    std::fs::create_dir_all(parent.join("notes")).unwrap();
+    let note = parent.join("notes/scratch.md");
+    let (code, v, _) = run_edit(&proj, &note, "x\n");
+    assert_eq!((code, verdict(&v)), (0, "allow"), "{v}");
+    assert_eq!(v["message"].as_str().unwrap(), "", "{v}");
+
+    let (parent2, proj2, _) = project(
+        "loud",
+        "  outside_writes: allow\n  report_outside_writes: true\n",
+    );
+    std::fs::create_dir_all(parent2.join("notes")).unwrap();
+    let (code, v, _) = run_edit(&proj2, &parent2.join("notes/scratch.md"), "x\n");
+    assert_eq!((code, verdict(&v)), (0, "allow-unjudged"), "{v}");
+    let message = v["message"].as_str().unwrap();
+    assert!(message.contains("did NOT judge"), "{v}");
+    assert!(message.contains("is outside the repository"), "{v}");
+}
+
+#[test]
+fn a_refused_outside_write_and_an_unjudged_inside_edit_still_speak() {
+    let (parent, proj, _) = project("refused", "  outside_writes: deny\n");
+    std::fs::create_dir_all(parent.join("notes")).unwrap();
+    let (code, v, _) = run_edit(&proj, &parent.join("notes/scratch.md"), "x\n");
+    assert_eq!((code, verdict(&v)), (1, "block"), "{v}");
+    assert!(!v["message"].as_str().unwrap().is_empty(), "{v}");
+
+    // A write inside the repository the hook cannot judge (several paths in one
+    // request) is still reported.
+    let (_p2, proj2, _) = project("inside", "  outside_writes: allow\n");
+    let (code, v, _) = run_edit_paths(&proj2, &[&proj2.join("a.txt"), &proj2.join("b.txt")], "x\n");
+    assert_eq!((code, verdict(&v)), (0, "allow-unjudged"), "{v}");
+    assert!(
+        v["message"].as_str().unwrap().contains("did NOT judge"),
+        "{v}"
+    );
+}
+
+#[test]
+fn a_link_outside_that_resolves_into_the_repository_is_not_silenced() {
+    let (parent, proj, _) = project("link", "  outside_writes: allow\n");
+    let link = parent.join("into-repo");
+    std::os::unix::fs::symlink(&proj, &link).unwrap();
+    let (code, v, _) = run_edit(&proj, &link.join("notes.txt"), "x\n");
+    assert_eq!(code, 0, "{v}");
+    assert_ne!(v["message"].as_str().unwrap(), "", "{v}");
+}

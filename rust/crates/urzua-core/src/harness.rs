@@ -176,6 +176,10 @@ pub struct HarnessDecl {
     /// Absolute or `~`-relative directories an agent may write under with
     /// `outside_writes: deny`.
     pub allow_paths: Vec<String>,
+    /// `report_outside_writes`: whether the editor hook says so when it allows a
+    /// write outside the session's repository without judging it. Off by default
+    /// (decided by the maintainer on 2026-11-16, MILE-278).
+    pub report_outside_writes: bool,
     /// `limits`: only the declared keys; the rest are built-in.
     pub limits: Limits,
     /// Keys and guardrails this build does not know, and values a guardrail
@@ -207,6 +211,7 @@ const HARNESS_KEYS: &[&str] = &[
     "guardrails",
     "outside_writes",
     "allow_paths",
+    "report_outside_writes",
     "limits",
 ];
 
@@ -344,12 +349,17 @@ impl<'de> Deserialize<'de> for HarnessDecl {
                 }
                 "outside_writes" => decl.outside_writes = Some(read_outside_writes::<D>(v)?),
                 "allow_paths" => decl.allow_paths = read_allow_paths::<D>(v)?,
+                "report_outside_writes" => {
+                    decl.report_outside_writes = v.as_bool().ok_or_else(|| {
+                        D::Error::custom("harness.report_outside_writes must be true or false")
+                    })?
+                }
                 "limits" => decl.limits = Limits::read(v).map_err(D::Error::custom)?,
                 other => decl.note_unknown_key(
                     "harness".to_string(),
                     other,
                     HARNESS_KEYS,
-                    "which this build does not know (it reads adapters, instructions_file, guardrails, outside_writes, allow_paths, limits)",
+                    "which this build does not know (it reads adapters, instructions_file, guardrails, outside_writes, allow_paths, report_outside_writes, limits)",
                 ),
             }
         }
@@ -438,6 +448,9 @@ impl Serialize for HarnessDecl {
         }
         if !self.allow_paths.is_empty() {
             map.serialize_entry("allow_paths", &self.allow_paths)?;
+        }
+        if self.report_outside_writes {
+            map.serialize_entry("report_outside_writes", &true)?;
         }
         if !self.limits.is_empty() {
             map.serialize_entry("limits", &self.limits)?;
@@ -719,5 +732,20 @@ mod outside_writes_tests {
         let h = parse("outside_writes: deny\nallow_paths: [\"~/s\"]\n").unwrap();
         let again: HarnessDecl = yaml_serde::from_str(&yaml_serde::to_string(&h).unwrap()).unwrap();
         assert_eq!(again, h);
+    }
+}
+
+#[cfg(test)]
+mod report_outside_writes_tests {
+    use super::*;
+
+    #[test]
+    fn off_by_default_reads_a_boolean_and_refuses_anything_else() {
+        let h: HarnessDecl = yaml_serde::from_str("outside_writes: allow\n").unwrap();
+        assert!(!h.report_outside_writes);
+        let h: HarnessDecl = yaml_serde::from_str("report_outside_writes: true\n").unwrap();
+        assert!(h.report_outside_writes);
+        assert!(h.problems.is_empty(), "{:?}", h.problems);
+        assert!(yaml_serde::from_str::<HarnessDecl>("report_outside_writes: loud\n").is_err());
     }
 }

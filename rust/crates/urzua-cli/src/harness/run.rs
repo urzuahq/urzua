@@ -818,6 +818,9 @@ fn judge_edit_in(config: Option<PathBuf>, mut request: Request) -> Verdict {
             return gates_only_verdict(&repo_root, &loaded, &request);
         }
     }
+    if let Some(quiet) = quiet_outside_write(&repo_root, &loaded, &request, actor) {
+        return quiet;
+    }
     let Some(harness) = loaded.harness.as_ref().filter(|h| h.enabled("editor-hook")) else {
         return unjudged(
             OnUnjudged::Allow,
@@ -868,6 +871,42 @@ fn judge_edit_in(config: Option<PathBuf>, mut request: Request) -> Verdict {
         content,
         &request,
     )
+}
+
+/// An allowed write whose every path, as written and as its links resolve, lies
+/// outside this repository says nothing unless `harness.report_outside_writes`
+/// is on (`MILE-278`). The editor hook would refuse it for an agent under
+/// `on_unjudged: deny`, so that case is left to the loud path below.
+fn quiet_outside_write(
+    repo_root: &Path,
+    loaded: &Config,
+    request: &Request,
+    actor: Actor,
+) -> Option<Verdict> {
+    let harness = loaded.harness.as_ref();
+    if harness.is_some_and(|h| h.report_outside_writes) || request.paths.is_empty() {
+        return None;
+    }
+    let editor = harness.filter(|h| h.enabled("editor-hook"));
+    if actor == Actor::Agent
+        && editor.is_some_and(|h| h.on_unjudged("editor-hook") == OnUnjudged::Deny)
+    {
+        return None;
+    }
+    let root = repo_root.canonicalize().ok()?;
+    let cwd = std::env::current_dir().ok()?;
+    let outside = |p: &String| {
+        let abs = absolute(&cwd, p);
+        crate::discovery::relative_to_root(repo_root, &abs).is_err()
+            && resolve_links(&abs).is_some_and(|full| !full.starts_with(&root))
+    };
+    request.paths.iter().all(outside).then(|| {
+        Verdict::new(
+            "allow",
+            request.paths.first().map(String::as_str),
+            String::new(),
+        )
+    })
 }
 
 /// The verdict for an edit when the configuration does not load.
