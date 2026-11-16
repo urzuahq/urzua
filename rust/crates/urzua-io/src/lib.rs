@@ -499,6 +499,79 @@ fn list_trees<'a>(
     Ok(listed)
 }
 
+/// The commits, newest first and at most `limit`, that changed how often
+/// `text` occurs in `path`, each with the file's path in that commit,
+/// following it across renames (`git log --follow -S`): where a section
+/// naming it was added or removed.
+pub fn commits_changing_text(
+    repo_root: &Path,
+    path: &Path,
+    text: &str,
+    limit: usize,
+) -> Result<Vec<(String, PathBuf)>, DiscoveryError> {
+    let out = run_git(
+        repo_root,
+        &[
+            "--literal-pathspecs",
+            "log",
+            "--follow",
+            "--name-only",
+            "--format=%x00%H",
+            &format!("-n{limit}"),
+            &format!("-S{text}"),
+            "--",
+            &path.display().to_string(),
+        ],
+    )?;
+    Ok(out
+        .split('\0')
+        .filter_map(|entry| {
+            let mut lines = entry.lines().filter(|l| !l.is_empty());
+            let commit = lines.next()?.to_string();
+            let path = lines
+                .next()
+                .map_or_else(|| path.to_path_buf(), PathBuf::from);
+            Some((commit, path))
+        })
+        .collect())
+}
+
+/// The full ref name `rev` resolves to (`refs/remotes/origin/main`), or
+/// `None` when it names no ref (a commit id, an unknown name).
+pub fn symbolic_full_name(repo_root: &Path, rev: &str) -> Option<String> {
+    if rev.starts_with('-') {
+        return None;
+    }
+    run_git(repo_root, &["rev-parse", "--symbolic-full-name", rev])
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| s.starts_with("refs/"))
+}
+
+/// The merge base of `rev` and `HEAD`, or `None` when none is visible (no
+/// shared history, or a shallow clone that hides it).
+pub fn merge_base_with_head(repo_root: &Path, rev: &str) -> Option<String> {
+    run_git(repo_root, &["merge-base", rev, "HEAD"])
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+}
+
+/// The Markdown files at `rev` whose text contains `text` (`git grep -F`).
+pub fn markdown_files_containing_at(repo_root: &Path, rev: &str, text: &str) -> Vec<PathBuf> {
+    let Ok(out) = run_git(
+        repo_root,
+        &["grep", "-l", "-F", "-e", text, rev, "--", "*.md"],
+    ) else {
+        return Vec::new();
+    };
+    let prefix = format!("{rev}:");
+    out.lines()
+        .filter_map(|l| l.strip_prefix(&prefix))
+        .map(PathBuf::from)
+        .collect()
+}
+
 /// A file as it was at `commit`: how a deleted record is read once it is
 /// gone from the tree.
 pub fn read_at_commit(
