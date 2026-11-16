@@ -242,32 +242,10 @@ impl Ctx<'_> {
                 in_item(&ours, &shape, &near)
             ))),
         };
-        let mut recomputed = Vec::new();
-        let mut waits_on: Vec<PathBuf> = Vec::new();
-        for (i, pin) in prepared.pins.iter().enumerate() {
-            if !pin.needs_recompute() {
-                continue;
-            }
-            match self.merged_hash(path, pin, &heads) {
-                Ok(h) => recomputed.push((i, h)),
-                Err(Unverified::Unmerged(file)) => {
-                    if !waits_on.contains(&file) {
-                        waits_on.push(file);
-                    }
-                }
-                Err(Unverified::Other(e)) => return Ok(refused(e)),
-            }
-        }
-        if !waits_on.is_empty() {
-            let files: Vec<String> = waits_on.iter().map(|p| p.display().to_string()).collect();
-            return Ok(Conflict {
-                waits_on,
-                ..refused(format!(
-                    "a pinned file is still unmerged ({}): its merged content does not exist yet, so the pin cannot be recomputed. Resolve and stage that file first (git add), then re-run urzua fix --conflicts",
-                    files.join(", ")
-                ))
-            });
-        }
+        let recomputed = match self.recompute(path, &prepared, &heads) {
+            Ok(r) => r,
+            Err(c) => return Ok(*c),
+        };
         let label_only = urzua_core::fix::Attestation::new(
             "",
             urzua_core::fix::IdentitySource::Asserted,
@@ -307,6 +285,53 @@ impl Ctx<'_> {
             rows_kept: resolved.rows_kept,
             waits_on: Vec::new(),
         })
+    }
+
+    /// The merged hash of each pin both sides moved, by its index; a refused
+    /// conflict when one cannot be recomputed.
+    fn recompute(
+        &self,
+        path: &Path,
+        prepared: &conflicts::Prepared,
+        heads: &Result<super::merge_pins::Heads, String>,
+    ) -> Result<Vec<(usize, String)>, Box<Conflict>> {
+        let refused = |reason: String| Conflict {
+            record: path.to_path_buf(),
+            kind: ConflictKind::Pin,
+            outcome: ConflictOutcome::Refused,
+            reason: Some(reason),
+            pins: Vec::new(),
+            version: None,
+            rows_kept: 0,
+            waits_on: Vec::new(),
+        };
+        let mut recomputed = Vec::new();
+        let mut waits_on: Vec<PathBuf> = Vec::new();
+        for (i, pin) in prepared.pins.iter().enumerate() {
+            if !pin.needs_recompute() {
+                continue;
+            }
+            match self.merged_hash(path, pin, heads) {
+                Ok(h) => recomputed.push((i, h)),
+                Err(Unverified::Unmerged(file)) => {
+                    if !waits_on.contains(&file) {
+                        waits_on.push(file);
+                    }
+                }
+                Err(Unverified::Other(e)) => return Err(Box::new(refused(e))),
+            }
+        }
+        if !waits_on.is_empty() {
+            let files: Vec<String> = waits_on.iter().map(|p| p.display().to_string()).collect();
+            return Err(Box::new(Conflict {
+                waits_on,
+                ..refused(format!(
+                    "a pinned file is still unmerged ({}): its merged content does not exist yet, so the pin cannot be recomputed. Resolve and stage that file first (git add), then re-run urzua fix --conflicts",
+                    files.join(", ")
+                ))
+            }));
+        }
+        Ok(recomputed)
     }
 
     /// A record git lists as unmerged whose working file has no markers: one

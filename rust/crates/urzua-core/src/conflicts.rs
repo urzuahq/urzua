@@ -502,61 +502,7 @@ pub fn rebuild(
     today: &str,
     attestation: &Attestation,
 ) -> Result<Resolved, String> {
-    let mut doc = LineDoc::parse(merged);
-    let header = header_lines(&doc);
-    let mut sites: Vec<(usize, String)> = field_lines(&doc, header, shape.evidence_field)
-        .into_iter()
-        .map(|n| (n, shape.evidence_field.to_string()))
-        .collect();
-    sites.extend(
-        item_clauses(merged, header, shape)
-            .into_iter()
-            .filter_map(|(_, key, item)| item.evidence.map(|c| (c.line, key))),
-    );
-    let mut pins = Vec::new();
-    for (i, p) in prepared.pins.iter().enumerate() {
-        let mark = format!("{}{PIN_MARK}", p.spelling);
-        let lines: Vec<usize> = sites
-            .iter()
-            .filter(|(n, key)| *key == p.key && doc.line(*n).is_some_and(|l| l.contains(&mark)))
-            .map(|(n, _)| *n)
-            .collect();
-        if lines.is_empty() {
-            continue;
-        }
-        let merged_hash = match p.kept() {
-            Some(h) => h,
-            None => recomputed
-                .iter()
-                .find(|(at, _)| *at == i)
-                .map(|(_, h)| h.clone())
-                .ok_or_else(|| format!("no merged hash for '{}' ({})", p.spelling, p.site))?,
-        };
-        let pinned = format!("{}@sha256:{merged_hash}", p.spelling);
-        for n in lines {
-            let line = doc.line(n).unwrap_or_default().to_string();
-            doc.replace_line(
-                n,
-                crate::fix::replace_exact_pin(&line, &mark, &pinned).unwrap_or(line),
-            );
-        }
-        pins.push(PinOutcome {
-            locator: p.spelling.clone(),
-            site: p.site.clone(),
-            base: p.base.clone(),
-            ours: p.ours.clone(),
-            theirs: p.theirs.clone(),
-            merged: merged_hash,
-            recomputed: p.needs_recompute(),
-        });
-    }
-    let mut text = doc.to_string();
-    if text.contains(PIN_MARK) {
-        return Err(
-            "a pin of the merged record could not be placed back at its site; resolve it by hand"
-                .into(),
-        );
-    }
+    let (mut text, pins) = restore_pins(merged, prepared, recomputed, shape)?;
     let recomputed_any = pins.iter().any(|p| p.recomputed);
     let mut version = merged_version(prepared, shape, recomputed_any)?;
     let mut superseded = superseded_versions(prepared, version.as_deref());
@@ -609,6 +555,72 @@ pub fn rebuild(
         version,
         rows_kept: prepared.rows_added,
     })
+}
+
+/// The merged text with each pin placed back at its site, and each pin's
+/// outcome.
+fn restore_pins(
+    merged: &str,
+    prepared: &Prepared,
+    recomputed: &[(usize, String)],
+    shape: &Shape<'_>,
+) -> Result<(String, Vec<PinOutcome>), String> {
+    let mut doc = LineDoc::parse(merged);
+    let header = header_lines(&doc);
+    let mut sites: Vec<(usize, String)> = field_lines(&doc, header, shape.evidence_field)
+        .into_iter()
+        .map(|n| (n, shape.evidence_field.to_string()))
+        .collect();
+    sites.extend(
+        item_clauses(merged, header, shape)
+            .into_iter()
+            .filter_map(|(_, key, item)| item.evidence.map(|c| (c.line, key))),
+    );
+    let mut pins = Vec::new();
+    for (i, p) in prepared.pins.iter().enumerate() {
+        let mark = format!("{}{PIN_MARK}", p.spelling);
+        let lines: Vec<usize> = sites
+            .iter()
+            .filter(|(n, key)| *key == p.key && doc.line(*n).is_some_and(|l| l.contains(&mark)))
+            .map(|(n, _)| *n)
+            .collect();
+        if lines.is_empty() {
+            continue;
+        }
+        let merged_hash = match p.kept() {
+            Some(h) => h,
+            None => recomputed
+                .iter()
+                .find(|(at, _)| *at == i)
+                .map(|(_, h)| h.clone())
+                .ok_or_else(|| format!("no merged hash for '{}' ({})", p.spelling, p.site))?,
+        };
+        let pinned = format!("{}@sha256:{merged_hash}", p.spelling);
+        for n in lines {
+            let line = doc.line(n).unwrap_or_default().to_string();
+            doc.replace_line(
+                n,
+                crate::fix::replace_exact_pin(&line, &mark, &pinned).unwrap_or(line),
+            );
+        }
+        pins.push(PinOutcome {
+            locator: p.spelling.clone(),
+            site: p.site.clone(),
+            base: p.base.clone(),
+            ours: p.ours.clone(),
+            theirs: p.theirs.clone(),
+            merged: merged_hash,
+            recomputed: p.needs_recompute(),
+        });
+    }
+    let text = doc.to_string();
+    if text.contains(PIN_MARK) {
+        return Err(
+            "a pin of the merged record could not be placed back at its site; resolve it by hand"
+                .into(),
+        );
+    }
+    Ok((text, pins))
 }
 
 /// The versions some added row states that are no longer the record's
