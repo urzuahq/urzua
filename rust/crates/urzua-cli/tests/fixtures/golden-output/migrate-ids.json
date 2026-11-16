@@ -14,6 +14,14 @@
     ],
     "next_action": null,
     "next_action_reason": null,
-    "status": "ok"
+    "notices": [
+      {
+        "message": "1 record(s) belong to record type(s) declaring `header_shape: none` (note), which have no header to hold a `Stable-Id`, so `--apply` writes nothing to them; give the type a header block (`header_shape: yaml-frontmatter`) to backfill ids",
+        "severity": "warning",
+        "subject": "migrate-ids"
+      }
+    ],
+    "status": "ok",
+    "written": 0
   }
 }

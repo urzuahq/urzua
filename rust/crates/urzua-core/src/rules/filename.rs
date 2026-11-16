@@ -338,16 +338,7 @@ fn identity_findings_for_type(
         .map(|r| file_name_of(r))
         .filter(|name| !name.starts_with(|c: char| c.is_ascii_digit()))
         .collect();
-    let exclude_hint = |names: &[String]| -> String {
-        if names.is_empty() {
-            return String::new();
-        }
-        format!(
-            "; or, if {} not a record (an index or readme page), list {} under `record_types.{type_name}.exclude_files`",
-            if names.len() == 1 { "it is" } else { "they are" },
-            names.join(", ")
-        )
-    };
+    let exclude_hint = |names: &[String]| exclude_files_hint(type_name, names);
 
     if off.len() == total {
         let dir = type_config.map_or_else(
@@ -406,6 +397,18 @@ fn identity_findings_for_type(
             ));
         }
     }
+}
+
+/// The alternative to renaming a file that is not a record.
+fn exclude_files_hint(type_name: &str, names: &[String]) -> String {
+    if names.is_empty() {
+        return String::new();
+    }
+    format!(
+        "; or, if {} not a record (an index or readme page), list {} under `record_types.{type_name}.exclude_files`",
+        if names.len() == 1 { "it is" } else { "they are" },
+        names.join(", ")
+    )
 }
 
 fn file_name_of(record: &Record) -> String {
