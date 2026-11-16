@@ -280,14 +280,9 @@ impl Ctx<'_> {
 /// The three-way merge of the normalised texts: `Err` with the first
 /// conflicting line when it does not merge cleanly.
 fn merge_file(prepared: &conflicts::Prepared) -> Result<Result<String, String>, String> {
-    let dir = std::env::temp_dir().join(format!(
-        "urzua-conflicts-{}-{}",
-        std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_nanos())
-            .unwrap_or_default()
-    ));
+    static SEQ: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let n = SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let dir = std::env::temp_dir().join(format!("urzua-conflicts-{}-{n}", std::process::id()));
     std::fs::create_dir_all(&dir).map_err(|e| format!("could not create a scratch dir: {e}"))?;
     let result = (|| {
         for (name, text) in [
