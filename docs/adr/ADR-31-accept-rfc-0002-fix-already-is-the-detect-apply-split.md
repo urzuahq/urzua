@@ -2,7 +2,7 @@
 Stable-Id: 01M6R3NK4K2QQFBGS4V1FDFGWW
 Status: Accepted
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-io/src/lib.rs@sha256:2ae8ac7886f19b7b494389db9cdb991d7373f201a932ba81e1427d62b946a871, test:rust/crates/urzua-io/src/lib.rs@sha256:2ae8ac7886f19b7b494389db9cdb991d7373f201a932ba81e1427d62b946a871
+Realized-by: code:rust/crates/urzua-io/src/lib.rs@sha256:be96d508a43b80ea9293b0ed8ea010f1994c5e67d475670d8a5e48f6d3b944d1, test:rust/crates/urzua-io/src/lib.rs@sha256:be96d508a43b80ea9293b0ed8ea010f1994c5e67d475670d8a5e48f6d3b944d1
 Date: 2026-09-06
 Accepted-on: 2026-09-06
 Author: beauwilliams
@@ -140,3 +140,4 @@ surface.
 > | 2026-11-10 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-io/src/lib.rs` 24fc70f5c371 -> b625d4fb0be8. Reason: urzua-io/src/lib.rs: added branch_first_author_unix_time (earliest author time of the commits past the merge base), existing functions unchanged; the claim holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-13 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-io/src/lib.rs` b625d4fb0be8 -> a2a2c9cd48a5. Reason: urzua-io gained `resolve_commit` (git rev-parse --verify of a ref to a commit); no existing function changed. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-io/src/lib.rs` a2a2c9cd48a5 -> 2ae8ac7886f1. Reason: Read the diff of each pinned file against main and the claim still holds. urzua-io lib.rs: resolve_baseline_commit and two small helpers were added to refuse a branch or HEAD as a drift baseline; resolve_commit and everything else are unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-io/src/lib.rs` 2ae8ac7886f1 -> be96d508a43b. Reason: io lib.rs adds sha256_hex_of_bytes and sha256_hex_of_str now calls it with the same output; nothing else changed. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |

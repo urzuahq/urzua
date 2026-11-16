@@ -1948,7 +1948,8 @@ fn revision_log_identity_problem(decl: &RevisionLogDecl) -> Option<&'static str>
                 || decl.classes.is_some()
                 || decl.class_column.is_some()
                 || decl.date_column.is_some()
-                || decl.tool_class.is_some() =>
+                || decl.tool_class.is_some()
+                || decl.evidence_class.is_some() =>
         {
             None
         }
@@ -2020,6 +2021,7 @@ fn revision_log_problem(decl: &RevisionLogDecl) -> Option<String> {
         ("class_column", &decl.class_column),
         ("date_column", &decl.date_column),
         ("tool_class", &decl.tool_class),
+        ("evidence_class", &decl.evidence_class),
     ] {
         if value
             .as_deref()
@@ -2047,6 +2049,18 @@ fn revision_log_problem(decl: &RevisionLogDecl) -> Option<String> {
                 ));
             }
             _ => {}
+        }
+    }
+    if let Some(evidence) = decl.evidence_class.as_deref().map(strip_emphasis) {
+        let known = if decl.classes.is_some() {
+            seen.contains(&evidence)
+        } else {
+            DEFAULT_REVISION_LOG_CLASSES.contains(&evidence)
+        };
+        if !known {
+            return Some(format!(
+                "an `evidence_class` `{evidence}` that is not in `classes` -- re-pin rows would carry a class the log rejects"
+            ));
         }
     }
     None
@@ -5479,6 +5493,26 @@ rules:
 
     fn log_shape(decl: &str) -> Result<RevisionLogShape, ConfigError> {
         parse(&format!("{LOG_BASE}    revision_log: {decl}\n")).map(|c| c.revision_log_shape("adr"))
+    }
+
+    #[test]
+    fn an_evidence_class_is_the_re_pin_class_and_must_be_declared() {
+        let shape =
+            log_shape("{classes: [substantive, structural, evidence], evidence_class: evidence}")
+                .unwrap();
+        assert_eq!(shape.evidence_class, "evidence");
+        assert_eq!(shape.for_evidence().tool_class, "evidence");
+        assert_eq!(shape.tool_class, "structural");
+        assert_eq!(
+            log_shape("{tool_class: structural}")
+                .unwrap()
+                .evidence_class,
+            "structural"
+        );
+        assert!(
+            log_shape("{classes: [substantive, structural], evidence_class: evidence}").is_err()
+        );
+        assert!(log_shape("{evidence_class: evidence}").is_err());
     }
 
     #[test]
