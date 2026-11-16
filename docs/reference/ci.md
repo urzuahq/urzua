@@ -156,7 +156,8 @@ and its exit status are unchanged, and `urzua hooks uninstall` removes only that
 Node or Python hook, a symlinked hook, or a hooks path outside the repository is refused with the line to add.
 `urzua doctor` reads only urzua's own block as wired: reading a hook cannot prove a line runs. A hook you
 maintain yourself is declared under `hooks:` (`pre-commit: {managed: declared}`) and proven with
-`urzua hooks verify --run`, which runs it once, for real, and reports whether it reached urzua.
+`urzua hooks verify --run`, which runs it once, for real (urzua's check included), and reports whether it
+reached urzua.
 
 With the [pre-commit framework](https://pre-commit.com), add this under `repos:` in
 `.pre-commit-config.yaml` (or run `urzua hooks install --write-config`), then

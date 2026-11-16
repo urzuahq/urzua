@@ -74,9 +74,12 @@ need to do".
   and `doctor`, `hooks status` and the session-start check report it `ok (declared)` while the file exists, is
   executable and mentions urzua, and warn when the declaration is plainly false. The declaration is the repository's
   assertion, which is why `.urzua/config.yaml` is a protected path in a gated repository. `urzua hooks verify --run`
-  proves it by behaviour: it runs each hook once as git would, for real, with a probe that makes any urzua the hook
-  starts record that it was reached and exit 0; it reports `reached` per hook and exits 1 when one is not. The probe
-  is honoured only inside a running `verify` that set it, so it cannot turn a real check off.
+  proves it by behaviour: it runs each hook once, for real, as git runs it (`git hook run`), with a probe directory
+  named in its environment. Any urzua the hook starts writes a marker there and then does exactly what it would have
+  done anyway: the check runs with its real result. `verify` reports `reached` per hook and exits 1 when one is not.
+  There is no mode in which urzua skips its check: an earlier design let the probe make urzua exit without checking,
+  and however its trigger was guarded a spoofed trigger landed a broken commit, so the probe now only records. Without
+  `--run`, `verify` runs nothing and says that `--run` executes the repository's hooks.
 - **The hook runs a read-only check named in configuration.** The block calls `urzua hooks run <hook>`, which runs
   `hooks.pre-commit` (default `check --base HEAD`: the changes since HEAD, the scope the Decision gives the commit) or
   `hooks.pre-push` (default `check`) and prints the count and each blocking finding's rule, file and message, and the
@@ -122,3 +125,4 @@ Easy to extend and to relax. The decision adds `doctor` reporting and a rule tha
 > | 2026-11-16 | The amendment of 2026-11-16 revised before merge: an installed hook warns by default when urzua cannot run (the orchestrator's decision, pending maintainer review), with the rationale corrected; hooks run only `check`; the block is placed or refused so it always runs, and a block that cannot run is reported unreachable; nothing is written through a symlink or outside the repository; the measured cost of the pre-commit check is stated. **Why:** an independent review of the pull request found a block that could never run reported as wired, writes through symlinks, and a blocking default that would stop contributors who never installed urzua. | **substantive** |
 > | 2026-11-16 | The amendment of 2026-11-16 revised again before merge: the block goes at the top of a hook, so urzua runs first and the rest of the hook is untouched (the orchestrator's decision, pending maintainer review), replacing placement before a final `exit` or `exec` and the refusals that came with it; "wired" means a call urzua can prove runs; `uninstall` applies `install`'s guards. **Why:** a re-check of the pull request found that reading a hook's text to find where it ends failed on `return`, `false; exit $?`, line continuations and `set -e`, and that `uninstall` wrote outside the repository. | **substantive** |
 > | 2026-11-16 | The amendment of 2026-11-16 gains the declare-and-prove design (the orchestrator's decision, pending maintainer review, quoting the maintainer): text proves nothing but the managed block; a hook the repository maintains is declared under `hooks:` and proven by `urzua hooks verify --run`. **Why:** a third review found hand-written lines reported as wired that never ran urzua (`exit 0; urzua check`), and the maintainer asked for configuration that supports repositories, this one included, whose hooks run urzua after guard code. | **substantive** |
+> | 2026-11-16 | The amendment of 2026-11-16: `urzua hooks verify --run` runs each hook for real, urzua's check included; the probe only records that urzua was reached and never changes what it does (the orchestrator's decision, pending maintainer review). **Why:** a fourth review landed a broken commit by spoofing the trigger of the earlier design, in which the probe made urzua skip its check. | **substantive** |

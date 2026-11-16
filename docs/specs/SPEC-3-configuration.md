@@ -1235,7 +1235,12 @@ hooks:
   pre-commit: [check, --base, HEAD]   # the default
   pre-push: {command: [check], managed: block}   # the same as [check], the default
   on_not_run: warn                    # the default; or block
+  verify_timeout_seconds: 600         # the default
 ```
+
+- **`verify_timeout_seconds`** is how long `urzua hooks verify --run` lets one hook run before it stops the hook and
+  everything it started and reports it `timed_out` (`SPEC-15`). At least 1; default 600, enough for a pre-push hook
+  that builds.
 
 - **`managed`** is `block` (the default: `urzua hooks install` writes and maintains a marked block at the top of the
   hook) or `declared`: the repository maintains the hook file itself and asserts that it runs urzua. `install` then
@@ -2824,3 +2829,4 @@ proves this configuration produces the three findings.
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 4285ca9e4458 -> e56be4912522. Reason: config.rs: validate_hooks also rejects --config, --stdin-path and --actors in a hook's check arguments; every other key and default is unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | `hooks.<hook>` may be a map with `command` and `managed` (`block` or `declared`); a declared hook is the repository's assertion, checked by `urzua hooks verify --run`. **Why:** a third review of `MILE-220`'s pull request: reading a hook's text cannot prove a line runs, and the maintainer asked for configuration that supports hooks a repository maintains itself. | **substantive** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` e56be4912522 -> f74531f49e9c. Reason: config.rs: hooks.<hook> may be a map with command and managed (block or declared) as well as a list, and args() fills in each hook's default; every other key and default is unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-16 | Adds `hooks.verify_timeout_seconds` (default 600). **Why:** a fourth review of `MILE-220`'s pull request: `urzua hooks verify --run` ran a hook with no time limit. | **substantive** |

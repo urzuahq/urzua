@@ -427,7 +427,7 @@ Installs and runs the agent harness. See [the agent harness](agent-harness.md) f
 urzua hooks install [--dry-run] [--write-config]
 urzua hooks status
 urzua hooks uninstall [--dry-run]
-urzua hooks verify [<pre-commit | pre-push>] [--run]
+urzua hooks verify [<pre-commit | pre-push>] [--run] [--allow-outside]
 urzua hooks run <pre-commit | pre-push>
 ```
 
@@ -460,11 +460,15 @@ that is plausible is `declared`, which counts as wired), `not-run` when `install
 only the blocks, restoring the file byte for byte, deletes only a hook file it created, and refuses where
 `install` would. Exit 0, 1 (`status` found a hook not wired) or 2 (refused).
 
-`verify` proves a hook reaches urzua by running it. Without `--run` it runs nothing and says what it would
-do. With `--run` it runs each hook once as git would, for real (a formatter in it rewrites files), with a
-probe that makes any urzua the hook starts record that it was reached and exit 0 without checking; the
-probe is honoured only inside that `verify` run. Output: `status` (`explained`, `ok`, `unreached`), `run`,
-`hooks` (`{hook, path, managed, reached, exit_code, note}`). Exit 1 when a hook is not reached.
+`verify` proves a hook reaches urzua by running it. Without `--run` it runs nothing and says that `--run`
+executes the repository's hooks. With `--run` it runs each hook once, for real, as git runs it (`git hook
+run`): urzua's check runs with its real result, and everything else in the hook happens (a formatter
+rewrites files). Any urzua the hook starts records in a probe directory that it was reached and otherwise
+behaves exactly as it always does. pre-push gets the remote `urzua-verify urzua-verify://not-a-remote` and
+empty stdin; a hook running longer than `hooks.verify_timeout_seconds` is stopped and reported; a
+`core.hooksPath` outside the repository needs `--allow-outside`. Output: `status` (`explained`, `ok`,
+`unreached`, `not-run`), `run`, `hooks` (`{hook, path, managed, reached, exit_code, timed_out, invocation,
+urzua_output, note}`). Exit 1 when a hook is not reached or timed out.
 
 ## audit
 

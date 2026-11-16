@@ -475,9 +475,13 @@ enum HooksTarget {
     Verify {
         /// `pre-commit` or `pre-push`; both when left out.
         hook: Option<String>,
-        /// Run the hooks.
+        /// Run the hooks, for real: urzua's check and everything else in them.
         #[arg(long)]
         run: bool,
+        /// With `--run`, also run hooks from a `core.hooksPath` outside the
+        /// repository, when that is where git runs them from.
+        #[arg(long)]
+        allow_outside: bool,
     },
     /// Run what the configuration names for a hook, summarised on stderr: what
     /// the installed hooks call.
@@ -647,9 +651,9 @@ fn install_panic_hook() {
 fn main() -> ExitCode {
     install_panic_hook();
 
-    if let Some(code) = commands::hooks_verify::probe_if_requested() {
-        return code;
-    }
+    // Records that a `hooks verify --run` reached this process, and changes
+    // nothing else: the run goes on exactly as it would have.
+    commands::hooks_verify::record_probe();
 
     panic_if_requested();
 
@@ -817,7 +821,11 @@ fn dispatch_hooks(config: Option<PathBuf>, target: HooksTarget) -> ExitCode {
         HooksTarget::Status => commands::hooks::run_status(config),
         HooksTarget::Uninstall { dry_run } => commands::hooks::run_uninstall(config, dry_run),
         HooksTarget::Run { hook } => commands::hooks::run_hook(config, hook),
-        HooksTarget::Verify { hook, run } => commands::hooks_verify::run_verify(config, hook, run),
+        HooksTarget::Verify {
+            hook,
+            run,
+            allow_outside,
+        } => commands::hooks_verify::run_verify(config, hook, run, allow_outside),
     }
 }
 

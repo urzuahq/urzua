@@ -99,7 +99,7 @@ fn absolute(repo_root: &Path, p: &str) -> PathBuf {
 /// `path` with every symlink resolved: the nearest existing ancestor is
 /// canonicalized and the rest appended, so a directory not yet created still
 /// resolves through a symlinked parent.
-fn resolve(path: &Path) -> PathBuf {
+pub(crate) fn resolve(path: &Path) -> PathBuf {
     let mut rest = Vec::new();
     let mut cur = path.to_path_buf();
     loop {
@@ -118,7 +118,7 @@ fn resolve(path: &Path) -> PathBuf {
 
 /// The places urzua may write a hook: the working tree and the git
 /// directory, which for a linked worktree or a submodule lives elsewhere.
-fn allowed_roots(repo_root: &Path) -> Vec<PathBuf> {
+pub(crate) fn allowed_roots(repo_root: &Path) -> Vec<PathBuf> {
     let mut roots = vec![resolve(repo_root)];
     for args in [
         ["rev-parse", "--absolute-git-dir"],
@@ -158,7 +158,10 @@ fn write_problem(dir: &Path, roots: &[PathBuf]) -> Option<String> {
 
 pub(crate) fn detect(repo_root: &Path) -> Result<Layout, String> {
     let roots = allowed_roots(repo_root);
-    let configured = git(repo_root, &["config", "--get", "core.hooksPath"])?;
+    let configured = git(
+        repo_root,
+        &["config", "--type=path", "--get", "core.hooksPath"],
+    )?;
     let value = String::from_utf8_lossy(&configured.stdout)
         .trim()
         .to_string();
@@ -465,11 +468,16 @@ fn declared_wiring(hook: &'static str, path: &Path, needs_exec: bool) -> Result<
             None,
         ));
     }
+    let leftover = if content.contains(BEGIN) {
+        "; it still holds urzua's managed block, which `urzua hooks uninstall` removes"
+    } else {
+        ""
+    };
     Ok(wired(
         hook,
         path,
         HookState::Declared,
-        format!("{shown} is declared ({key}) and mentions urzua; this is the repository's assertion -- `urzua hooks verify --run` proves it by running the hook"),
+        format!("{shown} is declared ({key}) and mentions urzua; this is the repository's assertion -- `urzua hooks verify --run`, which executes the repository's hooks, proves it by running the hook{leftover}"),
         None,
     ))
 }
@@ -1165,7 +1173,7 @@ fn link_problem(hook: &str, path: &Path, on_not_run: HookOnNotRun) -> Option<Str
         use std::os::unix::fs::MetadataExt;
         if meta.nlink() > 1 {
             return Some(format!(
-                "{} is a hard link ({} names); rewriting it would split it from its other names, so add this line to it: {line}",
+                "{} is a hard link ({} names); rewriting it would split it from its other names, so add this line to it: {line} -- or, if the repository maintains this hook itself, declare it (hooks.{hook}.managed: declared)",
                 path.display(),
                 meta.nlink()
             ));

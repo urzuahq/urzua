@@ -192,7 +192,8 @@ Run the check before each commit and push. Which step depends on the hooks you h
   urzua hooks verify --run
   ```
 
-  `verify --run` runs each hook once, for real, and reports `reached: true` when it gets to urzua.
+  `verify --run` runs each hook once, for real: urzua's check and everything else in the hook. It reports
+  `reached: true` when the hook gets to urzua. Read the hooks first: it executes them.
 
 ```bash
 urzua hooks install

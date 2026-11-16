@@ -112,7 +112,7 @@ pub struct Config {
 
 /// The `hooks` key: the urzua arguments each git hook runs, and what a hook
 /// does when urzua is missing or cannot run.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct HooksDecl {
     #[serde(rename = "pre-commit", default)]
@@ -121,6 +121,10 @@ pub struct HooksDecl {
     pub pre_push: HookDecl,
     #[serde(default)]
     pub on_not_run: HookOnNotRun,
+    /// Seconds `urzua hooks verify --run` lets one hook run before it stops
+    /// the hook and everything it started. Default 600.
+    #[serde(default = "HooksDecl::default_verify_timeout")]
+    pub verify_timeout_seconds: u64,
 }
 
 /// One hook: the urzua arguments it runs and who maintains the hook file.
@@ -204,7 +208,21 @@ impl HookOnNotRun {
     }
 }
 
+impl Default for HooksDecl {
+    fn default() -> Self {
+        HooksDecl {
+            pre_commit: HookDecl::default(),
+            pre_push: HookDecl::default(),
+            on_not_run: HookOnNotRun::default(),
+            verify_timeout_seconds: Self::default_verify_timeout(),
+        }
+    }
+}
+
 impl HooksDecl {
+    fn default_verify_timeout() -> u64 {
+        600
+    }
     pub fn is_default(&self) -> bool {
         *self == HooksDecl::default()
     }
@@ -3259,6 +3277,11 @@ pub fn parse_with_document_models(
 /// (`fix --apply`), reach the network (`refs`) or call the hook again
 /// (`hooks run`) on every commit.
 fn validate_hooks(hooks: &HooksDecl) -> Result<(), ConfigError> {
+    if hooks.verify_timeout_seconds == 0 {
+        return Err(ConfigError::InvalidHooks {
+            reason: "'verify_timeout_seconds' must be at least 1".to_string(),
+        });
+    }
     for name in ["pre-commit", "pre-push"] {
         let args = hooks.args(name).unwrap_or_default();
         if !matches!(args.first().map(String::as_str), Some("check" | "audit")) {
