@@ -313,9 +313,54 @@ fn read_optional(path: &Path) -> Result<Option<String>, String> {
 }
 
 fn hooks_path_value(repo_root: &Path) -> Result<Option<String>, String> {
-    let out = git(repo_root, &["config", "--get", "core.hooksPath"])?;
+    let out = git(
+        repo_root,
+        &["config", "--type=path", "--get", "core.hooksPath"],
+    )?;
     let value = String::from_utf8_lossy(&out.stdout).trim().to_string();
     Ok((out.status.success() && !value.is_empty()).then_some(value))
+}
+
+/// Where the effective `core.hooksPath` comes from: its scope (`local`,
+/// `global`, `system`, ...) and the file that sets it, as git names them.
+fn hooks_path_origin(repo_root: &Path) -> (String, String) {
+    let out = git(
+        repo_root,
+        &[
+            "config",
+            "--show-scope",
+            "--show-origin",
+            "--get",
+            "core.hooksPath",
+        ],
+    );
+    let line = out
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .unwrap_or_default();
+    let mut parts = line.splitn(3, '\t');
+    let scope = parts.next().unwrap_or("").to_string();
+    let origin = parts.next().unwrap_or("").to_string();
+    (
+        if scope.is_empty() {
+            "unknown".to_string()
+        } else {
+            scope
+        },
+        if origin.is_empty() {
+            "an unknown file".to_string()
+        } else {
+            origin
+        },
+    )
+}
+
+/// A `core.hooksPath` someone else set: urzua names it and where it is set,
+/// and leaves the decision to a person.
+fn conflict_message(repo_root: &Path, current: &str, configured: &str) -> String {
+    let (scope, origin) = hooks_path_origin(repo_root);
+    format!(
+        "this clone is not pointed at {configured}, the directory hooks.path names: core.hooksPath is {current} (scope {scope}, set in {origin}), so git does not run the hooks committed in {configured}; urzua does not change a value it did not set -- a person can decide to point this clone at {configured} with `git config --local core.hooksPath {configured}`"
+    )
 }
 
 /// The directory `hooks.path` names, when this clone's `core.hooksPath` does
@@ -362,12 +407,9 @@ pub(crate) fn report_wiring(
     let (message, fix) = match &off.current {
         None => (
             format!("this clone is not pointed at {p}, the directory hooks.path names: core.hooksPath is not set, so git does not run the hooks committed there -- `{INSTALL}` points this clone at {p}"),
-            INSTALL.to_string(),
+            Some(INSTALL.to_string()),
         ),
-        Some(c) => (
-            format!("this clone is not pointed at {p}, the directory hooks.path names: core.hooksPath is {c}, so git does not run the hooks committed in {p} -- if {c} is no longer wanted, unset it and run `{INSTALL}`"),
-            format!("git config --unset core.hooksPath && {INSTALL}"),
-        ),
+        Some(c) => (conflict_message(repo_root, c, p), None),
     };
     HOOKS
         .iter()
@@ -377,7 +419,7 @@ pub(crate) fn report_wiring(
                 &off.dir.join(hook),
                 HookState::NotPointed,
                 message.clone(),
-                Some(fix.clone()),
+                fix.clone(),
             ))
         })
         .collect()
@@ -526,7 +568,7 @@ fn declared_wiring(
                 hook,
                 path,
                 HookState::DeclaredMissing,
-                format!("{key}, but core.hooksPath is not set, so git looks for the hook in the clone's own hooks directory and finds none -- if the repository commits its hooks in a directory, name it in hooks.path and run `{INSTALL}`; otherwise remove the declaration so `{INSTALL}` manages it"),
+                format!("{key}, but there is no hook in this clone's own hooks directory, where git looks while core.hooksPath is not set -- if the repository commits its hooks in a directory, name it in hooks.path and run `{INSTALL}`; otherwise remove the declaration so `{INSTALL}` manages it"),
                 None,
             ))
         }
@@ -1216,24 +1258,29 @@ fn point_and_install(
     decl: &HooksDecl,
     dry_run: bool,
 ) -> HooksReport {
+    let unwritable = write_problem(&off.dir, &allowed_roots(repo_root));
     let layout = Layout::Files {
         kind: "hooks-path",
-        unwritable: write_problem(&off.dir, &allowed_roots(repo_root)),
+        unwritable: unwritable.clone(),
         dir: off.dir.clone(),
         needs_exec: true,
     };
     let mut report = HooksReport::new("install", dry_run, &layout);
     let p = &off.configured;
     if let Some(c) = &off.current {
+        report.refuse(conflict_message(repo_root, c, p));
+        return report;
+    }
+    if let Some(why) = unwritable {
         report.refuse(format!(
-            "core.hooksPath is already {c}, not {p}, the directory hooks.path names; urzua will not replace it -- if {c} is no longer wanted, run `git config --unset core.hooksPath`, then `{INSTALL}`"
+            "{why}; core.hooksPath was not set to hooks.path ({p})"
         ));
         return report;
     }
     if dry_run {
         report.item("core.hooksPath", &off.dir, "would-point");
     } else {
-        match git(repo_root, &["config", "core.hooksPath", p]) {
+        match git(repo_root, &["config", "--local", "core.hooksPath", p]) {
             Ok(o) if o.status.success() => report.item("core.hooksPath", &off.dir, "pointed"),
             Ok(o) => {
                 report.refuse(format!(
@@ -1261,8 +1308,24 @@ fn point_and_install(
             needs_exec: *needs_exec,
         };
         install_files(&mut report, decl, &target, dry_run);
+        declared_problems(&mut report, &layout, decl);
     }
     report
+}
+
+/// A declared hook the install cannot write is reported as `status` reports it,
+/// so install never says `ok` while the declaration is false.
+fn declared_problems(report: &mut HooksReport, layout: &Layout, decl: &HooksDecl) {
+    for w in wiring(layout, decl).into_iter().flatten() {
+        if decl.managed(w.hook) == HookManaged::Declared && !w.state.is_ok() {
+            report.item(w.hook, &w.path, w.state.status_word());
+            report.problems.push(w.message);
+            if report.exit == 0 {
+                report.status = "drift";
+                report.exit = 1;
+            }
+        }
+    }
 }
 
 fn install(layout: &Layout, decl: &HooksDecl, dry_run: bool, write_config: bool) -> HooksReport {
@@ -1288,7 +1351,8 @@ fn install(layout: &Layout, decl: &HooksDecl, dry_run: bool, write_config: bool)
                 unwritable: unwritable.as_deref(),
                 needs_exec: *needs_exec,
             };
-            install_files(&mut report, decl, &target, dry_run)
+            install_files(&mut report, decl, &target, dry_run);
+            declared_problems(&mut report, layout, decl);
         }
     }
     report
@@ -1667,7 +1731,20 @@ pub fn run_uninstall(config: Option<PathBuf>, dry_run: bool) -> ExitCode {
         ),
     };
     let framework = matches!(layout, Layout::Framework { .. });
-    for (hook, path) in files {
+    let committed = ws.config.hooks.path.as_ref().filter(|p| match &layout {
+        Layout::Files { dir, .. } => resolve(dir) == resolve(&ws.repo_root.join(p)),
+        Layout::Framework { .. } => false,
+    });
+    if let Some(p) = committed {
+        for (hook, path) in &files {
+            report.item(hook, path, "left");
+        }
+        report.notice(
+            NoticeSeverity::Info,
+            format!("{p} is the directory hooks.path names, where the repository commits its hooks; uninstall leaves its files as they are and only unsets this clone's core.hooksPath"),
+        );
+    }
+    for (hook, path) in files.into_iter().filter(|_| committed.is_none()) {
         uninstall_one(
             &mut report,
             hook,
@@ -1694,10 +1771,21 @@ fn unpoint(report: &mut HooksReport, repo_root: &Path, decl: &HooksDecl, dry_run
         Ok(None) => {}
     }
     let dir = repo_root.join(configured);
+    let (scope, origin) = hooks_path_origin(repo_root);
+    if scope != "local" {
+        report.item("core.hooksPath", &dir, "left");
+        return report.notice(
+            NoticeSeverity::Info,
+            format!("core.hooksPath is set at scope {scope} in {origin}, not in this clone's own configuration; urzua unsets only a local value it could have set"),
+        );
+    }
     if dry_run {
         return report.item("core.hooksPath", &dir, "would-unset");
     }
-    match git(repo_root, &["config", "--unset", "core.hooksPath"]) {
+    match git(
+        repo_root,
+        &["config", "--local", "--unset", "core.hooksPath"],
+    ) {
         Ok(o) if o.status.success() => report.item("core.hooksPath", &dir, "unset"),
         Ok(o) => report.refuse(format!(
             "git config --unset core.hooksPath failed: {}",

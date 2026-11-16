@@ -3296,13 +3296,22 @@ fn validate_hooks(hooks: &HooksDecl) -> Result<(), ConfigError> {
     }
     if let Some(path) = &hooks.path {
         let p = std::path::Path::new(path);
-        let inside = p
-            .components()
-            .all(|c| matches!(c, std::path::Component::Normal(_)));
-        if path.trim().is_empty() || !inside {
+        let inside = path
+            .split('/')
+            .all(|c| !c.is_empty() && c != "." && c != "..")
+            && p.components()
+                .all(|c| matches!(c, std::path::Component::Normal(_)));
+        if !inside {
             return Err(ConfigError::InvalidHooks {
                 reason: format!(
-                    "'path' must be a directory inside the repository, relative to its root, for example .git-hooks; got '{path}'"
+                    "'path' must be a directory inside the repository, relative to its root and written without '.', '..' or empty parts, for example .git-hooks; got '{path}'"
+                ),
+            });
+        }
+        if path.split('/').next() == Some(".git") {
+            return Err(ConfigError::InvalidHooks {
+                reason: format!(
+                    "'path' may not be under .git, which is not committed; got '{path}'"
                 ),
             });
         }

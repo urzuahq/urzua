@@ -450,15 +450,13 @@ fn doctor_reads_the_repositorys_own_config_and_reports_the_unwired_hook_as_a_war
     );
     let hook = find("hook-wired").expect("hook-wired check");
     assert_eq!(hook["status"], "warn", "{hook}");
-    assert_eq!(hook["state"], "not-pointed", "{hook}");
     assert!(
         hook["message"]
             .as_str()
             .unwrap()
-            .contains("not pointed at .git-hooks"),
+            .contains("declared, but there is no hook"),
         "{hook}"
     );
-    assert_eq!(hook["fix"], "urzua hooks install", "{hook}");
 }
 
 // ---- The acceptance date, Met-by, header case and required sections this repository declares

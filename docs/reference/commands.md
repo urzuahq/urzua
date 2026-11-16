@@ -438,8 +438,9 @@ missing hook is created; an existing shell hook gets a block between `# >>> urzu
 `# <<< urzua-hooks end` at its top (after the shebang, comments and a husky v8 source line), so urzua runs
 first and the rest of the hook is unchanged; a hook declared under `hooks.<hook>.managed: declared` is not
 written. When `hooks.path` names the directory the hooks are committed in, `install` first sets this clone's
-`core.hooksPath` to it, refusing when `core.hooksPath` already names another directory, and `uninstall` unsets it
-when it is that directory; `status` reports `not-pointed` until then. It
+`core.hooksPath` to it, refusing (and naming the value's scope and origin) when `core.hooksPath` already names
+another directory or the directory resolves outside the repository; `uninstall` leaves the committed files and
+unsets the local value when it is that directory; `status` reports `not-pointed` until then. It
 refuses, writing nothing and printing the line to add, a Node or Python hook, a hook without the execute bit,
 a symlinked or hard-linked hook file, and a hooks directory that resolves outside the repository and its git directory or
 cannot be written. With the pre-commit

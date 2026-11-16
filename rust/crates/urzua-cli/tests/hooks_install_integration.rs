@@ -703,9 +703,70 @@ fn a_named_hook_directory_is_reported_until_install_points_the_clone_at_it() {
     );
 }
 
+fn urzua_env(dir: &Path, args: &[&str], env: &[(&str, &Path)]) -> (i32, serde_json::Value) {
+    let mut cmd = common::urzua();
+    for (k, v) in env {
+        cmd.env(k, v);
+    }
+    let out = cmd.args(args).current_dir(dir).output().unwrap();
+    let json = serde_json::from_slice(&out.stdout)
+        .unwrap_or_else(|_| panic!("urzua {args:?}: {}", String::from_utf8_lossy(&out.stderr)));
+    (out.status.code().unwrap(), json)
+}
+
+fn local_hooks_path(dir: &Path) -> Option<String> {
+    let out = common::isolated_git()
+        .args(["config", "--local", "--get", "core.hooksPath"])
+        .current_dir(dir)
+        .output()
+        .unwrap();
+    out.status
+        .success()
+        .then(|| String::from_utf8_lossy(&out.stdout).trim().to_string())
+}
+
+/// Another `core.hooksPath`, set locally or globally: no next action, the
+/// message names its scope and the command a person may choose, and nothing
+/// suggests unsetting it.
+fn assert_conflict_reported(dir: &Path, env: &[(&str, &Path)], scope: &str) {
+    let (code, report) = urzua_env(dir, &["hooks", "install"], env);
+    assert_eq!(code, 2, "{report}");
+    let problem = report["problems"][0].as_str().unwrap();
+    assert!(problem.contains(&format!("scope {scope}")), "{report}");
+    assert!(
+        problem.contains("git config --local core.hooksPath .git-hooks"),
+        "{report}"
+    );
+    assert!(!report.to_string().contains("--unset"), "{report}");
+
+    let (_, status) = urzua_env(dir, &["hooks", "status"], env);
+    assert!(status["next_action"].is_null(), "{status}");
+    assert!(
+        status.to_string().contains(&format!("scope {scope}")),
+        "{status}"
+    );
+    assert!(!status.to_string().contains("--unset"), "{status}");
+    let (_, doctor) = urzua_env(dir, &["doctor"], env);
+    for c in doctor["checks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|c| c["check"] == "hook-wired")
+    {
+        assert!(c.get("fix").is_none(), "{c}");
+        assert!(
+            c["message"]
+                .as_str()
+                .unwrap()
+                .contains(&format!("scope {scope}")),
+            "{c}"
+        );
+    }
+}
+
 #[test]
-fn install_refuses_to_replace_another_hooks_path_and_uninstall_leaves_it() {
-    let dir = fixture("hook-dir-other");
+fn a_local_hooks_path_set_elsewhere_is_named_and_left_to_a_person() {
+    let dir = fixture("hook-dir-local");
     std::fs::write(
         dir.join(".urzua/config.yaml"),
         format!("{CONFIG}{DIR_CONFIG}"),
@@ -713,29 +774,114 @@ fn install_refuses_to_replace_another_hooks_path_and_uninstall_leaves_it() {
     .unwrap();
     commit_hook_dir(&dir);
     common::git(&dir, &["config", "core.hooksPath", "elsewhere"]);
+    assert_conflict_reported(&dir, &[], "local");
+    urzua(&dir, &["hooks", "uninstall"]);
+    assert_eq!(local_hooks_path(&dir).as_deref(), Some("elsewhere"));
+}
 
+#[test]
+fn a_global_hooks_path_is_named_and_left_to_a_person() {
+    let dir = fixture("hook-dir-global");
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        format!("{CONFIG}{DIR_CONFIG}"),
+    )
+    .unwrap();
+    commit_hook_dir(&dir);
+    let home = common::TempDir::new("urzua-hooks-global-home");
+    let global = home.join("gitconfig");
+    std::fs::write(&global, "[core]\n\thooksPath = /somewhere/else\n").unwrap();
+    assert_conflict_reported(&dir, &[("GIT_CONFIG_GLOBAL", &global)], "global");
+    assert_eq!(local_hooks_path(&dir), None);
+}
+
+#[test]
+fn a_hook_directory_that_resolves_outside_the_repository_is_refused_before_git_config() {
+    let dir = fixture("hook-dir-escape");
+    let outside = common::TempDir::new("urzua-hooks-escape-target");
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        format!("{CONFIG}{DIR_CONFIG}"),
+    )
+    .unwrap();
+    std::os::unix::fs::symlink(&outside, dir.join(".git-hooks")).unwrap();
     let (code, report) = urzua(&dir, &["hooks", "install"]);
     assert_eq!(code, 2, "{report}");
     assert!(
         report["problems"][0]
             .as_str()
             .unwrap()
-            .contains("core.hooksPath is already elsewhere"),
+            .contains("outside the repository"),
+        "{report}"
+    );
+    assert_eq!(local_hooks_path(&dir), None);
+}
+
+#[test]
+fn install_reports_a_declared_hook_missing_from_the_hook_directory() {
+    let dir = fixture("hook-dir-missing");
+    std::fs::write(
+        dir.join(".urzua/config.yaml"),
+        format!("{CONFIG}{DIR_CONFIG}"),
+    )
+    .unwrap();
+    write_exec(
+        &dir.join(".git-hooks/pre-commit"),
+        "#!/bin/sh\nurzua hooks run pre-commit\n",
+    );
+    let (code, report) = urzua(&dir, &["hooks", "install"]);
+    assert_eq!(code, 1, "{report}");
+    assert_ne!(report["status"], "ok", "{report}");
+    assert!(
+        states(&report).contains(&"pre-push=declared-missing".to_string()),
         "{report}"
     );
     let (_, status) = urzua(&dir, &["hooks", "status"]);
     assert_eq!(
-        status["next_action"], "git config --unset core.hooksPath && urzua hooks install",
-        "{status}"
+        states(&status),
+        ["pre-commit=declared", "pre-push=declared-missing"]
     );
+}
 
-    urzua(&dir, &["hooks", "uninstall"]);
-    let out = common::isolated_git()
-        .args(["config", "--get", "core.hooksPath"])
-        .current_dir(&dir)
+#[test]
+fn uninstall_in_a_fresh_clone_leaves_the_committed_hooks() {
+    let origin = fixture("hook-dir-origin");
+    std::fs::write(
+        origin.join(".urzua/config.yaml"),
+        format!("{CONFIG}{DIR_CONFIG}"),
+    )
+    .unwrap();
+    commit_hook_dir(&origin);
+    common::git(&origin, &["add", "-A"]);
+    common::git(&origin, &["commit", "-q", "--no-verify", "-m", "hooks"]);
+    let parent = common::TempDir::new("urzua-hooks-clone");
+    let clone = parent.join("c");
+    common::git(&parent, &["clone", "-q", &origin.to_string_lossy(), "c"]);
+
+    let (code, report) = urzua(&clone, &["hooks", "install"]);
+    assert_eq!(code, 0, "{report}");
+    assert_eq!(local_hooks_path(&clone).as_deref(), Some(".git-hooks"));
+    let (code, report) = urzua(&clone, &["hooks", "uninstall"]);
+    assert_eq!(code, 0, "{report}");
+    assert_eq!(
+        states(&report),
+        ["pre-commit=left", "pre-push=left", "core.hooksPath=unset"]
+    );
+    assert!(report.to_string().contains("leaves its files"), "{report}");
+    for hook in ["pre-commit", "pre-push"] {
+        assert!(clone.join(".git-hooks").join(hook).is_file());
+    }
+    let st = common::isolated_git()
+        .args(["status", "--porcelain"])
+        .current_dir(&clone)
         .output()
         .unwrap();
-    assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), "elsewhere");
+    assert!(
+        st.stdout.is_empty(),
+        "{}",
+        String::from_utf8_lossy(&st.stdout)
+    );
+    assert_eq!(local_hooks_path(&clone), None);
 }
 
 #[test]
@@ -763,4 +909,13 @@ fn a_hook_directory_outside_the_repository_is_a_config_error() {
     .unwrap();
     let (code, _) = urzua(&dir, &["hooks", "status"]);
     assert_eq!(code, 2);
+    for bad in [".git/hooks", ".git", ".", "./x", "a//b", "/abs"] {
+        std::fs::write(
+            dir.join(".urzua/config.yaml"),
+            format!("{CONFIG}hooks:\n  path: '{bad}'\n"),
+        )
+        .unwrap();
+        let (code, report) = urzua(&dir, &["hooks", "status"]);
+        assert_eq!(code, 2, "{bad}: {report}");
+    }
 }
