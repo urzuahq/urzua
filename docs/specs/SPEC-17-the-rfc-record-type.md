@@ -4,7 +4,7 @@ Version: '0.30'
 Date: 2026-09-08
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:.urzua/config.yaml#record_types::rfc@sha256:8e53dfa7c937bf291278741ca397f0c779508680b048abd24e1dcd5bad770dfa, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs@sha256:dc29b51bde5a2ba79d95c5e0a09466a54e816e8e2cc4a86a80e4459be477a447
+Realized-by: code:.urzua/config.yaml#record_types::rfc@sha256:58009d8ae30a6f57e01e8ae18c24a64306f0515a04d4b441d78d519472905f90, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs@sha256:dc29b51bde5a2ba79d95c5e0a09466a54e816e8e2cc4a86a80e4459be477a447
 Author: beauwilliams
 Subject: 'The `rfc` record type -- schema, required fields, and lifecycle for proposals.'
 Parent: —
@@ -148,3 +148,4 @@ ADR's own `Deciders` field records.
 > | 2026-11-16 | Bumped to `0.30`. Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml` b3876c284bd2 -> 169fd6057139. Reason: Read the diff of each re-pinned file against main. .urzua/config.yaml: `unread_markers: report` on embodiment.back-pointer-resolution; no other key changed. The claim this record evidences still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Bumped to `0.28`. A pinned evidence file (`.urzua/config.yaml`) was re-baselined in this change; this spec's text is unchanged. **Why:** a revision-log entry that adds a structural change bumps `Version`. | **structural** |
 > | 2026-11-16 | Pinned (attested by beauwilliams, identity: gh-verified, actor: agent): 1 locators pinned, 0 file-level, 1 scoped. Evidence: .urzua/config.yaml#record_types::rfc@sha256:8e53dfa7c937 Reason: Narrowed to record_types::rfc: this spec's shipped shape is the rfc type's declaration. **Why:** a claim is renewed only over pinned code and test evidence. | **structural** |
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `.urzua/config.yaml#record_types::rfc` (lines 158-221) 8e53dfa7c937 -> 58009d8ae30a. Reason: config.yaml: every record type's revision_log gains the class evidence and evidence_class: evidence, so a re-pin row no longer bumps a version, and the rule embodiment.back-pointer-resolution declares its two markers at their default values; neither changes what this record claims **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |

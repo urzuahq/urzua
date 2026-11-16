@@ -4,6 +4,68 @@ All notable changes to `urzua` are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/). Written for the person installing it — what changed
 for you — not a commit dump.
 
+## 0.4.5 (2026-11-16)
+
+### Features
+
+- The words rules compare against are configuration. `embodiment.back-pointer-resolution` takes `implements_marker`, `verifies_marker`, `comment_leaders` and `trailing_comment_leaders`, read by every rule and command that reads a back-pointer; `claim.status-agreement` takes `closing_verbs`; a `y-statement` section shape takes `phrases`; a record type's `statuses` takes `placeholders`; the suppression type takes `waiver_fields` (the fields `urzua waive` writes the reason and owner into). Each defaults to the list built in before it and a declared list replaces it, so a configuration that declares none behaves as before. `rejected_values`, on `override.unreviewed` and on the suppression type, adds values that never count as a reviewer or meet a waiver field; the built-in ones cannot be removed. An empty list, a blank or repeated value, or a marker without its colon is a load error naming the key.
+
+#### `urzua fix --conflicts` resolves the records a merge or rebase left conflicted when two branches each
+
+re-pinned them. Without `--apply` it lists every unmerged record by kind of conflict, resolvable or
+refused with the reason; with `--apply` it keeps both branches' revision-log rows in date order, takes
+the higher `Version`, recomputes each pin both sides moved and appends a row saying the pin was
+recomputed on merge. A pin is recomputed only when the merged file is git's automatic merge of two
+commits whose files match their branches' pins; a hand edit during the merge, a change on a branch
+without a re-pin, or a conflict anywhere else is refused and left untouched. It never stages. While
+records are unmerged, `urzua check` and `urzua fix --rebaseline` suggest it; `urzua check --base` lists
+every pin a pull request recomputed on merge. A type may declare `revision_log.evidence_class`, the
+class of re-pin rows; left out of `version_bump.classes`, a re-pin no longer bumps the version.
+
+#### `urzua init` adopts a corpus whose records have no header block, such as the common `0001-title.md`
+
+ADR style with `## Status`/`## Context`/`## Decision` sections: it proposes `header_shape: none` with the
+`##` sections at least 80% of the files carry as `sections.required`, so `urzua check` reports a record
+missing one, and its `notes` name what the config cannot check (duplicate numbers without a type prefix,
+the `## Status` text, prose references). A numbered directory is proposed this way only when a shared heading is a
+decision-record heading or the directory is named like a decision log; numbered pages are named in a
+notice instead. It withholds rules that would examine nothing on such a type, excludes `index.md` as well
+as `README.md` (and numberless unheaded files in a headerless directory), and in a
+repository with no records names `urzua init --types adr` in its message and `next_action`. `urzua doctor`
+with no config names a step that works instead of always "run `urzua init`". `urzua migrate ids` reports
+`written` and says why a headerless type got nothing. The rename finding for a numberless file names
+`exclude_files` as the alternative. The first `check` after adopting such a corpus no longer warns about the proposed
+config: `config.scope-matches-nothing` does not count a type declared `header_shape: none`, or a file with
+no identity while `filename.identity-pattern` reports it, and adopt no longer proposes
+`config.known-fields-declaration-missing`. `migrate ids --apply` that can write nothing reports `not-run`.
+
+#### Every command an urzua report prints now runs as printed. `fix --apply` next actions carry `--actor agent`, so they no longer stop with "--actor agent or --actor human is required" under a `gh`-verified login. A new key, `next_action_inputs`, is always an array: it is empty when `next_action` runs as is, and otherwise lists each `<...>` placeholder the command carries, with its flag and what to put there. The re-pin and renewal listings name their apply forms this way.
+
+`check` on a repository whose records are untracked names `git add -- :/<paths>` as its next action, and `urzua new` does the same for the record it wrote. A pinned file that changed leads to the re-pin listing (`urzua fix --rebaseline --ids <record>`, variant `embodiment-drift-pinned`). `fix --apply` no longer writes `Drift detected` over a stale pin, so following next actions cannot turn that drift green without a re-pin reason.
+
+Every built-in template from `urzua init --types` ships a revision log with a dated first row. `fix --apply`, `fix --rebaseline --apply` and `reverify --apply` append to a revision-log table that has no row yet. A mistyped `--rules` or `--rule` id names the nearest one, and an unresolvable `--base` names the ref that could not be resolved, with a `git fetch` next action for a remote-tracking ref.
+
+#### A change that needs two records to agree (one record superseding another under a declared relation pair, say) can now be made through the edit tools, without the shell.
+
+- `urzua fix` lists the missing other half of a relation that `relation.pair-reciprocity` or `relation.supersession-reciprocity` reports, and `urzua fix --apply --ids <record>` writes it, with a revision-log row. It never changes a `Status`, never overwrites a value that names no record, and writes nothing for a target that does not exist. The reciprocity findings now offer this command (`run-command`) instead of an `edit-field` `append`.
+- **The editor hook's default changed.** A new key, `harness.guardrails.editor-hook.pending_pair`, defaults to `allow`: an edit whose only new errors are the missing other half of a pair is now allowed, and the agent is told the record, the field and value, and the `urzua fix` command still required. Before, the edit was refused. To keep the refusal, set `pending_pair: refuse` under `harness.guardrails.editor-hook`; the refusal now names the `urzua fix` command. Any other new error still refuses, the acceptance and protected-path gates are unchanged, and an unmatched pair is still reported after a command and blocked by pre-commit and CI.
+
+### Fixes
+
+- The gate action's usage example, its `version` input description and the messages of its installer name `v0.4.4`, the current release, as the example of an exact release tag.
+- A release now ships `scripts/install.sh`, a one-line installer for x86_64 Linux and Apple Silicon macOS that verifies the archive (its build provenance attestation through `gh`, or a sha256 you supply) before it installs anything, and checks that the installed binary reports exactly the requested version. `docs/reference/install.md` leads with it and gives the sha256 of the `v0.4.4` archives.
+
+#### `urzua fix --conflicts` resolves a record whose conflicting pin sits in a Done-means item's
+
+`evidence:` clause, under the same checks as a pin in `Realized-by`; the items must otherwise match on
+both sides. Rows of one date keep the branch being merged in first and your own rows last, in a merge
+and a rebase alike, and a later stop of a multi-commit rebase resolves. When the version changes, the
+merge row says which earlier row's version was superseded instead of leaving it stating a wrong number.
+A record whose pinned file is still conflicted says so and lists the file under `waits_on`, with
+`next_action` telling you to resolve and stage it first. Index stages that differ from the two commits,
+a pinned file that is a symlink or changed mode are refused, and a line-ending conversion is named
+rather than blamed on a hand edit.
+
 ## 0.4.4 (2026-11-16)
 
 ### Features

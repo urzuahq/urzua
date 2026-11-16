@@ -167,11 +167,14 @@ findings print this command, `urzua fix --apply --ids <B>`.
   `--ids` or `--force`, `--by` and `--reason` (why the evidence still holds), rewrites the pins and
   appends an attributed revision row.
 - `--conflicts` looks at the records a merge or rebase left unmerged and lists each by `kind`. Kind
-  `pin` is a record whose two sides differ only in evidence pin hashes, the version field and rows
-  appended to the revision log. With `--apply` (and `--ids` or `--force`, and an identity) it keeps both
-  sides' rows in date order, takes the higher version, recomputes each pin both sides moved from the
-  merged file and appends a row saying the pin was recomputed on merge. Any other conflict is
-  `refused` with its reason and left untouched. It does not stage: `git add` the resolved records.
+  `pin` is a record whose two sides differ only in pin hashes (in the evidence field or in a Done-means
+  item's evidence clause), the version field and rows added to the revision log. With `--apply` (and
+  `--ids` or `--force`, and an identity) it keeps both sides' rows (by date, and within a date the
+  merged-in side's first and this branch's last, in a merge and a rebase alike), takes the higher
+  version, recomputes each pin both sides moved from the merged file and appends a row saying the pin
+  was recomputed on merge. Any other conflict is `refused` with its reason and left untouched; a record
+  whose pinned file is itself still unmerged lists that file under `waits_on`, and `next_action` says to
+  resolve and stage it first, then re-run. It does not stage: `git add` the resolved records.
   `status` is `nothing-conflicted`, `no-record-conflicts`, `resolvable`, `resolved` or
   `partial-failure`.
 - `--stdin-path <path>` judges proposed content for one record from stdin without writing. It cannot

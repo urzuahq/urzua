@@ -149,6 +149,20 @@ version?" The answer: "Yes, stop bumping".
 - **Renumbering** a record whose number the merge made a duplicate will be the command's second kind
   of conflict (`MILE-229`); it is not built yet.
 
+**Addition (2026-11-16), decided by the builder on 2026-11-16, pending maintainer review.** The text
+above is unchanged; this adds to it.
+
+- **The residual trust, said plainly.** Each side's pin is trusted as committed, even when no reason
+  row accompanies it: the conditions above prove that the file at a commit hashes to that commit's pin,
+  not that anyone reviewed the change behind it. And a clean textual merge can combine two attested
+  changes into a state neither side reviewed. That is why `check --base` lists every pin recomputed on
+  merge.
+- **Done-means pins.** A pin in a Done-means item's evidence clause (`ADR-96`) is resolved like one in
+  the evidence field, under the same conditions, provided the items of both sides are otherwise
+  identical (text, waiver, locators and their order, the order of the items).
+- **Index stages.** The record's index stages 1, 2 and 3 must equal the record at a merge base and at
+  the two commits; stages written by hand are refused.
+
 ## References
 
 - `ADR-32` -- the git-history drift this refines.
@@ -164,3 +178,4 @@ version?" The answer: "Yes, stop bumping".
 > | 2026-11-04 | `Implements: ADR-67` back-pointers added in `rust/crates/urzua-cli/src/discovery.rs` (the pin branch, the grace window, the audit anchor), `rust/crates/urzua-core/src/fix.rs` (`detect_rebaselines`, `apply_rebaseline`) and `rust/crates/urzua-cli/src/commands/fix.rs` (`run_rebaseline`). Comments only; no behaviour changes. **Why:** the drift review of 2026-11-04 found no back-pointer from the code to this record. | **structural** |
 > | 2026-11-04 | Amendment added: a locator may carry a scope between its path and its pin, and a scoped pin has no file-based grace window. **Why:** `ADR-74` (Accepted 2026-11-04) decides the scoped-locator grammar; `MILE-185` builds it. The Decision text is unchanged. | **substantive** |
 > | 2026-11-16 | Amendment added: `urzua fix --conflicts` resolves a record whose two sides conflict only in re-pin lines, recomputing a pin only from git's merge of two attested states, with a machine-written row, and refuses any other conflict; re-pin rows may carry a declared evidence class that does not bump the version. **Why:** maintainer decisions of 2026-11-16, quoted in the amendment; built by `MILE-284`. The Decision text is unchanged. | **substantive** |
+> | 2026-11-16 | Dated addition to the amendment of 2026-11-16, decided by the builder on 2026-11-16, pending maintainer review: the residual trust stated plainly (each side's pin trusted as committed, a clean merge can combine two attested changes into an unreviewed state), Done-means item pins resolved under the same conditions, and index stages checked against the two commits. The amendment's existing text and the Decision text are unchanged. **Why:** a documentation and security re-check of `fix --conflicts`; real use refused most records for a pin inside a Done-means item. | **substantive** |
