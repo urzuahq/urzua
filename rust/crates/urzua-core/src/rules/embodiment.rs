@@ -137,7 +137,8 @@ pub(crate) fn resolving_realized_by(
 /// those that state an `Embodiment`, so a bug or a milestone that names code or a
 /// test is held to its pin as an ADR is. A pin on a file that cannot be read is
 /// not a confirmed mismatch (`embodiment.locator-exists` reports it). One finding
-/// per record, naming each stale pin; its action is the re-pin that attests it.
+/// per record, naming each stale pin; its action lists the re-pin, and the
+/// message gives the apply form that attests it.
 pub fn embodiment_pin_stale(scan: &StalePinScan) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_EMBODIMENT_PIN_STALE;
     let Some(population) = scan.population else {
@@ -167,12 +168,11 @@ pub fn embodiment_pin_stale(scan: &StalePinScan) -> (RuleExecution, Vec<Finding>
                     "urzua",
                     "fix",
                     "--rebaseline",
-                    "--apply",
                     "--ids",
                     &rebaseline.record.display().to_string(),
                 ]),
                 format!(
-                    "{} pinned evidence changed since it was pinned: {}; read the change, then re-pin with `urzua fix --rebaseline --apply --ids {} --reason <why the evidence still holds>`",
+                    "{} pinned evidence changed since it was pinned: {}; read the change, then re-pin with `urzua fix --rebaseline --apply --ids {} --by <you> --actor <agent|human> --reason <why the evidence still holds>`",
                     rebaseline.pins.len(),
                     pins.join(", "),
                     rebaseline.record.display()

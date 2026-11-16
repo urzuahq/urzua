@@ -612,7 +612,7 @@ pub(crate) fn execute(
         &executions,
         &findings,
         (&mut notices, !unmatched.is_empty()),
-        base.as_deref(),
+        (base.as_deref(), selection.as_deref()),
     );
     notices.extend(unmatched);
     let fail_on = fail_on.unwrap_or(context.fail_on);
@@ -2731,7 +2731,7 @@ fn status_and_examined(
     executions: &[RuleExecution],
     findings: &[Finding],
     (notices, has_unmatched): (&mut Vec<Notice>, bool),
-    base: Option<&str>,
+    (base, selection): (Option<&str>, Option<&[String]>),
 ) -> (urzua_core::report::ReportStatus, usize) {
     let examined = session
         .records
@@ -2760,6 +2760,10 @@ fn status_and_examined(
         empty_diff || empty_corpus,
         examined,
         executions,
+        &|rule| {
+            session.config.rules.contains_key(rule)
+                || selection.is_some_and(|s| s.iter().any(|r| r == rule))
+        },
         active.count(),
     );
     // With nothing examined and an argument that selected nothing, that

@@ -62,19 +62,8 @@ fn run_checked(config_path: Option<PathBuf>, args: FixArgs) -> Result<ExitCode, 
     // corpus a back-pointer resolves against stays whole. A path that matches
     // no record is a failure naming it, never a silent skip.
     let (scoped, unmatched, proposed) = select_scope(&repo_root, &config, &mut records, &args)?;
-    // Drift is the expensive part (several `git` subprocesses per record) and
-    // its only consumer is `embodiment.consistency`; with that rule off `fix`
-    // has no embodiment verdict to repair, so say so instead of computing a
-    // verdict from an empty drift set (`MILE-159`, as `check` gates it). The
-    // `Status` repair (`MILE-183`) is the other thing `fix` writes, and needs
-    // no drift, so `status.delivery-agreement` being on is enough to proceed.
-    if !rule_enabled(&config, urzua_core::rules::RULE_EMBODIMENT_CONSISTENCY)
-        && !rule_enabled(&config, urzua_core::rules::RULE_STATUS_DELIVERY_AGREEMENT)
-    {
-        return Err(refuse(
-            "urzua fix repairs the Embodiment field that embodiment.consistency judges and the Status that status.delivery-agreement judges, and both rules are off or undeclared in the configuration: nothing to repair",
-        ));
-    }
+    // A re-pin compares hashes and needs neither repair rule: it is the fix
+    // `embodiment.pin-stale` suggests, and that rule is on by default.
     if args.rebaseline {
         return Ok(run_rebaseline(RebaselineArgs {
             repo_root: &repo_root,
@@ -90,6 +79,19 @@ fn run_checked(config_path: Option<PathBuf>, args: FixArgs) -> Result<ExitCode, 
             reason: &reason,
             after_lock: &|| {},
         }));
+    }
+    // Drift is the expensive part (several `git` subprocesses per record) and
+    // its only consumer is `embodiment.consistency`; with that rule off `fix`
+    // has no embodiment verdict to repair, so say so instead of computing a
+    // verdict from an empty drift set (`MILE-159`, as `check` gates it). The
+    // `Status` repair (`MILE-183`) is the other thing `fix` writes, and needs
+    // no drift, so `status.delivery-agreement` being on is enough to proceed.
+    if !rule_enabled(&config, urzua_core::rules::RULE_EMBODIMENT_CONSISTENCY)
+        && !rule_enabled(&config, urzua_core::rules::RULE_STATUS_DELIVERY_AGREEMENT)
+    {
+        return Err(refuse(
+            "urzua fix repairs the Embodiment field that embodiment.consistency judges and the Status that status.delivery-agreement judges, and both rules are off or undeclared in the configuration: nothing to repair",
+        ));
     }
     let tree = Tree {
         repo_root: &repo_root,

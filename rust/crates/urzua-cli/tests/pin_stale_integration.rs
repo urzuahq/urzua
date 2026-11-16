@@ -1,5 +1,5 @@
-//! `embodiment.pin-stale` (external review, item 1.2; maintainer decision,
-//! 2026-11-14: on by default). A confirmed `@sha256` pin mismatch on any
+//! `embodiment.pin-stale` (maintainer decision, 2026-11-14: on by default).
+//! A confirmed `@sha256` pin mismatch on any
 //! record's evidence is a `check` warning, bugs and milestones included, not
 //! only records that state an `Embodiment`. Real git fixtures and the real
 //! binary; the configuration declares no rule at all, so everything below
@@ -123,7 +123,7 @@ fn a_stale_pin_on_a_bug_and_on_a_milestone_is_a_warning_with_the_rebaseline_acti
         );
         assert_eq!(
             finding["suggested_action"]["target"]["argv"],
-            serde_json::json!(["urzua", "fix", "--rebaseline", "--apply", "--ids", path]),
+            serde_json::json!(["urzua", "fix", "--rebaseline", "--ids", path]),
             "{finding}"
         );
     }
@@ -185,4 +185,99 @@ fn a_change_to_the_pinned_file_surfaces_the_stale_pin_on_a_base_run() {
     commit_all(&dir, 0);
     let report = check(&dir, &["--base", "base"]);
     assert_eq!(stale(&report).len(), 2, "{report}");
+}
+
+fn urzua(dir: &Path, args: &[&str]) -> (Option<i32>, serde_json::Value) {
+    let out = common::urzua()
+        .args(args)
+        .current_dir(dir)
+        .output()
+        .unwrap();
+    let v = serde_json::from_slice(&out.stdout).unwrap_or_else(|e| panic!("json: {e}: {out:?}"));
+    (out.status.code(), v)
+}
+
+/// A repository that declares neither `embodiment.consistency` nor
+/// `status.delivery-agreement` still gets a working re-pin for the stale pin
+/// the default-on rule reports, listing and `--apply` both.
+#[test]
+fn the_rebaseline_the_rule_suggests_runs_with_neither_repair_rule_declared() {
+    let dir = fixture("no-repair-rules");
+    let config = format!("{CONFIG}fail_on: warning\nrules: {{header.required-fields: error}}\n");
+    std::fs::write(dir.join(".urzua/config.yaml"), config).unwrap();
+    for path in [BUG, MILE] {
+        let mut text = std::fs::read_to_string(dir.join(path)).unwrap();
+        text.push_str("\n> **Revision log**\n>\n> | Date | Change | Class |\n> |---|---|---|\n> | 2026-01-01 | Initial. | **structural** |\n");
+        std::fs::write(dir.join(path), text).unwrap();
+    }
+    std::fs::write(dir.join("src/a.rs"), V2).unwrap();
+    commit_all(&dir, 0);
+    let (code, report) = urzua(&dir, &["check"]);
+    assert_eq!(code, Some(1), "{report}");
+    assert_eq!(stale(&report).len(), 2, "{report}");
+    let (code, listing) = urzua(&dir, &["fix", "--rebaseline"]);
+    assert_eq!(code, Some(0), "{listing}");
+    assert_eq!(listing["status"], "repairs-available", "{listing}");
+    assert_eq!(
+        listing["rebaselines"].as_array().unwrap().len(),
+        2,
+        "{listing}"
+    );
+    let (code, applied) = urzua(
+        &dir,
+        &[
+            "fix",
+            "--rebaseline",
+            "--apply",
+            "--force",
+            "--by",
+            "tester",
+            "--reason",
+            "Read the change to src/a.rs; the claim still holds.",
+        ],
+    );
+    assert_eq!(code, Some(0), "{applied}");
+    assert_eq!(applied["status"], "applied", "{applied}");
+    commit_all(&dir, 0);
+    let (code, report) = urzua(&dir, &["check"]);
+    assert_eq!(code, Some(0), "{report}");
+    assert!(stale(&report).is_empty(), "{report}");
+}
+
+/// The suggested command runs as printed, and the message names the apply form
+/// with every flag it needs.
+#[test]
+fn the_suggested_command_runs_as_printed_and_the_message_gives_the_full_apply_form() {
+    let dir = fixture("runnable");
+    std::fs::write(dir.join("src/a.rs"), V2).unwrap();
+    commit_all(&dir, 0);
+    let report = check(&dir, &[]);
+    let finding = stale(&report)[0];
+    let argv: Vec<String> = finding["suggested_action"]["target"]["argv"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|a| a.as_str().unwrap().to_string())
+        .collect();
+    assert_eq!(argv[0], "urzua");
+    let rest: Vec<&str> = argv[1..].iter().map(String::as_str).collect();
+    let (code, out) = urzua(&dir, &rest);
+    assert_eq!(code, Some(0), "{out}");
+    assert_eq!(out["status"], "repairs-available", "{out}");
+    let message = finding["message"].as_str().unwrap();
+    for flag in ["--apply", "--reason", "--by", "--actor"] {
+        assert!(message.contains(flag), "{flag} missing: {message}");
+    }
+}
+
+/// Selecting only the default-on rule is a run that looked at the corpus: a
+/// finding it raises is never reported under `not-run`.
+#[test]
+fn selecting_only_the_rule_is_a_run_that_looked() {
+    let dir = fixture("selected");
+    std::fs::write(dir.join("src/a.rs"), V2).unwrap();
+    commit_all(&dir, 0);
+    let report = check(&dir, &["--rules", RULE]);
+    assert_eq!(stale(&report).len(), 2, "{report}");
+    assert_ne!(report["status"], "not-run", "{report}");
 }
