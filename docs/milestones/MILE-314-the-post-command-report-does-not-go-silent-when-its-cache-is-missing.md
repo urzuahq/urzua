@@ -13,13 +13,13 @@ When the post-command step has no baseline to compare with, have it judge the co
 
 ## Why
 
-On 2026-11-16 a review reproduced, with the released binary, `rm -rf .urzua/cache` followed by an edit and commit of a protected path in one command: the verdict was `allow` and nothing was printed. Running session-start after the wipe did not reseed the baseline. The rule for this report is that a gated change is never silent; a cache the agent can delete must not be what that depends on.
+On 2026-11-16 a review reproduced, with the released binary, `rm -rf .urzua/cache` followed by an edit and commit of a protected path in one command: the verdict was `allow` and nothing was printed. Session-start after the wipe reseeds from the tree as it then is, so a change made in between is adopted unreported, and it does not say it reseeded. The rule for this report is that a gated change is never silent; a cache the agent can delete must not be what that depends on.
 
 ## Done means
 
 - With no baseline present, a command that changes a protected path or makes a gated status move is reported at error, shown by a test that deletes the cache in the same command.
-- With no baseline and no base ref, the report says it could not judge and names that state; it is not `allow`.
-- Session-start after a wipe seeds the baseline and says so.
+- With no baseline and no base ref, the report says it could not judge and names that state; it is not `allow`, shown by a test.
+- Session-start that finds no baseline says that it seeded one and that changes before it were not judged, shown by a test.
 
 > **Revision log**
 >

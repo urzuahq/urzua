@@ -18,7 +18,7 @@ On 2026-11-16 a builder renamed a test function that a record pins by name. `urz
 ## Done means
 
 - A scoped pin whose symbol is gone is reported with a `next_action` that is the `fix --pin --replace` command with the old locator filled in, shown by a test.
-- When the pinned file has exactly one new symbol whose body hashes to the pinned hash, the replacement is offered with that symbol filled in.
+- When the pinned file has exactly one symbol, other than the pinned name, whose body hashes to the pinned hash, the replacement is offered with that symbol filled in.
 - The finding is the same under `check`, so the hooks lead to the same command.
 
 > **Revision log**

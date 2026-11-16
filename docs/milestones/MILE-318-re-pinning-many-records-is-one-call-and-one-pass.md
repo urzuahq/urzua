@@ -13,13 +13,14 @@ Let one `urzua fix --rebaseline --apply` re-pin every stale record that a change
 
 ## Why
 
-On 2026-11-16 three builders each re-pinned between 23 and 62 records by one call per record; 35 took more than two minutes. A re-pin row written into a record that other records pin makes those stale in turn, and the output does not say a second pass is needed; formatting a file after re-pinning makes every record that pins it stale again. The reason is per changed file, not per record, yet it is typed once per record.
+`fix --rebaseline --apply --ids a,b,c` already re-pins several records in one call, but with one reason for all of them, and this repository's re-pin helper takes one record. On 2026-11-16 three builders each re-pinned between 23 and 62 records one call at a time; 35 took more than two minutes. A re-pin row written into a record that other records pin makes those stale in turn, and the output does not say a second pass is needed; formatting a file after re-pinning makes every record that pins it stale again. The reason is per changed file, not per record, yet it is typed once per record.
 
 ## Done means
 
 - One invocation accepts a reason per changed file and re-pins every record whose stale pins are all explained by those files, shown by a test with ten records and two files.
 - The invocation repeats for records made stale by its own rows and reports how many passes it made; the cascade reason names the row that caused it.
 - A record with a stale pin on a file no reason was given for is left alone and listed with a `next_action`.
+- This repository's re-pin helper accepts several records.
 - The run on this repository's own records for a one-file change finishes in a time recorded in the pull request, against the per-record time before.
 
 > **Revision log**

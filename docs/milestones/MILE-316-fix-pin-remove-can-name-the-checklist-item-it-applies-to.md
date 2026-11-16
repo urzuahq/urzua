@@ -13,13 +13,13 @@ Let `urzua fix --pin --remove` and `--replace` take the item a locator belongs t
 
 ## Why
 
-On 2026-11-16 a builder needed to remove one checklist item's evidence for a file that two other items also cite. `fix --pin --remove` removed the locator from the other two items and refused the intended one because it was that item's only locator. The builder restored the two items by hand and deleted the third entry by hand, which is the kind of edit the evidence guards exist to make unnecessary.
+On 2026-11-16 a builder needed to remove one checklist item's evidence for a file that two other items also cite. `fix --pin --remove` removed the locator from the other two items and silently left the intended one, whose only locator it was; a second call refused it. The builder restored the two items by hand and deleted the third entry by hand, which is the kind of edit the evidence guards exist to make unnecessary.
 
 ## Done means
 
 - `fix --pin --remove` and `--replace` accept a selector for the item, and with it change only that item, shown by a test with one locator cited by three items.
 - Without the selector, a locator cited by more than one item is refused with a `next_action` listing the items.
-- Removing an item's only locator is allowed when the item is waived, since a waived item carries no evidence, shown by a test.
+- Removing an item's only locator is allowed when the item is waived (suppressed, in the neutral naming), since such an item carries no evidence, shown by a test.
 
 > **Revision log**
 >

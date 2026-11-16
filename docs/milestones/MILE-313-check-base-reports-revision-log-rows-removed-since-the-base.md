@@ -17,9 +17,9 @@ A revision log is the record's history, and nothing compares it between base and
 
 ## Done means
 
-- Under `check --base`, a record whose log at the base has a row that is not present at the head produces a finding naming the row's date and class, shown by a test.
+- Under `check --base`, a record whose log at the base has a row that is not present at the head produces a finding naming the row by its declared columns, shown by a test.
 - The record is matched across a rename and across deletion and re-creation at a new path by the identity the configuration declares, shown by a test of each.
-- A log section removed entirely is reported once for the section, not once per row.
+- A log section removed entirely is reported once for the section, not once per row, shown by a test.
 - The rule is on by default at error, can be suppressed by the ordinary suppression record, and knows no record type: it reads only the configured log shape.
 
 > **Revision log**
