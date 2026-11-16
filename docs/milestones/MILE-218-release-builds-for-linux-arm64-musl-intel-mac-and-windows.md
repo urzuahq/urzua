@@ -27,3 +27,4 @@ the audit of 2026-11-15 found releases for two targets only. Arm CI runners, Alp
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-15 | Initial record, `Status: Planned`. **Why:** Filed from the audits of 2026-11-15; the maintainer committed to the work in conversation that day. | **structural** |
+> | 2026-11-16 | Decided: Linux arm64 and musl first, Windows later; Intel Mac stays dropped. **Why:** the maintainer decided this on 2026-11-16 when asked which of the platforms to build first. | **substantive** |

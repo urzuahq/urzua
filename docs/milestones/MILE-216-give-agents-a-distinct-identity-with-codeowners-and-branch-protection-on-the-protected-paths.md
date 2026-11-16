@@ -5,7 +5,7 @@ Phase: '1'
 Track: accountability-identity
 Implements: ADR-89
 Depends-on: COND-6
-Blocked-on: the `main` ruleset requiring `ci` (COND-6), which agent-identity branch protection extends
+Blocked-on: null
 ---
 # 216 — Give agents a distinct identity, with CODEOWNERS and branch protection on the protected paths
 
@@ -30,3 +30,5 @@ Give agents an identity distinct from the maintainer's (a separate GitHub App or
 > | Date | Change | Class |
 > |---|---|---|
 > | 2026-11-08 | Initial record, `Status: Planned`. **Why:** `ADR-89` section 4 names a distinct agent identity plus `CODEOWNERS` and branch protection as a future option, and nothing tracked it. Maintainer-driven round-4 review. `Depends-on: COND-6` because branch protection extends the `main` ruleset that condition tracks. | **structural** |
+> | 2026-11-16 | Decided: agents get a separate GitHub App identity. **Why:** the maintainer decided on 2026-11-16: "there can be a GitHub app for agents. We can add this on the roadmap". Creating the App is the maintainer's step; this milestone tracks the rest. | **substantive** |
+> | 2026-11-16 | `Blocked-on` cleared. **Why:** `COND-6` is `Met`: the repository ruleset `release` (active since 2026-11-14) targets the default branch only and requires a pull request, the `ci` check from GitHub Actions, blocks deletion and force pushes, and has no bypass actor (`gh api repos/urzuahq/urzua/rulesets`). | **structural** |
