@@ -204,6 +204,13 @@ impl Write<'_> {
         let full = self.session.repo_root.join(&record.path);
         let fresh =
             urzua_io::read_to_string(&full).map_err(|e| format!("could not re-read: {e}"))?;
+        let (fresh, _) = super::fix::with_evidence_log(
+            &self.session.repo_root,
+            config,
+            Some(&record.record_type),
+            &fresh,
+            "write",
+        )?;
         let today = urzua_io::today();
         let new = edit(&fresh, (&today, self.attestation, self.reason))?;
         urzua_io::write_atomic_in(&self.session.repo_root, &full, &new)

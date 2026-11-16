@@ -6,10 +6,12 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use urzua_core::config::{Config, RuleLevel};
+use urzua_core::fix::new_log::{self, LogPlan};
 use urzua_core::fix::{Attestation, FailedPin, Rebaseline, Repair};
 use urzua_core::record::Record;
 use urzua_core::report::{
-    CouldNotRun, Failure, FixFailure, FixReport, FixStatus, Notice, NoticeSeverity, Population,
+    CouldNotRun, Failure, FixFailure, FixReport, FixStatus, NextAction, Notice, NoticeSeverity,
+    Population,
 };
 
 use crate::session::Session;
@@ -812,6 +814,7 @@ fn build_report(parts: ReportParts) -> FixReport {
             .into_iter()
             .chain(extra_notices)
             .collect(),
+        failure_action: None,
     }
 }
 
@@ -921,14 +924,15 @@ fn rebaseline_checked(mut args: RebaselineArgs<'_>) -> Result<ExitCode, Refusal>
     };
     let unmatched = std::mem::take(&mut args.unmatched);
     let Some(identity) = identity else {
-        let (found, unmatched) = narrow_to_ids(
+        let (found, mut unmatched) = narrow_to_ids(
             scan.found,
             |r| r.record.display().to_string(),
             args.ids,
             unmatched,
             REBASELINE_UNMATCHED,
         );
-        return Ok(emit(&build_report(ReportParts {
+        let (found, failure_action) = plan_rebaseline_logs(&args, found, &mut unmatched);
+        let mut report = build_report(ReportParts {
             population: scan.population,
             repairs: Vec::new(),
             rebaselines: found,
@@ -939,7 +943,9 @@ fn rebaseline_checked(mut args: RebaselineArgs<'_>) -> Result<ExitCode, Refusal>
             extra_notices: super::fix_conflicts::unmerged_records_notice(repo_root, config)
                 .into_iter()
                 .collect(),
-        })));
+        });
+        report.failure_action = failure_action;
+        return Ok(emit(&report));
     };
     Ok(apply_rebaselines(&args, identity, scan, unmatched))
 }
@@ -962,18 +968,23 @@ fn apply_rebaselines(
             REBASELINE_UNMATCHED,
         ));
     }
-    let mut applied = Vec::new();
-    for rb in scan
+    let selected: Vec<Rebaseline> = scan
         .found
         .into_iter()
         .filter(|r| args.force || args.ids.contains(&r.record.display().to_string()))
-    {
+        .collect();
+    let (selected, failure_action) = plan_rebaseline_logs(args, selected, &mut failed);
+    let mut applied = Vec::new();
+    for rb in selected {
         match write_rebaseline(args, &rb, &today, &identity.attestation) {
-            Ok(()) => applied.push(rb),
+            Ok(created) => applied.push(Rebaseline {
+                creates_revision_log: created,
+                ..rb
+            }),
             Err(e) => failed.push((rb.record.clone(), e)),
         }
     }
-    emit(&build_report(ReportParts {
+    let mut report = build_report(ReportParts {
         population: scan.population,
         repairs: Vec::new(),
         rebaselines: applied,
@@ -982,16 +993,19 @@ fn apply_rebaselines(
         identity: Some(identity),
         ran_apply: true,
         extra_notices: Vec::new(),
-    }))
+    });
+    report.failure_action = failure_action;
+    emit(&report)
 }
 
-/// Re-pins one record on disk; the error is the failure's message.
+/// Re-pins one record on disk, creating its revision log when it has none;
+/// the error is the failure's message.
 fn write_rebaseline(
     args: &RebaselineArgs<'_>,
     rb: &Rebaseline,
     today: &str,
     attestation: &Attestation,
-) -> Result<(), String> {
+) -> Result<bool, String> {
     if let Some(refusal) = urzua_core::authority::path_gate_refusal(
         args.config.authority.as_ref(),
         &rb.record,
@@ -1002,11 +1016,14 @@ fn write_rebaseline(
     let full_path = args.repo_root.join(&rb.record);
     let fresh =
         urzua_io::read_to_string(&full_path).map_err(|e| format!("could not re-read: {e}"))?;
-    let record_type = args
-        .records
-        .iter()
-        .find(|r| r.path == rb.record)
-        .map(|r| r.record_type.as_str());
+    let record_type = record_type_of(args.records, &rb.record);
+    let (fresh, created) = with_evidence_log(
+        args.repo_root,
+        args.config,
+        record_type,
+        &fresh,
+        "re-baseline",
+    )?;
     let log_id = record_type
         .map(|t| args.config.revision_log_id(t))
         .unwrap_or_default();
@@ -1023,7 +1040,108 @@ fn write_rebaseline(
         &log_shape,
     )?;
     urzua_io::write_atomic_in(args.repo_root, &full_path, &new)
-        .map_err(|e| format!("could not write: {e}"))
+        .map_err(|e| format!("could not write: {e}"))?;
+    Ok(created)
+}
+
+fn record_type_of<'a>(records: &'a [Record], path: &Path) -> Option<&'a str> {
+    records
+        .iter()
+        .find(|r| r.path == path)
+        .map(|r| r.record_type.as_str())
+}
+
+/// What an evidence write does about the revision log of a record of
+/// `record_type` whose text is `content`, and the empty section it would
+/// create: the type's template's own section, else the declared shape.
+pub(crate) fn evidence_log_plan(
+    repo_root: &Path,
+    config: &Config,
+    record_type: Option<&str>,
+    content: &str,
+) -> (LogPlan, urzua_core::config::RevisionLogId, Vec<String>) {
+    let id = record_type
+        .map(|t| config.revision_log_id(t))
+        .unwrap_or_default();
+    let shape = record_type
+        .map(|t| config.revision_log_shape(t))
+        .unwrap_or_default();
+    let plan = new_log::plan(content, &id, &shape);
+    let section = if plan == LogPlan::Create {
+        let template = record_type.and_then(|t| {
+            urzua_io::read_to_string(&repo_root.join(".urzua/templates").join(format!("{t}.md")))
+                .ok()
+        });
+        new_log::section(&id, &shape, template.as_deref())
+    } else {
+        Vec::new()
+    };
+    (plan, id, section)
+}
+
+/// `content` with an empty revision log appended when it has none, and
+/// whether one was; refused when the record has no body section for the log
+/// to follow. Only for writes whose rows are evidence rows.
+pub(crate) fn with_evidence_log(
+    repo_root: &Path,
+    config: &Config,
+    record_type: Option<&str>,
+    content: &str,
+    verb: &str,
+) -> Result<(String, bool), String> {
+    match evidence_log_plan(repo_root, config, record_type, content) {
+        (LogPlan::Present, _, _) => Ok((content.to_string(), false)),
+        (LogPlan::Create, _, section) => Ok((new_log::append(content, &section), true)),
+        (LogPlan::NoBody, id, _) => Err(new_log::no_body_refusal(&id, verb)),
+    }
+}
+
+const HEADING_PLACEHOLDER: &str = "<heading>";
+
+/// The command that gives `record` a heading for a new revision log to follow.
+pub(crate) fn add_heading_action(record: &Path) -> NextAction {
+    let path = urzua_core::report::shell_command(&[record.display().to_string()]);
+    NextAction {
+        command: format!("printf '\\n# %s\\n' '{HEADING_PLACEHOLDER}' >> {path}"),
+        reason: format!(
+            "{} has no body section for a new revision log to follow; this appends a heading, then re-run the write",
+            record.display()
+        ),
+        inputs: vec![urzua_core::report::ActionInput {
+            placeholder: HEADING_PLACEHOLDER.to_string(),
+            flag: String::new(),
+            means: "the record's title, one line".to_string(),
+        }],
+    }
+}
+
+/// Marks each listed re-pin that would create its record's revision log, and
+/// moves one that could not (no body section) into `failed`, returning the
+/// command that clears the first such refusal.
+fn plan_rebaseline_logs(
+    args: &RebaselineArgs<'_>,
+    found: Vec<Rebaseline>,
+    failed: &mut Vec<(PathBuf, String)>,
+) -> (Vec<Rebaseline>, Option<NextAction>) {
+    let mut kept = Vec::new();
+    let mut action = None;
+    for mut rb in found {
+        let content =
+            urzua_io::read_to_string(&args.repo_root.join(&rb.record)).unwrap_or_default();
+        let record_type = record_type_of(args.records, &rb.record);
+        match evidence_log_plan(args.repo_root, args.config, record_type, &content) {
+            (LogPlan::Present, _, _) => kept.push(rb),
+            (LogPlan::Create, _, _) => {
+                rb.creates_revision_log = true;
+                kept.push(rb);
+            }
+            (LogPlan::NoBody, id, _) => {
+                action.get_or_insert_with(|| add_heading_action(&rb.record));
+                failed.push((rb.record, new_log::no_body_refusal(&id, "re-baseline")));
+            }
+        }
+    }
+    (kept, action)
 }
 
 #[cfg(test)]

@@ -1769,6 +1769,9 @@ pub struct FixReport {
     pub identity: Option<AttestationReport>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub notices: Vec<Notice>,
+    /// The command that clears a failure the caller must act on first.
+    #[serde(skip)]
+    pub failure_action: Option<NextAction>,
 }
 
 /// The identity `fix --apply` wrote under (`ADR-89` section 5).
@@ -1818,6 +1821,9 @@ impl Report for FixReport {
     fn next_action(&self) -> Option<NextAction> {
         if let Some(next) = unmerged_next_action(&self.notices) {
             return Some(next);
+        }
+        if let Some(next) = &self.failure_action {
+            return Some(next.clone());
         }
         match self.status {
             FixStatus::RepairsAvailable if !self.repairs.is_empty() => {
