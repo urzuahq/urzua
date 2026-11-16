@@ -637,6 +637,9 @@ harness:
     editor-hook: {enabled: true}
     post-command: {enabled: true}
     session-start: {enabled: true}
+  # ADR-101 amendment of 2026-11-15, MILE-232: the hook timeout and input caps (SPEC-3).
+  limits:
+    hook_timeout_seconds: 120
 # Who may accept a record and change a protected path (ADR-89 section 4, MILE-200, SPEC-3). CI reads
 # this through diff.decider-required and the actors file the gate action writes; the evidence is the
 # pull request's author (`pr-author`, the default: a host bars an author from approving their own

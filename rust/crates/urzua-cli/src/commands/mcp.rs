@@ -91,6 +91,7 @@ const TOOLS: &[ToolSpec] = &[
 
 struct Server {
     config: Option<PathBuf>,
+    max_line_bytes: usize,
 }
 
 pub fn run(config: Option<PathBuf>, root: Option<PathBuf>) -> ExitCode {
@@ -98,7 +99,14 @@ pub fn run(config: Option<PathBuf>, root: Option<PathBuf>) -> ExitCode {
         Ok(mut server) => {
             let stdin = std::io::stdin().lock();
             let stdout = std::io::stdout().lock();
-            match urzua_mcp::serve(&mut server, env!("CARGO_PKG_VERSION"), stdin, stdout) {
+            let max = server.max_line_bytes;
+            match urzua_mcp::serve_with_limit(
+                &mut server,
+                env!("CARGO_PKG_VERSION"),
+                stdin,
+                stdout,
+                max,
+            ) {
                 Ok(()) => ExitCode::SUCCESS,
                 Err(e) => could_not_start(&format!("the stdio transport failed: {e}")),
             }
@@ -119,8 +127,19 @@ fn start(config: Option<PathBuf>, root: Option<PathBuf>) -> Result<Server, Strin
         std::env::set_current_dir(&root)
             .map_err(|e| format!("could not use {} as the root: {e}", root.display()))?;
     }
-    Workspace::open(&[], config.clone()).map_err(|e| e.to_string())?;
-    Ok(Server { config })
+    let ws = Workspace::open(&[], config.clone()).map_err(|e| e.to_string())?;
+    let max_line_bytes = ws
+        .config
+        .harness
+        .as_ref()
+        .map_or(urzua_mcp::MAX_LINE_BYTES, |h| {
+            h.limits
+                .get_usize(urzua_core::harness::limits::MCP_LINE_BYTES)
+        });
+    Ok(Server {
+        config,
+        max_line_bytes,
+    })
 }
 
 /// Stdout carries protocol frames only, so a start failure is JSON on stderr.

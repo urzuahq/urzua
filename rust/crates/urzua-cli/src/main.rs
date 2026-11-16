@@ -461,6 +461,9 @@ enum HarnessTarget {
     },
     /// List the adapters this binary embeds.
     Adapters,
+    /// Print the effective `harness.limits` of the configuration: every key,
+    /// declared or built in.
+    Limits,
     /// Run a guardrail core: a neutral request on stdin, a verdict on stdout.
     Run {
         #[command(subcommand)]
@@ -746,6 +749,7 @@ fn dispatch_harness(config: Option<PathBuf>, target: HarnessTarget) -> ExitCode 
         HarnessTarget::Update { force, dry_run } => harness::run_update(config, force, dry_run),
         HarnessTarget::Uninstall { dry_run } => harness::run_uninstall(config, dry_run),
         HarnessTarget::Adapters => harness::run_adapters(),
+        HarnessTarget::Limits => harness::run_limits(config),
         HarnessTarget::Run {
             event: HarnessRun::Edit,
         } => harness::run_edit(config),

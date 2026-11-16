@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.146'
+Version: '0.147'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:9b216fd928bd3f9899537d02dc64718b869ec42f36c6d041af0d27fe911a4936, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:09c2431a269316741c35b51dabd5766ecd3d50fab2b98069314bb1bc8857767d, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:255395e7d2caa34947cef28f463e2ec050e3eba798a4dc7573a3cad946fee1ae
@@ -933,6 +933,9 @@ harness:
     post-command:   {enabled: false}
     acceptance:     {enabled: false, on_unjudged: deny}
     protected-paths: {enabled: false, on_unjudged: deny}
+  limits:                            # optional; each key undeclared is its built-in value
+    hook_timeout_seconds: 120
+    paths_per_call: 512
 ```
 
 - **`adapters`** is a list of adapter names, each a directory of the bundle embedded in the binary
@@ -981,6 +984,75 @@ harness:
   the guardrail: a gate with nothing to enforce is not left to read as protection.
 - The editor hook also reads `block_on` and `override_log` (above); the harness cores read them from this
   file, so the shell scripts that used to read them by line are no longer needed.
+- **`limits`** sets the numbers that bound how much of one agent call the harness reads, and the editor
+  hook's timeout (`ADR-101` amendment of 2026-11-15). Each key is optional and undeclared is the built-in
+  value, so a configuration that declares none behaves as before. Every key but `hook_timeout_seconds`
+  is a security floor (see below): a lower value is a load error naming the key and the floor. A key
+  the build does not read under `limits`, or a value that is not a whole number, is a load error too,
+  unlike an unknown key elsewhere under `harness`, because a misspelled raise would silently leave the
+  floor. Raising a cap moves only the number: what lies beyond it is still an edit that was not judged,
+  which the guardrail's `on_unjudged` decides. `urzua harness limits` prints every effective value; the
+  translator reads them from it before it scans an MCP call, and keeps the built-in floor for any value
+  it cannot obtain. `hook_timeout_seconds` is written into the installed hook entry by `urzua harness
+  install` and `update`; a configuration that changes it leaves that entry out of date, which `urzua
+  harness status`, `urzua doctor` and the session-start check report until `urzua harness update`.
+
+  | Key | Default | Allowed | Bounds |
+  |---|---|---|---|
+  | `hook_timeout_seconds` | 120 | 120 to 600 | seconds the agent waits for the editor hook |
+  | `paths_per_call` | 512 | 512 or more | files of one call judged against the gates, in the translator and the engine |
+  | `records_per_call` | 8 | 8 or more | record-checking writes of one MCP call judged |
+  | `loose_strings_per_call` | 512 | 512 or more | other strings of one MCP call looked at as possible paths |
+  | `input_depth` | 24 | 24 to 256 | nesting levels of one MCP call's input read |
+  | `path_length` | 4096 | 4096 or more | characters of a string read as a path |
+  | `string_length` | 65536 | 65536 or more | characters of a string looked into for other readings of a path |
+  | `symlink_hops` | 40 | 40 or more | symbolic links followed resolving one path (more is read as a loop) |
+  | `json_depth` | 128 | 128 to 1024 | nesting levels of a settings file read |
+  | `mcp_line_bytes` | 1048576 | 1048576 to 67108864 | bytes of one request line `urzua mcp` reads (`SPEC-26`) |
+  | `gate_walk_files` | 50000 | 50000 or more | files walked under the path-gate entries |
+
+## Format invariants and security floors
+
+`ADR-101`'s amendment of 2026-11-15 makes configuration own any value that shapes what a user or agent
+sees or can do. A value is hard-coded only when it is one of two kinds, each listed here with its
+reason; a hard-coded value missing from this section is a defect. Later changes add rows to these
+tables rather than new sections.
+
+**Format invariants** are fixed because other tools, or urzua's own later runs, depend on the exact
+text. Configuring one would let two copies of urzua disagree about where a file is.
+
+| Value | Where | Reason |
+|---|---|---|
+| `.urzua/cache/post-command.json`, `.urzua/cache/post-command-head`, `.urzua/cache/protected-hashes.json` | `harness/post_command.rs` | the post-command baselines; the protected-path guardrail keeps `.urzua/cache` for the harness itself, so a configured location would be a baseline no gate protects from an agent's write |
+| `.urzua/harness.lock` | `harness/lock.rs` | what `install`, `status`, `update`, `uninstall`, `doctor` and the session-start check read to find what was installed; moving it would orphan an installed harness |
+
+**Security floors** bound how much of an untrusted input urzua reads. Configuration may raise one but
+never lower it: the built-in value is both the default and the minimum, and a lower value is a load
+error naming the key and the floor. What lies beyond a floor is reported, never silently skipped.
+A floor has no ceiling unless raising it far enough would bring back the failure it guards against;
+three do, and a value above the ceiling is a load error naming it:
+`harness.limits.input_depth` at most 256, because the translator's scan recurses once per level under
+Python's default recursion limit of 1000; `harness.limits.json_depth` at most 1024, because the
+settings parser, writer and drop recurse once per level and 1024 levels stay far inside a 2 MiB
+thread stack (tested); `harness.limits.mcp_line_bytes` at most 67108864 (64 MiB), because a line up to
+the cap is held in memory before it is answered. `harness.limits.hook_timeout_seconds` is a floor of
+the same kind with a ceiling of 600: the agent host lets a call proceed when the hook outlives its
+timeout and one record check can take more than ten seconds, so a wait shorter than the built-in 120
+seconds would let edits pass unjudged.
+
+| Value | Key | Reason |
+|---|---|---|
+| files judged per call | `harness.limits.paths_per_call` | each costs a search for the repositories that govern it; beyond it the call is not judged |
+| record checks per MCP call | `harness.limits.records_per_call` | each is a full record check; beyond it the call is not judged |
+| loose strings per MCP call | `harness.limits.loose_strings_per_call` | bounds the scan of a call's free text; beyond it the call is not judged |
+| MCP input depth | `harness.limits.input_depth` | bounds the recursive scan; beyond it the call is not judged |
+| path length | `harness.limits.path_length` | longer is not read as a path as written, only as what it normalises to |
+| string length | `harness.limits.string_length` | bounds the other readings of one string kept for a refusal |
+| symlink hops | `harness.limits.symlink_hops` | a chain longer than this is read as a loop and the path as unresolvable |
+| settings file depth | `harness.limits.json_depth` | the parser, writer and drop recurse; deeper would overflow the stack |
+| MCP request line | `harness.limits.mcp_line_bytes` | a longer line is refused with `-32600` without being held in memory |
+| editor hook timeout | `harness.limits.hook_timeout_seconds` | a host that kills the hook first lets the call proceed (`SPEC-24`) |
+| path-gate walk | `harness.limits.gate_walk_files` | a walk that stops at it reports it was truncated |
 
 ## Who may accept a record: `authority`
 
@@ -2600,4 +2672,5 @@ proves this configuration produces the three findings.
 > | 2026-11-14 | Bumped to `0.145`. Documents that `identity.record-symlink-escapes` is on for every configuration and that a configuration sets its level or turns it `off`. Declaring it `off` raises a warning notice on every `check`. **Why:** `ADR-89` amendment of 2026-11-14. | **substantive** |
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 9b216fd928bd -> 6e7b740a88d5, `rust/crates/urzua-cli/tests/own_config_integration.rs` d6dcb432d05a -> 09c2431a2693. Reason: Pinned file(s) changed by the symlinked-record refusal: config.rs: default-on rules are known to the config (a rule on by default needs no declaration; its level or `off` is configurable); own_config_integration.rs: a revision row appended by an earlier re-pin in this change. The record's claim is unaffected by these changes. (Re-applied after merging main.) **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 6e7b740a88d5 -> 9b216fd928bd. Reason: Pinned file(s) changed by the symlinked-record refusal: config.rs: default-on rules are known to the config (a rule on by default needs no declaration; its level or `off` is configurable). The record's claim is unaffected by these changes. (Re-applied after the config change and merging main.) **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
-> | 2026-11-14 | Bumped to `0.146`. Documents that `embodiment.pin-stale` is on by default (maintainer decision, 2026-11-14: on by default), that a last-audit date after today is reported and ignored, and that a heading inside an HTML comment is not a section. **Why:** external review items 1.2, 1.5 and 1.7. | **substantive** |
+> | 2026-11-15 | Bumped to `0.146`. Documents `harness.limits`: eleven keys with their defaults, the editor hook timeout as a floor of 120 with a ceiling of 600 (a host that kills the hook first lets the call proceed), the ten input caps as security floors, and the ceilings of the two recursion depths (256 and 1024) and of the MCP request line (64 MiB), a value below a floor or an unknown key under `limits` as a load error, `urzua harness limits`, and the installed timeout as drift. Adds `## Format invariants and security floors`, which lists the post-command cache paths and `.urzua/harness.lock` as format invariants and the ten harness input caps as security floors, each with its reason. **Why:** `ADR-101` amendment of 2026-11-15 (configuration owns behaviour), accepted by the maintainer; tracked by `MILE-232`; the maintainer's instruction for this change: "the input caps ... are SECURITY FLOORS. Today's value is both the default and the minimum". | **substantive** |
+> | 2026-11-14 | Bumped to `0.147`. Documents that `embodiment.pin-stale` is on by default (maintainer decision, 2026-11-14: on by default), that a last-audit date after today is reported and ignored, and that a heading inside an HTML comment is not a section. **Why:** external review items 1.2, 1.5 and 1.7. | **substantive** |

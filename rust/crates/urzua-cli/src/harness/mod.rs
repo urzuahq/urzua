@@ -17,6 +17,7 @@ mod block;
 mod bundle;
 mod gate;
 mod json;
+mod limits;
 mod lock;
 mod post_command;
 mod run;
@@ -138,6 +139,15 @@ struct Env {
     types: Vec<(String, String)>,
 }
 
+impl Env {
+    fn limits(&self) -> urzua_core::harness::Limits {
+        self.harness
+            .as_ref()
+            .map(|h| h.limits.clone())
+            .unwrap_or_default()
+    }
+}
+
 fn declared_types(config: &urzua_core::config::Config) -> Vec<(String, String)> {
     let mut types: Vec<(String, String)> = config
         .record_types
@@ -187,7 +197,7 @@ fn desired(env: &Env, adapters: &[String]) -> Result<Desired, String> {
                 want.files.insert(path, content);
             }
         }
-        let fragment = json::parse(&render_fragment(adapter)?)
+        let fragment = json::parse(&render_fragment(adapter, &env.limits())?)
             .map_err(|e| format!("the {name} settings fragment is invalid: {e}"))?;
         for entry in settings::entries(&fragment)? {
             want.entries.push((adapter.manifest().settings_file, entry));
@@ -207,9 +217,37 @@ fn desired(env: &Env, adapters: &[String]) -> Result<Desired, String> {
 /// sha256 (hex) of the adapter's file installed at `PATH`. A hook command that
 /// runs an installed file embeds that file's hash this way and refuses to run
 /// the file when it no longer matches (`ADR-89`, amendment of 2026-11-08); the
-/// value is written by `install` and `update` and read back by `status`.
-fn render_fragment(adapter: &bundle::Adapter) -> Result<String, String> {
+/// value is written by `install` and `update` and read back by `status`. Every
+/// `{{limit:KEY}}` is replaced by the effective `harness.limits.KEY`, so an
+/// installed value that differs from the configuration shows as out of date.
+fn render_fragment(
+    adapter: &bundle::Adapter,
+    limits: &urzua_core::harness::Limits,
+) -> Result<String, String> {
     let mut text = adapter.settings_fragment.to_string();
+    while let Some(at) = text.find("{{limit:") {
+        let rest = &text[at + "{{limit:".len()..];
+        let key = rest
+            .find("}}")
+            .map(|end| rest[..end].to_string())
+            .filter(|k| urzua_core::harness::limits::limit_info(k).is_some())
+            .ok_or_else(|| {
+                format!(
+                    "the {} settings fragment has a {{{{limit:}}}} that names no known limit",
+                    adapter.name
+                )
+            })?;
+        // Quoted in the fragment so it stays valid JSON; the value is a number.
+        text = text
+            .replace(
+                &format!("\"{{{{limit:{key}}}}}\""),
+                &limits.get(&key).to_string(),
+            )
+            .replace(
+                &format!("{{{{limit:{key}}}}}"),
+                &limits.get(&key).to_string(),
+            );
+    }
     while let Some(at) = text.find("{{sha256:") {
         let rest = &text[at + "{{sha256:".len()..];
         let end = rest.find("}}").ok_or_else(|| {
@@ -351,6 +389,9 @@ fn save_settings(root: &Path, rel: &str, s: &Settings) -> Result<(), String> {
 
 fn open(config: Option<PathBuf>) -> Result<Env, String> {
     let ws = Workspace::open(&[PathBuf::from(".")], config).map_err(|e| e.message)?;
+    if let Some(h) = &ws.config.harness {
+        limits::activate(&h.limits);
+    }
     Ok(Env {
         root: ws.repo_root,
         types: declared_types(&ws.config),
@@ -1345,6 +1386,55 @@ pub fn run_adapters() -> ExitCode {
             })
             .collect(),
     })
+}
+
+#[derive(serde::Serialize)]
+struct LimitsReport {
+    status: &'static str,
+    limits: BTreeMap<&'static str, u64>,
+}
+
+impl Report for LimitsReport {
+    fn notices(&self) -> &[Notice] {
+        &[]
+    }
+    fn exit_code(&self) -> ExitCode {
+        ExitCode::SUCCESS
+    }
+}
+
+/// The effective `harness.limits`, which the translator reads before it scans
+/// an MCP call (it never parses the configuration itself).
+pub fn run_limits(config: Option<PathBuf>) -> ExitCode {
+    match open(config) {
+        Ok(env) => emit(&LimitsReport {
+            status: "ok",
+            limits: env.limits().effective().into_iter().collect(),
+        }),
+        Err(m) => not_run(m),
+    }
+}
+
+/// The hash of each hook entry the bundle and configuration want now, keyed by
+/// (settings file, entry key), for the session-start check.
+pub(crate) fn wanted_entry_hashes(
+    root: &Path,
+    config: &urzua_core::config::Config,
+    adapters: &[String],
+) -> BTreeMap<(String, String), String> {
+    let env = Env {
+        root: root.to_path_buf(),
+        types: declared_types(config),
+        harness: config.harness.clone(),
+    };
+    desired(&env, adapters)
+        .map(|want| {
+            want.entries
+                .iter()
+                .map(|(file, e)| ((file.clone(), e.key()), e.hash()))
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 /// The adapters the lock names, for `doctor` and `session-start`.
