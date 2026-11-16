@@ -65,14 +65,12 @@ pub fn content_hash(root: &Path) -> Option<String> {
 
 /// Whether git tracks the binary (it must never be a committed file).
 pub fn is_tracked(root: &Path) -> bool {
-    std::process::Command::new("git")
-        .arg("-C")
-        .arg(root)
+    urzua_io::git::GitRun::new()
+        .dash_c(root)
         .args(["ls-files", "--error-unmatch", "--", BIN_PATH])
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status()
-        .is_ok_and(|s| s.success())
+        .discard_stderr()
+        .output()
+        .is_ok_and(|o| o.status.success())
 }
 
 pub fn state(root: &Path, lock: Option<&Lock>) -> BinState {

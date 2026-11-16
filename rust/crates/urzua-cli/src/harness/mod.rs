@@ -580,6 +580,30 @@ fn install(env: &Env, flag: Option<String>, dry_run: bool) -> HarnessReport {
     report.problems.extend(unprovided);
 
     let new_lock = install_lock(env, &want, adapters);
+    let ignore_write = plan_binary_and_ignore(env, &new_lock, dry_run, &mut report);
+    report.item(
+        "lock",
+        LOCK_PATH,
+        None,
+        past(dry_run, "written", "would-write"),
+    );
+    if dry_run {
+        return report;
+    }
+    match write_install(env, &plan, &new_lock, ignore_write.as_deref()) {
+        Ok(()) => report,
+        Err(m) => report.refuse(m),
+    }
+}
+
+/// The binary's pin and the `.gitignore` entry `install` adds for `.urzua/bin/`:
+/// their report items, and the new `.gitignore` text when it changes.
+fn plan_binary_and_ignore(
+    env: &Env,
+    new_lock: &Lock,
+    dry_run: bool,
+    report: &mut HarnessReport,
+) -> Option<String> {
     let ignore_write = repo_bin::gitignore_with_entry(
         &read(&env.root, ".gitignore")
             .ok()
@@ -603,23 +627,11 @@ fn install(env: &Env, flag: Option<String>, dry_run: bool) -> HarnessReport {
             None,
             past(dry_run, "pinned", "would-pin"),
         );
-        if let Some(why) = repo_bin::refusal(repo_bin::state(&env.root, Some(&new_lock))) {
+        if let Some(why) = repo_bin::refusal(repo_bin::state(&env.root, Some(new_lock))) {
             report.notice(NoticeSeverity::Warning, why);
         }
     }
-    report.item(
-        "lock",
-        LOCK_PATH,
-        None,
-        past(dry_run, "written", "would-write"),
-    );
-    if dry_run {
-        return report;
-    }
-    match write_install(env, &plan, &new_lock, ignore_write.as_deref()) {
-        Ok(()) => report,
-        Err(m) => report.refuse(m),
-    }
+    ignore_write
 }
 
 /// Whole files: create, or leave if identical. A different file is a person's
