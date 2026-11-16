@@ -951,11 +951,7 @@ impl HooksReport {
 
     fn next(&mut self, command: String, reason: &str) {
         if self.next.is_none() {
-            self.next = Some(NextAction {
-                command,
-                reason: reason.to_string(),
-                inputs: Vec::new(),
-            });
+            self.next = Some(NextAction::runs_as_printed(command, reason));
         }
     }
 

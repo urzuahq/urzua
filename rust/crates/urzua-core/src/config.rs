@@ -1814,6 +1814,20 @@ impl RecordTypeConfig {
     ///
     /// A declared `fields: {from: none}` is the same statement (RFC-33: the
     /// shape enum is one case of `fields.from`), so it gates identically.
+    /// The out-of-scope cause for this type's records under a rule that reads
+    /// a header. A headerless type that declares no field is out of scope as
+    /// declared; one that still declares fields asks for what it cannot hold,
+    /// which `config.scope-matches-nothing` reports.
+    pub fn header_out_of_scope(&self) -> crate::report::Outcome {
+        let declares_fields = !self.required_fields.is_empty()
+            || self.known_fields.as_ref().is_some_and(|k| !k.is_empty());
+        if declares_fields {
+            crate::report::Outcome::OutOfScope
+        } else {
+            crate::report::Outcome::OutOfScopeNoHeader
+        }
+    }
+
     pub fn has_no_header(&self) -> bool {
         self.header_shape == HeaderShape::None
             || self

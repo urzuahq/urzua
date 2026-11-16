@@ -28,8 +28,9 @@ read. A record still written that way is reported by `check` as unreadable, nami
 those records to frontmatter by hand; `init` counts them for you in a `header-shape` notice so you
 know how many there are.
 
-A type whose records carry no header at all can be declared `header_shape: none`. Such a type has
-nowhere to store a stable ID, so `urzua new` refuses it.
+Records with no header at all (the common `0001-title.md` ADR style) are adopted too: see
+[Adopting records that have no header block](#adopting-records-that-have-no-header-block). Such a type
+has nowhere to store a stable ID, so `urzua new` refuses it and `urzua migrate ids` writes nothing to it.
 
 A repository with no records yet does not need this walkthrough. Choose record types from the
 built-in profiles instead, and `init` writes them into the config with a starter template for each:
@@ -191,3 +192,67 @@ See [Local hooks](ci.md#local-hooks).
 
 If agents write records in your repository, install the harness so their edits are judged before they
 land. See [the agent harness](agent-harness.md).
+
+## Adopting records that have no header block
+
+The most common ADR style has no header block: files `docs/adr/0001-record-architecture-decisions.md`,
+a heading `# 1. Record architecture decisions`, a line `Date: 2021-03-04`, then `## Status` (body
+`Accepted` or `Superseded by ADR 0007`), `## Context`, `## Decision` and `## Consequences`. `urzua init`
+proposes a type for such a directory when at least two of its files share a `##` heading that at least
+80% of them carry (compared without letter case or a trailing colon), and either one of those headings is
+a decision-record heading (`Status`, `Context`, `Decision`, `Consequences`, `Decision Outcome`, `Context
+and Problem Statement`, `Decision Drivers`, `Considered Options`) or the directory is named `adr`, `adrs`,
+`decisions`, `rfc` or `rfcs`. A numbered directory that fails this, such as tutorial pages sharing `##
+Prerequisites`, is named in a notice as ordinary pages; declare it under `record_types` by hand if it does
+hold records. For fifteen such records, one of them missing `## Decision`, and a `README.md` index
+beside them, it writes:
+
+```yaml
+record_types:
+  adr:
+    dir: docs/adr
+    required_fields: []
+    header_shape: none
+    sections:
+      from: headings
+      required:
+      - name: Status
+      - name: Context
+      - name: Decision
+      - name: Consequences
+    exclude_files:
+    - README.md
+rules:
+  # ... the configuration and path rules, then:
+  filename.identity-pattern: warn
+  section.required: warn
+```
+
+The proposal's `notes` (in `urzua init --dry-run`'s `proposed` entry) list the threshold, each file that
+lacks a required section, the headings too rare to require, every number more than one file carries, and
+the other spellings of a heading, and the files written under `exclude_files` (`README.md`, `index.md`,
+and a file with no number and no header beside numbered ones; a numberless file that has a header stays a
+record). Remove a name from `exclude_files` if it is in fact a record.
+
+What `check` then checks for these records:
+
+- each required section is present (`section.required`), so a record missing `## Decision` is reported;
+- every file name is reported once by `filename.identity-pattern`, with the rename that gives each record
+  an identity (`0001-x.md` -> `ADR-0001-x.md`; `urzua migrate filenames` does it);
+- the configuration itself, and records outside the declared directories.
+
+What it does not check today, and why:
+
+- **No field is read.** With no header block, `Status:` and `Date:` lines in the body are prose, so no
+  field, status or date rule runs; `init` withholds every rule that reads a header and names them in a
+  `rule-applicability` notice.
+- **`## Status` is checked for presence only.** Its text is not read as the record's status, so a status
+  typo or a supersession is not checked (planned: fields read from a section, `MILE-255`).
+- **Prose references are not read.** `Superseded by ADR 0099` naming no record is not reported (planned:
+  references read from links and spaced ids, `MILE-268`).
+- **Duplicate numbers are not reported** while file names carry no type prefix: urzua reads a record's
+  number only from a name like `ADR-0006-x.md`, so `init` lists the duplicates it saw in its notes and
+  withholds `identity.collision`. Rename the files and declare `prefix: ADR` to turn it on.
+
+To get the full rule set, give the records a YAML frontmatter header (step 1) and rename them.
+

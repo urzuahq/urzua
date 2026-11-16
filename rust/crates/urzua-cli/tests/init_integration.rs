@@ -127,3 +127,65 @@ fn every_rule_adopt_proposes_examines_a_record() {
         .collect();
     assert!(idle.is_empty(), "ran over zero records: {idle:?}");
 }
+
+fn empty_repo(name: &str) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-init-{name}"));
+    common::git(&dir, &["init", "-q"]);
+    common::git(&dir, &["config", "user.email", "test@example.com"]);
+    common::git(&dir, &["config", "user.name", "test"]);
+    std::fs::write(dir.path().join("README.md"), "# project\n").unwrap();
+    common::git(&dir, &["add", "-A"]);
+    common::git(&dir, &["commit", "-q", "-m", "fixture"]);
+    dir
+}
+
+fn run_json(dir: &Path, args: &[&str]) -> (Option<i32>, serde_json::Value) {
+    let out = common::urzua()
+        .args(args)
+        .current_dir(dir)
+        .output()
+        .expect("urzua binary should run");
+    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+    let value = serde_json::from_str(&stdout).unwrap_or_else(|e| panic!("{e}: {stdout}"));
+    (out.status.code(), value)
+}
+
+/// MILE-265: in a repository with no record directory, `init` said "nothing to
+/// adopt" and never named `--types`.
+#[test]
+fn init_in_an_empty_repository_names_the_greenfield_command_observed_failing() {
+    let dir = empty_repo("empty-names-types");
+    let (code, report) = run_json(dir.path(), &["init"]);
+    assert_eq!(code, Some(2), "{report}");
+    let error = report["error"].as_str().unwrap();
+    assert!(error.contains("nothing to adopt"), "{error}");
+    assert!(error.contains("`urzua init --types adr`"), "{error}");
+    assert!(error.contains("adr, rfc, spec, prd"), "{error}");
+    assert_eq!(report["next_action"], "urzua init --types adr", "{report}");
+    assert!(report["next_action_reason"].is_string(), "{report}");
+}
+
+/// MILE-265: `doctor` after an `init` that could not adopt sent the user back
+/// to `urzua init`, a loop. It now names the step that works.
+#[test]
+fn doctor_after_a_refused_init_names_a_step_that_works_observed_failing() {
+    let dir = empty_repo("doctor-after-refusal");
+    let (code, _) = run_json(dir.path(), &["init"]);
+    assert_eq!(code, Some(2));
+    let (code, report) = run_json(dir.path(), &["doctor"]);
+    assert_eq!(code, Some(2), "{report}");
+    let message = report["checks"][0]["message"].as_str().unwrap();
+    assert!(!message.contains("run `urzua init` to adopt"), "{message}");
+    assert!(message.contains("urzua init --types adr"), "{message}");
+    assert_eq!(report["next_action"], "urzua init --types adr", "{report}");
+}
+
+/// When adopt would propose a config, `doctor` says so and points at it.
+#[test]
+fn doctor_with_an_adoptable_corpus_names_init() {
+    let dir = adopt_repo("doctor-adoptable");
+    let (_, report) = run_json(dir.path(), &["doctor"]);
+    let message = report["checks"][0]["message"].as_str().unwrap();
+    assert!(message.contains("proposes 1 record type(s)"), "{message}");
+    assert_eq!(report["next_action"], "urzua init", "{report}");
+}
