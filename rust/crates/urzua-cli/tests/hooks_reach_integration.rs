@@ -171,7 +171,7 @@ fn a_binary_without_hooks_run_is_not_run_and_obeys_the_policy() {
     assert!(out.status.success(), "{stderr}");
     assert!(stderr.contains("upgrade urzua"), "{stderr}");
     assert!(
-        stderr.contains("upgrade urzua to 0.4.5 or later"),
+        stderr.contains("upgrade urzua to 0.4.6 or later"),
         "{stderr}"
     );
     assert!(stderr.contains("orig"), "{stderr}");

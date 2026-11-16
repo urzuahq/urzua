@@ -139,7 +139,7 @@ runs the urzua arguments `hooks.<hook>` names (`SPEC-3`; default `check --base H
 `next_action` and the command for the full report. It exits 1 on blocking findings, which always stop the commit or
 push. When urzua is not found, is a release without `hooks run` (any exit other than 0, 1 or 3, such as a usage
 error), or the check cannot run, the hook prints one line saying urzua did not run, the records were NOT checked, how
-to install or upgrade it (naming 0.5.0, the first release with `hooks run`; exit 126 or 127 means not installed) and
+to install or upgrade it (naming the first release that contains `hooks run`, from one constant a test keeps in step with the CHANGELOG; exit 126 or 127 means not installed) and
 that CI will check them, and obeys `hooks.on_not_run` (`SPEC-3`): `warn`, the default, lets it through; `block` stops
 it, naming `--no-verify`. `hooks run` exits 3 for "not run under `block`" so the block can tell it from a finding; the
 block passes its policy in `URZUA_HOOKS_ON_NOT_RUN`, which `hooks run` uses only when the configuration cannot be read.

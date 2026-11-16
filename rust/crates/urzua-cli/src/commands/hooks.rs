@@ -30,7 +30,7 @@ const INSTALL_DOC: &str = "https://github.com/urzuahq/urzua/blob/main/docs/refer
 /// than the workspace version before that release ships, and, once the
 /// CHANGELOG has a release mentioning `urzua hooks install`, while it is not
 /// that release.
-pub(crate) const FIRST_VERSION: &str = "0.4.5";
+pub(crate) const FIRST_VERSION: &str = "0.4.6";
 /// `hooks run` exits with this when urzua did not run and the policy is
 /// `block`, so the block can tell it from a blocking finding (1) and from an
 /// older urzua's usage error (2).
