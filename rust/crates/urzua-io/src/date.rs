@@ -4,6 +4,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 const SECS_PER_DAY: i64 = 86_400;
 
 /// Years a Unix time can name: [`Date::from_unix`] answers `None` outside them.
+/// Callers treat `None` as "no date", so the bounds are part of the contract.
 const MIN_YEAR: i64 = -262_143;
 const MAX_YEAR: i64 = 262_142;
 
@@ -56,9 +57,14 @@ impl Date {
         (MIN_YEAR..=MAX_YEAR).contains(&date.year).then_some(date)
     }
 
+    /// The wall clock: the one place production code reads it.
+    pub(crate) fn wall_now() -> SystemTime {
+        SystemTime::now()
+    }
+
     /// The wall clock as Unix seconds. Only `system_clock` calls it.
     pub(crate) fn unix_now() -> i64 {
-        match SystemTime::now().duration_since(UNIX_EPOCH) {
+        match Date::wall_now().duration_since(UNIX_EPOCH) {
             Ok(d) => d.as_secs() as i64,
             Err(e) => {
                 let d = e.duration();

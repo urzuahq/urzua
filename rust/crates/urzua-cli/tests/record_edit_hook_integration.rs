@@ -1,7 +1,7 @@
 //! MILE-178, MILE-204: the record-edit hook (ADR-69, ADR-89). Recorded Claude Code
 //! PreToolUse payloads (`tests/fixtures/hook-payloads`) go through the installed
 //! translator and the engine core (`urzua harness run edit`) against the real urzua
-//! binary in a git fixture. Needs `python3` and `sh`; a missing tool fails the test,
+//! binary in a git fixture. Needs `sh`; a missing tool fails the test,
 //! never skips it.
 
 mod common;
@@ -101,7 +101,7 @@ fn adapter(root: &Path, name: &str, env: &[(&str, &str)]) -> serde_json::Value {
         .to_string();
     let mut c = Command::new("sh");
     c.args(["-c", &cmd]);
-    c.env("URZUA_BIN", env!("CARGO_BIN_EXE_urzua"))
+    c.env("PATH", common::path_with_urzua())
         .env_remove("URZUA_HOOK_OVERRIDE");
     for (k, v) in env {
         c.env(k, v);
@@ -238,20 +238,13 @@ fn when_urzua_cannot_judge_the_edit_proceeds_and_says_so() {
         .unwrap()
         .contains("did NOT judge"));
     // No binary at all.
-    let v = adapter(
-        &root,
-        "write-wrong",
-        &[
-            ("URZUA_BIN", "/nonexistent/urzua"),
-            ("PATH", "/usr/bin:/bin"),
-        ],
-    );
+    let v = adapter(&root, "write-wrong", &[("PATH", "/usr/bin:/bin")]);
     assert!(!denied(&v), "{v}");
     assert!(
         v["systemMessage"]
             .as_str()
             .unwrap()
-            .contains("did NOT judge"),
+            .contains("could NOT run"),
         "{v}"
     );
     // An Edit whose text is not in the file cannot be turned into a proposal.

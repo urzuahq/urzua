@@ -492,10 +492,13 @@ urzua harness status
 urzua harness update [--force] [--dry-run]
 urzua harness uninstall [--dry-run]
 urzua harness adapters
+urzua harness limits
 urzua harness run <edit | session-start | post-command>
+urzua harness hook <adapter> <edit | post-command | session-start>
+urzua harness record <new | finish | amend-finish | repin | reverify | done> ...
 ```
 
-Installs and runs the agent harness. See [the agent harness](agent-harness.md) for what each does.
+Installs and runs the agent harness. `hook` is what the agent's hook command calls: it reads the agent's hook event on stdin and prints the agent's hook output. `record` holds the steps the generated drafting and lifecycle commands run. See [the agent harness](agent-harness.md) for what each does.
 
 ## hooks
 

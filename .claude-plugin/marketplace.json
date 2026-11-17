@@ -1,0 +1,13 @@
+{
+  "name": "urzua",
+  "owner": {
+    "name": "urzua"
+  },
+  "plugins": [
+    {
+      "name": "urzua",
+      "source": "./plugins/claude-code",
+      "description": "The urzua harness hooks and lifecycle commands for Claude Code; the hooks call the urzua binary."
+    }
+  ]
+}

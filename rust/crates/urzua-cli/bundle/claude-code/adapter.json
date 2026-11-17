@@ -1,12 +1,18 @@
 {
   "name": "claude-code",
-  "description": "Hook entries and a translator for Claude Code: the editor hook (Write, Edit, MultiEdit, NotebookEdit and file-writing MCP tools), which also refuses an agent's move to an accepting status and its write to a protected path, the post-command check (Bash), the session-start readiness check, and a drafting command for every record type with /amend, /repin, /reverify and /done.",
+  "description": "Hook entries for Claude Code, each calling `urzua harness hook claude-code <event>`: the editor hook (Write, Edit, MultiEdit, NotebookEdit and file-writing MCP tools), which also refuses an agent's move to an accepting status and its write to a protected path, the post-command check (Bash), the session-start readiness check, and a drafting command for every record type with /amend, /repin, /reverify and /done. Nothing executable is installed in the repository.",
   "provides": ["editor-hook", "post-command", "session-start", "acceptance", "protected-paths"],
   "settings_file": ".claude/settings.json",
   "commands_dir": ".claude/commands",
   "kill_switches": ["disableAllHooks"],
+  "retired_files": [".claude/hooks/urzua-claude-code.py", ".claude/hooks/urzua-record.sh"],
+  "plugin": {
+    "id": "urzua@urzua",
+    "enabled_key": "enabledPlugins",
+    "settings_files": [".claude/settings.local.json", ".claude/settings.json", "~/.claude/settings.json"]
+  },
   "requires": {
-    "interpreters": ["python3"],
+    "interpreters": [],
     "env": ["CLAUDE_PROJECT_DIR"]
   }
 }

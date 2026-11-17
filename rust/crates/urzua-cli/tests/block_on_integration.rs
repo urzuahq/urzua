@@ -192,7 +192,7 @@ fn translator(root: &Path) -> Command {
         .to_string();
     let mut c = Command::new("sh");
     c.args(["-c", &cmd])
-        .env("URZUA_BIN", env!("CARGO_BIN_EXE_urzua"))
+        .env("PATH", common::path_with_urzua())
         .env_remove("URZUA_HOOK_OVERRIDE");
     c
 }

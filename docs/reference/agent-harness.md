@@ -36,18 +36,75 @@ urzua harness install
 
 `install` writes, for each adapter:
 
-- the hook files (for `claude-code`: `.claude/hooks/urzua-claude-code.py` and
-  `.claude/hooks/urzua-record.sh`);
 - drafting commands for the agent, one per record type plus `amend`, `done`, `repin` and `reverify`
   (for `claude-code`: `.claude/commands/*.md`);
-- hook entries merged into the agent's project settings (`.claude/settings.json`);
+- hook entries merged into the agent's project settings (`.claude/settings.json`), each calling
+  `urzua harness hook claude-code <event>`;
 - one block in the instructions file, between `<!-- urzua-harness:begin -->` and
   `<!-- urzua-harness:end -->`, telling the agent what it must not do;
 - `.urzua/harness.lock`, recording a hash of everything written.
 
+It writes no executable file and no hash into a hook entry: the binary does the work, and it was verified
+when you installed it. A generated command or instructions block tolerates only what a formatter changes
+(whitespace and wrapping, blank lines, indentation, list markers and numbering, the emphasis marker, table
+padding); any other character added or changed is drift. Indentation alone never is, even where it nests a step
+or turns a line into a code block, because the text stays visible to the agent reading it. Running a formatter
+over what `install` wrote is therefore not drift; the lock and the settings file can be re-indented too.
+
 It never overwrites a file that differs, refuses a settings file it cannot merge into (exit 2), and
 run twice produces identical bytes. Commit all of it. With no `harness` key and no `--adapter`,
-`install` writes nothing and says so. The hooks need `python3` on the machine the agent runs on.
+`install` writes nothing and says so. It names what it skipped (a guardrail the configuration leaves off, the
+instructions block with no `instructions_file`) and the key that turns it on.
+
+The hooks need `urzua` on the `PATH` the agent runs its hooks with. When it is not there, or is a release
+without `urzua harness hook`, the hook command says so and names the fix. When the binary runs but its engine
+gives no verdict, the binary decides from the inputs the engine reads: if no `.urzua/config.yaml` governs any
+targeted path (none at or above it, links resolved) nor the session's directory, nothing is governed and the hook
+says nothing; if one is found and is not read with certainty as letting an unjudged edit through, the edit is
+refused. Read with certainty as open means: neither `acceptance` nor `protected-paths` enabled without
+`on_unjudged: allow`, and `editor-hook` not enabled with `on_unjudged: deny`.
+
+When the binary cannot run at all, the hook command reads no path from the payload and decides from the session
+alone: from `CLAUDE_PROJECT_DIR` and from the working directory, each resolved to its physical path, it looks for
+the nearest `.urzua/config.yaml` at or above. With none, it says nothing, on stdout or stderr. With one that it reads
+with certainty as open, it lets the call through with a notice. With any other, it refuses every edit and MCP call
+until urzua is installed or upgraded, because without the binary it cannot tell a protected file from another.
+Read with certainty means: guardrails only at a key position under `harness.guardrails`, in the block form or the
+one-line `{...}` form, with only the keys a guardrail carries (`enabled: true|false`, `on_unjudged: allow|deny`,
+`pending_pair: allow|refuse`), values plain or quoted. A quoted key, an anchor, alias or tag, unbalanced brackets, a
+tab in indentation, a repeated key, a child indented unlike its siblings, `on_unjudged:` with its value on the next
+line, or a file that is not plain text is not certain, and is refused. So with the binary missing the hook closes
+the gate in a governed session, and it cannot see beyond the session's directory.
+
+With urzua missing or too old, the hook decides from the session's directory only. A session rooted in a
+directory with no configuration, or in a repository whose configuration is open, is not stopped from editing a
+file in a different, governed repository. Install urzua to close it: with the binary present every edited path is
+placed and judged. (Accepted by the maintainer on 2026-11-17 that a file the fallback cannot see is not checked;
+deciding from the session alone is the orchestrator's decision of 2026-11-17, pending maintainer review.)
+
+A panic inside the binary, or an engine that does
+not answer before the hook's own deadline (15 seconds short of `hook_timeout_seconds`), also ends in a
+refusal, as one JSON document.
+
+To install it once per machine instead, or as well, see
+[install once per machine, or commit to the repository](adopt.md#10-optional-agent-hooks).
+
+### Upgrading from 0.4.8 or earlier
+
+Releases up to 0.4.8 installed a script and pinned its sha256 in each hook command. Nothing removes them
+for you; `urzua harness status`, `urzua doctor` and the session-start check name what is left. By hand:
+
+```sh
+git rm .claude/hooks/urzua-claude-code.py .claude/hooks/urzua-record.sh
+# In .claude/settings.json, delete the three hook entries whose command mentions
+# .claude/hooks/urzua-claude-code.py (PreToolUse on Write|Edit|..., PostToolUse on Bash, SessionStart).
+urzua harness update    # writes the entries that call the binary, the commands and the lock
+urzua harness status    # "status": "ok"
+```
+
+Where the installed files and entries still match the lock, `urzua harness update` alone does all of
+this: it replaces the entries it owns and deletes the files the bundle no longer ships. The steps above are
+for a repository where a person changed them.
 
 ## Keep it in sync
 
@@ -194,8 +251,8 @@ beyond it is still an edit that was not judged, and `on_unjudged` decides what h
 | `mcp_line_bytes` | 1048576 (at most 67108864) | bytes of one request line `urzua mcp` reads |
 | `gate_walk_files` | 50000 | files walked under the path-gate entries |
 
-`urzua harness limits` prints the values in force. The translator asks it for them before it scans
-an MCP call; if it gets no answer it keeps the built-in values. `hook_timeout_seconds` is written
+`urzua harness limits` prints the values in force; the editor hook reads the same values before it scans
+an MCP call. `hook_timeout_seconds` is written
 into the installed hook entry, so after changing it run `urzua harness update`; until then `urzua
 harness status`, `urzua doctor` and the session-start check report the entry as out of date.
 
@@ -209,8 +266,10 @@ harness shortens the loop.
 
 ## What the hooks run
 
-The hook entries call `urzua harness run`, which a person never needs to run by hand. It reads a
-neutral request as JSON on stdin and prints a verdict as JSON on stdout:
+The hook entries call `urzua harness hook <adapter> <event>`, which reads the agent's own hook event on
+stdin, turns it into a neutral request, runs `urzua harness run <event>` and prints the agent's hook output.
+A person never needs to run either by hand. `urzua harness run` reads a neutral request as JSON on stdin and
+prints a verdict as JSON on stdout:
 
 ```text
 urzua harness run edit            # judge a proposed edit to a record
@@ -224,5 +283,8 @@ for anyone writing an adapter for another agent.
 ## Checking it works
 
 `urzua doctor` reports whether the harness is declared and installed (`harness-config`,
-`harness-installed`), and warns when a guardrail is enabled without `outside_writes` declared.
-`urzua harness status` should print `"status": "ok"`.
+`harness-installed`), which registration is in effect (`harness-registration`: the repository's settings,
+the plugin, both or none, as far as the settings files it can read show), anything an older release left
+(`harness-leftover`), and warns when a guardrail is enabled without `outside_writes` declared.
+`urzua harness status` should print `"status": "ok"`; its `registration` field says the same as
+`harness-registration`.

@@ -166,7 +166,8 @@ urzua --version
   not logged in. `new` with `new.check_open_prs: true` also runs `git fetch`. Everything else,
   including every `check`, makes no network call. See [what uses the
   network](commands.md#what-uses-the-network).
-- The agent harness hooks need `python3` (see [the agent harness](agent-harness.md)).
+- The agent harness hooks need `urzua` on the `PATH` the agent runs its hooks with, and `sh` and
+  `awk` for the fallback that runs when it is not there (see [the agent harness](agent-harness.md)).
 
 ## Telemetry
 

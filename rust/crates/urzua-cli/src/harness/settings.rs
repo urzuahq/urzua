@@ -2,13 +2,15 @@
 //! section 2). The file is a person's too, so the merge adds the bundle's
 //! entries, keyed by event, matcher and handler, and leaves every other key and
 //! entry as written. An entry is urzua's when its command runs
-//! `urzua harness run <handler>`, which is how `update` and `uninstall` find
-//! it. An entry that has the key of one of ours and was edited is a conflict:
+//! `urzua harness hook <adapter> <handler>`, or `urzua harness run <handler>`
+//! as an entry of an older bundle did, which is how `update` and `uninstall`
+//! find it. An entry that has the key of one of ours and was edited is a conflict:
 //! the merge reports it and never guesses.
 
 use super::json::J;
 
 const RUNS: &str = "urzua harness run ";
+const HOOK: &str = "urzua harness hook ";
 
 /// One hook entry of the adapter's settings fragment.
 #[derive(Debug, Clone)]
@@ -40,12 +42,46 @@ impl Entry {
 /// The handler a hook command runs, when it is one of urzua's.
 pub fn handler_of(hook: &J) -> Option<String> {
     let command = hook.get("command")?.as_str()?;
-    let at = command.find(RUNS)?;
-    let handler: String = command[at + RUNS.len()..]
-        .chars()
-        .take_while(|c| c.is_alphanumeric() || *c == '-')
-        .collect();
+    let word = |s: &str| -> String {
+        s.chars()
+            .take_while(|c| c.is_alphanumeric() || *c == '-')
+            .collect()
+    };
+    let handler = if let Some(at) = command.find(HOOK) {
+        let rest = &command[at + HOOK.len()..];
+        let adapter = word(rest);
+        word(rest[adapter.len()..].trim_start_matches(' '))
+    } else {
+        let at = command.find(RUNS)?;
+        word(&command[at + RUNS.len()..])
+    };
     (!handler.is_empty()).then_some(handler)
+}
+
+/// The hook commands in `settings` that name one of `retired` (files an older
+/// bundle installed and this one does not): an entry of the older bundle that
+/// runs a translator from the repository, checked against a pinned sha256.
+pub fn commands_naming(settings: &J, retired: &[String]) -> Vec<String> {
+    let Some(J::Obj(events)) = settings.get("hooks") else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for (event, groups) in events {
+        let J::Arr(groups) = groups else { continue };
+        for group in groups {
+            let Some(J::Arr(hooks)) = group.get("hooks") else {
+                continue;
+            };
+            let matcher = group.get("matcher").and_then(J::as_str).unwrap_or("");
+            for hook in hooks {
+                let command = hook.get("command").and_then(J::as_str).unwrap_or("");
+                if let Some(file) = retired.iter().find(|f| command.contains(f.as_str())) {
+                    out.push(format!("{event}|{matcher} (runs {file})"));
+                }
+            }
+        }
+    }
+    out
 }
 
 /// What the scripts of the first-generation editor guardrail have in their
@@ -105,7 +141,7 @@ pub fn entries(fragment: &J) -> Result<Vec<Entry>, String> {
             };
             for hook in hooks {
                 let handler = handler_of(hook).ok_or_else(|| {
-                    format!("a `hooks.{event}` entry does not run `{}`", RUNS.trim_end())
+                    format!("a `hooks.{event}` entry does not run `{}`", HOOK.trim_end())
                 })?;
                 out.push(Entry {
                     event: event.clone(),

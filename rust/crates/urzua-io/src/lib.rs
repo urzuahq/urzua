@@ -642,6 +642,12 @@ static CLOCK: std::sync::OnceLock<EvaluationClock> = std::sync::OnceLock::new();
 /// The one place the wall clock is read. Every date and age comparison reads
 /// the evaluation clock below; `clock_is_read_in_one_place` (urzua-cli tests)
 /// fails if another call site appears.
+/// Real time elapsed since `then`, ignoring `--as-of`: for measuring time
+/// between processes (a file's age), never for judging a record's dates.
+pub fn real_elapsed_since(then: std::time::SystemTime) -> Option<std::time::Duration> {
+    Date::wall_now().duration_since(then).ok()
+}
+
 fn system_clock() -> EvaluationClock {
     let unix = Date::unix_now();
     EvaluationClock {
@@ -1793,9 +1799,8 @@ mod tests {
         }
     }
 
-    /// `Ok((date, end-of-day Unix time))` or the error's kind, recorded from
-    /// chrono 0.4.45 running the previous implementation of `parse_as_of`
-    /// and `date_of_unix`.
+    /// `Ok` carries the date and its end-of-day Unix time; `Err(true)` is a
+    /// shape error and `Err(false)` a calendar error.
     #[test]
     fn as_of_parsing_matches_the_recorded_table() {
         let shape = |s| (s, Err(true));
