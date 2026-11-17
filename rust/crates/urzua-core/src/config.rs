@@ -1349,6 +1349,11 @@ pub struct RecordTypeConfig {
     /// same as deliberately declaring zero fields of that kind.
     #[serde(default)]
     pub narrative_fields: Option<Vec<String>>,
+    /// The values each named field may hold (`MILE-248`), read by
+    /// `field.value-not-declared` and by `statuses.require`/`forbid`
+    /// conditions. See `field_values`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub field_values: Option<BTreeMap<String, Vec<String>>>,
     /// Which spec documents this type's schema as a coherent feature area
     /// (MILE-0077/ADR-0041 -- "does this type need a spec" stays editorial,
     /// never inferred). Omitted means none currently covers this type, which
@@ -3249,6 +3254,7 @@ pub fn parse_with_document_models(
         .map_err(|reason| ConfigError::InvalidEmbodiment { reason })?;
     crate::locator::validate_resolvers(&config.locator_resolvers)
         .map_err(|reason| ConfigError::InvalidLocatorResolvers { reason })?;
+    crate::field_values::validate(&config.record_types)?;
     let status_decls = crate::status_model::validate(&config.record_types, &config.embodiment)?;
     crate::status_model::validate_items_rule(&config.record_types, &status_decls, &config.rules)?;
     validate_relation_pairs(&config)?;
@@ -5502,6 +5508,7 @@ mod tests {
             known_fields: Some(vec!["Embodiment".to_string()]),
             pointer_fields: None,
             narrative_fields: None,
+            field_values: None,
             spec: None,
             relation_fields: None,
             companion_fields: None,

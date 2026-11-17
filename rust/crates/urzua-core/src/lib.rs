@@ -16,6 +16,7 @@ pub mod document_model;
 pub mod done_items;
 pub mod embodiment_model;
 pub mod field_state;
+pub mod field_values;
 pub mod fix;
 pub mod graph;
 pub mod harness;

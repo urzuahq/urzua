@@ -186,7 +186,11 @@ pub fn effective_level(config: &Config, id: &str) -> crate::config::RuleLevel {
         .rules
         .get(id)
         .map(|s| s.level)
-        .or_else(|| super::default_on(id).map(|d| d.level))
+        .or_else(|| {
+            super::default_on(id)
+                .filter(|d| d.applies.is_none_or(|applies| applies(config)))
+                .map(|d| d.level)
+        })
         .unwrap_or(RuleLevel::Off)
 }
 

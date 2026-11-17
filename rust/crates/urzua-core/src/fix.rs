@@ -1544,6 +1544,7 @@ mod tests {
                     known_fields: Some(vec!["Phase".to_string(), "Evidence".to_string()]),
                     pointer_fields: None,
                     narrative_fields: None,
+                    field_values: None,
                     spec: None,
                     companion_fields: None,
                     relation_fields: Some(crate::config::RelationFields {

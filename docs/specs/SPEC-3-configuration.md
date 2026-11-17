@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.155'
+Version: '0.156'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:04472363242c8fea612ce39fc1f6cdc08571a58cc760845d5fa9a193060a3cff, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:09c2431a269316741c35b51dabd5766ecd3d50fab2b98069314bb1bc8857767d, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:255395e7d2caa34947cef28f463e2ec050e3eba798a4dc7573a3cad946fee1ae
@@ -465,11 +465,46 @@ Two details carry weight:
   must be subsets of `values`; `success` and `failure` must not overlap. `implementable` names the
   statuses at which implementation of the record is permitted. It is independent of the terminals
   (an in-progress milestone is implementable and not terminal; an accepted decision is both), and
-  the engine never infers it from `success`. `claim_retained` (optional, a subset of `values`) names statuses reached only after acceptance that may still carry an `Implemented` or `Verified` embodiment claim, such as `Superseded`; `embodiment.requires-accepted-status` allows the claim at `success` and `claim_retained` statuses. `require` and `forbid` are lists of `{when: [status, ...], fields:
+  the engine never infers it from `success`. `claim_retained` (optional, a subset of `values`) names statuses reached only after acceptance that may still carry an `Implemented` or `Verified` embodiment claim, such as `Superseded`; `embodiment.requires-accepted-status` allows the claim at `success` and `claim_retained` statuses. `require` and `forbid` are lists of `{when: [status, ...], when_field: {Field: [value, ...]}, fields:
   [field, ...]}`: each `when` entry must be in `values`, and each field must be in the type's
-  `required_fields` or `known_fields` when the type declares `known_fields`. A field may not be both
-  required and forbidden at one status. A duplicate or blank entry, an unknown key, or a key present
-  with no value is a load-time error naming the record type and `statuses`.
+  `required_fields` or `known_fields` when the type declares `known_fields`. An entry declares `when`,
+  `when_field` or both, and applies when every condition it declares holds (`MILE-319`): the status is
+  one of `when`, and each `when_field` field holds one of its listed values (exact match; a value of
+  several comma-separated elements matches when one element does). An entry with only `when_field`
+  applies whatever the status, including a blank one. A `when_field` field must be in the type's
+  `required_fields` or `known_fields` and may not be the status field (its values go in `when`), and
+  when the field has a `field_values` vocabulary each listed value must be in it. A finding of an entry
+  with a field condition names the triggering field and value (`Kind is bug, which requires 'Severity'`);
+  an entry with only `when` keeps its meaning and message. `forbid` means the field is absent or blank.
+  A field may not be both required and forbidden for a record that could meet both entries (their
+  statuses overlap and every field both condition on shares a value). A duplicate or blank entry, an
+  unknown key, or a key present with no value is a load-time error naming the record type and `statuses`.
+
+  ```yaml
+  record_types:
+    work:
+      required_fields: [Status, Kind]
+      known_fields: [Severity, Parent]
+      field_values: {Kind: [feature, bug, chore]}
+      statuses:
+        values: [Open, Done]
+        require: [{when_field: {Kind: [bug]}, fields: [Severity]}]
+        forbid:  [{when: [Done], when_field: {Kind: [chore]}, fields: [Severity]}]
+  ```
+
+  `field_values` (`MILE-248`, its enumerated-values part) is a per-type map from a declared field to
+  the whole values that field may hold, such as `field_values: {Kind: [feature, bug, chore]}`.
+  `field.value-not-declared`, on by default at `error` for a configuration in which some type declares
+  `field_values` (and `not-enabled` otherwise, so a configuration without one reports as before),
+  reports a record whose field holds a value outside the list, naming the field, the value and the
+  allowed values. The comparison is exact, case included. A value of several comma-separated
+  elements (a YAML list reads as one) has each element checked. A missing or blank value is not this
+  rule's business: `header.required-fields` and `field.quality` judge presence and quality. The load
+  refuses an empty map, an empty list, a blank entry or one with surrounding whitespace, an entry
+  holding a comma, a value listed twice, a field in neither `required_fields` nor `known_fields`, the
+  status field (its vocabulary is `statuses.values`), and a `pointer_fields` or `narrative_fields`
+  field, which holds references. A value a field's vocabulary declares is a real value in that field: `field.quality` does not read it as a placeholder nor `field.pending` as a pending marker, even when it is one of those words (`todo`, `pending`). Each map value is a list today; another value type (a range, a
+  pattern) can later be declared as a mapping beside it without changing this form.
 
   `transitions` and `initial` (`MILE-144`, `ADR-72`) declare the type's lifecycle. `transitions`
   maps a declared status to the declared statuses that may follow it; a status with no entry is
@@ -2831,3 +2866,4 @@ proves this configuration produces the three findings.
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` e56be4912522 -> f74531f49e9c. Reason: config.rs: hooks.<hook> may be a map with command and managed (block or declared) as well as a list, and args() fills in each hook's default; every other key and default is unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Adds `hooks.verify_timeout_seconds` (default 600). **Why:** a fourth review of `MILE-220`'s pull request: `urzua hooks verify --run` ran a hook with no time limit. | **substantive** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` f74531f49e9c -> 04472363242c. Reason: config.rs: the hooks key gains verify_timeout_seconds (default 600, at least 1), and hooks.<hook> may be a map with command and managed; every other key and default is unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-16 | Bumped to `0.156`. Adds the per-type `field_values` vocabulary and its rule `field.value-not-declared`, on by default at `error` wherever a type declares one; adds `when_field` to `statuses.require` and `statuses.forbid` entries, combined with `when` by AND, with load errors for a condition on an undeclared field, the status field or a value outside the field's vocabulary; the required-and-forbidden refusal now covers entries a record could meet together. The `field_values` and `when_field` shapes, exact matching, element-wise checking of a list value and the rule being on only where a vocabulary is declared were decided by the builder on 2026-11-16, pending maintainer review. **Why:** `MILE-248` (enumerated values only) and `MILE-319`: a field was a name plus presence, and a requirement could depend on the status alone. | **substantive** |
