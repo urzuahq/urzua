@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5DB4YPSWZ6MQV85PQ7
-Version: '0.23'
+Version: '0.30'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/commands/explain.rs@sha256:d87eefb9ff72ce780f38fcc66506d7125b894a075c30a1cff0749581812363ef, code:rust/crates/urzua-cli/src/commands/graph.rs@sha256:1f510a65fa597717f5b31e64dc28a316592f003c82b717d5c159c1546c6b43da, code:rust/crates/urzua-core/src/graph.rs@sha256:36dba22b9492eb3f3972fab5e04b7fba47ee1b53d61a4fde8587e8e59312f61d, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs@sha256:c54ac806e2c9b2f02f51bb222849fabc30ad3f80affb2d15bfd653064798688c
+Realized-by: code:rust/crates/urzua-cli/src/commands/explain.rs@sha256:d87eefb9ff72ce780f38fcc66506d7125b894a075c30a1cff0749581812363ef, code:rust/crates/urzua-cli/src/commands/graph.rs@sha256:1f510a65fa597717f5b31e64dc28a316592f003c82b717d5c159c1546c6b43da, code:rust/crates/urzua-core/src/graph.rs@sha256:36dba22b9492eb3f3972fab5e04b7fba47ee1b53d61a4fde8587e8e59312f61d, test:rust/crates/urzua-cli/tests/record_types_own_config_integration.rs@sha256:c54ac806e2c9b2f02f51bb222849fabc30ad3f80affb2d15bfd653064798688c, code:rust/crates/urzua-cli/src/commands/explain_types.rs@sha256:8d269478bbb2a32fd78f2121c20e891b3ad36b602a11f1266d0075ab2e999dd9, code:rust/crates/urzua-cli/src/commands/config_lines.rs@sha256:e5886132ed49cda81d59ff563f254557b246a58e7b7933ee35b93817ed64eb0b, test:rust/crates/urzua-cli/tests/explain_types_integration.rs@sha256:22004fd62300ee0937a3151ba039526da69c8c21563bdb6b8bf5979574f52c9f
 Author: beauwilliams
 Subject: '`urzua explain`/`urzua graph` -- read-only relationship queries over already-parsed data.'
 Implements: ADR-24, ADR-44
@@ -82,6 +82,82 @@ The report is `{"status": "ok", "rule": {...}}`. `rule` carries:
 An id that is not a rule this build ships is `not-run` with the id, the nearest valid id when one is close
 (`did you mean 'status.delivery-agreement'?`) and a pointer to `urzua rules`. Nothing is read from the
 corpus: the report is the build's rule table and the repository's configuration.
+
+## `urzua explain --types` and `urzua explain --type <name>`
+
+What the configuration declares for its record types, read from the configuration file and nothing
+else (`MILE-329`). The report shows declarations; where it shows a value that is not a copy of one,
+the value comes from the function the engine itself uses for that decision. Types are listed in name
+order, not declaration order; a configuration with no record type prints `types` as an empty list and
+no `next_action`. A name the configuration does not declare exits 2 with a `not-run` report naming
+the declared types, or saying that none is declared. `--full` goes with `--types` only:
+`--type <name> --full` exits 2 with `urzua explain --type <name>` as its `next_action`, and `--full`
+alone exits 2 with `urzua explain --types --full`.
+
+`urzua explain --types` prints a summary: per type `name`, `at`, `prefix`, `dirs`, `cannot_create`
+when `urzua new` refuses the type, `required` and `optional` field names, `states` (`values` and
+`initial`), `references` (each reference field with the types it may name, `"any"`, or `none`) and
+the number of `conditions`; then `path_gates`, the path gates as declared, without the note. A declared value is printed bare; a default keeps its
+marker object. Its `next_action` is `urzua explain --type <name>`.
+
+`urzua explain --types --full` prints every declaration of every type, `rules_set_in_configuration`
+(each rule as written under `rules:`, in written order, with its level and line, and a fixed note),
+`path_gates`, and `repository`: every declared top-level key other than `record_types` and `rules`,
+each as `{value, at}`. `urzua explain --type <name>` prints the same detail for one type and the
+note's sentence on enforcement.
+
+Per type in detail: `name`, `at`, `create_command` or `cannot_create`, `prefix`, `dirs`, `template`,
+`header_fields` (each with `required`, `values` from `field_values`, `pointer`, `narrative`, `roles`
+from `relation_fields`), `states`, `conditions`, `gates`, `aliases`. `create_command` (shell-quoted) is
+printed when `urzua new`'s own check of the configuration accepts the type (`header_shape`, and an
+identity pattern that compiles); the command can still be refused for the given title, because the
+identity pattern does not read back the name built from the real number and title, or by a path gate,
+and `urzua new` says why. `cannot_create` carries that check's reason. Each header field that a
+relation pair declares as its forward or inverse side, where the pair's `types` (if any) name the
+type, lists that pair under `relation_pairs` as declared (`name`, `forward`, `inverse`, `types`,
+`target_types`, `at`). A reference field is a `pointer_fields` entry
+or a field the engine's target constraints name for the type (a relation pair's forward field); its
+`pointer` gives the field's own `targets` with their line when it declares any, each relation pair
+whose forward side it is and that names `target_types`, with that line and the pair's `name`, under
+`pair_target_types`,
+and `effective_targets` from the engine's target constraints: the types the field may name, `"any"`
+when nothing constrains it, or `{"value": "none", "note": ...}` when no type satisfies every
+declaration. `states` holds the status lists, `initial`, `new_writes` (the status `urzua new`
+writes, from the function `urzua new` uses; absent when it writes none or refuses the type),
+`transitions` in declaration order, every other `statuses` key raw, and `expiry`: the claim periods
+the claim-expiry rule's setting declares for the type, with that setting's level as written.
+`conditions` gives each `statuses.require` and `statuses.forbid` entry with its `when`,
+`when_field` and `fields` keys, a `sentence` worded as a declaration (`declared: when ...`), and for a
+requirement `counts_as_missing`: the type's `pending` and `placeholders` with their lines, or, where
+the type declares none, a marker that the engine's built-in list applies. `gates` lists only the
+`authority` gates declared for the type by name (`type: <name>`). `aliases` lists each YAML alias
+under the type with the line of its anchor (`defined_at`), once per alias. Every other declared key
+of the type is printed raw under its own name as `{value, at}`; relation pairs appear as declared
+under `repository`.
+
+`path_gates` lists every `authority` gate declared by path, once, as declared (`paths`, `by`, `at`);
+in `--full` it carries a fixed note: a path gate declares who may change paths matching its patterns,
+whatever the type, and `urzua new`, the edit hook and the pull request check act on it where they are
+enabled. Path gates are not attributed to types.
+
+The report does not say which rules apply to a type, nor whether a declared condition is enforced.
+Which records a rule judges is decided inside each rule's code, and a mapping kept outside the rules
+drifts from it. `rules_set_in_configuration` lists what `rules:` says, nothing more: rules on by
+default or by a declaration do not appear there; `urzua check` reports every rule that ran and how
+many records each examined, and with this section answers whether a declaration is enforced.
+
+Every entry read from the configuration carries `at`, its key path and line (`path:line`). Lines come
+from a second pass over the YAML text: block keys and items, the first level of a single-line flow
+mapping, and each item of a flow list (also over several lines) are placed exactly; a key inside a
+multi-line flow mapping or an aliased value is given its nearest enclosing key's line. Nothing the
+configuration does not declare is printed, with these exceptions, each marked `"default": true` with
+a `source` and no `at`: `new_writes`, printed beside a declared `initial` so a mismatch between them
+shows
+(`urzua_new_scaffold`); the identifier prefix when `prefix` is not declared, from `urzua new`'s own
+prefix function (`type_name_uppercased`); the template path when `urzua new`'s template file exists
+(`conventional_template_path`); and the built-in pending and placeholder lists in `counts_as_missing`
+(`built_in_list`). Empty lists, empty objects and absent settings are omitted. The only prose is a
+condition's `sentence`, the reason in `cannot_create` and the fixed notes.
 
 ## `urzua graph`
 
@@ -189,3 +265,15 @@ Both are stdout-JSON-always (ADR-23) and never write. `graph` reads `pointer_fie
 > | 2026-11-17 | Pin recomputed on merge (attested by beauwilliams, identity: gh-verified, actor: agent): both merged sides re-pinned, `rust/crates/urzua-core/src/graph.rs` (Realized-by) 46d69af1dd1c and 9b36fa2ee136 -> 16a38ffef9e7; the new hash is the merged file's, which is git's automatic merge of the two re-pinned commits. No person wrote a reason for the merged state. **Why:** `urzua fix --conflicts` resolved a conflict that lay only in re-pin lines; a reviewer of the pull request should confirm the merged pin. | **evidence** |
 > | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/record_types_own_config_integration.rs` 95790a97cb28 -> c54ac806e2c9. Reason: record_types_own_config_integration.rs: the doctor test expects the not-pointed message now that this repository's config names its hook directory; no other test changed. The claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/graph.rs` 16a38ffef9e7 -> 36dba22b9492. Reason: rust/crates/urzua-core/src/graph.rs: test fixtures that build a Config gain the new declared_status_entries field; no production code changed **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-17 | Bumped to `0.24`. Adds the section `urzua explain --types` and `urzua explain --type <name>`: what the configuration declares per record type, each entry with its key path and line, the two marked defaults, and the three rule lists. **Why:** an agent new to a repository could not learn its record model from the tool without reading the configuration file. | **substantive** |
+> | 2026-11-17 | Bumped to `0.25`. `urzua explain --types` prints a summary with `--full` for every declaration and a `repository` section; every undeclared-rendering key is printed raw; a requirement carries `counts_as_missing`; four marked non-declared entries replace two; transitions keep declaration order; the per-type field list is `header_fields`; the initial-state text says what is declared. **Why:** review of the first version found declarations left out and a report too long for a session start; the summary default, the four marked entries and the agent-only session-start line were decided by the orchestrator and accepted by the maintainer on 2026-11-17: "The three decisions you made make sense to me. I'm happy with your decisions". | **substantive** |
+> | 2026-11-17 | Bumped to `0.26`. The `urzua explain --types` section: a type's rules are read from the rule table and include rules declared outside the type's keys; expiry is shown only while its rule is in effect; a reference field reports its own targets, each pair's `target_types` and the effective result, with `"any"` for none; an undeclared initial state says no start status is required and names what `urzua new` writes; the summary keeps default markers and counts conditions by whether their rule is on; `--full` goes with `--types` only; types are in name order; aliases name their anchor's line; the built-in pending and placeholder lists are marked; `Realized-by` cites `explain_types.rs`, `config_lines.rs` and `explain_types_integration.rs`. **Why:** review of 2026-11-17 found the command stated six things untruly; each is corrected. | **substantive** |
+> | 2026-11-17 | Pinned (attested by beauwilliams, identity: gh-verified, actor: agent): 3 locators pinned, 3 file-level, 0 scoped. Evidence: rust/crates/urzua-cli/src/commands/explain_types.rs@sha256:08015e93ad9d, rust/crates/urzua-cli/src/commands/config_lines.rs@sha256:e73c38775722, rust/crates/urzua-cli/tests/explain_types_integration.rs@sha256:6ceceef0feb2 Reason: explain_types.rs builds the explain --types and --type reports this spec's section describes; config_lines.rs gives each entry its key path and line; explain_types_integration.rs tests each stated behaviour **Why:** a claim is renewed only over pinned code and test evidence. | **evidence** |
+> | 2026-11-17 | Bumped to `0.27`. One type's rules are now `rules.from_declarations`: only rules tied to a declaration of the type or to an entry of a rule's setting naming it, each with `declared_by`, base-only rules marked; repository-wide rules move to `repository.rules` under `--types --full`, and each type points there in a fixed sentence. `new_writes` is read from the function `urzua new` uses and is absent when it writes no status; an empty target intersection reads `none`; gate paths compare with case folded; `--type --full` names the command to run. **Why:** review of 2026-11-17 showed that which rules examine a type cannot be derived from the rule table; the narrower claim was decided by the orchestrator on 2026-11-17, pending maintainer review. | **substantive** |
+> | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/explain_types.rs` 08015e93ad9d -> 6be486c4a397, `rust/crates/urzua-cli/tests/explain_types_integration.rs` 6ceceef0feb2 -> e3ff880de76a. Reason: explain_types.rs: one type's rules are those tied to its declarations or to a rule setting naming it, repository-wide rules move to repository.rules, new_writes comes from scaffold_status, an empty target intersection reads none, gate paths fold case; explain_types_integration.rs: tests for each **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-17 | Bumped to `0.28`. The report no longer says which rules apply to a type: per-type rule lists, rule ties and the repository-wide rule list are removed, and a paragraph says why (each rule decides its own population). `--types --full` lists `rules_set_in_configuration` as written, with a note that rules on by default or by declaration do not appear and `urzua check` reports what ran. Expiry shows the periods and the setting's level as written. A type `urzua new` refuses shows `cannot_create` with its reason instead of `create` and `new_writes`. Path gates use the engine's matcher, with `may_cover` where a glob cannot be decided. A pair's forward field outside `pointer_fields` is shown as a reference. **Why:** review of 2026-11-17 found the rule ties false three times; the cut was decided by the orchestrator on 2026-11-17, pending maintainer review. | **substantive** |
+> | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/explain_types.rs` 6be486c4a397 -> 83467de65c2d, `rust/crates/urzua-cli/src/commands/config_lines.rs` e73c38775722 -> 7e2b16324972, `rust/crates/urzua-cli/tests/explain_types_integration.rs` e3ff880de76a -> 0addf2725ab1. Reason: explain_types.rs: per-type rule ties are removed, --types --full lists the rules set as written, expiry shows periods and the level as written, a type urzua new refuses shows cannot_create, path gates use the engine's matcher, a pair's forward field is a reference; config_lines.rs: an index under a quoted key falls back to the right parent; explain_types_integration.rs: tests follow **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-17 | Bumped to `0.29`. Path gates are no longer attributed to types: per type `gates` lists only gates declared by type name, and `path_gates` lists every path gate once, as declared, with a fixed note; `create` becomes `create_command`, printed when `urzua new`'s own configuration check (header shape and identity pattern) accepts the type, with a sentence that the title or a path gate can still refuse it; conditions carry no rule id and their sentence reads `declared: ...`; `--type` output repeats the enforcement sentence; `rules_set_in_configuration` keeps the written order; each flow-list item has its own line; relation pairs appear only under `repository`; reference fields and every default come from the engine's own functions. **Why:** review of 2026-11-17 found the three computed parts still contradicting the engine; showing declarations only was decided by the orchestrator on 2026-11-17, pending maintainer review. | **substantive** |
+> | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/explain_types.rs` 83467de65c2d -> f2c2e4ac96a5, `rust/crates/urzua-cli/src/commands/config_lines.rs` 7e2b16324972 -> e5886132ed49, `rust/crates/urzua-cli/tests/explain_types_integration.rs` 0addf2725ab1 -> 6fc69e681902. Reason: explain_types.rs: per type only gates declared by type name, path gates once as declared, create_command from urzua new's own check, conditions worded as declarations without a rule id, rules set in written order, reference fields from the engine's target constraints, required_of_records from has_transitions; config_lines.rs: each flow-list item gets its own line; explain_types_integration.rs: tests follow **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-17 | Bumped to `0.30`. An undeclared `initial` is no longer printed (its `required_of_records` could only be false); `create_command` is shell-quoted and can be refused for the title because the identity pattern is fitted to the real number and title by `urzua new`; each header field lists the relation pairs that declare it; `pair_target_types` names its pair; the summary's `path_gates` has no note, and the note in `--full` is worded as a declaration. **Why:** review of 2026-11-17; the identity-pattern fit returns to `urzua new` after numbering, as before this change. | **substantive** |
+> | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/explain_types.rs` f2c2e4ac96a5 -> 8d269478bbb2, `rust/crates/urzua-cli/tests/explain_types_integration.rs` 6fc69e681902 -> 22004fd62300. Reason: explain_types.rs: create_command is shell-quoted, an undeclared initial is not printed, each header field lists the relation pairs declaring it, pair_target_types names its pair, the summary's path_gates drops the note, the note reads as a declaration; explain_types_integration.rs: tests follow, including six identity-pattern rows run through urzua new **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |

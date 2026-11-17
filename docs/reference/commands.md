@@ -57,7 +57,7 @@ Four commands do:
 | [`waive`](#waive) | Draft waivers for the current findings | with `--apply` |
 | [`mcp`](#mcp) | Serve the corpus to an agent over MCP, read-only | no |
 | [`doctor`](#doctor) | Report the health of the config and its wiring | no |
-| [`explain`](#explain) | Which records govern a path, or what a rule is | no |
+| [`explain`](#explain) | Which records govern a path, what a rule is, or what the configuration declares for its record types | no |
 | [`graph`](#graph) | The record relationship graph | no |
 | [`roadmap`](#roadmap) | The order of work, computed from the records | no |
 | [`rules`](#rules) | Every rule this build ships | no |
@@ -285,6 +285,8 @@ Exit 0 for `ok` and `warn`, 1 for `error`, 2 when there is no config to read.
 ```text
 urzua explain <path>
 urzua explain --rule <rule-id>
+urzua explain --types [--full]
+urzua explain --type <name>
 ```
 
 With a path (a file, directory, glob, or `path#scope`): every record whose `Realized-by` names it as
@@ -294,6 +296,39 @@ neither in the repository nor cited by a record exits 2.
 With `--rule`: what the rule is. Its `rule` object has `id`, `description`, `scope`, `judges`,
 `population_unit`, `spec`, the `level` your config sets, `waivable`, its `options` with their current
 values and its `actions`.
+
+With `--types`: a summary, one compact entry per declared record type in name order (`name`, `at`,
+`prefix`, `dirs`, `cannot_create` when `urzua new` refuses the type, `required` and `optional` field
+names, `states`, `references` with `"any"` for an unconstrained field and `none` when no type
+satisfies every declaration, and the number of `conditions`), then `path_gates` as declared; a default keeps its
+marker object; `next_action` is `urzua explain --type <name>` when a type is declared.
+
+With `--types --full`, or `--type <name>` for one type (always full; `--type <name> --full` and
+`--full` alone exit 2 and name the command to run): every declaration, each with `at`
+(`key.path:line`): `create_command` (shell-quoted) or `cannot_create`, `prefix`, `dirs`, `template`,
+`header_fields` (a `pointer` gives its own `targets`, each pair's `target_types` with the pair's name,
+and `effective_targets`; a field a relation pair declares lists that pair as declared), `states`
+(with `new_writes`, the status `urzua new` writes, and `expiry`, the claim periods with the rule
+setting's level as written), `conditions` (keys, a `declared: ...` sentence, `counts_as_missing` for a
+requirement), `gates` (only gates declared for the type by name), `aliases` (each alias with its
+anchor's line, once per alias), and every other declared key raw under its own name.
+`create_command` can still be refused for the given title (the identity pattern is fitted to the real
+number and title) or by a path gate; `urzua new` says why.
+`--types --full` adds `rules_set_in_configuration`, `path_gates` and `repository`, every other
+declared top-level key (relation pairs among them); `--type <name>` adds a one-sentence `note` on
+enforcement.
+
+`path_gates` lists each gate declared by path, once, as declared. A path gate declares who may change
+paths matching its patterns, whatever the type; `urzua new`, the edit hook and the pull request check
+act on it where they are enabled (`--full` repeats this as a note).
+
+`rules_set_in_configuration` is the rules set in the configuration, as written under `rules:`, in
+written order. Rules on by default or by a declaration do not appear there; `urzua check` reports
+every rule that ran and how many records each examined. The command does not say which rules apply
+to a type, nor whether a declared condition is enforced: each rule decides in its own code which
+records it judges, so a list kept outside the rules would drift from them.
+
+Entries not declared are marked `"default": true` with a `source`. An undeclared `--type` exits 2.
 
 ## graph
 

@@ -110,9 +110,20 @@ struct Verdict {
     findings: Vec<serde_json::Value>,
     #[serde(rename = "override", skip_serializing_if = "Option::is_none")]
     override_name: Option<String>,
-    /// Only for a `gates_only` request that no gate denied.
     #[serde(flatten, skip_serializing_if = "Option::is_none")]
-    gates: Option<Box<GatesAnswer>>,
+    extra: Option<Box<Extra>>,
+}
+
+/// What a verdict carries beyond its message, boxed to keep `Verdict` small.
+#[derive(Serialize)]
+#[serde(untagged)]
+enum Extra {
+    Gates(GatesAnswer),
+    /// Text for the agent alone: the adapter passes it on an `allow` session
+    /// start, which shows the person nothing.
+    Agent {
+        agent: &'static str,
+    },
 }
 
 /// The answer to a `gates_only` request that no gate denied: whether the full
@@ -132,7 +143,7 @@ impl Verdict {
             message,
             findings: Vec::new(),
             override_name: None,
-            gates: None,
+            extra: None,
         }
     }
 }
@@ -977,10 +988,10 @@ fn gates_only_verdict(repo_root: &Path, loaded: &Config, request: &Request) -> V
         .iter()
         .map(|p| !editor_on || governed(p))
         .collect();
-    verdict.gates = Some(Box::new(GatesAnswer {
+    verdict.extra = Some(Box::new(Extra::Gates(GatesAnswer {
         record: records.iter().any(|r| *r) || (records.is_empty() && !editor_on),
         records,
-    }));
+    })));
     verdict
 }
 
@@ -1752,14 +1763,19 @@ fn session_start(config: Option<PathBuf>) -> Verdict {
     finish(problems, &harness)
 }
 
+/// One line naming the command that prints the repository's record types.
+const TYPES_LINE: &str = "Record types: `urzua explain --types`";
+
 fn finish(problems: Vec<Problem>, harness: &urzua_core::harness::HarnessDecl) -> Verdict {
     const P: &str = "urzua harness (session-start)";
     if problems.is_empty() {
-        return Verdict::new(
+        let mut v = Verdict::new(
             "allow",
             None,
             format!("{P}: the harness is installed and wired"),
         );
+        v.extra = Some(Box::new(Extra::Agent { agent: TYPES_LINE }));
+        return v;
     }
     let mut message = format!(
         "{P}: {} thing(s) would make a guardrail fail open or not run:",
@@ -1778,6 +1794,7 @@ fn finish(problems: Vec<Problem>, harness: &urzua_core::harness::HarnessDecl) ->
             "\nA guardrail is set to on_unjudged: deny, so an agent's edit is refused while it cannot judge. {HATCH}"
         ));
     }
+    message.push_str(&format!("\n{TYPES_LINE}"));
     let mut v = Verdict::new("allow-with-warnings", None, message);
     v.findings = problems
         .iter()

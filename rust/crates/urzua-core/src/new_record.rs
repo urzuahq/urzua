@@ -478,6 +478,17 @@ impl<'a> ScaffoldSpec<'a> {
     }
 }
 
+/// The status a new record's scaffold writes, or `None` when it writes none:
+/// the type's status field must be a required field, which is the only kind
+/// the scaffold fills, and the type must declare a status vocabulary.
+pub fn scaffold_status(type_config: &crate::config::RecordTypeConfig) -> Option<String> {
+    let field = type_config.relation_field(crate::config::RelationRole::Status);
+    if !type_config.required_fields.iter().any(|f| f == field) {
+        return None;
+    }
+    type_config.status_decl()?.values.into_iter().next()
+}
+
 /// The initial text of a record: a synthesized YAML header from the type's
 /// declarations, then the body scaffolding of `template` (the caller reads the
 /// checked-in template, if any). Pure: no file is read or written.
@@ -489,7 +500,7 @@ pub fn scaffold_record(spec: &ScaffoldSpec, template: Option<&str>) -> String {
     let type_config = spec.type_config;
     // The entry state of the type's own vocabulary, not a choice: moving a
     // record on from it stays a human decision.
-    let status_decl = type_config.status_decl();
+    let initial_status = scaffold_status(type_config);
     let params = NewRecordParams {
         display_number: spec.display_number,
         // The H1 id is padded exactly as the file name is: the width of the
@@ -499,10 +510,7 @@ pub fn scaffold_record(spec: &ScaffoldSpec, template: Option<&str>) -> String {
             .and_then(|c| c.identify(spec.filename).number)
             .map_or(0, |n| n.len()),
         h1_prefix: spec.compiled.map(|_| spec.type_prefix),
-        initial_status: status_decl
-            .as_ref()
-            .and_then(|d| d.values.first())
-            .map(String::as_str),
+        initial_status: initial_status.as_deref(),
         status_field: type_config.relation_field(crate::config::RelationRole::Status),
         date_field: type_config.date_field(),
         author_field: type_config.author_field(),
