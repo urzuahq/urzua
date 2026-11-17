@@ -23,7 +23,7 @@ It's a record engine, not a record format: you declare what a record type looks 
 
 - **[urzua](https://github.com/urzuahq/urzua)** itself: its decisions, specs, bugs and backlog are urzua records under [`docs/`](docs/), checked on every pull request by the gate in this repository's CI.
 - **[subq-agent-kit](https://github.com/beauwilliams/subq-agent-kit)**: decision-model checks for coding agents. Its work is three record types its own configuration declares, a task that points at a milestone that points at an epic.
-- **TaskMarket** ([daydreamsai/taskmarket](https://github.com/daydreamsai/taskmarket), private): its decision records are checked by the urzua gate in CI.
+- **taskmarket** ([daydreamsai/taskmarket](https://github.com/daydreamsai/taskmarket), private): its decision records are checked by the urzua gate in CI.
 
 The board below is subq-agent-kit's plan, drawn by about fifty lines of script from one file, the output of `urzua export --format json`: each epic, the milestones under it, and each milestone's tasks, with what is ready and what waits on what taken from the order of work the export carries. It is a plan in progress, so its records may change. None of those three types, their names or their fields is built into urzua; that repository's [`.urzua/config.yaml`](https://github.com/beauwilliams/subq-agent-kit/blob/main/.urzua/config.yaml) declares them.
 
