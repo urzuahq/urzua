@@ -451,6 +451,27 @@ fn judging_roots(request: &Request, cwd: &Path) -> Vec<PathBuf> {
     roots
 }
 
+/// Whether no `.urzua/config.yaml` exists at or above the current directory,
+/// `project_dir`, or any of `paths` (relative to the current directory), with
+/// symlinks followed: the files are in no repository that uses urzua, so an
+/// edit or a command there is not judged and says nothing.
+pub(super) fn ungoverned(project_dir: Option<&str>, paths: &[String]) -> bool {
+    let Ok(cwd) = std::env::current_dir() else {
+        return false;
+    };
+    let mut starts = vec![cwd.clone()];
+    starts.extend(project_dir.map(PathBuf::from));
+    for p in paths {
+        let abs = absolute(&cwd, p);
+        starts.extend(resolve_links(&abs));
+        starts.push(abs);
+    }
+    !starts.iter().any(|s| {
+        s.ancestors()
+            .any(|a| crate::discovery::default_config_path(a).exists())
+    })
+}
+
 /// Whether the file the edit writes is inside `root`, as written or once its
 /// links are followed.
 fn holds(root: &Path, cwd: &Path, request: &Request) -> bool {
@@ -671,6 +692,13 @@ fn judge_edit(config: Option<PathBuf>, mut request: Request) -> Verdict {
     let Ok(cwd) = std::env::current_dir() else {
         return judge_edit_in(config, request);
     };
+    if config.is_none() && ungoverned(request.project_dir.as_deref(), &request.paths) {
+        return Verdict::new(
+            "allow",
+            request.paths.first().map(String::as_str),
+            String::new(),
+        );
+    }
     // The directories of this process are looked at once each.
     forget_git_roots();
     let total = request.paths.len();
@@ -1495,6 +1523,9 @@ pub fn run_session_start(config: Option<PathBuf>) -> ExitCode {
     let request = read_request().unwrap_or_default();
     if let Some(cwd) = &request.cwd {
         let _ = std::env::set_current_dir(cwd);
+    }
+    if config.is_none() && ungoverned(request.project_dir.as_deref(), &[]) {
+        return emit(&Verdict::new("allow", None, String::new()));
     }
     if config.is_none() {
         enter_governed_cwd(request.project_dir.as_deref());

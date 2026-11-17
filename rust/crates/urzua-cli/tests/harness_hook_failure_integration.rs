@@ -240,7 +240,7 @@ fn without_a_working_binary_a_configuration_read_with_certainty_as_open_lets_the
 }
 
 #[test]
-fn without_a_working_binary_a_missing_parent_or_unreadable_configuration_is_refused() {
+fn without_a_working_binary_a_parents_or_an_unreadable_configuration_is_refused() {
     let cmd = edit_command();
     let path = path_with(None);
     // The configuration is in a parent of the session's directory.
@@ -250,12 +250,6 @@ fn without_a_working_binary_a_missing_parent_or_unreadable_configuration_is_refu
     assert!(
         denied(&run(&cmd, &sub, &path, &[])),
         "a parent's configuration governs"
-    );
-    // No configuration anywhere above the session.
-    let bare = common::TempDir::new("urzua-hookfail-bare");
-    assert!(
-        denied(&run(&cmd, &bare, &path, &[])),
-        "nothing read, nothing certain"
     );
     // A configuration that cannot be read.
     if common::permission_bits_are_enforced() {
@@ -322,4 +316,135 @@ fn an_engine_that_does_not_answer_before_the_deadline_ends_in_a_refusal() {
     );
     assert!(denied(&v), "{v:?}");
     assert!(v.unwrap().to_string().contains("deadline"));
+}
+
+const GATE: &str = "authority:\n  deciders:\n    maintainers: {logins: [Alice]}\n  gates:\n    - {paths: [\".claude\"], by: maintainers}\n";
+
+/// Configurations whose engine refuses an agent's write to `.claude`, each in
+/// a shape a text scan misreads.
+fn refusing_shapes() -> Vec<(&'static str, String)> {
+    let h = |g: &str| format!("{TYPES}harness:\n  guardrails:\n{g}{GATE}");
+    vec![
+        ("True", h("    protected-paths: {enabled: True}\n")),
+        ("TRUE", h("    protected-paths: {enabled: TRUE}\n")),
+        ("quoted-key", h("    \"protected-paths\": {enabled: true}\n")),
+        ("one-line-harness", format!("{TYPES}harness: {{guardrails: {{protected-paths: {{enabled: true}}}}}}\n{GATE}")),
+        ("anchor-alias", format!("{TYPES}x: &g {{enabled: true}}\nharness:\n  guardrails:\n    protected-paths: *g\n{GATE}")),
+        ("json", r#"{"schema_version": 2, "record_types": {"adr": {"dir": "docs/adr", "required_fields": ["Status"]}}, "harness": {"guardrails": {"protected-paths": {"enabled": true}}}, "authority": {"deciders": {"maintainers": {"logins": ["Alice"]}}, "gates": [{"paths": [".claude"], "by": "maintainers"}]}}"#.to_string()),
+        ("trailing-comment", h("    protected-paths:\n      enabled: true # on_unjudged: allow false\n")),
+        ("comment-line-in-block", h("    protected-paths:\n      # on_unjudged: allow\n      enabled: true\n")),
+        ("quoted-allow-with-hash", h("    protected-paths:\n      enabled: true\n      on_unjudged: 'allow #x'\n")),
+    ]
+}
+
+fn write_settings(dir: &Path) -> String {
+    serde_json::json!({"tool_name": "Write", "cwd": dir.to_string_lossy(), "tool_input": {"file_path": dir.join(".claude/settings.json").to_string_lossy(), "content": "{}"}}).to_string()
+}
+
+const CRASHING: &str = r#"["sh", "-c", "kill -SEGV $$"]"#;
+
+#[test]
+fn with_the_engine_crashing_every_shape_the_engine_refuses_is_refused_by_the_hook() {
+    for (name, config) in refusing_shapes() {
+        let dir = repo(&format!("crash-{name}"), &config);
+        std::fs::create_dir_all(dir.join(".claude")).unwrap();
+        // The engine itself refuses the write under this configuration.
+        let out = common::run_hook(&dir, "edit", &write_settings(&dir), None, Some(&dir), &[]);
+        assert!(
+            String::from_utf8_lossy(&out.stdout).contains("\"deny\""),
+            "{name}: the engine refuses: {out:?}"
+        );
+        let out = common::run_hook(
+            &dir,
+            "edit",
+            &write_settings(&dir),
+            Some(&["sh", "-c", "kill -SEGV $$"]),
+            Some(&dir),
+            &[],
+        );
+        let text = String::from_utf8_lossy(&out.stdout);
+        assert!(
+            text.contains("\"permissionDecision\": \"deny\""),
+            "{name}: {text}"
+        );
+        let _ = CRASHING;
+    }
+}
+
+/// A repository that does not use urzua: no configuration in it or any parent.
+fn ungoverned() -> common::TempDir {
+    let dir = common::TempDir::new("urzua-hookfail-ungoverned");
+    git(&dir, &["init", "-q"]);
+    dir
+}
+
+#[test]
+fn in_a_repository_with_no_configuration_the_fallback_allows_a_write_and_an_mcp_call_silently() {
+    let cmd = edit_command();
+    let dir = ungoverned();
+    for (binary, label) in [
+        (None, "absent"),
+        (
+            Some("echo 'unrecognized subcommand' >&2; exit 2"),
+            "too old",
+        ),
+    ] {
+        let path = path_with(binary);
+        assert_eq!(
+            run(&cmd, &dir, &path, &[]),
+            None,
+            "{label}: a Write says nothing"
+        );
+        let mcp = serde_json::json!({"tool_name": "mcp__fs__write_file", "cwd": dir.to_string_lossy(), "tool_input": {"path": dir.join("a.txt").to_string_lossy(), "content": "x"}}).to_string();
+        let mut c = Command::new("/bin/sh");
+        c.args(["-c", &cmd])
+            .current_dir(&dir)
+            .env_clear()
+            .env("PATH", path.dir.path())
+            .env("CLAUDE_PROJECT_DIR", dir.path())
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        let mut child = c.spawn().unwrap();
+        let _ = child.stdin.take().unwrap().write_all(mcp.as_bytes());
+        let out = child.wait_with_output().unwrap();
+        assert_eq!(
+            (out.status.code(), out.stdout.is_empty()),
+            (Some(0), true),
+            "{label}: {out:?}"
+        );
+    }
+}
+
+#[test]
+fn in_a_repository_with_no_configuration_the_binary_says_nothing_even_when_the_engine_crashes() {
+    let dir = ungoverned();
+    let write = serde_json::json!({"tool_name": "Write", "cwd": dir.to_string_lossy(), "tool_input": {"file_path": dir.join("a.txt").to_string_lossy(), "content": "x"}}).to_string();
+    let bash = serde_json::json!({"tool_name": "Bash", "cwd": dir.to_string_lossy(), "tool_input": {"command": "true"}}).to_string();
+    let start = serde_json::json!({"cwd": dir.to_string_lossy(), "session_id": "s"}).to_string();
+    for (event, payload) in [
+        ("edit", &write),
+        ("post-command", &bash),
+        ("session-start", &start),
+    ] {
+        let out = common::run_hook(&dir, event, payload, None, Some(&dir), &[]);
+        assert!(
+            out.stdout.is_empty(),
+            "{event}: {}",
+            String::from_utf8_lossy(&out.stdout)
+        );
+    }
+    let out = common::run_hook(
+        &dir,
+        "edit",
+        &write,
+        Some(&["sh", "-c", "kill -SEGV $$"]),
+        Some(&dir),
+        &[],
+    );
+    assert!(
+        out.stdout.is_empty(),
+        "{}",
+        String::from_utf8_lossy(&out.stdout)
+    );
 }

@@ -25,7 +25,7 @@ pub use command::hook_command;
 use std::path::{Path, PathBuf};
 
 use super::super::json::{self, J};
-use super::pyjson::{dumps, dumps_indent1, obj, s};
+use super::hook_json::{dumps, dumps_indent1, obj, s};
 use super::{engine, text as vtext, truthy};
 
 pub const NAME: &str = "claude-code";
@@ -38,6 +38,9 @@ const EDIT_TOOLS: [&str; 4] = ["Write", "Edit", "MultiEdit", "NotebookEdit"];
 /// allowed, or a file no record type governs.
 const QUIET: [&str; 2] = ["allow", "not-governed"];
 const ALLOWED_NOTES: [&str; 3] = ["allow-unjudged", "allow-override", "allow-with-warnings"];
+/// Why an edit nobody judged is refused when the configuration was read without
+/// the engine.
+pub(super) const CLOSED: &str = "The configuration does not show with certainty that an unjudged edit may go through (acceptance or protected-paths is at on_unjudged: deny, or the configuration could not be read with certainty), so an agent's edit that was not judged is refused. A person edits outside the agent harness, or sets on_unjudged: allow in .urzua/config.yaml.";
 /// How an error about a tool input of the wrong shape begins.
 const MALFORMED: &str = "the tool input is malformed: ";
 const POST_NOT_JUDGED: &str =
@@ -146,16 +149,33 @@ impl Run {
         })
     }
 
-    /// Whether the configuration closes an unjudged edit, read as text from the
-    /// working directory and from the session's project. Only when the engine
-    /// cannot be run.
+    /// Whether the configuration refuses an unjudged edit, read without the
+    /// engine (it could not be run or did not give a verdict) from the working
+    /// directory and from the session's project: refused unless each is read
+    /// with certainty as open or is not governed at all.
     fn closed_by_config_text(&self, cwd: Option<&str>) -> bool {
         let here = std::env::current_dir().unwrap_or_default();
         let mut starts = vec![cwd.map(PathBuf::from).unwrap_or(here)];
         if let Some(p) = &self.project {
             starts.push(PathBuf::from(p));
         }
-        starts.iter().any(|d| text::config_closes(d) == Some(true))
+        starts
+            .iter()
+            .any(|d| text::unjudged_at(d) == text::Unjudged::Closed)
+    }
+
+    /// Whether no configuration governs the working directory, the session's
+    /// project or any of `paths`: a repository that does not use urzua, where
+    /// an edit nobody judged is allowed without a word.
+    fn not_governed(&self, cwd: Option<&str>, paths: &[String]) -> bool {
+        let here = std::env::current_dir().unwrap_or_default();
+        let base = cwd.map(PathBuf::from).unwrap_or(here);
+        let mut starts = vec![base.clone()];
+        starts.extend(self.project.as_ref().map(PathBuf::from));
+        starts.extend(paths.iter().map(|p| base.join(p)));
+        starts
+            .iter()
+            .all(|d| text::unjudged_at(d) == text::Unjudged::NotGoverned)
     }
 
     /// An edit the translator could not judge: the engine says whether the
@@ -191,8 +211,11 @@ impl Run {
                 );
             }
         }
+        if self.not_governed(cwd, &paths) {
+            return (Kind::Allow, String::new());
+        }
         if loud && self.closed_by_config_text(cwd) {
-            return (Kind::Block, format!("{message} The configuration sets on_unjudged: deny for acceptance or protected-paths, so an agent's edit that was not judged is refused. A person edits outside the agent harness, or sets on_unjudged: allow in .urzua/config.yaml."));
+            return (Kind::Block, format!("{message} {CLOSED}"));
         }
         if loud {
             (Kind::Stated, message.to_string())
@@ -248,8 +271,8 @@ fn usable_dir(d: &str) -> bool {
     if d.is_empty() || !Path::new(d).is_dir() {
         return false;
     }
-    // Entering it is the test os.access(d, X_OK) stood for; the process is the
-    // hook's own and goes back at once.
+    // Whether the directory can be entered is known only by entering it; the
+    // process is the hook's own and goes back at once.
     let here = std::env::current_dir();
     let ok = std::env::set_current_dir(d).is_ok();
     if let Ok(h) = here {
@@ -263,7 +286,7 @@ pub(super) fn to_value(j: &J) -> serde_json::Value {
 }
 
 /// A JSON value as a message shows it: a string bare, `None`, `True` and `False` for null and booleans.
-fn py_str(j: Option<&J>) -> String {
+fn shown(j: Option<&J>) -> String {
     match j {
         None | Some(J::Null) => "None".into(),
         Some(J::Bool(true)) => "True".into(),
@@ -288,12 +311,12 @@ fn j_truthy(j: Option<&J>) -> bool {
 
 fn read_text(path: &str) -> Result<String, String> {
     let bytes = std::fs::read(path)
-        .map_err(|e| format!("cannot read {path}: {}", py_os_error(&e, path)))?;
+        .map_err(|e| format!("cannot read {path}: {}", io_error_text(&e, path)))?;
     String::from_utf8(bytes).map_err(|e| format!("cannot read {path}: {e}"))
 }
 
 /// An I/O error as messages show it: `[Errno 2] No such file or directory: 'path'`.
-fn py_os_error(e: &std::io::Error, path: &str) -> String {
+fn io_error_text(e: &std::io::Error, path: &str) -> String {
     let text = e.to_string();
     let base = text.split(" (os error").next().unwrap_or(&text).to_string();
     match e.raw_os_error() {
@@ -310,7 +333,7 @@ fn notebook_proposed(inp: &J, path: &str) -> Result<String, String> {
         return Err(format!("{path} is not a notebook with cells"));
     };
     let mode = if j_truthy(inp.get("edit_mode")) {
-        py_str(inp.get("edit_mode"))
+        shown(inp.get("edit_mode"))
     } else {
         "replace".to_string()
     };
@@ -321,7 +344,7 @@ fn notebook_proposed(inp: &J, path: &str) -> Result<String, String> {
         index = cells
             .iter()
             .position(|c| matches!(c, J::Obj(_)) && c.get("id") == Some(id));
-        let shown = py_str(Some(id));
+        let shown = shown(Some(id));
         if index.is_none() && !shown.is_empty() && shown.chars().all(|c| c.is_ascii_digit()) {
             index = shown.parse::<usize>().ok().filter(|n| *n < cells.len());
         }
@@ -513,7 +536,7 @@ fn edit(run: &mut Run, payload: &J, cwd: Option<&str>) {
     if !EDIT_TOOLS.contains(&tool) || !j_truthy(raw) {
         return;
     }
-    let path = py_str(raw);
+    let path = shown(raw);
     let content = match raw {
         Some(J::Str(_)) => proposed(tool, inp, &path),
         _ => Err(format!("{MALFORMED}{key} is not a string")),

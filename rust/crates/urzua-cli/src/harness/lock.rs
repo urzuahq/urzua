@@ -123,6 +123,28 @@ fn words(text: &str) -> String {
             out.push(format!("\n{t}"));
             continue;
         }
+        // Markup that changes what the reader sees or how it is scoped: a
+        // heading's level, a comment opening or closing, a rule (which also
+        // fences front matter).
+        let hashes = t.chars().take_while(|c| *c == '#').count();
+        let marks: Vec<char> = t.chars().filter(|c| !c.is_whitespace()).collect();
+        let rule = marks.len() >= 3 && ['-', '*', '_'].iter().any(|m| marks.iter().all(|c| c == m));
+        if hashes > 0 || rule || t.contains("<!--") || t.contains("-->") {
+            prose_words(&std::mem::take(&mut prose), &mut out);
+            if rule {
+                out.push("\n---".to_string());
+                continue;
+            }
+            if t.contains("<!--") || t.contains("-->") {
+                out.push(format!("\n{t}"));
+                continue;
+            }
+            out.push(format!("\n{}", "#".repeat(hashes)));
+            prose.push(' ');
+            prose.push_str(&t[hashes..]);
+            prose_words(&std::mem::take(&mut prose), &mut out);
+            continue;
+        }
         // A list marker a formatter may change or renumber (`-`, `*`, `+`, `1.`,
         // `1)`), followed by a space; `--flag` at a line start is not one.
         let digits = t.chars().take_while(char::is_ascii_digit).count();
@@ -243,6 +265,17 @@ mod tests {
             STEP,
             &STEP.replace("check --json", "check\n   --json")
         ));
+    }
+
+    #[test]
+    fn a_line_of_markup_or_a_heading_level_changed_is_drift_and_sentence_punctuation_is_not() {
+        let doc = "---\ndescription: x\n---\n\n# /done\n\nRun it.\n\n## Steps\n\n1. Do this.\n";
+        assert!(!same_text(doc, &doc.replace("## Steps", "<!--\n## Steps")));
+        assert!(!same_text(doc, &doc.replace("## Steps", "-->\n## Steps")));
+        assert!(!same_text(doc, &doc.replace("# /done", "## /done")));
+        assert!(!same_text(doc, &doc.replace("Run it.", "Run it.\n\n---")));
+        assert!(same_text(doc, &doc.replace("Run it.", "Run it;")));
+        assert!(same_text(doc, &doc.replace("Run it.", "Run\n   it.")));
     }
 
     #[test]

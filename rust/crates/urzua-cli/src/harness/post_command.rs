@@ -280,6 +280,11 @@ fn judge(config: Option<PathBuf>) -> PostVerdict {
     // A command that ran inside a nested repository (`git init sub && cd sub`)
     // is still the governed repository's session.
     if config.is_none() {
+        // A repository with no configuration anywhere above it does not use
+        // urzua: there is nothing to judge and nothing to say.
+        if super::run::ungoverned(request.project_dir.as_deref(), &[]) {
+            return PostVerdict::quiet("");
+        }
         super::run::enter_governed_cwd(request.project_dir.as_deref());
     }
     super::limits::activate(&super::limits::of(config.clone(), None));

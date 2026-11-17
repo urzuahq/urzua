@@ -1047,6 +1047,24 @@ a generated file's code (fenced lines, inline code) is compared exactly, its pro
 stand-in engine is read only in a build with the `test-seams` feature, which only `cargo test` turns on, in
 place of the debug-build rule of the amendment above.
 
+## Amendment (2026-11-17, second review): one rule for an unjudged edit, and no configuration is not governed
+
+Decided by the orchestrator on 2026-11-17, pending maintainer review: with no `.urzua/config.yaml` in the
+repository or any parent, the repository is not governed, and the hook allows an edit silently, whether the
+binary runs or not. A configuration that is found but cannot be read, or not read with certainty as open, stays
+a refusal.
+
+Decided by the builder on 2026-11-17, pending maintainer review: when the engine cannot give a verdict, the
+binary decides from the configuration parsed as YAML. It is open only when it parses and neither `acceptance` nor
+`protected-paths` is enabled without `on_unjudged: allow`, with a guardrail off only when `enabled` is absent,
+null or `false`. The hook command's text fallback follows the same rule, accepting only shapes it reads with
+certainty. With the binary present and no configuration found, the hooks print nothing. The plugin's hook
+timeout is the top of the `hook_timeout_seconds` range, because a plugin cannot read a repository's
+configuration; the binary reads it and ends the wait itself. A line of markup in a generated file (a heading
+level, a comment opening or closing, a rule) counts as a change, as code does. In the first amendment of this
+date, the statements that are not the maintainer's quoted words are marked as decided by the builder, pending
+maintainer review.
+
 ## References
 
 - `ADR-69`, `ADR-70`, `ADR-71`: the hook, drafting commands and layered gate this extends; `ADR-70` gains an
@@ -1101,3 +1119,4 @@ place of the debug-build rule of the amendment above.
 > | 2026-11-16 | Added an `## Amendment (2026-11-16): a match lowers the report only against a remote-tracking ref`, correcting the earlier amendment of that day: raw-byte and mode matching, deletion-only absent-from-both, non-UTF-8 names never match, the remote-tracking-only downgrade, the rule-change event, and the agent's own line. **Why:** `MILE-311`, decided by the orchestrator on 2026-11-16, pending maintainer review, after the third review of its pull request. | **substantive** |
 > | 2026-11-17 | Added an `## Amendment (2026-11-17): the enforcer lives in the binary, and the script and its pin are removed`: the translation is `urzua harness hook`, the drafting helper `urzua harness record`, nothing executable is installed and no entry carries a hash, the binary is verified at install, the settings file and the configuration stay protected, and leftovers are removed by hand with no migration command. **Why:** `MILE-339` and `MILE-280`; accepted by the maintainer on 2026-11-17 for the points quoted in the amendment, the rest decided by the builder on 2026-11-17, pending maintainer review. | **substantive** |
 > | 2026-11-17 | Added an `## Amendment (2026-11-17, review): the hook fails closed`: the text fallback refuses whatever it cannot read with certainty, stdout is printed only on success, a panic or the hook's deadline refuses, an unknown verdict is unjudged, generated code compares exactly, the test seams need the `test-seams` feature. **Why:** review of the pull request that moved the harness into the binary; the fallback decided by the orchestrator on 2026-11-17, the rest by the builder, both pending maintainer review. | **substantive** |
+> | 2026-11-17 | Added an `## Amendment (2026-11-17, second review): one rule for an unjudged edit, and no configuration is not governed`, and marked the builder's statements in the first amendment of this date as pending maintainer review. **Why:** second review of the pull request that moved the harness into the binary; the not-governed rule decided by the orchestrator on 2026-11-17, the rest by the builder, both pending maintainer review. | **substantive** |

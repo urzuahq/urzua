@@ -11,8 +11,7 @@ use super::json::J;
 use super::settings;
 
 /// The leftovers of an older bundle for `adapters`, each with the steps that
-/// remove it by hand. There is no migration command (`ADR-89`, amendment of
-/// 2026-11-17).
+/// remove it. No command removes one that a person changed.
 pub fn leftovers(root: &Path, adapters: &[String]) -> Vec<String> {
     let mut out = Vec::new();
     for name in adapters {
@@ -32,13 +31,13 @@ pub fn leftovers(root: &Path, adapters: &[String]) -> Vec<String> {
             .unwrap_or_default()
         {
             out.push(format!(
-                "{file} still holds the hook entry {entry} that an older bundle wrote: it runs a script from the repository against a pinned sha256, and the script is no longer installed. Remove that entry from {file} by hand, then run `urzua harness update` (`urzua harness install` where there is no lock) to write the entry that calls the binary"
+                "{file} still holds the hook entry {entry} that an older bundle wrote: it runs a script from the repository against a pinned sha256, and the script is no longer installed. `urzua harness update` replaces it, with the script and the helper, while they match .urzua/harness.lock; where a person changed one, remove that entry from {file} by hand first"
             ));
         }
         for f in &manifest.retired_files {
             if root.join(f).exists() {
                 out.push(format!(
-                    "{f} is left from an older bundle: nothing installs, runs or pins it now. Remove it by hand: git rm {f}"
+                    "{f} is left from an older bundle: nothing installs, runs or pins it now. `urzua harness update` deletes it while it matches .urzua/harness.lock; otherwise remove it by hand: git rm {f}"
                 ));
             }
         }

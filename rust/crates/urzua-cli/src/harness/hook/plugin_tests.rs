@@ -1,6 +1,6 @@
 //! The agent plugin in `plugins/<adapter>/` registers the same hooks as
 //! `urzua harness install`: its hooks file is the adapter's settings fragment
-//! rendered with the built-in limits, and its commands are the bundle's
+//! rendered with the built-in limits and the hook timeout at the top of its range, and its commands are the bundle's
 //! lifecycle commands, byte for byte. Its manifest and the marketplace entry are
 //! checked against the documented shape as far as it can be checked offline.
 //! `URZUA_WRITE_PLUGIN=1` rewrites the generated files instead of comparing.
@@ -18,9 +18,26 @@ fn plugin_dir(adapter: &str) -> PathBuf {
     repo().join("plugins").join(adapter)
 }
 
+/// The limits the plugin's hooks are rendered with: the built-in ones, except
+/// the hook timeout at the top of its range. A plugin cannot read a
+/// repository's configuration, so the host's timeout must outlast any
+/// `hook_timeout_seconds` a repository declares; the binary reads it and ends
+/// the wait itself, with a refusal, before then.
+pub(super) fn plugin_limits() -> urzua_core::harness::Limits {
+    let top =
+        urzua_core::harness::limits::limit_info(urzua_core::harness::limits::HOOK_TIMEOUT_SECONDS)
+            .and_then(|i| i.range)
+            .map(|(_, high)| high)
+            .expect("the hook timeout has a range");
+    urzua_core::harness::Limits::read(
+        &yaml_serde::from_str(&format!("hook_timeout_seconds: {top}")).expect("yaml"),
+    )
+    .expect("the top of the range is a valid value")
+}
+
 fn generated(adapter: &super::super::bundle::Adapter) -> Vec<(PathBuf, String)> {
-    let fragment = super::super::render_fragment(adapter, &urzua_core::harness::Limits::default())
-        .expect("the fragment renders");
+    let fragment =
+        super::super::render_fragment(adapter, &plugin_limits()).expect("the fragment renders");
     let mut hooks = json::parse(&fragment)
         .expect("the fragment is JSON")
         .pretty();
@@ -34,7 +51,8 @@ fn generated(adapter: &super::super::bundle::Adapter) -> Vec<(PathBuf, String)> 
 }
 
 #[test]
-fn the_plugin_registers_what_the_install_does() {
+fn the_plugin_registers_what_the_install_does_but_with_the_timeout_at_the_top_of_its_range_because_it_cannot_read_the_repository(
+) {
     for adapter in ADAPTERS.iter().filter(|a| a.manifest().plugin.is_some()) {
         for (path, want) in generated(adapter) {
             if std::env::var_os("URZUA_WRITE_PLUGIN").is_some() {

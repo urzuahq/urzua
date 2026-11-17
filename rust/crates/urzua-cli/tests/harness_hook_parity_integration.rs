@@ -543,6 +543,9 @@ fn sh(dir: &Path, script: &str) {
     assert!(status.success(), "{script}");
 }
 
+const BINARY_CLOSED: &str = "The configuration does not show with certainty that an unjudged edit may go through (acceptance or protected-paths is at on_unjudged: deny, or the configuration could not be read with certainty), so an agent's edit that was not judged is refused.";
+const REFERENCE_CLOSED: &str = "The configuration sets on_unjudged: deny for acceptance or protected-paths, so an agent's edit that was not judged is refused.";
+
 /// How strict an output is: a refusal, a message, silence.
 fn rank(out: &str) -> u8 {
     if out.contains("\"permissionDecision\": \"deny\"") {
@@ -574,6 +577,10 @@ fn compare(config_name: &str, config: &str, cases: Vec<Case>) {
         let norm =
             |text: &str, dir: &Path| text.replace(&dir.to_string_lossy().to_string(), "<DIR>");
         let (s, r) = (norm(&from_script, &a), norm(&from_binary, &b));
+        // One declared difference in wording: the binary's refusal says it could
+        // not read the configuration with certainty, which is its rule; the
+        // reference said the configuration sets deny. The decision is the same.
+        let r = r.replace(BINARY_CLOSED, REFERENCE_CLOSED);
         spoke += usize::from(!s.is_empty());
         denied += usize::from(s.contains("\"permissionDecision\": \"deny\""));
         if case.name.contains("binary-is-stricter") {

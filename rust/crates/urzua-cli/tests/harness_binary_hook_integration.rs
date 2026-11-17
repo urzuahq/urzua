@@ -270,10 +270,7 @@ fn status_doctor_and_install_name_a_leftover_script_and_pinned_entry_with_the_re
             && text.contains("git rm .claude/hooks/urzua-record.sh"),
         "{v}"
     );
-    assert!(
-        text.contains("Remove that entry from .claude/settings.json by hand"),
-        "{v}"
-    );
+    assert!(text.contains("`urzua harness update` replaces it"), "{v}");
     let (_, v) = urzua(&dir, &["doctor"]);
     let leftovers: Vec<&serde_json::Value> = v["checks"]
         .as_array()

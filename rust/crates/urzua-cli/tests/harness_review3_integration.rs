@@ -519,11 +519,7 @@ fn session_start_compares_the_installed_files_the_hook_entries_and_the_kill_swit
 
     // An edited hook entry, still present by handler.
     let settings = std::fs::read_to_string(dir.join(".claude/settings.json")).unwrap();
-    let edited = settings.replacen(
-        "else c=$?; fi;",
-        "else c=0; fi;",
-        1,
-    );
+    let edited = settings.replacen("else c=$?; fi;", "else c=0; fi;", 1);
     assert_ne!(edited, settings, "the fixture's command changed shape");
     std::fs::write(dir.join(".claude/settings.json"), &edited).unwrap();
     let v = session(&dir);

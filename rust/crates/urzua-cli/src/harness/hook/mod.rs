@@ -4,15 +4,14 @@
 //! core, and turns the verdict into the agent's hook output (SPEC-24).
 //!
 //! Nothing is installed in the repository to do this, so nothing there can be
-//! edited to weaken it, and nothing needs a hash pinned (`ADR-89`, amendment of
-//! 2026-11-17). The registration table below and the adapter modules it lists
+//! edited to weaken it, and nothing needs a hash pinned (`ADR-89`). The registration table below and the adapter modules it lists
 //! are the only code that names an agent.
 
 mod claude_code;
+mod hook_json;
 mod once;
 #[cfg(test)]
 mod plugin_tests;
-mod pyjson;
 
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -64,8 +63,8 @@ pub fn run_hook(adapter: &str, event: &str) -> ExitCode {
         );
         return ExitCode::from(2);
     };
-    // The global hook prints a not-run document and exits 2; here a panic must
-    // end in the adapter's refusal instead, as one document on stdout.
+    // A panic here must end in the adapter's refusal, as one document on
+    // stdout, never in an exit before anything is printed.
     std::panic::set_hook(Box::new(|info| {
         eprintln!("urzua harness hook: {info}");
     }));

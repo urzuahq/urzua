@@ -34,11 +34,13 @@ const FIX: &str = "Install urzua (https://github.com/urzuahq/urzua/blob/main/doc
 /// answer in front of the fallback's. The fallback runs when the binary did not
 /// answer: urzua is not on PATH (127), it is a release without `harness hook`
 /// (exit 2 from its argument parser), or it was killed. Then nothing judged the
-/// call, and nothing can load the configuration. For an edit the command fails
+/// call, and nothing can load the configuration. With no `.urzua/config.yaml`
+/// at or above the project the repository does not use urzua, and every hook
+/// exits quietly: a plugin installed for every repository must not stop edits
+/// where nothing is governed. Otherwise, for an edit the command fails
 /// closed: it lets the edit through, with a message, only when awk reads with
 /// certainty that no guardrail refuses an unjudged edit (`CERTAIN_ALLOW`); a
-/// configuration it cannot read that way, an unreadable one, or none found is
-/// a refusal that tells the person to install or upgrade urzua. The
+/// configuration it cannot read that way or an unreadable one is a refusal that tells the person to install or upgrade urzua. The
 /// post-command and session-start hooks only ever report. `$w` holds no quote
 /// or backslash, so it is safe inside the JSON.
 pub fn hook_command(event: &str) -> Option<String> {
@@ -49,13 +51,13 @@ pub fn hook_command(event: &str) -> Option<String> {
     let why = r#"if command -v urzua >/dev/null 2>&1; then w="urzua exited $c: it may be a release older than urzua harness hook"; else w="urzua is not on PATH"; fi; "#;
     let tail = match event {
         "edit" => format!(
-            r#"{FIND_CONFIG}v=""; if [ -n "$cfg" ] && [ -r "$cfg" ]; then v=$({CERTAIN_ALLOW}); fi; if [ "$v" = allow ]; then printf '%s\n' '{{"systemMessage":"urzua harness: the editor hook could NOT run ('"$w"'), so this edit was not judged; .urzua/config.yaml lets an unjudged edit through. {FIX}"}}'; exit 0; fi; printf '%s\n' '{{"hookSpecificOutput":{{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"urzua harness: the editor hook could NOT run ('"$w"'), so this edit was not judged, and the command cannot read with certainty from .urzua/config.yaml that an unjudged edit may go through, so it is refused. Install or upgrade urzua; a person can also edit outside the agent harness. {FIX}"}}}}'; exit 0"#
+            r#"{FIND_CONFIG}[ -n "$cfg" ] || exit 0; v=""; if [ -r "$cfg" ]; then v=$({CERTAIN_ALLOW}); fi; if [ "$v" = allow ]; then printf '%s\n' '{{"systemMessage":"urzua harness: the editor hook could NOT run ('"$w"'), so this edit was not judged; .urzua/config.yaml lets an unjudged edit through. {FIX}"}}'; exit 0; fi; printf '%s\n' '{{"hookSpecificOutput":{{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"urzua harness: the editor hook could NOT run ('"$w"'), so this edit was not judged, and the command cannot read with certainty from .urzua/config.yaml that an unjudged edit may go through, so it is refused. Install or upgrade urzua; a person can also edit outside the agent harness. {FIX}"}}}}'; exit 0"#
         ),
         "post-command" => format!(
-            r#"printf '%s\n' '{{"systemMessage":"urzua harness: the post-command check could NOT run ('"$w"'), so the effect of this command on records was NOT judged. {FIX}","hookSpecificOutput":{{"hookEventName":"PostToolUse","additionalContext":"urzua harness (post-command): NOT judged; run urzua check before committing."}}}}'; exit 0"#
+            r#"{FIND_CONFIG}[ -n "$cfg" ] || exit 0; printf '%s\n' '{{"systemMessage":"urzua harness: the post-command check could NOT run ('"$w"'), so the effect of this command on records was NOT judged. {FIX}","hookSpecificOutput":{{"hookEventName":"PostToolUse","additionalContext":"urzua harness (post-command): NOT judged; run urzua check before committing."}}}}'; exit 0"#
         ),
         "session-start" => format!(
-            r#"printf '%s\n' '{{"systemMessage":"urzua harness: the session-start check could NOT run ('"$w"'), so the harness was not checked and no guardrail can judge an edit in this session. {FIX}","hookSpecificOutput":{{"hookEventName":"SessionStart","additionalContext":"urzua harness: urzua could not run ('"$w"'); no edit is judged in this session. {FIX}"}}}}'; exit 0"#
+            r#"{FIND_CONFIG}[ -n "$cfg" ] || exit 0; printf '%s\n' '{{"systemMessage":"urzua harness: the session-start check could NOT run ('"$w"'), so the harness was not checked and no guardrail can judge an edit in this session. {FIX}","hookSpecificOutput":{{"hookEventName":"SessionStart","additionalContext":"urzua harness: urzua could not run ('"$w"'); no edit is judged in this session. {FIX}"}}}}'; exit 0"#
         ),
         _ => return None,
     };

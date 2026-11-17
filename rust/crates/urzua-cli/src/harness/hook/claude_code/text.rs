@@ -5,130 +5,76 @@ use std::path::Path;
 
 /// Whitespace as the adapter reads it: Unicode whitespace and the four
 /// separator controls (U+001C to U+001F).
-pub fn py_space(c: char) -> bool {
+pub fn is_blank(c: char) -> bool {
     c.is_whitespace() || ('\u{1c}'..='\u{1f}').contains(&c)
 }
 
-fn py_word(c: char) -> bool {
-    c.is_alphanumeric() || c == '_'
+/// What the configuration that governs a directory says about an edit nobody
+/// judged, read without the engine.
+#[derive(Debug, PartialEq, Eq)]
+pub enum Unjudged {
+    /// No `.urzua/config.yaml` at or above the directory: not governed.
+    NotGoverned,
+    /// Read with certainty as letting an unjudged edit through.
+    Open,
+    /// Refusing, or not readable with certainty (it does not parse, cannot be
+    /// read, or holds a value of a shape the rule does not accept).
+    Closed,
 }
 
-/// Lines split at every line break: `\n`, `\r\n`, `\r`, vertical tab, form
-/// feed, the separator controls, NEL, and U+2028 and U+2029.
-fn splitlines(text: &str) -> Vec<&str> {
-    let mut out = Vec::new();
-    let mut start = 0;
-    let mut chars = text.char_indices().peekable();
-    while let Some((i, c)) = chars.next() {
-        let breaks = matches!(
-            c,
-            '\n' | '\r'
-                | '\u{b}'
-                | '\u{c}'
-                | '\u{1c}'
-                | '\u{1d}'
-                | '\u{1e}'
-                | '\u{85}'
-                | '\u{2028}'
-                | '\u{2029}'
-        );
-        if !breaks {
-            continue;
-        }
-        out.push(&text[start..i]);
-        let mut end = i + c.len_utf8();
-        if c == '\r' {
-            if let Some((j, '\n')) = chars.peek().copied() {
-                chars.next();
-                end = j + 1;
-            }
-        }
-        start = end;
-    }
-    if start < text.len() {
-        out.push(&text[start..]);
-    }
-    out
-}
-
-/// After `\b` + `word` at `at` in `body`: whether `word` starts a word there.
-fn word_at(body: &str, at: usize, word: &str) -> bool {
-    body[at..].starts_with(word) && body[..at].chars().next_back().is_none_or(|c| !py_word(c))
-}
-
-fn skip_space(t: &str) -> &str {
-    t.trim_start_matches(py_space)
-}
-
-/// `\b{key}\s*:\s*{quote}{value}\b` anywhere in `body`.
-fn has_setting(body: &str, key: &str, value: &str, quote: bool) -> bool {
-    body.match_indices(key).any(|(at, _)| {
-        if !word_at(body, at, key) {
-            return false;
-        }
-        let rest = skip_space(&body[at + key.len()..]);
-        let Some(rest) = rest.strip_prefix(':') else {
-            return false;
-        };
-        let mut rest = skip_space(rest);
-        if quote {
-            if let Some(r) = rest.strip_prefix(['"', '\'']) {
-                if r.starts_with(value) {
-                    rest = r;
-                }
-            }
-        }
-        rest.strip_prefix(value)
-            .is_some_and(|r| r.chars().next().is_none_or(|c| !py_word(c)))
-    })
-}
-
-/// Whether the configuration found at or above `d` turns on acceptance or
-/// protected-paths without `on_unjudged: allow` (a text scan), or `None` when
-/// no configuration is found.
-pub fn config_closes(d: &Path) -> Option<bool> {
+/// The rule the hook command's text fallback also follows: a configuration is
+/// open only when it parses and neither `acceptance` nor `protected-paths`
+/// under `harness.guardrails` is enabled without `on_unjudged: allow`. A
+/// guardrail counts as off only when `enabled` is absent, null or `false`, and
+/// as allowing only when `on_unjudged` is exactly the string `allow`; anything
+/// else is closed.
+pub fn unjudged_at(d: &Path) -> Unjudged {
     let start = super::super::lexical_absolute(d);
-    let mut dir = start.as_path();
-    let text = loop {
-        match std::fs::read(dir.join(".urzua/config.yaml")) {
-            Ok(b) => break String::from_utf8_lossy(&b).to_string(),
-            Err(_) => dir = dir.parent()?,
-        }
+    let Some(path) = start
+        .ancestors()
+        .map(|a| a.join(".urzua/config.yaml"))
+        .find(|p| p.exists())
+    else {
+        return Unjudged::NotGoverned;
     };
-    let lines = splitlines(&text);
-    for (i, line) in lines.iter().enumerate() {
-        let body_start = line.trim_start_matches(py_space);
-        let indent = line.chars().count() - body_start.chars().count();
-        let Some(after) = ["acceptance", "protected-paths"]
-            .iter()
-            .find_map(|k| body_start.strip_prefix(k))
-        else {
-            continue;
-        };
-        let Some(mut body) = skip_space(after)
-            .strip_prefix(':')
-            .map(|b| skip_space(b).to_string())
-        else {
-            continue;
-        };
-        if body.is_empty() || body.starts_with('#') {
-            body = String::new();
-            for next in &lines[i + 1..] {
-                let lead = next.chars().count() - next.trim_start_matches(py_space).chars().count();
-                if !next.trim_matches(py_space).is_empty() && lead <= indent {
-                    break;
-                }
-                body.push(' ');
-                body.push_str(next);
-            }
-        }
-        if has_setting(&body, "enabled", "true", false)
-            && !has_setting(&body, "on_unjudged", "allow", true)
-        {
-            return Some(true);
-        }
+    let Ok(text) = std::fs::read_to_string(&path) else {
+        return Unjudged::Closed;
+    };
+    let Ok(doc) = yaml_serde::from_str::<yaml_serde::Value>(urzua_core::config::strip_bom(&text))
+    else {
+        return Unjudged::Closed;
+    };
+    if open(&doc) {
+        Unjudged::Open
+    } else {
+        Unjudged::Closed
     }
-    Some(false)
+}
+
+fn open(doc: &yaml_serde::Value) -> bool {
+    use yaml_serde::Value as V;
+    let guardrails = match doc.get("harness") {
+        None | Some(V::Null) => return true,
+        Some(h @ V::Mapping(_)) => match h.get("guardrails") {
+            None | Some(V::Null) => return true,
+            Some(g @ V::Mapping(_)) => g,
+            Some(_) => return false,
+        },
+        Some(_) => return false,
+    };
+    ["acceptance", "protected-paths"].iter().all(|name| {
+        let g = match guardrails.get(*name) {
+            None | Some(V::Null) => return true,
+            Some(g @ V::Mapping(_)) => g,
+            Some(_) => return false,
+        };
+        let off = matches!(
+            g.get("enabled"),
+            None | Some(V::Null) | Some(V::Bool(false))
+        );
+        let allows = matches!(g.get("on_unjudged"), Some(V::String(s)) if s == "allow");
+        off || allows
+    })
 }
 
 /// The reason inside a translator message, without its own prefix and closing
@@ -268,7 +214,7 @@ pub fn as_paths(value: &str, max_path: usize) -> (Option<String>, Vec<String>) {
         extras.push(value.replace('\0', ""));
         value = value.split('\0').next().unwrap_or("").to_string();
     }
-    let mut value = value.trim_matches(py_space).to_string();
+    let mut value = value.trim_matches(is_blank).to_string();
     if value.is_empty() || value.contains('\n') {
         return (None, Vec::new());
     }
@@ -317,26 +263,38 @@ mod tests {
     }
 
     #[test]
-    fn the_config_scan_reads_block_and_inline_forms() {
-        let dir = std::env::temp_dir().join(format!("urzua-closes-{}", std::process::id()));
+    fn a_configuration_is_open_only_when_it_parses_and_says_so() {
+        let dir = std::env::temp_dir().join(format!("urzua-unjudged-{}", std::process::id()));
         std::fs::create_dir_all(dir.join(".urzua")).unwrap();
+        let sub = dir.join("a/b");
+        std::fs::create_dir_all(&sub).unwrap();
         for (text, want) in [
             (
                 "harness:\n  guardrails:\n    acceptance:\n      enabled: true\n",
-                true,
+                Unjudged::Closed,
             ),
             (
                 "harness:\n  guardrails:\n    acceptance: {enabled: true, on_unjudged: 'allow'}\n",
-                false,
+                Unjudged::Open,
             ),
             (
                 "harness:\n  guardrails:\n    protected-paths:\n      enabled: false\n",
-                false,
+                Unjudged::Open,
             ),
+            (
+                "harness:\n  guardrails:\n    protected-paths: {enabled: 'yes'}\n",
+                Unjudged::Closed,
+            ),
+            ("harness: [\n", Unjudged::Closed),
+            ("schema_version: 2\n", Unjudged::Open),
         ] {
             std::fs::write(dir.join(".urzua/config.yaml"), text).unwrap();
-            assert_eq!(config_closes(&dir), Some(want), "{text}");
+            assert_eq!(unjudged_at(&sub), want, "{text}");
         }
         std::fs::remove_dir_all(&dir).unwrap();
+        assert_eq!(
+            unjudged_at(Path::new("/nonexistent-urzua/x")),
+            Unjudged::NotGoverned
+        );
     }
 }
