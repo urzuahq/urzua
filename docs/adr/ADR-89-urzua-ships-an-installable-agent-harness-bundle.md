@@ -1104,6 +1104,26 @@ be read, since it names no file the hook can place. Front matter is compared as 
 a table separator cell must be one of `---`, `:---`, `---:`, `:---:`. Accepted limit, pending maintainer review:
 in a repository that does not use urzua, the fallback refuses an edit whose path has a `.` or `..` component.
 
+## Amendment (2026-11-17, sixth review): without the binary, the hook decides from the session alone
+
+Decided by the orchestrator on 2026-11-17, pending maintainer review: when urzua cannot run, the hook command reads
+no path from the payload. It finds the configuration at or above the session's directory; with none it says
+nothing, with one read with certainty as open it lets the call through with a notice, and with any other it
+refuses every edit and MCP call until urzua is installed or upgraded. This replaces the payload reading of the
+third, fourth and fifth review amendments of this date, which a text scanner in sh and awk cannot do the way the
+engine does.
+
+The accepted limit: with urzua missing or too old, the hook decides from the session's directory only. A session
+rooted in a directory with no configuration, or in a repository whose configuration is open, is not stopped from
+editing a file in a different, governed repository. Install urzua to close it: with the binary present every
+edited path is placed and judged. Accepted by the maintainer on 2026-11-17, for the part he accepted, in his
+words: "I think acceptable limits winners was not installed. For example, file named under an unusual key is not
+checked. Fair enough yet?" (a file the fallback cannot see is not checked); the simplification itself is the
+orchestrator's decision, pending maintainer review.
+
+Decided by the builder on 2026-11-17, pending maintainer review: an edit whose payload the binary cannot read is
+decided from the session (silent where nothing governs, refused where the configuration is not certainly open).
+
 ## References
 
 - `ADR-69`, `ADR-70`, `ADR-71`: the hook, drafting commands and layered gate this extends; `ADR-70` gains an
@@ -1162,3 +1182,4 @@ in a repository that does not use urzua, the fallback refuses an edit whose path
 > | 2026-11-17 | Added an `## Amendment (2026-11-17, third review): an unjudged edit is decided from the engine's inputs`: path placement and configuration discovery as the engine does them, silence only where nothing governs any path, the closed list of formatter differences, `editor-hook` deny honoured, and the shell fallback's limit stated. **Why:** third review of the pull request that moved the harness into the binary; the placement rule and the drift list decided by the orchestrator on 2026-11-17, the rest by the builder, all pending maintainer review. | **substantive** |
 > | 2026-11-17 | Added an `## Amendment (2026-11-17, fourth review): every candidate path counts, and the shell refuses what it cannot place`. **Why:** fourth review of the pull request that moved the harness into the binary; decided by the builder on 2026-11-17, pending maintainer review. | **substantive** |
 > | 2026-11-17 | Added an `## Amendment (2026-11-17, fifth review): the shell fallback places only plain paths`. **Why:** fifth review of the pull request that moved the harness into the binary; decided by the builder on 2026-11-17, pending maintainer review. | **substantive** |
+> | 2026-11-17 | Added an `## Amendment (2026-11-17, sixth review): without the binary, the hook decides from the session alone`, replacing the shell fallback's payload reading and stating the one accepted limit. **Why:** sixth review of the pull request that moved the harness into the binary; the simplification decided by the orchestrator on 2026-11-17, pending maintainer review; the limit's acceptance quoted from the maintainer for the part he accepted. | **substantive** |

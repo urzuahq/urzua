@@ -203,39 +203,14 @@ fn table_separator(t: &str) -> Option<String> {
     Some(format!("\u{1}table:{}", cells.join("|")))
 }
 
-/// Whether the whitespace-delimited word around each character looks like a
-/// path, a file name or a variable: it holds a `/`, a `.` before a letter or
-/// digit, or starts with `$` or `~`.
-fn path_like(c: &[char]) -> Vec<bool> {
-    let mut out = vec![false; c.len()];
-    let mut i = 0;
-    while i < c.len() {
-        if c[i].is_whitespace() {
-            i += 1;
-            continue;
-        }
-        let start = i;
-        while i < c.len() && !c[i].is_whitespace() {
-            i += 1;
-        }
-        let w = &c[start..i];
-        let like = w.contains(&'/')
-            || w.windows(2).any(|p| p[0] == '.' && p[1].is_alphanumeric())
-            || matches!(w.first(), Some('$' | '~'));
-        out[start..i].iter_mut().for_each(|x| *x = like);
-    }
-    out
-}
-
 /// Emphasis markers written with `_` read as `*`: only a run that opens
 /// emphasis (after the start, whitespace or an opening bracket or quote, before
 /// a letter or digit) paired with a later run of the same length that closes it
 /// (after a letter or digit, before the end, whitespace or sentence
-/// punctuation), neither inside a word that looks like a path, file name or
-/// variable. Every other `_` stays as written.
+/// punctuation): around a word or phrase it is emphasis whatever the word holds.
+/// An underscore inside a word, or a run with no partner, stays as written.
 fn emphasis_as_star(s: &str) -> String {
     let c: Vec<char> = s.chars().collect();
-    let like = path_like(&c);
     let mut runs: Vec<(usize, usize, bool, bool)> = Vec::new();
     let mut i = 0;
     while i < c.len() {
@@ -253,9 +228,7 @@ fn emphasis_as_star(s: &str) -> String {
             && after.is_some_and(char::is_alphanumeric);
         let closes = before.is_some_and(char::is_alphanumeric)
             && after.is_none_or(|x| x.is_whitespace() || ".,;:!?)]}\"'".contains(x));
-        if !like[a] {
-            runs.push((a, i - a, opens, closes));
-        }
+        runs.push((a, i - a, opens, closes));
     }
     let mut marker = vec![false; c.len()];
     let mut open: Option<(usize, usize)> = None;
@@ -523,13 +496,19 @@ mod tests {
     }
 
     #[test]
-    fn an_underscore_in_a_path_or_unpaired_is_never_an_emphasis_marker() {
+    fn an_underscore_inside_a_word_or_unpaired_is_never_an_emphasis_marker() {
         assert!(!same_text(
             "Edit _config.yml now.\n",
             "Edit *config.yml now.\n"
         ));
         assert!(!same_text("Set DIR_ first.\n", "Set DIR* first.\n"));
+        assert!(!same_text("Set on_unjudged.\n", "Set on*unjudged.\n"));
         assert!(same_text("Read _this_ now.\n", "Read *this* now.\n"));
+        assert!(same_text(
+            "Edit _config.yml_ now.\n",
+            "Edit *config.yml* now.\n"
+        ));
+        assert!(same_text("Say _and/or_ here.\n", "Say *and/or* here.\n"));
     }
 
     #[test]

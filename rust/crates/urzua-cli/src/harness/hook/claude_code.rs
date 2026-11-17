@@ -469,11 +469,18 @@ fn main(run: &mut Run, payload: &[u8]) {
         _ => {
             let message =
                 "urzua harness: the hook payload was unreadable, so this call was NOT judged";
-            // An edit whose payload cannot be read names no file the hook can
-            // place, so no configuration can be found for it: refused, as any
-            // edit the hook cannot place is. The host never sends one.
+            // An edit whose payload cannot be read names no file: it is decided
+            // from the session alone, as every unjudged edit is where no path
+            // can be read. Not governed: silent. Not certainly open: refused.
             if event == "edit" {
-                return run.deny(&format!("{message}; it names no file the hook can place, so it is refused. Run: urzua harness status"));
+                let project = run.project.clone();
+                return match run.policy(project.as_deref(), &[]) {
+                    Unjudged::NotGoverned => {}
+                    Unjudged::Closed => run.deny(&format!(
+                        "{message}; it names no file the hook can place. {CLOSED}"
+                    )),
+                    Unjudged::Open => run.stated(message, &event),
+                };
             }
             return run.stated(message, &event);
         }

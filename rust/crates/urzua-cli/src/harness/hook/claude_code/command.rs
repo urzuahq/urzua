@@ -2,14 +2,14 @@
 //! (`urzua harness install`) and in the plugin's hooks file alike: both are
 //! rendered from the one settings fragment, so they cannot drift.
 
-/// The session's project when the binary cannot be run: `CLAUDE_PROJECT_DIR`,
-/// else the nearest git repository at or above the working directory that
-/// holds `.urzua/config.yaml`, else the working directory. Then the
-/// configuration that governs it: the nearest `.urzua/config.yaml` at or above
-/// that directory, as the engine finds it.
-const FIND_CONFIG: &str = r#"r="${CLAUDE_PROJECT_DIR:-}"; if [ -z "$r" ]; then d="$PWD"; while [ -n "$d" ]; do top=$(git -C "$d" rev-parse --show-toplevel 2>/dev/null) || break; if [ -f "$top/.urzua/config.yaml" ]; then r="$top"; break; fi; d="${top%/*}"; done; [ -n "$r" ] || r="$PWD"; fi; cfg=""; d="$r"; while [ -n "$d" ]; do if [ -e "$d/.urzua/config.yaml" ]; then cfg="$d/.urzua/config.yaml"; break; fi; [ "$d" = / ] && break; d=$(dirname "$d"); done; "#;
+/// The configuration that governs the session, found without the binary: the
+/// nearest `.urzua/config.yaml` at or above `CLAUDE_PROJECT_DIR`, else the
+/// working directory, in `$cfg` (empty when there is none). The walk ends at
+/// the root whatever `dirname` returns there (busybox gives `//` for `//`), so
+/// it always terminates; nothing it reads comes from the payload.
+const FIND_CONFIG: &str = r#"cfg=""; d="${CLAUDE_PROJECT_DIR:-$PWD}"; while [ -n "$d" ]; do if [ -e "$d/.urzua/config.yaml" ]; then cfg="$d/.urzua/config.yaml"; break; fi; n=$(dirname "$d"); [ "$n" = "$d" ] && break; d=$n; done; "#;
 
-/// Prints `allow` only when it reads `$k` with certainty as letting an
+/// Prints `allow` only when it reads `$cfg` with certainty as letting an
 /// unjudged edit through, by the rule the binary uses: neither `acceptance` nor
 /// `protected-paths` enabled without `on_unjudged: allow` (their default being
 /// deny), and `editor-hook` not enabled with `on_unjudged: deny`. It prints
@@ -21,39 +21,7 @@ const FIND_CONFIG: &str = r#"r="${CLAUDE_PROJECT_DIR:-}"; if [ -z "$r" ]; then d
 /// items. Any other shape (a quoted key, `True`, a flow map that spans lines,
 /// the name anywhere else) is not certain. Plain POSIX awk: no `match` arrays,
 /// no interval expressions, so mawk and gawk read it the same.
-const CERTAIN_ALLOW: &str = r#"awk 'function trim(s){sub(/^[ \t]+/,"",s);sub(/[ \t]+$/,"",s);return s} function item(x){if(x=="enabled: true")en=1;else if(x=="enabled: false")en=0;else if(x=="on_unjudged: allow"){al=1;as=1}else if(x=="on_unjudged: deny"){al=0;as=1}else u=1} function closes(){return en&&(nm=="editor-hook"?(as&&!al):!al)} function shut(){if(blk&&closes())c=1;blk=0} {l=$0;sub(/\r$/,"",l);if(l~/^[ \t]*#/)l="";p=index(l," #");q=index(l,"\t#");if(q&&(!p||q<p))p=q;if(p)l=substr(l,1,p-1);if(l~/^[ \t]*$/)next;if(l~/(^|[ \t,:{[])[&*!]/||index(l,"<<")||(NR>1&&l~/^(---|[.][.][.])/))u=1;i=match(l,/[^ \t]/)-1;t=trim(l);if(blk){if(i>bi){item(t);next}shut()}if(l~/acceptance|protected-paths|editor-hook/){en=0;al=0;as=0;if(t=="acceptance:"||t=="protected-paths:"||t=="editor-hook:"){nm=substr(t,1,length(t)-1);blk=1;bi=i;next}if(t~/^(acceptance|protected-paths|editor-hook): [{][^{}]*[}]$/){nm=t;sub(/:.*/,"",nm);b=t;sub(/^[^{]*[{]/,"",b);sub(/[}]$/,"",b);n=split(b,parts,",");for(k=1;k<=n;k++)item(trim(parts[k]));if(closes())c=1;next}u=1}} END{shut();if(!u&&!c)print "allow"}' "$k" 2>/dev/null"#;
-
-/// Every configuration that governs the edit, as far as the shell can place
-/// it, in `$cs`; `bad` set when it cannot place one with certainty (a refusal).
-///
-/// A value under those keys that holds an escape, a control character or a raw
-/// line break is refused outright: no host writes one, and where the break
-/// falls decides what the parts name.
-///
-/// A value under `file_path`, `notebook_path` or `path` is placed only when it
-/// is a plain path as written: a JSON string with no escape, starting with `/`
-/// or a name character (`[A-Za-z0-9_.-]`), with no scheme (`name:`) at the start,
-/// no whitespace or control character at either end, and no trailing slash.
-/// Such a path is walked from its nearest existing directory, as written and as
-/// that directory's physical path (`cd -P`); it is refused when it has a `.` or
-/// `..` component (the host normalises it lexically and the walk would start
-/// elsewhere), when its last component is a symlink, or when a missing
-/// directory on it is a symlink (a dangling link the write would follow).
-///
-/// Any other value under those keys (a URL, `~` or `$HOME`, padding, a trailing
-/// slash, a line break, an array, an object, a number) is refused when the
-/// session has a configuration. Without one, every string in the payload that
-/// holds a `/` is placed as the engine would read it (a `file:` prefix dropped,
-/// `~`, `$HOME` and `${HOME}` expanded, padding split off, a trailing slash
-/// dropped) and the edit is refused when any finds a configuration, a `.` or
-/// `..` component, or a symlink as its last component; so an ordinary edit in a
-/// repository that does not use urzua stays quiet. Paths under any other key
-/// are not read: the documented limit of a fallback with no JSON parser.
-const PAYLOAD_CONFIGS: &str = r#"nl=$(printf '\n_'); nl=${nl%_}; cs="$cfg"; bad=""; odd=""; walk() { d=$(dirname "$1"); while [ ! -d "$d" ]; do [ -L "$d" ] && bad=1; d=$(dirname "$d"); done; for e in "$d" "$(cd -P "$d" 2>/dev/null && pwd -P)"; do while [ -n "$e" ]; do [ -e "$e/.urzua/config.yaml" ] && cs="$cs$nl$e/.urzua/config.yaml"; [ "$e" = / ] && break; e=$(dirname "$e"); done; done; }; printf '%s' "$p" | grep -qE '"(file_path|notebook_path|path)"[[:space:]]*:[[:space:]]*"[^"]*(\\|[[:cntrl:]]|$)' && bad=1; nk=$(printf '%s' "$p" | grep -oE '"(file_path|notebook_path|path)"[[:space:]]*:' | wc -l); fs=$(printf '%s' "$p" | grep -oE '"(file_path|notebook_path|path)"[[:space:]]*:[[:space:]]*"[^"\\]*"' | sed -e 's/^[^:]*:[[:space:]]*"//' -e 's/"$//' | grep -E '^(/|[A-Za-z0-9_.-])' | grep -vE '^[A-Za-z][A-Za-z0-9+.-]*:|/$|[[:space:][:cntrl:]]$'); np=$(printf '%s' "$fs" | grep -c .); [ "$np" -lt "$nk" ] && odd=1; set -f; o_ifs=$IFS; IFS=$nl; for f in $fs; do case "/$f/" in */./*|*/../*) bad=1;; esac; case "$f" in /*) ;; *) f="$PWD/$f";; esac; [ -L "$f" ] && bad=1; walk "$f"; done; if [ -n "$odd" ]; then if [ -n "$cfg" ]; then bad=1; else n0=$cs; for f in $(printf '%s' "$p" | sed 's/\${HOME}/$HOME/g' | tr '\042\133\135\173\175\054\072' '\n\n\n\n\n\n\n' | tr '[:space:]' '\n' | grep /); do case "$f" in '~/'*) f="$HOME/${f#'~/'}";; '$HOME/'*) f="$HOME/${f#'$HOME/'}";; esac; case "$f" in /*) ;; *) f="$PWD/$f";; esac; while [ "$f" != / ] && [ "${f%/}" != "$f" ]; do f=${f%/}; done; case "/$f/" in */./*|*/../*) bad=1;; esac; [ -L "$f" ] && bad=1; walk "$f"; done; [ "$cs" = "$n0" ] || bad=1; fi; fi; IFS=$o_ifs; set +f; "#;
-
-/// `allow` in `$v` when every configuration in `$cs` reads with certainty as
-/// open and no path was unplaceable.
-const ALL_CERTAIN: &str = r#"v=allow; [ -z "$bad" ] || v=""; set -f; IFS=$nl; for k in $cs; do if [ -r "$k" ]; then [ "$(CERTAIN)" = allow ] || v=""; else v=""; fi; done; IFS=$o_ifs; set +f; "#;
+const CERTAIN_ALLOW: &str = r#"awk 'function trim(s){sub(/^[ \t]+/,"",s);sub(/[ \t]+$/,"",s);return s} function item(x){if(x=="enabled: true")en=1;else if(x=="enabled: false")en=0;else if(x=="on_unjudged: allow"){al=1;as=1}else if(x=="on_unjudged: deny"){al=0;as=1}else u=1} function closes(){return en&&(nm=="editor-hook"?(as&&!al):!al)} function shut(){if(blk&&closes())c=1;blk=0} {l=$0;sub(/\r$/,"",l);if(l~/^[ \t]*#/)l="";p=index(l," #");q=index(l,"\t#");if(q&&(!p||q<p))p=q;if(p)l=substr(l,1,p-1);if(l~/^[ \t]*$/)next;if(l~/(^|[ \t,:{[])[&*!]/||index(l,"<<")||(NR>1&&l~/^(---|[.][.][.])/))u=1;i=match(l,/[^ \t]/)-1;t=trim(l);if(blk){if(i>bi){item(t);next}shut()}if(l~/acceptance|protected-paths|editor-hook/){en=0;al=0;as=0;if(t=="acceptance:"||t=="protected-paths:"||t=="editor-hook:"){nm=substr(t,1,length(t)-1);blk=1;bi=i;next}if(t~/^(acceptance|protected-paths|editor-hook): [{][^{}]*[}]$/){nm=t;sub(/:.*/,"",nm);b=t;sub(/^[^{]*[{]/,"",b);sub(/[}]$/,"",b);n=split(b,parts,",");for(k=1;k<=n;k++)item(trim(parts[k]));if(closes())c=1;next}u=1}} END{shut();if(!u&&!c)print "allow"}' "$cfg" 2>/dev/null"#;
 
 const FIX: &str = "Install urzua (https://github.com/urzuahq/urzua/blob/main/docs/reference/install.md), then run: urzua harness status";
 
@@ -66,27 +34,26 @@ const FIX: &str = "Install urzua (https://github.com/urzuahq/urzua/blob/main/doc
 /// answer in front of the fallback's. The fallback runs when the binary did not
 /// answer: urzua is not on PATH (127), it is a release without `harness hook`
 /// (exit 2 from its argument parser), or it was killed. Then nothing judged the
-/// call, and nothing can load the configuration. The payload is read once into
-/// `$p` so the fallback can look at it too. With no `.urzua/config.yaml` at or
-/// above the project nor any edited path the shell can read, nothing is
-/// governed and every hook exits quietly: a plugin installed for every
-/// repository must not stop edits where nothing is governed. Otherwise, for an
-/// edit the command fails closed: it lets the edit through, with a message,
-/// only when every configuration found reads with certainty as open
-/// (`CERTAIN_ALLOW`); any other, an unreadable one, or a path it cannot place
-/// is a refusal that tells the person to install or upgrade urzua. The
+/// call, and nothing can load the configuration or read the payload, so the
+/// fallback decides from the session alone. With no `.urzua/config.yaml` at or
+/// above the session's directory nothing is governed and every hook exits
+/// quietly: a plugin installed for every repository must not stop edits where
+/// nothing is governed. With one that awk reads with certainty as letting an
+/// unjudged edit through (`CERTAIN_ALLOW`), an edit goes through with a
+/// notice. With any other, every edit is refused until urzua is installed or
+/// upgraded: without the binary the fallback cannot tell a protected file from
+/// another, or see which repository an edited file is in. The
 /// post-command and session-start hooks only ever report. `$w` holds no quote
 /// or backslash, so it is safe inside the JSON.
 pub fn hook_command(event: &str) -> Option<String> {
     let run = format!(
-        "p=$(cat); if o=$(printf '%s' \"$p\" | urzua harness hook {} {event}); then [ -z \"$o\" ] || printf '%s\\n' \"$o\"; exit 0; else c=$?; fi; ",
+        "if o=$(urzua harness hook {} {event}); then [ -z \"$o\" ] || printf '%s\\n' \"$o\"; exit 0; else c=$?; fi; ",
         super::NAME
     );
     let why = r#"if command -v urzua >/dev/null 2>&1; then w="urzua exited $c: it may be a release older than urzua harness hook"; else w="urzua is not on PATH"; fi; "#;
     let tail = match event {
         "edit" => format!(
-            r#"{FIND_CONFIG}{PAYLOAD_CONFIGS}[ -n "$cs$bad" ] || exit 0; {all}if [ "$v" = allow ]; then printf '%s\n' '{{"systemMessage":"urzua harness: the editor hook could NOT run ('"$w"'), so this edit was not judged; every .urzua/config.yaml that governs it lets an unjudged edit through. {FIX}"}}'; exit 0; fi; printf '%s\n' '{{"hookSpecificOutput":{{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"urzua harness: the editor hook could NOT run ('"$w"'), so this edit was not judged, and the command cannot read with certainty from the .urzua/config.yaml that governs it that an unjudged edit may go through, so it is refused. Install or upgrade urzua; a person can also edit outside the agent harness. {FIX}"}}}}'; exit 0"#,
-            all = ALL_CERTAIN.replace("$(CERTAIN)", &format!("$({CERTAIN_ALLOW})"))
+            r#"{FIND_CONFIG}[ -n "$cfg" ] || exit 0; v=""; if [ -r "$cfg" ]; then v=$({CERTAIN_ALLOW}); fi; if [ "$v" = allow ]; then printf '%s\n' '{{"systemMessage":"urzua harness: the editor hook could NOT run ('"$w"'), so this edit was not judged; .urzua/config.yaml lets an unjudged edit through. {FIX}"}}'; exit 0; fi; printf '%s\n' '{{"hookSpecificOutput":{{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"urzua harness: the editor hook could NOT run ('"$w"'). Without it no edit in this repository can be judged, and .urzua/config.yaml does not let an unjudged edit through, so every edit is refused until urzua is installed or upgraded. A person can also edit outside the agent harness. {FIX}"}}}}'; exit 0"#
         ),
         "post-command" => format!(
             r#"{FIND_CONFIG}[ -n "$cfg" ] || exit 0; printf '%s\n' '{{"systemMessage":"urzua harness: the post-command check could NOT run ('"$w"'), so the effect of this command on records was NOT judged. {FIX}","hookSpecificOutput":{{"hookEventName":"PostToolUse","additionalContext":"urzua harness (post-command): NOT judged; run urzua check before committing."}}}}'; exit 0"#
