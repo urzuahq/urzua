@@ -3,23 +3,24 @@ Stable-Id: 01M7KSH0YBASNSJPQGWPJW2RCN
 Status: Planned
 Phase: '2'
 Track: integrations
-Blocked-on: null
+Blocked-on: MILE-337
 ---
 # 338 — A guided setup ships with the harness bundle
 
 ## What
 
-Ship, in the harness bundle and installable by one verified command, an agent skill that interviews the person adopting urzua and writes the configuration from tested blocks, so no agent writes keys from guesses.
+Ship, from the harness bundle, a setup skill kept in one adapter-neutral source and rendered into each installed adapter's own skill or command format. It interviews the person adopting urzua and writes the configuration from tested blocks, so no agent writes keys from guesses.
 
 ## Why
 
-`urzua init` proposes a configuration from what a repository already has; it does not ask what the person wants. The questions that turned out to matter in one adopting repository were never asked: which record types exist and how they nest; who may accept a decision; whether agents work in the repository and which guardrails to install; whether a finished record must cite evidence per check, and where evidence that cannot be committed goes; which fields have fixed values; what CI should block. Each answer maps to a block of configuration that exists and is tested. The generated drafting commands show the bundle can already carry agent-facing instructions per repository, and `MILE-280` plans to ship the harness as an agent plugin; the maintainer distributes skills for another of his repositories with a one-line installer and asked for the same here.
+`urzua init` proposes a configuration from what a repository already has; it does not ask what the person wants. The questions that turned out to matter in one adopting repository were never asked: which record types exist and how they nest; who may accept a decision; whether agents work in the repository and which guardrails to install; whether a finished record must cite evidence per check, and where evidence that cannot be committed goes; which fields have fixed values; what CI should block. Each answer maps to a block of configuration that exists and is tested. The generated drafting commands show the bundle can already carry agent-facing instructions per repository, and `MILE-280` plans to ship the harness as an agent plugin; the maintainer proposed, on 2026-11-17, that the tool supply skills that guide setup.
 
 ## Done means
 
-- The harness bundle carries a setup skill that asks the person the questions above one at a time, in plain words with a recommendation, and writes only configuration blocks that a test in this repository loads and exercises, shown by a test that every block the skill can write is such a block.
+- The harness bundle carries a setup skill that asks the person the questions above one at a time, in plain words with a recommendation, and writes only configuration blocks that a test in this repository loads and exercises, shown by a test that the skill source lists each question with a recommendation line and that every block it can write is such a block.
+- The skill source names no agent product; each adapter's rendering is checked in CI against the source (`MILE-280`).
 - The skill reads `urzua doctor`'s list of undeclared capabilities as its agenda and finishes by running `doctor` and `check`, so the skill and the tool cannot disagree about what is left.
-- The skill is installable by one command whose download is verified by checksum or attestation the way the binary's is, and through the plugin distribution `MILE-280` describes; the command is documented in the adoption guide.
+- The skill is installable by one command whose download is verified by checksum or attestation the way the binary's is, and through `MILE-280`'s plugin once it exists; the command is documented in the adoption guide.
 - A decision the person declines is written down as declined with their reason, not left unset.
 - The skill holds no record type, status or field name of its own beyond the starter profiles `urzua init` already offers.
 
