@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5C0WX34AQKF79DQDS5
-Version: '0.41'
+Version: '0.42'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -31,7 +31,9 @@ declared `statuses.initial`, or at the first of `statuses.values` when the type 
 (`MILE-151`, `BUG-199`). The report's `status_from` says which: `{field, value, source, other_initial}`,
 `source` being `statuses.initial[0]` or `statuses.values[0]` and `other_initial` the remaining declared
 initial states, so a caller sees when the choice among several was made for it; `null` when the type
-declares no `statuses`. That is the vocabulary's entry state rather than a
+declares no `statuses` or does not require its status field. The choice is one core function
+(`new_record::scaffold_status`), which `urzua explain --types` also calls for its `new_writes`, so the two
+cannot disagree. That is the vocabulary's entry state rather than a
 decision, so moving a record on from it stays a human's; a type that declares no `statuses` leaves
 the field blank. A type may also name the field that takes the record's title
 (`relation_fields.title`, a spec's `Subject`) and the version a record starts at
@@ -321,3 +323,4 @@ steps and in seconds, for each record type.
 > | 2026-11-17 | The rows of 2026-11-17 (`0.36`), 2026-11-17 (`0.37`), 2026-11-17 (re-baseline) describe intermediate states of the pull request for `MILE-322` and `MILE-324` that the final change does not contain: a `ScaffoldSpec.unset_as_null` flag; writing a field `new` has no value for as the template's text, the `—` sentinel or nothing. The final change writes such a field empty and lists it in `to_fill`, has no such flag or function, leaves `is_record_reference`'s visibility as on main, and keeps a present but empty `Expires` expired, as releases 0.4.7 and 0.4.8 do. The earlier rows stay as history. **Why:** review of that pull request asked that rows naming designs absent from the final tree be closed. | **structural** |
 > | 2026-11-17 | Bumped to `0.41`. Gives the maintainer's acceptance its own sentence, covering only "leave it empty and tell the agent what to fill", and marks the rest of the section decided by the builder, pending maintainer review; date, author and status fill only a required field; `to_fill` gains `if_empty`, and a hint is never a dash or a built-in placeholder word; the next action separates required from optional fields; a required pointer left empty is still reported. **Why:** review of the pull request for `MILE-322` and `MILE-324`: the acceptance sat beside decisions the maintainer had not seen, template-only fields were filled where release 0.4.8 left them for the author, and the next action named optional fields as if required. | **substantive** |
 > | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/new.rs` 130b8b1d8bbd -> c71281cac1bd, `rust/crates/urzua-core/src/new_record.rs` 08fe0a8a09c6 -> 3fcf76bf181b. Reason: new.rs moves the staging decision into needs_staging so run stays within the function-length bound; behaviour is unchanged; new_record.rs fills date, author and status only in a field the type requires (a template-only field is written empty), adds if_empty to to_fill entries for a suppression type's Expires and permanent fields, offers no dash or built-in placeholder word as a hint, and rewords its comments without record ids; unit tests cover each. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-17 | Bumped to `0.42`. Merges main's `urzua explain --types` rows; the starting-status choice (`statuses.initial`, else the first of `statuses.values`, only for a required status field) lives in `new_record::scaffold_status`, which `explain`'s `new_writes` and `new`'s `status_from` share. **Why:** merging main, where `explain` (`#579`) moved the choice into that shared function. | **substantive** |
