@@ -256,7 +256,7 @@ file in a different, governed repository. Install urzua to close it: with the bi
 placed and judged. (Accepted by the maintainer on 2026-11-17 that a file the fallback cannot see is not checked;
 deciding from the session alone is the orchestrator's decision of 2026-11-17, pending maintainer review.)
 
- Not verified without a live agent: that Claude Code fires a
+Not verified without a live agent: that Claude Code fires a
 user-level plugin's hooks for every session as documented, and how an organization's managed settings can
 force the plugin on.
 

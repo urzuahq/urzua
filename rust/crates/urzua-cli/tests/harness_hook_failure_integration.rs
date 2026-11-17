@@ -69,7 +69,7 @@ struct Path_ {
 
 fn path_with(urzua: Option<&str>) -> Path_ {
     let dir = common::TempDir::new("urzua-hookfail-path");
-    for tool in ["sh", "git", "awk", "dirname", "cat", "sleep"] {
+    for tool in ["sh", "git", "awk", "dirname", "cat", "sleep", "tr", "wc"] {
         let found = std::env::split_paths(&std::env::var_os("PATH").unwrap())
             .map(|d| d.join(tool))
             .find(|p| p.is_file())

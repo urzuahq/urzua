@@ -239,7 +239,7 @@ fn the_settings_command_refuses_when_it_cannot_run_and_the_configuration_says_de
     install(&dir);
     let target = dir.join(".claude/settings.json");
     let payload = write_payload(&dir, &target, "{}\n");
-    let tools = path_with(&["sh", "git", "awk", "cat"]);
+    let tools = path_with(&["sh", "git", "awk", "cat", "dirname", "tr", "wc"]);
     // No urzua on PATH: the shell fallback reads the configuration.
     let v = run_command(&dir, &dir, Some(&dir), Some(tools.path()), &payload);
     assert_eq!(decision(&v), Some("deny"), "{v}");
@@ -268,7 +268,7 @@ fn the_settings_command_refuses_when_it_cannot_run_and_the_configuration_says_de
 fn the_settings_command_only_warns_when_the_configuration_allows_an_unjudged_edit() {
     let dir = fixture("b1-open", &config(", on_unjudged: allow"));
     install(&dir);
-    let tools = path_with(&["sh", "git", "awk", "cat"]);
+    let tools = path_with(&["sh", "git", "awk", "cat", "dirname", "tr", "wc"]);
     let payload = write_payload(&dir, &dir.join(".claude/settings.json"), "{}\n");
     let v = run_command(&dir, &dir, Some(&dir), Some(tools.path()), &payload);
     assert_eq!(decision(&v), None, "{v}");
