@@ -5,6 +5,7 @@ rules:
   header.required-fields: error
   relation.pair-reciprocity: error
   relation.target-status-undeclared: error
+  pointer.target-type: error
   pointer.target-status:
     level: error
     not_in: [Superseded]
@@ -17,7 +18,7 @@ record_types:
     header_shape: yaml-frontmatter
     required_fields: [Status]
     known_fields: [Status, Supersedes, Superseded-by, Implements]
-    pointer_fields: [Supersedes, Superseded-by, Implements]
+    pointer_fields: [Supersedes, Superseded-by, {name: Implements, targets: [adr]}]
     narrative_fields: []
   note:
     dir: docs/notes

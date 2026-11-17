@@ -1,0 +1,9 @@
+id: a-reference-to-a-record-of-a-type-the-field-does-not-allow-is-reported
+corpus: corpus-s
+invocation: [check]
+# Implements declares targets [adr]; ADR-4 implements NOTE-1, a note record, while ADR-3 implements an adr.
+expect_exit: 1
+expect_findings:
+  - {rule: pointer.target-type, severity: error, file: docs/adr/ADR-4-cites-a-note.md, message_contains: "NOTE-1 is of type 'note'"}
+expect_no_findings:
+  - {rule: pointer.target-type, file: docs/adr/ADR-3-leans-on-old.md}

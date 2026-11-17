@@ -107,6 +107,7 @@ mod tests {
             embodiment: Default::default(),
             locator_resolvers: Default::default(),
             upgraded_from: None,
+            pointer_targets: Default::default(),
             override_log: None,
             block_on: None,
             attestation: Default::default(),

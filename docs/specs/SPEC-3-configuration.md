@@ -1,9 +1,9 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.159'
+Version: '0.160'
 Date: 2026-08-20
 Status: Shipped
-Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:10513fd0fc156634e9cfc5262943ddd81ede092de5f2676d386ade090e568ee5, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:09c2431a269316741c35b51dabd5766ecd3d50fab2b98069314bb1bc8857767d, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:255395e7d2caa34947cef28f463e2ec050e3eba798a4dc7573a3cad946fee1ae
+Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:b6ac9d56ae0f2e7cd44fcf834a4ff3700e9171e2f443d14f4b8e5261293e6f6f, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:09c2431a269316741c35b51dabd5766ecd3d50fab2b98069314bb1bc8857767d, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:255395e7d2caa34947cef28f463e2ec050e3eba798a4dc7573a3cad946fee1ae
 Embodiment: Verified
 Author: beauwilliams
 Subject: '`.urzua/config.yaml` -- the schema for record types, required/known fields, and per-type behavior.'
@@ -1586,6 +1586,7 @@ relation_pairs:
     cross_type: true          # optional, default true
     acyclic: false            # optional (MILE-27), default false
     types: [rfc]              # optional (MILE-155), default: every type declaring a side
+    target_types: [adr]       # optional (MILE-259), default: any type
     provisional:              # optional (MILE-154)
       statuses: [Draft]       # claimant statuses at which an unechoed claim is provisional
       level: warn             # warn (default) | error
@@ -1597,6 +1598,21 @@ Direction is the field name, so two records each claiming the `forward` side do 
 other. `relation.pair-reciprocity` checks `reciprocity: required` pairs; `relation.cross-type-disallowed`
 reports a claim whose target is another record type in a `cross_type: false` pair, which the
 reciprocity rule excludes (counted out of scope) rather than skipping silently.
+
+**Target types (`MILE-259`).** `target_types` lists the record types the pair's `forward` field may name; the
+`inverse` field is not constrained by it. A `pointer_fields` entry declares the same for a plain pointer field by
+taking the map form `{name: Parent, targets: [epic]}` in place of the bare name; the bare name and the map form mix
+freely in one list, and every other reader of `pointer_fields` sees only the names. `pointer.target-type` (`SPEC-2`)
+reports a reference that resolves to a record of a type outside the list, naming the field, the target, its type and
+the allowed types; each element of a list-valued field is judged, and a reference that names no record is
+`pointer.resolution`'s alone. A field constrained both ways must satisfy both. Load errors: a listed type that is not
+a configured record type, an empty list, a type listed twice, `targets` on any key other than `pointer_fields`, and
+a `cross_type: false` pair whose `target_types` names a type that does not carry its forward field (such a claim could
+never be made without a finding). A declared target list is the more specific statement: a claim whose target is
+outside it is reported by `pointer.target-type` only, not also by `relation.cross-type-disallowed`, unless
+`pointer.target-type` is declared `off`. A configuration that declares no target types behaves as before.
+`urzua graph` lists the claims of every declared relation pair as `pointer` edges, alongside `pointer_fields` and
+`narrative_fields`.
 
 `provisional` (`MILE-154`, from the `MILE-127` decision) splits `relation.pair-reciprocity` by the
 **claimant's** status, read from its `Status` role field by exact comparison. A claim from a record
@@ -2912,7 +2928,11 @@ proves this configuration produces the three findings.
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 1110a9945a86 -> cc9ac43c376f. Reason: config.rs: hooks.path validation moves into hooks_path_problem, which also rejects a leading '~', a backslash, colon or control character in any part, and .git in any part compared case-insensitively; every other key and default is unchanged **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` cc9ac43c376f -> 5b7ad3cd442c. Reason: config.rs: hooks.path also rejects names Windows or HFS+ read as .git (trailing dots or spaces, GIT~1, ignorable zero-width characters); every other key and default is unchanged **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 92f35c74119a -> 10513fd0fc15. Reason: merged main: the pin held main's config.rs; the merged file adds this branch's hooks.path and hooks.print_success keys and their validation to main's revision-log column validation, both unchanged **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-16 | Adds target types for reference fields: a `pointer_fields` entry may be `{name, targets}`, and a relation pair may declare `target_types`; both are judged by `pointer.target-type`, and `urzua graph` lists relation-pair edges. **Why:** `MILE-259`: a link to a record of the wrong type could not be expressed as a finding. | **substantive** |
 > | 2026-11-16 | Bumped to `0.156`. Adds `harness.guardrails.post-command.base` (default `origin/HEAD`) and `base_match` (default `info`): a gated change whose content is the base ref's is reported in one sentence at that level, still printed, advisory because the refs are local. **Why:** the maintainer reported on 2026-11-16 that the report after a pull of the default branch could not be understood. | **substantive** |
 > | 2026-11-16 | `post-command.base` lowers a report only when it is a remote-tracking ref; matching compares raw bytes; a change of `base` or `base_match` is reported at `error` and lowers nothing for that command. **Why:** `MILE-311`, decided by the orchestrator on 2026-11-16, pending maintainer review, after a security review of its pull request showed a clean filter could forge a match and a command could lower its own report through the comparison rule. | **substantive** |
 > | 2026-11-16 | Version set on merge (attested by beauwilliams, identity: gh-verified, actor: agent): `Version` is set to 0.158 by this merge, the next number above the higher side's 0.157, because `version_bump` requires a new version for the rows this merge combines. Rows added on the branches state versions 0.156 and 0.157, which were true there and are superseded by this merge. **Why:** `urzua fix --conflicts` resolved a conflict that lay only in re-pin lines; a person's row is never rewritten. | **evidence** |
+> | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 92f35c74119a -> 052ffdb64844. Reason: Merged main into the MILE-259 target-type branch. config.rs: a pointer_fields entry may be {name, targets}, Config gains a skipped pointer_targets map, RelationPair gains optional target_types, new load error InvalidPointerTargets; every other key unchanged. rules: new rule pointer.target-type (catalog.rs, pointer.rs, table.rs; default-on at error, not-enabled when nothing is declared); relation.rs cross-type-disallowed defers to it. graph.rs lists relation-pair edges. fix.rs, migrate.rs, property.rs, type_scope.rs, sequence.rs: fixtures add the new fields; fix.rs also carries main's change that a re-pin creates a missing revision log. check_integration.rs: the header-none fixture declares a target list. SPEC-3 documents the keys. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-17 | Pin recomputed on merge (attested by beauwilliams, identity: gh-verified, actor: agent): both merged sides re-pinned, `rust/crates/urzua-core/src/config.rs` (Realized-by) 052ffdb64844 and 10513fd0fc15 -> b6ac9d56ae0f; the new hash is the merged file's, which is git's automatic merge of the two re-pinned commits. No person wrote a reason for the merged state. `Version` is set to 0.159 by this merge, the next number above the higher side's 0.158, because `version_bump` requires a new version for the rows this merge combines. A row added on a branch states version 0.158, which was true there and is superseded by this merge. **Why:** `urzua fix --conflicts` resolved a conflict that lay only in re-pin lines; a reviewer of the pull request should confirm the merged pin. | **evidence** |
 > | 2026-11-17 | Version set on merge (attested by beauwilliams, identity: gh-verified, actor: agent): `Version` is set to 0.159 by this merge, the next number above the higher side's 0.158, because `version_bump` requires a new version for the rows this merge combines. A row added on a branch states version 0.158, which was true there and is superseded by this merge. **Why:** `urzua fix --conflicts` resolved a conflict that lay only in re-pin lines; a person's row is never rewritten. | **evidence** |
+> | 2026-11-17 | Version set on merge (attested by beauwilliams, identity: gh-verified, actor: agent): `Version` is set to 0.160 by this merge, the next number above the higher side's 0.159, because `version_bump` requires a new version for the rows this merge combines. A row added on a branch states version 0.159, which was true there and is superseded by this merge. **Why:** `urzua fix --conflicts` resolved a conflict that lay only in re-pin lines; a person's row is never rewritten. | **evidence** |
