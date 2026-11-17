@@ -2,7 +2,7 @@
 Stable-Id: 01M2VHJHA4F5PMMA9DGW0CM6Y5
 Status: Accepted
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/discovery.rs@sha256:bc6192871bbd9fe39d4b10ad460b98cf69170d44118a7fcb7940b8be499ce7ae, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:f2601b80e3188008bc81729720946fcd700bfab20e3a2a1b6facd80b62e77686
+Realized-by: code:rust/crates/urzua-cli/src/discovery.rs@sha256:bc6192871bbd9fe39d4b10ad460b98cf69170d44118a7fcb7940b8be499ce7ae, test:rust/crates/urzua-cli/tests/check_integration.rs@sha256:1730b2bc16731eaa0f4279de20ca9a21fd432e67bfa548faec319ff5af9c131a
 Date: 2026-09-19
 Accepted-on: 2026-09-19
 Author: beauwilliams
@@ -129,3 +129,4 @@ Removing it is cheap to undo. Keeping it is what compounds.
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/check_integration.rs` 464326b8c43f -> 828702780265. Reason: check_integration.rs: hand-written hooks, including this repository's own, are now expected as installed-unmanaged-call; the other tests are unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/check_integration.rs` 6d2ad3bf8830 -> 03a0f940f65e. Reason: check_integration.rs gains a test that migrate ids refuses a path-gated record; the record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Pin recomputed on merge (attested by beauwilliams, identity: gh-verified, actor: agent): both merged sides re-pinned, `rust/crates/urzua-cli/tests/check_integration.rs` (Realized-by) 03a0f940f65e and 828702780265 -> f2601b80e318; the new hash is the merged file's, which is git's automatic merge of the two re-pinned commits. No person wrote a reason for the merged state. **Why:** `urzua fix --conflicts` resolved a conflict that lay only in re-pin lines; a reviewer of the pull request should confirm the merged pin. | **evidence** |
+> | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/check_integration.rs` f2601b80e318 -> 1730b2bc1673. Reason: check_integration.rs: the header-none census test's type declares a field_values vocabulary so the new rule is held to the out-of-scope census; no other test changed **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
