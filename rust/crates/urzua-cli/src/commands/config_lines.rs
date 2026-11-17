@@ -26,6 +26,52 @@ pub(crate) fn index(parent: &str, i: usize) -> String {
     format!("{parent}[{i}]")
 }
 
+/// A flow sequence (`[a, b, ...]`) still open at the end of a line: each item
+/// is given the line it starts on.
+struct FlowSeq {
+    path: String,
+    depth: usize,
+    next: usize,
+    in_item: bool,
+    quote: Option<char>,
+}
+
+impl FlowSeq {
+    /// Reads `text` (from `line`), recording each top-level item's line;
+    /// returns whether the sequence is still open.
+    fn feed(&mut self, text: &str, line: usize, lines: &mut HashMap<String, usize>) -> bool {
+        for c in text.chars() {
+            if let Some(q) = self.quote {
+                if c == q {
+                    self.quote = None;
+                }
+                continue;
+            }
+            if self.depth == 1 && !self.in_item && !c.is_whitespace() && c != ',' && c != ']' {
+                if c == '#' {
+                    break;
+                }
+                lines.entry(index(&self.path, self.next)).or_insert(line);
+                self.next += 1;
+                self.in_item = true;
+            }
+            match c {
+                '"' | '\'' => self.quote = Some(c),
+                '[' | '{' => self.depth += 1,
+                ']' | '}' => {
+                    self.depth -= 1;
+                    if self.depth == 0 {
+                        return false;
+                    }
+                }
+                ',' if self.depth == 1 => self.in_item = false,
+                _ => {}
+            }
+        }
+        true
+    }
+}
+
 struct Frame {
     indent: usize,
     path: String,
@@ -48,8 +94,15 @@ impl ConfigLines {
         let mut stack: Vec<Frame> = Vec::new();
         let mut counters: HashMap<String, usize> = HashMap::new();
         let mut block_scalar_at: Option<usize> = None;
+        let mut flow: Option<FlowSeq> = None;
         for (n, raw) in text.lines().enumerate() {
             let line_no = n + 1;
+            if let Some(seq) = flow.as_mut() {
+                if !seq.feed(raw, line_no, &mut out.lines) {
+                    flow = None;
+                }
+                continue;
+            }
             let trimmed = raw.trim_start();
             if trimmed.is_empty() || trimmed.starts_with('#') || trimmed.starts_with("---") {
                 continue;
@@ -112,6 +165,18 @@ impl ConfigLines {
             }
             if value.starts_with('{') {
                 out.flow_keys(&path, value, line_no);
+            }
+            if value.starts_with('[') {
+                let mut seq = FlowSeq {
+                    path: path.clone(),
+                    depth: 0,
+                    next: 0,
+                    in_item: false,
+                    quote: None,
+                };
+                if seq.feed(value, line_no, &mut out.lines) {
+                    flow = Some(seq);
+                }
             }
             if value.starts_with('|') || value.starts_with('>') {
                 block_scalar_at = Some(indent);
@@ -250,6 +315,17 @@ mod tests {
             l.aliases_under("t.b"),
             [("t.b.statuses:6".to_string(), "t.a.statuses:3".to_string())]
         );
+    }
+
+    #[test]
+    fn each_item_of_a_multi_line_flow_list_has_its_own_line() {
+        let text = "t:\n  known: [a,\n    \"b, c\",\n    {x: 1},\n    d]\n  after: 1\n";
+        let l = ConfigLines::scan(text);
+        assert_eq!(l.line("t.known[0]"), Some(2));
+        assert_eq!(l.line("t.known[1]"), Some(3));
+        assert_eq!(l.line("t.known[2]"), Some(4));
+        assert_eq!(l.line("t.known[3]"), Some(5));
+        assert_eq!(l.line("t.after"), Some(6));
     }
 
     #[test]

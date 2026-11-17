@@ -12,11 +12,11 @@ const FIXTURE: &str = include_str!("fixtures/explain_types/config.yaml");
 const EVERY_KEY: &str = include_str!("fixtures/explain_types/every_key.yaml");
 
 /// The summary of the three-type fixture, as printed, stays under this many bytes.
-const MAX_SUMMARY_BYTES: usize = 2_200;
+const MAX_SUMMARY_BYTES: usize = 2_350;
 /// The full report of the three-type fixture stays under this many bytes.
-const MAX_FULL_BYTES: usize = 10_200;
+const MAX_FULL_BYTES: usize = 10_000;
 /// The summary of this repository's own configuration stays under this many bytes.
-const MAX_OWN_SUMMARY_BYTES: usize = 5_900;
+const MAX_OWN_SUMMARY_BYTES: usize = 6_050;
 
 fn repo(name: &str, config: &str) -> common::TempDir {
     let dir = common::TempDir::new(&format!("urzua-explain-types-{name}"));
@@ -102,7 +102,7 @@ fn every_declaration_is_reported_with_its_position() {
     assert_eq!(r["status"], "ok");
     assert_positions(&r);
     let issue = of(&r, "issue");
-    assert_eq!(issue["create"], "urzua new issue \"<title>\"");
+    assert_eq!(issue["create_command"], "urzua new issue \"<title>\"");
     assert_eq!(issue["prefix"]["value"], "ISS");
     assert_eq!(issue["prefix"]["at"], "record_types.issue.prefix:6");
     assert_eq!(issue["dirs"][1]["value"], "docs/issues-archive");
@@ -145,18 +145,27 @@ fn every_declaration_is_reported_with_its_position() {
     assert_eq!(require["when_field"]["Kind"], json!(["bug"]));
     assert_eq!(
         require["sentence"],
-        "when State is Closed and Kind is bug, Severity is required"
+        "declared: when State is Closed and Kind is bug, Severity is required"
     );
     assert_eq!(
         issue["conditions"][1]["sentence"],
-        "when State is Open, Fixes is forbidden"
+        "declared: when State is Open, Fixes is forbidden"
     );
     assert_eq!(issue["gates"][0]["to"], json!(["Dropped"]));
     assert_eq!(issue["gates"][0]["logins"], json!(["someone"]));
     assert!(issue["revision_log"]["at"].is_string());
-    assert_eq!(of(&r, "note")["gates"][0]["paths"], json!(["docs/notes"]));
+    assert!(
+        of(&r, "note").get("gates").is_none(),
+        "a path gate is not attributed to a type"
+    );
+    assert_eq!(r["path_gates"]["gates"][0]["paths"], json!(["docs/notes"]));
+    assert_eq!(r["path_gates"]["gates"][0]["at"], "authority.gates[1]:54");
     let task = of(&r, "task");
-    let pair = &task["relation_pairs"][0];
+    assert!(
+        task.get("relation_pairs").is_none(),
+        "pairs are shown as declared, once"
+    );
+    let pair = &r["repository"]["relation_pairs"]["value"][0];
     assert_eq!(pair["target_types"], json!(["task"]));
     assert_eq!(pair["reciprocity"], "none");
     assert_eq!(
@@ -250,7 +259,11 @@ fn a_bare_type_prints_nothing_it_does_not_declare() {
     let note = of(&r, "note");
     let mut keys: Vec<&String> = note.as_object().unwrap().keys().collect();
     keys.sort();
-    assert_eq!(keys, ["at", "create", "dirs", "name", "prefix"], "{note}");
+    assert_eq!(
+        keys,
+        ["at", "create_command", "dirs", "name", "prefix"],
+        "{note}"
+    );
     assert_eq!(note["prefix"]["default"], true);
     assert!(
         r.get("rules_set_in_configuration").is_none(),
@@ -350,7 +363,7 @@ fn every_key_a_record_type_accepts_is_reported_when_declared() {
             work["states"]
         );
     }
-    let pair = &work["relation_pairs"][0];
+    let pair = &r["repository"]["relation_pairs"]["value"][0];
     for key in [
         "name",
         "forward",
@@ -358,7 +371,6 @@ fn every_key_a_record_type_accepts_is_reported_when_declared() {
         "reciprocity",
         "cross_type",
         "acyclic",
-        "at",
     ] {
         assert!(pair.get(key).is_some(), "pair key `{key}`: {pair}");
     }
@@ -525,19 +537,6 @@ fn an_empty_target_intersection_says_none() {
     assert_eq!(of(&s, "a")["references"]["Up"]["value"], "none");
     assert!(!s.to_string().contains("\"Up\":[]"));
 }
-
-#[test]
-fn a_path_gate_matches_directories_with_case_folded() {
-    let config = FIXTURE.replace("    - paths: [docs/notes]", "    - paths: [DOCS/Notes]");
-    let dir = repo("gate-case", &config);
-    let (_, r) = run(&dir, &["explain", "--type", "note"]);
-    assert_eq!(
-        of(&r, "note")["gates"][0]["paths"],
-        json!(["DOCS/Notes"]),
-        "{r}"
-    );
-}
-
 #[test]
 fn the_full_report_lists_the_rules_set_as_written() {
     let dir = repo("rules-set", FIXTURE);
@@ -559,9 +558,10 @@ fn the_full_report_lists_the_rules_set_as_written() {
     }
     let (_, one) = run(&dir, &["explain", "--type", "issue"]);
     assert!(one.get("rules").is_none(), "{one}");
-    assert_eq!(
-        of(&one, "issue")["conditions"][0]["rule"],
-        "status.required-field-missing"
+    assert!(of(&one, "issue")["conditions"][0].get("rule").is_none());
+    assert!(
+        one["note"].as_str().unwrap().contains("urzua check"),
+        "{one}"
     );
 }
 
@@ -604,7 +604,7 @@ record_types:
     let dir = write_repo("no-header", config);
     let (_, r) = run(&dir, &["explain", "--type", "log"]);
     let log = of(&r, "log");
-    assert!(log.get("create").is_none(), "{log}");
+    assert!(log.get("create_command").is_none(), "{log}");
     assert!(log["states"].get("new_writes").is_none(), "{log}");
     let (out, refused) = run(&dir, &["new", "log", "x", "--by", "someone"]);
     assert_eq!(out.status.code(), Some(2), "{refused}");
@@ -613,74 +613,8 @@ record_types:
         "the engine's own reason"
     );
     let (_, s) = run(&dir, &["explain", "--types"]);
-    assert!(of(&s, "log").get("create").is_none());
+    assert!(of(&s, "log").get("create_command").is_none());
 }
-
-#[test]
-fn glob_path_gates_are_matched_as_the_engine_matches_them() {
-    let config = "schema_version: 2
-record_types:
-  d:
-    dir: docs/d
-    required_fields: [Status]
-  e:
-    dir: docs/e
-    required_fields: [Status]
-  f:
-    dir: docs/f
-    required_fields: [Status]
-  g:
-    dir: docs/g
-    identity: {from: filename, pattern: '^(?P<prefix>G)-(?P<number>\\d+)-(?P<slug>.+)$'}
-    required_fields: [Status]
-authority:
-  deciders:
-    owners: {logins: [someone]}
-  gates:
-    - paths: ['docs/**']
-      by: owners
-    - paths: ['**/D-*.md']
-      by: owners
-    - paths: ['docs/*/E-*.md']
-      by: owners
-    - paths: ['other/**']
-      by: owners
-";
-    let dir = write_repo("glob-gates", config);
-    for d in ["docs/d", "docs/e", "docs/f", "docs/g"] {
-        std::fs::create_dir_all(dir.join(d)).unwrap();
-    }
-    let gate_paths = |t: &str| -> Vec<Value> {
-        let (_, r) = run(&dir, &["explain", "--type", t]);
-        of(&r, t)["gates"]
-            .as_array()
-            .cloned()
-            .unwrap_or_default()
-            .iter()
-            .map(|g| g["paths"][0].clone())
-            .collect()
-    };
-    assert_eq!(gate_paths("d"), [json!("docs/**"), json!("**/D-*.md")]);
-    assert_eq!(gate_paths("e"), [json!("docs/**"), json!("docs/*/E-*.md")]);
-    assert_eq!(
-        gate_paths("f"),
-        [json!("docs/**")],
-        "f's file names are decidable"
-    );
-    assert_eq!(
-        gate_paths("g"),
-        [json!("docs/**"), json!("**/D-*.md"), json!("docs/*/E-*.md")]
-    );
-    let (_, r) = run(&dir, &["explain", "--type", "g"]);
-    let gates = of(&r, "g")["gates"].as_array().unwrap().clone();
-    assert!(
-        gates[0].get("may_cover").is_none(),
-        "docs/** covers g: {gates:?}"
-    );
-    assert_eq!(gates[1]["may_cover"]["value"], true, "{gates:?}");
-    assert_eq!(gates[2]["may_cover"]["value"], true, "{gates:?}");
-}
-
 #[test]
 fn a_pair_forward_field_outside_pointer_fields_shows_the_pairs_targets() {
     let config = "schema_version: 2
@@ -726,4 +660,109 @@ fn full_alone_and_an_empty_summary_name_no_type_command() {
     let empty = repo("empty-next", "schema_version: 2\nrecord_types: {}\n");
     let (_, r) = run(&empty, &["explain", "--types"]);
     assert!(r["next_action"].is_null(), "{r}");
+}
+
+#[test]
+fn path_gates_are_listed_once_as_declared_and_types_carry_only_their_own_gates() {
+    let dir = repo("path-gates", FIXTURE);
+    let (_, s) = run(&dir, &["explain", "--types"]);
+    assert_eq!(
+        s["path_gates"]["gates"][0]["paths"],
+        json!(["docs/notes"]),
+        "{s}"
+    );
+    assert!(s["path_gates"]["note"]
+        .as_str()
+        .unwrap()
+        .contains("whatever the type"));
+    let (_, r) = run(&dir, &["explain", "--type", "issue"]);
+    assert_eq!(of(&r, "issue")["gates"][0]["to"], json!(["Dropped"]));
+    assert_eq!(of(&r, "issue")["gates"].as_array().unwrap().len(), 1);
+}
+
+#[test]
+fn a_pattern_urzua_new_cannot_fit_is_refused_ahead_and_a_title_refusal_is_not() {
+    let config = "schema_version: 2
+record_types:
+  b:
+    dir: docs/b
+    prefix: B
+    identity: {from: filename, pattern: '^(?P<prefix>X)-(?P<number>\\d+)-(?P<slug>.+)$'}
+    required_fields: [Status]
+  a:
+    dir: docs/a
+    required_fields: [Status]
+";
+    let dir = write_repo("refusals", config);
+    let (_, r) = run(&dir, &["explain", "--types", "--full"]);
+    let b = of(&r, "b");
+    assert!(b.get("create_command").is_none(), "{b}");
+    let (out, refused) = run(&dir, &["new", "b", "hello", "--by", "someone"]);
+    assert_eq!(out.status.code(), Some(2), "{refused}");
+    assert_eq!(
+        b["cannot_create"], refused["error"],
+        "the reason `urzua new` gives"
+    );
+    assert!(refused["error"].as_str().unwrap().contains("does not read"));
+    let a = of(&r, "a");
+    assert_eq!(a["create_command"], "urzua new a \"<title>\"");
+    let (out, refused) = run(&dir, &["new", "a", "!!!", "--by", "someone"]);
+    assert_eq!(
+        out.status.code(),
+        Some(2),
+        "a title refusal is decided by `urzua new`: {refused}"
+    );
+}
+
+#[test]
+fn a_multi_line_flow_list_gives_each_item_its_line() {
+    let config = "schema_version: 2
+record_types:
+  a:
+    dir: docs/a
+    required_fields: [Status]
+    known_fields: [One,
+      Two,
+      Three]
+";
+    let dir = write_repo("flow-lines", config);
+    let (_, r) = run(&dir, &["explain", "--type", "a"]);
+    let a = of(&r, "a");
+    assert_eq!(field(a, "One")["at"], "record_types.a.known_fields[0]:6");
+    assert_eq!(field(a, "Two")["at"], "record_types.a.known_fields[1]:7");
+    assert_eq!(field(a, "Three")["at"], "record_types.a.known_fields[2]:8");
+}
+
+#[test]
+fn the_rules_set_keep_their_written_order() {
+    let config = format!("{FIXTURE}  field.quality: warn\n  diff.decider-required: error\n");
+    let dir = repo("rules-order", &config);
+    let (_, r) = run(&dir, &["explain", "--types", "--full"]);
+    let ids: Vec<&str> = r["rules_set_in_configuration"]["rules"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| e["id"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        ids,
+        [
+            "header.required-fields",
+            "status.transition-allowed",
+            "field.quality",
+            "diff.decider-required"
+        ]
+    );
+}
+
+#[test]
+fn the_summary_gives_no_create_command() {
+    let dir = repo("summary-no-create", FIXTURE);
+    let (_, s) = run(&dir, &["explain", "--types"]);
+    for t in s["types"].as_array().unwrap() {
+        assert!(
+            t.get("create").is_none() && t.get("create_command").is_none(),
+            "{t}"
+        );
+    }
 }

@@ -38,6 +38,10 @@ The delivered command follows the previous amendment's wording, not the Done-mea
 
 The delivered command does not meet the Done-means item "the rules that are on because of a declaration, each naming the declaring key": it lists only the rules set in the configuration, as written under `rules:`, and does not say which rules apply to a type, because which records a rule judges is decided in each rule's code and three reviews found every mapping kept outside the rules false. The marked defaults it prints are the undeclared initial state, the status `urzua new` writes, an undeclared prefix, the conventional template path and the built-in pending and placeholder lists; no rule is among them. Decided by the orchestrator on 2026-11-17, pending maintainer review.
 
+## Amendment (2026-11-17): statements of earlier amendments the delivered command no longer makes
+
+The delivered command no longer makes these statements of the earlier amendments: that "a rule on by declaration" is one of its marked entries; that the summary shows "the rule ids with their levels"; and that it says anything about which rules apply to a type or whether a declared condition is enforced. Path gates are listed once for the repository, as declared, and not attributed to types. Decided by the orchestrator on 2026-11-17, pending maintainer review.
+
 > **Revision log**
 >
 > | Date | Change | Class |
@@ -47,3 +51,4 @@ The delivered command does not meet the Done-means item "the rules that are on b
 > | 2026-11-17 | Amendment: one sentence says the delivered command follows the amendment's four marked entries rather than the Done-means item's "exactly two exceptions", and that it also marks the built-in pending and placeholder lists. **Why:** review of 2026-11-17 noted the item and the amendment disagree; the item is left as written. | **structural** |
 > | 2026-11-17 | The second amendment's sentence on which wording the command follows is marked as decided by the builder, pending maintainer review. **Why:** review of 2026-11-17: the statement is the builder's, not the maintainer's. | **structural** |
 > | 2026-11-17 | Amendment: the delivered command does not list rules on by declaration or say which rules apply to a type; the Done-means items are left as written and the Status is unchanged. **Why:** decided by the orchestrator on 2026-11-17 after review found per-type rule ties false three times, pending maintainer review. | **substantive** |
+> | 2026-11-17 | Amendment: lists the statements of earlier amendments the delivered command no longer makes (a rule on by declaration as a marked entry, rule ids in the summary, rule applicability, path gates per type). **Why:** decided by the orchestrator on 2026-11-17, pending maintainer review. | **structural** |

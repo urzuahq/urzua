@@ -240,8 +240,9 @@ enum Command {
         /// Every record type the configuration declares, one compact entry each.
         #[arg(long, conflicts_with = "record_type")]
         types: bool,
-        /// With `--types`: every type's full declaration, and the repository's
-        /// own settings.
+        /// With `--types`: every type's full declaration, the rules set in the
+        /// configuration as written under `rules:`, the path gates, and the
+        /// repository's own settings.
         #[arg(long, conflicts_with_all = ["path", "rule"])]
         full: bool,
         /// One declared record type.
