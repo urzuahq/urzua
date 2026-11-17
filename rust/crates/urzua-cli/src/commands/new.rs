@@ -147,13 +147,7 @@ pub(crate) fn build_filename(
             "title '{title}' has no ASCII letters or digits to build a filename slug from -- give it a title containing at least one"
         ));
     }
-    // Type prefix explicit in the filename (ADR-36). The type's configured
-    // `prefix` when it declares one (e.g. `MILE` for `milestone`), otherwise the
-    // type name itself, upper-cased.
-    let type_prefix = type_config
-        .prefix
-        .clone()
-        .unwrap_or_else(|| record_type.to_ascii_uppercase());
+    let type_prefix = type_prefix(record_type, type_config);
     // Never zero-padded by default (ADR-36 amendment): padding doesn't solve
     // lexicographic sort order permanently, only defers the break. A declared
     // pattern that requires padding is the one reason to pad, and the name is
@@ -183,15 +177,47 @@ pub(crate) fn lookup_record_type<'a>(
         ));
     };
 
-    // `none` declares this type has nowhere for a header, and therefore
-    // nowhere to write a `Stable-Id` -- generating a record with no identity
-    // would be worse than refusing (`ADR-50`).
+    if let Some(refusal) = scaffold_refusal(record_type, type_config) {
+        return Err(refusal);
+    }
+    Ok(type_config)
+}
+
+/// Why `urzua new` cannot create a record of this type, or `None` when it can.
+/// `none` declares this type has nowhere for a header, and therefore nowhere to
+/// write a `Stable-Id` -- generating a record with no identity would be worse
+/// than refusing (`ADR-50`).
+///
+/// Also refused: a declared identity pattern that does not compile. Whether
+/// the pattern reads back the name `urzua new` builds depends on the number
+/// and the title, so `build_filename` decides that after numbering.
+pub(crate) fn scaffold_refusal(
+    record_type: &str,
+    type_config: &urzua_core::config::RecordTypeConfig,
+) -> Option<String> {
     if type_config.header_shape == urzua_core::header::HeaderShape::None {
-        return Err(format!(
+        return Some(format!(
             "record type '{record_type}' declares header_shape: none -- urzua new cannot generate an identity for a type with no header"
         ));
     }
-    Ok(type_config)
+    compile_declared_identity(record_type, type_config).err()
+}
+
+/// The prefix a record's file name opens with (`ADR-36`): the type's declared
+/// `prefix`, otherwise the type name upper-cased.
+pub(crate) fn type_prefix(
+    record_type: &str,
+    type_config: &urzua_core::config::RecordTypeConfig,
+) -> String {
+    type_config
+        .prefix
+        .clone()
+        .unwrap_or_else(|| record_type.to_ascii_uppercase())
+}
+
+/// The checked-in template `urzua new` reads for a type, relative to the root.
+pub(crate) fn template_path(record_type: &str) -> PathBuf {
+    PathBuf::from(".urzua/templates").join(format!("{record_type}.md"))
 }
 
 /// What numbering a new record settles: the type's identity grammar and the
@@ -467,10 +493,7 @@ struct NewRecordInputs<'a> {
 /// Reads the type's checked-in template, if any, and hands it to the shared
 /// scaffold in core.
 fn render_record(inputs: &NewRecordInputs) -> String {
-    let template_path = inputs
-        .repo_root
-        .join(".urzua/templates")
-        .join(format!("{}.md", inputs.record_type));
+    let template_path = inputs.repo_root.join(template_path(inputs.record_type));
     let template = urzua_io::read_to_string(&template_path).ok();
     urzua_core::new_record::scaffold_record(
         &urzua_core::new_record::ScaffoldSpec::plain(

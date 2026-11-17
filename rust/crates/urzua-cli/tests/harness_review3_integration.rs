@@ -357,7 +357,14 @@ fn mcp(dir: &Path, tool: &str, input: serde_json::Value) -> String {
 }
 
 fn translate(dir: &Path, payload: &str) -> serde_json::Value {
-    let out = common::run_hook(dir, "edit", payload, None, None, &[]);
+    translate_event(dir, "edit", payload)
+}
+
+/// What the binary hook prints for `event`: the hook output the agent harness
+/// reads (`additionalContext` for the agent, `systemMessage` for the person).
+fn translate_event(dir: &Path, event: &str, payload: &str) -> serde_json::Value {
+    let project = (event == "session-start").then_some(dir);
+    let out = common::run_hook(dir, event, payload, None, project, &[]);
     assert_eq!(out.status.code(), Some(0), "{out:?}");
     if out.stdout.is_empty() {
         return serde_json::Value::Null;
@@ -501,10 +508,37 @@ fn session_start_compares_the_installed_files_the_hook_entries_and_the_kill_swit
     wire_git_hooks(&dir);
     let v = session(&dir);
     assert_eq!(v["verdict"], "allow", "installed and wired: {v}");
+    let start =
+        serde_json::json!({"hook_event_name": "SessionStart", "cwd": dir.to_string_lossy()})
+            .to_string();
+    let relayed = translate_event(&dir, "session-start", &start);
+    assert!(
+        relayed["hookSpecificOutput"]["additionalContext"]
+            .as_str()
+            .is_some_and(|c| c.contains("urzua explain --types")),
+        "the agent is told the record-types command: {relayed}"
+    );
+    assert!(
+        relayed.get("systemMessage").is_none(),
+        "a healthy session start shows the person nothing: {relayed}"
+    );
     // A script an older bundle installed, left in the repository.
     let leftover = dir.join(".claude/hooks/urzua-claude-code.py");
     std::fs::create_dir_all(leftover.parent().unwrap()).unwrap();
     std::fs::write(&leftover, "import sys\n").unwrap();
+    // A warning verdict reaches the person, with the line at its end.
+    let warned = translate_event(&dir, "session-start", &start);
+    let message = warned["systemMessage"].as_str().unwrap_or_default();
+    assert!(
+        message.contains("leftover") || message.contains("urzua-claude-code.py"),
+        "a session-start warning reaches the person: {warned}"
+    );
+    assert!(
+        message
+            .trim_end()
+            .ends_with("Record types: `urzua explain --types`"),
+        "the warning ends with the record-types line: {warned}"
+    );
     let v = session(&dir);
     assert_eq!(v["verdict"], "allow-with-warnings", "{v}");
     let p = problems(&v);
