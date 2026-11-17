@@ -1768,9 +1768,11 @@ fn finish(problems: Vec<Problem>, harness: &urzua_core::harness::HarnessDecl) ->
     for p in &problems {
         message.push_str(&format!("\n  - [{}] {}", p.check, p.message));
     }
-    if urzua_core::harness::GUARDRAILS
-        .iter()
-        .any(|g| harness.enabled(g.name) && harness.on_unjudged(g.name) == OnUnjudged::Deny)
+    // A git hook that does not run cannot make a harness guardrail refuse an edit.
+    if problems.iter().any(|p| p.check != "git-hook")
+        && urzua_core::harness::GUARDRAILS
+            .iter()
+            .any(|g| harness.enabled(g.name) && harness.on_unjudged(g.name) == OnUnjudged::Deny)
     {
         message.push_str(&format!(
             "\nA guardrail is set to on_unjudged: deny, so an agent's edit is refused while it cannot judge. {HATCH}"
