@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "bundle_version": "0.4.6",
+  "bundle_version": "0.4.7",
   "adapters": [
     "claude-code"
   ],
