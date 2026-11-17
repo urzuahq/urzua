@@ -596,7 +596,10 @@ fn validate_field_rules(rt: &RecordTypeConfig, d: &StatusDecl) -> Result<(), Str
     }
     for status in &d.values {
         let required = status_only_fields(&d.require, status);
-        if let Some(f) = status_only_fields(&d.forbid, status).into_iter().find(|f| required.contains(f)) {
+        if let Some(f) = status_only_fields(&d.forbid, status)
+            .into_iter()
+            .find(|f| required.contains(f))
+        {
             return Err(format!(
                 "'{f}' is both required and forbidden at '{status}'"
             ));
@@ -1402,7 +1405,10 @@ mod tests {
     #[test]
     fn a_status_only_conflict_keeps_its_wording() {
         let e = kinds("      require: [{when: [Open], fields: [Cause]}]\n      forbid: [{when: [Open], fields: [Cause]}]\n").unwrap_err().to_string();
-        assert!(e.ends_with("'Cause' is both required and forbidden at 'Open'"), "{e}");
+        assert!(
+            e.ends_with("'Cause' is both required and forbidden at 'Open'"),
+            "{e}"
+        );
     }
 
     #[test]

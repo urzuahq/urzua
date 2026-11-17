@@ -534,7 +534,9 @@ fn rules_lists_each_variant_with_its_action_or_its_exemption_reason() {
     assert_eq!(typed[0]["variant"], "pointer-target-type");
     assert_eq!(typed[0]["kind"], "edit-field");
     assert_eq!(typed[0]["op"], "set");
-    let vocab = find("field.value-not-declared")["actions"].as_array().unwrap();
+    let vocab = find("field.value-not-declared")["actions"]
+        .as_array()
+        .unwrap();
     assert_eq!(vocab.len(), 1, "{vocab:?}");
     assert_eq!(vocab[0]["variant"], "field-value-not-declared");
     assert_eq!(vocab[0]["kind"], "edit-field");
