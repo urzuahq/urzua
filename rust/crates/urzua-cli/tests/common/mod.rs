@@ -329,7 +329,7 @@ pub fn run_hook(
     envs: &[(&str, &std::ffi::OsStr)],
 ) -> std::process::Output {
     use std::io::Write;
-    let mut c = std::process::Command::new(env!("CARGO_BIN_EXE_urzua"));
+    let mut c = urzua();
     c.args(["harness", "hook", "claude-code", event])
         .current_dir(dir)
         .env(

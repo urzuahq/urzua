@@ -1,5 +1,5 @@
 ---
-Version: '0.8'
+Version: '0.9'
 Date: 2026-09-19
 Status: Accepted
 Embodiment: Verified
@@ -36,7 +36,9 @@ inventory attached to it, which is what this spec now holds.
 | `platform/` | Deployment targets and infrastructure, per environment. **Reserved; holds a README only.** |
 | `.urzua/` | This repository's own `config.yaml` and record templates -- the tool's configuration of itself. |
 | `.github/` | Workflows, `actions/` (composite actions, among them the `urzua-gate` gate), `ISSUE_TEMPLATE/`, `PULL_REQUEST_TEMPLATE.md`, `release-paths` (`ADR-49`), and `scripts/` (the CI and release guard scripts, `BUG-48`). |
-| `.claude/` | Claude Code settings, the record-edit hook scripts under `hooks/`, and the slash commands under `commands/` for drafting and maintaining records. |
+| `.claude/` | Claude Code settings (whose hooks call `urzua harness hook`) and the slash commands under `commands/` for drafting and maintaining records. |
+| `.claude-plugin/` | `marketplace.json`, the Claude Code marketplace entry that lists the plugin under `plugins/claude-code`. |
+| `plugins/` | Agent plugins; `claude-code/` registers the same hooks and slash commands as `urzua harness install`, calling the installed binary. |
 | `.changeset/` | Pending release fragments (`ADR-29`), consumed by `knope` at release time. |
 | `.git-hooks/` | The pre-commit and pre-push hooks installed by `make hooks-install`. |
 
@@ -97,3 +99,4 @@ the speculative reservation this spec exists to stop accumulating.
 > | 2026-11-13 | Bumped to `0.7`. Layout table amended to match the tree: added `.claude/`; the `scripts/` row names `generate-rule-table.py`; the `.github/` row lists `actions/`, `ISSUE_TEMPLATE/`, `PULL_REQUEST_TEMPLATE.md` and `scripts/`. Success criterion 1 is now enforced by `layout_table_integration.rs`, and its `Verifies: SPEC-21` back-pointer replaces the workflow file in `Realized-by`; the test compares against the entries git sees (tracked or untracked, gitignored excepted), so a developer's ignored `.DS_Store` or `.idea/` does not fail it. **Why:** a re-read found the table behind the repository again; the criterion existed but nothing ran it. | **substantive** |
 > | 2026-11-16 | Bumped to `0.8`. The `scripts/` row names `install.sh` and `install-test.sh`, the release install script and its tests. **Why:** `MILE-217` adds a one-line installer that is fetched by release tag from `scripts/install.sh`, so the layout table has to say it lives there. | **substantive** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `Makefile` ccc04e61c2e3 -> 8ac4c5bd1ebd. Reason: Read the diff of the Makefile: it only adds the install-script-test target (runs scripts/install-test.sh), lists it in .PHONY and in the ci target's prerequisites; the targets that dispatch the layout this record describes are unchanged, so the claim still holds **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-17 | Bumped to `0.9`. Layout table: added `plugins/` and `.claude-plugin/`; the `.claude/` row no longer names hook scripts, since its hooks call the binary. **Why:** `MILE-339` moves the harness into the binary and `MILE-280` adds the Claude Code plugin and its marketplace entry at the root. | **substantive** |

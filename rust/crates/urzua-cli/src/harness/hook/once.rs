@@ -14,7 +14,7 @@
 //! payload with no call id is always judged.
 
 use std::path::{Path, PathBuf};
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
 
 use super::super::json::{self, J};
 
@@ -36,11 +36,8 @@ fn call_id(payload: &[u8], event: &str) -> Option<String> {
 }
 
 fn claims_dir(project: &Path) -> Option<PathBuf> {
-    let out = std::process::Command::new("git")
-        .arg("-C")
-        .arg(project)
+    let out = super::pinned_git(project)
         .args(["rev-parse", "--git-common-dir"])
-        .stderr(std::process::Stdio::null())
         .output()
         .ok()?;
     if !out.status.success() {
@@ -58,7 +55,7 @@ fn claims_dir(project: &Path) -> Option<PathBuf> {
 
 fn age(path: &Path) -> Option<Duration> {
     let modified = std::fs::metadata(path).ok()?.modified().ok()?;
-    SystemTime::now().duration_since(modified).ok()
+    urzua_io::real_elapsed_since(modified)
 }
 
 fn prune(dir: &Path) {

@@ -321,3 +321,18 @@ fn an_unreadable_edit_payload_under_an_open_config_goes_through_with_a_notice() 
     assert_eq!(rank(&out), 1, "{out}");
     assert!(out.contains("NOT judged"), "{out}");
 }
+
+#[test]
+fn the_session_environment_cannot_point_git_at_another_repository() {
+    let w = world();
+    let git_dir = w.ung.join(".git");
+    let envs: Vec<(&str, &std::ffi::OsStr)> = vec![
+        ("CLAUDE_PROJECT_DIR", std::ffi::OsStr::new("")),
+        ("GIT_DIR", git_dir.as_os_str()),
+        ("GIT_WORK_TREE", w.ung.as_os_str()),
+    ];
+    let out = common::run_hook(&w.gov, "edit", "garbage{", None, None, &envs);
+    assert_eq!(out.status.code(), Some(0), "{out:?}");
+    let out = String::from_utf8(out.stdout).unwrap();
+    assert_eq!(rank(&out), 2, "{out}");
+}
