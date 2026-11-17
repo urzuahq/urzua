@@ -114,7 +114,32 @@ fn words(text: &str) -> String {
     let mut out: Vec<String> = Vec::new();
     let mut prose: Vec<&str> = Vec::new();
     let mut fence = false;
-    for line in text.lines() {
+    let mut all = text.lines().peekable();
+    // Front matter is YAML the host reads: compared as the value it parses to,
+    // so a formatter that folds a long value over lines changes nothing and a
+    // changed key, value, nesting or delimiter does. One that does not parse is
+    // compared line for line.
+    if all.peek() == Some(&"---") {
+        all.next();
+        let mut body: Vec<&str> = Vec::new();
+        let mut closed = false;
+        for line in all.by_ref() {
+            if line.trim_end() == "---" {
+                closed = true;
+                break;
+            }
+            body.push(line.trim_end());
+        }
+        let text = body.join("\n");
+        let parsed = yaml_serde::from_str::<yaml_serde::Value>(&text)
+            .ok()
+            .and_then(|v| serde_json::to_string(&v).ok());
+        out.push(match (closed, parsed) {
+            (true, Some(v)) => format!("\nfm:{v}"),
+            _ => format!("\nfm-text:{closed}:{text}"),
+        });
+    }
+    for line in all {
         let t = line.trim();
         if t.starts_with("```") || t.starts_with("~~~") {
             out.push(prose_text(&std::mem::take(&mut prose)));
@@ -126,47 +151,115 @@ fn words(text: &str) -> String {
             out.push(format!("\n{t}"));
             continue;
         }
-        prose.push(t);
+        prose.push(line.trim_end());
     }
     out.push(prose_text(&prose));
     out.join(" ")
 }
 
-/// Prose lines as one string, with the tolerated differences taken out.
+/// A list item's marker and the space after it, when `t` is a list item: a
+/// bullet always; a number only where a list can start or continue (`in_list`:
+/// after a blank line, a heading, a list item or a line indented under one),
+/// so a wrapped line that begins with a number keeps it.
+fn list_marker(t: &str, in_list: bool) -> usize {
+    let digits = t.chars().take_while(char::is_ascii_digit).count();
+    let marker = match t[digits..].chars().next() {
+        Some('.' | ')') if digits > 0 => digits + 1,
+        Some('-' | '*' | '+') if digits == 0 => 1,
+        _ => return 0,
+    };
+    if !t[marker..].starts_with([' ', '\t']) || (digits > 0 && !in_list) {
+        return 0;
+    }
+    marker
+}
+
+/// A table's separator row (cells of dashes and colons between pipes) as its
+/// cells without padding: a token no other line can equal.
+fn table_separator(t: &str) -> Option<String> {
+    if !t.contains('|')
+        || !t.contains('-')
+        || !t.chars().all(|c| matches!(c, '|' | '-' | ':' | ' '))
+    {
+        return None;
+    }
+    let cells: Vec<String> = t
+        .trim_matches('|')
+        .split('|')
+        .map(|c| {
+            let c = c.trim();
+            format!(
+                "{}-{}",
+                if c.starts_with(':') { ":" } else { "" },
+                if c.ends_with(':') { ":" } else { "" }
+            )
+        })
+        .collect();
+    Some(format!("\u{1}table:{}", cells.join("|")))
+}
+
+/// An emphasis marker `_` read as `*`: only one that opens emphasis (after the
+/// start, whitespace or an opening bracket or quote, before a letter or digit)
+/// or closes it (after a letter or digit, before the end, whitespace or
+/// sentence punctuation). Never inside a word, a path or a glob.
+fn emphasis_as_star(s: &str) -> String {
+    let c: Vec<char> = s.chars().collect();
+    let mut out = String::with_capacity(s.len());
+    for (i, ch) in c.iter().enumerate() {
+        if *ch != '_' {
+            out.push(*ch);
+            continue;
+        }
+        let (mut a, mut b) = (i, i + 1);
+        while a > 0 && c[a - 1] == '_' {
+            a -= 1;
+        }
+        while b < c.len() && c[b] == '_' {
+            b += 1;
+        }
+        let before = a.checked_sub(1).map(|j| c[j]);
+        let after = c.get(b).copied();
+        let opens = before.is_none_or(|x| x.is_whitespace() || "([{\"'".contains(x))
+            && after.is_some_and(char::is_alphanumeric);
+        let closes = before.is_some_and(char::is_alphanumeric)
+            && after.is_none_or(|x| x.is_whitespace() || ".,;:!?)]}\"'".contains(x));
+        out.push(if opens || closes { '*' } else { '_' });
+    }
+    out
+}
+
+/// Prose lines (indentation kept) as one string, with the tolerated
+/// differences taken out.
 fn prose_text(lines: &[&str]) -> String {
     let mut joined = String::new();
-    for t in lines {
-        let digits = t.chars().take_while(char::is_ascii_digit).count();
-        let marker = match t[digits..].chars().next() {
-            Some('.' | ')') if digits > 0 => digits + 1,
-            Some('-' | '*' | '+') if digits == 0 => 1,
-            _ => 0,
+    let mut in_list = true;
+    for line in lines {
+        let t = line.trim_start();
+        let indented = t.len() < line.len();
+        let marker = list_marker(t, in_list);
+        let body = match table_separator(t) {
+            Some(row) => row,
+            None => t[marker..].to_string(),
         };
-        let body = if marker > 0 && t[marker..].starts_with([' ', '\t']) {
-            &t[marker..]
-        } else {
-            t
-        };
-        // A table's separator row: padding changes the run of dashes.
-        let body = if !body.is_empty() && body.chars().all(|c| matches!(c, '|' | '-' | ':' | ' ')) {
-            let mut row = String::new();
-            for c in body.chars().filter(|c| *c != ' ') {
-                if !(c == '-' && row.ends_with('-')) {
-                    row.push(c);
-                }
-            }
-            row
-        } else {
-            body.to_string()
-        };
+        in_list =
+            t.is_empty() || t.starts_with('#') || list_marker(t, true) > 0 || (in_list && indented);
         joined.push(' ');
         joined.push_str(&body);
     }
+    let joined = joined.split_whitespace().collect::<Vec<_>>().join(" ");
+    // Inline code is compared as written; emphasis outside it.
     joined
-        .split_whitespace()
+        .split('`')
+        .enumerate()
+        .map(|(i, part)| {
+            if i % 2 == 1 {
+                part.to_string()
+            } else {
+                emphasis_as_star(part)
+            }
+        })
         .collect::<Vec<_>>()
-        .join(" ")
-        .replace('_', "*")
+        .join("`")
 }
 
 /// The hash a lock keeps for a generated text file: of its words only.
@@ -314,6 +407,62 @@ mod tests {
         ] {
             assert!(same_text(doc, &reformatted), "{name}");
         }
+    }
+
+    #[test]
+    fn the_emphasis_marker_is_tolerated_only_where_it_marks_emphasis() {
+        let doc = "Set `on_unjudged` and read `docs/*.md`; on_unjudged stays.\n";
+        assert!(!same_text(
+            doc,
+            &doc.replace("`on_unjudged`", "`on*unjudged`")
+        ));
+        assert!(!same_text(doc, &doc.replace("`docs/*.md`", "`docs/_.md`")));
+        assert!(!same_text(
+            doc,
+            &doc.replace("on_unjudged stays", "on*unjudged stays")
+        ));
+        let em = "Read *this* now.\n";
+        assert!(same_text(em, &em.replace("*this*", "_this_")));
+    }
+
+    #[test]
+    fn front_matter_compares_as_the_yaml_value_it_parses_to() {
+        let doc = "---\ndescription: d\nargument-hint: <t>\n---\n\n# x\n";
+        for changed in [
+            doc.replace(
+                "description: d\nargument-hint",
+                "description: d argument-hint",
+            ),
+            doc.replace("\nargument-hint", "\n  argument-hint"),
+            doc.replacen("---", "-", 1),
+            doc.replacen("---", "- - -", 1),
+            doc.replacen("---", "-----", 1),
+        ] {
+            assert!(!same_text(doc, &changed), "{changed}");
+        }
+        assert!(same_text(
+            doc,
+            &doc.replace("description: d", "description: d   ")
+        ));
+    }
+
+    #[test]
+    fn a_table_separator_tolerates_padding_and_never_equals_another_line() {
+        let doc = "| a | b |\n|---|:--|\n| 1 | 2 |\n";
+        assert!(same_text(
+            doc,
+            &doc.replace("|---|:--|", "| ----- | :---- |")
+        ));
+        assert!(!same_text("x\n\n---\n", "x\n\n|-|\n"));
+        assert!(!same_text(doc, &doc.replace("|---|:--|", "|---|---|")));
+    }
+
+    #[test]
+    fn a_number_starting_a_wrapped_line_is_kept() {
+        let doc = "Wait\n30. seconds.\n";
+        assert!(!same_text(doc, "Wait\n5. seconds.\n"));
+        let list = "Steps:\n\n1. one\n2. two\n";
+        assert!(same_text(list, "Steps:\n\n1. one\n1. two\n"));
     }
 
     #[test]

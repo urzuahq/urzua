@@ -172,11 +172,70 @@ fn where_the_engine_gives_no_verdict_the_hook_decides_from_the_engines_inputs() 
             gov_settings.clone(),
         ),
     ];
-    for (name, cwd, project, file) in &rows {
-        let p = payload(cwd, file);
-        let real = hook(cwd, project, &p, None);
+    let mcp = |cwd: &Path, tool: &str, input: serde_json::Value| {
+        serde_json::json!({"tool_name": tool, "cwd": cwd.to_string_lossy(), "tool_input": input})
+            .to_string()
+    };
+    let mut cases: Vec<(&str, &Path, Project, String)> = rows
+        .into_iter()
+        .map(|(n, c, pr, f)| (n, c, pr, payload(c, &f)))
+        .collect();
+    cases.extend([
+        (
+            "an MCP string under a key that names no path",
+            &*w.ung,
+            Project::Dir(&w.ung),
+            mcp(
+                &w.ung,
+                "mcp__x__do",
+                serde_json::json!({"thing": gov_settings}),
+            ),
+        ),
+        (
+            "the same string nested",
+            &*w.ung,
+            Project::Dir(&w.ung),
+            mcp(
+                &w.ung,
+                "mcp__x__do",
+                serde_json::json!({"o": {"thing": gov_settings}}),
+            ),
+        ),
+        (
+            "the same string relative",
+            &*w.ung,
+            Project::Dir(&w.ung),
+            mcp(
+                &w.ung,
+                "mcp__x__do",
+                serde_json::json!({"thing": "../gov/.claude/settings.json"}),
+            ),
+        ),
+        (
+            "a write tool's string under an unknown key",
+            &*w.ung,
+            Project::Dir(&w.ung),
+            mcp(
+                &w.ung,
+                "mcp__fs__write_file",
+                serde_json::json!({"args": {"p": gov_settings}}),
+            ),
+        ),
+        (
+            "an MCP string from a session inside the repository",
+            &*w.gov,
+            Project::Dir(&w.gov),
+            mcp(
+                &w.gov,
+                "mcp__x__do",
+                serde_json::json!({"thing": gov_settings}),
+            ),
+        ),
+    ]);
+    for (name, cwd, project, p) in &cases {
+        let real = hook(cwd, project, p, None);
         assert_eq!(rank(&real), 2, "{name}: the engine refuses: {real}");
-        let crashed = hook(cwd, project, &p, Some(CRASH));
+        let crashed = hook(cwd, project, p, Some(CRASH));
         assert!(
             rank(&crashed) >= rank(&real),
             "{name}: engine {real} hook {crashed}"
@@ -317,11 +376,84 @@ fn without_urzua_an_edit_of_a_file_in_another_governed_repository_is_refused() {
         let out = without_urzua(&cmd, cwd, &payload(cwd, &file));
         assert_eq!(rank(&out), 2, "{name}: {out}");
     }
-    // A file in the ungoverned directory itself is still allowed silently.
+    // A file in the ungoverned directory itself is allowed without a word.
     let out = without_urzua(
         &cmd,
         &w.ung,
         &payload(&w.ung, &w.ung.join("a.txt").to_string_lossy()),
     );
     assert!(out.is_empty(), "{out}");
+}
+
+fn which(name: &str) -> Option<PathBuf> {
+    std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default())
+        .map(|d| d.join(name))
+        .find(|p| p.is_file())
+}
+
+/// The command run with no `urzua` on PATH, by `shell` (argv) and with `awk`
+/// as the only awk.
+fn without_urzua_using(
+    cmd: &str,
+    cwd: &Path,
+    payload: &str,
+    shell: &[PathBuf],
+    awk: &Path,
+) -> String {
+    let tools = common::TempDir::new("urzua-placement-shells");
+    for tool in ["git", "dirname", "cat", "grep", "sed", "pwd"] {
+        if let Some(found) = which(tool) {
+            std::os::unix::fs::symlink(found, tools.join(tool)).unwrap();
+        }
+    }
+    std::os::unix::fs::symlink(awk, tools.join("awk")).unwrap();
+    let mut c = Command::new(&shell[0]);
+    c.args(&shell[1..])
+        .args(["-c", cmd])
+        .current_dir(cwd)
+        .env_clear()
+        .env("PATH", tools.path())
+        .env("CLAUDE_PROJECT_DIR", cwd)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    let mut child = c.spawn().unwrap();
+    let _ = child.stdin.take().unwrap().write_all(payload.as_bytes());
+    let out = child.wait_with_output().unwrap();
+    assert_eq!(out.status.code(), Some(0), "{out:?}");
+    String::from_utf8(out.stdout).unwrap()
+}
+
+#[test]
+fn without_urzua_a_dot_dot_component_or_a_dangling_directory_link_is_refused_in_every_shell_and_awk(
+) {
+    let cmd = edit_command();
+    let w = world();
+    std::os::unix::fs::symlink(w.gov.join(".claude/newsub"), w.ung.join("dang")).unwrap();
+    let ung = w.ung.to_string_lossy().to_string();
+    let cases = [
+        (
+            "a .. after a missing directory",
+            format!("{ung}/nonexist/../../gov/.claude/settings.json"),
+        ),
+        (
+            "the same, relative",
+            "nonexist/../../gov/.claude/settings.json".to_string(),
+        ),
+        ("a dangling directory link", format!("{ung}/dang/x.json")),
+    ];
+    let mut shells: Vec<Vec<PathBuf>> = vec![vec![PathBuf::from("/bin/sh")]];
+    shells.extend(which("bash").map(|b| vec![b]));
+    shells.extend(which("busybox").map(|b| vec![b, PathBuf::from("sh")]));
+    let mut awks: Vec<PathBuf> = ["mawk", "gawk"].iter().filter_map(|a| which(a)).collect();
+    awks.extend(which("busybox"));
+    assert!(!awks.is_empty());
+    for shell in &shells {
+        for awk in &awks {
+            for (name, file) in &cases {
+                let out = without_urzua_using(&cmd, &w.ung, &payload(&w.ung, file), shell, awk);
+                assert_eq!(rank(&out), 2, "{shell:?} {awk:?} {name}: {out}");
+            }
+        }
+    }
 }

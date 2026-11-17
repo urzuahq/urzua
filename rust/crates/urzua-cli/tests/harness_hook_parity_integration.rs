@@ -3,8 +3,8 @@
 //! in two copies of the same repository and the outputs are compared byte for
 //! byte (the repository's path written as `<DIR>`). Where the two differ on
 //! purpose, the case asserts the binary is at least as strict and its name says
-//! why. Nothing installs the reference; `python3` runs it. Needs `git`,
-//! `python3` and `sh`.
+//! why. Nothing installs the reference. Needs `git`, `sh`, and `python3` to
+//! run the reference.
 
 mod common;
 

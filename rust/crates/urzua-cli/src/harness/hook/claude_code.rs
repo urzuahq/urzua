@@ -203,7 +203,10 @@ impl Run {
         }
         match self.policy(cwd, &paths) {
             Unjudged::NotGoverned => return (Kind::Allow, String::new()),
-            Unjudged::Closed if loud => return (Kind::Block, format!("{message} {CLOSED}")),
+            // The engine would have judged every candidate path, loud or not.
+            Unjudged::Closed if loud || !paths.is_empty() => {
+                return (Kind::Block, format!("{message} {CLOSED}"))
+            }
             _ => {}
         }
         if loud {

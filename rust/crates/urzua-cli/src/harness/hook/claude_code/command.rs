@@ -27,11 +27,14 @@ const CERTAIN_ALLOW: &str = r#"awk 'function trim(s){sub(/^[ \t]+/,"",s);sub(/[ 
 /// it: the session's (`$cfg`), and every `.urzua/config.yaml` at or above each
 /// `file_path`, `notebook_path` or `path` string in the payload, walked both as
 /// written and through the physical path of its nearest existing directory. A
-/// path the shell cannot place (an escape inside the string, or a final
-/// component that is a symlink) sets `bad`, a refusal. Paths under any other
+/// path the shell cannot place sets `bad`, a refusal: an escape inside the
+/// string; a `.` or `..` component, because the host normalises it lexically and
+/// the walk would start somewhere else; a final component that is a symlink; or
+/// a missing directory that is a symlink (a dangling link the write would
+/// follow). Paths under any other
 /// key, as an MCP call may use, are not read: the documented limit of a
 /// fallback that has no JSON parser.
-const PAYLOAD_CONFIGS: &str = r#"nl=$(printf '\n_'); nl=${nl%_}; cs="$cfg"; bad=""; printf '%s' "$p" | grep -qE '"(file_path|notebook_path|path)"[[:space:]]*:[[:space:]]*"[^"]*\\' && bad=1; fs=$(printf '%s' "$p" | grep -oE '"(file_path|notebook_path|path)"[[:space:]]*:[[:space:]]*"[^"\\]*"' | sed -e 's/^[^:]*:[[:space:]]*"//' -e 's/"$//'); set -f; o_ifs=$IFS; IFS=$nl; for f in $fs; do case "$f" in /*) ;; *) f="$PWD/$f";; esac; [ -L "$f" ] && bad=1; d=$(dirname "$f"); while [ ! -d "$d" ]; do d=$(dirname "$d"); done; for e in "$d" "$(cd -P "$d" 2>/dev/null && pwd -P)"; do while [ -n "$e" ]; do [ -e "$e/.urzua/config.yaml" ] && cs="$cs$nl$e/.urzua/config.yaml"; [ "$e" = / ] && break; e=$(dirname "$e"); done; done; done; IFS=$o_ifs; set +f; "#;
+const PAYLOAD_CONFIGS: &str = r#"nl=$(printf '\n_'); nl=${nl%_}; cs="$cfg"; bad=""; printf '%s' "$p" | grep -qE '"(file_path|notebook_path|path)"[[:space:]]*:[[:space:]]*"[^"]*\\' && bad=1; fs=$(printf '%s' "$p" | grep -oE '"(file_path|notebook_path|path)"[[:space:]]*:[[:space:]]*"[^"\\]*"' | sed -e 's/^[^:]*:[[:space:]]*"//' -e 's/"$//'); set -f; o_ifs=$IFS; IFS=$nl; for f in $fs; do case "/$f/" in */./*|*/../*) bad=1;; esac; case "$f" in /*) ;; *) f="$PWD/$f";; esac; [ -L "$f" ] && bad=1; d=$(dirname "$f"); while [ ! -d "$d" ]; do [ -L "$d" ] && bad=1; d=$(dirname "$d"); done; for e in "$d" "$(cd -P "$d" 2>/dev/null && pwd -P)"; do while [ -n "$e" ]; do [ -e "$e/.urzua/config.yaml" ] && cs="$cs$nl$e/.urzua/config.yaml"; [ "$e" = / ] && break; e=$(dirname "$e"); done; done; done; IFS=$o_ifs; set +f; "#;
 
 /// `allow` in `$v` when every configuration in `$cs` reads with certainty as
 /// open and no path was unplaceable.

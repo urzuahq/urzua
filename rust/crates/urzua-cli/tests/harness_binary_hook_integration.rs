@@ -139,7 +139,15 @@ fn reformat_everything(dir: &Path) {
         let text = std::fs::read_to_string(&f).unwrap();
         let mut out = String::new();
         let mut fence = false;
-        for line in text.lines() {
+        let mut front = text.starts_with("---\n");
+        for (n, line) in text.lines().enumerate() {
+            // Front matter is YAML, which a markdown formatter leaves as it is.
+            if front {
+                out.push_str(line);
+                out.push('\n');
+                front = n == 0 || line != "---";
+                continue;
+            }
             // A formatter leaves the inside of a code fence alone.
             if line.trim_start().starts_with("```") {
                 fence = !fence;

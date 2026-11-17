@@ -252,12 +252,17 @@ and the hook's working directory outside the repository, the engine running and 
 
 With `urzua` missing (or a release without `urzua harness hook`), the hook command's shell fallback cannot read
 JSON. It reads only the `file_path`, `notebook_path` and `path` string values of the payload (a value holding an
-escape is a refusal), follows directory links through the physical path of the nearest existing directory, and
-refuses a path whose last component is a symlink. An edit that names its file any other way, as an MCP call may
+escape is a refusal). It refuses a path that has a `.` or `..` component, a path whose last component is a
+symlink, and a path through a missing directory that is a symlink (a dangling link). Otherwise it looks for
+configurations at or above the path's nearest existing directory twice: as written, and as that directory's
+physical path (`cd -P`), which follows any symlinked directory on the way. An edit that names its file any other way, as an MCP call may
 (`destination`, `uri`, a key that is itself a path, a nested `from` or `to`), is placed only by the session's
 directory: from a session in an ungoverned directory, or in a governed repository whose configuration lets an
 unjudged edit through, such an edit of a file in a different repository whose configuration refuses one is
-**allowed**. A relative path is placed against the hook's working directory. This is an accepted limit, pending
+**allowed**. A relative path is placed against the hook's working directory. Two more limits of the same
+kind: a payload whose key is written with a unicode escape (`\u0066ile_path`) or with a line break between the
+key and its value is not seen, and the edit is placed only by the session's directory (the host's serialiser
+writes neither). These are accepted limits, pending
 maintainer review; with the binary present none of it applies.
 
  Not verified without a live agent: that Claude Code fires a

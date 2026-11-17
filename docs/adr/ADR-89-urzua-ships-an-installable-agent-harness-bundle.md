@@ -1082,6 +1082,17 @@ closes an unjudged edit. With the binary missing, the shell fallback also reads 
 fallback with no JSON parser cannot see a file named under any other key (as an MCP call may), so such an edit of
 a file in a refusing repository is allowed from a session in an ungoverned directory or an open repository.
 
+## Amendment (2026-11-17, fourth review): every candidate path counts, and the shell refuses what it cannot place
+
+Decided by the builder on 2026-11-17, pending maintainer review: when the engine gives no verdict and a
+configuration that governs a candidate path is not certainly open, the edit is refused whether or not the call
+looked like an edit, because the engine judges every candidate path either way. The shell fallback refuses a path
+with a `.` or `..` component and a path through a dangling directory link. Accepted limits, pending maintainer
+review: the fallback does not see a key written with a unicode escape, or a line break between a key and its
+value. Generated prose tolerates the emphasis marker only where it opens or closes emphasis, never inside a word,
+path, glob or inline code; front matter is compared as the YAML value it parses to; a table's separator row
+tolerates only its padding; a number starts a list item only where a list can start or continue.
+
 ## References
 
 - `ADR-69`, `ADR-70`, `ADR-71`: the hook, drafting commands and layered gate this extends; `ADR-70` gains an
@@ -1138,3 +1149,4 @@ a file in a refusing repository is allowed from a session in an ungoverned direc
 > | 2026-11-17 | Added an `## Amendment (2026-11-17, review): the hook fails closed`: the text fallback refuses whatever it cannot read with certainty, stdout is printed only on success, a panic or the hook's deadline refuses, an unknown verdict is unjudged, generated code compares exactly, the test seams need the `test-seams` feature. **Why:** review of the pull request that moved the harness into the binary; the fallback decided by the orchestrator on 2026-11-17, the rest by the builder, both pending maintainer review. | **substantive** |
 > | 2026-11-17 | Added an `## Amendment (2026-11-17, second review): one rule for an unjudged edit, and no configuration is not governed`, and marked the builder's statements in the first amendment of this date as pending maintainer review. **Why:** second review of the pull request that moved the harness into the binary; the not-governed rule decided by the orchestrator on 2026-11-17, the rest by the builder, both pending maintainer review. | **substantive** |
 > | 2026-11-17 | Added an `## Amendment (2026-11-17, third review): an unjudged edit is decided from the engine's inputs`: path placement and configuration discovery as the engine does them, silence only where nothing governs any path, the closed list of formatter differences, `editor-hook` deny honoured, and the shell fallback's limit stated. **Why:** third review of the pull request that moved the harness into the binary; the placement rule and the drift list decided by the orchestrator on 2026-11-17, the rest by the builder, all pending maintainer review. | **substantive** |
+> | 2026-11-17 | Added an `## Amendment (2026-11-17, fourth review): every candidate path counts, and the shell refuses what it cannot place`. **Why:** fourth review of the pull request that moved the harness into the binary; decided by the builder on 2026-11-17, pending maintainer review. | **substantive** |

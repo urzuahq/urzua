@@ -4,8 +4,8 @@
 //! from a cwd outside the repository is still judged, paths match case
 //! insensitively, an edit through a symlink is judged as its target, and
 //! `export`/`import` name their format. Real git repositories, the real
-//! binary and its hook command. Needs `git`, `sh`, and `python3` for the
-//! stand-in engines that log what they are sent.
+//! binary and its hook command. Needs `git`, `sh`, and `python3`, which runs the
+//! stand-in engines that log each request.
 
 mod common;
 
