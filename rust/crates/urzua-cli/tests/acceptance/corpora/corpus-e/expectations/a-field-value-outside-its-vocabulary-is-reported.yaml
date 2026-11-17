@@ -1,0 +1,16 @@
+id: a-field-value-outside-its-vocabulary-is-reported
+corpus: corpus-e
+# The adr type declares Owner's vocabulary as [ana, Kai]: the records' `kai`
+# differs only in case, and matching is exact (MILE-248). The blank Owner of
+# ADR-0002 is left to field.quality. No `rules:` entry turns the rule on: the
+# declaration does.
+invocation: [--config, .urzua/owner-vocabulary.yaml, check]
+expect_exit: 1
+expect_findings:
+  - rule: field.value-not-declared
+    file: records/adr/ADR-0001-clean.md
+    severity: error
+    message_contains: "field 'Owner' holds 'kai'"
+expect_no_findings:
+  - rule: field.value-not-declared
+    file: records/adr/ADR-0002-blank-owner.md

@@ -120,6 +120,8 @@ pub enum Declaration {
     RevisionLog,
     /// `statuses.values`, read by `status.undeclared-value`.
     StatusValues,
+    /// `field_values`, read by `field.value-not-declared`.
+    FieldValues,
     /// `statuses.require`, read by `status.required-field-missing`.
     StatusRequire,
     /// `statuses.forbid`, read by `status.forbidden-field-present`.
@@ -154,6 +156,7 @@ impl Declaration {
             Declaration::LocatorField => "a locator field (Realized-by) in known_fields",
             Declaration::RevisionLog => "revision_log",
             Declaration::StatusValues => "statuses.values",
+            Declaration::FieldValues => "field_values",
             Declaration::StatusRequire => "statuses.require",
             Declaration::StatusForbid => "statuses.forbid",
             Declaration::StatusTransitions => "statuses.transitions",
@@ -279,26 +282,58 @@ pub struct DefaultOn {
     pub id: &'static str,
     pub level: crate::config::RuleLevel,
     pub under_selection: bool,
+    /// When set, the rule is on by default only for a configuration this
+    /// accepts; any other configuration lists it `not-enabled`, as before the
+    /// rule existed.
+    pub applies: Option<fn(&crate::config::Config) -> bool>,
+}
+
+fn declares_target_types(config: &crate::config::Config) -> bool {
+    !crate::pointer_targets::constraints(config).is_empty()
+}
+
+fn declares_field_values(config: &crate::config::Config) -> bool {
+    config
+        .record_types
+        .values()
+        .any(|t| t.field_values.is_some())
 }
 
 /// Every rule that is on by default. Their executions do not count as a rule
 /// having looked at a corpus the repository chose to govern (`any_rule_looked`):
 /// a configuration that declares no rule still reports `not-run`.
 pub const DEFAULT_ON_RULES: &[DefaultOn] = &[
+    // On wherever a vocabulary is declared, since one nothing checks would be
+    // a silent no-op; off elsewhere, so a config without one reports as before.
+    DefaultOn {
+        id: RULE_FIELD_VALUE_NOT_DECLARED,
+        level: crate::config::RuleLevel::Error,
+        under_selection: false,
+        applies: Some(declares_field_values),
+    },
     DefaultOn {
         id: RULE_IDENTITY_RECORD_SYMLINK_ESCAPES,
         level: crate::config::RuleLevel::Error,
         under_selection: true,
+        applies: None,
     },
     DefaultOn {
         id: RULE_EMBODIMENT_PIN_STALE,
         level: crate::config::RuleLevel::Warn,
         under_selection: false,
+        applies: None,
+    },
+    DefaultOn {
+        id: RULE_POINTER_TARGET_TYPE,
+        level: crate::config::RuleLevel::Error,
+        under_selection: false,
+        applies: Some(declares_target_types),
     },
     DefaultOn {
         id: RULE_DIFF_PIN_CHANGED_UNATTESTED,
         level: crate::config::RuleLevel::Error,
         under_selection: false,
+        applies: None,
     },
 ];
 
@@ -396,6 +431,30 @@ pub const RULE_TABLE: &[RuleDef] = &[
         run: |c| {
             let opts: PointerTargetOpts = c.config.rule_opts(RULE_POINTER_TARGET_STATUS);
             pointer_target_status(c.records, c.config, &opts.not_in, opts.fields.as_deref(), c.index)
+        },
+    },
+    RuleDef {
+        id: RULE_POINTER_TARGET_TYPE,
+        description: "A reference resolves, but its target's record type is outside the types the field declares it may name (`MILE-259`): a `pointer_fields` entry written `{name, targets}`, or a relation pair's `target_types` for its forward field; declared in both places, a target must satisfy both. Each element of a list-valued field is judged. Only a constrained field is in the population; the rule is on by default at `error`, and reports `not-enabled` in a configuration that declares no target types, so such a configuration reports as before. A dangling reference is `pointer.resolution`'s, and a claim this rule reports is not also reported by `relation.cross-type-disallowed`.",
+        scope: Scope::Records,
+        anchor: Anchor::Record,
+        judges: Judges::CrossRecord,
+        needs_identity_index: true,
+        requires_relation_pairs: false,
+        requires_acyclic_pair: false,
+        requires_override_log: false,
+        requires_authority: false,
+        reads_declaration: None,
+        header_none: HeaderNone::OutOfScope,
+        options: &[],
+        population: PopulationUnit::Field,
+        actions: &[
+            VariantAction::new("pointer-target-type", ActionDecl::FIELD_SET),
+        ],
+        phase: Phase::Main,
+        companion: None,
+        run: |c| {
+            pointer_target_type(c.records, c.config, c.index)
         },
     },
     RuleDef {
@@ -1131,6 +1190,30 @@ pub const RULE_TABLE: &[RuleDef] = &[
         },
     },
     RuleDef {
+        id: RULE_FIELD_VALUE_NOT_DECLARED,
+        description: "A field's value is not one of the values its type declares for it in `field_values` (`MILE-248`), compared exactly. A value holding several comma-separated elements (a YAML list) has each element checked. A missing or blank value is left to `header.required-fields` and `field.quality`, and a type declaring no `field_values` is not examined. On by default at `error`.",
+        scope: Scope::Records,
+        anchor: Anchor::Record,
+        judges: Judges::OneRecord,
+        needs_identity_index: false,
+        requires_relation_pairs: false,
+        requires_acyclic_pair: false,
+        requires_override_log: false,
+        requires_authority: false,
+        reads_declaration: Some(Declaration::FieldValues),
+        header_none: HeaderNone::OutOfScope,
+        options: &[],
+        population: PopulationUnit::Field,
+        actions: &[
+            VariantAction::new("field-value-not-declared", ActionDecl::FIELD_SET),
+        ],
+        phase: Phase::Main,
+        companion: None,
+        run: |c| {
+            field_value_not_declared(c.records, c.config)
+        },
+    },
+    RuleDef {
         id: RULE_FIELD_UNTRIMMED_VALUE,
         description: "A field value carrying leading/trailing whitespace, reachable only through `yaml-frontmatter` — disclosed rather than silently trimmed.",
         scope: Scope::Records,
@@ -1697,7 +1780,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_STATUS_REQUIRED_FIELD_MISSING,
-        description: "A field the type's `statuses.require` ties to the record's current `Status` is blank, unedited template text, or (when the type declares `statuses.pending`) one of that declared placeholder vocabulary's whole values such as `Unknown` or `none recorded`, or a value matching one of its `{pattern: ...}` entries for a placeholder family (`MILE-132`, `MILE-153`, `MILE-162`), for example `Deciders` on an `Accepted` record. A type declaring no `pending` keeps the old reading, so a value that only contains the word is still a real value. A type declaring no `require` entries is not examined. The optional `field_levels` option (`MILE-140`) sets `warn` or `error` per field; a field it does not name takes the rule's `level`.",
+        description: "A field the type's `statuses.require` ties to the record's current `Status` is blank, unedited template text, or (when the type declares `statuses.pending`) one of that declared placeholder vocabulary's whole values such as `Unknown` or `none recorded`, or a value matching one of its `{pattern: ...}` entries for a placeholder family (`MILE-132`, `MILE-153`, `MILE-162`), for example `Deciders` on an `Accepted` record. An entry may also name `when_field` values of another field; it then applies when every condition it declares holds, whatever the status if it declares no `when`, and the finding names the triggering field and value. A type declaring no `pending` keeps the old reading, so a value that only contains the word is still a real value. A type declaring no `require` entries is not examined. The optional `field_levels` option (`MILE-140`) sets `warn` or `error` per field; a field it does not name takes the rule's `level`.",
         scope: Scope::Records,
         anchor: Anchor::Record,
         judges: Judges::OneRecord,
@@ -1721,7 +1804,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_STATUS_FORBIDDEN_FIELD_PRESENT,
-        description: "A field the type's `statuses.forbid` bars at the record's current `Status` carries a value (`MILE-132`), for example an acceptance date on a record that is not accepted. A type declaring no `forbid` entries is not examined.",
+        description: "A field the type's `statuses.forbid` bars at the record's current `Status` carries a value (`MILE-132`), for example an acceptance date on a record that is not accepted. A type declaring no `forbid` entries is not examined. An entry may also name `when_field` values of another field; it then applies when every condition it declares holds, whatever the status if it declares no `when`, and the finding names the triggering field and value.",
         scope: Scope::Records,
         anchor: Anchor::Record,
         judges: Judges::OneRecord,
@@ -2617,6 +2700,7 @@ mod tests {
                     Declaration::LocatorField
                 ),
                 (RULE_HEADER_FIELD_SET_CONSISTENCY, Declaration::KnownFields),
+                (RULE_FIELD_VALUE_NOT_DECLARED, Declaration::FieldValues),
                 (RULE_FIELD_UNTRIMMED_VALUE, Declaration::DeclaredFields),
                 (
                     RULE_FIELD_LEADING_RESERVED_INDICATOR,

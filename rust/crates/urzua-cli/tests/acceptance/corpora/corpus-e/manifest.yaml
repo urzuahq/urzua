@@ -3,6 +3,9 @@ fixtures:
   - path: .urzua/adr-only.yaml
     irregularity: >-
       declares one record type, adr; the gizmo directory is not declared; not a record.
+  - path: .urzua/owner-vocabulary.yaml
+    irregularity: >-
+      the adr-only config plus a field_values vocabulary for Owner, [ana, Kai], which the records' `kai` misses by case; not a record.
   - path: .urzua/with-gizmo.yaml
     irregularity: >-
       the same config plus one declared type, gizmo, whose name appears nowhere in the source; not a record.

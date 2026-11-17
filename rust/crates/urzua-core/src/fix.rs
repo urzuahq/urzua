@@ -1397,6 +1397,7 @@ mod tests {
             embodiment: Default::default(),
             locator_resolvers: Default::default(),
             upgraded_from: None,
+            pointer_targets: Default::default(),
             override_log: None,
             block_on: None,
             attestation: Default::default(),
@@ -1529,6 +1530,7 @@ mod tests {
             embodiment: Default::default(),
             locator_resolvers: Default::default(),
             upgraded_from: None,
+            pointer_targets: Default::default(),
             override_log: None,
             block_on: None,
             attestation: Default::default(),
@@ -1554,6 +1556,7 @@ mod tests {
                     known_fields: Some(vec!["Phase".to_string(), "Evidence".to_string()]),
                     pointer_fields: None,
                     narrative_fields: None,
+                    field_values: None,
                     spec: None,
                     companion_fields: None,
                     relation_fields: Some(crate::config::RelationFields {

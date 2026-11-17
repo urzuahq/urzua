@@ -42,6 +42,7 @@ fn run_status_rule(
     rule_id: &'static str,
     variant: &'static str,
     eligible: impl Fn(&StatusDecl) -> bool,
+    judge_blank: impl Fn(&StatusDecl) -> bool,
     judge: impl Fn(&Judged) -> Vec<(Option<String>, String)>,
 ) -> (RuleExecution, Vec<Finding>) {
     let declared = statuses_by_type(config);
@@ -62,8 +63,11 @@ fn run_status_rule(
                 &record.record_type,
                 crate::config::RelationRole::Status,
             );
+            // An entry keyed on another field applies whatever the status, so
+            // a blank status still meets it; any other judgement needs one.
             let status = match declared_value(record, status_field) {
                 Ok(v) if !v.trim().is_empty() => v,
+                Ok(v) if judge_blank(decl) => v,
                 Ok(_) => return Outcome::Absent,
                 Err(outcome) => return outcome,
             };
@@ -583,6 +587,7 @@ pub fn status_undeclared_value(
         RULE_STATUS_UNDECLARED_VALUE,
         "status-undeclared-value",
         |_| true,
+        |_| false,
         |j| {
             if j.decl.declares(j.status) {
                 return Vec::new();
@@ -758,15 +763,17 @@ pub fn status_required_field_missing(
         RULE_STATUS_REQUIRED_FIELD_MISSING,
         "status-required-field-missing",
         |d| !d.require.is_empty(),
+        StatusDecl::has_field_conditions,
         |j| {
             j.decl
-                .required_at(j.status)
+                .required_for(j.status, &header_value(j.record))
                 .into_iter()
-                .filter_map(|field| {
+                .filter_map(|t| {
                     // A declared pending vocabulary (MILE-153) is the type's own
                     // placeholder list: its whole values are missing here too. A
                     // type declaring none keeps the old reading, so the compiled-in
                     // `contains("pending")` match never reaches this rule.
+                    let field = t.field;
                     let state = classify_with(j.record.header.get(field), Some(j.decl));
                     let declared_pending =
                         state == FieldState::Pending && j.decl.pending.is_some();
@@ -776,8 +783,8 @@ pub fn status_required_field_missing(
                         (
                             Some(field.to_string()),
                             format!(
-                                "{} is {}, which requires '{field}', but it is {state:?} -- not a real, present value",
-                                j.status_field, j.status
+                                "{}, which requires '{field}', but it is {state:?} -- not a real, present value",
+                                because(j, &t)
                             ),
                         )
                     })
@@ -785,6 +792,22 @@ pub fn status_required_field_missing(
                 .collect()
         },
     )
+}
+
+/// How a record reads its header for a field condition.
+fn header_value(record: &Record) -> impl Fn(&str) -> Option<String> + '_ {
+    |f| record.header.get(f).map(str::to_string)
+}
+
+/// What put the record under an entry: the status when the entry keys on it,
+/// then every field condition that held.
+fn because(j: &Judged, t: &crate::status_model::Triggered) -> String {
+    let mut parts = Vec::new();
+    if t.on_status || t.triggers.is_empty() {
+        parts.push(format!("{} is {}", j.status_field, j.status));
+    }
+    parts.extend(t.triggers.iter().map(|(f, v)| format!("{f} is {v}")));
+    parts.join(" and ")
 }
 
 /// A field the record's status forbids, carrying a value.
@@ -798,19 +821,21 @@ pub fn status_forbidden_field_present(
         RULE_STATUS_FORBIDDEN_FIELD_PRESENT,
         "status-forbidden-field-present",
         |d| !d.forbid.is_empty(),
+        StatusDecl::has_field_conditions,
         |j| {
             j.decl
-                .forbidden_at(j.status)
+                .forbidden_for(j.status, &header_value(j.record))
                 .into_iter()
-                .filter(|field| classify(j.record.header.get(field)) != FieldState::Blank)
-                .map(|field| {
+                .filter(|t| classify(j.record.header.get(t.field)) != FieldState::Blank)
+                .map(|t| {
                     (
                         // This rule takes no `field_levels`, so naming the field
                         // sets no severity; it tells the action which to remove.
-                        Some(field.to_string()),
+                        Some(t.field.to_string()),
                         format!(
-                            "{} is {}, which forbids '{field}', but the record carries it",
-                            j.status_field, j.status
+                            "{}, which forbids '{}', but the record carries it",
+                            because(j, &t),
+                            t.field
                         ),
                     )
                 })

@@ -205,12 +205,66 @@ fn compiled(pattern: &str) -> Option<std::sync::Arc<regex::Regex>> {
         .clone()
 }
 
-/// Fields tied to the statuses in `when`.
+/// Fields tied to the statuses in `when` and to the values of other fields in
+/// `when_field`. Each condition present must hold; at least one
+/// is declared. An empty `when` places no condition on the status.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct StatusFieldRule {
+    #[serde(default)]
     pub when: Vec<String>,
+    #[serde(
+        default,
+        deserialize_with = "crate::field_values::deserialize_when_field"
+    )]
+    pub when_field: BTreeMap<String, Vec<String>>,
     pub fields: Vec<String>,
+}
+
+/// A field an entry ties to a record, whether the entry keys on the status,
+/// and the field conditions that held, in field-name order.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Triggered<'a> {
+    pub field: &'a str,
+    pub on_status: bool,
+    pub triggers: Vec<(&'a str, String)>,
+}
+
+impl StatusFieldRule {
+    /// Whether the entry applies to a record at `status` whose header reads
+    /// `value`, and the element of each conditioned field that met it.
+    fn applies<'a>(
+        &'a self,
+        status: &str,
+        value: &dyn Fn(&str) -> Option<String>,
+    ) -> Option<Vec<(&'a str, String)>> {
+        if !self.when.is_empty() && !self.when.iter().any(|w| w == status) {
+            return None;
+        }
+        let mut hits = Vec::new();
+        for (field, values) in &self.when_field {
+            let held = value(field)?;
+            let hit =
+                crate::field_values::elements(&held).find(|e| values.iter().any(|v| v == e))?;
+            hits.push((field.as_str(), hit.to_string()));
+        }
+        Some(hits)
+    }
+
+    /// Whether some record could meet both entries: their statuses overlap and
+    /// every field both condition on shares a value.
+    fn overlaps(&self, other: &StatusFieldRule) -> bool {
+        let statuses = self.when.is_empty()
+            || other.when.is_empty()
+            || self.when.iter().any(|w| other.when.contains(w));
+        statuses
+            && self.when_field.iter().all(|(f, vs)| {
+                other
+                    .when_field
+                    .get(f)
+                    .is_none_or(|ws| vs.iter().any(|v| ws.contains(v)))
+            })
+    }
 }
 
 impl StatusDecl {
@@ -301,21 +355,50 @@ impl StatusDecl {
             .collect()
     }
 
-    pub fn required_at(&self, status: &str) -> Vec<&str> {
-        fields_at(&self.require, status)
+    /// The fields required of a record at `status` whose header reads `value`.
+    pub fn required_for<'a>(
+        &'a self,
+        status: &str,
+        value: &dyn Fn(&str) -> Option<String>,
+    ) -> Vec<Triggered<'a>> {
+        fields_for(&self.require, status, value)
     }
 
-    pub fn forbidden_at(&self, status: &str) -> Vec<&str> {
-        fields_at(&self.forbid, status)
+    /// The fields forbidden to a record at `status` whose header reads `value`.
+    pub fn forbidden_for<'a>(
+        &'a self,
+        status: &str,
+        value: &dyn Fn(&str) -> Option<String>,
+    ) -> Vec<Triggered<'a>> {
+        fields_for(&self.forbid, status, value)
+    }
+
+    /// Whether any entry conditions on a field rather than only the status.
+    pub fn has_field_conditions(&self) -> bool {
+        self.require
+            .iter()
+            .chain(&self.forbid)
+            .any(|r| !r.when_field.is_empty())
     }
 }
 
-fn fields_at<'a>(rules: &'a [StatusFieldRule], status: &str) -> Vec<&'a str> {
-    let mut out: Vec<&str> = Vec::new();
-    for rule in rules.iter().filter(|r| r.when.iter().any(|w| w == status)) {
+fn fields_for<'a>(
+    rules: &'a [StatusFieldRule],
+    status: &str,
+    value: &dyn Fn(&str) -> Option<String>,
+) -> Vec<Triggered<'a>> {
+    let mut out: Vec<Triggered> = Vec::new();
+    for rule in rules {
+        let Some(triggers) = rule.applies(status, value) else {
+            continue;
+        };
         for f in &rule.fields {
-            if !out.contains(&f.as_str()) {
-                out.push(f);
+            if !out.iter().any(|t| t.field == f) {
+                out.push(Triggered {
+                    field: f,
+                    on_status: !rule.when.is_empty(),
+                    triggers: triggers.clone(),
+                });
             }
         }
     }
@@ -478,16 +561,26 @@ fn validate_one(
     if let Some(delivery) = &d.delivery {
         validate_delivery(rt, d, delivery, embodiment)?;
     }
+    validate_field_rules(rt, d)
+}
+
+fn validate_field_rules(rt: &RecordTypeConfig, d: &StatusDecl) -> Result<(), String> {
     let declared = rt.known_fields.as_ref().map(|_| rt.declared_fields());
     for (what, rules) in [("require", &d.require), ("forbid", &d.forbid)] {
         for rule in rules {
-            check_list(&format!("{what}.when"), &rule.when, false)?;
+            if rule.when.is_empty() && rule.when_field.is_empty() {
+                return Err(format!(
+                    "a `{what}` entry declares neither `when` nor `when_field`, so it would never apply"
+                ));
+            }
+            check_list(&format!("{what}.when"), &rule.when, true)?;
             check_list(&format!("{what}.fields"), &rule.fields, false)?;
             if let Some(w) = rule.when.iter().find(|w| !d.declares(w)) {
                 return Err(format!(
                     "`{what}.when` names '{w}', which is not in `values`"
                 ));
             }
+            check_when_field(rt, what, rule)?;
             if let Some(declared) = &declared {
                 if let Some(f) = rule
                     .fields
@@ -502,15 +595,77 @@ fn validate_one(
         }
     }
     for status in &d.values {
-        let required = d.required_at(status);
-        if let Some(f) = d
-            .forbidden_at(status)
+        let required = status_only_fields(&d.require, status);
+        if let Some(f) = status_only_fields(&d.forbid, status)
             .into_iter()
             .find(|f| required.contains(f))
         {
             return Err(format!(
                 "'{f}' is both required and forbidden at '{status}'"
             ));
+        }
+    }
+    for r in &d.require {
+        for f in d.forbid.iter().filter(|f| r.overlaps(f)) {
+            if let Some(field) = r.fields.iter().find(|x| f.fields.contains(x)) {
+                return Err(format!(
+                    "'{field}' is both required and forbidden for a record that meets both entries ({})",
+                    describe(r)
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn status_only_fields<'a>(rules: &'a [StatusFieldRule], status: &str) -> Vec<&'a String> {
+    rules
+        .iter()
+        .filter(|r| r.when_field.is_empty() && r.when.iter().any(|w| w == status))
+        .flat_map(|r| &r.fields)
+        .collect()
+}
+
+fn describe(rule: &StatusFieldRule) -> String {
+    let mut parts = Vec::new();
+    if !rule.when.is_empty() {
+        parts.push(format!("when: {}", rule.when.join(", ")));
+    }
+    for (f, vs) in &rule.when_field {
+        parts.push(format!("{f}: {}", vs.join(", ")));
+    }
+    parts.join("; ")
+}
+
+/// A field condition names a field the type declares, other than the status
+/// (which `when` covers), and values from its vocabulary when it has one.
+fn check_when_field(
+    rt: &RecordTypeConfig,
+    what: &str,
+    rule: &StatusFieldRule,
+) -> Result<(), String> {
+    let declared = rt.declared_fields();
+    let status_field = rt.relation_field(crate::config::RelationRole::Status);
+    for (field, values) in &rule.when_field {
+        let key = format!("{what}.when_field.{field}");
+        if field == status_field {
+            return Err(format!(
+                "`{key}` conditions on the status field; name its values under `{what}.when`"
+            ));
+        }
+        if !declared.contains(&crate::values::FieldName::new(field.as_str())) {
+            return Err(format!(
+                "`{key}` names '{field}', which is in neither `required_fields` nor `known_fields`"
+            ));
+        }
+        check_list(&key, values, false)?;
+        if let Some(vocab) = rt.field_vocabulary(field) {
+            if let Some(v) = values.iter().find(|v| !vocab.contains(v)) {
+                return Err(format!(
+                    "`{key}` names '{v}', which is not in `field_values.{field}` ({})",
+                    vocab.join(", ")
+                ));
+            }
         }
     }
     Ok(())
@@ -905,6 +1060,7 @@ pub(crate) fn validate_items_rule(
 
 #[cfg(test)]
 mod tests {
+    use super::Triggered;
     use crate::config::{parse, ConfigError};
 
     fn cfg(statuses: &str) -> String {
@@ -930,8 +1086,12 @@ mod tests {
         let d = c.record_types["bug"].status_decl().unwrap();
         assert!(d.declares("Open") && !d.declares("Nope"));
         assert!(d.is_terminal("Fixed") && d.is_terminal("WontFix") && !d.is_terminal("Open"));
-        assert_eq!(d.required_at("Fixed"), vec!["Fixed-in"]);
-        assert_eq!(d.forbidden_at("Open"), vec!["Fixed-in"]);
+        let none = |_: &str| None;
+        fn fields(t: Vec<Triggered<'_>>) -> Vec<&str> {
+            t.into_iter().map(|t| t.field).collect()
+        }
+        assert_eq!(fields(d.required_for("Fixed", &none)), vec!["Fixed-in"]);
+        assert_eq!(fields(d.forbidden_for("Open", &none)), vec!["Fixed-in"]);
         assert_eq!(d.is_pending_value(" Pending "), Some(true));
         assert_eq!(d.is_pending_value("pending review"), Some(false));
     }
@@ -1219,5 +1379,56 @@ mod tests {
             "{base}      initial: [Open]\n      transitions:\n        Open: [Fixed, Fixed]\n"
         ))
         .contains("twice"));
+    }
+
+    fn kinds(statuses: &str) -> Result<crate::config::Config, ConfigError> {
+        parse(&format!(
+            "schema_version: 2\nrecord_types:\n  work:\n    dir: docs/work\n    required_fields: [Status]\n    known_fields: [Kind, Parent, Cause]\n    pointer_fields: [Parent]\n    narrative_fields: []\n    field_values: {{Kind: [feature, bug, chore]}}\n    statuses:\n      values: [Open, Done]\n{statuses}"
+        ))
+    }
+
+    #[test]
+    fn a_field_condition_triggers_with_or_without_a_status() {
+        let c = kinds("      require: [{when_field: {Kind: [bug]}, fields: [Cause]}]\n      forbid: [{when: [Done], when_field: {Kind: [bug]}, fields: [Parent]}]\n").unwrap();
+        let d = c.record_types["work"].status_decl().unwrap();
+        let bug = |f: &str| (f == "Kind").then(|| "bug".to_string());
+        let chore = |f: &str| (f == "Kind").then(|| "chore".to_string());
+        let req = d.required_for("Open", &bug);
+        assert_eq!(req[0].field, "Cause");
+        assert_eq!(req[0].triggers, vec![("Kind", "bug".to_string())]);
+        assert!(!req[0].on_status);
+        assert!(d.required_for("Open", &chore).is_empty());
+        assert!(d.forbidden_for("Open", &bug).is_empty());
+        assert_eq!(d.forbidden_for("Done", &bug)[0].field, "Parent");
+    }
+
+    #[test]
+    fn a_status_only_conflict_keeps_its_wording() {
+        let e = kinds("      require: [{when: [Open], fields: [Cause]}]\n      forbid: [{when: [Open], fields: [Cause]}]\n").unwrap_err().to_string();
+        assert!(
+            e.ends_with("'Cause' is both required and forbidden at 'Open'"),
+            "{e}"
+        );
+    }
+
+    #[test]
+    fn a_bad_field_condition_is_refused_at_load() {
+        let e = |s: &str| kinds(s).unwrap_err().to_string();
+        assert!(
+            e("      require: [{when_field: {Nope: [x]}, fields: [Cause]}]\n").contains("neither")
+        );
+        assert!(
+            e("      require: [{when_field: {Kind: [bgu]}, fields: [Cause]}]\n")
+                .contains("field_values.Kind")
+        );
+        assert!(
+            e("      require: [{when_field: {Status: [Open]}, fields: [Cause]}]\n")
+                .contains("status field")
+        );
+        assert!(
+            e("      require: [{fields: [Cause]}]\n").contains("neither `when` nor `when_field`")
+        );
+        assert!(e("      require: [{when_field: {Kind: [bug]}, fields: [Cause]}]\n      forbid: [{when: [Open], fields: [Cause]}]\n").contains("both required and forbidden"));
+        assert!(kinds("      require: [{when_field: {Kind: [bug]}, fields: [Cause]}]\n      forbid: [{when_field: {Kind: [chore]}, fields: [Cause]}]\n").is_ok());
     }
 }

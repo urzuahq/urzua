@@ -727,6 +727,7 @@ mod tests {
             provisional: None,
             types: None,
             acyclic: true,
+            target_types: None,
         }
     }
 
