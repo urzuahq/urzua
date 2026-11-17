@@ -49,17 +49,130 @@ use urzua_core::config::Config;
 use urzua_core::report::{CheckReport, Finding, FindingSeverity, Notice, Report, ReportStatus};
 use urzua_io::git::GitRun;
 
+use super::gate::GateEvent;
 use super::run::{key, live, to_json};
 use crate::commands::check::{check_paths, judge_proposed};
 use crate::emit;
 use crate::session::Workspace;
 
 const GUARDRAIL: &str = "post-command";
+
+/// The settings every git call of this module pins. Derived caches (the
+/// commit-graph and its changed-path filters) and display settings live in
+/// the repository, where the judged command can write them, and each can
+/// change which commits or paths these read-only queries report.
+const PINNED: &[&str] = &[
+    "-c",
+    "core.commitGraph=false",
+    "-c",
+    "commitGraph.readChangedPaths=false",
+    "-c",
+    "log.showRoot=true",
+];
+
+/// Every git call of this module: the pinned settings, and replace refs off,
+/// since a local `refs/replace` entry would change the trees and history read.
+fn git_run() -> GitRun {
+    GitRun::new()
+        .env("GIT_NO_REPLACE_OBJECTS", "1")
+        .args(PINNED)
+}
+
+/// The shallow file's bytes, empty when there is none. `None` when git
+/// cannot name it.
+fn shallow_content(repo_root: &Path) -> Option<Vec<u8>> {
+    let out = git_run()
+        .cwd(repo_root)
+        .args(["--no-optional-locks", "rev-parse", "--git-path", "shallow"])
+        .discard_stderr()
+        .output()
+        .ok()
+        .filter(|o| o.status.success())?;
+    let path = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    Some(std::fs::read(repo_root.join(path)).unwrap_or_default())
+}
+
+/// Why nothing may be compared because of the shallow file: a commit in
+/// `start..HEAD` is a shallow boundary (a hand-edited shallow file acts as a
+/// graft), or the file changed since the baseline. A boundary in the base's
+/// history, as in an ordinary shallow clone, does not count. Git reads only a
+/// line's leading object id, so that is what is compared.
+fn shallow_problem(
+    repo_root: &Path,
+    start: &str,
+    prior: Option<&ProtectedState>,
+) -> Option<&'static str> {
+    const TRUNCATED: &str =
+        "the command truncated the history (a shallow boundary in its own commits)";
+    let Some(shallow) = shallow_content(repo_root) else {
+        return Some(TRUNCATED);
+    };
+    let bounds: HashSet<String> = shallow
+        .split(|b| *b == b'\n')
+        .map(|l| {
+            l.iter()
+                .take_while(|b| b.is_ascii_hexdigit())
+                .map(|b| b.to_ascii_lowercase() as char)
+                .collect::<String>()
+        })
+        .filter(|id| id.len() >= 40)
+        .collect();
+    if start != "HEAD" && !bounds.is_empty() {
+        let Some(out) = git_run()
+            .cwd(repo_root)
+            .args(["--no-optional-locks", "rev-list", &format!("{start}..HEAD")])
+            .discard_stderr()
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+        else {
+            return Some(TRUNCATED);
+        };
+        if String::from_utf8_lossy(&out.stdout)
+            .lines()
+            .any(|c| bounds.contains(c.trim()))
+        {
+            return Some(TRUNCATED);
+        }
+    }
+    let sig = urzua_io::sha256_hex_of_bytes(&shallow);
+    prior
+        .and_then(|p| p.post_shallow.as_deref())
+        .is_some_and(|old| old != sig)
+        .then_some("the shallow file changed")
+}
+
+/// Whether replace refs or a grafts file exist. Git still honours grafts with
+/// replace refs off, so either means nothing is compared with the base. A
+/// shallow clone's `shallow` file is ordinary and not counted.
+fn history_rewritten(repo_root: &Path) -> bool {
+    let out = |args: &[&str]| {
+        git_run()
+            .cwd(repo_root)
+            .args(args)
+            .discard_stderr()
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+    };
+    let Some(replace) = out(&["--no-optional-locks", "for-each-ref", "refs/replace"]) else {
+        return true;
+    };
+    let Some(grafts) = out(&[
+        "--no-optional-locks",
+        "rev-parse",
+        "--git-path",
+        "info/grafts",
+    ]) else {
+        return true;
+    };
+    !replace.is_empty() || repo_root.join(grafts).exists()
+}
 const P: &str = "urzua harness (post-command)";
 const CACHE: &str = ".urzua/cache/post-command.json";
 const HEAD_FILE: &str = ".urzua/cache/post-command-head";
 const PROTECTED_FILE: &str = ".urzua/cache/protected-hashes.json";
-const STASH_FILE: &str = ".urzua/cache/post-command-stash";
 /// How far back the reflog is read for the moves since the last check.
 const REFLOG_DEPTH: usize = 200;
 
@@ -95,6 +208,16 @@ struct PostVerdict {
     /// because a pull, checkout, merge or rebase brought them in. A gated move or
     /// a protected change in them is still reported.
     adopted: Vec<String>,
+    /// The gated paths whose content is the one on the configured base ref,
+    /// reported at the configured lower level. `None` when there are none.
+    base_match: Option<BaseMatch>,
+}
+
+#[derive(Serialize)]
+struct BaseMatch {
+    base: String,
+    level: &'static str,
+    paths: Vec<String>,
 }
 
 impl PostVerdict {
@@ -110,6 +233,7 @@ impl PostVerdict {
             agent: String::new(),
             person: String::new(),
             adopted: Vec::new(),
+            base_match: None,
         }
     }
 
@@ -174,38 +298,22 @@ fn judge(config: Option<PathBuf>) -> PostVerdict {
         _ => "HEAD".to_string(),
     };
     let committed = committed.unwrap_or_default();
-    // The reflog and the stash are written by whoever runs git, the agent
-    // included, so they choose only whether ordinary findings are absorbed and
-    // how a gate event is worded; they never keep a gate event from the report.
-    let (absorbed, mut arrived) = match (&top, &last, &head) {
+    // The reflog is written by whoever runs git, the agent included, so it
+    // chooses only whether ordinary findings are absorbed; it never keeps a
+    // gate event from the report.
+    let absorbed = match (&top, &last, &head) {
         (Some(t), Some(l), Some(h)) if l != h && !committed.is_empty() => {
             let elsewhere = not_own(&committed, own_files(t, l, h).as_ref());
             let refs: Vec<&String> = elsewhere.iter().collect();
-            (same_as(t, h, &refs), elsewhere)
+            same_as(t, h, &refs, &HashSet::new())
         }
-        _ => (Vec::new(), Vec::new()),
+        _ => Vec::new(),
     };
-    if let Some(t) = &top {
-        if let Some(oid) = read_stash(t) {
-            arrived.extend(stash_matches(t, &oid));
-        }
-    }
-    arrived.sort();
-    arrived.dedup();
-    let v = judge_changes(
-        &config,
-        top.as_deref(),
-        &base,
-        committed,
-        (&absorbed, &arrived),
-    );
+    let v = judge_changes(&config, top.as_deref(), &base, committed, &absorbed);
     // The range is consumed once it has been judged; an unjudged run keeps it.
     if v.verdict != "allow-unjudged" {
         if let (Some(t), Some(h)) = (&top, &head) {
             write_head(t, h);
-        }
-        if let Some(t) = &top {
-            write_stash(t, stash_top().as_deref());
         }
     }
     v
@@ -219,7 +327,7 @@ fn judge(config: Option<PathBuf>) -> PostVerdict {
 /// git cannot say: every commit then counts as the session's own.
 fn own_files(top: &Path, last: &str, head: &str) -> Option<HashSet<String>> {
     let git = |args: &[&str]| {
-        GitRun::new()
+        git_run()
             .cwd(top)
             .arg("--no-optional-locks")
             .args(args)
@@ -277,56 +385,103 @@ fn not_own(committed: &[String], own: Option<&HashSet<String>>) -> Vec<String> {
     }
 }
 
-/// The paths whose file on disk is the blob `rev` holds (both absent counts).
-fn same_as(top: &Path, rev: &str, paths: &[&String]) -> Vec<String> {
-    if paths.is_empty() {
-        return Vec::new();
-    }
-    let Ok(out) = GitRun::new()
+/// The `(mode, blob)` `rev` holds for each of `paths` that it has, from
+/// `git ls-tree` with the paths as literal pathspecs. `None` when git fails.
+fn base_entries(
+    top: &Path,
+    rev: &str,
+    paths: &[&String],
+) -> Option<BTreeMap<String, (String, String)>> {
+    let mut args: Vec<String> = [
+        "--no-optional-locks",
+        "--literal-pathspecs",
+        "ls-tree",
+        "-r",
+        "-z",
+        "--full-tree",
+        "--end-of-options",
+        rev,
+        "--",
+    ]
+    .iter()
+    .map(|a| a.to_string())
+    .collect();
+    args.extend(paths.iter().map(|p| p.to_string()));
+    let out = git_run()
         .cwd(top)
-        .args([
-            "--no-optional-locks",
-            "ls-tree",
-            "-r",
-            "-z",
-            "--full-tree",
-            rev,
-        ])
+        .args(&args)
+        .discard_stderr()
         .output()
-    else {
-        return Vec::new();
-    };
+        .ok()
+        .filter(|o| o.status.success())?;
     // `<mode> <type> <oid>\t<path>`
-    let blobs: BTreeMap<String, String> = out
+    let entries: BTreeMap<String, (String, String)> = out
         .stdout
         .split(|b| *b == 0)
         .filter_map(|e| {
             let text = String::from_utf8_lossy(e).to_string();
             let (meta, path) = text.split_once('\t')?;
-            Some((path.to_string(), meta.split(' ').nth(2)?.to_string()))
+            let mut meta = meta.split(' ');
+            let mode = meta.next()?.to_string();
+            let oid = meta.nth(1)?.to_string();
+            Some((path.to_string(), (mode, oid)))
         })
         .collect();
-    let present: Vec<&String> = paths
-        .iter()
-        .copied()
-        .filter(|p| top.join(p.as_str()).symlink_metadata().is_ok())
-        .collect();
-    let mut same: Vec<String> = paths
-        .iter()
-        .filter(|p| top.join(p.as_str()).symlink_metadata().is_err() && !blobs.contains_key(**p))
-        .map(|p| (*p).clone())
-        .collect();
-    if present.is_empty() {
+    Some(entries)
+}
+
+/// The paths whose file on disk is the entry `rev` holds, the same mode and the
+/// same blob of its raw bytes. Absent from both counts only for a path in
+/// `deleted`; a path git named in bytes that are not UTF-8 never matches,
+/// since its decoded name is not the file. Filters are not run: a
+/// clean filter the agent configures could make any content hash as `rev`'s. A symlink is compared as its link text and
+/// is never followed; a submodule or a directory never matches.
+fn same_as(top: &Path, rev: &str, paths: &[&String], deleted: &HashSet<String>) -> Vec<String> {
+    if paths.is_empty() {
+        return Vec::new();
+    }
+    let Some(entries) = base_entries(top, rev, paths) else {
+        return Vec::new();
+    };
+    let mut same = Vec::new();
+    let mut regular: Vec<(&String, &'static str)> = Vec::new();
+    for p in paths {
+        if p.contains('\u{FFFD}') {
+            continue;
+        }
+        let Ok(meta) = top.join(p.as_str()).symlink_metadata() else {
+            if deleted.contains(p.as_str()) && !entries.contains_key(p.as_str()) {
+                same.push((*p).clone());
+            }
+            continue;
+        };
+        let Some((mode, oid)) = entries.get(p.as_str()) else {
+            continue;
+        };
+        if meta.file_type().is_symlink() {
+            if mode == "120000" && link_blob(top, p).as_deref() == Some(oid.as_str()) {
+                same.push((*p).clone());
+            }
+        } else if meta.is_file() {
+            regular.push((p, file_mode(&meta)));
+        }
+    }
+    if regular.is_empty() {
         return same;
     }
-    let list = present
+    let list = regular
         .iter()
-        .map(|p| p.as_str())
+        .map(|(p, _)| p.as_str())
         .collect::<Vec<_>>()
         .join("\n");
-    let oids: Vec<String> = GitRun::new()
+    let oids: Vec<String> = git_run()
         .cwd(top)
-        .args(["--no-optional-locks", "hash-object", "--stdin-paths"])
+        .args([
+            "--no-optional-locks",
+            "hash-object",
+            "--no-filters",
+            "--stdin-paths",
+        ])
         .stdin(list.as_bytes())
         .discard_stderr()
         .output()
@@ -339,9 +494,9 @@ fn same_as(top: &Path, rev: &str, paths: &[&String]) -> Vec<String> {
                 .collect()
         })
         .unwrap_or_default();
-    if oids.len() == present.len() {
-        for (p, oid) in present.iter().zip(&oids) {
-            if blobs.get(*p) == Some(oid) {
+    if oids.len() == regular.len() {
+        for ((p, mode), oid) in regular.iter().zip(&oids) {
+            if entries.get(p.as_str()) == Some(&(mode.to_string(), oid.clone())) {
                 same.push((*p).clone());
             }
         }
@@ -349,60 +504,32 @@ fn same_as(top: &Path, rev: &str, paths: &[&String]) -> Vec<String> {
     same
 }
 
-/// The working-tree changes whose content is the stash entry that was on top at
-/// the last check: a `git stash pop` or `apply` restored them.
-fn stash_matches(top: &Path, oid: &str) -> Vec<String> {
-    let Ok(tree) = changed_paths() else {
-        return Vec::new();
-    };
-    let paths: Vec<String> = tree
-        .into_iter()
-        .filter(|(_, d)| !d)
-        .map(|(p, _)| p)
-        .collect();
-    let refs: Vec<&String> = paths.iter().collect();
-    // Untracked files a stash saved (`-u`) live in its third parent.
-    let mut same = same_as(top, oid, &refs);
-    same.extend(same_as(top, &format!("{oid}^3"), &refs));
-    same
+/// The tree mode git would record for a regular file.
+fn file_mode(meta: &std::fs::Metadata) -> &'static str {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if meta.permissions().mode() & 0o111 != 0 {
+            return "100755";
+        }
+    }
+    let _ = meta;
+    "100644"
 }
 
-fn stash_top() -> Option<String> {
-    let out = GitRun::new()
-        .args([
-            "--no-optional-locks",
-            "rev-parse",
-            "-q",
-            "--verify",
-            "refs/stash",
-        ])
+/// The blob id of a symlink's link text, as git stores a symlink.
+fn link_blob(top: &Path, rel: &str) -> Option<String> {
+    let target = std::fs::read_link(top.join(rel)).ok()?;
+    let text = target.to_string_lossy().to_string();
+    git_run()
+        .cwd(top)
+        .args(["--no-optional-locks", "hash-object", "--stdin"])
+        .stdin(text.as_bytes())
         .discard_stderr()
         .output()
-        .ok()?;
-    let oid = String::from_utf8_lossy(&out.stdout).trim().to_string();
-    (out.status.success() && !oid.is_empty()).then_some(oid)
-}
-
-fn read_stash(top: &Path) -> Option<String> {
-    let text = std::fs::read_to_string(top.join(STASH_FILE)).ok()?;
-    let text = text.trim();
-    (!text.is_empty()).then(|| text.to_string())
-}
-
-fn write_stash(top: &Path, oid: Option<&str>) {
-    let path = top.join(STASH_FILE);
-    match oid {
-        None => {
-            let _ = std::fs::remove_file(path);
-        }
-        Some(oid) if read_stash(top).as_deref() != Some(oid) => {
-            if let Some(dir) = path.parent() {
-                let _ = std::fs::create_dir_all(dir);
-            }
-            let _ = urzua_io::write_atomic(&path, oid);
-        }
-        Some(_) => {}
-    }
+        .ok()
+        .filter(|o| o.status.success())
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
 }
 
 fn judge_changes(
@@ -410,7 +537,7 @@ fn judge_changes(
     top: Option<&Path>,
     base: &str,
     committed: Vec<String>,
-    (absorbed, arrived): (&[String], &[String]),
+    absorbed: &[String],
 ) -> PostVerdict {
     // The gate: git's own view of the working tree, before any configuration.
     let mut tree = match changed_paths() {
@@ -432,8 +559,11 @@ fn judge_changes(
         config: loaded,
     } = match open_governed(config) {
         Ok(ws) => ws,
-        Err(verdict) => return *verdict,
+        Err(verdict) => return name_gated(*verdict, top, &tree, &committed),
     };
+
+    // The comparison rule as it was before the command, from the baseline.
+    let prior = read_protected(&repo_root);
 
     // Protected files git does not show (ignored ones), by content hash.
     let scan = scan_protected(&repo_root, &config_path, &loaded, true);
@@ -443,7 +573,13 @@ fn judge_changes(
         mut protected,
         remembered,
     } = select_unseen(&repo_root, &loaded, &paths, &scan.baseline_entries);
-    protected.extend(shrink_lines(&repo_root, &config_path, &scan));
+    let prior_rule = prior.as_ref();
+    protected.extend(shrink_lines(
+        &repo_root,
+        &config_path,
+        &scan,
+        (&loaded, prior_rule),
+    ));
     let deletions = gated_deletions(&repo_root, &loaded, &paths, base, &scan);
     let mut remembered = remembered;
     let adopted: Vec<String> = fresh
@@ -452,19 +588,10 @@ fn judge_changes(
         .cloned()
         .collect();
     remember_deletions(&repo_root, &paths, &deletions, &mut remembered);
-    let deletions: Vec<String> = deletions.into_iter().map(|(_, line)| line).collect();
+    let deletions: Vec<GateEvent> = deletions.into_iter().map(|(_, e)| e).collect();
     if fresh.is_empty() && protected.is_empty() && deletions.is_empty() {
         write_memory(&repo_root, &remembered);
-        let mut v = PostVerdict::quiet(format!(
-            "{P}: no governed record changed since the last check; no check ran"
-        ));
-        v.adopted = adopted;
-        if let Some(note) = &scan.note {
-            v.verdict = "allow-with-warnings";
-            v.message.push_str(&format!(" {note}"));
-            v.agent = format!("{P}: {note}");
-        }
-        return v;
+        return nothing_to_check(adopted, scan.note.as_deref());
     }
 
     // A gated move is judged on the same records, against the commit the
@@ -472,15 +599,21 @@ fn judge_changes(
     // never blocks. It does not depend on `check` being able to run.
     let mut gated = gated_moves(&repo_root, &loaded, &fresh, base, &scan);
     gated.extend(deletions);
-    let gated = mark_arrived(gated, arrived);
-    let protected = mark_arrived(protected, arrived);
+    let gates = base_gates(
+        &repo_root,
+        &config_path,
+        &loaded,
+        &paths,
+        prior.as_ref(),
+        (gated, protected, base),
+    );
     let to_check: Vec<String> = fresh
         .iter()
         .filter(|p| !absorbed.contains(*p))
         .cloned()
         .collect();
 
-    let report = match run_check(config, &to_check, gated.is_empty() && protected.is_empty()) {
+    let report = match run_check(config, &to_check, gates.is_empty()) {
         Ok(r) => r,
         Err(verdict) => return *verdict,
     };
@@ -488,43 +621,576 @@ fn judge_changes(
     let (old, new) = partition_by_head(config, &all, base);
     write_memory(&repo_root, &remembered);
 
-    let mut v = report_verdict(
-        &to_check,
-        protected,
-        gated,
-        (new, old),
-        scan.note.as_deref(),
-    );
+    let mut v = report_verdict(&to_check, &gates, (new, old), scan.note.as_deref());
     v.adopted = adopted;
     v
 }
 
-/// A report line whose path arrived with `HEAD` moving or matches the stash says
-/// so instead of reading as an edit. Only the wording changes.
-fn mark_arrived(lines: Vec<String>, arrived: &[String]) -> Vec<String> {
-    lines
-        .into_iter()
-        .map(|line| {
-            let head = line.trim_start();
-            let hit = arrived.iter().any(|p| {
-                head.strip_prefix(p.as_str())
-                    .is_some_and(|rest| rest.starts_with(' ') || rest.starts_with(':'))
-            });
-            if hit {
-                format!("{line} It arrived by a git move such as pull, checkout, merge, reset or stash pop, not by an edit tool; it is reported because a decider must make it.")
+/// The comparison rule (`base`, `base_match`) the configuration sets.
+fn loaded_rule(loaded: &Config) -> (String, String) {
+    let harness = loaded.harness.as_ref();
+    (
+        harness
+            .map_or(urzua_core::harness::DEFAULT_BASE, |h| h.post_command_base())
+            .to_string(),
+        level_name(harness.map_or(FindingSeverity::Info, |h| h.post_command_base_match()))
+            .to_string(),
+    )
+}
+
+/// An event when the comparison rule differs from the one the baseline
+/// recorded: the configuration changed it, or, with the configuration file
+/// unchanged, the baseline under `.urzua/cache` was edited. Either way a
+/// command cannot lower its own report, so this is an error of its own whether
+/// or not the configuration file is a protected path.
+fn rule_change(
+    repo_root: &Path,
+    config_path: &Path,
+    loaded: &Config,
+    prior: Option<&ProtectedState>,
+) -> Option<GateEvent> {
+    let prior = prior?;
+    let now = loaded_rule(loaded);
+    let show = |(b, l): &(String, String)| format!("base '{b}', base_match '{l}'");
+    let same_config =
+        urzua_io::sha256_hex_of_file(config_path).is_some_and(|sig| sig == prior.config_sig);
+    let recorded = prior.post_base.clone().zip(prior.post_level.clone());
+    let act = match recorded {
+        Some(r) if r == now => return None,
+        Some(r) => rule_act(&show(&now), &show(&r), same_config),
+        None if same_config => return None,
+        None => format!(
+            "changed the configuration while the baseline records no post-command comparison rule to compare with; the rule is now {}",
+            show(&now)
+        ),
+    };
+    Some(GateEvent {
+        path: config_path
+            .strip_prefix(repo_root)
+            .unwrap_or(config_path)
+            .display()
+            .to_string(),
+        guardrail: "post-command",
+        act,
+        gate: String::new(),
+    })
+}
+
+fn rule_act(now: &str, recorded: &str, same_config: bool) -> String {
+    if same_config {
+        format!(
+            "left the configuration's post-command comparison rule ({now}) different from the one the baseline under .urzua/cache recorded ({recorded}), so the baseline was edited"
+        )
+    } else {
+        format!("changed the post-command comparison rule from {recorded} to {now}")
+    }
+}
+
+/// The verdict when no governed record and no gated path changed.
+fn nothing_to_check(adopted: Vec<String>, note: Option<&str>) -> PostVerdict {
+    let mut v = PostVerdict::quiet(format!(
+        "{P}: no governed record changed since the last check; no check ran"
+    ));
+    v.adopted = adopted;
+    if let Some(note) = note {
+        v.verdict = "allow-with-warnings";
+        v.message.push_str(&format!(" {note}"));
+        v.agent = format!("{P}: {note}");
+    }
+    v
+}
+
+/// The gated changes of one command, compared with the base ref the
+/// configuration names, or the one recorded before a command that changed it.
+fn base_gates(
+    repo_root: &Path,
+    config_path: &Path,
+    loaded: &Config,
+    paths: &BTreeMap<String, bool>,
+    prior: Option<&ProtectedState>,
+    (gated, protected, start): (Vec<GateEvent>, Vec<GateEvent>, &str),
+) -> Gates {
+    let harness = loaded.harness.as_ref();
+    let config_rel = config_path
+        .strip_prefix(repo_root)
+        .unwrap_or(config_path)
+        .to_string_lossy()
+        .to_string();
+    let config_changed = paths.contains_key(&config_rel)
+        || prior.is_some_and(|p| {
+            urzua_io::sha256_hex_of_file(config_path).is_some_and(|sig| sig != p.config_sig)
+        });
+    // A command that edits the configuration could set the comparison rule
+    // that judges it (`base: HEAD`), so then the rule as it was before the
+    // command is used, and the configuration file itself must match it.
+    let (base_ref, level) = if config_changed {
+        match prior.and_then(|p| {
+            p.post_base
+                .clone()
+                .zip(p.post_level.as_deref().and_then(level_of))
+        }) {
+            Some((b, l)) => (b, l),
+            None => (String::new(), FindingSeverity::Error),
+        }
+    } else {
+        (
+            harness
+                .map_or(urzua_core::harness::DEFAULT_BASE, |h| h.post_command_base())
+                .to_string(),
+            harness.map_or(FindingSeverity::Info, |h| h.post_command_base_match()),
+        )
+    };
+    let mut event_paths: Vec<&String> = gated.iter().chain(&protected).map(|e| &e.path).collect();
+    if config_changed {
+        event_paths.push(&config_rel);
+    }
+    let rewritten = history_rewritten(repo_root);
+    let truncated = shallow_problem(repo_root, start, prior);
+    let matched = if base_ref.is_empty() || rewritten || truncated.is_some() {
+        None
+    } else {
+        let deleted: HashSet<String> = paths
+            .iter()
+            .filter(|(_, d)| **d)
+            .map(|(p, _)| p.clone())
+            .collect();
+        matching_base(repo_root, (&base_ref, start), &event_paths, &deleted)
+    };
+    let compared = matched.is_some();
+    let mut matched = matched.unwrap_or_default();
+    let rule_changed = protected.iter().any(|e| e.guardrail == "post-command");
+    if rule_changed || (config_changed && !matched.contains(&config_rel)) {
+        matched.clear();
+    }
+    let (base, remote) = describe_base(repo_root, &base_ref);
+    Gates {
+        moves: gated,
+        protected,
+        matched,
+        base,
+        // A local ref is whatever the agent made it, so a match with it
+        // lowers nothing.
+        local: compared && !remote,
+        rule_changed,
+        level: if remote { level } else { FindingSeverity::Error },
+        unresolved: (!compared).then(|| {
+            if rewritten {
+                "replace refs or grafts are present, so nothing was compared with the base".to_string()
+            } else if let Some(why) = truncated {
+                format!("{why}, so nothing was compared with the base")
+            } else if base_ref.is_empty() {
+                "no base ref to compare with: the command changed the configuration and the comparison rule it had before is not known".to_string()
             } else {
-                line
+                format!("no base ref to compare with: '{base_ref}' does not resolve")
             }
+        }),
+    }
+}
+
+/// The gated changes of one command, and which of them hold exactly the
+/// content of the `base` tree.
+struct Gates {
+    moves: Vec<GateEvent>,
+    protected: Vec<GateEvent>,
+    matched: HashSet<String>,
+    base: String,
+    /// The base is not a remote-tracking ref, so a match proves nothing.
+    local: bool,
+    /// The comparison rule changed, so nothing was compared.
+    rule_changed: bool,
+    /// Why no comparison was made, when none was.
+    unresolved: Option<String>,
+    level: FindingSeverity,
+}
+
+impl Gates {
+    /// ", and their content is not the one on <base>" when that was compared.
+    fn unlike(&self) -> String {
+        if self.rule_changed {
+            return " (the post-command comparison rule changed in this command, so nothing was compared with the base)".to_string();
+        }
+        match &self.unresolved {
+            None => format!(", and their content is not the one on {}", self.base),
+            Some(why) => format!(" ({why})"),
+        }
+    }
+
+    /// The agent's own line when every gated change matches, never the
+    /// person's text, so the translator does not drop it as a repeat.
+    fn agent_match_line(&self) -> Option<String> {
+        let n = self.matching().len();
+        if n == 0 {
+            return None;
+        }
+        Some(if self.local {
+            format!(
+                "{P}: {n} gated change(s) match {}, which proves nothing; a decider must make or approve them, and the person has been told.",
+                self.base
+            )
+        } else if self.level == FindingSeverity::Error {
+            format!(
+                "{P}: {n} gated change(s) match {}; a decider must make or approve them, and the person has been told.",
+                self.base
+            )
+        } else {
+            format!(
+                "{P}: {n} gated change(s) match {}; nothing to do.",
+                self.base
+            )
         })
-        .collect()
+    }
+
+    fn is_empty(&self) -> bool {
+        self.moves.is_empty() && self.protected.is_empty()
+    }
+
+    fn all(&self) -> impl Iterator<Item = &GateEvent> {
+        self.moves.iter().chain(&self.protected)
+    }
+
+    fn matches(&self, e: &GateEvent) -> bool {
+        self.matched.contains(&e.path)
+    }
+
+    /// The events reported at full weight: every one whose content differs from
+    /// the base tree.
+    fn differing(&self) -> Vec<&GateEvent> {
+        self.all().filter(|e| !self.matches(e)).collect()
+    }
+
+    fn matching(&self) -> Vec<&GateEvent> {
+        self.all().filter(|e| self.matches(e)).collect()
+    }
+
+    /// One line per event, at the level it is reported at, for the JSON lists.
+    fn lines(&self, events: &[GateEvent]) -> Vec<String> {
+        events
+            .iter()
+            .map(|e| {
+                if self.matches(e) {
+                    format!(
+                        "{} Its content is the one on {}.",
+                        e.line(level_name(self.level)),
+                        self.base
+                    )
+                } else {
+                    e.line("error")
+                }
+            })
+            .collect()
+    }
+
+    /// The sentence for the paths that hold the base tree's content, `None`
+    /// when there are none.
+    fn matching_sentence(&self, alone: bool) -> Option<String> {
+        let matching = self.matching();
+        let n = matching.len();
+        if n == 0 {
+            return None;
+        }
+        let level = level_name(self.level);
+        let names = named(matching.iter().map(|e| e.path.as_str()));
+        let tail = if self.local {
+            ", which the agent can move, so the match proves nothing; a decider must review the listed paths"
+        } else if self.level == FindingSeverity::Error {
+            "; a decider must review the listed paths"
+        } else if alone {
+            ", so nothing needs doing"
+        } else {
+            "; nothing needs doing for them"
+        };
+        Some(if alone {
+            format!(
+                "{P} {level}: the command changed {n} gated path(s) ({names}), and each now holds exactly the content on {}{tail}.",
+                self.base
+            )
+        } else {
+            format!(
+                "{level}: {n} other gated path(s) ({names}) now hold exactly the content on {}{tail}.",
+                self.base
+            )
+        })
+    }
+
+    /// What the person is told: the differing changes grouped under each gate,
+    /// the gate named once, then the matching ones in one line.
+    fn person(&self) -> String {
+        let differing = self.differing();
+        if differing.is_empty() {
+            return self.matching_sentence(true).unwrap_or_default();
+        }
+        let mut out = format!(
+            "{P}: the command changed {} path(s) the authority table reserves for a decider{}. It had already run, so nothing was prevented; CI's diff.decider-required checks who made it. A decider must make or approve these changes.",
+            differing.len(),
+            self.unlike()
+        );
+        out.push_str(&grouped(&differing));
+        if let Some(rest) = self.matching_sentence(false) {
+            out.push_str(&format!("\n{rest}"));
+        }
+        out
+    }
+}
+
+/// Up to five paths by name, then how many more.
+fn named<'a>(paths: impl Iterator<Item = &'a str>) -> String {
+    const SHOWN: usize = 5;
+    let all: Vec<&str> = paths.collect();
+    let mut text = all
+        .iter()
+        .take(SHOWN)
+        .copied()
+        .collect::<Vec<_>>()
+        .join(", ");
+    if all.len() > SHOWN {
+        text.push_str(&format!(" and {} more", all.len() - SHOWN));
+    }
+    text
+}
+
+/// Adds to a verdict that could not judge the gated paths git shows as
+/// changed, by the previous baseline's protected entries and its
+/// configuration file, so a broken configuration does not hide them.
+fn name_gated(
+    mut v: PostVerdict,
+    top: Option<&Path>,
+    tree: &[(String, bool)],
+    committed: &[String],
+) -> PostVerdict {
+    if v.verdict != "allow-unjudged" {
+        return v;
+    }
+    let Some(state) = top.and_then(read_protected) else {
+        return v;
+    };
+    let changed: Vec<&str> = tree
+        .iter()
+        .map(|(p, _)| p.as_str())
+        .chain(committed.iter().map(String::as_str))
+        .collect();
+    let mut gated: Vec<&str> = changed
+        .into_iter()
+        .filter(|p| {
+            super::gate::baseline_protected_report(Path::new(p), false, &state.entries).is_some()
+        })
+        .collect();
+    gated.sort();
+    gated.dedup();
+    if !gated.is_empty() {
+        let extra = format!(
+            " Gated paths the command changed, by the previous configuration: {}.",
+            named(gated.into_iter())
+        );
+        v.message.push_str(&extra);
+        v.person.push_str(&extra);
+    }
+    v
+}
+
+/// The events under one heading per guardrail and gate, each path a line.
+fn grouped(events: &[&GateEvent]) -> String {
+    let mut groups: Vec<((&str, &str), Vec<&GateEvent>)> = Vec::new();
+    for e in events {
+        let k = (e.guardrail, e.gate.as_str());
+        match groups.iter_mut().find(|(g, _)| *g == k) {
+            Some((_, list)) => list.push(e),
+            None => groups.push((k, vec![e])),
+        }
+    }
+    let mut out = String::new();
+    for ((guardrail, gate), list) in groups {
+        if gate.is_empty() {
+            out.push_str(&format!("\n[{guardrail}] error:"));
+        } else {
+            out.push_str(&format!("\n[{guardrail}] error ({gate}):"));
+        }
+        for e in list {
+            out.push_str(&format!("\n  {}: the command {}", e.path, e.act));
+        }
+    }
+    out
+}
+
+fn level_of(name: &str) -> Option<FindingSeverity> {
+    match name {
+        "error" => Some(FindingSeverity::Error),
+        "warning" => Some(FindingSeverity::Warning),
+        "info" => Some(FindingSeverity::Info),
+        _ => None,
+    }
+}
+
+fn level_name(level: FindingSeverity) -> &'static str {
+    match level {
+        FindingSeverity::Error => "error",
+        FindingSeverity::Warning => "warning",
+        FindingSeverity::Info => "info",
+    }
+}
+
+/// The paths of `paths` whose file on disk, hashed as git hashes it, is the
+/// blob `base` holds for it, a path absent from both included. `None` when
+/// `base` does not resolve to a tree.
+///
+/// This is advisory: `base` is a local ref, and the agent the report is about
+/// can move it or commit to it. A match therefore only lowers how loudly a
+/// change is reported, never whether it is; CI compares with the real remote.
+fn matching_base(
+    repo_root: &Path,
+    (base, start): (&str, &str),
+    paths: &[&String],
+    deleted: &HashSet<String>,
+) -> Option<HashSet<String>> {
+    if paths.is_empty() {
+        return Some(HashSet::new());
+    }
+    let tree = format!("{base}^{{tree}}");
+    let resolves = git_run()
+        .cwd(repo_root)
+        .args(["--no-optional-locks", "rev-parse", "-q", "--verify", &tree])
+        .discard_stderr()
+        .output()
+        .is_ok_and(|o| o.status.success());
+    if !resolves {
+        return None;
+    }
+    let mut same: HashSet<String> = same_as(repo_root, base, paths, deleted)
+        .into_iter()
+        .collect();
+    // The working tree alone can hold the base's bytes while the index or a
+    // commit holds other content, so all three must equal the base, and no
+    // commit the command made that the base lacks may touch the path.
+    match committed_state(repo_root, (base, start), paths) {
+        Some((base_e, head_e, index_e, foreign)) => same.retain(|p| {
+            base_e.get(p) == head_e.get(p)
+                && base_e.get(p) == index_e.get(p)
+                && !foreign.contains(p)
+        }),
+        None => same.clear(),
+    }
+    Some(same)
+}
+
+type Entries = BTreeMap<String, (String, String)>;
+
+/// The base's, `HEAD`'s and the index's entry for each path, and the paths a
+/// commit in `start..HEAD` that `base` does not contain touched. `None` when
+/// git cannot say.
+fn committed_state(
+    repo_root: &Path,
+    (base, start): (&str, &str),
+    paths: &[&String],
+) -> Option<(Entries, Entries, Entries, HashSet<String>)> {
+    let base_e = base_entries(repo_root, base, paths)?;
+    let head_e = base_entries(repo_root, "HEAD", paths)?;
+    let git = |args: Vec<String>| {
+        git_run()
+            .cwd(repo_root)
+            .args(&args)
+            .discard_stderr()
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| o.stdout)
+    };
+    let with_paths = |mut args: Vec<String>| {
+        args.push("--".to_string());
+        args.extend(paths.iter().map(|p| p.to_string()));
+        args
+    };
+    let flags = ["--no-optional-locks", "--literal-pathspecs"].map(String::from);
+    let mut ls = flags.to_vec();
+    ls.extend(["ls-files", "-s", "-z"].map(String::from));
+    // `<mode> <oid> <stage>\t<path>`; a conflicted path never matches.
+    let index_e: Entries = git(with_paths(ls))?
+        .split(|b| *b == 0)
+        .filter_map(|e| {
+            let text = String::from_utf8_lossy(e).to_string();
+            let (meta, path) = text.split_once('\t')?;
+            let mut meta = meta.split(' ');
+            let (mode, oid, stage) = (meta.next()?, meta.next()?, meta.next()?);
+            let entry = if stage == "0" {
+                (mode.to_string(), oid.to_string())
+            } else {
+                ("conflict".to_string(), String::new())
+            };
+            Some((path.to_string(), entry))
+        })
+        .collect();
+    let mut foreign = HashSet::new();
+    if start != "HEAD" {
+        let mut log = flags.to_vec();
+        // `--full-history --cc` so a merge commit that changed the path is listed;
+        // `-m` would also list a clean merge of the base.
+        log.extend(
+            [
+                "log",
+                "--root",
+                "--full-history",
+                "--cc",
+                "--format=",
+                "--name-only",
+                "-z",
+            ]
+            .map(String::from),
+        );
+        log.extend([
+            format!("{start}..HEAD"),
+            "--not".to_string(),
+            base.to_string(),
+        ]);
+        foreign = git(with_paths(log))?
+            .split(|b| *b == 0 || *b == b'\n')
+            .filter(|n| !n.is_empty())
+            .map(|n| String::from_utf8_lossy(n).to_string())
+            .collect();
+    }
+    Some((base_e, head_e, index_e, foreign))
+}
+
+/// The base ref for the report, as configured. A remote-tracking ref that
+/// names another (`origin/HEAD`) adds the branch it points at; anything else
+/// (a local branch, `HEAD`, a commit) is called a local ref, since it says
+/// nothing about the default branch.
+fn describe_base(repo_root: &Path, base: &str) -> (String, bool) {
+    let git = |args: &[&str]| {
+        git_run()
+            .cwd(repo_root)
+            .args(args)
+            .discard_stderr()
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+            .filter(|t| !t.is_empty())
+    };
+    if base.is_empty() {
+        return ("no base".to_string(), false);
+    }
+    let full = git(&[
+        "--no-optional-locks",
+        "rev-parse",
+        "--symbolic-full-name",
+        base,
+    ]);
+    if !full
+        .as_deref()
+        .is_some_and(|f| f.starts_with("refs/remotes/"))
+    {
+        return (format!("the local ref {base}"), false);
+    }
+    let name = match git(&["--no-optional-locks", "rev-parse", "--abbrev-ref", base]) {
+        Some(short) if short != base => format!("{base} ({short})"),
+        _ => base.to_string(),
+    };
+    (name, true)
 }
 
 /// The verdict for a judged command: the findings `check` reported on the
 /// changed records, the gated moves and the protected changes.
 fn report_verdict(
     fresh: &[String],
-    protected: Vec<String>,
-    gated: Vec<String>,
+    gates: &Gates,
     (new, old): (Vec<&Finding>, Vec<&Finding>),
     note: Option<&str>,
 ) -> PostVerdict {
@@ -532,9 +1198,16 @@ fn report_verdict(
     v.checked = fresh.to_vec();
     v.findings = to_json(&new);
     v.pre_existing = to_json(&old);
-    v.gated_moves = gated.clone();
-    v.protected_changes = protected.clone();
-    if new.is_empty() && old.is_empty() && gated.is_empty() && protected.is_empty() {
+    v.gated_moves = gates.lines(&gates.moves);
+    v.protected_changes = gates.lines(&gates.protected);
+    if !gates.matching().is_empty() {
+        v.base_match = Some(BaseMatch {
+            base: gates.base.clone(),
+            level: level_name(gates.level),
+            paths: gates.matching().iter().map(|e| e.path.clone()).collect(),
+        });
+    }
+    if new.is_empty() && old.is_empty() && gates.is_empty() {
         v.message = format!(
             "{P}: checked {} changed record(s); no findings",
             fresh.len()
@@ -546,26 +1219,17 @@ fn report_verdict(
         }
         return v;
     }
-    v.agent = agent_line(&new, old.len(), &gated, &protected, note);
-    if !gated.is_empty() || !protected.is_empty() {
-        let mut person = format!(
-            "{P}: the command changed what the authority table reserves for a decider. It had already run, so nothing was prevented; CI's diff.decider-required checks who made it."
-        );
-        if !gated.is_empty() {
-            person.push_str(&format!("\n{}", gated.join("\n")));
-        }
-        if !protected.is_empty() {
-            person.push_str(&format!("\n{}", protected.join("\n")));
-        }
-        v.person = person;
+    v.agent = agent_line(&new, old.len(), gates, note);
+    if !gates.is_empty() {
+        v.person = gates.person();
     }
+    // Every gated change is printed, a matching one included.
     v.verdict = "allow-with-warnings";
     v.message = findings_message(&FindingsSummary {
         checked: fresh.len(),
         new: &new,
         old: &old,
-        gated: &gated,
-        protected: &protected,
+        gates,
         note,
     });
     v
@@ -573,13 +1237,7 @@ fn report_verdict(
 
 /// The agent's report: the new findings to fix, one line each, and a short
 /// line for a decider's change it must not present as done.
-fn agent_line(
-    new: &[&Finding],
-    old: usize,
-    gated: &[String],
-    protected: &[String],
-    note: Option<&str>,
-) -> String {
+fn agent_line(new: &[&Finding], old: usize, gates: &Gates, note: Option<&str>) -> String {
     let mut parts = Vec::new();
     if !new.is_empty() {
         parts.push(format!(
@@ -587,17 +1245,22 @@ fn agent_line(
             new.len(),
             describe(new)
         ));
-    } else if old > 0 && gated.is_empty() && protected.is_empty() {
+    } else if old > 0 && gates.is_empty() {
         parts.push(format!(
             "{P}: {old} finding(s) the changed records already had before this command; none is new."
         ));
     }
-    if !gated.is_empty() || !protected.is_empty() {
+    let differing = gates.differing().len();
+    if differing > 0 {
         parts.push(format!(
-            "{P}: the command made {} gated move(s) and {} protected-path change(s); a decider must make or approve these, and the person has been told.",
-            gated.len(),
-            protected.len()
+            "{P}: the command made {differing} gated change(s){}; a decider must make or approve these, and the person has been told.",
+            gates.unlike()
         ));
+    }
+    if differing == 0 {
+        parts.extend(gates.agent_match_line());
+    } else if let Some(m) = gates.matching_sentence(false) {
+        parts.push(format!("{P} {m}"));
     }
     if let Some(note) = note {
         parts.push(format!("{P}: {note}"));
@@ -607,7 +1270,12 @@ fn agent_line(
 
 /// The report lines for what the command took out of the baseline's gates: a
 /// path gate, and a status gate or the `acceptance` guardrail.
-fn shrink_lines(repo_root: &Path, config_path: &Path, scan: &ProtectedScan) -> Vec<String> {
+fn shrink_lines(
+    repo_root: &Path,
+    config_path: &Path,
+    scan: &ProtectedScan,
+    (loaded, prior): (&Config, Option<&ProtectedState>),
+) -> Vec<GateEvent> {
     let mut lines = Vec::new();
     if !scan.shrunk.is_empty() {
         lines.push(shrink_line(repo_root, config_path, &scan.shrunk));
@@ -619,6 +1287,7 @@ fn shrink_lines(repo_root: &Path, config_path: &Path, scan: &ProtectedScan) -> V
             &scan.status_shrunk,
         ));
     }
+    lines.extend(rule_change(repo_root, config_path, loaded, prior));
     lines
 }
 
@@ -630,7 +1299,7 @@ fn gated_moves(
     fresh: &[String],
     base: &str,
     scan: &ProtectedScan,
-) -> Vec<String> {
+) -> Vec<GateEvent> {
     fresh
         .iter()
         .filter_map(|rel| {
@@ -650,7 +1319,7 @@ fn gated_moves(
 fn remember_deletions(
     repo_root: &Path,
     paths: &BTreeMap<String, bool>,
-    reported: &[(String, String)],
+    reported: &[(String, GateEvent)],
     remembered: &mut BTreeMap<String, String>,
 ) {
     for (rel, _) in reported {
@@ -672,7 +1341,7 @@ fn gated_deletions(
     paths: &BTreeMap<String, bool>,
     base: &str,
     scan: &ProtectedScan,
-) -> Vec<(String, String)> {
+) -> Vec<(String, GateEvent)> {
     let deleted: Vec<&String> = paths.iter().filter(|(_, d)| **d).map(|(p, _)| p).collect();
     if deleted.is_empty() {
         return Vec::new();
@@ -772,7 +1441,7 @@ fn changed_path_map(
         paths.insert(rel, deleted);
     }
     for rel in committed {
-        let gone = !repo_root.join(&rel).exists();
+        let gone = !rel.contains('\u{FFFD}') && !repo_root.join(&rel).exists();
         paths.entry(rel).or_insert(gone);
     }
     for (rel, deleted) in protected_changes {
@@ -785,8 +1454,8 @@ fn changed_path_map(
 struct Selected {
     /// Governed records to check.
     fresh: Vec<String>,
-    /// One report line per protected path changed.
-    protected: Vec<String>,
+    /// One event per protected path changed.
+    protected: Vec<GateEvent>,
     /// The memory to write once judged: every candidate with its hash.
     remembered: BTreeMap<String, String>,
 }
@@ -835,7 +1504,7 @@ fn select_unseen(
         .filter(|(p, h)| h.is_empty() || seen.get(*p) != Some(*h))
         .map(|(p, _)| p.clone())
         .collect();
-    let protected: Vec<String> = protected_candidates
+    let protected: Vec<GateEvent> = protected_candidates
         .iter()
         .filter(|(p, (h, _))| h.is_empty() || seen.get(*p) != Some(h))
         .filter_map(|(p, (_, deleted))| protected_report(p, *deleted))
@@ -856,25 +1525,29 @@ struct FindingsSummary<'a> {
     checked: usize,
     new: &'a [&'a Finding],
     old: &'a [&'a Finding],
-    gated: &'a [String],
-    protected: &'a [String],
+    gates: &'a Gates,
     note: Option<&'a str>,
 }
 
 fn findings_message(summary: &FindingsSummary) -> String {
-    let (new, old, gated, protected) = (summary.new, summary.old, summary.gated, summary.protected);
+    let (new, old, gates) = (summary.new, summary.old, summary.gates);
+    if new.is_empty() && old.is_empty() && gates.differing().is_empty() {
+        let mut m = gates.matching_sentence(true).unwrap_or_default();
+        if let Some(note) = summary.note {
+            m.push_str(&format!("\n{note}"));
+        }
+        return m;
+    }
     let errors = new
         .iter()
         .filter(|f| f.severity == FindingSeverity::Error)
         .count();
     let mut notes = String::new();
-    if !gated.is_empty() {
-        notes.push_str(&format!(", and {} gated move(s)", gated.len()));
-    }
-    if !protected.is_empty() {
+    let differing = gates.differing();
+    if !differing.is_empty() {
         notes.push_str(&format!(
-            ", and {} protected path change(s)",
-            protected.len()
+            ", and {} gated change(s) reserved for a decider",
+            differing.len()
         ));
     }
     let mut m = format!(
@@ -882,17 +1555,11 @@ fn findings_message(summary: &FindingsSummary) -> String {
         summary.checked,
         summary.new.len()
     );
-    if !gated.is_empty() {
-        m.push_str(&format!(
-            "\nGated move(s) to a status the authority table reserves for a decider:\n{}",
-            gated.join("\n")
-        ));
+    if !differing.is_empty() {
+        m.push_str(&grouped(&differing));
     }
-    if !protected.is_empty() {
-        m.push_str(&format!(
-            "\nProtected path(s) the authority table reserves for a decider:\n{}",
-            protected.join("\n")
-        ));
+    if let Some(rest) = gates.matching_sentence(false) {
+        m.push_str(&format!("\n{rest}"));
     }
     if let Some(note) = summary.note {
         m.push_str(&format!("\n{note}"));
@@ -913,7 +1580,7 @@ fn findings_message(summary: &FindingsSummary) -> String {
 /// is `None` when git cannot say (no repository, no commit yet); the working
 /// tree is still examined then.
 fn top_and_head() -> (Option<PathBuf>, Option<String>) {
-    let Ok(out) = GitRun::new()
+    let Ok(out) = git_run()
         .args([
             "--no-optional-locks",
             "rev-parse",
@@ -938,7 +1605,7 @@ fn top_and_head() -> (Option<PathBuf>, Option<String>) {
 /// or `None` when git cannot compare them (a commit that is gone after a
 /// rewrite): the working tree is judged against `HEAD` then.
 fn committed_since(last: &str, head: &str) -> Option<Vec<String>> {
-    let out = GitRun::new()
+    let out = git_run()
         .args([
             "--no-optional-locks",
             "diff",
@@ -992,6 +1659,14 @@ struct ProtectedState {
     /// The status gates in force (empty with the `acceptance` guardrail off).
     #[serde(default)]
     status_gates: Vec<super::gate::StatusGateEntry>,
+    /// The post-command comparison ref and level the configuration set.
+    #[serde(default)]
+    post_base: Option<String>,
+    #[serde(default)]
+    post_level: Option<String>,
+    /// The hash of the shallow file's content (empty when there is none).
+    #[serde(default)]
+    post_shallow: Option<String>,
 }
 
 fn read_protected(top: &Path) -> Option<ProtectedState> {
@@ -1085,22 +1760,30 @@ fn shrunk_entries(old: Option<&ProtectedState>, entries: &[String]) -> Vec<Strin
         .unwrap_or_default()
 }
 
-fn shrink_line(root: &Path, config_path: &Path, shrunk: &[String]) -> String {
+fn shrink_line(root: &Path, config_path: &Path, shrunk: &[String]) -> GateEvent {
     let rel = config_path.strip_prefix(root).unwrap_or(config_path);
-    format!(
-        "  {} [protected-paths] error: the protected set shrank: the configuration no longer gates {}. Those paths are not protected from now on. It was not prevented; CI's diff.decider-required checks who made it.",
-        rel.display(),
-        shrunk.join(", ")
-    )
+    GateEvent {
+        path: rel.display().to_string(),
+        guardrail: "protected-paths",
+        act: format!(
+            "changed the configuration so the protected set shrank: it no longer gates {}, so those paths are not protected from now on",
+            shrunk.join(", ")
+        ),
+        gate: String::new(),
+    }
 }
 
-fn status_shrink_line(root: &Path, config_path: &Path, lost: &[String]) -> String {
+fn status_shrink_line(root: &Path, config_path: &Path, lost: &[String]) -> GateEvent {
     let rel = config_path.strip_prefix(root).unwrap_or(config_path);
-    format!(
-        "  {} [acceptance] error: the status gates shrank: the configuration no longer gates {} (a gate removed or narrowed, or the acceptance guardrail switched off). Those moves are not gated from now on. It was not prevented; CI's diff.decider-required checks who made it.",
-        rel.display(),
-        lost.join("; ")
-    )
+    GateEvent {
+        path: rel.display().to_string(),
+        guardrail: "acceptance",
+        act: format!(
+            "changed the configuration so the status gates shrank: it no longer gates {} (a gate removed or narrowed, or the acceptance guardrail switched off), so those moves are not gated from now on",
+            lost.join("; ")
+        ),
+        gate: String::new(),
+    }
 }
 
 /// At session start, before the baseline is taken from the configuration as it
@@ -1200,6 +1883,23 @@ fn scan_protected(root: &Path, config_path: &Path, config: &Config, report: bool
             files,
             truncated,
             status_gates,
+            post_base: Some(
+                config
+                    .harness
+                    .as_ref()
+                    .map_or(urzua_core::harness::DEFAULT_BASE, |h| h.post_command_base())
+                    .to_string(),
+            ),
+            post_level: Some(
+                level_name(
+                    config
+                        .harness
+                        .as_ref()
+                        .map_or(FindingSeverity::Info, |h| h.post_command_base_match()),
+                )
+                .to_string(),
+            ),
+            post_shallow: shallow_content(root).map(|s| urzua_io::sha256_hex_of_bytes(&s)),
         },
     );
     scan
@@ -1268,7 +1968,6 @@ pub(super) fn seed_head(repo_root: &Path) {
     if std::env::set_current_dir(repo_root).is_ok() {
         if let (Some(top), Some(head)) = top_and_head() {
             write_head(&top, &head);
-            write_stash(&top, stash_top().as_deref());
         }
     }
     if let Some(p) = prev {
@@ -1281,7 +1980,7 @@ pub(super) fn seed_head(repo_root: &Path) {
 /// deleted, staged or not. An error is a stated reason the changed set could
 /// not be read.
 fn changed_paths() -> Result<Vec<(String, bool)>, String> {
-    let out = GitRun::new()
+    let out = git_run()
         .args([
             "--no-optional-locks",
             "status",
@@ -1308,7 +2007,7 @@ fn changed_paths() -> Result<Vec<(String, bool)>, String> {
 /// change (a sparse checkout leaves such files out). Empty when git cannot say.
 fn hidden_changes(top: &Path) -> Vec<(String, bool)> {
     let git = |args: &[&str]| {
-        GitRun::new()
+        git_run()
             .cwd(top)
             .arg("--no-optional-locks")
             .args(args)
@@ -1369,7 +2068,7 @@ fn hidden_changes(top: &Path) -> Vec<(String, bool)> {
         .join("\n");
     // If git cannot be run, or fails, no hash is known and each file counts as
     // changed, the safe direction.
-    let hashed = GitRun::new()
+    let hashed = git_run()
         .cwd(top)
         .args(["--no-optional-locks", "hash-object", "--stdin-paths"])
         .stdin(paths.as_bytes())
@@ -1446,7 +2145,7 @@ fn partition_by_head<'a>(
 }
 
 fn head_text(rel: &Path, base: &str) -> Option<String> {
-    let out = GitRun::new()
+    let out = git_run()
         .args(["--no-optional-locks", "show"])
         .arg(format!("{base}:{}", rel.to_string_lossy()))
         .output()

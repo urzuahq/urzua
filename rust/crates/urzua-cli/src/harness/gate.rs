@@ -441,6 +441,32 @@ pub(super) fn lost_status_gates(old: &[StatusGateEntry], now: &[StatusGateEntry]
         .collect()
 }
 
+/// One change the post-command check reports: the path, the guardrail whose
+/// gate it falls under, what the command did, and the gate (empty when the
+/// change is to the gates themselves).
+#[derive(Debug, Clone)]
+pub(super) struct GateEvent {
+    pub path: String,
+    pub guardrail: &'static str,
+    pub act: String,
+    pub gate: String,
+}
+
+impl GateEvent {
+    /// The event as one self-contained line at `level`.
+    pub fn line(&self, level: &str) -> String {
+        let gate = if self.gate.is_empty() {
+            String::new()
+        } else {
+            format!(" ({})", self.gate)
+        };
+        format!(
+            "  {} [{}] {level}: the command {}{gate}. It was not prevented; CI's diff.decider-required checks who made it.",
+            self.path, self.guardrail, self.act
+        )
+    }
+}
+
 /// After a command has already run: the report line for a record whose status
 /// on disk is a gated one that `base` did not hold (a new record, or one at
 /// another status), else `None`. `base` is `HEAD`, or the commit the last
@@ -455,7 +481,7 @@ pub(super) fn gated_move_report(
     rel: &Path,
     base: &str,
     baseline: &[StatusGateEntry],
-) -> Option<String> {
+) -> Option<GateEvent> {
     let folded = fold_to_declared_dir(config, rel);
     let rel = folded.as_path();
     let content = std::fs::read_to_string(repo_root.join(rel)).ok()?;
@@ -497,10 +523,12 @@ pub(super) fn gated_move_report(
             rel.display()
         ),
     };
-    Some(format!(
-        "  {} [acceptance] error: the command {before}, a move the authority table reserves for a decider ({summary}). It was not prevented; CI's diff.decider-required checks who made it.",
-        rel.display(),
-    ))
+    Some(GateEvent {
+        path: rel.display().to_string(),
+        guardrail: "acceptance",
+        act: format!("{before}, a move the authority table reserves for a decider"),
+        gate: summary,
+    })
 }
 
 /// The identity a rename keeps: a record's `Stable-Id` and record id.
@@ -525,7 +553,7 @@ pub(super) fn gated_deletion_report(
     base: &str,
     baseline: &[StatusGateEntry],
     survivors: &[RecordIdentity],
-) -> Option<String> {
+) -> Option<GateEvent> {
     let folded = fold_to_declared_dir(config, rel);
     let rel = folded.as_path();
     let text = urzua_io::read_at_commit_if_present(repo_root, base, rel)
@@ -548,11 +576,15 @@ pub(super) fn gated_deletion_report(
         return None;
     }
     let field = rules::relation_field_name(config, &record_type, RelationRole::Status);
-    Some(format!(
-        "  {} [acceptance] error: the command deleted {} while {field} was '{status}', a move the authority table reserves for a decider ({summary}). It was not prevented; CI's diff.decider-required checks who made it.",
-        rel.display(),
-        rel.display(),
-    ))
+    Some(GateEvent {
+        path: rel.display().to_string(),
+        guardrail: "acceptance",
+        act: format!(
+            "deleted {} while {field} was '{status}', a move the authority table reserves for a decider",
+            rel.display()
+        ),
+        gate: summary,
+    })
 }
 
 /// After a command has already run: the report line for a path under a
@@ -563,18 +595,21 @@ pub(super) fn protected_change_report(
     config: &Config,
     rel: &Path,
     deleted: bool,
-) -> Option<String> {
+) -> Option<GateEvent> {
     let (harness, authority) = (config.harness.as_ref()?, config.authority.as_ref()?);
     if !harness.enabled("protected-paths") {
         return None;
     }
     let gate = protected_gate(authority, rel)?;
-    Some(format!(
-        "  {} [protected-paths] error: the command {} a protected path ({}). It was not prevented; CI's diff.decider-required checks who made it.",
-        rel.display(),
-        if deleted { "deleted" } else { "changed" },
-        gate_summary(gate)
-    ))
+    Some(GateEvent {
+        path: rel.display().to_string(),
+        guardrail: "protected-paths",
+        act: format!(
+            "{} a protected path",
+            if deleted { "deleted" } else { "changed" }
+        ),
+        gate: gate_summary(gate),
+    })
 }
 
 /// The report line for a path the previous baseline protected through one of
@@ -584,17 +619,20 @@ pub(super) fn baseline_protected_report(
     rel: &Path,
     deleted: bool,
     baseline: &[String],
-) -> Option<String> {
+) -> Option<GateEvent> {
     let folded = fold_path(&rel.to_string_lossy());
     let entry = baseline
         .iter()
         .find(|e| rules::path_matches_entry(Path::new(&folded), &fold_path(e)))?;
-    Some(format!(
-        "  {} [protected-paths] error: the command {} a path the previous configuration protected (gate path '{}', no longer in the configuration). It was not prevented; CI's diff.decider-required checks who made it.",
-        rel.display(),
-        if deleted { "deleted" } else { "changed" },
-        entry
-    ))
+    Some(GateEvent {
+        path: rel.display().to_string(),
+        guardrail: "protected-paths",
+        act: format!(
+            "{} a path the previous configuration protected",
+            if deleted { "deleted" } else { "changed" }
+        ),
+        gate: format!("gate path '{entry}', no longer in the configuration"),
+    })
 }
 
 /// What the raw configuration says about the gates when it does not load, read
