@@ -239,6 +239,8 @@ urzua harness install
 git add .claude .urzua/harness.lock AGENTS.md && git commit -m "Install the urzua harness"
 ```
 
+The plugin's hooks wait up to 600 seconds, the top of the range of `harness.limits.hook_timeout_seconds`, because a plugin cannot read a repository's configuration; the binary reads it and refuses the edit itself when its own deadline passes. In a repository with no urzua configuration the plugin's hooks say nothing.
+
 Both at once is safe: Claude Code runs both registrations, and the hook judges each call once and prints
 the same answer for both. `urzua harness status` reports which is in effect (`registration`).
 
