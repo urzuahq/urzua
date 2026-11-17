@@ -658,6 +658,15 @@ fn judge_simple(run: &mut Run, request: serde_json::Value, cwd: Option<&str>) {
                     ]),
                 ),
             ]));
+        } else if kind == "allow" && truthy(verdict.get("agent")) {
+            // For the agent alone: a healthy session start shows the person nothing.
+            run.print(&obj(vec![(
+                "hookSpecificOutput",
+                obj(vec![
+                    ("hookEventName", s("SessionStart")),
+                    ("additionalContext", s(vtext(&verdict, "agent"))),
+                ]),
+            )]));
         }
         return;
     }

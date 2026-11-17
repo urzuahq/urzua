@@ -1,0 +1,71 @@
+schema_version: 2
+record_types:
+  work:
+    dir: docs/work
+    extra_dirs: [docs/work-old]
+    exclude_files: [README.md]
+    identity: {from: filename, pattern: '^(?P<prefix>WORK)-(?P<number>\d+)-(?P<slug>.+)$'}
+    fields: {from: yaml-frontmatter}
+    sections:
+      from: headings
+      depth: 2
+      required:
+        - {name: Goal}
+    prefix: WORK
+    header_shape: yaml-frontmatter
+    required_fields: [Status, Stable-Id]
+    known_fields: [Kind, Embodiment, Realized-by, Depends-on, Blocks, Note, Opened]
+    relation_fields: {date: Opened}
+    companion_fields:
+      - [embodiment_state, embodiment_locator]
+    field_values:
+      Kind: [build, decision]
+    pointer_fields: [Depends-on, Blocks]
+    narrative_fields: [Note]
+    spec: SPEC-1
+    revision_log:
+      marker: "**Revision log**"
+    statuses:
+      values: [Planned, Doing, Waiting, Done, Dropped]
+      success: [Done]
+      failure: [Dropped]
+      implementable: [Planned, Doing, Done]
+      claim_retained: [Dropped]
+      blocked: [Waiting]
+      progress: [Doing, Done]
+      pending: [pending]
+      placeholders: [tbd]
+      initial: [Planned]
+      transitions:
+        Planned: [Doing, Dropped]
+        Doing: [Waiting, Done]
+        Waiting: [Doing]
+      require:
+        - {when: [Done], fields: [Realized-by]}
+      forbid:
+        - {when: [Planned], fields: [Realized-by]}
+      delivery:
+        delivered_tiers: [Implemented, Verified]
+        unevidenced_tiers: [Not started]
+        not_done: [Planned, Doing]
+        set_status: Done
+  exception:
+    dir: docs/exceptions
+    role: suppression
+    required_fields: [Rule, Scope, Reason, Owner, Stable-Id]
+    known_fields: [Expires, Category]
+    effective_requires: [Reason]
+    rejected_values: ['2099-12-31']
+    waiver_fields: {reason: Reason, owner: Owner}
+    permanent:
+      - rule: status.delivery-agreement
+        reason_field: Category
+        categories:
+          - {name: docs-only}
+relation_pairs:
+  - name: order
+    forward: Depends-on
+    inverse: Blocks
+    reciprocity: none
+    cross_type: true
+    acyclic: true

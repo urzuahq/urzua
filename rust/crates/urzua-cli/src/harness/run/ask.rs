@@ -24,7 +24,7 @@ pub(super) struct AskRequest {
 
 fn refuse(mut refused: Verdict, why: &str) -> Verdict {
     refused.message = format!("{} {why}", refused.message);
-    refused.asking = None;
+    refused.extra = None;
     refused
 }
 
@@ -32,7 +32,10 @@ fn refuse(mut refused: Verdict, why: &str) -> Verdict {
 /// move into a gated status under `in_session: ask` that the host can put to
 /// the person, `ask` with the receipt. Nothing is stored either way.
 pub(super) fn ask_or_refuse(j: &Judging<'_>, request: &Request, refused: Verdict) -> Verdict {
-    let Some(mv) = refused.asking.as_ref().and_then(|a| a.gated_move.clone()) else {
+    let Some(mv) = refused.extra.as_deref().and_then(|e| match e {
+        super::Extra::Gated { gated_move } => Some(gated_move.clone()),
+        _ => None,
+    }) else {
         return refused;
     };
     let asks = j
@@ -101,10 +104,7 @@ fn prepare(
         receipt::sanitize(&receipt::title_of(&content), 80)
     );
     let mut v = Verdict::new("ask", Some(path), reason);
-    v.asking = Some(Box::new(super::Asking {
-        content: Some(with),
-        gated_move: None,
-    }));
+    v.extra = Some(Box::new(super::Extra::Ask { content: with }));
     Ok(v)
 }
 
