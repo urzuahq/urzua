@@ -1,10 +1,11 @@
-//! The second-pass review of the harness (ADR-89): a Bash edit of a protected
+//! Harness hardening: a Bash edit of a protected
 //! path is reported, a commit made inside the same command is reported, an
 //! adapter failure fails closed where the configuration says deny, an edit
 //! from a cwd outside the repository is still judged, paths match case
 //! insensitively, an edit through a symlink is judged as its target, and
 //! `export`/`import` name their format. Real git repositories, the real
-//! binary and its hook command. Needs `git`, `python3` and `sh`.
+//! binary and its hook command. Needs `git`, `sh`, and `python3` for the
+//! stand-in engines that log what they are sent.
 
 mod common;
 

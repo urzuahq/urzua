@@ -226,8 +226,7 @@ fn desired(env: &Env, adapters: &[String]) -> Result<Desired, String> {
 /// the hook command the adapter generates for that event (`hook::command`), and
 /// every `{{limit:KEY}}` by the effective `harness.limits.KEY`, so an installed
 /// value that differs from the configuration shows as out of date. No command
-/// carries a file hash: nothing executable is installed (`ADR-89`, amendment of
-/// 2026-11-17).
+/// carries a file hash: nothing executable is installed.
 fn render_fragment(
     adapter: &bundle::Adapter,
     limits: &urzua_core::harness::Limits,

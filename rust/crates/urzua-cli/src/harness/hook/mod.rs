@@ -4,8 +4,9 @@
 //! core, and turns the verdict into the agent's hook output (SPEC-24).
 //!
 //! Nothing is installed in the repository to do this, so nothing there can be
-//! edited to weaken it, and nothing needs a hash pinned (`ADR-89`). The registration table below and the adapter modules it lists
-//! are the only code that names an agent.
+//! edited to weaken it, and nothing needs a hash pinned. The registration
+//! table below and the adapter modules it lists are the only code that names
+//! an agent.
 
 mod claude_code;
 mod hook_json;

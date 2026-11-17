@@ -45,8 +45,11 @@ urzua harness install
 - `.urzua/harness.lock`, recording a hash of everything written.
 
 It writes no executable file and no hash into a hook entry: the binary does the work, and it was verified
-when you installed it. A generated command or instructions block is compared by its words, so running a
-formatter over what `install` wrote is not drift; the lock and the settings file can be re-indented too.
+when you installed it. A generated command or instructions block tolerates only what a formatter changes
+(whitespace and wrapping, blank lines, indentation, list markers and numbering, the emphasis marker, table
+padding); any other character added or changed is drift. Indentation alone never is, even where it nests a step
+or turns a line into a code block, because the text stays visible to the agent reading it. Running a formatter
+over what `install` wrote is therefore not drift; the lock and the settings file can be re-indented too.
 
 It never overwrites a file that differs, refuses a settings file it cannot merge into (exit 2), and
 run twice produces identical bytes. Commit all of it. With no `harness` key and no `--adapter`,
@@ -54,7 +57,26 @@ run twice produces identical bytes. Commit all of it. With no `harness` key and 
 instructions block with no `instructions_file`) and the key that turns it on.
 
 The hooks need `urzua` on the `PATH` the agent runs its hooks with. When it is not there, or is a release
-without `urzua harness hook`, the hook command says so and names the fix. For an edit it then fails closed: it lets the edit through only when it reads with certainty that neither `acceptance` nor `protected-paths` refuses an unjudged edit (comments stripped, whole values matched, the nearest `.urzua/config.yaml` at or above the project, in the block form `enabled: true|false` / `on_unjudged: allow|deny` or the one-line `{...}` form, with no anchor, alias, tag or flow map spanning lines anywhere); any other shape, an unreadable file, or no configuration found is a refusal that tells the person to install or upgrade urzua. A missing binary closes the gate rather than opening it. In a repository with no `.urzua/config.yaml` in it or any parent, nothing is governed: every hook exits quietly, with or without the binary, so a plugin installed for every repository does not stop edits elsewhere. A panic inside the binary, or an engine that does
+without `urzua harness hook`, the hook command says so and names the fix. One rule decides an edit nobody judged, whether the engine could not give a verdict or the binary could
+not run: if no `.urzua/config.yaml` governs any targeted path (none at or above it, links resolved) nor the
+session's directory, nothing is governed and the hook says nothing; if one is found and is not read with
+certainty as letting an unjudged edit through, the edit is refused. Read with certainty as open means: neither
+`acceptance` nor `protected-paths` enabled without `on_unjudged: allow`, and `editor-hook` not enabled with
+`on_unjudged: deny`. The binary parses the YAML; the shell fallback accepts only the block form
+(`enabled: true|false`, `on_unjudged: allow|deny`) and the one-line `{...}` form, with comments stripped and no
+anchor, alias or tag anywhere. A missing binary closes the gate rather than opening it.
+
+With `urzua` missing (or a release without `urzua harness hook`), the hook command's shell fallback cannot read
+JSON. It reads only the `file_path`, `notebook_path` and `path` string values of the payload (a value holding an
+escape is a refusal), follows directory links through the physical path of the nearest existing directory, and
+refuses a path whose last component is a symlink. An edit that names its file any other way, as an MCP call may
+(`destination`, `uri`, a key that is itself a path, a nested `from` or `to`), is placed only by the session's
+directory: from a session in an ungoverned directory, or in a governed repository whose configuration lets an
+unjudged edit through, such an edit of a file in a different repository whose configuration refuses one is
+**allowed**. A relative path is placed against the hook's working directory. This is an accepted limit, pending
+maintainer review; with the binary present none of it applies.
+
+ A panic inside the binary, or an engine that does
 not answer before the hook's own deadline (15 seconds short of `hook_timeout_seconds`), also ends in a
 refusal, as one JSON document.
 

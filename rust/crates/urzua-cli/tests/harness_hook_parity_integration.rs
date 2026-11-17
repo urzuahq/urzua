@@ -3,7 +3,8 @@
 //! in two copies of the same repository and the outputs are compared byte for
 //! byte (the repository's path written as `<DIR>`). Where the two differ on
 //! purpose, the case asserts the binary is at least as strict and its name says
-//! why. Nothing installs the reference. Needs `git`, `python3` and `sh`.
+//! why. Nothing installs the reference; `python3` runs it. Needs `git`,
+//! `python3` and `sh`.
 
 mod common;
 
@@ -33,7 +34,7 @@ fn git(dir: &Path, args: &[&str]) {
 }
 
 /// A repository with the configuration, a record, a notebook, a note and the
-/// script at the place it was installed (so its project directory is the
+/// reference translator under `.claude/hooks/` (so its project directory is the
 /// repository), committed.
 fn fixture(name: &str, config: &str) -> common::TempDir {
     let dir = common::TempDir::new(&format!("urzua-parity-{name}"));
@@ -70,7 +71,7 @@ fn feed(c: &mut Command, payload: &str) -> String {
     String::from_utf8(out.stdout).unwrap()
 }
 
-/// What the script printed for `payload`, with `engine` after `--`.
+/// What the reference translator prints for `payload`, with `engine` after `--`.
 fn script(dir: &Path, event: &str, payload: &str, engine: &[&str]) -> String {
     let mut c = Command::new("python3");
     c.arg("-I")

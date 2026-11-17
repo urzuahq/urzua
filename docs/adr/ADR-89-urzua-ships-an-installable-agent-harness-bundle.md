@@ -1065,6 +1065,23 @@ level, a comment opening or closing, a rule) counts as a change, as code does. I
 date, the statements that are not the maintainer's quoted words are marked as decided by the builder, pending
 maintainer review.
 
+## Amendment (2026-11-17, third review): an unjudged edit is decided from the engine's inputs
+
+Decided by the orchestrator on 2026-11-17, pending maintainer review: when the engine gives no verdict, the hook
+decides from the inputs the engine would have read, through the engine's own functions: every edited path made
+absolute against the request's directory and its links resolved, and every configuration at or above each path
+(as written and as resolved) and the session's own. It refuses where it cannot place a path or cannot read with
+certainty that every configuration found lets an unjudged edit through; it allows silently only when no path
+and no session directory has a configuration in any ancestor. A generated file's prose tolerates only a closed
+list of formatter differences (whitespace and wrapping, blank lines, indentation, list markers and numbering, the
+emphasis marker, table padding, trailing whitespace); any other character added, removed or changed is drift.
+
+Decided by the builder on 2026-11-17, pending maintainer review: `editor-hook` with `on_unjudged: deny` also
+closes an unjudged edit. With the binary missing, the shell fallback also reads the payload's `file_path`,
+`notebook_path` and `path` strings to find their configurations. Accepted limit, pending maintainer review: a
+fallback with no JSON parser cannot see a file named under any other key (as an MCP call may), so such an edit of
+a file in a refusing repository is allowed from a session in an ungoverned directory or an open repository.
+
 ## References
 
 - `ADR-69`, `ADR-70`, `ADR-71`: the hook, drafting commands and layered gate this extends; `ADR-70` gains an
@@ -1120,3 +1137,4 @@ maintainer review.
 > | 2026-11-17 | Added an `## Amendment (2026-11-17): the enforcer lives in the binary, and the script and its pin are removed`: the translation is `urzua harness hook`, the drafting helper `urzua harness record`, nothing executable is installed and no entry carries a hash, the binary is verified at install, the settings file and the configuration stay protected, and leftovers are removed by hand with no migration command. **Why:** `MILE-339` and `MILE-280`; accepted by the maintainer on 2026-11-17 for the points quoted in the amendment, the rest decided by the builder on 2026-11-17, pending maintainer review. | **substantive** |
 > | 2026-11-17 | Added an `## Amendment (2026-11-17, review): the hook fails closed`: the text fallback refuses whatever it cannot read with certainty, stdout is printed only on success, a panic or the hook's deadline refuses, an unknown verdict is unjudged, generated code compares exactly, the test seams need the `test-seams` feature. **Why:** review of the pull request that moved the harness into the binary; the fallback decided by the orchestrator on 2026-11-17, the rest by the builder, both pending maintainer review. | **substantive** |
 > | 2026-11-17 | Added an `## Amendment (2026-11-17, second review): one rule for an unjudged edit, and no configuration is not governed`, and marked the builder's statements in the first amendment of this date as pending maintainer review. **Why:** second review of the pull request that moved the harness into the binary; the not-governed rule decided by the orchestrator on 2026-11-17, the rest by the builder, both pending maintainer review. | **substantive** |
+> | 2026-11-17 | Added an `## Amendment (2026-11-17, third review): an unjudged edit is decided from the engine's inputs`: path placement and configuration discovery as the engine does them, silence only where nothing governs any path, the closed list of formatter differences, `editor-hook` deny honoured, and the shell fallback's limit stated. **Why:** third review of the pull request that moved the harness into the binary; the placement rule and the drift list decided by the orchestrator on 2026-11-17, the rest by the builder, all pending maintainer review. | **substantive** |

@@ -34,6 +34,7 @@ use crate::emit;
 use crate::session::Workspace;
 
 mod outside;
+pub(super) mod unjudged;
 
 /// Who is acting. An absent actor is treated as an agent: the safer reading.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

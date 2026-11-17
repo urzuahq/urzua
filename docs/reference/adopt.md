@@ -246,9 +246,21 @@ the same answer for both. `urzua harness status` reports which is in effect (`re
 
 The known limit, and what the plugin changes about it: a hook in a repository's own settings runs only for
 a session opened in that repository. A user-level plugin's hook runs for every session, so a session opened
-in another directory that edits this repository's files is judged too: the hook finds the configuration
-from the file's path, not from the session's directory (tested with the session's directory and the hook's
-working directory outside the repository). Not verified without a live agent: that Claude Code fires a
+in another directory that edits this repository's files is judged too: the binary finds the configuration
+from the file's path, links resolved, not from the session's directory (tested with the session's directory
+and the hook's working directory outside the repository, the engine running and the engine crashing).
+
+With `urzua` missing (or a release without `urzua harness hook`), the hook command's shell fallback cannot read
+JSON. It reads only the `file_path`, `notebook_path` and `path` string values of the payload (a value holding an
+escape is a refusal), follows directory links through the physical path of the nearest existing directory, and
+refuses a path whose last component is a symlink. An edit that names its file any other way, as an MCP call may
+(`destination`, `uri`, a key that is itself a path, a nested `from` or `to`), is placed only by the session's
+directory: from a session in an ungoverned directory, or in a governed repository whose configuration lets an
+unjudged edit through, such an edit of a file in a different repository whose configuration refuses one is
+**allowed**. A relative path is placed against the hook's working directory. This is an accepted limit, pending
+maintainer review; with the binary present none of it applies.
+
+ Not verified without a live agent: that Claude Code fires a
 user-level plugin's hooks for every session as documented, and how an organization's managed settings can
 force the plugin on.
 

@@ -25,6 +25,7 @@ pub use command::hook_command;
 use std::path::{Path, PathBuf};
 
 use super::super::json::{self, J};
+use super::super::run::unjudged::{unjudged_policy, Unjudged};
 use super::hook_json::{dumps, dumps_indent1, obj, s};
 use super::{engine, text as vtext, truthy};
 
@@ -149,33 +150,13 @@ impl Run {
         })
     }
 
-    /// Whether the configuration refuses an unjudged edit, read without the
-    /// engine (it could not be run or did not give a verdict) from the working
-    /// directory and from the session's project: refused unless each is read
-    /// with certainty as open or is not governed at all.
-    fn closed_by_config_text(&self, cwd: Option<&str>) -> bool {
-        let here = std::env::current_dir().unwrap_or_default();
-        let mut starts = vec![cwd.map(PathBuf::from).unwrap_or(here)];
-        if let Some(p) = &self.project {
-            starts.push(PathBuf::from(p));
-        }
-        starts
-            .iter()
-            .any(|d| text::unjudged_at(d) == text::Unjudged::Closed)
-    }
-
-    /// Whether no configuration governs the working directory, the session's
-    /// project or any of `paths`: a repository that does not use urzua, where
-    /// an edit nobody judged is allowed without a word.
-    fn not_governed(&self, cwd: Option<&str>, paths: &[String]) -> bool {
+    /// The decision without an engine verdict, from the inputs the engine would
+    /// have read: the edited paths placed as it places them and every
+    /// configuration that governs them.
+    fn policy(&self, cwd: Option<&str>, paths: &[String]) -> Unjudged {
         let here = std::env::current_dir().unwrap_or_default();
         let base = cwd.map(PathBuf::from).unwrap_or(here);
-        let mut starts = vec![base.clone()];
-        starts.extend(self.project.as_ref().map(PathBuf::from));
-        starts.extend(paths.iter().map(|p| base.join(p)));
-        starts
-            .iter()
-            .all(|d| text::unjudged_at(d) == text::Unjudged::NotGoverned)
+        unjudged_policy(&base, self.project.as_deref(), paths)
     }
 
     /// An edit the translator could not judge: the engine says whether the
@@ -193,7 +174,16 @@ impl Run {
             let mut request = self.request("edit", None, cwd);
             request["paths"] = serde_json::json!(paths);
             request["adapter_error"] = serde_json::json!(text::reason_of(message));
-            if let Ok(verdict) = engine(&self.event, &request, cwd) {
+            let known = |v: &serde_json::Value| {
+                let k = vtext(v, "verdict");
+                k == "block" || QUIET.contains(&k) || ALLOWED_NOTES.contains(&k)
+            };
+            if let Some(verdict) = engine(&self.event, &request, cwd).ok().filter(known) {
+                // The engine allowed it with nothing to say (not governed, or a
+                // guardrail the configuration turned off).
+                if QUIET.contains(&vtext(&verdict, "verdict")) {
+                    return (Kind::Allow, String::new());
+                }
                 if vtext(&verdict, "verdict") == "block" {
                     let m = verdict
                         .get("message")
@@ -211,11 +201,10 @@ impl Run {
                 );
             }
         }
-        if self.not_governed(cwd, &paths) {
-            return (Kind::Allow, String::new());
-        }
-        if loud && self.closed_by_config_text(cwd) {
-            return (Kind::Block, format!("{message} {CLOSED}"));
+        match self.policy(cwd, &paths) {
+            Unjudged::NotGoverned => return (Kind::Allow, String::new()),
+            Unjudged::Closed if loud => return (Kind::Block, format!("{message} {CLOSED}")),
+            _ => {}
         }
         if loud {
             (Kind::Stated, message.to_string())
@@ -587,6 +576,9 @@ fn judge_simple(run: &mut Run, request: serde_json::Value, cwd: Option<&str>) {
     let verdict = match engine(&event, &request, cwd) {
         Ok(v) => v,
         Err(_) => {
+            if run.policy(cwd, &[]) == Unjudged::NotGoverned {
+                return;
+            }
             let message = format!("urzua harness: urzua did NOT judge this call (the engine command `{}` could not be run or answered with something that is not a verdict). It is allowed unless the configuration refuses an edit that was not judged; run `urzua harness status`.", run.argv());
             return run.stated(&message, &event);
         }

@@ -99,22 +99,25 @@ pub fn hash(text: &str) -> String {
 
 const WORDS: &str = "words-sha256:";
 
-/// What a generated instruction or command file says, in order, with what a
-/// formatter changes left out. Prose is compared by its words (indentation,
-/// line breaks, list markers and their numbers, emphasis marks and trailing
-/// spaces do not count). Code is compared exactly: every line inside a code
-/// fence, apart from its indentation and trailing spaces, and every inline code
-/// span, apart from runs of whitespace inside it. A changed command (`&&` for
-/// `||`, a `#` that comments a step out, `--json` for `json`) is therefore a
-/// change, and reflowed prose is not.
+/// What a generated instruction or command file says, with only the
+/// differences a formatter makes left out. Prose tolerates a closed list:
+/// whitespace and line wrapping, blank lines, leading indentation, the list
+/// marker character (`-`, `*`, `+`) and ordered-list numbering, the emphasis
+/// marker character (`*` or `_`), table padding, and trailing whitespace. Any
+/// other character added, removed or changed is a change: a heading's level,
+/// a comment or a processing instruction, a rule or an underline, a
+/// strikethrough, a leading `|`, a `;` for a `.`. Lines inside a code fence
+/// compare exactly apart from indentation and trailing whitespace. Indentation
+/// alone is never a change, even where it nests a step or turns a line into a
+/// code block: the text stays visible to the reader either way.
 fn words(text: &str) -> String {
     let mut out: Vec<String> = Vec::new();
-    let mut prose = String::new();
+    let mut prose: Vec<&str> = Vec::new();
     let mut fence = false;
     for line in text.lines() {
         let t = line.trim();
         if t.starts_with("```") || t.starts_with("~~~") {
-            prose_words(&std::mem::take(&mut prose), &mut out);
+            out.push(prose_text(&std::mem::take(&mut prose)));
             fence = !fence;
             out.push(format!("\n{t}"));
             continue;
@@ -123,30 +126,16 @@ fn words(text: &str) -> String {
             out.push(format!("\n{t}"));
             continue;
         }
-        // Markup that changes what the reader sees or how it is scoped: a
-        // heading's level, a comment opening or closing, a rule (which also
-        // fences front matter).
-        let hashes = t.chars().take_while(|c| *c == '#').count();
-        let marks: Vec<char> = t.chars().filter(|c| !c.is_whitespace()).collect();
-        let rule = marks.len() >= 3 && ['-', '*', '_'].iter().any(|m| marks.iter().all(|c| c == m));
-        if hashes > 0 || rule || t.contains("<!--") || t.contains("-->") {
-            prose_words(&std::mem::take(&mut prose), &mut out);
-            if rule {
-                out.push("\n---".to_string());
-                continue;
-            }
-            if t.contains("<!--") || t.contains("-->") {
-                out.push(format!("\n{t}"));
-                continue;
-            }
-            out.push(format!("\n{}", "#".repeat(hashes)));
-            prose.push(' ');
-            prose.push_str(&t[hashes..]);
-            prose_words(&std::mem::take(&mut prose), &mut out);
-            continue;
-        }
-        // A list marker a formatter may change or renumber (`-`, `*`, `+`, `1.`,
-        // `1)`), followed by a space; `--flag` at a line start is not one.
+        prose.push(t);
+    }
+    out.push(prose_text(&prose));
+    out.join(" ")
+}
+
+/// Prose lines as one string, with the tolerated differences taken out.
+fn prose_text(lines: &[&str]) -> String {
+    let mut joined = String::new();
+    for t in lines {
         let digits = t.chars().take_while(char::is_ascii_digit).count();
         let marker = match t[digits..].chars().next() {
             Some('.' | ')') if digits > 0 => digits + 1,
@@ -158,29 +147,26 @@ fn words(text: &str) -> String {
         } else {
             t
         };
-        prose.push(' ');
-        prose.push_str(body);
-    }
-    prose_words(&prose, &mut out);
-    out.join(" ")
-}
-
-/// The words of prose, and its inline code spans exactly.
-fn prose_words(prose: &str, out: &mut Vec<String>) {
-    for (i, part) in prose.split('`').enumerate() {
-        if i % 2 == 1 {
-            out.push(format!(
-                "`{}`",
-                part.split_whitespace().collect::<Vec<_>>().join(" ")
-            ));
+        // A table's separator row: padding changes the run of dashes.
+        let body = if !body.is_empty() && body.chars().all(|c| matches!(c, '|' | '-' | ':' | ' ')) {
+            let mut row = String::new();
+            for c in body.chars().filter(|c| *c != ' ') {
+                if !(c == '-' && row.ends_with('-')) {
+                    row.push(c);
+                }
+            }
+            row
         } else {
-            out.extend(
-                part.split(|c: char| !c.is_alphanumeric())
-                    .filter(|w| !w.is_empty())
-                    .map(str::to_string),
-            );
-        }
+            body.to_string()
+        };
+        joined.push(' ');
+        joined.push_str(&body);
     }
+    joined
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .replace('_', "*")
 }
 
 /// The hash a lock keeps for a generated text file: of its words only.
@@ -268,14 +254,66 @@ mod tests {
     }
 
     #[test]
-    fn a_line_of_markup_or_a_heading_level_changed_is_drift_and_sentence_punctuation_is_not() {
+    fn a_line_of_markup_a_heading_level_or_sentence_punctuation_changed_is_drift() {
         let doc = "---\ndescription: x\n---\n\n# /done\n\nRun it.\n\n## Steps\n\n1. Do this.\n";
         assert!(!same_text(doc, &doc.replace("## Steps", "<!--\n## Steps")));
         assert!(!same_text(doc, &doc.replace("## Steps", "-->\n## Steps")));
         assert!(!same_text(doc, &doc.replace("# /done", "## /done")));
         assert!(!same_text(doc, &doc.replace("Run it.", "Run it.\n\n---")));
-        assert!(same_text(doc, &doc.replace("Run it.", "Run it;")));
+        assert!(!same_text(doc, &doc.replace("Run it.", "Run it;")));
         assert!(same_text(doc, &doc.replace("Run it.", "Run\n   it.")));
+    }
+
+    #[test]
+    fn only_the_differences_a_formatter_makes_are_tolerated_in_prose() {
+        let doc = "---\ndescription: x\n---\n\n# /done\n\nRun *it* now.\n\n- one\n- two\n\n1. first\n2. second\n\n## Steps\n";
+        for (name, changed) in [
+            (
+                "a link-reference comment",
+                doc.replace("## Steps", "[//]: # (hidden)\n## Steps"),
+            ),
+            (
+                "a processing instruction on one line",
+                doc.replace("## Steps", "<? hidden ?>\n## Steps"),
+            ),
+            (
+                "a processing instruction on several lines",
+                doc.replace("## Steps", "<?\nhidden\n?>\n## Steps"),
+            ),
+            (
+                "a setext underline",
+                doc.replace("Run *it* now.", "Run *it* now.\n==="),
+            ),
+            (
+                "a dash underline",
+                doc.replace("Run *it* now.", "Run *it* now.\n---"),
+            ),
+            (
+                "a strikethrough",
+                doc.replace("Run *it* now.", "Run ~~it~~ now."),
+            ),
+            (
+                "a leading pipe",
+                doc.replace("Run *it* now.", "| Run *it* now."),
+            ),
+        ] {
+            assert!(!same_text(doc, &changed), "{name}");
+        }
+        for (name, reformatted) in [
+            (
+                "list markers",
+                doc.replace("- one", "* one").replace("- two", "+ two"),
+            ),
+            ("numbering", doc.replace("2. second", "1. second")),
+            ("emphasis marker", doc.replace("*it*", "_it_")),
+            (
+                "wrapping and indentation",
+                doc.replace("Run *it* now.", "Run\n      *it*\n   now.   "),
+            ),
+            ("blank lines", doc.replace("\n\n", "\n\n\n")),
+        ] {
+            assert!(same_text(doc, &reformatted), "{name}");
+        }
     }
 
     #[test]

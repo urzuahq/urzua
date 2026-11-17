@@ -492,3 +492,32 @@ fn update_alone_converts_a_repository_installed_by_0_4_7_whose_files_match_the_l
         "{settings}"
     );
 }
+
+/// A real formatter: when `prettier` is on PATH, every generated markdown file
+/// is rewritten with both prose-wrap settings and status stays ok. Without it
+/// the hand-written reformat above stands in.
+#[test]
+fn a_prettier_pass_over_the_installed_files_leaves_status_ok_when_prettier_is_available() {
+    let Some(prettier) = std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default())
+        .map(|d| d.join("prettier"))
+        .find(|p| p.is_file())
+    else {
+        eprintln!("prettier is not on PATH; the hand-written reformat test covers formatting");
+        return;
+    };
+    let dir = installed("prettier");
+    for wrap in ["always", "never"] {
+        let mut files = Vec::new();
+        files_under(&dir.join(".claude/commands"), &mut files);
+        files.push(dir.join("AGENTS.md"));
+        let out = Command::new(&prettier)
+            .args(["--write", "--prose-wrap", wrap])
+            .args(&files)
+            .current_dir(&dir)
+            .output()
+            .unwrap();
+        assert!(out.status.success(), "{out:?}");
+        let (code, v) = urzua(&dir, &["harness", "status"]);
+        assert_eq!((code, v["status"].as_str()), (0, Some("ok")), "{wrap}: {v}");
+    }
+}
