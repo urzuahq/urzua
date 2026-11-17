@@ -1255,7 +1255,7 @@ hooks:
   else (naming the value, its scope and the file that sets it), when `path` resolves through a symlink outside the
   working tree or into the git directory or git would read the value as another place, when any entry there, whatever
   its name (git runs every hook name it knows from the directory), is a symlink whose target lies outside the working
-  tree or in the git directory at any hop of its chain, a dangling one included (a chain longer than 40 links is refused as a loop), and when a hook it must write cannot be
+  tree or in the git directory at any hop of its chain, resolved as the kernel resolves it (a `..` after a linked directory is taken from where that link went), a dangling one included (a chain longer than 40 links, or a loop, is refused as unresolvable), and when a hook it must write cannot be
   written (for a directory not yet created, its nearest existing ancestor is probed). Pointing alone, with every hook
   declared, needs no write.
   While the clone is not pointed at `path`, `doctor`, `urzua hooks status` and the session-start check report every

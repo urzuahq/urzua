@@ -1386,7 +1386,7 @@ fn a_link_loop_is_unsafe() {
     let (code, report) = urzua(&dir, &["hooks", "install"]);
     assert_eq!(code, 2, "{report}");
     assert!(
-        report.to_string().contains("chain of more than"),
+        report.to_string().contains("could not be resolved"),
         "{report}"
     );
     assert_eq!(local_hooks_path(&dir), None);
@@ -1430,4 +1430,46 @@ fn reinstalling_an_already_pointed_clone_runs_the_same_guards_as_status() {
         "{report}"
     );
     assert_eq!(report["next_action"], "urzua hooks uninstall", "{report}");
+}
+
+fn parent_through_linked_dir(
+    name: &str,
+    create_target: bool,
+) -> (common::TempDir, common::TempDir) {
+    let dir = declared_tools_hooks(name);
+    let outside = common::TempDir::new("urzua-hooks-dotdot-target");
+    std::fs::create_dir_all(outside.join("d")).unwrap();
+    if create_target {
+        write_exec(&outside.join("y"), "#!/bin/sh\necho OUTSIDE-RAN >&2\n");
+    }
+    std::os::unix::fs::symlink(outside.join("d"), dir.join("tools/sub")).unwrap();
+    std::os::unix::fs::symlink("../sub/../y", dir.join("tools/hooks/commit-msg")).unwrap();
+    (dir, outside)
+}
+
+#[test]
+fn a_parent_step_after_a_linked_directory_is_taken_from_where_the_link_went() {
+    for (name, exists) in [("dotdot-existing", true), ("dotdot-dangling", false)] {
+        let (dir, _outside) = parent_through_linked_dir(name, exists);
+        let (_, status) = urzua(&dir, &["hooks", "status"]);
+        assert!(
+            states(&status).contains(&"commit-msg=unsafe-hook".to_string()),
+            "{name}: {status}"
+        );
+        let (code, report) = urzua(&dir, &["hooks", "install"]);
+        assert_eq!(code, 2, "{name}: {report}");
+        assert_eq!(local_hooks_path(&dir), None, "{name}");
+    }
+}
+
+#[test]
+fn a_parent_step_after_a_linked_directory_inside_the_tree_is_safe() {
+    let dir = declared_tools_hooks("dotdot-inside");
+    std::fs::create_dir_all(dir.join("other")).unwrap();
+    write_exec(&dir.join("x"), "#!/bin/sh\nexit 0\n");
+    std::os::unix::fs::symlink("../other", dir.join("tools/sub")).unwrap();
+    std::os::unix::fs::symlink("../sub/../x", dir.join("tools/hooks/commit-msg")).unwrap();
+    let (code, report) = urzua(&dir, &["hooks", "install"]);
+    assert_eq!(code, 0, "{report}");
+    assert_eq!(local_hooks_path(&dir).as_deref(), Some("tools/hooks"));
 }

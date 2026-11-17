@@ -476,60 +476,106 @@ fn unsafe_hooks(repo_root: &Path, configured: &str) -> Vec<(String, String)> {
         .flatten()
         .filter_map(|e| {
             let path = e.path();
-            let why = link_escape(repo_root, &path)?;
-            let what = if path.is_dir() { "a directory" } else { "a file" };
-            Some((
-                e.file_name().to_string_lossy().into_owned(),
-                format!(
-                    "{} is a symlink that leads to {why}, so git would run {what} the repository does not commit",
+            let message = match link_escape(repo_root, &path)? {
+                LinkEscape::Unresolvable => format!(
+                    "{} is a symlink whose chain could not be resolved (more than {LINK_HOPS} links, or a loop)",
                     path.display()
                 ),
-            ))
+                LinkEscape::Reaches(real, where_) => {
+                    let what = if path.is_dir() { "a directory" } else { "a file" };
+                    format!(
+                        "{} is a symlink that leads to {}, {where_}, so git would run {what} the repository does not commit",
+                        path.display(),
+                        real.display()
+                    )
+                }
+            };
+            Some((e.file_name().to_string_lossy().into_owned(), message))
         })
         .collect();
     found.sort();
     found
 }
 
-/// `path` with `.` and `..` removed without touching the filesystem, for a
-/// link target that does not exist yet.
-fn lexical(path: &Path) -> PathBuf {
-    let mut out = PathBuf::new();
-    for c in path.components() {
-        match c {
-            std::path::Component::CurDir => {}
-            std::path::Component::ParentDir => {
-                out.pop();
-            }
-            other => out.push(other),
-        }
-    }
-    out
+const LINK_HOPS: usize = 40;
+
+enum LinkEscape {
+    Reaches(PathBuf, &'static str),
+    Unresolvable,
 }
 
-/// Where a symlink chain starting at `path` leaves the working tree or enters
-/// the git directory, hop by hop, so a dangling link is judged before its
-/// target exists. `None` when `path` is not a link or every hop stays inside.
-fn link_escape(repo_root: &Path, path: &Path) -> Option<String> {
-    const HOPS: usize = 40;
-    let mut cur = path.to_path_buf();
-    let mut linked = false;
-    for _ in 0..HOPS {
-        let Ok(target) = std::fs::read_link(&cur) else {
-            return None;
-        };
-        linked = true;
-        let base = cur.parent().map(Path::to_path_buf).unwrap_or_default();
-        cur = lexical(&base.join(target));
-        let real = resolve(&cur);
-        if let Some(where_) = escapes(repo_root, &real) {
-            return Some(format!("{}, {where_}", real.display()));
-        }
-        if std::fs::symlink_metadata(&cur).is_err() {
-            return None;
+/// Where a symlink at `path` leads when that is outside the working tree or
+/// inside the git directory. An existing target is known exactly from
+/// `canonicalize`; a dangling chain is walked as the kernel walks it, so a
+/// `..` after a symlinked directory is taken from where that link went.
+fn link_escape(repo_root: &Path, path: &Path) -> Option<LinkEscape> {
+    let target = std::fs::read_link(path).ok()?;
+    if let Ok(real) = std::fs::canonicalize(path) {
+        return escapes(repo_root, &real).map(|w| LinkEscape::Reaches(real, w));
+    }
+    let start = path.parent().and_then(|p| p.canonicalize().ok())?;
+    let mut hops = 1;
+    match walk_link(repo_root, start, &target, &mut hops) {
+        Err(e) => Some(e),
+        Ok(end) => escapes(repo_root, &end).map(|w| LinkEscape::Reaches(end, w)),
+    }
+}
+
+/// Resolves `target` from the canonical directory `cur`, component by
+/// component, following each symlink met on the way. Below the first missing
+/// component nothing can be a link, so the rest is appended as text.
+fn walk_link(
+    repo_root: &Path,
+    mut cur: PathBuf,
+    target: &Path,
+    hops: &mut usize,
+) -> Result<PathBuf, LinkEscape> {
+    use std::path::Component;
+    let parts: Vec<Component> = target.components().collect();
+    for (i, c) in parts.iter().enumerate() {
+        match c {
+            Component::Prefix(_) | Component::CurDir => {}
+            Component::RootDir => cur = PathBuf::from("/"),
+            Component::ParentDir => {
+                cur.pop();
+            }
+            Component::Normal(name) => {
+                let next = cur.join(name);
+                match std::fs::symlink_metadata(&next) {
+                    Ok(m) if m.file_type().is_symlink() => {
+                        *hops += 1;
+                        if *hops > LINK_HOPS {
+                            return Err(LinkEscape::Unresolvable);
+                        }
+                        let t = std::fs::read_link(&next).map_err(|_| LinkEscape::Unresolvable)?;
+                        cur = walk_link(repo_root, cur, &t, hops)?;
+                        if let Some(w) = escapes(repo_root, &cur) {
+                            return Err(LinkEscape::Reaches(cur, w));
+                        }
+                        if !cur.exists() {
+                            return Ok(append_rest(cur, &parts[i + 1..]));
+                        }
+                    }
+                    Ok(_) => cur = next.canonicalize().unwrap_or(next),
+                    Err(_) => return Ok(append_rest(next, &parts[i + 1..])),
+                }
+            }
         }
     }
-    linked.then(|| format!("a chain of more than {HOPS} links, which git cannot follow to a file in the repository"))
+    Ok(cur)
+}
+
+fn append_rest(mut path: PathBuf, rest: &[std::path::Component]) -> PathBuf {
+    for c in rest {
+        match c {
+            std::path::Component::ParentDir => {
+                path.pop();
+            }
+            std::path::Component::Normal(n) => path.push(n),
+            _ => {}
+        }
+    }
+    path
 }
 
 /// `urzua hooks uninstall`, when running it would unset this clone's
