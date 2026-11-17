@@ -101,12 +101,8 @@ pub fn pointer_target_type(
     index: &RecordIndex,
 ) -> (RuleExecution, Vec<Finding>) {
     const RULE_ID: &str = RULE_POINTER_TARGET_TYPE;
+    // Default-on only where target types are declared (`DefaultOn::applies`).
     let targets = crate::pointer_targets::constraints(config);
-    // On by default, but a configuration that declares no target types has not
-    // asked for it, and reports exactly as it did before the rule existed.
-    if targets.is_empty() {
-        return (RuleExecution::not_enabled(RULE_ID), Vec::new());
-    }
     let mut findings = Vec::new();
     let slots: Vec<(&Record, &String, &Vec<String>)> = records
         .iter()

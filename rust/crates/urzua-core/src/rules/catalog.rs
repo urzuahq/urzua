@@ -22,6 +22,7 @@ pub const RULE_HEADER_POINTER_FIELD_CLEAN: &str = "header.pointer-field-clean";
 pub const RULE_NARRATIVE_FIELD_STALE: &str = "narrative-field.stale";
 pub const RULE_FIELD_QUALITY: &str = "field.quality";
 pub const RULE_FIELD_PENDING: &str = "field.pending";
+pub const RULE_FIELD_VALUE_NOT_DECLARED: &str = "field.value-not-declared";
 pub const RULE_CLAIM_STATUS_AGREEMENT: &str = "claim.status-agreement";
 pub const RULE_FILENAME_TITLE_CONSISTENCY: &str = "filename.title-consistency";
 pub const RULE_REVISION_LOG_CHANGE_CLASS_REQUIRED: &str = "revision-log.change-class-required";

@@ -286,6 +286,7 @@ mod tests {
                     known_fields: None,
                     pointer_fields: None,
                     narrative_fields: None,
+                    field_values: None,
                     spec: None,
                     relation_fields: Some(relation_fields),
                     companion_fields: None,

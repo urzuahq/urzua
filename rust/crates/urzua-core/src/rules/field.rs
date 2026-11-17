@@ -47,12 +47,19 @@ pub fn field_pending(records: &[Record], config: &Config) -> (RuleExecution, Vec
                     );
                     let status = record.header.get(status_field).unwrap_or_default();
                     let named = d.require.iter().any(|r| r.fields.contains(field));
-                    named && !d.required_at(status).contains(&field.as_str())
+                    let value = |f: &str| record.header.get(f).map(str::to_string);
+                    named
+                        && !d
+                            .required_for(status, &value)
+                            .iter()
+                            .any(|t| t.field == field.as_str())
                 })
             {
                 return Outcome::Absent;
             }
-            if classify_with(record.header.get(field.as_str()), declared) == FieldState::Pending {
+            if !holds_declared_value(config, record, field.as_str())
+                && classify_with(record.header.get(field.as_str()), declared) == FieldState::Pending
+            {
                 let declared_severity = declared_field_severity(config, RULE_ID, field.as_str());
                 findings.push(
                     Finding::new(
@@ -120,6 +127,65 @@ pub fn field_untrimmed_value(records: &[Record], config: &Config) -> (RuleExecut
         },
     );
 
+    (
+        RuleExecution::ran(RULE_ID, population, examined_records),
+        findings,
+    )
+}
+
+/// A field value outside the vocabulary its type declares in `field_values`
+/// (`MILE-248`). One slot per vocabulary field; a missing or blank value is
+/// eligible and not examined, since presence and quality are other rules'.
+pub fn field_value_not_declared(
+    records: &[Record],
+    config: &Config,
+) -> (RuleExecution, Vec<Finding>) {
+    const RULE_ID: &str = RULE_FIELD_VALUE_NOT_DECLARED;
+    let vocab_by_type: HashMap<String, Vec<&String>> = config
+        .record_types
+        .iter()
+        .filter_map(|(name, t)| {
+            t.field_values
+                .as_ref()
+                .map(|m| (name.clone(), m.keys().collect()))
+        })
+        .collect();
+    let mut findings = Vec::new();
+    let slots = field_slots(records, &vocab_by_type);
+    let (population, examined_records) = scoped_census_records(
+        config,
+        PopulationUnit::Field,
+        slots,
+        |(record, _)| *record,
+        |(record, field)| {
+            if record.header.is_unreadable() {
+                return Outcome::Unreadable;
+            }
+            let value = match record.header.get(field.as_str()) {
+                Some(v) if !v.trim().is_empty() => v,
+                _ => return Outcome::Absent,
+            };
+            let allowed = config.record_types[&record.record_type]
+                .field_vocabulary(field)
+                .unwrap_or_default();
+            let outside = crate::field_values::undeclared(allowed, value);
+            if !outside.is_empty() {
+                findings.push(Finding::new(
+                    RULE_ID,
+                    FindingSeverity::Error,
+                    record.path.clone(),
+                    ActionSource::new("field-value-not-declared").field(field.as_str()),
+                    format!(
+                        "field '{field}' holds '{}', which is not declared for type '{}' (allowed: {})",
+                        outside.join("', '"),
+                        record.record_type,
+                        allowed.join(", ")
+                    ),
+                ));
+            }
+            Outcome::Examined
+        },
+    );
     (
         RuleExecution::ran(RULE_ID, population, examined_records),
         findings,
@@ -195,6 +261,22 @@ pub fn field_leading_reserved_indicator(
     )
 }
 
+/// Whether `field` holds only values its type's `field_values` declares: a
+/// declared word (`Todo`, `pending`) is then a real value, not a marker.
+fn holds_declared_value(config: &Config, record: &Record, field: &str) -> bool {
+    let Some(allowed) = config
+        .record_types
+        .get(&record.record_type)
+        .and_then(|t| t.field_vocabulary(field))
+    else {
+        return false;
+    };
+    record.header.get(field).is_some_and(|v| {
+        crate::field_values::elements(v).next().is_some()
+            && crate::field_values::undeclared(allowed, v).is_empty()
+    })
+}
+
 /// The state `field.quality` judges `field` of `record` to be in: against the
 /// type's template when `from_templates` (`BUG-22`), by the compiled-in tokens
 /// otherwise. Shared with `urzua migrate schema --report`, so the preview and
@@ -257,6 +339,9 @@ pub fn field_quality(
             // error itself, once per record rather than once per slot.
             if record.header.is_unreadable() {
                 return Outcome::Unreadable;
+            }
+            if holds_declared_value(config, record, field.as_str()) {
+                return Outcome::Examined;
             }
             let state = classify_quality_field(
                 record,

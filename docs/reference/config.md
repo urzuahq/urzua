@@ -140,6 +140,7 @@ record_types:
 | `required_fields` | Fields every record must carry with a real value. `header.required-fields` and `field.quality` read it. |
 | `known_fields` | The closed set of fields a record may carry besides `required_fields`. Declare it, even as `[]`, to make the field set a conscious choice. |
 | `pointer_fields` | Fields that name other records, resolved by `pointer.resolution`. An entry may be `{name: Parent, targets: [epic]}` to limit the record types the field may name; see below. |
+| `field_values` | `{Field: [value, ...]}`: the values a declared field may hold, compared exactly; each element of a comma-separated or list value is checked. Read by `field.value-not-declared`, on by default at `error` once any type declares this key. Not for the status field (`statuses.values`) or a pointer or narrative field. |
 | `narrative_fields` | Fields that name other records without being a dependency. They are resolved like pointer fields and appear in `urzua graph` tagged `narrative`. |
 | `spec` | The id of the spec that documents the type (`SPEC-16`). |
 | `relation_fields` | Which field plays which role, for the tool: `status`, `embodiment_state`, `embodiment_locator`, `supersession`, `date`, `author`, `title`. `new` fills `date`, `author` and `title`. |
@@ -180,13 +181,34 @@ with `cross_type: false` may list only types that carry its forward field.
 | `success`, `failure` | Which values are a good or a bad outcome. |
 | `implementable` | Statuses whose records code may legitimately keep citing. |
 | `claim_retained` | Statuses that keep a record's evidence claim even though it is no longer current. |
-| `initial` | Statuses a record may be filed in. |
+| `initial` | Statuses a record may be filed in. Declared only with `transitions`; one without the other is a load error. |
 | `transitions` | `{From: [To, ...]}`: the lawful moves. |
-| `require`, `forbid` | Lists of `{when: [status, ...], fields: [field, ...]}`: fields that must, or must not, hold a value in those statuses. |
+| `require`, `forbid` | Lists of `{when: [status, ...], when_field: {Field: [value, ...]}, fields: [field, ...]}`: fields that must, or must not (absent or blank), hold a value when the status is one of `when` and each `when_field` field holds one of its values. Declare `when`, `when_field` or both. These entries report only when the rules `status.required-field-missing` and `status.forbidden-field-present` are enabled under `rules:`; a freshly initialised config does not enable them. |
 | `pending` | The type's placeholder vocabulary: whole values (`unknown`) and `{pattern: <regex>}` entries that count as missing. |
 | `placeholders` | Whole values (compared without case) that are unedited template text, replacing the built-in words `name`, `name(s)`, `yyyy-mm-dd`, `tbd`, `todo`, `(project lead)`, `(session author)` for this type. An empty list is a load error. |
 | `blocked`, `progress` | Statuses read by the derived `blocked` value and `sequence.status-agreement`. |
 | `delivery` | How a status agrees with delivery evidence, including per-item evidence in a list-form "Done means" section (`items`). See `SPEC-3`, "Done-means items". |
+
+A vocabulary and a requirement keyed on another field: `Kind` must be one of three values, and a bug must carry a `Severity`.
+
+```yaml
+record_types:
+  work:
+    dir: docs/work
+    required_fields: [Status, Kind]
+    known_fields: [Severity, Parent]
+    pointer_fields: [Parent]
+    narrative_fields: []
+    field_values:
+      Kind: [feature, bug, chore]          # field.value-not-declared reports `Kind: Bug`
+    statuses:
+      values: [Open, Done]
+      require:
+        - {when: [Done], fields: [Parent]}                  # keyed on the status
+        - {when_field: {Kind: [bug]}, fields: [Severity]}   # keyed on another field
+```
+
+The forbid form takes the same keys: `forbid: [{when_field: {Kind: [chore]}, fields: [Severity]}]` keeps a chore from carrying a severity (absent or blank).
 
 ### `sections`
 

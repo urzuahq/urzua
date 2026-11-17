@@ -714,6 +714,7 @@ fn session_notices(
         (with_base, context.actors.is_some()),
         selection,
     ));
+    notices.extend(inapplicable_selection_notices(&session.config, selection));
     notices.extend(symlink_refusal_off_notice(&session.config));
     notices.extend(pin_attestation_off_notice(&session.config));
     notices.extend(super::fix_conflicts::unmerged_records_notice(
@@ -721,6 +722,45 @@ fn session_notices(
         &session.config,
     ));
     notices
+}
+
+/// A selected rule that is on only where its declaration exists, in a
+/// configuration without it, runs as `not-enabled` like an unselected one, and
+/// the run says why. When no selected rule applies the report is left as it
+/// was before such rules existed.
+fn inapplicable_selection_notices(config: &Config, selection: Option<&[String]>) -> Vec<Notice> {
+    let Some(selected) = selection else {
+        return Vec::new();
+    };
+    let inapplicable: Vec<&String> = selected
+        .iter()
+        .filter(|id| {
+            !config.rules.contains_key(id.as_str())
+                && urzua_core::rules::default_on(id).is_some_and(|d| d.applies.is_some())
+                && rules::effective_level(config, id) == RuleLevel::Off
+        })
+        .collect();
+    if inapplicable.len() == selected.len() {
+        return Vec::new();
+    }
+    inapplicable
+        .into_iter()
+        .map(|id| {
+            let key = if id == rules::RULE_POINTER_TARGET_TYPE {
+                "`targets` on a `pointer_fields` entry or `target_types` on a relation pair"
+            } else {
+                "`field_values`"
+            };
+            Notice {
+                severity: NoticeSeverity::Info,
+                subject: id.clone(),
+                message: format!(
+                    "the selected rule {id} does not apply to this configuration and is not run: it is on only where {key} is declared, and nothing declares it"
+                ),
+                detail: None,
+            }
+        })
+        .collect()
 }
 
 /// A configuration that turns the symlink refusal off is told so on every run:

@@ -1,9 +1,9 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.160'
+Version: '0.161'
 Date: 2026-08-20
 Status: Shipped
-Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:b6ac9d56ae0f2e7cd44fcf834a4ff3700e9171e2f443d14f4b8e5261293e6f6f, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:09c2431a269316741c35b51dabd5766ecd3d50fab2b98069314bb1bc8857767d, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:255395e7d2caa34947cef28f463e2ec050e3eba798a4dc7573a3cad946fee1ae
+Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:4c2fb7f2d848d219fec97bc00d08dfabcee42dbe40ce954677de50eb331af338, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:09c2431a269316741c35b51dabd5766ecd3d50fab2b98069314bb1bc8857767d, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:255395e7d2caa34947cef28f463e2ec050e3eba798a4dc7573a3cad946fee1ae
 Embodiment: Verified
 Author: beauwilliams
 Subject: '`.urzua/config.yaml` -- the schema for record types, required/known fields, and per-type behavior.'
@@ -471,11 +471,50 @@ Two details carry weight:
   must be subsets of `values`; `success` and `failure` must not overlap. `implementable` names the
   statuses at which implementation of the record is permitted. It is independent of the terminals
   (an in-progress milestone is implementable and not terminal; an accepted decision is both), and
-  the engine never infers it from `success`. `claim_retained` (optional, a subset of `values`) names statuses reached only after acceptance that may still carry an `Implemented` or `Verified` embodiment claim, such as `Superseded`; `embodiment.requires-accepted-status` allows the claim at `success` and `claim_retained` statuses. `require` and `forbid` are lists of `{when: [status, ...], fields:
+  the engine never infers it from `success`. `claim_retained` (optional, a subset of `values`) names statuses reached only after acceptance that may still carry an `Implemented` or `Verified` embodiment claim, such as `Superseded`; `embodiment.requires-accepted-status` allows the claim at `success` and `claim_retained` statuses. `require` and `forbid` are lists of `{when: [status, ...], when_field: {Field: [value, ...]}, fields:
   [field, ...]}`: each `when` entry must be in `values`, and each field must be in the type's
-  `required_fields` or `known_fields` when the type declares `known_fields`. A field may not be both
-  required and forbidden at one status. A duplicate or blank entry, an unknown key, or a key present
-  with no value is a load-time error naming the record type and `statuses`.
+  `required_fields` or `known_fields` when the type declares `known_fields`. An entry declares `when`,
+  `when_field` or both, and applies when every condition it declares holds (`MILE-319`): the status is
+  one of `when`, and each `when_field` field holds one of its listed values (exact match; a value of
+  several comma-separated elements matches when one element does). An entry with only `when_field`
+  applies whatever the status, including a blank one. A `when_field` field must be in the type's
+  `required_fields` or `known_fields` and may not be the status field (its values go in `when`), and
+  when the field has a `field_values` vocabulary each listed value must be in it. A finding of an entry
+  with a field condition names the triggering field and value (`Kind is bug, which requires 'Severity'`);
+  an entry with only `when` keeps its meaning and message. `forbid` means the field is absent or blank. Neither `require` nor `forbid` reports anything unless `status.required-field-missing` and `status.forbidden-field-present` are enabled under `rules:` (a freshly initialised config does not enable them), and a status-only conflict keeps the wording "'F' is both required and forbidden at 'S'".
+  A field may not be both required and forbidden for a record that could meet both entries (their
+  statuses overlap and every field both condition on shares a value). A duplicate or blank entry, an
+  unknown key, or a key present with no value is a load-time error naming the record type and `statuses`.
+
+  ```yaml
+  rules:
+    status.required-field-missing: error
+    status.forbidden-field-present: error
+  record_types:
+    work:
+      dir: docs/work
+      required_fields: [Status, Kind]
+      known_fields: [Severity, Parent]
+      field_values: {Kind: [feature, bug, chore]}
+      statuses:
+        values: [Open, Done]
+        require: [{when_field: {Kind: [bug]}, fields: [Severity]}]
+        forbid:  [{when: [Done], when_field: {Kind: [chore]}, fields: [Severity]}]
+  ```
+
+  `field_values` (`MILE-248`, its enumerated-values part) is a per-type map from a declared field to
+  the whole values that field may hold, such as `field_values: {Kind: [feature, bug, chore]}`.
+  `field.value-not-declared`, on by default at `error` for a configuration in which some type declares
+  `field_values` (and `not-enabled` otherwise, so a configuration without one reports as before),
+  reports a record whose field holds a value outside the list, naming the field, the value and the
+  allowed values. The comparison is exact, case included. A value of several comma-separated
+  elements (a YAML list reads as one) has each element checked. A missing or blank value is not this
+  rule's business: `header.required-fields` and `field.quality` judge presence and quality. The load
+  refuses an empty map, an empty list, a blank entry or one with surrounding whitespace, an entry
+  holding a comma, a value listed twice, a field in neither `required_fields` nor `known_fields`, the
+  status field (its vocabulary is `statuses.values`), and a `pointer_fields` or `narrative_fields`
+  field, which holds references. A value a field's vocabulary declares is a real value in that field: `field.quality` does not read it as a placeholder nor `field.pending` as a pending marker, even when it is one of those words (`todo`, `pending`). Each map value is a list today; another value type (a range, a
+  pattern) can later be declared as a mapping beside it without changing this form.
 
   `transitions` and `initial` (`MILE-144`, `ADR-72`) declare the type's lifecycle. `transitions`
   maps a declared status to the declared statuses that may follow it; a status with no entry is
@@ -2932,7 +2971,14 @@ proves this configuration produces the three findings.
 > | 2026-11-16 | Bumped to `0.156`. Adds `harness.guardrails.post-command.base` (default `origin/HEAD`) and `base_match` (default `info`): a gated change whose content is the base ref's is reported in one sentence at that level, still printed, advisory because the refs are local. **Why:** the maintainer reported on 2026-11-16 that the report after a pull of the default branch could not be understood. | **substantive** |
 > | 2026-11-16 | `post-command.base` lowers a report only when it is a remote-tracking ref; matching compares raw bytes; a change of `base` or `base_match` is reported at `error` and lowers nothing for that command. **Why:** `MILE-311`, decided by the orchestrator on 2026-11-16, pending maintainer review, after a security review of its pull request showed a clean filter could forge a match and a command could lower its own report through the comparison rule. | **substantive** |
 > | 2026-11-16 | Version set on merge (attested by beauwilliams, identity: gh-verified, actor: agent): `Version` is set to 0.158 by this merge, the next number above the higher side's 0.157, because `version_bump` requires a new version for the rows this merge combines. Rows added on the branches state versions 0.156 and 0.157, which were true there and are superseded by this merge. **Why:** `urzua fix --conflicts` resolved a conflict that lay only in re-pin lines; a person's row is never rewritten. | **evidence** |
+> | 2026-11-16 | Bumped to `0.156`. Adds the per-type `field_values` vocabulary and its rule `field.value-not-declared`, on by default at `error` wherever a type declares one; adds `when_field` to `statuses.require` and `statuses.forbid` entries, combined with `when` by AND, with load errors for a condition on an undeclared field, the status field or a value outside the field's vocabulary; the required-and-forbidden refusal now covers entries a record could meet together. The `field_values` and `when_field` shapes, exact matching, element-wise checking of a list value and the rule being on only where a vocabulary is declared were decided by the builder on 2026-11-16, pending maintainer review. **Why:** `MILE-248` (enumerated values only) and `MILE-319`: a field was a name plus presence, and a requirement could depend on the status alone. | **substantive** |
 > | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 92f35c74119a -> 052ffdb64844. Reason: Merged main into the MILE-259 target-type branch. config.rs: a pointer_fields entry may be {name, targets}, Config gains a skipped pointer_targets map, RelationPair gains optional target_types, new load error InvalidPointerTargets; every other key unchanged. rules: new rule pointer.target-type (catalog.rs, pointer.rs, table.rs; default-on at error, not-enabled when nothing is declared); relation.rs cross-type-disallowed defers to it. graph.rs lists relation-pair edges. fix.rs, migrate.rs, property.rs, type_scope.rs, sequence.rs: fixtures add the new fields; fix.rs also carries main's change that a re-pin creates a missing revision log. check_integration.rs: the header-none fixture declares a target list. SPEC-3 documents the keys. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-17 | Pin recomputed on merge (attested by beauwilliams, identity: gh-verified, actor: agent): both merged sides re-pinned, `rust/crates/urzua-core/src/config.rs` (Realized-by) 052ffdb64844 and 10513fd0fc15 -> b6ac9d56ae0f; the new hash is the merged file's, which is git's automatic merge of the two re-pinned commits. No person wrote a reason for the merged state. `Version` is set to 0.159 by this merge, the next number above the higher side's 0.158, because `version_bump` requires a new version for the rows this merge combines. A row added on a branch states version 0.158, which was true there and is superseded by this merge. **Why:** `urzua fix --conflicts` resolved a conflict that lay only in re-pin lines; a reviewer of the pull request should confirm the merged pin. | **evidence** |
 > | 2026-11-17 | Version set on merge (attested by beauwilliams, identity: gh-verified, actor: agent): `Version` is set to 0.159 by this merge, the next number above the higher side's 0.158, because `version_bump` requires a new version for the rows this merge combines. A row added on a branch states version 0.158, which was true there and is superseded by this merge. **Why:** `urzua fix --conflicts` resolved a conflict that lay only in re-pin lines; a person's row is never rewritten. | **evidence** |
 > | 2026-11-17 | Version set on merge (attested by beauwilliams, identity: gh-verified, actor: agent): `Version` is set to 0.160 by this merge, the next number above the higher side's 0.159, because `version_bump` requires a new version for the rows this merge combines. A row added on a branch states version 0.159, which was true there and is superseded by this merge. **Why:** `urzua fix --conflicts` resolved a conflict that lay only in re-pin lines; a person's row is never rewritten. | **evidence** |
+> | 2026-11-17 | Version set on merge (attested by beauwilliams, identity: gh-verified, actor: agent): `Version` is set to 0.159 by this merge, the next number above the higher side's 0.158, because `version_bump` requires a new version for the rows this merge combines. Rows added on the branches state versions 0.156 and 0.158, which were true there and are superseded by this merge. **Why:** `urzua fix --conflicts` resolved a conflict that lay only in re-pin lines; a person's row is never rewritten. | **evidence** |
+> | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 10513fd0fc15 -> a0d942d7e73e. Reason: config.rs: RecordTypeConfig gains the optional field_values map, validated at load by field_values::validate; every other key and default is unchanged **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-17 | Pin recomputed on merge (attested by beauwilliams, identity: gh-verified, actor: agent): both merged sides re-pinned, `rust/crates/urzua-core/src/config.rs` (Realized-by) a0d942d7e73e and b6ac9d56ae0f -> 8827e0da41fb; the new hash is the merged file's, which is git's automatic merge of the two re-pinned commits. No person wrote a reason for the merged state. `Version` is set to 0.160 by this merge, the next number above the higher side's 0.159, because `version_bump` requires a new version for the rows this merge combines. A row added on a branch states version 0.159, which was true there and is superseded by this merge. **Why:** `urzua fix --conflicts` resolved a conflict that lay only in re-pin lines; a reviewer of the pull request should confirm the merged pin. | **evidence** |
+> | 2026-11-17 | At `0.160` after merging main's target types and hook path text: a finding of a `when_field` entry names the status only when the entry declares `when`, and names every conditioned field; a status-only required-and-forbidden conflict keeps its earlier wording; `field_values` and `when_field` read non-string scalars as text and refuse a null entry or a key with no value, naming the key; the example is a complete type and the require/forbid rules are stated to need enabling. **Why:** review of the pull request for `MILE-248` and `MILE-319`. | **substantive** |
+> | 2026-11-17 | Version set on merge (attested by beauwilliams, identity: gh-verified, actor: agent): `Version` is set to 0.161 by this merge, the next number above the higher side's 0.160, because `version_bump` requires a new version for the rows this merge combines. A row added on a branch states version 0.160, which was true there and is superseded by this merge. **Why:** `urzua fix --conflicts` resolved a conflict that lay only in re-pin lines; a person's row is never rewritten. | **evidence** |
+> | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 8827e0da41fb -> 4c2fb7f2d848. Reason: config.rs: merged main's pointer target types, hooks.path and post-command base keys; this branch adds the optional field_values map with a deserializer that reads scalars as text and refuses null, validated at load **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |

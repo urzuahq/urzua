@@ -133,6 +133,7 @@ mod tests {
                     known_fields: None,
                     pointer_fields: None,
                     narrative_fields: None,
+                    field_values: None,
                     spec: None,
                     relation_fields: None,
                     companion_fields: None,
