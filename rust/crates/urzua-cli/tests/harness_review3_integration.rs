@@ -500,6 +500,10 @@ fn session_start_compares_the_installed_files_the_hook_entries_and_the_kill_swit
     wire_git_hooks(&dir);
     let v = session(&dir);
     assert_eq!(v["verdict"], "allow", "installed and wired: {v}");
+    assert!(
+        v.to_string().contains("urzua explain --types"),
+        "session start names the record-types command: {v}"
+    );
     let translator = dir.join(".claude/hooks/urzua-claude-code.py");
     let original = std::fs::read_to_string(&translator).unwrap();
 

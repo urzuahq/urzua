@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5DB4YPSWZ6MQV85PQ7
-Version: '0.23'
+Version: '0.24'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -82,6 +82,34 @@ The report is `{"status": "ok", "rule": {...}}`. `rule` carries:
 An id that is not a rule this build ships is `not-run` with the id, the nearest valid id when one is close
 (`did you mean 'status.delivery-agreement'?`) and a pointer to `urzua rules`. Nothing is read from the
 corpus: the report is the build's rule table and the repository's configuration.
+
+## `urzua explain --types` and `urzua explain --type <name>`
+
+What the configuration declares for its record types, read from the configuration file and nothing
+else. `--types` reports every declared type; `--type <name>` one. A name the
+configuration does not declare exits 2 with a `not-run` report naming the declared types.
+
+The report is `{status, config, types, rules}`. Each type carries `name`, `create` (the `urzua new`
+command for it), `dirs`, and, only where declared, `prefix`, `header_shape`, `identity`, `role`,
+`spec`, `template` (the type's file under `.urzua/templates` when one exists), `fields` (each with
+`required`, `values` from `field_values`, `pointer` with its `targets`, `narrative`, `roles` from
+`relation_fields`), `relation_pairs` (with `target_types`), `states` (the status lists, `transitions`,
+and the claim periods `embodiment.claim-expired` sets for the type as `expiry`), `conditions` (each
+`statuses.require`/`forbid` entry with its `when`, `when_field` and `fields` keys and one generated
+`sentence`), `gates` (an `authority` gate on the type's states or on a path overlapping its
+directories, with `by` and `logins`), `delivery`, `revision_log` and `sections`.
+
+`rules` holds `set` (each rule the configuration names, with its level), `on_by_declaration` (a
+default-on rule whose condition a declaration meets, with the keys that declare it) and
+`declared_but_not_enabled` (a rule that reports a declaration in the report and is off, with those
+keys).
+
+Every entry read from the configuration carries `at`, its key path and line (`path:line`). Lines come
+from a second pass over the YAML text; a key inside a multi-line flow collection is given its
+nearest enclosing key's line. Nothing the configuration does not declare is printed, with two
+exceptions marked `"default": true` and carrying no `at`: a type's initial state when `initial` is not
+declared (the first `values` entry, which `urzua new` writes), and a rule on by declaration. Empty
+lists and absent settings are omitted. The only prose is the `sentence` of a condition.
 
 ## `urzua graph`
 
@@ -188,3 +216,4 @@ Both are stdout-JSON-always (ADR-23) and never write. `graph` reads `pointer_fie
 > | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/explain.rs` a199dc863fdb -> d87eefb9ff72, `rust/crates/urzua-core/src/graph.rs` 02ace1051d4b -> 46d69af1dd1c. Reason: explain.rs: explain --rule reports the rule's effective level, which equals the old reading for every rule but a default-on rule whose default depends on the configuration; graph.rs: a test fixture's RecordTypeConfig literal gains field_values: None; no behaviour changed **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-17 | Pin recomputed on merge (attested by beauwilliams, identity: gh-verified, actor: agent): both merged sides re-pinned, `rust/crates/urzua-core/src/graph.rs` (Realized-by) 46d69af1dd1c and 9b36fa2ee136 -> 16a38ffef9e7; the new hash is the merged file's, which is git's automatic merge of the two re-pinned commits. No person wrote a reason for the merged state. **Why:** `urzua fix --conflicts` resolved a conflict that lay only in re-pin lines; a reviewer of the pull request should confirm the merged pin. | **evidence** |
 > | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/record_types_own_config_integration.rs` 95790a97cb28 -> c54ac806e2c9. Reason: record_types_own_config_integration.rs: the doctor test expects the not-pointed message now that this repository's config names its hook directory; no other test changed. The claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-17 | Bumped to `0.24`. Adds the section `urzua explain --types` and `urzua explain --type <name>`: what the configuration declares per record type, each entry with its key path and line, the two marked defaults, and the three rule lists. **Why:** an agent new to a repository could not learn its record model from the tool without reading the configuration file. | **substantive** |

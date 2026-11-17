@@ -1,0 +1,58 @@
+schema_version: 2
+record_types:
+  issue:
+    dir: docs/issues
+    extra_dirs: [docs/issues-archive]
+    prefix: ISS
+    header_shape: yaml-frontmatter
+    required_fields: [State, Kind, Stable-Id]
+    known_fields: [Severity, Fixes, See-also, Opened]
+    relation_fields: {status: State, date: Opened}
+    field_values:
+      Kind: [bug, chore]
+      Severity: [low, high]
+    pointer_fields:
+      - {name: Fixes, targets: [task]}
+    narrative_fields: [See-also]
+    statuses:
+      values: [Open, Closed, Dropped]
+      success: [Closed]
+      failure: [Dropped]
+      initial: [Open]
+      transitions:
+        Open: [Closed, Dropped]
+        Closed: [Open]
+      require:
+        - {when: [Closed], when_field: {Kind: [bug]}, fields: [Severity]}
+      forbid:
+        - {when: [Open], fields: [Fixes]}
+    revision_log:
+      marker: "**Revision log**"
+  task:
+    dir: docs/tasks
+    required_fields: [Status, Stable-Id]
+    known_fields: [Depends-on, Blocks]
+    pointer_fields: [Depends-on, Blocks]
+    narrative_fields: []
+    statuses:
+      values: [Todo, Doing, Done]
+      success: [Done]
+  note:
+    dir: docs/notes
+    required_fields: [Stable-Id]
+relation_pairs:
+  - name: order
+    forward: Depends-on
+    inverse: Blocks
+    reciprocity: none
+    target_types: [task]
+authority:
+  deciders:
+    owners: {logins: [someone]}
+  gates:
+    - {type: issue, to: [Dropped], by: owners}
+    - paths: [docs/notes]
+      by: owners
+rules:
+  header.required-fields: error
+  status.transition-allowed: warn

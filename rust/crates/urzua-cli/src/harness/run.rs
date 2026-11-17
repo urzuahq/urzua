@@ -1752,13 +1752,16 @@ fn session_start(config: Option<PathBuf>) -> Verdict {
     finish(problems, &harness)
 }
 
+/// One line naming the command that prints the repository's record types.
+const TYPES_LINE: &str = "Record types: `urzua explain --types`";
+
 fn finish(problems: Vec<Problem>, harness: &urzua_core::harness::HarnessDecl) -> Verdict {
     const P: &str = "urzua harness (session-start)";
     if problems.is_empty() {
         return Verdict::new(
             "allow",
             None,
-            format!("{P}: the harness is installed and wired"),
+            format!("{P}: the harness is installed and wired\n{TYPES_LINE}"),
         );
     }
     let mut message = format!(
@@ -1778,6 +1781,7 @@ fn finish(problems: Vec<Problem>, harness: &urzua_core::harness::HarnessDecl) ->
             "\nA guardrail is set to on_unjudged: deny, so an agent's edit is refused while it cannot judge. {HATCH}"
         ));
     }
+    message.push_str(&format!("\n{TYPES_LINE}"));
     let mut v = Verdict::new("allow-with-warnings", None, message);
     v.findings = problems
         .iter()

@@ -1,0 +1,224 @@
+//! Where each key of a configuration file is declared: a light second pass
+//! over the YAML text that maps key paths (`record_types.bug.statuses.require[0]`)
+//! to 1-based line numbers. The typed load keeps no source positions, so this
+//! reads block-style YAML line by line, with the first level of a flow mapping
+//! on the line that opens it. A key it cannot place (inside a multi-line flow
+//! collection) is answered with the nearest enclosing key's line.
+
+use std::collections::HashMap;
+
+/// One segment appended to a key path: a plain key as `.key`, a key with any
+/// other character as `["key"]`, so a rule id or a status with a space stays
+/// one segment.
+pub(crate) fn key(parent: &str, segment: &str) -> String {
+    let plain = !segment.is_empty()
+        && segment
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-');
+    match (plain, parent.is_empty()) {
+        (true, true) => segment.to_string(),
+        (true, false) => format!("{parent}.{segment}"),
+        (false, _) => format!("{parent}[{}]", serde_json::Value::from(segment)),
+    }
+}
+
+pub(crate) fn index(parent: &str, i: usize) -> String {
+    format!("{parent}[{i}]")
+}
+
+struct Frame {
+    indent: usize,
+    path: String,
+    /// A key whose value starts on a later line: a sequence may sit at its
+    /// own indent.
+    open_key: bool,
+}
+
+#[derive(Default)]
+pub(crate) struct ConfigLines {
+    lines: HashMap<String, usize>,
+}
+
+impl ConfigLines {
+    pub(crate) fn scan(text: &str) -> Self {
+        let mut out = ConfigLines::default();
+        let mut stack: Vec<Frame> = Vec::new();
+        let mut counters: HashMap<String, usize> = HashMap::new();
+        let mut block_scalar_at: Option<usize> = None;
+        for (n, raw) in text.lines().enumerate() {
+            let line_no = n + 1;
+            let trimmed = raw.trim_start();
+            if trimmed.is_empty() || trimmed.starts_with('#') || trimmed.starts_with("---") {
+                continue;
+            }
+            let indent = raw.len() - trimmed.len();
+            if let Some(at) = block_scalar_at {
+                if indent > at {
+                    continue;
+                }
+                block_scalar_at = None;
+            }
+            let (indent, rest, item_path) = if let Some(after) = trimmed
+                .strip_prefix("- ")
+                .or(if trimmed == "-" { Some("") } else { None })
+            {
+                while stack
+                    .last()
+                    .is_some_and(|f| f.indent > indent || (f.indent == indent && !f.open_key))
+                {
+                    stack.pop();
+                }
+                let parent = stack.last().map(|f| f.path.clone()).unwrap_or_default();
+                let counter = counters.entry(parent.clone()).or_insert(0);
+                let path = index(&parent, *counter);
+                *counter += 1;
+                out.lines.entry(path.clone()).or_insert(line_no);
+                let inner = indent + 2 + (after.len() - after.trim_start().len());
+                stack.push(Frame {
+                    indent,
+                    path: path.clone(),
+                    open_key: false,
+                });
+                let after = after.trim_start();
+                if after.starts_with('{') {
+                    out.flow_keys(&path, after, line_no);
+                }
+                (inner, after, Some(path))
+            } else {
+                (indent, trimmed, None)
+            };
+            let Some((name, value)) = split_key(rest) else {
+                continue;
+            };
+            while stack.last().is_some_and(|f| {
+                f.indent >= indent && item_path.as_deref() != Some(f.path.as_str())
+            }) {
+                stack.pop();
+            }
+            let parent = stack.last().map(|f| f.path.clone()).unwrap_or_default();
+            let path = key(&parent, &name);
+            out.lines.entry(path.clone()).or_insert(line_no);
+            counters.remove(&path);
+            let value = value.trim();
+            if value.starts_with('{') {
+                out.flow_keys(&path, value, line_no);
+            }
+            if value.starts_with('|') || value.starts_with('>') {
+                block_scalar_at = Some(indent);
+            }
+            stack.push(Frame {
+                indent,
+                path,
+                open_key: value.is_empty() || value.starts_with('#'),
+            });
+        }
+        out
+    }
+
+    /// The first-level keys of a flow mapping that opens on `line`.
+    fn flow_keys(&mut self, parent: &str, flow: &str, line: usize) {
+        let mut depth = 0usize;
+        let mut quote: Option<char> = None;
+        let mut start = 1usize;
+        for (i, c) in flow.char_indices() {
+            match (quote, c) {
+                (Some(q), c) if c == q => quote = None,
+                (Some(_), _) => {}
+                (None, '"' | '\'') => quote = Some(c),
+                (None, '{' | '[') => depth += 1,
+                (None, '}' | ']') => {
+                    if depth == 1 {
+                        self.flow_entry(parent, &flow[start..i], line);
+                    }
+                    depth = depth.saturating_sub(1);
+                }
+                (None, ',') if depth == 1 => {
+                    self.flow_entry(parent, &flow[start..i], line);
+                    start = i + 1;
+                }
+                _ => {}
+            }
+        }
+    }
+
+    fn flow_entry(&mut self, parent: &str, entry: &str, line: usize) {
+        if let Some((name, _)) = split_key(entry.trim()) {
+            self.lines.entry(key(parent, &name)).or_insert(line);
+        }
+    }
+
+    /// The line `path` is declared on, else its nearest enclosing key's.
+    pub(crate) fn line(&self, path: &str) -> Option<usize> {
+        let mut p = path;
+        loop {
+            if let Some(n) = self.lines.get(p) {
+                return Some(*n);
+            }
+            p = parent_of(p)?;
+        }
+    }
+
+    /// `path:line`, or the bare path when no line is known.
+    pub(crate) fn at(&self, path: &str) -> String {
+        match self.line(path) {
+            Some(n) => format!("{path}:{n}"),
+            None => path.to_string(),
+        }
+    }
+}
+
+fn parent_of(path: &str) -> Option<&str> {
+    if let Some(stripped) = path.strip_suffix(']') {
+        let open = stripped.rfind("[\"").or_else(|| stripped.rfind('['))?;
+        return Some(&path[..open]);
+    }
+    path.rfind('.').map(|i| &path[..i])
+}
+
+/// `key: value` with the key unquoted; `None` for a line that is not a key.
+fn split_key(text: &str) -> Option<(String, &str)> {
+    let (name, rest) = if let Some(q) = text.chars().next().filter(|c| *c == '"' || *c == '\'') {
+        let close = text[1..].find(q)? + 1;
+        (text[1..close].to_string(), &text[close + 1..])
+    } else {
+        let colon = text
+            .char_indices()
+            .find(|(i, c)| {
+                *c == ':' && text[i + 1..].chars().next().is_none_or(char::is_whitespace)
+            })?
+            .0;
+        let name = text[..colon].trim();
+        if name.is_empty() || name.contains(['{', '[', '#']) {
+            return None;
+        }
+        (name.to_string(), &text[colon..])
+    };
+    let rest = rest.trim_start().strip_prefix(':')?;
+    Some((name, rest))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn places_block_flow_and_sequence_keys() {
+        let text = "a:\n  b: 1\n  list:\n  - x\n  - {name: y, targets: [t]}\n  \"k.v\": 2\nrules:\n  status.x: error\n";
+        let l = ConfigLines::scan(text);
+        assert_eq!(l.line("a.b"), Some(2));
+        assert_eq!(l.line("a.list[0]"), Some(4));
+        assert_eq!(l.line("a.list[1].targets"), Some(5));
+        assert_eq!(l.line("a[\"k.v\"]"), Some(6));
+        assert_eq!(l.line("rules[\"status.x\"]"), Some(8));
+        assert_eq!(l.line("a.list[1].targets[0]"), Some(5));
+    }
+
+    #[test]
+    fn nested_items_restart_their_count() {
+        let text = "t:\n  x:\n    req:\n      - {when: [A]}\n  y:\n    req:\n      - a: 1\n        b: 2\n      - a: 3\n";
+        let l = ConfigLines::scan(text);
+        assert_eq!(l.line("t.x.req[0].when"), Some(4));
+        assert_eq!(l.line("t.y.req[0].b"), Some(8));
+        assert_eq!(l.line("t.y.req[1].a"), Some(9));
+    }
+}

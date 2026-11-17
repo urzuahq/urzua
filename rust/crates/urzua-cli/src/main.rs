@@ -219,15 +219,30 @@ enum Command {
     /// is instead: its scope, the level this repository sets, its severity
     /// floor and waivable flag, its options with their current values, its
     /// action variants, its population unit and its spec (ADR-96).
-    #[command(override_usage = "urzua explain <PATH>\n       urzua explain --rule <RULE_ID>")]
+    /// With `--types`, what the configuration declares for every record type
+    /// (its fields, values, references, states, conditions, gates and the
+    /// command that creates one), each entry with the key path and line it was
+    /// read from; `--type <name>` for one type.
+    #[command(
+        override_usage = "urzua explain <PATH>\n       urzua explain --rule <RULE_ID>\n       urzua explain --types\n       urzua explain --type <TYPE>"
+    )]
     Explain {
         /// A file, directory, glob or `path#scope`. Always a path, even when
         /// it spells a rule id; use `--rule` for a rule.
-        #[arg(required_unless_present = "rule", conflicts_with = "rule")]
+        #[arg(
+            required_unless_present_any = ["rule", "types", "record_type"],
+            conflicts_with_all = ["rule", "types", "record_type"]
+        )]
         path: Option<String>,
         /// A rule id, as `urzua rules` lists them.
-        #[arg(long, value_name = "RULE_ID")]
+        #[arg(long, value_name = "RULE_ID", conflicts_with_all = ["types", "record_type"])]
         rule: Option<String>,
+        /// Every record type the configuration declares.
+        #[arg(long, conflicts_with = "record_type")]
+        types: bool,
+        /// One declared record type.
+        #[arg(long = "type", value_name = "TYPE")]
+        record_type: Option<String>,
     },
 
     /// The full record-relationship graph: every `Implements`/
@@ -703,7 +718,12 @@ fn dispatch(config: Option<PathBuf>, command: Command) -> ExitCode {
                 ..Default::default()
             },
         ),
-        Command::Explain { path, rule } => commands::explain::run(config, path, rule),
+        Command::Explain { types: true, .. } => commands::explain_types::run(config, None),
+        Command::Explain {
+            record_type: Some(t),
+            ..
+        } => commands::explain_types::run(config, Some(t)),
+        Command::Explain { path, rule, .. } => commands::explain::run(config, path, rule),
         Command::Graph => commands::graph::run(config),
         Command::Roadmap => commands::roadmap::run(config),
         Command::Mcp { root } => commands::mcp::run(config, root),

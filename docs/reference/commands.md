@@ -57,7 +57,7 @@ Four commands do:
 | [`waive`](#waive) | Draft waivers for the current findings | with `--apply` |
 | [`mcp`](#mcp) | Serve the corpus to an agent over MCP, read-only | no |
 | [`doctor`](#doctor) | Report the health of the config and its wiring | no |
-| [`explain`](#explain) | Which records govern a path, or what a rule is | no |
+| [`explain`](#explain) | Which records govern a path, what a rule is, or what the configuration declares for its record types | no |
 | [`graph`](#graph) | The record relationship graph | no |
 | [`roadmap`](#roadmap) | The order of work, computed from the records | no |
 | [`rules`](#rules) | Every rule this build ships | no |
@@ -285,6 +285,8 @@ Exit 0 for `ok` and `warn`, 1 for `error`, 2 when there is no config to read.
 ```text
 urzua explain <path>
 urzua explain --rule <rule-id>
+urzua explain --types
+urzua explain --type <name>
 ```
 
 With a path (a file, directory, glob, or `path#scope`): every record whose `Realized-by` names it as
@@ -294,6 +296,16 @@ neither in the repository nor cited by a record exits 2.
 With `--rule`: what the rule is. Its `rule` object has `id`, `description`, `scope`, `judges`,
 `population_unit`, `spec`, the `level` your config sets, `waivable`, its `options` with their current
 values and its `actions`.
+
+With `--types` (every type) or `--type <name>` (one): what the configuration declares for each
+record type, read from the configuration alone. Each entry in `types` has `name`, `create` (the
+`urzua new` command), `dirs`, and where declared `prefix`, `fields` (with `required`, `values`,
+`pointer` and its `targets`, `narrative`, `roles`), `relation_pairs`, `states` (lists, `transitions`,
+`expiry`), `conditions` (`kind`, `when`, `when_field`, `fields` and a one-line `sentence`), `gates`
+(`by`, `logins`), `template`, `delivery`, `revision_log` and `sections`. `rules` has `set`,
+`on_by_declaration` and `declared_but_not_enabled`. Every entry read from the configuration has
+`at`, `key.path:line`; the two defaults it prints (an undeclared initial state, a rule on by
+declaration) are marked `"default": true`. An undeclared `--type` exits 2.
 
 ## graph
 

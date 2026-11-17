@@ -159,6 +159,11 @@ key urzua does not recognize, which `doctor` treats as an error.
 
 ## 7. Create new records with `new`
 
+An agent starting work in a repository runs `urzua explain --types` first: it prints every record
+type the configuration declares, with its fields, their values, what a reference may name, the
+states and allowed moves, each requirement as one sentence, any gate and the exact `urzua new`
+command, each entry with the configuration line it came from.
+
 ```sh
 urzua new adr "Use S3 for blobs"
 ```
