@@ -98,6 +98,41 @@ The order of mechanisms is therefore:
 An adapter states which of the three it supports, each verified on the host by a test and not taken from its
 documentation. The refusal of point 2 of the Decision names the mechanism the adapter supports.
 
+## Amendment (2026-11-17): the host asks the person about the edit itself, a typed harness command is the second way, and there is no accept command
+
+Accepted by the maintainer on 2026-11-17 ("I'm happy for you to amend ADR 102. I'll give you my acceptance."). The Decision
+is unchanged: acceptance in the conversation stays an opt-in mode, an approval is single-use and bound to what the person
+was shown, the agent cannot write one, and the harness writes the receipt. This changes the order of mechanisms set by the
+amendment of 2026-11-16, and rules one mechanism out.
+
+What prompted it. On 2026-11-17 an adopting repository's maintainer approved a decision record in chat and expected that
+to be enough; the agent's change was then stopped at commit, and the same rule would have stopped the person. Three designs
+were put to the maintainer. He chose the first, kept the second, and rejected a command that accepts a record.
+
+1. **The host asks about the edit.** When an agent's edit makes a gated move, the harness returns the host's
+   ask-the-person decision for that edit. The prompt names the record, the status it leaves, the status it enters and the
+   gate. Approving writes the edit; declining refuses it. This is now the first mechanism, where the amendment of
+   2026-11-16 made it the last. The limit that amendment recorded still binds: where the host's permission mode does not
+   guarantee the prompt is shown to a person, the edit is refused, and each mode is verified on the host by a test.
+2. **A typed harness command.** The person may instead type a harness command that names the record. A hook on the
+   person's own input sees it, which the agent cannot produce, and grants a one-use approval for that record's pending
+   gated move. The maintainer's words: "I also think the typed command would be useful, actually having other typed
+   commands in the harness is actually good to have." The command belongs to the harness, is named for approving a gated
+   move and not for any one status, and the same text written by the agent grants nothing.
+3. **No accept command in the engine.** Relayed from the maintainer on 2026-11-17: a command named for accepting "adds
+   weird behaviour to the engine", because types, statuses and gates are configuration and such a command names one status
+   of one profile. The edit already states the record, the field and the move, and the gate table already says which moves
+   are reserved, so no new verb is needed.
+
+The urzua tool that asks, and the chat question, of the amendment of 2026-11-16 are no longer the first and second
+mechanisms. An adapter may still offer the tool where its host supports one; it is not required.
+
+One record of an approval satisfies both the local git hook and the rule that checks in CI who made a gated move. It states
+that the move was approved in an agent session by the named person. It never states that the person edited the file.
+
+What this does not change: an approval proves who approved only as far as the host can tell who is at the keyboard, and CI
+still sees a pull request as authored by whoever's credentials pushed it.
+
 ## Reversibility
 
 Easy to walk back: the mode is opt-in, and removing it returns every repository to refuse. The cost of getting it wrong is an
@@ -130,3 +165,4 @@ Receipts already written stay valid records of what happened.
 > | 2026-11-16 | Drafted as Proposed. **Why:** The maintainer reported on 2026-11-16 that every acceptance ends with the agent saying it has no permission and asked for approval by a question in the chat. | **substantive** |
 > | 2026-11-16 | Status changed from Proposed to Accepted. **Why:** Accepted by the maintainer on 2026-11-16. | **substantive** |
 > | 2026-11-16 | Amendment added: an urzua tool that requires the person's interaction is the first mechanism and the chat question the fallback. **Why:** Accepted by the maintainer on 2026-11-16, after a review of agent hosts found that the agent writes a chat question's wording and that something other than a person can answer it. | **substantive** |
+> | 2026-11-17 | Amendment added: the host asks the person about the edit itself as the first mechanism, a typed harness command as the second, and no accept command in the engine. **Why:** Accepted by the maintainer on 2026-11-17 ("I'm happy for you to amend ADR 102. I'll give you my acceptance."), after an adopting repository met the refusal on a record its maintainer had approved in chat. Recorded by an agent through the shell at the maintainer's instruction. | **substantive** |
