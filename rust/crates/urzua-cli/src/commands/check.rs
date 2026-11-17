@@ -1825,8 +1825,8 @@ fn index_with_disclosures<'a>(
 
     // Every waived Done-means item is listed, by category, never omitted
     // (`ADR-96` section 3), whenever a rule that judges them is on.
-    if enabled_setting(config, rules::RULE_STATUS_WAIVED_ITEM_STALE).is_some()
-        || enabled_setting(config, rules::RULE_STATUS_DELIVERY_AGREEMENT).is_some()
+    if rules::effective_level(config, rules::RULE_STATUS_WAIVED_ITEM_STALE) != RuleLevel::Off
+        || rules::effective_level(config, rules::RULE_STATUS_DELIVERY_AGREEMENT) != RuleLevel::Off
     {
         notices.extend(rules::waived_item_notices(&session.records, config));
     }
@@ -3036,6 +3036,7 @@ fn status_and_examined(
         executions,
         &|rule| {
             session.config.rules.contains_key(rule)
+                || urzua_core::rules::counts_as_declared(&session.config, rule)
                 || selection.is_some_and(|s| s.iter().any(|r| r == rule))
         },
         active.count(),

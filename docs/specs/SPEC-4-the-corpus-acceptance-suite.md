@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5N2PD9ZYBJPZHN05W7
-Version: '0.24'
+Version: '0.25'
 Date: 2026-08-20
 Status: Shipped
 Embodiment: Verified
@@ -78,7 +78,7 @@ expect_findings:
   - rule: "field.quality"
     file: "records/ADR-0002-blank-author.md"
     severity: "error"
-    message_contains: "'Author' is Blank"
+    message_contains: "'Author' is empty"
 ```
 
 The suite is red before the rule exists and green after. A case that passes against a build with the
@@ -498,3 +498,4 @@ own-corpus case lacks the flag. A case over a fixture corpus needs none.
 > | 2026-11-14 | Bumped to `0.24`. A case's `commits` may create symlinks (`symlink`); `corpus-d` gains the case for `identity.record-symlink-escapes`. **Why:** `ADR-89` amendment of 2026-11-14 added that rule. | **structural** |
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/acceptance.rs` 88011c208cad -> f96453567b7c. Reason: Pinned file(s) changed by the symlinked-record refusal: acceptance.rs: a case's commits may create symlinks. The record's claim is unaffected by these changes. (Re-applied after merging main.) **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/acceptance.rs` f96453567b7c -> 5e48c899ec5f. Reason: Pinned file(s) changed by the symlinked-record refusal: acceptance.rs: a case's commits may create symlinks. The record's claim is unaffected by these changes. (Re-applied after the config change and merging main.) **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-17 | Bumped to `0.25`. The example case for `field.quality` expects `'Author' is empty`, the wording a finding about a field present with no value now has (an absent field is `missing from the header`). **Why:** `MILE-327`. | **substantive** |

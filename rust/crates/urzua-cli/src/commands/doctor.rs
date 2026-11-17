@@ -331,10 +331,16 @@ fn config_shape_checks(
     // Every rule is opt-in (ADR-53): a config enabling none makes `check`
     // exit 2 not-run, so "healthy" here would be the silent no-op doctor
     // exists to catch.
-    if config
-        .rules
-        .values()
-        .all(|r| r.level == urzua_core::config::RuleLevel::Off)
+    let by_declaration = urzua_core::rules::DEFAULT_ON_RULES.iter().any(|d| {
+        d.applies.is_some_and(|applies| applies(config))
+            && urzua_core::rules::effective_level(config, d.id)
+                != urzua_core::config::RuleLevel::Off
+    });
+    if !by_declaration
+        && config
+            .rules
+            .values()
+            .all(|r| r.level == urzua_core::config::RuleLevel::Off)
     {
         checks.push(DoctorCheck::new(
             "rules-enabled",
@@ -361,12 +367,54 @@ fn config_shape_checks(
                 ));
             }
         }
+        declared_entry_checks(config, name, cfg, checks);
         if cfg.required_fields.is_empty() {
             checks.push(DoctorCheck::new(
                 "record-type-required-fields",
                 DoctorStatus::Warn,
                 format!(
                     "record type '{name}' has no required_fields -- field.quality and field.pending will never fire for it"
+                ),
+            ));
+        }
+    }
+}
+
+/// A declared entry the configuration then holds no rule to: the rule that
+/// reports it is on by declaration, so only a `rules:` entry turning it off
+/// leaves the declaration reporting nothing (`MILE-326`). A checklist whose
+/// rule is off is refused at load instead.
+fn declared_entry_checks(
+    config: &urzua_core::config::Config,
+    name: &str,
+    cfg: &urzua_core::config::RecordTypeConfig,
+    checks: &mut Vec<DoctorCheck>,
+) {
+    use urzua_core::rules::{
+        effective_level, RULE_STATUS_FORBIDDEN_FIELD_PRESENT, RULE_STATUS_REQUIRED_FIELD_MISSING,
+    };
+    let Some(decl) = cfg.status_decl() else {
+        return;
+    };
+    let entries = [
+        (
+            "statuses.require",
+            !decl.require.is_empty(),
+            RULE_STATUS_REQUIRED_FIELD_MISSING,
+        ),
+        (
+            "statuses.forbid",
+            !decl.forbid.is_empty(),
+            RULE_STATUS_FORBIDDEN_FIELD_PRESENT,
+        ),
+    ];
+    for (key, declared, rule) in entries {
+        if declared && effective_level(config, rule) == urzua_core::config::RuleLevel::Off {
+            checks.push(DoctorCheck::new(
+                "declared-entry-rule-off",
+                DoctorStatus::Warn,
+                format!(
+                    "record type '{name}' declares `{key}`, but `{rule}` is turned off under `rules:`, so the declaration reports nothing: remove the `rules:` entry or give it a level"
                 ),
             ));
         }

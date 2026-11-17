@@ -318,11 +318,31 @@ fn undecided_record(
     None
 }
 
+/// "does not exist", and for text shaped like a record identifier, what a
+/// locator is: a path, so the record is cited by its own.
+fn missing_locator_cause(category: &str, path: &str, env: &LocatorEnv<'_>) -> String {
+    let named = env
+        .records
+        .iter()
+        .find(|r| record_id(r).is_some_and(|id| id.eq_ignore_ascii_case(path)));
+    match named {
+        Some(record) => format!(
+            "locator {path} does not exist: it was read as a path, and a record is cited by its path (`{category}:{}`)",
+            record.path.display()
+        ),
+        None if crate::done_items::is_record_id(path) => format!(
+            "locator {path} does not exist: it was read as a path, and a record is cited by its path"
+        ),
+        None => format!("locator {path} does not exist"),
+    }
+}
+
 fn evidence_standing(
     item: &Item,
     config: &Config,
     kind: &KindRule<'_>,
     delivery: &DeliveryDecl,
+    record_type: &str,
     env: &LocatorEnv<'_>,
 ) -> EvidenceStanding {
     if item.placeholder {
@@ -341,13 +361,20 @@ fn evidence_standing(
     }
     let entries = crate::locator::realized_by_locators(&clause.text);
     for entry in &entries {
+        let path = entry
+            .parsed
+            .as_ref()
+            .map_or_else(|_| entry.raw.clone(), |l| l.path.clone());
         if locator_defect(entry, "the evidence clause", env).is_some() {
-            let path = entry
-                .parsed
-                .as_ref()
-                .map_or_else(|_| entry.raw.clone(), |l| l.path.clone());
             return EvidenceStanding::Fails {
-                cause: format!("locator {path} does not exist"),
+                cause: missing_locator_cause(&entry.category, &path, env),
+            };
+        }
+        if entry.category == "record" && !env.records.iter().any(|r| r.path == Path::new(&path)) {
+            return EvidenceStanding::Fails {
+                cause: format!(
+                    "locator {path} is under `record:` but is not a record of any declared type"
+                ),
             };
         }
     }
@@ -378,8 +405,9 @@ fn evidence_standing(
             .collect();
         EvidenceStanding::Fails {
             cause: format!(
-                "locator {} resolves only to {tier}, which is not in resolving_tiers",
-                paths.join(", ")
+                "locator {} resolves only to {tier}, which is not in resolving_tiers ({}): add '{tier}' to `record_types.{record_type}.statuses.delivery.items.resolving_tiers` in the configuration to make it count",
+                paths.join(", "),
+                delivery.resolving_tiers().join(", ")
             ),
         }
     }
@@ -410,7 +438,7 @@ pub fn judge_items(
             n: item.n,
             line: item.line,
             text: item.text.clone(),
-            evidence: evidence_standing(item, config, &kind, delivery, env),
+            evidence: evidence_standing(item, config, &kind, delivery, &record.record_type, env),
             waived: item.waiver.clone(),
         })
         .collect();

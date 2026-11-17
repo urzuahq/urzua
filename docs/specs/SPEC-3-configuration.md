@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.161'
+Version: '0.162'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:4c2fb7f2d848d219fec97bc00d08dfabcee42dbe40ce954677de50eb331af338, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:09c2431a269316741c35b51dabd5766ecd3d50fab2b98069314bb1bc8857767d, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:255395e7d2caa34947cef28f463e2ec050e3eba798a4dc7573a3cad946fee1ae
@@ -481,15 +481,12 @@ Two details carry weight:
   `required_fields` or `known_fields` and may not be the status field (its values go in `when`), and
   when the field has a `field_values` vocabulary each listed value must be in it. A finding of an entry
   with a field condition names the triggering field and value (`Kind is bug, which requires 'Severity'`);
-  an entry with only `when` keeps its meaning and message. `forbid` means the field is absent or blank. Neither `require` nor `forbid` reports anything unless `status.required-field-missing` and `status.forbidden-field-present` are enabled under `rules:` (a freshly initialised config does not enable them), and a status-only conflict keeps the wording "'F' is both required and forbidden at 'S'".
+  an entry with only `when` keeps its meaning and message. `forbid` means the field is absent or blank. `status.required-field-missing` is on by default at `error` in a configuration where some type declares a `require` entry, and `status.forbidden-field-present` where some type declares a `forbid` entry (`MILE-326`); a configuration that names either rule keeps the level it gives, one that declares neither entry reports as before, and `urzua doctor` warns of an entry whose rule the configuration turns off. A status-only conflict keeps the wording "'F' is both required and forbidden at 'S'".
   A field may not be both required and forbidden for a record that could meet both entries (their
   statuses overlap and every field both condition on shares a value). A duplicate or blank entry, an
   unknown key, or a key present with no value is a load-time error naming the record type and `statuses`.
 
   ```yaml
-  rules:
-    status.required-field-missing: error
-    status.forbidden-field-present: error
   record_types:
     work:
       dir: docs/work
@@ -594,8 +591,11 @@ Two details carry weight:
 
   - `status.undeclared-value`: a `Status` outside `values` (every `Status`, for a type that declares `pending` and no `values`).
   - `status.required-field-missing` / `status.forbidden-field-present`: a `require` field that is
-    blank, unedited template text or, when the type declares `pending`, one of its whole pending
-    values (`MILE-153`) at the record's status, and a `forbid` field that carries a value. Both read
+    absent (`missing from the header`), empty, unedited template text or, when the type declares
+    `pending`, one of its whole pending values (`MILE-153`) at the record's status, and a `forbid`
+    field that carries a value. When the type declares `field_values` for an absent or empty `require`
+    field, the message ends `(allowed: a, b)`, the form `field.value-not-declared` uses, and the
+    suggested action carries the values as its value (`MILE-327`). Both read
     the status by exact comparison, as every other rule does. `pending` is the type's one declared
     placeholder vocabulary: `field.pending` and this rule read the same list, so `Unknown`, a dash
     or `none recorded` can be declared once and no longer satisfies a requirement. A type that omits
@@ -2587,8 +2587,16 @@ or one a prefix of the other; a `partial_status` outside `values`, outside `not_
 type's `transitions` do not allow from a `not_done` status; a `resolving_tiers` entry that is not a
 declared embodiment tier; a `delivered_tiers` entry that is not in `resolving_tiers` (the error names both lists), because no item could resolve at it; a duplicate category or one whose name holds whitespace, a parenthesis or a
 comma; an `expires: required` category without `cite: required` (a deferral needs a target); and
-`items` on a type whose `status.delivery-agreement` is off or not declared in `rules`, because that
-rule's `DoneWithUnresolvedItems` finding is what holds a status to the items.
+`items` on a type whose `status.delivery-agreement` the configuration turns `off` under `rules:`,
+because that rule's `DoneWithUnresolvedItems` finding is what holds a status to the items. The three
+rules that judge a checklist (`status.delivery-agreement`, `status.done-items-shape`,
+`status.waived-item-stale`) are on by default wherever a type declares `items` (`SPEC-2`, "Rules that
+are on by default"), and a configuration that names one keeps the level it gives. A type that
+declares `items` need not list the evidence field (`Realized-by` by default) in `required_fields` or
+`known_fields`: the field is required only where `delivery` has no `items`, because a checklist is
+judged from each item's own clause and the header field only adds to the evidence. An incomplete
+declaration is refused naming the missing key (`statuses.delivery.items.partial_status` is
+missing) and printing the smallest block that loads, the one `docs/reference/checklist.md` shows.
 
 A record declares its kind (`ADR-96`, amendment of 2026-11-07): `kind.field` names the header field and
 `kind.kinds` is the vocabulary. A kind's `delivered_tiers` replaces the type's for the rule that a record
@@ -2664,8 +2672,14 @@ embodiment:
   none: Not started              # no evidence at all
 ```
 
-- `evidence` is `test`, `code` or `spec`: a `Realized-by` locator of that kind, or a citing source
-  comment (`Verifies:` is `test`, `Implements:` is `code`). The first tier whose evidence exists wins,
+- `evidence` is `test`, `code`, `spec` or `record`: a `Realized-by` locator of that kind, or a citing source
+  comment (`Verifies:` is `test`, `Implements:` is `code`). The category names are fixed by the engine, not
+  declared; `record` cites a tracked record's file by its path (`record:docs/adr/ADR-1-x.md`), and a Done-means
+  item under it must name a record of a declared type. No default tier uses it, so it counts only where a tier
+  declares `evidence: record` (decided by the builder on 2026-11-17, pending maintainer review).
+  A Done-means item whose clause is not entirely locators, or whose locator is a record identifier rather than
+  a path, is told so, and the message lists the categories; a cited record whose tier is not in
+  `resolving_tiers` is told to add the tier to `record_types.<type>.statuses.delivery.items.resolving_tiers`. The first tier whose evidence exists wins,
   so the list order is the tier order.
 - `claims_built: true` marks a state that says the work was built. A record in the type whose `Status`
   is not accepted cannot state one (`embodiment.requires-accepted-status`), and a record stating one
@@ -2982,3 +2996,4 @@ proves this configuration produces the three findings.
 > | 2026-11-17 | At `0.160` after merging main's target types and hook path text: a finding of a `when_field` entry names the status only when the entry declares `when`, and names every conditioned field; a status-only required-and-forbidden conflict keeps its earlier wording; `field_values` and `when_field` read non-string scalars as text and refuse a null entry or a key with no value, naming the key; the example is a complete type and the require/forbid rules are stated to need enabling. **Why:** review of the pull request for `MILE-248` and `MILE-319`. | **substantive** |
 > | 2026-11-17 | Version set on merge (attested by beauwilliams, identity: gh-verified, actor: agent): `Version` is set to 0.161 by this merge, the next number above the higher side's 0.160, because `version_bump` requires a new version for the rows this merge combines. A row added on a branch states version 0.160, which was true there and is superseded by this merge. **Why:** `urzua fix --conflicts` resolved a conflict that lay only in re-pin lines; a person's row is never rewritten. | **evidence** |
 > | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 8827e0da41fb -> 4c2fb7f2d848. Reason: config.rs: merged main's pointer target types, hooks.path and post-command base keys; this branch adds the optional field_values map with a deserializer that reads scalars as text and refuses null, validated at load **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-17 | Bumped to `0.162`. A type declaring `statuses.delivery.items` need not list the evidence field in `required_fields` or `known_fields` (it is still required of a `delivery` without `items`); the rules that judge a checklist and the two status-requirement rules are on by declaration, and only an `off` entry for `status.delivery-agreement` is refused at load; an incomplete checklist declaration is refused naming the missing key and printing the smallest block that loads; the embodiment `evidence` categories gain `record`, which counts only where a tier declares it (decided by the builder, pending maintainer review). **Why:** `MILE-326` and an adopting repository's report on setting up a checklist; a configuration that declares none of these keys is unchanged. | **substantive** |

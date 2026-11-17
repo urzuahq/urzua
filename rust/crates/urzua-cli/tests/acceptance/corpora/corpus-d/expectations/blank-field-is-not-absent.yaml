@@ -6,5 +6,5 @@ expect_findings:
   - rule: field.quality
     file: records/ADR-0002-blank-author.md
     severity: error
-    message_contains: "'Author' is Blank"
+    message_contains: "'Author' is empty"
     suggested_action: {kind: edit-field, op: set, target: {file: records/ADR-0002-blank-author.md, field: Author}}
