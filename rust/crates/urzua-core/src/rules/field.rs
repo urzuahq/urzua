@@ -52,7 +52,9 @@ pub fn field_pending(records: &[Record], config: &Config) -> (RuleExecution, Vec
             {
                 return Outcome::Absent;
             }
-            if classify_with(record.header.get(field.as_str()), declared) == FieldState::Pending {
+            if !holds_declared_value(config, record, field.as_str())
+                && classify_with(record.header.get(field.as_str()), declared) == FieldState::Pending
+            {
                 let declared_severity = declared_field_severity(config, RULE_ID, field.as_str());
                 findings.push(
                     Finding::new(
@@ -195,6 +197,27 @@ pub fn field_leading_reserved_indicator(
     )
 }
 
+/// Whether `field` holds a value its type declares for that field: the status
+/// field's `statuses.values`. A declared word (`Todo`, `pending`) is then a real
+/// value in that field, not a placeholder or a pending marker (`MILE-324`).
+fn holds_declared_value(config: &Config, record: &Record, field: &str) -> bool {
+    let Some(type_config) = config.record_types.get(&record.record_type) else {
+        return false;
+    };
+    let status_field = relation_field_name(
+        config,
+        &record.record_type,
+        crate::config::RelationRole::Status,
+    );
+    field == status_field
+        && type_config.status_decl().is_some_and(|d| {
+            record
+                .header
+                .get(field)
+                .is_some_and(|v| d.declares(v.trim()))
+        })
+}
+
 /// The state `field.quality` judges `field` of `record` to be in: against the
 /// type's template when `from_templates` (`BUG-22`), by the compiled-in tokens
 /// otherwise. Shared with `urzua migrate schema --report`, so the preview and
@@ -258,6 +281,9 @@ pub fn field_quality(
             if record.header.is_unreadable() {
                 return Outcome::Unreadable;
             }
+            if holds_declared_value(config, record, field.as_str()) {
+                return Outcome::Examined;
+            }
             let state = classify_quality_field(
                 record,
                 field.as_str(),
@@ -300,6 +326,35 @@ mod tests {
     /// Full builder for the config-level pointer/narrative-field validation
     /// tests (MILE-90) -- the two helpers above default both new fields to
     /// `None`, which isn't useful for testing them directly.
+    /// MILE-324: a status value the type declares is a real value in the
+    /// status field, though `todo` is in both default vocabularies; the same
+    /// word in a field that declares no values is still reported.
+    #[test]
+    fn a_declared_status_value_is_not_a_placeholder_or_pending_in_that_field() {
+        let yaml = "schema_version: 2\nrecord_types:\n  task:\n    dir: docs/tasks\n    header_shape: yaml-frontmatter\n    required_fields: [Status, Next]\n    statuses:\n      values: [Todo, InProgress, Done]\n      initial: [Todo]\n      transitions:\n        Todo: [InProgress]\n        InProgress: [Done]\n";
+        let config = crate::config::parse(yaml).unwrap();
+        let record = Record::parse_with_shape_and_prefix(
+            PathBuf::from("docs/tasks/TASK-1-x.md"),
+            "task".to_string(),
+            "---\nStatus: Todo\nNext: Todo\n---\n# 1 - X\n",
+            crate::header::HeaderShape::YamlFrontmatter,
+            "TASK".to_string(),
+        );
+        let templates = crate::new_record::TemplateValues::new();
+        let (_, quality) = field_quality(std::slice::from_ref(&record), &config, &templates);
+        let (_, pending) = field_pending(std::slice::from_ref(&record), &config);
+        let fields = |f: &[Finding]| -> Vec<String> {
+            f.iter()
+                .map(|f| f.message.split('\'').nth(1).unwrap_or_default().to_string())
+                .collect()
+        };
+        assert_eq!(fields(&quality), ["Next"], "{quality:?}");
+        assert!(
+            !fields(&pending).contains(&"Status".to_string()),
+            "{pending:?}"
+        );
+    }
+
     /// BUG-65: a type that declares its pending vocabulary is judged by whole
     /// values; a value merely mentioning the word is a real value.
     #[test]

@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5C0WX34AQKF79DQDS5
-Version: '0.35'
+Version: '0.36'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -16,14 +16,14 @@ Parent: SPEC-1
 
 Creates a record from the type's configuration with a stable ID assigned. Never asks the author to
 pick a number. Fills in only what the tool can compute; every decision a human makes stays the
-template's own placeholder text for a human to pick.
+template's own placeholder text for a human to pick, and the report lists those fields to fill.
 
 ## How a record is built
 
 The header is always synthesized as YAML frontmatter from the type's `required_fields`, the only
 header shape `new` writes (the `blockquote` and `bold-list` shapes were removed, `MILE-85`): every
-configured field is emitted as a blank frontmatter key, so the config alone drives what an author
-has to fill in. Fields `new` can compute are filled: a freshly generated `Stable-Id`, the date and
+configured field is emitted as a frontmatter key (see "A field `new` has no value for" below), so the
+config alone drives what an author has to fill in. Fields `new` can compute are filled: a freshly generated `Stable-Id`, the date and
 author fields (`relation_fields.date`/`author`, default `Date`/`Author`; the author resolved the same way `fix --apply` resolves an identity: `gh api user` wins even over an
 explicit `--by`, which wins over `git config user.name` -- SPEC-8's identity tiering, reused rather
 than redesigned), and the type's status field, which starts at the first value of the type's
@@ -33,7 +33,33 @@ the field blank. A type may also name the field that takes the record's title
 (`relation_fields.title`, a spec's `Subject`) and the version a record starts at
 (`revision_log.version_bump.initial`, written into the `version_bump` field, a spec's `Version`), so a
 scaffold does not fail `field.quality` on a required field the tool could fill (`MILE-74`). Every
-other field is a decision a human makes and stays blank.
+other field is a decision a human makes and is written as the next section says.
+
+## A field `new` has no value for (`MILE-322`)
+
+`new` never writes a field as `null`. A field it has no value for is written:
+
+- with the template's text for that field, when the template's header carries non-empty text for it
+  (`Deciders: name(s)`, `Kind: feature | bug | chore`), and listed in the report's `to_fill` with
+  `reason: placeholder`. Two exceptions take the forms below instead: the status field of a type that
+  declares `statuses` (its template line lists the values, it is not one), and a `pointer_fields`
+  field whose template text is not a clean reference list, which `header.pointer-field-clean` would
+  report;
+- as the `—` no-value sentinel when the type requires it and the template has no text for it, listed
+  in `to_fill` with `reason: required-empty`. The sentinel keeps `header.required-fields` satisfied and
+  is not read as blank by `field.quality` or as unclean by `header.pointer-field-clean`, so the only
+  record of the gap is `to_fill`;
+- not at all, when the type does not require it and the template has no text for it. An unset
+  optional pointer field therefore trips no pointer rule. A template text of `—` is written as is and
+  is not listed.
+
+A template text equal to a placeholder word, or under `field.quality`'s `template_placeholders`, is
+then reported by `field.quality` as a placeholder at the level the configuration gives that rule:
+truthfully, since the author has not filled it. `new` followed by `git add` and `check` reports no
+other finding about a field `new` wrote. The report's `next_action_reason` names the fields to fill;
+when the record needs no staging, `next_action` is `urzua check <path>` once they are filled.
+(Decided by the builder on 2026-11-17, pending maintainer review: the sentinel for a required field
+over an empty value, which `field.quality` would report as blank although the author caused nothing.)
 
 If a checked-in template exists (`.urzua/templates/<type>.md`), its body scaffolding (the H1 and the
 sections beneath the header) is appended under the synthesized header; the template's own header, in
@@ -58,7 +84,7 @@ without an edit:
   type's prefix and the number; a pattern no such name fits is a refusal naming the pattern, before
   anything is written. A type with no `identity` is numbered and named exactly as before.
 - **Template fields.** A field the template's header names beyond the type's `required_fields` is written
-  blank when the type declares it (`known_fields`, or any field when none is declared), so the record starts
+  as the section above says when the type declares it (`known_fields`, or any field when none is declared), so the record starts
   with the fields the template meant it to carry (`BUG-188`). A template field the type does not declare is
   left out, since it would only trip `header.field-set-consistency`.
 - **Field set.** `Stable-Id` is always written (ADR-21: every record type gets one). When the type
@@ -179,8 +205,9 @@ output is unchanged.
 fact, and the opt-in `header.scaffold-mismatch` rule (`SPEC-2`) does: under `check --base` it
 re-renders the header of each added record from the run's configuration and the type's template, with
 the record's own number, title, `Stable-Id`, author and date, and compares the fields `new` decides (which
-exist, their order, and the value each starts at). A field `new` leaves null may be filled in or left
-out; nothing else may differ. `new` carries no stamp or marker for this (a stamp is forgeable and changes the
+exist, their order, and the value each starts at). The comparison renders every field `new` has no
+value for as null, whatever `new` wrote for it (template text, the sentinel or nothing), and a field
+null there may be filled in or left out; nothing else may differ. `new` carries no stamp or marker for this (a stamp is forgeable and changes the
 record), and nothing here changes what `new` writes.
 
 `scripts/replay-header-comparator.py` runs that rule at every commit of the pull requests merged in
@@ -260,3 +287,4 @@ steps and in seconds, for each record type.
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/new.rs` 1a5415993507 -> 42834880ff2b, `rust/crates/urzua-cli/tests/new_integration.rs` c319a5750aa1 -> 24cdee5f880f. Reason: new.rs refuses to write a record into a path-gated directory through write_new_record, which waive shares; new_integration.rs gains a test that new refuses a path-gated directory; the record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Bumped to `0.35`. Re-pinned the evidence `MILE-288`, `MILE-289` and `MILE-290` changed (the pin attestation rule, path gates on write commands, one definition of blank); what this spec states is unchanged. **Why:** a re-pinned versioned spec carries a version above main's. | **structural** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/new.rs` 42834880ff2b -> 17c7a9534720. Reason: new.rs refuses a path-gated directory through write_new_record, and a misplaced doc comment moved back to write_new_file; the record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-17 | Bumped to `0.36`. Adds `## A field `new` has no value for`: such a field carries the template's text, the `—` sentinel when required, or is left out, never `null`; the report gains `to_fill` and its next-action reason names those fields; `header.scaffold-mismatch` compares against the null form. Decided by the builder on 2026-11-17, pending maintainer review: the sentinel for a required field with no template text. **Why:** `MILE-322` -- `new` wrote `null`, so a new record started with `field.quality` and `header.pointer-field-clean` findings the author did not cause. | **substantive** |

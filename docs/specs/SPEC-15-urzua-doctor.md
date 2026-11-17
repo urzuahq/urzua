@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5E1D23JRXBPTP54NSG
-Version: '0.34'
+Version: '0.35'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -43,7 +43,8 @@ command's output contract.
 (`notices` -- see below -- is omitted here since it's empty in this example; present, non-empty, only
 when there's a real observation to report.)
 
-`status` is the worst severity across `checks` (`error` beats `warn` beats `ok`). Exit codes: `2` if
+`status` is the worst severity across `checks` (`error` beats `warn` beats `ok`); a check at `info`
+names something worth knowing that is not wrong, and leaves `status` as it would be without it. Exit codes: `2` if
 `.urzua/config.yaml` doesn't exist at all (run `urzua init` first); `1` if the config fails to parse,
 or any check reports `error`; `0` otherwise — a `warn`-only report still exits `0`, since only an
 error blocks. That 2/1/0 split is carried on an explicit, non-serialized field (ADR-46) precisely
@@ -62,6 +63,7 @@ empty, same as every other command's report.
 | `record-types-declared` | At least one `[record_types.*]` entry exists. `error` if the map is empty — `check` would never examine anything. |
 | `rules-enabled` | At least one rule is enabled (level other than `off`). `error` if none is: every rule is opt-in (`ADR-53`), so `check` would report not-run and examine nothing (`BUG-174`). |
 | `record-type-dir` | One check per declared type: does `dir` actually exist on disk. `error` if not — this fires today for `waiver` in this very repo, correctly, since no waiver record has been created yet (MILE-59) and its directory was deliberately never pre-created. |
+| `declared-value-vocabulary` | `info`, one per declared status value that the type's placeholder or pending vocabulary (its declared `statuses.placeholders`/`statuses.pending`, else the compiled-in words) also reads as a marker, naming the type and the value (`MILE-324`). The value is a real value in the status field, so nothing is reported there; the line says why the same word is still reported in any other field. |
 | `record-type-required-fields` | One check per declared type with an empty `required_fields`. `warn`, not `error` — a type with no required fields is unusual, not necessarily wrong. |
 | `ci-wired` | Some workflow under `.github/workflows/` runs `urzua check` (a call in a command position: a `#` comment and an `echo`/`printf` line are not a call) or uses urzua's reusable `actions/urzua-gate` action (`MILE-180`); a repository's own wrapper script or make target is not recognised, which runs the checker for the caller. `warn` if not — a check that exists but is never run reports nothing to anyone. |
 | `authority-host` | Whether the declared `authority` gates anything. `warn` when it declares deciders and no gate (`diff.decider-required` then has nothing to judge). `ok` when it declares no decider and no gate either, only how a gate will be read (`decider_table`, `waivable`): that is what `urzua init` writes, a posture and not a forgotten gate. `ok` with the host-settings caveat when a gate exists. |
@@ -219,3 +221,4 @@ The block is POSIX sh, correct under `set -e`, `set -u` and `sh -e`, and names o
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/record_types_own_config_integration.rs` a9004c5b0c23 -> 459b7bc6fe09. Reason: the doctor test in record_types_own_config_integration.rs expects not-pointed at .git-hooks with the fix urzua hooks install, since this repository's config names hooks.path; no other test in the file changed **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/record_types_own_config_integration.rs` 459b7bc6fe09 -> 95790a97cb28. Reason: record_types_own_config_integration.rs is back to its content on main: the doctor test again expects declared-missing, since this repository's config does not name hooks.path until a release reads it **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/doctor.rs` 9db7314f4e99 -> 9ac209773392. Reason: doctor.rs: hook-wired takes each check's layer from the wiring it reports, so an unsafe entry with another hook name gets its own check; the other checks are unchanged **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-17 | Bumped to `0.35`. Adds the `info` check status and `declared-value-vocabulary`, naming a declared status value that the placeholder or pending vocabulary also holds; an `info` check leaves `status` unchanged. **Why:** `MILE-324` -- a status named `Todo` was reported as a placeholder, and the overlap was visible nowhere. | **substantive** |

@@ -138,6 +138,20 @@ fn classify_inner(
     FieldState::Present
 }
 
+/// Which of the type's vocabularies, `placeholder` or `pending`, would read
+/// `value` as a marker: the declared words when the type declares them, else
+/// the compiled-in ones. `None` when neither does.
+pub fn default_vocabulary_of(
+    value: &str,
+    declared: Option<&crate::status_model::StatusDecl>,
+) -> Option<&'static str> {
+    match classify_with(Some(value), declared) {
+        FieldState::Placeholder => Some("placeholder"),
+        FieldState::Pending => Some("pending"),
+        _ => None,
+    }
+}
+
 /// The compiled-in vocabulary read against the WHOLE trimmed value, case
 /// insensitively: `TBD`, `TODO`, `name` and the other placeholder tokens are a
 /// Placeholder, and `pending` alone is Pending. A sentence that merely contains

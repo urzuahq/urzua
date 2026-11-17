@@ -41,7 +41,7 @@ pub(crate) fn git_hook_problems(repo_root: &std::path::Path) -> Vec<String> {
         .unwrap_or_default();
     hook_checks(repo_root, &decl)
         .into_iter()
-        .filter(|c| c.status != DoctorStatus::Ok)
+        .filter(|c| c.status > DoctorStatus::Info)
         .map(|c| c.message)
         .collect()
 }
@@ -105,6 +105,7 @@ fn hook_checks(
 #[serde(rename_all = "kebab-case")]
 enum DoctorStatus {
     Ok,
+    Info,
     Warn,
     Error,
 }
@@ -267,6 +268,7 @@ pub fn run(config: Option<PathBuf>) -> ExitCode {
     };
 
     config_shape_checks(&config, &repo_root, &mut checks);
+    declared_value_vocabulary_checks(&config, &mut checks);
     template_section_checks(&config, &repo_root, &mut checks);
     checks.push(ci_wired_check(&repo_root));
 
@@ -369,6 +371,34 @@ fn config_shape_checks(
                     "record type '{name}' has no required_fields -- field.quality and field.pending will never fire for it"
                 ),
             ));
+        }
+    }
+}
+
+/// One `info` check per declared status value that the type's placeholder or
+/// pending vocabulary also holds (`MILE-324`). The value is exempt in the
+/// status field, so nothing is wrong; the overlap is named so a reader of the
+/// same word in another field knows why it is reported there.
+fn declared_value_vocabulary_checks(
+    config: &urzua_core::config::Config,
+    checks: &mut Vec<DoctorCheck>,
+) {
+    for name in config.sorted_type_names() {
+        let Some(decl) = config.record_types[name].status_decl() else {
+            continue;
+        };
+        for value in &decl.values {
+            if let Some(vocabulary) =
+                urzua_core::field_state::default_vocabulary_of(value, Some(&decl))
+            {
+                checks.push(DoctorCheck::new(
+                    "declared-value-vocabulary",
+                    DoctorStatus::Info,
+                    format!(
+                        "record type '{name}' declares status '{value}', which is also in the {vocabulary} vocabulary -- it is a real value in the status field and still reported in any other field"
+                    ),
+                ));
+            }
         }
     }
 }

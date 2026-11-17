@@ -1608,6 +1608,10 @@ pub struct NewReport {
     /// reason (`ADR-93`, Amendment of 2026-11-07). Always present; empty when
     /// nothing was skipped.
     pub skipped: Vec<SkippedReason>,
+    /// The header fields written without a value of their own, which the
+    /// author still has to fill (`MILE-322`). Always present; empty when `new`
+    /// filled every field it wrote.
+    pub to_fill: Vec<crate::new_record::FieldToFill>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub notices: Vec<Notice>,
 }
@@ -1735,11 +1739,29 @@ impl Report for NewReport {
     }
     fn next_action(&self) -> Option<NextAction> {
         let path = self.path.display().to_string();
-        let words = git_add([path.as_str()]);
-        self.stage.then(|| {
-            NextAction::runs_as_printed(
+        let fields: Vec<&str> = self.to_fill.iter().map(|f| f.field.as_str()).collect();
+        let fill = if fields.is_empty() {
+            String::new()
+        } else {
+            format!(
+                "; then fill {} (listed in to_fill) and run urzua check",
+                fields.join(", ")
+            )
+        };
+        if self.stage {
+            let words = git_add([path.as_str()]);
+            return Some(NextAction::runs_as_printed(
                 shell_command(&words),
-                "stages the new record: check examines only tracked records unless discovery.include_untracked is set",
+                format!("stages the new record: check examines only tracked records unless discovery.include_untracked is set{fill}"),
+            ));
+        }
+        (!self.to_fill.is_empty()).then(|| {
+            NextAction::runs_as_printed(
+                shell_command(&["urzua", "check", path.as_str()]),
+                format!(
+                    "checks the new record once {} (listed in to_fill) hold real values",
+                    fields.join(", ")
+                ),
             )
         })
     }

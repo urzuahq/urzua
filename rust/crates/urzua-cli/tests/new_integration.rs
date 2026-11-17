@@ -373,7 +373,10 @@ fn new_keeps_the_templates_declared_non_required_header_fields_observed_failing(
     let report = new_report(&dir, "Second thing");
     let path = report["path"].as_str().unwrap().to_string();
     let content = std::fs::read_to_string(dir.join(&path)).unwrap();
-    assert!(content.contains("\nDeciders: null\n"), "{content}");
+    assert!(
+        content.contains("\nDeciders: name(s) (optional)\n"),
+        "{content}"
+    );
     assert!(!content.contains("Mood"), "{content}");
     assert!(content.contains("## Context"), "{content}");
     check_is_clean(&dir);
@@ -426,8 +429,8 @@ fn new_fills_the_declared_title_and_starting_version_fields_observed_failing() {
     assert!(content.contains("\nSubject: Named subject\n"), "{content}");
     assert!(content.contains("\nVersion: '0.1'\n"), "{content}");
     assert!(
-        content.contains("\nGist: null\n"),
-        "an undeclared field stays blank: {content}"
+        content.contains("\nGist: —\n"),
+        "an undeclared required field takes the no-value sentinel: {content}"
     );
 }
 

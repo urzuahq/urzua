@@ -125,11 +125,14 @@ fetches pull request head refs so numbers taken by open pull requests are skippe
 
 The header is built from the type's `required_fields`, with the `Stable-Id`, the date, the author
 (from `--by`, `gh`, or `git config user.name`) and the first declared status filled in; every other
-field is left for you. If `.urzua/templates/<type>.md` exists, its body (title and sections) is
+field is left for you. A field left for you is never written `null`: it carries the template's text
+for it, or `—` when the type requires it and the template has none, or is left out. `to_fill` lists
+each such field as `{field, reason}` (`placeholder` or `required-empty`), and `next_action_reason`
+names them. If `.urzua/templates/<type>.md` exists, its body (title and sections) is
 appended. A type with `header_shape: none` is refused, since it has nowhere to store a stable id.
 
 Output: `status`, `path`, `display_number`, `stable_id`, `pull_refs` (whether the open pull request
-fetch ran, and which numbers it skipped and who held them), `skipped` and `notices` (when present: the identity used in place of `--by`, a failed fetch, a type directory that does not exist yet; whatever `new` prints to stderr is also a notice). `skipped` is always present and empty
+fetch ran, and which numbers it skipped and who held them), `skipped`, `to_fill` and `notices` (when present: the identity used in place of `--by`, a failed fetch, a type directory that does not exist yet; whatever `new` prints to stderr is also a notice). `skipped` is always present and empty
 when nothing was skipped: one `{number, reason}` per number, with `reason` `local`, `worktree <path>`
 or `open-pr <ref>`. When the type's directory does not exist yet, `new` numbers from 1 and creates it,
 saying so on stderr and in a `notices` entry. It resolves an identity with `gh api user` first (see [What uses the
@@ -269,14 +272,16 @@ whether it parses (an unrecognized key is an error here), whether each record ty
 exists, whether a CI workflow invokes `urzua check` or the gate action, whether git pre-commit and
 pre-push hooks run it, and the harness and authority declarations.
 
-Output: `status` (`ok`, `warn` or `error`) and `checks`, each with `check`, `status` and `message`.
+Output: `status` (`ok`, `warn` or `error`) and `checks`, each with `check`, `status` (`ok`, `info`,
+`warn` or `error`; `info` never changes the report's `status`) and `message`.
 A `hook-wired` check also carries `layer`, `state`, `hook_layout` (`default`, `hooks-path`, `husky` or
 `pre-commit-framework`) and, when the hook is not wired, `fix`: the command that wires it,
 usually `urzua hooks install`. The report's `next_action` is the first such command.
 The `check` ids include `config-exists`, `config-parses`, `record-type-dir`, `ci-wired`, `hook-wired`,
 `authority-host` (whether the declared authority gates anything), `authority-decider-table`,
 `authority-waivable`, `harness-config` (the declared harness, and any key of it this build does not
-recognize) and `template-sections` (whether a type's starter template has a heading for each section
+recognize), `declared-value-vocabulary` (`info`: a declared status value that is also a placeholder
+or pending word, which is a real value in the status field and still reported elsewhere) and `template-sections` (whether a type's starter template has a heading for each section
 the type requires).
 Exit 0 for `ok` and `warn`, 1 for `error`, 2 when there is no config to read.
 
