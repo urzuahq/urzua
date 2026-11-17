@@ -223,7 +223,7 @@ pub fn header_scaffold_mismatch(
                     record.path.clone(),
                     ActionSource::new("scaffold-mismatch"),
                     format!(
-                        "this record's header is not the one `urzua new {}` writes: {listed}. Create a record with `urzua new` and fill only its null fields and body; if the difference is deliberate, waive this finding",
+                        "this record's header is not the one `urzua new {}` writes: {listed}. Create a record with `urzua new` and fill only its empty fields and body; if the difference is deliberate, waive this finding",
                         record.record_type
                     ),
                 ));

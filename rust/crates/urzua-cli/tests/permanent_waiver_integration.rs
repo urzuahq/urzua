@@ -382,3 +382,84 @@ fn a_permanent_declaration_that_is_not_well_formed_is_refused_at_load() {
         );
     }
 }
+
+fn expired_messages(report: &serde_json::Value) -> Vec<String> {
+    report["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|f| {
+            f["rule"] == "waiver.matches-nothing"
+                && f["message"].as_str().unwrap().contains("is expired")
+        })
+        .map(|f| f["message"].as_str().unwrap().to_string())
+        .collect()
+}
+
+/// `MILE-322`: a present but empty `Expires`, as `urzua new` writes it or as an
+/// older `null`, leaves the waiver without effect and is reported, even where
+/// the type declares no `permanent`; it never makes the waiver permanent.
+#[test]
+fn an_empty_or_null_expires_covers_nothing_and_is_reported() {
+    for empty in ["Expires:\n", "Expires: null\n"] {
+        let dir = corpus("empty-expires", &config(""));
+        waiver(&dir, empty);
+        let (_, report) = run(&dir);
+        assert_eq!(waived_by(&report), None, "{empty}: {report}");
+        let expired = expired_messages(&report);
+        assert_eq!(expired.len(), 1, "{empty}: {report}");
+        assert!(expired[0].contains("Expires is empty"), "{}", expired[0]);
+    }
+}
+
+/// An absent `Expires` line keeps its meaning: with no `permanent` declared the
+/// waiver takes effect.
+#[test]
+fn a_waiver_with_no_expires_line_is_unchanged() {
+    let dir = corpus("absent-expires", &config(""));
+    waiver(&dir, "");
+    let (_, report) = run(&dir);
+    assert_eq!(
+        waived_by(&report).as_deref(),
+        Some("docs/waiver/WAIVER-1-x.md"),
+        "{report}"
+    );
+    assert!(expired_messages(&report).is_empty(), "{report}");
+}
+
+/// The repro end to end: `urzua new` writes `Expires:` empty from a template
+/// that has the line; filling only Rule, Scope and Reason leaves the waiver
+/// without effect, and the other record's finding is not waived.
+#[test]
+fn a_waiver_from_new_with_its_expires_left_empty_covers_nothing() {
+    let dir = corpus("new-empty-expires", &config(""));
+    std::fs::create_dir_all(dir.join(".urzua/templates")).unwrap();
+    std::fs::write(
+        dir.join(".urzua/templates/waiver.md"),
+        "---\nRule: rule.id\nScope: a path\nReason: why\nExpires: YYYY-MM-DD\n---\n# NNNN — Title\n",
+    )
+    .unwrap();
+    let out = common::urzua()
+        .args(["new", "waiver", "w", "--by", "tester"])
+        .current_dir(&dir)
+        .output()
+        .unwrap();
+    let report: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    let path = dir.join(report["path"].as_str().unwrap());
+    let text = std::fs::read_to_string(&path).unwrap();
+    assert!(text.contains("\nExpires:\n"), "{text}");
+    let filled = text
+        .replace("\nRule:\n", "\nRule: header.required-fields\n")
+        .replace("\nScope:\n", "\nScope: docs/adr/ADR-1-a.md\n")
+        .replace("\nReason:\n", "\nReason: a stated reason\n");
+    std::fs::write(&path, filled).unwrap();
+    assert!(Command::new("git")
+        .args(["add", "-A"])
+        .current_dir(&dir)
+        .status()
+        .unwrap()
+        .success());
+    let (_, report) = run(&dir);
+    assert_eq!(waived_by(&report), None, "{report}");
+    assert_eq!(expired_messages(&report).len(), 1, "{report}");
+}

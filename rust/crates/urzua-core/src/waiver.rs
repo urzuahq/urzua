@@ -362,13 +362,10 @@ pub fn load_suppressions(
             // drop a waiver that should apply.
             let rule = r.header.get_reserved("Rule")?.to_string();
             let scope = r.header.get_reserved("Scope")?.to_string();
-            // An empty `Expires` is no date, the same as an absent one.
-            let expires = r
-                .header
-                .get_reserved("Expires")
-                .map(str::trim)
-                .filter(|e| !e.is_empty())
-                .map(str::to_string);
+            // A present but empty `Expires` (`Expires:` or `null`) is kept as
+            // `Some("")`: not a calendar date, so the waiver is expired and covers
+            // nothing. Reading it as absent would make it permanent.
+            let expires = r.header.get_reserved("Expires").map(|s| s.to_string());
             // Blank is not narrowing: a template's empty `Variant:` covers
             // every variant, as a waiver written before the field did.
             let variant = r
@@ -570,20 +567,28 @@ mod tests {
         assert!(!w("2026-11-06").is_active("2026-11-07"));
     }
 
-    /// `MILE-322`: an empty `Expires`, as `urzua new` writes it, is no date:
-    /// the waiver loads as one with no `Expires`, not as an expired one.
+    /// `MILE-322`: a present but empty `Expires`, as `urzua new` writes it or as
+    /// an older `null`, is not a date: the waiver is expired and covers nothing,
+    /// never permanent. An absent `Expires` line keeps its meaning.
     #[test]
-    fn an_empty_expires_is_read_as_no_expires() {
-        for empty in ["Expires:", "Expires: null"] {
+    fn an_empty_expires_leaves_the_waiver_without_effect() {
+        let load = |line: &str| {
             let r = Record::parse(
                 std::path::PathBuf::from("docs/waivers/WAIVER-1-x.md"),
                 "waiver".to_string(),
-                &format!("---\nRule: r.x\nScope: '*'\n{empty}\n---\n"),
+                &format!("---\nRule: r.x\nScope: '*'\n{line}---\n"),
             );
-            let waivers = load_suppressions(&[r], &SuppressionType::named("waiver"));
+            load_suppressions(&[r], &SuppressionType::named("waiver"))
+        };
+        for empty in ["Expires:\n", "Expires: null\n"] {
+            let waivers = load(empty);
             assert_eq!(waivers.len(), 1, "{empty}");
-            assert_eq!(waivers[0].expires, None, "{empty}");
+            assert_eq!(waivers[0].expires.as_deref(), Some(""), "{empty}");
+            assert!(!waivers[0].is_active("2026-11-17"), "{empty}");
         }
+        let waivers = load("");
+        assert_eq!(waivers[0].expires, None);
+        assert!(waivers[0].is_active("2026-11-17"));
     }
 
     #[test]

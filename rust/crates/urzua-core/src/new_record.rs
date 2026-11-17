@@ -365,7 +365,12 @@ impl UnsetFields<'_> {
         self.template_values
             .and_then(|t| t.get(field))
             .map(|v| v.trim())
-            .filter(|v| !v.is_empty() && !matches!(*v, "null" | "~"))
+            // A `—` template value would invite the author to write the sentinel.
+            .filter(|v| {
+                !v.is_empty()
+                    && !matches!(*v, "null" | "~")
+                    && !crate::values::is_no_value_sentinel(v)
+            })
             .map(str::to_string)
     }
 }
@@ -1493,7 +1498,7 @@ mod tests {
             pointer_fields: Some(vec!["Parent".to_string()]),
             ..Default::default()
         };
-        let template = "---\nKind: feature | bug | chore\nOwner:\nParent: the record this belongs to\n---\n# 0 -- T\n\n## What\n";
+        let template = "---\nKind: feature | bug | chore\nOwner: —\nParent: the record this belongs to\n---\n# 0 -- T\n\n## What\n";
         let spec = ScaffoldSpec::plain(
             &type_config,
             None,
