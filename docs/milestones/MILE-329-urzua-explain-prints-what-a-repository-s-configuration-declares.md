@@ -17,7 +17,7 @@ On release 0.4.7 an agent new to a repository cannot learn its record model from
 
 ## Done means
 
-- `urzua explain --types` prints every declared record type and `urzua explain --type <name>` one of them, as JSON, read from the configuration and nothing else; decided by the orchestrator on 2026-11-17, pending maintainer review, on the ground that the maintainer looked under `explain` first.
+- `urzua explain --types` prints every declared record type and `urzua explain --type <name>` one of them, as JSON, read from the configuration and nothing else; the name was accepted by the maintainer on 2026-11-17: "types is more generic and more agent friendly and machine friendly" than a name that calls it a workflow.
 - For each type the report gives: its identifier prefix and directories; required and optional fields; each field's declared values; each reference field with the types it may name; its states with the initial ones and the allowed moves; each declared requirement and prohibition with its conditions as one sentence; any gate on its states or paths with who may act; the template in use; and the exact command that creates a record of the type, shown by a test against a configuration that uses each of these.
 - The report lists the rules this configuration sets, with their levels, and separately the rules that are on because of a declaration, each naming the declaring key.
 - Nothing in the report is a built-in default the configuration did not change, except where a default decides behaviour a reader needs (the initial state, a rule on by declaration), and those are marked as defaults.
