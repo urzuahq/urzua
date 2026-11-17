@@ -179,6 +179,24 @@ pub fn graph<'a>(
             );
         }
         fields.push((supersession_field, POINTER.kind));
+        let declared = config
+            .record_types
+            .get(&record.record_type)
+            .map(|t| t.declared_fields())
+            .unwrap_or_default();
+        for pair in config.relation_pairs.iter().filter(|p| {
+            p.types
+                .as_ref()
+                .is_none_or(|t| t.contains(&record.record_type))
+        }) {
+            for side in [pair.forward.as_str(), pair.inverse.as_str()] {
+                if declared.contains(&crate::values::FieldName::new(side))
+                    && !fields.iter().any(|(f, _)| *f == side)
+                {
+                    fields.push((side, POINTER.kind));
+                }
+            }
+        }
 
         for (field_name, kind) in fields {
             let Some(value) = record.header.get(field_name) else {
@@ -216,6 +234,7 @@ mod tests {
             embodiment: Default::default(),
             locator_resolvers: Default::default(),
             upgraded_from: None,
+            pointer_targets: Default::default(),
             override_log: None,
             block_on: None,
             attestation: Default::default(),
@@ -241,6 +260,7 @@ mod tests {
             embodiment: Default::default(),
             locator_resolvers: Default::default(),
             upgraded_from: None,
+            pointer_targets: Default::default(),
             override_log: None,
             block_on: None,
             attestation: Default::default(),
@@ -439,6 +459,23 @@ mod tests {
             "unexpected dangling edge: {:?}",
             edges[0]
         );
+    }
+
+    #[test]
+    fn graph_includes_the_edges_of_a_declared_relation_pair() {
+        let config = crate::config::parse(
+            "schema_version: 2\nrecord_types:\n  a:\n    dir: docs/a\n    required_fields: [Status]\n    known_fields: [Up, Down]\nrelation_pairs:\n  - {name: link, forward: Up, inverse: Down, reciprocity: required}\n",
+        )
+        .unwrap();
+        let up = record("docs/a/A-1-x.md", "a", "---\nStatus: x\nUp: A-2\n---\n");
+        let down = record("docs/a/A-2-y.md", "a", "---\nStatus: x\nDown: A-1\n---\n");
+        let (edges, _) = graph(&[up, down], &config, &HashMap::new(), &HashMap::new());
+        let got: Vec<(&str, &str, &str)> = edges
+            .iter()
+            .map(|e| (e.from.as_str(), e.relation.as_str(), e.to.as_str()))
+            .collect();
+        assert_eq!(got, vec![("A-1", "Up", "A-2"), ("A-2", "Down", "A-1")]);
+        assert!(edges.iter().all(|e| !e.dangling));
     }
 
     #[test]

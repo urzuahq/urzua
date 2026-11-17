@@ -455,6 +455,17 @@ fn validate_selection(
             )
             .into());
         }
+        if !config.rules.contains_key(id) && rules::effective_level(config, id) == RuleLevel::Off {
+            let reads = urzua_core::rules::rule_def(id)
+                .and_then(|d| d.reads_declaration)
+                .map_or("the declaration it reads".to_string(), |d| {
+                    format!("`{}`", d.key())
+                });
+            return Err(format!(
+                "urzua check --rules: '{id}' does not apply to this configuration: it is on by default only where a record type declares {reads}, and none does"
+            )
+            .into());
+        }
         if !out.iter().any(|o| o == id) {
             out.push(id.to_string());
         }

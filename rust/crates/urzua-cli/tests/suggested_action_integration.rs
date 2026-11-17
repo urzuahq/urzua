@@ -498,7 +498,7 @@ fn rules_lists_each_variant_with_its_action_or_its_exemption_reason() {
     let dir = std::env::temp_dir();
     let rules = parsed(&urzua(&dir, &["rules"]));
     let all = rules["rules"].as_array().unwrap();
-    assert_eq!(all.len(), 78, "every shipped rule is listed");
+    assert_eq!(all.len(), 79, "every shipped rule is listed");
     let find = |id: &str| {
         all.iter()
             .find(|r| r["id"] == id)
@@ -527,6 +527,18 @@ fn rules_lists_each_variant_with_its_action_or_its_exemption_reason() {
         "{region}"
     );
     assert!(region.get("kind").is_none(), "{region}");
+
+    // A wrong-type reference is repaired by naming a record of an allowed type.
+    let typed = find("pointer.target-type")["actions"].as_array().unwrap();
+    assert_eq!(typed.len(), 1, "{typed:?}");
+    assert_eq!(typed[0]["variant"], "pointer-target-type");
+    assert_eq!(typed[0]["kind"], "edit-field");
+    assert_eq!(typed[0]["op"], "set");
+    let vocab = find("field.value-not-declared")["actions"].as_array().unwrap();
+    assert_eq!(vocab.len(), 1, "{vocab:?}");
+    assert_eq!(vocab[0]["variant"], "field-value-not-declared");
+    assert_eq!(vocab[0]["kind"], "edit-field");
+    assert_eq!(vocab[0]["op"], "set");
 
     // A kind with no ops omits `op`.
     let index = find("index.freshness")["actions"].as_array().unwrap();

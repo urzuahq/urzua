@@ -799,14 +799,15 @@ fn header_value(record: &Record) -> impl Fn(&str) -> Option<String> + '_ {
     |f| record.header.get(f).map(str::to_string)
 }
 
-/// What put the record under an entry: its status, the field condition, or both.
+/// What put the record under an entry: the status when the entry keys on it,
+/// then every field condition that held.
 fn because(j: &Judged, t: &crate::status_model::Triggered) -> String {
-    let status = format!("{} is {}", j.status_field, j.status);
-    match &t.trigger {
-        None => status,
-        Some((field, value)) if j.status.trim().is_empty() => format!("{field} is {value}"),
-        Some((field, value)) => format!("{status} and {field} is {value}"),
+    let mut parts = Vec::new();
+    if t.on_status || t.triggers.is_empty() {
+        parts.push(format!("{} is {}", j.status_field, j.status));
     }
+    parts.extend(t.triggers.iter().map(|(f, v)| format!("{f} is {v}")));
+    parts.join(" and ")
 }
 
 /// A field the record's status forbids, carrying a value.

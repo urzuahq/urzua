@@ -91,6 +91,70 @@ pub fn pointer_target_status(
     )
 }
 
+/// A resolved reference whose target is of a type outside the field's declared
+/// target types (`MILE-259`): a `pointer_fields` entry's `targets`, or a pair's
+/// `target_types` for its forward field. Only a constrained field is in the
+/// population; a dangling reference is `pointer.resolution`'s.
+pub fn pointer_target_type(
+    records: &[Record],
+    config: &Config,
+    index: &RecordIndex,
+) -> (RuleExecution, Vec<Finding>) {
+    const RULE_ID: &str = RULE_POINTER_TARGET_TYPE;
+    // Default-on only where target types are declared (`DefaultOn::applies`).
+    let targets = crate::pointer_targets::constraints(config);
+    let mut findings = Vec::new();
+    let slots: Vec<(&Record, &String, &Vec<String>)> = records
+        .iter()
+        .flat_map(|record| {
+            targets
+                .get(&record.record_type)
+                .into_iter()
+                .flatten()
+                .map(move |(field, allowed)| (record, field, allowed))
+        })
+        .collect();
+
+    let (population, examined_records) = scoped_census_records(
+        config,
+        PopulationUnit::Field,
+        slots,
+        |(record, _, _)| *record,
+        |(record, field_name, allowed)| {
+            let references = match declared_field_references(record, field_name.as_str()) {
+                Ok(refs) => refs,
+                Err(outcome) => return outcome,
+            };
+            for reference in references {
+                let Some(target) = index.get(&crate::values::RecordId::new(&reference)) else {
+                    continue;
+                };
+                if allowed.contains(&target.record_type) {
+                    continue;
+                }
+                findings.push(Finding::new(
+                    RULE_ID,
+                    FindingSeverity::Error,
+                    record.path.clone(),
+                    ActionSource::new("pointer-target-type").field(field_name.as_str()),
+                    format!(
+                        "{field_name}: {reference} is of type '{}', but {field_name} on type '{}' may only name records of type {}",
+                        target.record_type,
+                        record.record_type,
+                        allowed.join(", ")
+                    ),
+                ));
+            }
+            Outcome::Examined
+        },
+    );
+
+    (
+        RuleExecution::ran(RULE_ID, population, examined_records),
+        findings,
+    )
+}
+
 pub fn pointer_resolution(
     records: &[Record],
     config: &Config,

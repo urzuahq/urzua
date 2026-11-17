@@ -139,7 +139,7 @@ record_types:
 | `header_shape` | `yaml-frontmatter` (default) or `none`. |
 | `required_fields` | Fields every record must carry with a real value. `header.required-fields` and `field.quality` read it. |
 | `known_fields` | The closed set of fields a record may carry besides `required_fields`. Declare it, even as `[]`, to make the field set a conscious choice. |
-| `pointer_fields` | Fields that name other records, resolved by `pointer.resolution`. |
+| `pointer_fields` | Fields that name other records, resolved by `pointer.resolution`. An entry may be `{name: Parent, targets: [epic]}` to limit the record types the field may name; see below. |
 | `field_values` | `{Field: [value, ...]}`: the values a declared field may hold, compared exactly; each element of a comma-separated or list value is checked. Read by `field.value-not-declared`, on by default at `error` once any type declares this key. Not for the status field (`statuses.values`) or a pointer or narrative field. |
 | `narrative_fields` | Fields that name other records without being a dependency. They are resolved like pointer fields and appear in `urzua graph` tagged `narrative`. |
 | `spec` | The id of the spec that documents the type (`SPEC-16`). |
@@ -155,6 +155,24 @@ record_types:
 | `waiver_fields` | For a suppression type: `{reason: <field>, owner: <field>}`, the fields `urzua waive` writes a draft's reason and owner into; `Reason` and `Owner` by default. `Rule`, `Scope`, `Expires`, `Variant` and `Key-path` are read by name and cannot be renamed. |
 | `fields` | `{from: prefix-lines}` (or `yaml-frontmatter`, or `none`): where a record's fields are read from. `header_shape` is the usual way to say it; `fields` exists for a corpus whose headers are bare `Key: value` lines. |
 
+### Target types of a reference field
+
+A `pointer_fields` entry is a field name or `{name, targets}`. With `targets`, a reference to an existing record of
+any other type is a `pointer.target-type` error, on by default. A relation pair limits its forward field the same way
+with `target_types`:
+
+```yaml
+record_types:
+  story:
+    pointer_fields: [Implements, {name: Parent, targets: [epic]}]
+relation_pairs:
+  - {name: parent, forward: Parent-of, inverse: Child-of, reciprocity: required, target_types: [story]}
+```
+
+Each element of a list is judged; with no target types declared anywhere the rule reports `not-enabled`. A reference that names no record is not this rule's finding but `pointer.resolution`'s, and that rule must be enabled for a dangling link to be reported; a freshly initialised config does not turn it on. Each target type
+must be a declared record type, the list must not be empty, and only a `pointer_fields` entry takes `targets`. A pair
+with `cross_type: false` may list only types that carry its forward field.
+
 ### `statuses`
 
 | Key | What it does |
@@ -163,9 +181,9 @@ record_types:
 | `success`, `failure` | Which values are a good or a bad outcome. |
 | `implementable` | Statuses whose records code may legitimately keep citing. |
 | `claim_retained` | Statuses that keep a record's evidence claim even though it is no longer current. |
-| `initial` | Statuses a record may be filed in. |
+| `initial` | Statuses a record may be filed in. Declared only with `transitions`; one without the other is a load error. |
 | `transitions` | `{From: [To, ...]}`: the lawful moves. |
-| `require`, `forbid` | Lists of `{when: [status, ...], when_field: {Field: [value, ...]}, fields: [field, ...]}`: fields that must, or must not (absent or blank), hold a value when the status is one of `when` and each `when_field` field holds one of its values. Declare `when`, `when_field` or both. |
+| `require`, `forbid` | Lists of `{when: [status, ...], when_field: {Field: [value, ...]}, fields: [field, ...]}`: fields that must, or must not (absent or blank), hold a value when the status is one of `when` and each `when_field` field holds one of its values. Declare `when`, `when_field` or both. These entries report only when the rules `status.required-field-missing` and `status.forbidden-field-present` are enabled under `rules:`; a freshly initialised config does not enable them. |
 | `pending` | The type's placeholder vocabulary: whole values (`unknown`) and `{pattern: <regex>}` entries that count as missing. |
 | `placeholders` | Whole values (compared without case) that are unedited template text, replacing the built-in words `name`, `name(s)`, `yyyy-mm-dd`, `tbd`, `todo`, `(project lead)`, `(session author)` for this type. An empty list is a load error. |
 | `blocked`, `progress` | Statuses read by the derived `blocked` value and `sequence.status-agreement`. |

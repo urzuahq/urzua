@@ -2,7 +2,7 @@
 Stable-Id: 01M6R3NK4DZVCS8MKRDA7V53NZ
 Status: Accepted
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-core/src/graph.rs@sha256:46d69af1dd1c7a1dfafc28c63fe46b7087a1ea00528f1a72a9a17fa7fe030895, code:rust/crates/urzua-cli/src/commands/explain.rs@sha256:d87eefb9ff72ce780f38fcc66506d7125b894a075c30a1cff0749581812363ef, code:rust/crates/urzua-cli/src/commands/graph.rs@sha256:1f510a65fa597717f5b31e64dc28a316592f003c82b717d5c159c1546c6b43da, test:rust/crates/urzua-core/src/graph.rs@sha256:46d69af1dd1c7a1dfafc28c63fe46b7087a1ea00528f1a72a9a17fa7fe030895
+Realized-by: code:rust/crates/urzua-core/src/graph.rs@sha256:16a38ffef9e7cf348734e71cc53f62e8f7e6cd6e1a2861746a60d61b2b7489b5, code:rust/crates/urzua-cli/src/commands/explain.rs@sha256:d87eefb9ff72ce780f38fcc66506d7125b894a075c30a1cff0749581812363ef, code:rust/crates/urzua-cli/src/commands/graph.rs@sha256:1f510a65fa597717f5b31e64dc28a316592f003c82b717d5c159c1546c6b43da, test:rust/crates/urzua-core/src/graph.rs@sha256:16a38ffef9e7cf348734e71cc53f62e8f7e6cd6e1a2861746a60d61b2b7489b5
 Date: 2026-09-06
 Accepted-on: 2026-09-06
 Author: beauwilliams
@@ -35,6 +35,16 @@ requiring a separate `check` run to notice).
 
 Both are read-only, reuse `record_id`/`extract_references`/`parse_realized_by` rather than
 reimplementing reference-parsing a third time, and require no config change or new record field.
+
+## Amendment (2026-11-17): `graph` also lists relation-pair edges
+
+*Status of this amendment: decided by the builder on 2026-11-17, pending maintainer review. The Decision text above is unchanged.*
+
+The Decision names `graph`'s edges as the `Implements`/`Derives-from`/`Supersedes`/`Superseded-by`
+fields. Since `ADR-44` those came from each type's declared `pointer_fields` and `narrative_fields`,
+and since `MILE-259` `graph` also lists the forward and inverse fields of every declared
+`relation_pairs` entry a record's type carries, tagged `pointer`. Read the Decision's edge list as
+these declared fields; `SPEC-13` states the current edge set.
 
 ## Reversibility
 
@@ -79,4 +89,7 @@ how any existing field is parsed.
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/graph.rs` 03f7eed2679c -> 509c4a10a5da. Reason: graph.rs only gains rejected_values and waiver_fields in a test fixture's RecordTypeConfig literal. The claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/graph.rs` 03f7eed2679c -> a3630fa0b4ec. Reason: graph.rs: the only change is one added `hooks: Default::default()` field in a Config struct literal, needed by the new optional hooks key; behaviour is unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Pin recomputed on merge (attested by beauwilliams, identity: gh-verified, actor: agent): both merged sides re-pinned, `rust/crates/urzua-core/src/graph.rs` 509c4a10a5da and a3630fa0b4ec -> 02ace1051d4b; the new hash is the merged file's, which is git's automatic merge of the two re-pinned commits. No person wrote a reason for the merged state. **Why:** `urzua fix --conflicts` resolved a conflict that lay only in re-pin lines; a reviewer of the pull request should confirm the merged pin. | **structural** |
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/graph.rs` 02ace1051d4b -> 9b36fa2ee136. Reason: Adds declared target types for reference fields (MILE-259). config.rs: a pointer_fields entry may be {name, targets} (the typed parse keeps only names), Config gains a skipped pointer_targets map, RelationPair gains optional target_types, a new load error InvalidPointerTargets; every other key unchanged. rules: new rule pointer.target-type (catalog.rs, pointer.rs, table.rs, default-on at error, not-enabled when nothing is declared); relation.rs cross-type-disallowed defers to it for a claim outside target_types. graph.rs lists relation-pair edges. fix.rs, migrate.rs, property.rs, type_scope.rs, sequence.rs: test fixtures add the new fields only. check_integration.rs: the header-none fixture declares a target list so the new rule is exercised. SPEC-3 documents the keys. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-17 | Amendment added: `graph` also lists relation-pair edges. **Why:** `MILE-259` added relation-pair edges to `graph`, which the Decision's edge list does not name; decided by the builder on 2026-11-17, pending maintainer review. | **structural** |
 > | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/graph.rs` 02ace1051d4b -> 46d69af1dd1c, `rust/crates/urzua-cli/src/commands/explain.rs` a199dc863fdb -> d87eefb9ff72. Reason: explain.rs: explain --rule reports the rule's effective level, which equals the old reading for every rule but a default-on rule whose default depends on the configuration; graph.rs: a test fixture's RecordTypeConfig literal gains field_values: None; no behaviour changed **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-17 | Pin recomputed on merge (attested by beauwilliams, identity: gh-verified, actor: agent): both merged sides re-pinned, `rust/crates/urzua-core/src/graph.rs` (Realized-by) 46d69af1dd1c and 9b36fa2ee136 -> 16a38ffef9e7, `rust/crates/urzua-core/src/graph.rs` (Realized-by, occurrence 2) 46d69af1dd1c and 9b36fa2ee136 -> 16a38ffef9e7; the new hash is the merged file's, which is git's automatic merge of the two re-pinned commits. No person wrote a reason for the merged state. **Why:** `urzua fix --conflicts` resolved a conflict that lay only in re-pin lines; a reviewer of the pull request should confirm the merged pin. | **evidence** |

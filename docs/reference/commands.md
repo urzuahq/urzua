@@ -303,7 +303,8 @@ urzua graph
 
 Every relationship edge between records, as data. Each edge is `{from, relation, to, kind, dangling}`
 with `kind` either `pointer` or `narrative` and `dangling` true when the target does not exist. The
-edges come from the fields the config declares as `pointer_fields` and `narrative_fields`, plus
+edges come from the fields the config declares as `pointer_fields` and `narrative_fields`, the
+forward and inverse fields of every declared `relation_pairs` entry (tagged `pointer`), plus
 `Supersedes` and `Superseded-by`.
 
 ## roadmap

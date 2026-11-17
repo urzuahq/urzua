@@ -59,6 +59,10 @@ pub struct Config {
     /// same config written at the current version are equal.
     #[serde(skip)]
     pub upgraded_from: Option<crate::schema_version::UpgradeInfo>,
+    /// The `targets` of `pointer_fields` entries (`MILE-259`), read from the
+    /// raw document at load; the typed parse keeps only the names.
+    #[serde(skip)]
+    pub pointer_targets: crate::pointer_targets::PointerTargets,
     /// The committed log of editor-hook overrides (`ADR-78`, `MILE-188`): a
     /// repository-relative path. The hook appends to it and
     /// `override.unreviewed` reads it. Absent means no log is declared.
@@ -1349,7 +1353,8 @@ pub struct RecordTypeConfig {
     /// must also appear in this type's `required_fields`/`known_fields`
     /// (`config.pointer-field-not-known`) and must not also appear in
     /// `narrative_fields` (`config.pointer-narrative-overlap`).
-    #[serde(default)]
+    /// An entry may be `{name, targets}` (`MILE-259`); see `pointer_targets`.
+    #[serde(default, deserialize_with = "crate::pointer_targets::names")]
     pub pointer_fields: Option<Vec<String>>,
     /// Prose-tolerant reference fields with an optional embedded reference
     /// (MILE-0090/ADR-0044) -- resolved the same as `pointer_fields` but
@@ -1364,7 +1369,11 @@ pub struct RecordTypeConfig {
     /// The values each named field may hold (`MILE-248`), read by
     /// `field.value-not-declared` and by `statuses.require`/`forbid`
     /// conditions. See `field_values`.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::field_values::deserialize"
+    )]
     pub field_values: Option<BTreeMap<String, Vec<String>>>,
     /// Which spec documents this type's schema as a coherent feature area
     /// (MILE-0077/ADR-0041 -- "does this type need a spec" stays editorial,
@@ -2097,6 +2106,8 @@ pub enum ConfigError {
     InvalidCompanionFields { record_type: String, reason: String },
     #[error("relation_pairs: {reason}")]
     InvalidRelationPair { reason: String },
+    #[error("pointer target types: {reason}")]
+    InvalidPointerTargets { reason: String },
     #[error("roadmap: {reason}")]
     InvalidRoadmap { reason: String },
     #[error("record type '{record_type}' declares prefix '{prefix}', which {reason}")]
@@ -3288,6 +3299,7 @@ pub fn parse_with_document_models(
     content: &str,
 ) -> Result<(Config, BTreeMap<String, DocumentModel>), ConfigError> {
     let mut config = read_in_window(content)?;
+    config.pointer_targets = crate::pointer_targets::collect(content)?;
     let models = crate::document_model::validate_declarations(&config.record_types)?;
     config
         .embodiment
@@ -3299,6 +3311,7 @@ pub fn parse_with_document_models(
     let status_decls = crate::status_model::validate(&config.record_types, &config.embodiment)?;
     crate::status_model::validate_items_rule(&config.record_types, &status_decls, &config.rules)?;
     validate_relation_pairs(&config)?;
+    crate::pointer_targets::validate(&config)?;
     validate_roadmap(&config)?;
     validate_companion_fields(&config)?;
     validate_record_types(&config)?;
@@ -4783,6 +4796,10 @@ pub struct RelationPair {
     /// `false`; it applies to any pair, not only a dependency one.
     #[serde(default)]
     pub acyclic: bool,
+    /// The record types the forward field may name (`MILE-259`). Omitted
+    /// means any; see `pointer_targets` for how it meets `cross_type`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_types: Option<Vec<String>>,
 }
 
 /// Which claimants make a pair's claim provisional, and how loudly an

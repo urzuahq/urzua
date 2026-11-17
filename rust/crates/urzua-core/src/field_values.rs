@@ -30,6 +30,75 @@ fn invalid(record_type: &str, reason: String) -> ConfigError {
     }
 }
 
+/// A `{Field: [value, ...]}` map whose values are scalars, read as their YAML
+/// source text (`1`, `true`) the way a header value is; a null entry or a
+/// non-scalar is refused naming `key`, never as a bare serde type error.
+pub(crate) fn scalar_map(
+    key: &str,
+    raw: yaml_serde::Value,
+) -> Result<BTreeMap<String, Vec<String>>, String> {
+    use yaml_serde::Value;
+    let Value::Mapping(map) = raw else {
+        return Err(format!(
+            "`{key}` is a mapping of a field to a list of values"
+        ));
+    };
+    let mut out = BTreeMap::new();
+    for (field, values) in map {
+        let field = scalar_text(&field)
+            .ok_or_else(|| format!("`{key}` has a field name that is not a plain value"))?;
+        let Value::Sequence(items) = values else {
+            return Err(format!("`{key}.{field}` is not a list of values"));
+        };
+        let mut list = Vec::new();
+        for item in &items {
+            list.push(scalar_text(item).ok_or_else(|| {
+                format!("`{key}.{field}` has an entry that is null or not a plain value")
+            })?);
+        }
+        out.insert(field, list);
+    }
+    Ok(out)
+}
+
+fn scalar_text(v: &yaml_serde::Value) -> Option<String> {
+    use yaml_serde::Value;
+    match v {
+        Value::String(s) => Some(s.clone()),
+        Value::Number(n) => Some(n.to_string()),
+        Value::Bool(b) => Some(b.to_string()),
+        _ => None,
+    }
+}
+
+/// `field_values` as a type declares it: present with no value is refused.
+pub(crate) fn deserialize<'de, D: serde::Deserializer<'de>>(
+    d: D,
+) -> Result<Option<BTreeMap<String, Vec<String>>>, D::Error> {
+    use serde::Deserialize;
+    match Option::<yaml_serde::Value>::deserialize(d)? {
+        None => Err(serde::de::Error::custom(
+            "`field_values` is present with no value; give it a mapping or remove the key",
+        )),
+        Some(v) => scalar_map("field_values", v)
+            .map(Some)
+            .map_err(serde::de::Error::custom),
+    }
+}
+
+/// `when_field` inside a `statuses.require`/`forbid` entry.
+pub(crate) fn deserialize_when_field<'de, D: serde::Deserializer<'de>>(
+    d: D,
+) -> Result<BTreeMap<String, Vec<String>>, D::Error> {
+    use serde::Deserialize;
+    match Option::<yaml_serde::Value>::deserialize(d)? {
+        None => Err(serde::de::Error::custom(
+            "`when_field` is present with no value; give it a mapping or remove the key",
+        )),
+        Some(v) => scalar_map("when_field", v).map_err(serde::de::Error::custom),
+    }
+}
+
 /// The elements of a header value, trimmed and non-blank.
 pub fn elements(value: &str) -> impl Iterator<Item = &str> {
     value.split(',').map(str::trim).filter(|e| !e.is_empty())
@@ -156,6 +225,20 @@ mod tests {
         assert!(err("    field_values: {Parent: [x]}\n").contains("pointer_fields"));
         assert!(err("    field_values: {Nope: [x]}\n").contains("neither"));
         assert!(err("    field_values: {}\n").contains("is empty"));
+        assert!(err("    field_values: {Kind: [~]}\n")
+            .contains("`field_values.Kind` has an entry that is null"));
+        assert!(err("    field_values:\n").contains("`field_values` is present with no value"));
+        let c = load("    field_values: {Kind: [1, true]}\n").unwrap();
+        assert_eq!(
+            c.record_types["work"].field_vocabulary("Kind").unwrap(),
+            ["1", "true"]
+        );
+        let mapped = crate::config::parse(
+            "schema_version: 2\nrecord_types:\n  work:\n    dir: docs/work\n    required_fields: [Status]\n    known_fields: [Parent]\n    pointer_fields: [{name: Parent, targets: [work]}]\n    narrative_fields: []\n    field_values: {Parent: [x]}\n",
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(mapped.contains("pointer_fields"), "{mapped}");
     }
 
     #[test]

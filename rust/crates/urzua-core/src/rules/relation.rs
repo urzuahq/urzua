@@ -624,6 +624,10 @@ pub fn relation_cross_type_disallowed(
     let mut findings = Vec::new();
 
     let slots = pair_slots(records, config, |p| !p.cross_type);
+    let target_type_rule_on = config
+        .rules
+        .get(RULE_POINTER_TARGET_TYPE)
+        .is_none_or(|s| s.level != crate::config::RuleLevel::Off);
 
     let (population, examined_records) = scoped_census_records(
         config,
@@ -640,6 +644,18 @@ pub fn relation_cross_type_disallowed(
                 let Some(target) = index.get(&crate::values::RecordId::new(&reference)) else {
                     continue;
                 };
+                // A declared target-type list is the more specific statement:
+                // a target outside it is `pointer.target-type`'s finding alone.
+                if slot.forward
+                    && target_type_rule_on
+                    && slot
+                        .pair
+                        .target_types
+                        .as_ref()
+                        .is_some_and(|t| !t.contains(&target.record_type))
+                {
+                    continue;
+                }
                 if target.record_type != slot.record.record_type {
                     findings.push(Finding::new(
                         RULE_ID,
@@ -1011,6 +1027,7 @@ mod tests {
             provisional: None,
             types: None,
             acyclic: false,
+            target_types: None,
         }
     }
 

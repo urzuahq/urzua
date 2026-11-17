@@ -151,7 +151,7 @@ fn a_kind_outside_the_vocabulary_is_reported_and_a_bug_requires_severity() {
     let missing = findings(&v, "status.required-field-missing");
     let m0 = missing[0]["message"].as_str().unwrap();
     assert!(
-        m0.contains("Kind is bug") && m0.contains("'Severity'"),
+        m0.starts_with("Kind is bug, which requires 'Severity'"),
         "{m0}"
     );
     let m1 = missing[1]["message"].as_str().unwrap();
@@ -262,4 +262,131 @@ fn a_condition_on_an_undeclared_field_or_value_is_a_load_error() {
     let (code, v) = check(&dir);
     assert_eq!(code, Some(2), "{v}");
     assert!(v.to_string().contains("lists no values"), "{v}");
+}
+
+fn run(dir: &std::path::Path, args: &[&str]) -> (Option<i32>, Value) {
+    let out = common::urzua()
+        .args(args)
+        .current_dir(dir)
+        .output()
+        .unwrap();
+    (
+        out.status.code(),
+        serde_json::from_slice(&out.stdout).unwrap(),
+    )
+}
+
+#[test]
+fn a_field_is_required_for_one_value_and_forbidden_for_another() {
+    let config = CONFIG.replace(
+        "        - {when_field: {Kind: [bug]}, fields: [Severity]}\n",
+        "        - {when_field: {Kind: [bug]}, fields: [Severity]}\n      forbid:\n        - {when_field: {Kind: [chore]}, fields: [Severity]}\n",
+    );
+    let dir = repo(
+        "req-forbid",
+        &config,
+        &[
+            (
+                "WORK-1-bug-ok.md",
+                "Status: Open\nKind: bug\nSeverity: high\n",
+            ),
+            ("WORK-2-bug-missing.md", "Status: Open\nKind: bug\n"),
+            ("WORK-3-chore-ok.md", "Status: Open\nKind: chore\n"),
+            (
+                "WORK-4-chore-carries.md",
+                "Status: Open\nKind: chore\nSeverity: low\n",
+            ),
+        ],
+    );
+    let (_, v) = check(&dir);
+    assert_eq!(
+        files(&v, "status.required-field-missing"),
+        ["docs/work/WORK-2-bug-missing.md"],
+        "{v}"
+    );
+    assert_eq!(
+        files(&v, "status.forbidden-field-present"),
+        ["docs/work/WORK-4-chore-carries.md"],
+        "{v}"
+    );
+    let m = findings(&v, "status.forbidden-field-present")[0]["message"]
+        .as_str()
+        .unwrap();
+    assert!(
+        m.starts_with("Kind is chore, which forbids 'Severity'"),
+        "{m}"
+    );
+}
+
+#[test]
+fn a_status_and_two_field_conditions_are_all_named_in_field_order() {
+    let config = CONFIG
+        .replace(
+            "known_fields: [Parent, Severity, Labels]",
+            "known_fields: [Parent, Severity, Labels, Area]",
+        )
+        .replace(
+            "        - {when_field: {Kind: [bug]}, fields: [Severity]}\n",
+            "        - {when: [Open], when_field: {Kind: [bug], Area: [ui]}, fields: [Severity]}\n",
+        );
+    let dir = repo(
+        "two-fields",
+        &config,
+        &[("WORK-1-x.md", "Status: Open\nKind: bug\nArea: ui\n")],
+    );
+    let (_, v) = check(&dir);
+    let m = findings(&v, "status.required-field-missing")[0]["message"]
+        .as_str()
+        .unwrap();
+    assert!(
+        m.starts_with("Status is Open and Area is ui and Kind is bug, which requires 'Severity'"),
+        "{m}"
+    );
+}
+
+#[test]
+fn selecting_the_rule_where_no_vocabulary_is_declared_says_it_does_not_apply() {
+    let config = CONFIG.replace(
+        "    field_values:\n      Kind: [feature, bug, chore]\n      Labels: [ui, api]\n",
+        "",
+    );
+    assert!(!config.contains("field_values"));
+    let dir = repo("selection", &config, &[]);
+    let (code, v) = run(&dir, &["check", "--rules", "field.value-not-declared"]);
+    assert_eq!(code, Some(2), "{v}");
+    let e = v["error"].as_str().unwrap();
+    assert!(
+        e.contains("does not apply to this configuration") && e.contains("field_values"),
+        "{e}"
+    );
+}
+
+#[test]
+fn non_string_scalars_are_read_as_text_and_a_null_value_is_refused_naming_the_key() {
+    let config = CONFIG
+        .replace("Labels: [ui, api]", "Labels: [1, true]")
+        .replace("{when_field: {Kind: [bug]}", "{when_field: {Labels: [1]}");
+    let dir = repo(
+        "scalars",
+        &config,
+        &[("WORK-1-x.md", "Status: Open\nKind: bug\nLabels: [1]\n")],
+    );
+    let (code, v) = check(&dir);
+    assert_ne!(code, Some(2), "{v}");
+    assert_eq!(
+        files(&v, "status.required-field-missing"),
+        ["docs/work/WORK-1-x.md"],
+        "{v}"
+    );
+    let null = CONFIG.replace("{when_field: {Kind: [bug]}", "{when_field: {Kind: [~]}");
+    let dir = repo("null-when", &null, &[]);
+    let (code, v) = check(&dir);
+    assert_eq!(code, Some(2), "{v}");
+    assert!(
+        v["error"]
+            .as_str()
+            .unwrap()
+            .contains("`when_field.Kind` has an entry that is null"),
+        "{v}"
+    );
 }

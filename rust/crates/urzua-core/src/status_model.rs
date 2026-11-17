@@ -213,38 +213,42 @@ fn compiled(pattern: &str) -> Option<std::sync::Arc<regex::Regex>> {
 pub struct StatusFieldRule {
     #[serde(default)]
     pub when: Vec<String>,
-    #[serde(default)]
+    #[serde(
+        default,
+        deserialize_with = "crate::field_values::deserialize_when_field"
+    )]
     pub when_field: BTreeMap<String, Vec<String>>,
     pub fields: Vec<String>,
 }
 
-/// A field an entry ties to a record, and the field condition that triggered
-/// it (`None` for an entry keyed on the status alone).
+/// A field an entry ties to a record, whether the entry keys on the status,
+/// and the field conditions that held, in field-name order.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Triggered<'a> {
     pub field: &'a str,
-    pub trigger: Option<(&'a str, String)>,
+    pub on_status: bool,
+    pub triggers: Vec<(&'a str, String)>,
 }
 
 impl StatusFieldRule {
     /// Whether the entry applies to a record at `status` whose header reads
-    /// `value`, and the first field condition that held.
+    /// `value`, and the element of each conditioned field that met it.
     fn applies<'a>(
         &'a self,
         status: &str,
         value: &dyn Fn(&str) -> Option<String>,
-    ) -> Option<Option<(&'a str, String)>> {
+    ) -> Option<Vec<(&'a str, String)>> {
         if !self.when.is_empty() && !self.when.iter().any(|w| w == status) {
             return None;
         }
-        let mut first = None;
+        let mut hits = Vec::new();
         for (field, values) in &self.when_field {
             let held = value(field)?;
             let hit =
                 crate::field_values::elements(&held).find(|e| values.iter().any(|v| v == e))?;
-            first.get_or_insert((field.as_str(), hit.to_string()));
+            hits.push((field.as_str(), hit.to_string()));
         }
-        Some(first)
+        Some(hits)
     }
 
     /// Whether some record could meet both entries: their statuses overlap and
@@ -385,14 +389,15 @@ fn fields_for<'a>(
 ) -> Vec<Triggered<'a>> {
     let mut out: Vec<Triggered> = Vec::new();
     for rule in rules {
-        let Some(trigger) = rule.applies(status, value) else {
+        let Some(triggers) = rule.applies(status, value) else {
             continue;
         };
         for f in &rule.fields {
             if !out.iter().any(|t| t.field == f) {
                 out.push(Triggered {
                     field: f,
-                    trigger: trigger.clone(),
+                    on_status: !rule.when.is_empty(),
+                    triggers: triggers.clone(),
                 });
             }
         }
@@ -589,6 +594,14 @@ fn validate_field_rules(rt: &RecordTypeConfig, d: &StatusDecl) -> Result<(), Str
             }
         }
     }
+    for status in &d.values {
+        let required = status_only_fields(&d.require, status);
+        if let Some(f) = status_only_fields(&d.forbid, status).into_iter().find(|f| required.contains(f)) {
+            return Err(format!(
+                "'{f}' is both required and forbidden at '{status}'"
+            ));
+        }
+    }
     for r in &d.require {
         for f in d.forbid.iter().filter(|f| r.overlaps(f)) {
             if let Some(field) = r.fields.iter().find(|x| f.fields.contains(x)) {
@@ -600,6 +613,14 @@ fn validate_field_rules(rt: &RecordTypeConfig, d: &StatusDecl) -> Result<(), Str
         }
     }
     Ok(())
+}
+
+fn status_only_fields<'a>(rules: &'a [StatusFieldRule], status: &str) -> Vec<&'a String> {
+    rules
+        .iter()
+        .filter(|r| r.when_field.is_empty() && r.when.iter().any(|w| w == status))
+        .flat_map(|r| &r.fields)
+        .collect()
 }
 
 fn describe(rule: &StatusFieldRule) -> String {
@@ -1371,10 +1392,17 @@ mod tests {
         let chore = |f: &str| (f == "Kind").then(|| "chore".to_string());
         let req = d.required_for("Open", &bug);
         assert_eq!(req[0].field, "Cause");
-        assert_eq!(req[0].trigger, Some(("Kind", "bug".to_string())));
+        assert_eq!(req[0].triggers, vec![("Kind", "bug".to_string())]);
+        assert!(!req[0].on_status);
         assert!(d.required_for("Open", &chore).is_empty());
         assert!(d.forbidden_for("Open", &bug).is_empty());
         assert_eq!(d.forbidden_for("Done", &bug)[0].field, "Parent");
+    }
+
+    #[test]
+    fn a_status_only_conflict_keeps_its_wording() {
+        let e = kinds("      require: [{when: [Open], fields: [Cause]}]\n      forbid: [{when: [Open], fields: [Cause]}]\n").unwrap_err().to_string();
+        assert!(e.ends_with("'Cause' is both required and forbidden at 'Open'"), "{e}");
     }
 
     #[test]
