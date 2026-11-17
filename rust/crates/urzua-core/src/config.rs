@@ -129,6 +129,16 @@ pub struct HooksDecl {
     /// the hook and everything it started. Default 600.
     #[serde(default = "HooksDecl::default_verify_timeout")]
     pub verify_timeout_seconds: u64,
+    /// The directory, relative to the repository root, the hooks are
+    /// committed in. git's `core.hooksPath` is per clone, so `urzua hooks
+    /// install` points each clone at it and the reports name it when a clone
+    /// is not pointed there.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+    /// `urzua hooks run` prints a line when nothing blocks. Default false:
+    /// a clean run prints nothing.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub print_success: bool,
 }
 
 /// One hook: the urzua arguments it runs and who maintains the hook file.
@@ -219,6 +229,8 @@ impl Default for HooksDecl {
             pre_push: HookDecl::default(),
             on_not_run: HookOnNotRun::default(),
             verify_timeout_seconds: Self::default_verify_timeout(),
+            path: None,
+            print_success: false,
         }
     }
 }
@@ -3311,6 +3323,44 @@ pub fn parse_with_document_models(
     Ok((config, models))
 }
 
+/// Why `hooks.path` cannot name a committed directory inside the repository
+/// that git resolves to the same place, or `None`. git expands a leading `~`
+/// and reads a backslash or colon as a path separator or drive on some hosts,
+/// and `.git` matches case-insensitively on case-insensitive filesystems.
+fn hooks_path_problem(path: &str) -> Option<&'static str> {
+    if path.starts_with('~') {
+        return Some("may not begin with '~', which git expands to a home directory");
+    }
+    if path.starts_with('/') {
+        return Some("must be relative to the repository root");
+    }
+    for c in path.split('/') {
+        if c.is_empty() || c == "." || c == ".." {
+            return Some(
+                "must be written without '.', '..' or empty parts, for example .git-hooks",
+            );
+        }
+        if c.contains(['\\', ':']) || c.chars().any(char::is_control) {
+            return Some("may not contain a backslash, a colon or a control character");
+        }
+        if is_git_dir_name(c) {
+            return Some("may not name .git in any part (compared case-insensitively), which is not committed");
+        }
+    }
+    None
+}
+
+/// `.git` as Windows and HFS+ read it: trailing dots and spaces dropped,
+/// ignorable zero-width characters skipped, and the 8.3 short name `GIT~1`.
+fn is_git_dir_name(c: &str) -> bool {
+    let visible: String = c
+        .chars()
+        .filter(|ch| !matches!(ch, '\u{200B}'..='\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2060}'..='\u{2064}' | '\u{206A}'..='\u{206F}' | '\u{FEFF}'))
+        .collect();
+    let trimmed = visible.trim_end_matches(['.', ' ']);
+    trimmed.eq_ignore_ascii_case(".git") || trimmed.eq_ignore_ascii_case("git~1")
+}
+
 /// A hook runs only a read-only check of this repository: another subcommand could write files
 /// (`fix --apply`), reach the network (`refs`) or call the hook again
 /// (`hooks run`) on every commit.
@@ -3319,6 +3369,13 @@ fn validate_hooks(hooks: &HooksDecl) -> Result<(), ConfigError> {
         return Err(ConfigError::InvalidHooks {
             reason: "'verify_timeout_seconds' must be at least 1".to_string(),
         });
+    }
+    if let Some(path) = &hooks.path {
+        if let Some(why) = hooks_path_problem(path) {
+            return Err(ConfigError::InvalidHooks {
+                reason: format!("'path' {why}; got {path:?}"),
+            });
+        }
     }
     for name in ["pre-commit", "pre-push"] {
         let args = hooks.args(name).unwrap_or_default();

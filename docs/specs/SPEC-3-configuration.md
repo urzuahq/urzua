@@ -1,9 +1,9 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.158'
+Version: '0.159'
 Date: 2026-08-20
 Status: Shipped
-Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:052ffdb6484403af4ea640717ece11e2072db1700eba702a66dd44d0a2021954, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:09c2431a269316741c35b51dabd5766ecd3d50fab2b98069314bb1bc8857767d, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:255395e7d2caa34947cef28f463e2ec050e3eba798a4dc7573a3cad946fee1ae
+Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:b6ac9d56ae0f2e7cd44fcf834a4ff3700e9171e2f443d14f4b8e5261293e6f6f, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:09c2431a269316741c35b51dabd5766ecd3d50fab2b98069314bb1bc8857767d, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:255395e7d2caa34947cef28f463e2ec050e3eba798a4dc7573a3cad946fee1ae
 Embodiment: Verified
 Author: beauwilliams
 Subject: '`.urzua/config.yaml` -- the schema for record types, required/known fields, and per-type behavior.'
@@ -1242,7 +1242,40 @@ hooks:
   pre-push: {command: [check], managed: block}   # the same as [check], the default
   on_not_run: warn                    # the default; or block
   verify_timeout_seconds: 600         # the default
+  path: .git-hooks                    # absent by default
+  print_success: false                # the default
 ```
+
+- **`path`** names the directory, relative to the repository root, the hooks are committed in. git's
+  `core.hooksPath` is set per clone, so a fresh clone runs none of them until it is pointed there: `urzua hooks
+  install` sets this clone's local `core.hooksPath` to `path` (with `--dry-run`, reports `would-point` and writes
+  nothing); the report notes that the relative value is shared by every worktree of the clone. Every guard, on every run of `install` (the clone already pointed or not), for the
+  directory and for each hook file git would run from it, declared or not, runs before anything is written; on a
+  refusal neither `core.hooksPath` nor any file changes. It refuses when `core.hooksPath` is already set to something
+  else (naming the value, its scope and the file that sets it), when `path` resolves through a symlink outside the
+  working tree or into the git directory or git would read the value as another place, when any entry there, whatever
+  its name (git runs every hook name it knows from the directory), is a symlink whose target lies outside the working
+  tree or in the git directory at any hop of its chain, resolved as the kernel resolves it (a `..` after a linked directory is taken from where that link went), a dangling one included (a chain longer than 40 links, or a loop, is refused as unresolvable), and when a hook it must write cannot be
+  written (for a directory not yet created, its nearest existing ancestor is probed). Pointing alone, with every hook
+  declared, needs no write.
+  While the clone is not pointed at `path`, `doctor`, `urzua hooks status` and the session-start check report every
+  hook `not-pointed`, naming the directory. A next action is offered only when running it would succeed:
+  `urzua hooks install` when it would; none when another value is set (urzua never changes a value it did not set;
+  the message names its scope and origin and that a person can choose `git config --local core.hooksPath <path>`)
+  or when `install` would refuse (the message names why). A directory that resolves outside the working tree or into
+  the git directory is `unsafe-dir`, and a hook file that is such a symlink is `unsafe-hook`; when the clone is
+  already pointed there, the message says git runs hooks from there and the next action is `urzua hooks uninstall`
+  when that would unset the value.
+  `urzua hooks uninstall` leaves the files in `path` as they are (`left`) and unsets `core.hooksPath` only when it
+  equals `path` and is set in the repository's own configuration file (a value from an included file or another
+  scope is named and left).
+  `path` is relative; each `/`-separated part is non-empty, is not `.` or `..`, contains no backslash, colon or
+  control character, and is not `.git` compared case-insensitively, nor a name Windows or HFS+ read as `.git`
+  (trailing dots or spaces, `GIT~1`, ignorable zero-width characters); the first part does not begin with `~`.
+  Nothing is normalised: `./x`, `a//b` and an absolute path are rejected. Anything else is a load error naming
+  `hooks.path`.
+- **`print_success`** makes `urzua hooks run` print `<hook>: urzua <args>: no blocking findings` on stderr when
+  nothing blocks. Default `false`: a clean run prints nothing and exits 0. A refusal prints the same whatever it is.
 
 - **`verify_timeout_seconds`** is how long `urzua hooks verify --run` lets one hook run before it stops the hook and
   everything it started and reports it `timed_out` (`SPEC-15`). At least 1; default 600, enough for a pre-push hook
@@ -1252,7 +1285,10 @@ hooks:
   hook) or `declared`: the repository maintains the hook file itself and asserts that it runs urzua. `install` then
   writes nothing to that hook, and `doctor`, `urzua hooks status` and the session-start check report it `ok`
   (`declared`) while the file exists, is executable and mentions urzua, and warn (`declared-missing`,
-  `declared-not-executable`, `declared-no-call`) when the declaration is plainly false. The declaration is an
+  `declared-not-executable`, `declared-no-call`) when the declaration is plainly false. A declared hook missing
+  while `core.hooksPath` is unset names `hooks.path`, not the clone's own hooks directory, as the place for it.
+  `urzua hooks install` reports a declared hook it finds missing, not executable or without a call as `status` does,
+  and exits 1 with `drift`, with or without `hooks.path`. The declaration is an
   assertion by the repository, not something urzua reads from the hook: that is why `.urzua/config.yaml` is a
   protected path in a gated repository, and `urzua hooks verify --run` is how to check it (`SPEC-15`).
 
@@ -2858,5 +2894,12 @@ proves this configuration produces the three findings.
 > | 2026-11-16 | Bumped to `0.157`. A revision-log column-name key (`class_column`, `date_column`, `narrative_column`) holding `\|` or a line break is a load error. **Why:** review of `MILE-310`'s pull request -- such a name would break the header of a log `fix` creates. | **substantive** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 9a0e556d7191 -> 9b878358f929. Reason: config.rs rejects a pipe or line break in a revision-log column-name key and moves the per-key name checks into named_key_problem; the claim this record makes still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 9b878358f929 -> 92f35c74119a. Reason: config.rs moves the doc comment of revision_log_problem back above that function, with no change in behaviour; the claim this record makes still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-16 | Bumped to `0.158`. Adds `hooks.path`, the directory the hooks are committed in, which `urzua hooks install` points `core.hooksPath` at and the reports name while a clone is not pointed there, and `hooks.print_success` (default false), which restores the line `urzua hooks run` printed on a clean run. **Why:** `MILE-309`: a fresh clone of a repository with committed hooks was told to write a hook under the git directory; `MILE-312`: a clean hook run printed a line on every commit. | **substantive** |
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 04472363242c -> 98204e0e0814. Reason: config.rs: the hooks key gains path (a relative directory inside the repository, validated) and print_success (default false); every other key and default is unchanged **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 98204e0e0814 -> 1110a9945a86. Reason: config.rs: hooks.path also rejects '.', '..', empty parts and a first component of .git; hooks.print_success is unchanged; every other key and default is unchanged **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 1110a9945a86 -> cc9ac43c376f. Reason: config.rs: hooks.path validation moves into hooks_path_problem, which also rejects a leading '~', a backslash, colon or control character in any part, and .git in any part compared case-insensitively; every other key and default is unchanged **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` cc9ac43c376f -> 5b7ad3cd442c. Reason: config.rs: hooks.path also rejects names Windows or HFS+ read as .git (trailing dots or spaces, GIT~1, ignorable zero-width characters); every other key and default is unchanged **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 92f35c74119a -> 10513fd0fc15. Reason: merged main: the pin held main's config.rs; the merged file adds this branch's hooks.path and hooks.print_success keys and their validation to main's revision-log column validation, both unchanged **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-16 | Adds target types for reference fields: a `pointer_fields` entry may be `{name, targets}`, and a relation pair may declare `target_types`; both are judged by `pointer.target-type`, and `urzua graph` lists relation-pair edges. **Why:** `MILE-259`: a link to a record of the wrong type could not be expressed as a finding. | **substantive** |
 > | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 92f35c74119a -> 052ffdb64844. Reason: Merged main into the MILE-259 target-type branch. config.rs: a pointer_fields entry may be {name, targets}, Config gains a skipped pointer_targets map, RelationPair gains optional target_types, new load error InvalidPointerTargets; every other key unchanged. rules: new rule pointer.target-type (catalog.rs, pointer.rs, table.rs; default-on at error, not-enabled when nothing is declared); relation.rs cross-type-disallowed defers to it. graph.rs lists relation-pair edges. fix.rs, migrate.rs, property.rs, type_scope.rs, sequence.rs: fixtures add the new fields; fix.rs also carries main's change that a re-pin creates a missing revision log. check_integration.rs: the header-none fixture declares a target list. SPEC-3 documents the keys. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-17 | Pin recomputed on merge (attested by beauwilliams, identity: gh-verified, actor: agent): both merged sides re-pinned, `rust/crates/urzua-core/src/config.rs` (Realized-by) 052ffdb64844 and 10513fd0fc15 -> b6ac9d56ae0f; the new hash is the merged file's, which is git's automatic merge of the two re-pinned commits. No person wrote a reason for the merged state. `Version` is set to 0.159 by this merge, the next number above the higher side's 0.158, because `version_bump` requires a new version for the rows this merge combines. A row added on a branch states version 0.158, which was true there and is superseded by this merge. **Why:** `urzua fix --conflicts` resolved a conflict that lay only in re-pin lines; a reviewer of the pull request should confirm the merged pin. | **evidence** |

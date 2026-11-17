@@ -165,7 +165,9 @@ Node or Python hook, a symlinked hook, or a hooks path outside the repository is
 `urzua doctor` reads only urzua's own block as wired: reading a hook cannot prove a line runs. A hook you
 maintain yourself is declared under `hooks:` (`pre-commit: {managed: declared}`) and proven with
 `urzua hooks verify --run`, which runs it once, for real (urzua's check included), and reports whether it
-reached urzua.
+reached urzua. A repository that commits its hooks in a directory names it under `hooks:` (`path: .git-hooks`):
+`core.hooksPath` is set per clone, so each clone runs `urzua hooks install` once to point at it, and `urzua
+doctor` says so until it has. A clean hook run prints nothing; `print_success: true` prints a line.
 
 With the [pre-commit framework](https://pre-commit.com), add this under `repos:` in
 `.pre-commit-config.yaml` (or run `urzua hooks install --write-config`), then
