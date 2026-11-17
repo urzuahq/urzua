@@ -143,7 +143,7 @@ fn check_base(dir: &Path, extra: &[&str]) -> (i32, String) {
 }
 
 #[test]
-fn without_the_mode_the_gated_edit_is_refused_as_before_and_the_refusal_names_the_key() {
+fn without_the_mode_the_gated_edit_is_refused_exactly_as_before() {
     let dir = repo("off", &config(""));
     let v = hook(
         &dir,
@@ -154,7 +154,7 @@ fn without_the_mode_the_gated_edit_is_refused_as_before_and_the_refusal_names_th
     let (d, r) = decision(&v);
     assert_eq!(d, "deny", "{v}");
     assert!(
-        r.contains("in_session: ask") && r.contains("outside the agent harness"),
+        !r.contains("in_session") && r.contains("outside the agent harness"),
         "{r}"
     );
     assert!(!dir.join(".git/urzua/approvals").exists());

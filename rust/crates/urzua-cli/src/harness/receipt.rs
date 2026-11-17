@@ -290,7 +290,7 @@ mod tests {
             "{t:?}"
         );
         assert!(
-            t.starts_with("ADR-1: Fix typo [2Jmoves Status x a\u{301}\u{301}a"),
+            t.starts_with("ADR-1: Fix typo [2Jmoves Status xa\u{301}\u{301}a\u{301}\u{301}a"),
             "{t:?}"
         );
     }

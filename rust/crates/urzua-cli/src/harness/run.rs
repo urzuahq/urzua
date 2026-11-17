@@ -1041,9 +1041,9 @@ fn agent_gate_denial(repo_root: &Path, loaded: &Config, request: &Request) -> Op
         // A path without content is still judged by its path (a protected
         // path blocks); the acceptance gate, which reads content, finds no status.
         let content = request.content_at(i).unwrap_or("");
-        gate::git_dir_denial(loaded, Path::new(path))
-            .map(|d| denied(&d, path, request))
-            .or_else(|| gate_denial(repo_root, loaded, path, content, request))
+        gate_denial(repo_root, loaded, path, content, request).or_else(|| {
+            gate::git_dir_denial(loaded, Path::new(path)).map(|d| denied(&d, path, request))
+        })
     })
 }
 

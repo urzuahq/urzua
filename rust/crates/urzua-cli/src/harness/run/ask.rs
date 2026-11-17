@@ -22,8 +22,6 @@ pub(super) struct AskRequest {
     why_not: String,
 }
 
-const OFF: &str = "A decider can instead set harness.guardrails.acceptance.in_session: ask in .urzua/config.yaml, so that an agent's gated edit is put to the person at the keyboard through the agent host.";
-
 fn refuse(mut refused: Verdict, why: &str) -> Verdict {
     refused.message = format!("{} {why}", refused.message);
     refused.asking = None;
@@ -43,11 +41,7 @@ pub(super) fn ask_or_refuse(j: &Judging<'_>, request: &Request, refused: Verdict
         .as_ref()
         .is_some_and(|h| h.in_session() == InSession::Ask);
     if !asks {
-        // Named only to an adapter that can ask, so the advice is one it can take.
-        return match request.ask {
-            Some(_) => refuse(refused, OFF),
-            None => refused,
-        };
+        return refused;
     }
     let [path] = request.paths.as_slice() else {
         return refuse(refused, "The person is asked about one file per edit, and this call names several: make the gated move in an edit of that record alone.");
