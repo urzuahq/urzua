@@ -18,8 +18,9 @@ A checklist item's evidence clause accepts only locators: a path under a categor
 ## Done means
 
 - A configuration can declare an evidence form for an attested observation, with the fields an observation must carry (who attests, the date, what was observed) and whether the type accepts it, shown by a test; a type that does not declare it rejects it as today.
-- An item evidenced only by an observation is reported as met by attestation, a state distinct from met by a resolving locator, and the configuration declares whether that state satisfies the finished status, shown by a test of each setting.
+- An item evidenced only by an observation is reported as met by attestation, a state distinct from met by a resolving locator, and the configuration declares whether that state satisfies the finished status, the default being that it does not and is reported as information, shown by a test of each setting.
 - An observation is written by a command that records the attesting identity the way other attested rows are recorded, not typed by hand, and a hand-typed one is reported, shown by a test.
+- A configuration can declare an evidence category for a committed record of an observation (a log extract, a report), which requires a file and is checked like any other pin, so such a file is not cited under a category that calls it code; an adopting repository that commits its run evidence with private content removed asked for this on 2026-11-17 and judged a free-text observation weaker than a committed file.
 - An observation can carry a locator to a committed log or transcript, which is then checked like any other pin, and the reference page shows the three forms side by side: a test, a committed log, an attested observation.
 
 > **Revision log**
