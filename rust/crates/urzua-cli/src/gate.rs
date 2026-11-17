@@ -29,10 +29,18 @@ pub(crate) fn any_rule_looked(
     // A rule that is on for every configuration runs whether or not the
     // repository asked for it, so it counts only when the configuration declares
     // it or `--rules` selects it: a configuration that declares no rule still
-    // reports `not-run`.
+    // reports `not-run`. The exception is a rule that holds a declaration only
+    // the repository could have written (`DefaultOn::counts_when_applied`): it
+    // counts once it has examined a record, so a clean run of it is `ok`, while
+    // one that read nothing stays `not-run`.
     executed.iter().any(|e| {
+        let Some(default_on) = urzua_core::rules::default_on(&e.rule) else {
+            return e.status == RuleStatus::Ran;
+        };
         e.status == RuleStatus::Ran
-            && (urzua_core::rules::default_on(&e.rule).is_none() || named(&e.rule))
+            && (named(&e.rule)
+                || default_on.counts_when_applied
+                    && e.population.as_ref().is_some_and(|p| p.examined() > 0))
     })
 }
 

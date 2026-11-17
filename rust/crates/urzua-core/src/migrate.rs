@@ -108,6 +108,7 @@ mod tests {
             locator_resolvers: Default::default(),
             upgraded_from: None,
             pointer_targets: Default::default(),
+            declared_status_entries: Default::default(),
             override_log: None,
             block_on: None,
             attestation: Default::default(),

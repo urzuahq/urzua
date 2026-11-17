@@ -170,7 +170,7 @@ fn parse_range(tail: &str) -> Result<Scope, LocatorError> {
     Ok(Scope::Range { start, end })
 }
 
-/// Parses one locator (the text after `spec:`, `code:` or `test:`), in the
+/// Parses one locator (the text after `spec:`, `code:`, `test:` or `record:`), in the
 /// order `ADR-74` point 1 fixes: (1) a trailing `@sha256:` pin, (2) otherwise a
 /// trailing commit anchor, (3) in what remains, the text after the last `#`
 /// as the scope only when it matches `scope`; otherwise the whole text is the
@@ -236,9 +236,10 @@ pub fn realized_by_locators(value: &str) -> Vec<LocatorEntry> {
         .collect()
 }
 
-/// The categories a `Realized-by` entry can carry: the declared evidence
-/// categories.
-const CATEGORIES: [&str; 3] = ["spec", "code", "test"];
+/// The categories a `Realized-by` entry or an item's evidence clause can
+/// carry. The engine fixes these names; `embodiment.tiers` maps each to the
+/// tier a repository calls it. `record` names a tracked record's file.
+pub const CATEGORIES: [&str; 4] = ["spec", "code", "test", "record"];
 
 /// True when `rest` begins an entry: a category, then `:`.
 fn starts_entry(rest: &str) -> bool {
@@ -274,7 +275,7 @@ pub fn realized_by_entries(value: &str) -> Vec<(&str, &str)> {
 }
 
 /// The non-blank text of a `Realized-by` value that belongs to no recognised
-/// entry: everything before the first `spec:`/`code:`/`test:` prefix, or the
+/// entry: everything before the first `spec:`/`code:`/`test:`/`record:` prefix, or the
 /// whole value when it holds none (a bare path, `Code:`, `tests:`). The shared
 /// splitter drops it; `embodiment.locator-exists` reports it.
 pub fn realized_by_unrecognised(value: &str) -> Option<&str> {
