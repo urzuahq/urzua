@@ -54,9 +54,9 @@ run twice produces identical bytes. Commit all of it. With no `harness` key and 
 instructions block with no `instructions_file`) and the key that turns it on.
 
 The hooks need `urzua` on the `PATH` the agent runs its hooks with. When it is not there, or is a release
-without `urzua harness hook`, the hook command says so and names the fix; for an edit it reads
-`.urzua/config.yaml` as text and refuses the edit where `acceptance` or `protected-paths` is on without
-`on_unjudged: allow`, so a missing binary closes the gate rather than opening it.
+without `urzua harness hook`, the hook command says so and names the fix. For an edit it then fails closed: it lets the edit through only when it reads with certainty that neither `acceptance` nor `protected-paths` refuses an unjudged edit (comments stripped, whole values matched, the nearest `.urzua/config.yaml` at or above the project, in the block form `enabled: true|false` / `on_unjudged: allow|deny` or the one-line `{...}` form, with no anchor, alias, tag or flow map spanning lines anywhere); any other shape, an unreadable file, or no configuration found is a refusal that tells the person to install or upgrade urzua. A missing binary closes the gate rather than opening it. A panic inside the binary, or an engine that does
+not answer before the hook's own deadline (15 seconds short of `hook_timeout_seconds`), also ends in a
+refusal, as one JSON document.
 
 To install it once per machine instead, or as well, see
 [install once per machine, or commit to the repository](adopt.md#10-optional-agent-hooks).

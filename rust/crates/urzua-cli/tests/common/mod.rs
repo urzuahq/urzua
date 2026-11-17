@@ -357,8 +357,8 @@ pub fn run_hook(
     child.wait_with_output().unwrap()
 }
 
-/// The engine argv the old translator was given, `urzua harness run edit` and
-/// the like: the binary's own engine, no stand-in.
+/// `None` (the binary's own engine) for an argv that names `urzua`, else the
+/// argv as a stand-in engine.
 pub fn engine_or_own<'a>(engine: &'a [&'a str]) -> Option<&'a [&'a str]> {
     (engine.first() != Some(&"urzua")).then_some(engine)
 }

@@ -260,7 +260,10 @@ fn status_doctor_and_install_name_a_leftover_script_and_pinned_entry_with_the_re
     let dir = repo("leftover", CONFIG);
     leave_the_old_bundle(&dir);
     let (code, v) = urzua(&dir, &["harness", "install"]);
-    assert_eq!(code, 2, "the old entry has the key of the new one: {v}");
+    assert_eq!(
+        code, 2,
+        "a pinned entry has the key of the entry install writes: {v}"
+    );
     let text = v.to_string();
     assert!(
         text.contains("git rm .claude/hooks/urzua-claude-code.py")
@@ -416,5 +419,79 @@ fn a_session_rooted_elsewhere_is_judged_by_the_repository_that_holds_the_file() 
     assert!(
         String::from_utf8_lossy(&out.stdout).contains("acceptance"),
         "{out:?}"
+    );
+}
+
+fn copy_tree(from: &Path, to: &Path) {
+    std::fs::create_dir_all(to).unwrap();
+    for e in std::fs::read_dir(from).unwrap() {
+        let p = e.unwrap().path();
+        let dest = to.join(p.file_name().unwrap());
+        if p.is_dir() {
+            copy_tree(&p, &dest);
+        } else {
+            std::fs::copy(&p, &dest).unwrap();
+        }
+    }
+}
+
+/// A repository as release 0.4.7 installed it: both scripts, the settings
+/// entries that pin the translator's sha256, eleven commands calling the
+/// helper script, and a lock of plain `sha256:` hashes, all matching each other.
+#[test]
+fn update_alone_converts_a_repository_installed_by_0_4_7_whose_files_match_the_lock() {
+    let mut config = String::from("schema_version: 2\nrecord_types:\n");
+    for ty in [
+        "adr",
+        "bug",
+        "condition",
+        "milestone",
+        "rfc",
+        "spec",
+        "waiver",
+    ] {
+        config.push_str(&format!("  {ty}:\n    dir: \"docs/{ty}\"\n"));
+    }
+    config.push_str("harness:\n  adapters: [claude-code]\n  guardrails:\n    protected-paths: {enabled: true}\nauthority:\n  deciders:\n    maintainers: {logins: [Alice]}\n  gates:\n    - {paths: [\".claude\"], by: maintainers}\n");
+    let dir = repo("v047", &config);
+    let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/harness/v0.4.7");
+    copy_tree(&fixture.join("claude"), &dir.join(".claude"));
+    std::fs::copy(
+        fixture.join("urzua/harness.lock"),
+        dir.join(".urzua/harness.lock"),
+    )
+    .unwrap();
+    git(&dir, &["add", "-A"]);
+    git(&dir, &["commit", "-q", "-m", "as 0.4.7 installed it"]);
+    let (code, v) = urzua(&dir, &["harness", "status"]);
+    assert_eq!(code, 1, "the 0.4.7 layout is drift: {v}");
+    assert!(v["problems"].to_string().contains("older bundle"), "{v}");
+
+    let (code, v) = urzua(&dir, &["harness", "update"]);
+    assert_eq!(code, 0, "one command: {v}");
+    let (code, v) = urzua(&dir, &["harness", "status"]);
+    assert_eq!((code, v["status"].as_str()), (0, Some("ok")), "{v}");
+    assert!(!dir.join(".claude/hooks").exists(), "no script is left");
+    let mut left = Vec::new();
+    files_under(&dir.join(".claude"), &mut left);
+    for f in &left {
+        use std::os::unix::fs::PermissionsExt;
+        assert_eq!(
+            std::fs::metadata(f).unwrap().permissions().mode() & 0o111,
+            0,
+            "{}",
+            f.display()
+        );
+        let text = std::fs::read_to_string(f).unwrap();
+        assert!(
+            !text.contains("urzua-claude-code.py") && !text.contains("urzua-record.sh"),
+            "{}",
+            f.display()
+        );
+    }
+    let settings = std::fs::read_to_string(dir.join(".claude/settings.json")).unwrap();
+    assert!(
+        settings.contains("urzua harness hook claude-code edit"),
+        "{settings}"
     );
 }

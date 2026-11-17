@@ -85,14 +85,28 @@ fn script(dir: &Path, event: &str, payload: &str, engine: &[&str]) -> String {
 
 /// What the binary printed for `payload`, with `engine` standing in when it is
 /// not the binary's own.
-fn binary(dir: &Path, event: &str, payload: &str, engine: &[&str]) -> String {
+fn binary(dir: &Path, event: &str, payload: &str, engine: &[&str], name: &str) -> String {
+    // A case named `...-project-unset` runs with no CLAUDE_PROJECT_DIR (the hook
+    // finds the project from its working directory); `...-project-elsewhere`
+    // names a directory that holds no configuration.
+    let elsewhere = common::TempDir::new("urzua-parity-elsewhere");
+    let project = if name.ends_with("-project-elsewhere") {
+        Some(elsewhere.path())
+    } else {
+        Some(dir)
+    };
+    let mut envs: Vec<(&str, &std::ffi::OsStr)> = vec![("HOME", dir.as_os_str())];
+    let empty = std::ffi::OsString::new();
+    if name.ends_with("-project-unset") {
+        envs.push(("CLAUDE_PROJECT_DIR", empty.as_os_str()));
+    }
     let out = common::run_hook(
         dir,
         event,
         payload,
         common::engine_or_own(engine),
-        Some(dir),
-        &[("HOME", dir.as_os_str())],
+        project,
+        &envs,
     );
     assert_eq!(out.status.code(), Some(0), "{out:?}");
     String::from_utf8(out.stdout).unwrap()
@@ -529,6 +543,15 @@ fn sh(dir: &Path, script: &str) {
     assert!(status.success(), "{script}");
 }
 
+/// How strict an output is: a refusal, a message, silence.
+fn rank(out: &str) -> u8 {
+    if out.contains("\"permissionDecision\": \"deny\"") {
+        2
+    } else {
+        u8::from(!out.trim().is_empty())
+    }
+}
+
 fn compare(config_name: &str, config: &str, cases: Vec<Case>) {
     let mut differ = Vec::new();
     let (total, mut spoke, mut denied) = (cases.len(), 0, 0);
@@ -547,13 +570,20 @@ fn compare(config_name: &str, config: &str, cases: Vec<Case>) {
             case.engine.to_vec()
         };
         let from_script = script(&a, case.event, &(case.payload)(&a), &engine);
-        let from_binary = binary(&b, case.event, &(case.payload)(&b), &engine);
+        let from_binary = binary(&b, case.event, &(case.payload)(&b), &engine, case.name);
         let norm =
             |text: &str, dir: &Path| text.replace(&dir.to_string_lossy().to_string(), "<DIR>");
         let (s, r) = (norm(&from_script, &a), norm(&from_binary, &b));
         spoke += usize::from(!s.is_empty());
         denied += usize::from(s.contains("\"permissionDecision\": \"deny\""));
-        if s != r {
+        if case.name.contains("binary-is-stricter") {
+            if rank(&r) < rank(&s) {
+                differ.push(format!(
+                    "{config_name}/{} (binary less strict):\n  script: {s}\n  binary: {r}",
+                    case.name
+                ));
+            }
+        } else if s != r {
             differ.push(format!(
                 "{config_name}/{}:\n  script: {s}\n  binary: {r}",
                 case.name
@@ -571,6 +601,246 @@ fn compare(config_name: &str, config: &str, cases: Vec<Case>) {
         spoke * 2 >= total && (denied > 0 || config_name == "allow"),
         "{config_name}: {spoke} of {total} spoke, {denied} denied"
     );
+}
+
+fn path_cases() -> Vec<Case> {
+    let c = |name, setup, payload: fn(&Path) -> String| Case {
+        name,
+        event: "edit",
+        engine: OWN,
+        payload,
+        setup,
+    };
+    let w = |d: &Path, rel: &str, content: &str| {
+        tool(
+            d,
+            "Write",
+            serde_json::json!({"file_path": abs(d, rel), "content": content}),
+        )
+    };
+    let _ = w;
+    vec![
+        c(
+            "symlinked-file",
+            Some("ln -s .claude/settings.json link.json"),
+            |d| {
+                tool(
+                    d,
+                    "Write",
+                    serde_json::json!({"file_path": abs(d, "link.json"), "content": "{}"}),
+                )
+            },
+        ),
+        c("symlinked-dir", Some("ln -s .claude cl"), |d| {
+            tool(
+                d,
+                "Write",
+                serde_json::json!({"file_path": abs(d, "cl/settings.json"), "content": "{}"}),
+            )
+        }),
+        c(
+            "hard-link",
+            Some("ln .claude/settings.json hard.json"),
+            |d| {
+                tool(
+                    d,
+                    "Write",
+                    serde_json::json!({"file_path": abs(d, "hard.json"), "content": "{}"}),
+                )
+            },
+        ),
+        c("dot-dot", None, |d| {
+            tool(
+                d,
+                "Write",
+                serde_json::json!({"file_path": abs(d, "docs/../.claude/settings.json"), "content": "{}"}),
+            )
+        }),
+        c("case-variant", None, |d| {
+            tool(
+                d,
+                "Write",
+                serde_json::json!({"file_path": abs(d, ".CLAUDE/Settings.json"), "content": "{}"}),
+            )
+        }),
+        c("dot-segments", None, |d| {
+            tool(
+                d,
+                "Write",
+                serde_json::json!({"file_path": format!("{}/./docs/./adr/ADR-1-a.md", d.to_string_lossy()), "content": ACCEPTED}),
+            )
+        }),
+        c("outside-repository", None, |d| {
+            tool(
+                d,
+                "Write",
+                serde_json::json!({"file_path": format!("{}-outside.txt", d.to_string_lossy()), "content": "x"}),
+            )
+        }),
+        c("git-urzua", None, |d| {
+            tool(
+                d,
+                "Write",
+                serde_json::json!({"file_path": abs(d, ".git/urzua/hook-calls/k.done"), "content": "{}"}),
+            )
+        }),
+        c("git-config", None, |d| {
+            tool(
+                d,
+                "Write",
+                serde_json::json!({"file_path": abs(d, ".git/config"), "content": "[core]"}),
+            )
+        }),
+        c("git-hooks", None, |d| {
+            tool(
+                d,
+                "Write",
+                serde_json::json!({"file_path": abs(d, ".git/hooks/pre-commit"), "content": "#!/bin/sh"}),
+            )
+        }),
+        c(
+            "leaving-a-gated-status",
+            Some("sed -i 's/Proposed/Accepted/' docs/adr/ADR-1-a.md && git commit -qam accepted"),
+            |d| {
+                tool(
+                    d,
+                    "Write",
+                    serde_json::json!({"file_path": abs(d, PATH_1), "content": PROPOSED}),
+                )
+            },
+        ),
+        c("notebook-delete", None, |d| {
+            tool(
+                d,
+                "NotebookEdit",
+                serde_json::json!({"notebook_path": abs(d, "n.ipynb"), "cell_id": "c1", "new_source": "", "edit_mode": "delete"}),
+            )
+        }),
+        c("notebook-bad-mode", None, |d| {
+            tool(
+                d,
+                "NotebookEdit",
+                serde_json::json!({"notebook_path": abs(d, "n.ipynb"), "cell_id": "c1", "new_source": "x", "edit_mode": "frob"}),
+            )
+        }),
+        c("tool-input-a-string", None, |d| {
+            serde_json::json!({"tool_name": "Write", "cwd": d.to_string_lossy(), "tool_input": "x"})
+                .to_string()
+        }),
+        c("tool-input-a-list", None, |d| {
+            serde_json::json!({"tool_name": "Write", "cwd": d.to_string_lossy(), "tool_input": [1, 2]}).to_string()
+        }),
+        c("unknown-tool", None, |d| {
+            tool(
+                d,
+                "Frobnicate",
+                serde_json::json!({"file_path": abs(d, ".claude/settings.json")}),
+            )
+        }),
+        c("protected-write-project-unset", None, |d| {
+            tool(
+                d,
+                "Write",
+                serde_json::json!({"file_path": abs(d, ".claude/settings.json"), "content": "{}"}),
+            )
+        }),
+        c("record-write-project-unset", None, |d| {
+            tool(
+                d,
+                "Write",
+                serde_json::json!({"file_path": abs(d, PATH_1), "content": ACCEPTED}),
+            )
+        }),
+        c(
+            "protected-write-binary-is-stricter-or-equal-project-elsewhere",
+            None,
+            |d| {
+                tool(
+                    d,
+                    "Write",
+                    serde_json::json!({"file_path": abs(d, ".claude/settings.json"), "content": "{}"}),
+                )
+            },
+        ),
+        c(
+            "multiedit-no-edits-binary-is-stricter-reference-crashes-into-the-same-text-scan",
+            None,
+            |d| {
+                tool(
+                    d,
+                    "MultiEdit",
+                    serde_json::json!({"file_path": abs(d, "notes.txt")}),
+                )
+            },
+        ),
+    ]
+}
+
+#[test]
+fn every_path_shape_and_project_setting_gives_the_scripts_output_or_a_stricter_one() {
+    compare("deny", &config(""), path_cases());
+    compare("allow", &config(", on_unjudged: allow"), path_cases());
+}
+
+/// The reference decoded a payload that is not UTF-8 leniently and, finding no
+/// file in it, said nothing; the binary reads it as unreadable, which the
+/// configuration refuses where a guardrail refuses an unjudged edit.
+#[test]
+fn a_payload_that_is_not_utf8_binary_is_stricter_it_reads_it_as_unreadable() {
+    for (name, cfg) in [
+        ("deny", config("")),
+        ("allow", config(", on_unjudged: allow")),
+    ] {
+        let (a, b) = (
+            fixture(&format!("{name}-bytes-py"), &cfg),
+            fixture(&format!("{name}-bytes-rs"), &cfg),
+        );
+        let raw = |dir: &Path, script_side: bool| {
+            let mut c = if script_side {
+                let mut c = Command::new("python3");
+                c.arg("-I")
+                    .arg(dir.join(SCRIPT))
+                    .args(["edit", "--", "urzua", "harness", "run", "edit"])
+                    .env("URZUA_BIN", env!("CARGO_BIN_EXE_urzua"));
+                c
+            } else {
+                let mut c = Command::new(env!("CARGO_BIN_EXE_urzua"));
+                c.args(["harness", "hook", "claude-code", "edit"])
+                    .env("CLAUDE_PROJECT_DIR", dir);
+                c
+            };
+            c.current_dir(dir)
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped());
+            let mut child = c.spawn().unwrap();
+            let _ = child
+                .stdin
+                .take()
+                .unwrap()
+                .write_all(b"{\"tool_name\": \"Write\", \"x\": \"\xff\xfe\"}");
+            let out = child.wait_with_output().unwrap();
+            String::from_utf8(out.stdout)
+                .unwrap()
+                .replace(&dir.to_string_lossy().to_string(), "<DIR>")
+        };
+        let (s, r) = (raw(&a, true), raw(&b, false));
+        assert!(rank(&r) >= rank(&s), "{name}: script {s} binary {r}");
+        assert!(r.contains("unreadable"), "{name}: {r}");
+    }
+}
+
+/// An event the binary does not know exits 2 with nothing on stdout, so the
+/// installed command's fallback answers; the reference printed a notice that
+/// let the call through. The binary is the stricter.
+#[test]
+fn an_unknown_event_binary_is_stricter_it_exits_nonzero_so_the_fallback_answers() {
+    let dir = fixture("unknown-event", &config(""));
+    let out = common::run_hook(&dir, "frob", "{}", None, Some(&dir), &[]);
+    assert_eq!(out.status.code(), Some(2), "{out:?}");
+    assert!(out.stdout.is_empty());
+    let from_script = script(&dir, "frob", "{}", &["urzua", "harness", "run", "frob"]);
+    assert!(!from_script.contains("deny"), "{from_script}");
 }
 
 #[test]

@@ -287,9 +287,9 @@ never accept a record or touch a guardrail rests on this file and on the person 
 - a Bash command that writes what the edit tools cannot: `.urzua/cache`, `.urzua/harness.lock`, the override
   log, `.git/hooks`, `.git/config` and `.git/urzua`. Nothing reports it;
 - without `urzua` on `PATH` (or with a release too old for `urzua harness hook`), the editor hook's command
-  reads `.urzua/config.yaml` as text and refuses every edit if it finds `acceptance` or `protected-paths` enabled without `on_unjudged: allow`; a
-  configuration that scan misreads is read as not closed, and an invalid or empty `.urzua/config.yaml` (only
-  a Bash write makes one, and it is reported) lets every edit through with a message;
+  reads `.urzua/config.yaml` as text and refuses every edit unless it reads with certainty that neither
+  `acceptance` nor `protected-paths` refuses an unjudged edit; an empty `.urzua/config.yaml` (only a Bash
+  write makes one, and it is reported) lets every edit through with a message;
 - a repository the session did not start in can add restrictions, never remove them: an edit is judged by
   the session's repository and by every governed repository that holds the file, and a deny from any wins;
 - the agent-instructions block in this file is not a protected path: an edit tool can remove it with no

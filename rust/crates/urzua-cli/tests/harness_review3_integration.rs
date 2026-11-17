@@ -247,7 +247,7 @@ fn the_settings_command_refuses_when_it_cannot_run_and_the_configuration_says_de
         .as_str()
         .unwrap();
     assert!(
-        reason.contains("on_unjudged") && reason.contains("urzua is not on PATH"),
+        reason.contains("with certainty") && reason.contains("urzua is not on PATH"),
         "{reason}"
     );
     assert!(reason.contains("install.md"), "names the fix: {reason}");
@@ -520,8 +520,8 @@ fn session_start_compares_the_installed_files_the_hook_entries_and_the_kill_swit
     // An edited hook entry, still present by handler.
     let settings = std::fs::read_to_string(dir.join(".claude/settings.json")).unwrap();
     let edited = settings.replacen(
-        "urzua harness hook claude-code edit && exit 0; c=$?;",
-        "urzua harness hook claude-code edit && exit 0; c=0;",
+        "else c=$?; fi;",
+        "else c=0; fi;",
         1,
     );
     assert_ne!(edited, settings, "the fixture's command changed shape");
@@ -799,7 +799,7 @@ fn the_installed_settings_command_denies_the_minted_outer_repository_repro() {
     assert_eq!(decision(&v), Some("deny"), "{v}");
 }
 
-// ------------------- round 4 S1, after the script: nothing to edit, nothing pinned
+// ------------------------------------------ nothing to edit, nothing pinned
 
 fn status_of(dir: &Path) -> serde_json::Value {
     let out = urzua()

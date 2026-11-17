@@ -1028,6 +1028,22 @@ same answer; the plugin ships the hooks and the lifecycle commands, and per-type
 and a debug build reads a stand-in engine from `URZUA_HOOK_ENGINE_FOR_TESTS` for its tests, which a release
 build ignores.
 
+## Amendment (2026-11-17, review): the hook fails closed
+
+Decided by the orchestrator on 2026-11-17, pending maintainer review: when the binary cannot run, the hook
+command's text fallback fails closed. It lets an edit through only when it reads with certainty that neither
+`acceptance` nor `protected-paths` refuses an unjudged edit; a configuration shape it cannot read that way, an
+unreadable file, or no configuration found is a refusal that tells the person to install or upgrade urzua. This
+replaces the fallback of the amendment above, which refused only where it found those guardrails enabled.
+
+Decided by the builder on 2026-11-17, pending maintainer review: the hook command prints the binary's stdout only
+when it exits 0; a panic inside `urzua harness hook` ends in a refusal of the edit as one JSON document; the
+hook stops waiting for the engine 15 seconds before `hook_timeout_seconds` and refuses the edit, because the
+agent lets a call through at its own timeout; a verdict word the adapter does not know is an edit nobody judged;
+a generated file's code (fenced lines, inline code) is compared exactly, its prose by words; and the tests'
+stand-in engine is read only in a build with the `test-seams` feature, which only `cargo test` turns on, in
+place of the debug-build rule of the amendment above.
+
 ## References
 
 - `ADR-69`, `ADR-70`, `ADR-71`: the hook, drafting commands and layered gate this extends; `ADR-70` gains an
@@ -1081,3 +1097,4 @@ build ignores.
 > | 2026-11-16 | Added an `## Amendment (2026-11-16): the post-command report weighs a gate event by the base branch`: the "arrived by a git move" wording and the stash tracking are removed, and a gate event matching the configured base ref is reported in one sentence at a lower level, still printed. **Why:** `MILE-311`, decided by the orchestrator on 2026-11-16, pending maintainer review, after the maintainer reported on 2026-11-16 that the report after a pull could not be understood. | **substantive** |
 > | 2026-11-16 | Added an `## Amendment (2026-11-16): a match lowers the report only against a remote-tracking ref`, correcting the earlier amendment of that day: raw-byte and mode matching, deletion-only absent-from-both, non-UTF-8 names never match, the remote-tracking-only downgrade, the rule-change event, and the agent's own line. **Why:** `MILE-311`, decided by the orchestrator on 2026-11-16, pending maintainer review, after the third review of its pull request. | **substantive** |
 > | 2026-11-17 | Added an `## Amendment (2026-11-17): the enforcer lives in the binary, and the script and its pin are removed`: the translation is `urzua harness hook`, the drafting helper `urzua harness record`, nothing executable is installed and no entry carries a hash, the binary is verified at install, the settings file and the configuration stay protected, and leftovers are removed by hand with no migration command. **Why:** `MILE-339` and `MILE-280`; accepted by the maintainer on 2026-11-17 for the points quoted in the amendment, the rest decided by the builder on 2026-11-17, pending maintainer review. | **substantive** |
+> | 2026-11-17 | Added an `## Amendment (2026-11-17, review): the hook fails closed`: the text fallback refuses whatever it cannot read with certainty, stdout is printed only on success, a panic or the hook's deadline refuses, an unknown verdict is unjudged, generated code compares exactly, the test seams need the `test-seams` feature. **Why:** review of the pull request that moved the harness into the binary; the fallback decided by the orchestrator on 2026-11-17, the rest by the builder, both pending maintainer review. | **substantive** |

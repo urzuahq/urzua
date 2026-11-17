@@ -219,6 +219,10 @@ be used together.
 | What it adds | Nothing per repository: the rules come from each repository's `.urzua/config.yaml`. | The per-type drafting commands (generated from the configuration), the instructions block, and `status` drift checks against the lock. |
 | Needs | `urzua` on `PATH`. | `urzua` on `PATH`. |
 
+A repository that vendors the plugin (keeps a copy of `plugins/claude-code` or a `.claude-plugin`
+marketplace file of its own) should list both paths under a protected-path gate, as it does `.claude`:
+an agent that can edit the plugin's hooks file can change what the next install registers.
+
 Install the plugin once per machine:
 
 ```sh

@@ -1229,7 +1229,7 @@ fn session_start_is_quiet_when_ready_and_names_each_thing_that_would_fail_open()
     assert_eq!(checks_of(&v), ["environment"], "{v}");
     assert!(msg(&v).contains("CLAUDE_PROJECT_DIR"), "{v}");
 
-    // No interpreter is needed: python3 missing changes nothing.
+    // No interpreter is needed beyond the binary.
     let no_python = path_with(&["urzua", "git", "sh"]);
     let v = session_start(&dir, &no_python, true);
     assert_eq!(v["verdict"], "allow", "{v}");

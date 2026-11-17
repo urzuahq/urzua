@@ -99,7 +99,10 @@ fn judge_once(a: &Adapter, event: &str) -> String {
     once::run(project.as_deref(), a.name, event, &payload, || {
         let out = (a.translate)(event, &payload, project.as_deref());
         if TIMED_OUT.load(Ordering::SeqCst) {
-            return (a.fail_closed)(event, "the engine did not answer before the hook's deadline");
+            return (a.fail_closed)(
+                event,
+                "the engine did not answer before the hook's deadline",
+            );
         }
         out
     })
@@ -115,8 +118,8 @@ static TIMED_OUT: AtomicBool = AtomicBool::new(false);
 const DEADLINE_MARGIN: Duration = Duration::from_secs(15);
 
 fn start_deadline(project: Option<&Path>) {
-    let timeout = super::limits::of(None, project)
-        .get(urzua_core::harness::limits::HOOK_TIMEOUT_SECONDS);
+    let timeout =
+        super::limits::of(None, project).get(urzua_core::harness::limits::HOOK_TIMEOUT_SECONDS);
     let budget = test_seam("URZUA_HOOK_DEADLINE_FOR_TESTS")
         .and_then(|s| s.parse::<u64>().ok())
         .map(Duration::from_secs)
@@ -293,7 +296,9 @@ pub(super) fn engine(
         }
         std::thread::sleep(Duration::from_millis(10));
     }
-    let out = reader.join().map_err(|_| "the engine's output could not be read")?;
+    let out = reader
+        .join()
+        .map_err(|_| "the engine's output could not be read")?;
     let verdict: serde_json::Value = serde_json::from_slice(&out).map_err(|e| e.to_string())?;
     if !verdict
         .as_object()

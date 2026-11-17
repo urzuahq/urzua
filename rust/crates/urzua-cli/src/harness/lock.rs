@@ -123,12 +123,18 @@ fn words(text: &str) -> String {
             out.push(format!("\n{t}"));
             continue;
         }
-        // A list marker a formatter may change or renumber: `-`, `*`, `+`, `1.`, `1)`.
+        // A list marker a formatter may change or renumber (`-`, `*`, `+`, `1.`,
+        // `1)`), followed by a space; `--flag` at a line start is not one.
         let digits = t.chars().take_while(char::is_ascii_digit).count();
-        let body = match t[digits..].chars().next() {
-            Some('.' | ')') if digits > 0 => &t[digits + 1..],
-            Some('-' | '*' | '+') if digits == 0 => &t[1..],
-            _ => t,
+        let marker = match t[digits..].chars().next() {
+            Some('.' | ')') if digits > 0 => digits + 1,
+            Some('-' | '*' | '+') if digits == 0 => 1,
+            _ => 0,
+        };
+        let body = if marker > 0 && t[marker..].starts_with([' ', '\t']) {
+            &t[marker..]
+        } else {
+            t
         };
         prose.push(' ');
         prose.push_str(body);
@@ -141,7 +147,10 @@ fn words(text: &str) -> String {
 fn prose_words(prose: &str, out: &mut Vec<String>) {
     for (i, part) in prose.split('`').enumerate() {
         if i % 2 == 1 {
-            out.push(format!("`{}`", part.split_whitespace().collect::<Vec<_>>().join(" ")));
+            out.push(format!(
+                "`{}`",
+                part.split_whitespace().collect::<Vec<_>>().join(" ")
+            ));
         } else {
             out.extend(
                 part.split(|c: char| !c.is_alphanumeric())
@@ -225,8 +234,15 @@ mod tests {
     fn changed_punctuation_in_a_command_is_drift_and_reindenting_it_is_not() {
         assert!(!same_text(STEP, &STEP.replace("&&", "||")));
         assert!(!same_text(STEP, &STEP.replace("--json", "json")));
-        assert!(same_text(STEP, &STEP.replace("   urzua harness", "      urzua harness")));
+        assert!(same_text(
+            STEP,
+            &STEP.replace("   urzua harness", "      urzua harness")
+        ));
         assert!(same_text(STEP, &STEP.replace("Then use", "Then\nuse")));
+        assert!(same_text(
+            STEP,
+            &STEP.replace("check --json", "check\n   --json")
+        ));
     }
 
     #[test]

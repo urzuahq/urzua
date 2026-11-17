@@ -34,7 +34,12 @@ pub const EVENTS: &[&str] = &["edit", "post-command", "session-start"];
 pub const PROJECT_ENV: &str = "CLAUDE_PROJECT_DIR";
 
 const EDIT_TOOLS: [&str; 4] = ["Write", "Edit", "MultiEdit", "NotebookEdit"];
+/// The verdicts that let an edit through with nothing to say: judged and
+/// allowed, or a file no record type governs.
+const QUIET: [&str; 2] = ["allow", "not-governed"];
 const ALLOWED_NOTES: [&str; 3] = ["allow-unjudged", "allow-override", "allow-with-warnings"];
+/// How an error about a tool input of the wrong shape begins.
+const MALFORMED: &str = "the tool input is malformed: ";
 const POST_NOT_JUDGED: &str =
     "urzua harness (post-command): NOT judged; run 'urzua check' before committing.";
 
@@ -373,7 +378,7 @@ fn proposed(tool: &str, inp: &J, path: &str) -> Result<J, String> {
     let edits: &[J] = if tool == "MultiEdit" {
         match inp.get("edits") {
             Some(J::Arr(list)) => list,
-            _ => return Err("the edits are not a list".into()),
+            _ => return Err(format!("{MALFORMED}the edits are not a list")),
         }
     } else {
         &single
@@ -383,7 +388,7 @@ fn proposed(tool: &str, inp: &J, path: &str) -> Result<J, String> {
         let field = |k: &str| match e.get(k) {
             None => Ok(String::new()),
             Some(J::Str(t)) => Ok(t.clone()),
-            Some(_) => Err(format!("{k} is not a string")),
+            Some(_) => Err(format!("{MALFORMED}{k} is not a string")),
         };
         let (old, new) = (field("old_string")?, field("new_string")?);
         let all = j_truthy(e.get("replace_all"));
@@ -426,9 +431,12 @@ pub fn fail_closed(event: &str, why: &str) -> String {
         project: None,
         out: String::new(),
     };
-    let message = format!("urzua harness: {why}, so this call was NOT judged. Run: urzua harness status");
+    let message =
+        format!("urzua harness: {why}, so this call was NOT judged. Run: urzua harness status");
     if event == "edit" {
-        run.deny(&format!("{message}. The edit is refused because nothing judged it."));
+        run.deny(&format!(
+            "{message}. The edit is refused because nothing judged it."
+        ));
     } else {
         run.stated(&message, event);
     }
@@ -508,12 +516,18 @@ fn edit(run: &mut Run, payload: &J, cwd: Option<&str>) {
     let path = py_str(raw);
     let content = match raw {
         Some(J::Str(_)) => proposed(tool, inp, &path),
-        _ => Err(format!("{key} is not a string")),
+        _ => Err(format!("{MALFORMED}{key} is not a string")),
     };
     let content = match content {
         Ok(c) => c,
         Err(e) => {
             let message = format!("urzua harness: urzua did NOT judge this edit ({tool} of {path}: {e}). It is allowed unless the configuration refuses an edit that was not judged; run 'urzua check' before committing.");
+            // A tool input of the wrong shape says nothing reliable about the
+            // file, so the configuration alone decides, as for an unreadable
+            // payload: refused wherever a guardrail refuses an unjudged edit.
+            if e.starts_with(MALFORMED) {
+                return run.unjudged_edit(&message, cwd, Vec::new(), true);
+            }
             return run.unjudged_edit(&message, cwd, vec![path], false);
         }
     };
@@ -532,7 +546,7 @@ fn edit(run: &mut Run, payload: &J, cwd: Option<&str>) {
         run.deny(message);
     } else if ALLOWED_NOTES.contains(&kind) {
         run.note(message);
-    } else if kind != "allow" {
+    } else if !QUIET.contains(&kind) {
         let message = unknown_verdict(kind);
         run.unjudged_edit(&message, cwd, vec![path], true);
     }

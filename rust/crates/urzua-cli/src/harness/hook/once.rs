@@ -146,7 +146,11 @@ mod tests {
         if !writable {
             let start = std::time::Instant::now();
             assert_eq!(claimed(&dir, "k", || "judged".to_string()), "judged");
-            assert!(start.elapsed() < Duration::from_secs(2), "{:?}", start.elapsed());
+            assert!(
+                start.elapsed() < Duration::from_secs(2),
+                "{:?}",
+                start.elapsed()
+            );
         }
         std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o755)).unwrap();
         std::fs::remove_dir_all(&dir).unwrap();

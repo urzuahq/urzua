@@ -21,7 +21,11 @@ const DENYING: &str = "    protected-paths:\n      enabled: true\n";
 const ALLOWING: &str = "    protected-paths:\n      enabled: true\n      on_unjudged: allow\n";
 
 fn git(dir: &Path, args: &[&str]) {
-    let out = Command::new("git").args(args).current_dir(dir).output().unwrap();
+    let out = Command::new("git")
+        .args(args)
+        .current_dir(dir)
+        .output()
+        .unwrap();
     assert!(out.status.success(), "git {args:?}: {out:?}");
 }
 
@@ -38,11 +42,19 @@ fn repo(name: &str, config: &str) -> common::TempDir {
 /// every test runs the command the agent runs.
 fn edit_command() -> String {
     let dir = repo("command", &harness(DENYING));
-    let out = common::urzua().args(["harness", "install"]).current_dir(&dir).output().unwrap();
+    let out = common::urzua()
+        .args(["harness", "install"])
+        .current_dir(&dir)
+        .output()
+        .unwrap();
     assert!(out.status.success(), "{out:?}");
     let s: serde_json::Value =
-        serde_json::from_str(&std::fs::read_to_string(dir.join(".claude/settings.json")).unwrap()).unwrap();
-    s["hooks"]["PreToolUse"][0]["hooks"][0]["command"].as_str().unwrap().to_string()
+        serde_json::from_str(&std::fs::read_to_string(dir.join(".claude/settings.json")).unwrap())
+            .unwrap();
+    s["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+        .as_str()
+        .unwrap()
+        .to_string()
 }
 
 fn payload(dir: &Path) -> String {
@@ -65,11 +77,14 @@ fn path_with(urzua: Option<&str>) -> Path_ {
         std::os::unix::fs::symlink(found, dir.join(tool)).unwrap();
     }
     match urzua {
-        Some("build") => std::os::unix::fs::symlink(env!("CARGO_BIN_EXE_urzua"), dir.join("urzua")).unwrap(),
+        Some("build") => {
+            std::os::unix::fs::symlink(env!("CARGO_BIN_EXE_urzua"), dir.join("urzua")).unwrap()
+        }
         Some(script) => {
             use std::os::unix::fs::PermissionsExt;
             std::fs::write(dir.join("urzua"), format!("#!/bin/sh\n{script}\n")).unwrap();
-            std::fs::set_permissions(dir.join("urzua"), std::fs::Permissions::from_mode(0o755)).unwrap();
+            std::fs::set_permissions(dir.join("urzua"), std::fs::Permissions::from_mode(0o755))
+                .unwrap();
         }
         None => {}
     }
@@ -92,7 +107,11 @@ fn run(cmd: &str, dir: &Path, path: &Path_, envs: &[(&str, &str)]) -> Option<ser
         c.env(k, v);
     }
     let mut child = c.spawn().unwrap();
-    let _ = child.stdin.take().unwrap().write_all(payload(dir).as_bytes());
+    let _ = child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(payload(dir).as_bytes());
     let out = child.wait_with_output().unwrap();
     assert_eq!(out.status.code(), Some(0), "{out:?}");
     let text = String::from_utf8(out.stdout).unwrap();
@@ -100,7 +119,10 @@ fn run(cmd: &str, dir: &Path, path: &Path_, envs: &[(&str, &str)]) -> Option<ser
         return None;
     }
     let mut docs = serde_json::Deserializer::from_str(&text).into_iter::<serde_json::Value>();
-    let first = docs.next().unwrap().unwrap_or_else(|e| panic!("{e}: {text}"));
+    let first = docs
+        .next()
+        .unwrap()
+        .unwrap_or_else(|e| panic!("{e}: {text}"));
     assert!(docs.next().is_none(), "more than one JSON document: {text}");
     Some(first)
 }
@@ -137,30 +159,66 @@ fn a_binary_that_writes_half_an_answer_and_fails_leaves_only_the_fallback() {
 /// sure do not) that the fallback must refuse too.
 const NOT_CERTAIN: &[(&str, &str)] = &[
     ("block", "    protected-paths:\n      enabled: true\n"),
-    ("True", "    protected-paths:\n      enabled: True\n      on_unjudged: allow\n"),
+    (
+        "True",
+        "    protected-paths:\n      enabled: True\n      on_unjudged: allow\n",
+    ),
     ("TRUE", "    protected-paths:\n      enabled: TRUE\n"),
-    ("quoted-key", "    \"protected-paths\":\n      enabled: true\n      on_unjudged: allow\n"),
-    ("single-quoted-key", "    'protected-paths': {enabled: true, on_unjudged: allow}\n"),
-    ("anchor-alias", "    x: &g {enabled: true}\n    protected-paths: *g\n"),
+    (
+        "quoted-key",
+        "    \"protected-paths\":\n      enabled: true\n      on_unjudged: allow\n",
+    ),
+    (
+        "single-quoted-key",
+        "    'protected-paths': {enabled: true, on_unjudged: allow}\n",
+    ),
+    (
+        "anchor-alias",
+        "    x: &g {enabled: true}\n    protected-paths: *g\n",
+    ),
     ("tag", "    protected-paths: !!map {enabled: true}\n"),
-    ("flow-nested", "    nested: {protected-paths: {enabled: true}}\n"),
-    ("flow-on-later-lines", "    protected-paths: {\n      enabled: true}\n"),
-    ("comment-says-allow", "    protected-paths:\n      enabled: true # on_unjudged: allow\n"),
-    ("xallow", "    protected-paths: {enabled: true, on_unjudged: xallow}\n"),
-    ("value-on-next-line", "    protected-paths:\n      enabled:\n        true\n"),
+    (
+        "flow-nested",
+        "    nested: {protected-paths: {enabled: true}}\n",
+    ),
+    (
+        "flow-on-later-lines",
+        "    protected-paths: {\n      enabled: true}\n",
+    ),
+    (
+        "comment-says-allow",
+        "    protected-paths:\n      enabled: true # on_unjudged: allow\n",
+    ),
+    (
+        "xallow",
+        "    protected-paths: {enabled: true, on_unjudged: xallow}\n",
+    ),
+    (
+        "value-on-next-line",
+        "    protected-paths:\n      enabled:\n        true\n",
+    ),
 ];
 
 #[test]
 fn without_a_working_binary_every_shape_the_awk_cannot_read_with_certainty_is_refused() {
     let cmd = edit_command();
-    for (binary, label) in [(None, "absent"), (Some("echo 'error: unrecognized subcommand hook' >&2; exit 2"), "too old")] {
+    for (binary, label) in [
+        (None, "absent"),
+        (
+            Some("echo 'error: unrecognized subcommand hook' >&2; exit 2"),
+            "too old",
+        ),
+    ] {
         let path = path_with(binary);
         for (name, guardrails) in NOT_CERTAIN {
             let config = format!("{TYPES}harness:\n  adapters: [claude-code]\n  guardrails:\n{guardrails}{AUTHORITY}");
             let dir = repo(&format!("shape-{name}"), &config);
             let v = run(&cmd, &dir, &path, &[]);
             assert!(denied(&v), "{label} / {name}: {v:?}");
-            assert!(v.unwrap().to_string().contains("Install or upgrade urzua"), "{label} / {name}");
+            assert!(
+                v.unwrap().to_string().contains("Install or upgrade urzua"),
+                "{label} / {name}"
+            );
         }
     }
 }
@@ -189,10 +247,16 @@ fn without_a_working_binary_a_missing_parent_or_unreadable_configuration_is_refu
     let dir = repo("parent", &harness(DENYING));
     let sub: PathBuf = dir.join("sub");
     std::fs::create_dir_all(&sub).unwrap();
-    assert!(denied(&run(&cmd, &sub, &path, &[])), "a parent's configuration governs");
+    assert!(
+        denied(&run(&cmd, &sub, &path, &[])),
+        "a parent's configuration governs"
+    );
     // No configuration anywhere above the session.
     let bare = common::TempDir::new("urzua-hookfail-bare");
-    assert!(denied(&run(&cmd, &bare, &path, &[])), "nothing read, nothing certain");
+    assert!(
+        denied(&run(&cmd, &bare, &path, &[])),
+        "nothing read, nothing certain"
+    );
     // A configuration that cannot be read.
     if common::permission_bits_are_enforced() {
         use std::os::unix::fs::PermissionsExt;
@@ -209,12 +273,27 @@ fn without_a_working_binary_a_missing_parent_or_unreadable_configuration_is_refu
 fn an_answer_with_an_unknown_verdict_word_is_an_unjudged_edit_not_a_silent_allow() {
     let cmd = edit_command();
     let path = path_with(Some("build"));
-    let engine = serde_json::json!(["sh", "-c", "cat >/dev/null; echo '{\"verdict\":\"maybe\",\"message\":\"\"}'"]).to_string();
+    let engine = serde_json::json!([
+        "sh",
+        "-c",
+        "cat >/dev/null; echo '{\"verdict\":\"maybe\",\"message\":\"\"}'"
+    ])
+    .to_string();
     let dir = repo("unknown-deny", &harness(DENYING));
-    let v = run(&cmd, &dir, &path, &[("URZUA_HOOK_ENGINE_FOR_TESTS", &engine)]);
+    let v = run(
+        &cmd,
+        &dir,
+        &path,
+        &[("URZUA_HOOK_ENGINE_FOR_TESTS", &engine)],
+    );
     assert!(denied(&v), "{v:?}");
     let dir = repo("unknown-allow", &harness(ALLOWING));
-    let v = run(&cmd, &dir, &path, &[("URZUA_HOOK_ENGINE_FOR_TESTS", &engine)]);
+    let v = run(
+        &cmd,
+        &dir,
+        &path,
+        &[("URZUA_HOOK_ENGINE_FOR_TESTS", &engine)],
+    );
     assert!(!denied(&v), "{v:?}");
     assert!(v.expect("not silent").to_string().contains("'maybe'"));
 }
@@ -231,9 +310,16 @@ fn an_engine_that_does_not_answer_before_the_deadline_ends_in_a_refusal() {
         &cmd,
         &dir,
         &path,
-        &[("URZUA_HOOK_ENGINE_FOR_TESTS", &engine), ("URZUA_HOOK_DEADLINE_FOR_TESTS", "1")],
+        &[
+            ("URZUA_HOOK_ENGINE_FOR_TESTS", &engine),
+            ("URZUA_HOOK_DEADLINE_FOR_TESTS", "1"),
+        ],
     );
-    assert!(start.elapsed() < std::time::Duration::from_secs(15), "{:?}", start.elapsed());
+    assert!(
+        start.elapsed() < std::time::Duration::from_secs(15),
+        "{:?}",
+        start.elapsed()
+    );
     assert!(denied(&v), "{v:?}");
     assert!(v.unwrap().to_string().contains("deadline"));
 }

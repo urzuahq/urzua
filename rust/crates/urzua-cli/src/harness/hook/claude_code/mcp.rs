@@ -112,7 +112,7 @@ const DEST_WORDS: [&str; 11] = [
 
 /// A verdict word this build knows.
 fn known(kind: &str) -> bool {
-    kind == "allow" || kind == "block" || ALLOWED_NOTES.contains(&kind)
+    kind == "block" || super::QUIET.contains(&kind) || ALLOWED_NOTES.contains(&kind)
 }
 
 fn has(list: &[&str], w: &str) -> bool {
