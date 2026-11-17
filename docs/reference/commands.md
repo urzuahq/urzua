@@ -125,10 +125,10 @@ fetches pull request head refs so numbers taken by open pull requests are skippe
 
 The header is built from the type's `required_fields`, with the `Stable-Id`, the date, the author
 (from `--by`, `gh`, or `git config user.name`) and the first declared status filled in; every other
-field is left for you. A field left for you is never written `null`: it carries the template's text
-for it, or `—` when the type requires it and the template has none, or is left out. `to_fill` lists
-each such field as `{field, reason}` (`placeholder` or `required-empty`), and `next_action_reason`
-names them. If `.urzua/templates/<type>.md` exists, its body (title and sections) is
+field is left for you. A field left for you is written empty (`Kind:`), required or optional, never
+with the template's text, `—` or `null`. `to_fill` lists each such field as `{field, required, hint}`,
+`hint` being the template's text for it or `null`, and `next_action_reason` names them. `check` then
+reports an empty required field as Blank and an empty optional field not at all. If `.urzua/templates/<type>.md` exists, its body (title and sections) is
 appended. A type with `header_shape: none` is refused, since it has nowhere to store a stable id.
 
 Output: `status`, `path`, `display_number`, `stable_id`, `pull_refs` (whether the open pull request
@@ -280,8 +280,7 @@ usually `urzua hooks install`. The report's `next_action` is the first such comm
 The `check` ids include `config-exists`, `config-parses`, `record-type-dir`, `ci-wired`, `hook-wired`,
 `authority-host` (whether the declared authority gates anything), `authority-decider-table`,
 `authority-waivable`, `harness-config` (the declared harness, and any key of it this build does not
-recognize), `declared-value-vocabulary` (`info`: a declared status value that is also a placeholder
-or pending word, which is a real value in the status field and still reported elsewhere) and `template-sections` (whether a type's starter template has a heading for each section
+recognize), `declared-value-vocabulary` (a declared status or `field_values` value that a placeholder or pending vocabulary also reads as a marker: `info`, or `warn` when the type lists it in its own `statuses.placeholders` or `statuses.pending`) and `template-sections` (whether a type's starter template has a heading for each section
 the type requires).
 Exit 0 for `ok` and `warn`, 1 for `error`, 2 when there is no config to read.
 

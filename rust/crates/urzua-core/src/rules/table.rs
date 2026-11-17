@@ -1522,7 +1522,7 @@ pub const RULE_TABLE: &[RuleDef] = &[
     },
     RuleDef {
         id: RULE_HEADER_POINTER_FIELD_CLEAN,
-        description: "A type's `pointer_fields` entries are clean, comma-separated references only, format-enforced (MILE-90/ADR-44) — an empty entry between commas or freeform trailing prose is flagged. Never applies to `narrative_fields`, which tolerate prose.",
+        description: "A type's `pointer_fields` entries are clean, comma-separated references only, format-enforced (MILE-90/ADR-44) — an empty entry between commas or freeform trailing prose is flagged. An empty value (`Field:`, or `null`) names no reference and is not flagged (`MILE-322`). Never applies to `narrative_fields`, which tolerate prose.",
         scope: Scope::Records,
         anchor: Anchor::Record,
         judges: Judges::OneRecord,

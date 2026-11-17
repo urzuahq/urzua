@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5C0WX34AQKF79DQDS5
-Version: '0.36'
+Version: '0.37'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -37,29 +37,23 @@ other field is a decision a human makes and is written as the next section says.
 
 ## A field `new` has no value for (`MILE-322`)
 
-`new` never writes a field as `null`. A field it has no value for is written:
+`new` never invents a value. A field it has no value for is written empty (`Kind:`, nothing after the
+colon: the same YAML null an older `new`'s `Kind: null` was, read the same by every rule), required or
+optional, whenever the type's header carries the field; the set and order of fields `new` writes is
+unchanged, so an author fills an optional field without adding a line. `new` never writes `—` on the
+author's behalf (it asserts "deliberately no value") and never copies a template's text into a header
+field.
 
-- with the template's text for that field, when the template's header carries non-empty text for it
-  (`Deciders: name(s)`, `Kind: feature | bug | chore`), and listed in the report's `to_fill` with
-  `reason: placeholder`. Two exceptions take the forms below instead: the status field of a type that
-  declares `statuses` (its template line lists the values, it is not one), and a `pointer_fields`
-  field whose template text is not a clean reference list, which `header.pointer-field-clean` would
-  report;
-- as the `—` no-value sentinel when the type requires it and the template has no text for it, listed
-  in `to_fill` with `reason: required-empty`. The sentinel keeps `header.required-fields` satisfied and
-  is not read as blank by `field.quality` or as unclean by `header.pointer-field-clean`, so the only
-  record of the gap is `to_fill`;
-- not at all, when the type does not require it and the template has no text for it. An unset
-  optional pointer field therefore trips no pointer rule. A template text of `—` is written as is and
-  is not listed.
+The report's `to_fill` lists each such field as `{field, required, hint}`: `required` says whether the
+type requires it, and `hint` is the template's text for that field (`feature | bug | chore`,
+`name(s)`), or `null` when the template has none. `next_action_reason` names the fields to fill; when
+the record needs no staging, `next_action` is `urzua check <path>` once they are filled.
 
-A template text equal to a placeholder word, or under `field.quality`'s `template_placeholders`, is
-then reported by `field.quality` as a placeholder at the level the configuration gives that rule:
-truthfully, since the author has not filled it. `new` followed by `git add` and `check` reports no
-other finding about a field `new` wrote. The report's `next_action_reason` names the fields to fill;
-when the record needs no staging, `next_action` is `urzua check <path>` once they are filled.
-(Decided by the builder on 2026-11-17, pending maintainer review: the sentinel for a required field
-over an empty value, which `field.quality` would report as blank although the author caused nothing.)
+`new` followed by `git add` and `check` then reports, for a field `new` wrote, only the true
+`field.quality` finding on an empty required field ("field 'Kind' is Blank"). An empty optional field
+draws no finding from any rule: it names no reference, no date and no vocabulary value. An empty value
+written by hand behaves the same. (Accepted by the maintainer on 2026-11-17: "leave it empty and tell
+the agent what to fill".)
 
 If a checked-in template exists (`.urzua/templates/<type>.md`), its body scaffolding (the H1 and the
 sections beneath the header) is appended under the synthesized header; the template's own header, in
@@ -205,9 +199,10 @@ output is unchanged.
 fact, and the opt-in `header.scaffold-mismatch` rule (`SPEC-2`) does: under `check --base` it
 re-renders the header of each added record from the run's configuration and the type's template, with
 the record's own number, title, `Stable-Id`, author and date, and compares the fields `new` decides (which
-exist, their order, and the value each starts at). The comparison renders every field `new` has no
-value for as null, whatever `new` wrote for it (template text, the sentinel or nothing), and a field
-null there may be filled in or left out; nothing else may differ. `new` carries no stamp or marker for this (a stamp is forgeable and changes the
+exist, their order, and the value each starts at). A field the scaffold leaves empty, as `new` writes
+it, may be filled in or left out; nothing else may differ, so a record made by `new` and then filled
+is not a mismatch. A record an older `new` wrote with `Field: null` compares the same, since both read
+as empty. `new` carries no stamp or marker for this (a stamp is forgeable and changes the
 record), and nothing here changes what `new` writes.
 
 `scripts/replay-header-comparator.py` runs that rule at every commit of the pull requests merged in
@@ -289,3 +284,4 @@ steps and in seconds, for each record type.
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/new.rs` 42834880ff2b -> 17c7a9534720. Reason: new.rs refuses a path-gated directory through write_new_record, and a misplaced doc comment moved back to write_new_file; the record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-17 | Bumped to `0.36`. Adds `## A field `new` has no value for`: such a field carries the template's text, the `—` sentinel when required, or is left out, never `null`; the report gains `to_fill` and its next-action reason names those fields; `header.scaffold-mismatch` compares against the null form. Decided by the builder on 2026-11-17, pending maintainer review: the sentinel for a required field with no template text. **Why:** `MILE-322` -- `new` wrote `null`, so a new record started with `field.quality` and `header.pointer-field-clean` findings the author did not cause. | **substantive** |
 > | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/new.rs` 17c7a9534720 -> db754194da30, `rust/crates/urzua-core/src/new_record.rs` 9ad96b4bc331 -> 048a39513924, `rust/crates/urzua-cli/tests/new_integration.rs` 24cdee5f880f -> eafc3593c1d4. Reason: new.rs takes the fields to fill from the scaffold and puts them in the report as to_fill; numbering, naming, identity and writing are unchanged; new_integration.rs: two assertions that pinned a null field now expect the template's text and the em-dash sentinel; new_record.rs writes a field new has no value for as the template's text, the em-dash sentinel when required, or leaves it out, never null, and returns the fields still to fill through scaffold_record_reporting; ScaffoldSpec gains unset_as_null for the comparison scaffold; the tests that pinned null now assert the new forms. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-17 | Bumped to `0.37`. Rewrites `## A field `new` has no value for`: such a field is written empty, required or optional, never as the template's text, the `—` sentinel or `null`, and the field set is unchanged; `to_fill` entries are `{field, required, hint}` with the template's text as `hint`; an empty required field keeps `field.quality`'s Blank finding and an empty optional field draws none; `header.scaffold-mismatch` compares against the empty form. **Why:** maintainer decision of 2026-11-17 on `MILE-322` ("leave it empty and tell the agent what to fill"), after review found template prose landing in pointer, date and grouping fields under `0.36`. | **substantive** |
