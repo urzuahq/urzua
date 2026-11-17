@@ -1,19 +1,23 @@
-//! `urzua explain --types` and `urzua explain --type <name>`:
-//! what the configuration declares for its record types, each entry with the
-//! key path and line it was read from.
+//! `urzua explain --types [--full]` and `urzua explain --type <name>`
+//! (`MILE-329`): what the configuration declares for its record types, each
+//! entry with the key path and line it was read from.
 
 mod common;
 
 use std::path::Path;
 use std::process::Command;
 
-use serde_json::Value;
+use serde_json::{json, Value};
 
 const FIXTURE: &str = include_str!("fixtures/explain_types/config.yaml");
+const EVERY_KEY: &str = include_str!("fixtures/explain_types/every_key.yaml");
 
-/// The fixture's report, pretty-printed as the command prints it, stays under
-/// this many bytes.
-const MAX_REPORT_BYTES: usize = 12_000;
+/// The summary of the three-type fixture, as printed, stays under this many bytes.
+const MAX_SUMMARY_BYTES: usize = 2_500;
+/// The full report of the three-type fixture stays under this many bytes.
+const MAX_FULL_BYTES: usize = 12_000;
+/// The summary of this repository's own configuration stays under this many bytes.
+const MAX_OWN_SUMMARY_BYTES: usize = 6_000;
 
 fn repo(name: &str, config: &str) -> common::TempDir {
     let dir = common::TempDir::new(&format!("urzua-explain-types-{name}"));
@@ -56,7 +60,7 @@ fn of<'a>(report: &'a Value, name: &str) -> &'a Value {
 }
 
 fn field<'a>(t: &'a Value, name: &str) -> &'a Value {
-    t["fields"]
+    t["header_fields"]
         .as_array()
         .unwrap()
         .iter()
@@ -86,11 +90,15 @@ fn assert_positions(v: &Value) {
     }
 }
 
+fn own_root() -> std::path::PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..")
+}
+
 #[test]
 fn every_declaration_is_reported_with_its_position() {
     let dir = repo("full", FIXTURE);
     std::fs::write(dir.join(".urzua/templates/issue.md"), "# {title}\n").unwrap();
-    let (out, r) = run(&dir, &["explain", "--types"]);
+    let (out, r) = run(&dir, &["explain", "--types", "--full"]);
     assert_eq!(out.status.code(), Some(0), "{r}");
     assert_eq!(r["status"], "ok");
     assert_positions(&r);
@@ -100,28 +108,35 @@ fn every_declaration_is_reported_with_its_position() {
     assert_eq!(issue["prefix"]["at"], "record_types.issue.prefix:6");
     assert_eq!(issue["dirs"][1]["value"], "docs/issues-archive");
     assert_eq!(issue["header_shape"]["value"], "yaml-frontmatter");
-    assert_eq!(issue["template"]["path"], ".urzua/templates/issue.md");
+    assert_eq!(
+        issue["template"],
+        json!({"value": ".urzua/templates/issue.md", "default": true, "source": "conventional_template_path"})
+    );
+    assert!(
+        of(&r, "task").get("template").is_none(),
+        "no file, no entry"
+    );
     assert_eq!(field(issue, "Kind")["required"], true);
     assert_eq!(
         field(issue, "Kind")["values"]["value"],
-        serde_json::json!(["bug", "chore"])
+        json!(["bug", "chore"])
     );
     assert!(field(issue, "Severity").get("required").is_none());
-    assert_eq!(
-        field(issue, "Fixes")["pointer"]["targets"],
-        serde_json::json!(["task"])
-    );
+    assert_eq!(field(issue, "Fixes")["pointer"]["targets"], json!(["task"]));
     assert!(field(issue, "See-also")["narrative"]["at"].is_string());
     assert_eq!(field(issue, "State")["roles"][0]["role"], "status");
     assert_eq!(field(issue, "Opened")["roles"][0]["role"], "date");
     let states = &issue["states"];
-    assert_eq!(states["initial"]["value"], serde_json::json!(["Open"]));
-    assert_eq!(states["transitions"][0]["from"], "Closed");
-    assert_eq!(states["failure"]["value"], serde_json::json!(["Dropped"]));
+    assert_eq!(states["initial"]["value"], json!(["Open"]));
+    assert_eq!(
+        states["transitions"][0]["from"], "Open",
+        "declaration order"
+    );
+    assert_eq!(states["failure"]["value"], json!(["Dropped"]));
     let require = &issue["conditions"][0];
     assert_eq!(require["kind"], "require");
-    assert_eq!(require["when"], serde_json::json!(["Closed"]));
-    assert_eq!(require["when_field"]["Kind"], serde_json::json!(["bug"]));
+    assert_eq!(require["when"], json!(["Closed"]));
+    assert_eq!(require["when_field"]["Kind"], json!(["bug"]));
     assert_eq!(
         require["sentence"],
         "when State is Closed and Kind is bug, Severity is required"
@@ -130,28 +145,33 @@ fn every_declaration_is_reported_with_its_position() {
         issue["conditions"][1]["sentence"],
         "when State is Open, Fixes is forbidden"
     );
-    assert_eq!(issue["gates"][0]["to"], serde_json::json!(["Dropped"]));
-    assert_eq!(issue["gates"][0]["logins"], serde_json::json!(["someone"]));
+    assert_eq!(issue["gates"][0]["to"], json!(["Dropped"]));
+    assert_eq!(issue["gates"][0]["logins"], json!(["someone"]));
     assert!(issue["revision_log"]["at"].is_string());
-    assert_eq!(
-        of(&r, "note")["gates"][0]["paths"],
-        serde_json::json!(["docs/notes"])
-    );
+    assert_eq!(of(&r, "note")["gates"][0]["paths"], json!(["docs/notes"]));
     let task = of(&r, "task");
+    let pair = &task["relation_pairs"][0];
+    assert_eq!(pair["target_types"], json!(["task"]));
+    assert_eq!(pair["reciprocity"], "none");
     assert_eq!(
-        task["relation_pairs"][0]["target_types"],
-        serde_json::json!(["task"])
+        task["prefix"],
+        json!({"value": "TASK", "default": true, "source": "type_name_uppercased"})
     );
     assert_eq!(
         task["states"]["initial"],
-        serde_json::json!({"value": ["Todo"], "default": true})
+        json!({"value": ["Todo"], "default": true, "source": "first_status_value"})
+    );
+    let gates = &r["repository"]["authority"];
+    assert!(
+        gates["at"].is_string() && gates["value"]["gates"].is_array(),
+        "{r}"
     );
 }
 
 #[test]
 fn rules_set_on_by_declaration_and_declared_but_not_enabled() {
     let dir = repo("rules", FIXTURE);
-    let (_, r) = run(&dir, &["explain", "--types"]);
+    let (_, r) = run(&dir, &["explain", "--types", "--full"]);
     let rules = &r["rules"];
     let set = rules["set"].as_array().unwrap();
     assert_eq!(set.len(), 2);
@@ -163,6 +183,8 @@ fn rules_set_on_by_declaration_and_declared_but_not_enabled() {
         .find(|e| e["id"] == "field.value-not-declared")
         .unwrap();
     assert_eq!(values["default"], true);
+    assert_eq!(values["source"], "default_on");
+    assert!(values.get("at").is_none());
     assert_eq!(
         values["declared_by"][0],
         "record_types.issue.field_values:11"
@@ -185,6 +207,10 @@ fn one_type_and_an_unknown_type() {
     let (out, r) = run(&dir, &["explain", "--type", "task"]);
     assert_eq!(out.status.code(), Some(0));
     assert_eq!(r["types"].as_array().unwrap().len(), 1);
+    assert!(
+        r["types"][0]["header_fields"][0]["at"].is_string(),
+        "full detail: {r}"
+    );
     let (out, r) = run(&dir, &["explain", "--type", "nope"]);
     assert_eq!(out.status.code(), Some(2), "{r}");
     assert_eq!(r["status"], "not-run");
@@ -193,17 +219,73 @@ fn one_type_and_an_unknown_type() {
 }
 
 #[test]
-fn the_report_stays_under_its_size() {
-    let dir = repo("size", FIXTURE);
-    let out = common::urzua()
-        .args(["explain", "--types"])
-        .current_dir(&dir)
+fn one_type_keeps_only_the_rules_that_act_on_it() {
+    let dir = repo("scoped", FIXTURE);
+    let (_, r) = run(&dir, &["explain", "--type", "note"]);
+    let set: Vec<&Value> = r["rules"]["set"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| &e["id"])
+        .collect();
+    assert_eq!(set, ["header.required-fields"], "{r}");
+    assert!(r["rules"].get("on_by_declaration").is_none(), "{r}");
+    assert!(r["next_action"].is_null());
+}
+
+#[test]
+fn the_summary_is_compact_and_points_at_the_detail() {
+    let dir = repo("summary", FIXTURE);
+    let (_, r) = run(&dir, &["explain", "--types"]);
+    let issue = of(&r, "issue");
+    assert_eq!(issue["prefix"], "ISS");
+    assert_eq!(issue["at"], "record_types.issue:3");
+    assert_eq!(issue["dirs"], json!(["docs/issues", "docs/issues-archive"]));
+    assert_eq!(issue["required"], json!(["State", "Kind", "Stable-Id"]));
+    assert_eq!(issue["references"]["Fixes"], json!(["task"]));
+    assert_eq!(issue["states"]["initial"], json!(["Open"]));
+    assert_eq!(issue["conditions"], 2);
+    assert_eq!(of(&r, "task")["prefix"], "TASK");
+    assert_eq!(
+        r["rules"]["on_by_declaration"]["field.value-not-declared"],
+        "error"
+    );
+    assert_eq!(
+        r["rules"]["declared_but_not_enabled"]["status.required-field-missing"],
+        "off"
+    );
+    assert!(r["rules"].get("set").is_none());
+    assert_eq!(r["next_action"], "urzua explain --type <name>");
+    assert!(r.get("repository").is_none());
+}
+
+fn bytes(dir: &Path, args: &[&str]) -> usize {
+    common::urzua()
+        .args(args)
+        .current_dir(dir)
         .output()
-        .unwrap();
+        .unwrap()
+        .stdout
+        .len()
+}
+
+#[test]
+fn the_reports_stay_under_their_sizes() {
+    let dir = repo("size", FIXTURE);
+    let summary = bytes(&dir, &["explain", "--types"]);
     assert!(
-        out.stdout.len() < MAX_REPORT_BYTES,
-        "{} bytes for the three-type fixture",
-        out.stdout.len()
+        summary < MAX_SUMMARY_BYTES,
+        "{summary} bytes: three-type summary"
+    );
+    let full = bytes(&dir, &["explain", "--types", "--full"]);
+    assert!(
+        full < MAX_FULL_BYTES,
+        "{full} bytes: three-type full report"
+    );
+    let own = bytes(&own_root(), &["explain", "--types"]);
+    assert!(
+        own < MAX_OWN_SUMMARY_BYTES,
+        "{own} bytes: this repository's summary"
     );
 }
 
@@ -213,21 +295,152 @@ fn a_bare_type_prints_nothing_it_does_not_declare() {
         "bare",
         "schema_version: 2\nrecord_types:\n  note:\n    dir: docs/notes\n",
     );
-    let (_, r) = run(&dir, &["explain", "--types"]);
+    let (_, r) = run(&dir, &["explain", "--types", "--full"]);
     let note = of(&r, "note");
     let mut keys: Vec<&String> = note.as_object().unwrap().keys().collect();
     keys.sort();
-    assert_eq!(keys, ["at", "create", "dirs", "name"], "{note}");
-    assert_eq!(r["rules"], serde_json::json!({}), "{r}");
+    assert_eq!(keys, ["at", "create", "dirs", "name", "prefix"], "{note}");
+    assert_eq!(note["prefix"]["default"], true);
+    assert!(r.get("rules").is_none(), "an empty object is omitted: {r}");
+    let repo_keys: Vec<&String> = r["repository"].as_object().unwrap().keys().collect();
+    assert_eq!(repo_keys, ["schema_version"], "{r}");
 }
 
 #[test]
 fn this_repository_configuration_loads() {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-    let (out, r) = run(&root, &["explain", "--types"]);
+    let (out, r) = run(&own_root(), &["explain", "--types", "--full"]);
     assert_eq!(out.status.code(), Some(0), "{r}");
     for name in ["adr", "spec", "milestone", "bug"] {
         assert!(of(&r, name)["dirs"][0]["at"].is_string());
     }
     assert_positions(&r);
+}
+
+/// The keys a configuration struct accepts, read from the load error an
+/// unknown key produces (`expected one of ...`), so a key added to the struct
+/// is listed here without editing this test.
+fn accepted_keys(dir: &Path, config: &str) -> Vec<String> {
+    std::fs::write(dir.join(".urzua/config.yaml"), config).unwrap();
+    let (_, r) = run(dir, &["explain", "--types"]);
+    let error = r["error"]
+        .as_str()
+        .unwrap_or_else(|| panic!("no load error: {r}"));
+    let list = error
+        .split("expected one of")
+        .nth(1)
+        .unwrap_or_else(|| panic!("{error}"));
+    list.split('`')
+        .skip(1)
+        .step_by(2)
+        .map(str::to_string)
+        .collect()
+}
+
+/// Whether the full report shows a per-type key: through its own rendering,
+/// or raw under its own name.
+fn type_key_shown(t: &Value, key: &str) -> bool {
+    let fields = t["header_fields"].as_array().cloned().unwrap_or_default();
+    let any_field = |k: &str| fields.iter().any(|f| f.get(k).is_some());
+    match key {
+        "dir" | "extra_dirs" => t["dirs"].as_array().is_some_and(|d| d.len() > 1),
+        "required_fields" => any_field("required"),
+        "known_fields" => fields.iter().any(|f| f.get("required").is_none()),
+        "field_values" => any_field("values"),
+        "pointer_fields" => any_field("pointer"),
+        "narrative_fields" => any_field("narrative"),
+        "relation_fields" => any_field("roles"),
+        "statuses" => t["states"].is_object(),
+        other => t[other]["at"].is_string(),
+    }
+}
+
+#[test]
+fn every_key_a_record_type_accepts_is_reported_when_declared() {
+    let dir = repo("every-key", EVERY_KEY);
+    let type_keys = accepted_keys(
+        &dir,
+        "schema_version: 2\nrecord_types:\n  n:\n    dir: docs/n\n    zz_unknown: 1\n",
+    );
+    let status_keys = accepted_keys(
+        &dir,
+        "schema_version: 2\nrecord_types:\n  n:\n    dir: docs/n\n    statuses: {values: [A], zz_unknown: 1}\n",
+    );
+    assert!(
+        type_keys.len() > 20 && status_keys.len() > 10,
+        "{type_keys:?} {status_keys:?}"
+    );
+    std::fs::write(dir.join(".urzua/config.yaml"), EVERY_KEY).unwrap();
+    let (out, r) = run(&dir, &["explain", "--types", "--full"]);
+    assert_eq!(out.status.code(), Some(0), "{r}");
+    assert_positions(&r);
+    let types = r["types"].as_array().unwrap();
+    for key in &type_keys {
+        assert!(
+            types.iter().any(|t| type_key_shown(t, key)),
+            "per-type key `{key}` is not in the report: declare it in every_key.yaml, and render it"
+        );
+    }
+    let work = of(&r, "work");
+    for key in &status_keys {
+        let shown = match key.as_str() {
+            "require" | "forbid" => work["conditions"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|c| c["kind"] == key.as_str()),
+            other => work["states"][other].is_object() || work["states"][other].is_array(),
+        };
+        assert!(
+            shown,
+            "statuses key `{key}` is not in the report: {}",
+            work["states"]
+        );
+    }
+    let pair = &work["relation_pairs"][0];
+    for key in [
+        "name",
+        "forward",
+        "inverse",
+        "reciprocity",
+        "cross_type",
+        "acyclic",
+        "at",
+    ] {
+        assert!(pair.get(key).is_some(), "pair key `{key}`: {pair}");
+    }
+}
+
+#[test]
+fn a_requirement_names_what_counts_as_missing() {
+    let dir = repo("missing", EVERY_KEY);
+    let (_, r) = run(&dir, &["explain", "--type", "work"]);
+    let work = of(&r, "work");
+    let require = &work["conditions"][0];
+    assert_eq!(require["kind"], "require");
+    let missing = &require["counts_as_missing"];
+    assert_eq!(missing["pending"]["value"], json!(["pending"]));
+    assert_eq!(missing["placeholders"]["value"], json!(["tbd"]));
+    assert!(missing["pending"]["at"].is_string());
+    assert!(work["conditions"][1].get("counts_as_missing").is_none());
+}
+
+#[test]
+fn every_top_level_key_but_types_and_rules_is_under_repository() {
+    let dir = repo("top-level", EVERY_KEY);
+    let keys = accepted_keys(
+        &dir,
+        "schema_version: 2\nzz_unknown: 1\nrecord_types:\n  n:\n    dir: docs/n\n",
+    );
+    assert!(keys.len() > 10, "{keys:?}");
+    let (_, r) = run(&own_root(), &["explain", "--types", "--full"]);
+    let repository = r["repository"].as_object().unwrap();
+    for key in keys
+        .iter()
+        .filter(|k| *k != "record_types" && *k != "rules")
+    {
+        assert!(
+            repository.get(key).is_some_and(|e| e["at"].is_string()),
+            "top-level key `{key}` is not under `repository`; this repository's configuration declares every one"
+        );
+    }
 }

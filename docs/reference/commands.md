@@ -285,7 +285,7 @@ Exit 0 for `ok` and `warn`, 1 for `error`, 2 when there is no config to read.
 ```text
 urzua explain <path>
 urzua explain --rule <rule-id>
-urzua explain --types
+urzua explain --types [--full]
 urzua explain --type <name>
 ```
 
@@ -297,15 +297,17 @@ With `--rule`: what the rule is. Its `rule` object has `id`, `description`, `sco
 `population_unit`, `spec`, the `level` your config sets, `waivable`, its `options` with their current
 values and its `actions`.
 
-With `--types` (every type) or `--type <name>` (one): what the configuration declares for each
-record type, read from the configuration alone. Each entry in `types` has `name`, `create` (the
-`urzua new` command), `dirs`, and where declared `prefix`, `fields` (with `required`, `values`,
-`pointer` and its `targets`, `narrative`, `roles`), `relation_pairs`, `states` (lists, `transitions`,
-`expiry`), `conditions` (`kind`, `when`, `when_field`, `fields` and a one-line `sentence`), `gates`
-(`by`, `logins`), `template`, `delivery`, `revision_log` and `sections`. `rules` has `set`,
-`on_by_declaration` and `declared_but_not_enabled`. Every entry read from the configuration has
-`at`, `key.path:line`; the two defaults it prints (an undeclared initial state, a rule on by
-declaration) are marked `"default": true`. An undeclared `--type` exits 2.
+With `--types`: a summary, one compact entry per declared record type (`name`, `prefix`, `dirs`,
+`create`, `required` and `optional` field names, `states`, `references`, the number of
+`conditions`) and the rules on by declaration or declared but off, as `id: level`; `next_action` is
+`urzua explain --type <name>`. With `--types --full`, or `--type <name>` for one type: every
+declaration, each with `at` (`key.path:line`): `header_fields`, `relation_pairs`, `states`,
+`conditions` (keys, a one-line `sentence`, and `counts_as_missing` for a requirement), `gates`, and
+every other declared key raw under its own name; `rules` (`set`, `on_by_declaration`,
+`declared_but_not_enabled`); `--full` adds `repository`, every other declared top-level key. Four
+entries not declared are printed, marked `"default": true` with a `source`: an undeclared initial
+state, a rule on by declaration, an undeclared prefix, and the conventional template file. An
+undeclared `--type` exits 2.
 
 ## graph
 

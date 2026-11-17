@@ -347,15 +347,24 @@ fn mcp(dir: &Path, tool: &str, input: serde_json::Value) -> String {
 }
 
 fn translate(dir: &Path, payload: &str) -> serde_json::Value {
+    translate_event(dir, "edit", payload)
+}
+
+/// What the bundled translator prints for `event`: the hook output the agent
+/// harness reads (`additionalContext` for the agent, `systemMessage` for the person).
+fn translate_event(dir: &Path, event: &str, payload: &str) -> serde_json::Value {
     let mut c = Command::new("python3");
     c.arg("-I")
         .arg(
             Path::new(env!("CARGO_MANIFEST_DIR"))
                 .join("bundle/claude-code/files/.claude/hooks/urzua-claude-code.py"),
         )
-        .args(["edit", "--", "urzua", "harness", "run", "edit"])
+        .args([event, "--", "urzua", "harness", "run", event])
         .current_dir(dir)
         .env("URZUA_BIN", env!("CARGO_BIN_EXE_urzua"));
+    if event == "session-start" {
+        c.env("CLAUDE_PROJECT_DIR", dir);
+    }
     let out = run_with_stdin(&mut c, payload);
     assert_eq!(out.status.code(), Some(0), "{out:?}");
     if out.stdout.is_empty() {
@@ -500,9 +509,19 @@ fn session_start_compares_the_installed_files_the_hook_entries_and_the_kill_swit
     wire_git_hooks(&dir);
     let v = session(&dir);
     assert_eq!(v["verdict"], "allow", "installed and wired: {v}");
+    let start =
+        serde_json::json!({"hook_event_name": "SessionStart", "cwd": dir.to_string_lossy()})
+            .to_string();
+    let relayed = translate_event(&dir, "session-start", &start);
     assert!(
-        v.to_string().contains("urzua explain --types"),
-        "session start names the record-types command: {v}"
+        relayed["hookSpecificOutput"]["additionalContext"]
+            .as_str()
+            .is_some_and(|c| c.contains("urzua explain --types")),
+        "the agent is told the record-types command: {relayed}"
+    );
+    assert!(
+        relayed.get("systemMessage").is_none(),
+        "a healthy session start shows the person nothing: {relayed}"
     );
     let translator = dir.join(".claude/hooks/urzua-claude-code.py");
     let original = std::fs::read_to_string(&translator).unwrap();

@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5DB4YPSWZ6MQV85PQ7
-Version: '0.24'
+Version: '0.25'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -86,18 +86,31 @@ corpus: the report is the build's rule table and the repository's configuration.
 ## `urzua explain --types` and `urzua explain --type <name>`
 
 What the configuration declares for its record types, read from the configuration file and nothing
-else. `--types` reports every declared type; `--type <name>` one. A name the
-configuration does not declare exits 2 with a `not-run` report naming the declared types.
+else (`MILE-329`). A name the configuration does not declare exits 2 with a `not-run` report naming
+the declared types.
 
-The report is `{status, config, types, rules}`. Each type carries `name`, `create` (the `urzua new`
-command for it), `dirs`, and, only where declared, `prefix`, `header_shape`, `identity`, `role`,
-`spec`, `template` (the type's file under `.urzua/templates` when one exists), `fields` (each with
+`urzua explain --types` prints a summary: per type `name`, `at`, `prefix`, `dirs`, `create` (the
+`urzua new` command for it), `required` and `optional` field names, `states` (`values` and
+`initial`), `references` (each reference field with the types it may name) and the number of
+`conditions`; then `rules` with `on_by_declaration` and `declared_but_not_enabled` as `id: level`.
+Its `next_action` is `urzua explain --type <name>`.
+
+`urzua explain --types --full` prints every declaration of every type, `rules`, and `repository`:
+every declared top-level key other than `record_types` and `rules`, each as `{value, at}`.
+`urzua explain --type <name>` prints the same detail for one type, with `rules.set` holding only the
+rules that report a declaration of that type and the two other rule lists only entries naming its
+keys.
+
+Per type in detail: `name`, `at`, `create`, `prefix`, `dirs`, `template`, `header_fields` (each with
 `required`, `values` from `field_values`, `pointer` with its `targets`, `narrative`, `roles` from
-`relation_fields`), `relation_pairs` (with `target_types`), `states` (the status lists, `transitions`,
-and the claim periods `embodiment.claim-expired` sets for the type as `expiry`), `conditions` (each
-`statuses.require`/`forbid` entry with its `when`, `when_field` and `fields` keys and one generated
-`sentence`), `gates` (an `authority` gate on the type's states or on a path overlapping its
-directories, with `by` and `logins`), `delivery`, `revision_log` and `sections`.
+`relation_fields`), `relation_pairs` (every key each pair declares), `states` (the status lists,
+`initial`, `transitions` in declaration order, the claim periods `embodiment.claim-expired` sets for
+the type as `expiry`, and every other `statuses` key raw), `conditions` (each `statuses.require` and
+`statuses.forbid` entry with its `when`, `when_field` and `fields` keys, one generated `sentence`, and
+for a requirement `counts_as_missing`: the type's declared `pending` and `placeholders`, whose
+values meet no requirement), `gates` (an `authority` gate on the type's states or on a path
+overlapping its directories, with `by` and `logins`). Every other declared key of the type is printed
+raw under its own name as `{value, at}`, so no declaration is left out.
 
 `rules` holds `set` (each rule the configuration names, with its level), `on_by_declaration` (a
 default-on rule whose condition a declaration meets, with the keys that declare it) and
@@ -106,10 +119,12 @@ keys).
 
 Every entry read from the configuration carries `at`, its key path and line (`path:line`). Lines come
 from a second pass over the YAML text; a key inside a multi-line flow collection is given its
-nearest enclosing key's line. Nothing the configuration does not declare is printed, with two
-exceptions marked `"default": true` and carrying no `at`: a type's initial state when `initial` is not
-declared (the first `values` entry, which `urzua new` writes), and a rule on by declaration. Empty
-lists and absent settings are omitted. The only prose is the `sentence` of a condition.
+nearest enclosing key's line. Nothing the configuration does not declare is printed, with four
+exceptions marked `"default": true` with a `source` and no `at`: a type's initial state when
+`initial` is not declared (`first_status_value`); a rule on by declaration (`default_on`); the
+identifier prefix when `prefix` is not declared (`type_name_uppercased`); and the template path when
+the conventional template file exists (`conventional_template_path`). Empty lists, empty objects and
+absent settings are omitted. The only prose is the `sentence` of a condition.
 
 ## `urzua graph`
 
@@ -217,3 +232,4 @@ Both are stdout-JSON-always (ADR-23) and never write. `graph` reads `pointer_fie
 > | 2026-11-17 | Pin recomputed on merge (attested by beauwilliams, identity: gh-verified, actor: agent): both merged sides re-pinned, `rust/crates/urzua-core/src/graph.rs` (Realized-by) 46d69af1dd1c and 9b36fa2ee136 -> 16a38ffef9e7; the new hash is the merged file's, which is git's automatic merge of the two re-pinned commits. No person wrote a reason for the merged state. **Why:** `urzua fix --conflicts` resolved a conflict that lay only in re-pin lines; a reviewer of the pull request should confirm the merged pin. | **evidence** |
 > | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/record_types_own_config_integration.rs` 95790a97cb28 -> c54ac806e2c9. Reason: record_types_own_config_integration.rs: the doctor test expects the not-pointed message now that this repository's config names its hook directory; no other test changed. The claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-17 | Bumped to `0.24`. Adds the section `urzua explain --types` and `urzua explain --type <name>`: what the configuration declares per record type, each entry with its key path and line, the two marked defaults, and the three rule lists. **Why:** an agent new to a repository could not learn its record model from the tool without reading the configuration file. | **substantive** |
+> | 2026-11-17 | Bumped to `0.25`. `urzua explain --types` prints a summary with `--full` for every declaration and a `repository` section; every undeclared-rendering key is printed raw; a requirement carries `counts_as_missing`; four marked non-declared entries replace two; transitions keep declaration order; the per-type field list is `header_fields`; the initial-state text says what is declared. **Why:** review of the first version found declarations left out and a report too long for a session start; the summary default, the four marked entries and the agent-only session-start line were decided by the orchestrator and accepted by the maintainer on 2026-11-17: "The three decisions you made make sense to me. I'm happy with your decisions". | **substantive** |
