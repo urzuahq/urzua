@@ -371,6 +371,19 @@ fn a_locator_naming_a_record_by_identifier_is_told_to_cite_its_path() {
 }
 
 #[test]
+fn a_locator_that_did_not_resolve_says_it_was_read_as_a_path() {
+    let message = done_cause(
+        "- Built. — evidence: code:src/nope.rs\n",
+        SMALL_CHECKLIST,
+        "",
+    );
+    assert!(
+        message.contains("locator src/nope.rs does not exist: it was read as a path"),
+        "{message}"
+    );
+}
+
+#[test]
 fn a_cited_record_whose_tier_does_not_count_names_the_key_that_would_count_it() {
     let message = done_cause(
         "- Decided. — evidence: spec:docs/adr/ADR-1-use-x.md\n",

@@ -318,8 +318,8 @@ fn undecided_record(
     None
 }
 
-/// "does not exist", and for text shaped like a record identifier, what a
-/// locator is: a path, so the record is cited by its own.
+/// "does not exist", saying the text was read as a path, and for a record
+/// identifier that a record is cited by its own.
 fn missing_locator_cause(category: &str, path: &str, env: &LocatorEnv<'_>) -> String {
     let named = env
         .records
@@ -333,7 +333,7 @@ fn missing_locator_cause(category: &str, path: &str, env: &LocatorEnv<'_>) -> St
         None if crate::done_items::is_record_id(path) => format!(
             "locator {path} does not exist: it was read as a path, and a record is cited by its path"
         ),
-        None => format!("locator {path} does not exist"),
+        None => format!("locator {path} does not exist: it was read as a path"),
     }
 }
 
