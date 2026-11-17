@@ -7,8 +7,10 @@
 
 #![forbid(unsafe_code)]
 
+mod date;
 pub mod git;
 
+use date::{Date, ParseError};
 use git::GitRun;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -641,42 +643,34 @@ static CLOCK: std::sync::OnceLock<EvaluationClock> = std::sync::OnceLock::new();
 /// the evaluation clock below; `clock_is_read_in_one_place` (urzua-cli tests)
 /// fails if another call site appears.
 fn system_clock() -> EvaluationClock {
-    let now = chrono::Utc::now();
+    let unix = Date::unix_now();
     EvaluationClock {
-        date: now.date_naive().format("%Y-%m-%d").to_string(),
-        unix: now.timestamp(),
+        date: Date::from_unix(unix)
+            .expect("the system clock is within the supported calendar range")
+            .to_string(),
+        unix,
         source: AsOfSource::Clock,
     }
 }
 
 /// Parses a strict `YYYY-MM-DD` calendar date.
-fn parse_as_of(value: &str) -> Result<chrono::NaiveDate, String> {
-    let shaped = value.len() == 10
-        && value.bytes().enumerate().all(|(i, b)| match i {
-            4 | 7 => b == b'-',
-            _ => b.is_ascii_digit(),
-        });
-    if !shaped {
-        return Err(format!(
-            "--as-of '{value}' is not a date: write it as YYYY-MM-DD"
-        ));
-    }
-    chrono::NaiveDate::parse_from_str(value, "%Y-%m-%d")
-        .map_err(|_| format!("--as-of '{value}' is not a calendar date: write it as YYYY-MM-DD"))
+fn parse_as_of(value: &str) -> Result<Date, String> {
+    Date::parse(value).map_err(|e| match e {
+        ParseError::Shape => format!("--as-of '{value}' is not a date: write it as YYYY-MM-DD"),
+        ParseError::NotACalendarDate => {
+            format!("--as-of '{value}' is not a calendar date: write it as YYYY-MM-DD")
+        }
+    })
 }
 
 /// Fixes the evaluation date for the whole run (`--as-of`). Call once, before
 /// anything reads a date; a second call, or a call after a read, is refused.
 pub fn set_as_of(value: &str) -> Result<(), String> {
     let date = parse_as_of(value)?;
-    let end_of_day = date
-        .and_hms_opt(23, 59, 59)
-        .map(|t| t.and_utc().timestamp())
-        .ok_or_else(|| format!("--as-of '{value}' is out of range"))?;
     CLOCK
         .set(EvaluationClock {
-            date: date.format("%Y-%m-%d").to_string(),
-            unix: end_of_day,
+            date: date.to_string(),
+            unix: date.end_of_day_unix(),
             source: AsOfSource::Flag,
         })
         .map_err(|_| "the evaluation date was already fixed for this run".to_string())
@@ -697,7 +691,7 @@ pub fn today() -> String {
 
 /// The UTC `YYYY-MM-DD` date of a Unix time, or `None` when out of range.
 pub fn date_of_unix(unix: i64) -> Option<String> {
-    chrono::DateTime::from_timestamp(unix, 0).map(|t| t.format("%Y-%m-%d").to_string())
+    Date::from_unix(unix).map(|d| d.to_string())
 }
 
 /// Where [`today`] came from.
@@ -1744,9 +1738,9 @@ mod tests {
         if std::env::var_os("URZUA_TODAY_CHILD").is_none() {
             return;
         }
-        let before = chrono::Utc::now().date_naive().to_string();
+        let before = date_of_unix(Date::unix_now()).unwrap();
         let got = today();
-        let after = chrono::Utc::now().date_naive().to_string();
+        let after = date_of_unix(Date::unix_now()).unwrap();
         assert!(
             got == before || got == after,
             "TZ={:?}: today() gave {got}, the UTC date is {before}",
@@ -1796,6 +1790,102 @@ mod tests {
             "+026-11-08",
         ] {
             assert!(parse_as_of(bad).is_err(), "{bad:?}");
+        }
+    }
+
+    /// `Ok((date, end-of-day Unix time))` or the error's kind, recorded from
+    /// chrono 0.4.45 running the previous implementation of `parse_as_of`
+    /// and `date_of_unix`.
+    #[test]
+    fn as_of_parsing_matches_the_recorded_table() {
+        let shape = |s| (s, Err(true));
+        let calendar = |s| (s, Err(false));
+        let ok = |s, end| (s, Ok(end));
+        let table: Vec<(&str, Result<i64, bool>)> = vec![
+            ok("2026-11-08", 1_794_182_399),
+            ok("2024-02-29", 1_709_251_199),
+            ok("1999-12-31", 946_684_799),
+            ok("2000-02-29", 951_868_799),
+            ok("0000-01-01", -62_167_132_801),
+            ok("0000-02-29", -62_162_035_201),
+            ok("0001-01-01", -62_135_510_401),
+            ok("9999-12-31", 253_402_300_799),
+            shape("2026-1-5"),
+            shape("2026-01-5"),
+            shape("2026-1-05"),
+            shape("+026-11-08"),
+            shape("-026-11-08"),
+            shape("+2026-11-08"),
+            shape("-2026-11-08"),
+            shape("12026-11-08"),
+            shape(" 2026-11-08"),
+            shape("2026-11-08 "),
+            shape("2026-11-08x"),
+            shape("2026-11-08\n"),
+            shape(""),
+            shape("tomorrow"),
+            shape("20261108"),
+            shape("2026/11/08"),
+            shape("2026-11-08T00:00:00Z"),
+            shape("\u{662}\u{660}\u{662}\u{666}-\u{661}\u{661}-\u{660}\u{668}"),
+            shape("\u{ff12}\u{ff10}\u{ff12}\u{ff16}-\u{ff11}\u{ff11}-\u{ff10}\u{ff18}"),
+            calendar("2026-02-30"),
+            calendar("2025-02-29"),
+            calendar("1900-02-29"),
+            calendar("2100-02-29"),
+            calendar("2026-00-10"),
+            calendar("2026-13-01"),
+            calendar("2026-04-31"),
+            calendar("2026-12-00"),
+            calendar("2026-12-32"),
+        ];
+        for (input, expected) in table {
+            let got = parse_as_of(input);
+            match expected {
+                Ok(end) => {
+                    let date = got.unwrap_or_else(|e| panic!("{input:?}: {e}"));
+                    assert_eq!(date.to_string(), input);
+                    assert_eq!(date.end_of_day_unix(), end, "{input:?}");
+                }
+                Err(is_shape) => {
+                    let msg = got.expect_err(input);
+                    assert!(msg.contains(&format!("'{input}'")), "{msg}");
+                    assert_eq!(msg.contains("is not a date"), is_shape, "{input:?}: {msg}");
+                    assert_eq!(
+                        msg.contains("is not a calendar date"),
+                        !is_shape,
+                        "{input:?}: {msg}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn date_of_unix_matches_the_recorded_table() {
+        let table: [(i64, Option<&str>); 19] = [
+            (0, Some("1970-01-01")),
+            (-1, Some("1969-12-31")),
+            (86_399, Some("1970-01-01")),
+            (86_400, Some("1970-01-02")),
+            (-86_400, Some("1969-12-31")),
+            (951_782_400, Some("2000-02-29")),
+            (1_731_801_600, Some("2024-11-17")),
+            (-2_208_988_800, Some("1900-01-01")),
+            (-62_167_219_200, Some("0000-01-01")),
+            (-62_167_219_201, Some("-0001-12-31")),
+            (253_402_300_799, Some("9999-12-31")),
+            (253_402_300_800, Some("+10000-01-01")),
+            (-8_334_601_228_801, None),
+            (-8_334_601_228_800, Some("-262143-01-01")),
+            (-8_334_601_142_400, Some("-262143-01-02")),
+            (8_210_266_876_799, Some("+262142-12-31")),
+            (8_210_266_876_800, None),
+            (i64::MAX, None),
+            (i64::MIN, None),
+        ];
+        for (unix, expected) in table {
+            assert_eq!(date_of_unix(unix).as_deref(), expected, "{unix}");
         }
     }
 
