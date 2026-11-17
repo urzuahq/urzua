@@ -81,54 +81,32 @@ fn prepare(
     ask: &AskRequest,
     content: String,
 ) -> Result<Prepared, String> {
-    let authority = j.config.authority.as_ref().ok_or("no authority table")?;
-    let gate = authority
+    let gate = j
+        .config
+        .authority
+        .as_ref()
+        .ok_or("no authority table")?
         .status_gates(&mv.record_type, &mv.to)
         .next()
         .ok_or("the gate could not be found again")?;
-    let who = approval::approver(j.repo_root, j.config).map_err(|e| {
-        format!("Who is at the keyboard could not be read ({e}), so the receipt could not name the person; set git config user.name or sign in to gh, then retry.")
-    })?;
-    if let Some(login) = who.login.as_deref() {
-        if !authority.in_group(gate, login) {
-            return Err(format!(
-                "The person at the keyboard is '{login}' by gh, who is not in the decider group '{}', so asking them would approve nothing CI accepts; a member of '{}' approves the move, in their own session or outside the agent harness.",
-                mv.group, mv.group
-            ));
-        }
-    }
-    let record = crate::discovery::parse_prospective_record(j.config, &mv.rel, &content).ok();
-    let id = record
-        .as_ref()
-        .and_then(urzua_core::rules::record_id)
-        .unwrap_or_else(|| mv.rel.to_string_lossy().to_string());
-    let title = approval::title_of(&content);
-    let moved = match &mv.from {
-        Some(from) => format!("{} moved from '{from}' to '{}'", mv.field, mv.to),
-        None => format!("filed at {} '{}'", mv.field, mv.to),
-    };
+    let (who, login) = decider(j, gate, mv)?;
+    let (id, to, from) = shown_move(j, gate, mv, &content)?;
     let narrative = format!(
-        "{moved} ({}); approved in an agent session by {} (identity: {}) at the agent host's permission prompt, which showed this edit; the agent made the edit and the urzua harness wrote this row.",
-        mv.gate, who.name, who.source
+        "{} moved {from} to '{to}' ({}); approved in an agent session, by {login} as the host session reported them (name read from {}). A local record of the agent session, not verified; CI does not rely on it.",
+        mv.field, mv.gate, who.source
     );
     let today = urzua_io::today();
-    let receipt = approval::with_receipt(
-        j.config,
-        &mv.record_type,
-        &content,
-        &narrative,
-        &mv.to,
-        &today,
-    )
-    .map_err(|e| {
-        format!(
+    let receipt =
+        approval::with_receipt(j.config, &mv.record_type, &content, &narrative, &to, &today)
+            .map_err(|e| {
+                format!(
             "The receipt could not be written into the record ({e}); fix the record, then retry."
         )
-    })?;
+            })?;
     if let Some(v) = judge_receipt(j, path, &receipt) {
         return Ok(Prepared::Judged(v));
     }
-    let now = urzua_io::now_unix();
+    let now = approval::now();
     let minutes = j
         .config
         .harness
@@ -136,16 +114,19 @@ fn prepare(
         .map_or(urzua_core::harness::DEFAULT_APPROVAL_MINUTES, |h| {
             h.approval_minutes()
         });
+    let rel = mv.rel.to_string_lossy().to_string();
     approval::write_pending(
         j.repo_root,
         &Approval {
-            path: mv.rel.to_string_lossy().to_string(),
+            base_blob: approval::head_blob(j.repo_root, &rel),
+            path: rel,
             record_id: id.clone(),
-            status: mv.to.clone(),
+            from: mv.from.clone(),
+            status: to.clone(),
             body_sha256: urzua_io::sha256_hex_of_str(&receipt),
             session: ask.session.clone(),
             call: ask.call.clone(),
-            identity: who.name.clone(),
+            identity: login.clone(),
             identity_source: who.source.to_string(),
             created_unix: now,
             expires_unix: now + i64::from(minutes) * 60,
@@ -157,13 +138,16 @@ fn prepare(
             "The approval could not be kept ({e}), so it could not be honoured at commit; retry."
         )
     })?;
-    let from = mv.from.as_deref().map_or_else(
-        || "files it straight at".to_string(),
-        |f| format!("moves {} from '{f}' to", mv.field),
-    );
+    // The engine's sentence comes first and stands alone, built only from
+    // values checked against the configuration; the record's own title, which
+    // the agent wrote, follows, marked as such and sanitised.
     let reason = format!(
-        "urzua: approve a gated move? {id} \"{title}\" {from} '{}'. Only the decider group '{}' may make this move ({}). Approving writes this edit together with its receipt: a revision-log row reading that the move was approved in an agent session by {} (identity: {}). Decline unless you are that decider and mean to make this move.",
-        mv.to, mv.group, mv.gate, who.name, who.source
+        "urzua: approve a gated move? {id} moves {from} to {} '{to}'. {}: only the decider group '{}' may decide. Approving writes the whole file as shown, including any change to its body, with a revision-log row recording that the move was approved in this agent session by {login}. Decline unless you are in '{}' and mean to make this move. The record's own title, as the agent wrote it: {}",
+        mv.field,
+        mv.gate,
+        mv.group,
+        mv.group,
+        approval::sanitize(&approval::title_of(&content), 80)
     );
     let mut v = Verdict::new("ask", Some(path), reason);
     v.asking = Some(Box::new(super::Asking {
@@ -171,6 +155,74 @@ fn prepare(
         gated_move: None,
     }));
     Ok(Prepared::Ask(v))
+}
+
+/// Who the session reports at the keyboard, and the decider login it matches.
+/// The name is whatever gh or git config reports, so it is held to the gate's
+/// group whatever its source, and written as the group spells it.
+fn decider(
+    j: &Judging<'_>,
+    gate: &urzua_core::authority::Gate,
+    mv: &super::gate::GatedMove,
+) -> Result<(approval::Approver, String), String> {
+    let authority = j.config.authority.as_ref().ok_or("no authority table")?;
+    let who = approval::approver(j.repo_root, j.config).map_err(|e| {
+        format!("Who is at the keyboard could not be read ({e}), so the receipt could not name a decider; set git config user.name or sign in to gh, then retry.")
+    })?;
+    let login = authority
+        .group(gate)
+        .and_then(|g| g.logins.iter().find(|l| l.eq_ignore_ascii_case(&who.name)))
+        .cloned()
+        .ok_or_else(|| {
+            format!(
+                "The session reports '{}' at the keyboard (read from {}), who is not in the decider group '{}', so the person is not asked; a member of '{}' approves the move, in their own session or outside the agent harness.",
+                approval::sanitize(&who.name, 40),
+                who.source,
+                mv.group,
+                mv.group
+            )
+        })?;
+    Ok((who, login))
+}
+
+/// The record's id, the status entered and the phrase for the status left,
+/// each only in a form checked against the configuration: the id as the
+/// type's prefix and a number, a status only as a value the type declares.
+fn shown_move(
+    j: &Judging<'_>,
+    gate: &urzua_core::authority::Gate,
+    mv: &super::gate::GatedMove,
+    content: &str,
+) -> Result<(String, String, String), String> {
+    let record = crate::discovery::parse_prospective_record(j.config, &mv.rel, content)
+        .map_err(|e| format!("The record could not be read ({e})."))?;
+    let id = urzua_core::rules::record_id(&record)
+        .filter(|id| {
+            id.strip_prefix(&format!("{}-", record.type_prefix))
+                .is_some_and(|n| !n.is_empty() && n.chars().all(|c| c.is_ascii_digit()))
+        })
+        .ok_or("The record's file name does not give an id of its type's form, so the person cannot be told which record this is; name the file as `urzua new` does, then retry.")?;
+    let to = gate
+        .to
+        .iter()
+        .find(|t| urzua_core::authority::same_status(t, &mv.to))
+        .cloned()
+        .unwrap_or_else(|| mv.to.clone());
+    let decl = j
+        .config
+        .record_types
+        .get(&mv.record_type)
+        .and_then(|t| t.status_decl());
+    let declared = |s: &str| decl.as_ref().is_some_and(|d| d.declares(s));
+    if !declared(&to) {
+        return Err(format!("The gate's status is not a value the type declares, so the move cannot be shown to the person; declare it under record_types.{}.statuses.", mv.record_type));
+    }
+    let from = match &mv.from {
+        Some(f) if declared(f) => format!("from {} '{f}'", mv.field),
+        Some(_) => format!("from a {} the type does not declare", mv.field),
+        None => "as a new record".to_string(),
+    };
+    Ok((id, to, from))
 }
 
 /// The editor hook's judgement of the edit with its receipt, when it refuses:

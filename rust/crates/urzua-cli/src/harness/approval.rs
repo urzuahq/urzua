@@ -4,24 +4,27 @@
 //! With `acceptance.in_session: ask`, the editor hook answers an agent's move
 //! into a gated status with the host's ask-the-person decision instead of a
 //! refusal. Before it answers, it rewrites the proposed file to carry the
-//! receipt (the status's required date fields and a revision-log row naming the
-//! person), so the person approves the edit and its receipt as one write and no
-//! commit can fall between the two. It also writes a pending approval under the
-//! git directory, keyed by the record and naming the host's id for the call.
+//! receipt (the status's required date fields and a revision-log row), so the
+//! person approves the edit and its receipt as one write and no commit can fall
+//! between the two. It also keeps a pending approval under the git directory,
+//! keyed by the record and naming the host's id for the call, the status left,
+//! the status entered, the blob the edit starts from and the approved bytes.
 //! When the host reports that very call landed (its post-edit event, which runs
-//! only after the person approved and the tool ran), the approval is confirmed.
-//! The local commit check accepts a gated move only with a confirmed approval
-//! for that record, that status and those exact bytes, before it expires.
+//! only after an approved tool call, and whose transcript must show the call),
+//! the approval is confirmed. The local commit check accepts an uncommitted
+//! gated move only with a confirmed, unexpired, unused approval for exactly
+//! those bytes on that base; the first check that finds the bytes committed
+//! marks it used.
 //!
-//! Why an agent cannot forge one: the approvals live under `.git/urzua`, which
-//! the protected-paths guardrail keeps from the agent's edit tools, and the git
-//! directory is in no commit, so CI never reads them. A shell command can write
-//! there as it can write any file the user can; such a command's status move is
-//! what the post-command check reports to the person, and CI still judges the
-//! pull request by its actors file. The approval proves, locally, that a person
-//! answered the host's prompt for this move in this session; it proves who only
-//! as far as its identity source does.
+//! What this is not: proof. The hooks run as the agent's own user, so a shell
+//! command can produce every one of these files (by writing them, or by piping
+//! made-up payloads to the hook), and the person a receipt names is whoever
+//! `gh` or `git config` reported. The edit tools cannot write the git
+//! directory, and the post-command check reports any change under the
+//! approvals directory made during a shell command. The pull request check with
+//! the actors file is the control a repository relies on; CI never reads this.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -30,6 +33,10 @@ use urzua_core::rules::SessionApproval;
 
 pub(crate) const PENDING: &str = "pending";
 pub(crate) const CONFIRMED: &str = "confirmed";
+pub(crate) const CONSUMED: &str = "consumed";
+/// The blob id kept for a record that did not exist at `HEAD`.
+pub(crate) const NO_BLOB: &str = "none";
+const SEEN: &str = "approvals.seen";
 
 /// One approval as it is kept on disk.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -37,41 +44,63 @@ pub(crate) struct Approval {
     /// The record's path from the repository root.
     pub path: String,
     pub record_id: String,
+    /// The status the edit leaves; `None` for a record filed at the gated one.
+    pub from: Option<String>,
     /// The status the approved edit enters.
     pub status: String,
+    /// The git blob id of the record at `HEAD` when the person was asked.
+    pub base_blob: String,
     /// The sha256 of the whole file as the approved edit writes it, receipt included.
     pub body_sha256: String,
     pub session: String,
     /// The host's id for the edit call.
     pub call: String,
+    /// The decider login the session's identity matched.
     pub identity: String,
+    /// Where that name was read: `gh` or `git config`. Not a verification.
     pub identity_source: String,
     pub created_unix: i64,
     pub expires_unix: i64,
     pub state: String,
 }
 
-/// `<git common dir>/urzua`, the harness's own state beside the repository,
-/// which no commit carries.
-pub(crate) fn git_state_dir(repo_root: &Path) -> Option<PathBuf> {
+/// The wall clock, never `--as-of`: an approval's life is real time.
+pub(crate) fn now() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
+}
+
+fn git(dir: &Path, args: &[&str]) -> Option<Vec<u8>> {
     let out = std::process::Command::new("git")
         .arg("-C")
-        .arg(repo_root)
-        .args(["rev-parse", "--git-common-dir"])
+        .arg(dir)
+        .args(args)
         .stderr(std::process::Stdio::null())
         .output()
         .ok()?;
-    if !out.status.success() {
-        return None;
-    }
-    let dir = String::from_utf8(out.stdout).ok()?;
-    let dir = PathBuf::from(dir.trim_end_matches('\n'));
-    let dir = if dir.is_absolute() {
-        dir
-    } else {
-        repo_root.join(dir)
-    };
-    Some(dir.join("urzua"))
+    out.status.success().then_some(out.stdout)
+}
+
+fn git_path(dir: &Path, args: &[&str]) -> Option<PathBuf> {
+    let raw = String::from_utf8(git(dir, args)?).ok()?;
+    let p = PathBuf::from(raw.trim_end_matches('\n'));
+    let p = if p.is_absolute() { p } else { dir.join(p) };
+    p.canonicalize().ok()
+}
+
+/// `<git common dir>/urzua`, only when the common directory is the
+/// repository's own: its git directory, or the directory a linked worktree's
+/// git directory sits in (`<common>/worktrees/<name>`). A `commondir` file
+/// pointed anywhere else is refused, so writing it cannot move the approvals.
+pub(crate) fn git_state_dir(repo_root: &Path) -> Option<PathBuf> {
+    let git_dir = git_path(repo_root, &["rev-parse", "--absolute-git-dir"])?;
+    let common = git_path(repo_root, &["rev-parse", "--git-common-dir"])?;
+    let own = common == git_dir
+        || (git_dir.parent().and_then(Path::file_name) == Some("worktrees".as_ref())
+            && git_dir.parent().and_then(Path::parent) == Some(common.as_path()));
+    own.then(|| common.join("urzua"))
 }
 
 fn approvals_dir(repo_root: &Path) -> Option<PathBuf> {
@@ -94,16 +123,66 @@ fn write(path: &Path, approval: &Approval) -> Result<(), String> {
     urzua_io::write_atomic(path, &(text + "\n")).map_err(|e| e.to_string())
 }
 
+/// The blob id of `rel` at `HEAD`, or [`NO_BLOB`].
+pub(crate) fn head_blob(repo_root: &Path, rel: &str) -> String {
+    git(
+        repo_root,
+        &["rev-parse", "-q", "--verify", &format!("HEAD:{rel}")],
+    )
+    .and_then(|o| String::from_utf8(o).ok())
+    .map(|s| s.trim().to_string())
+    .filter(|s| !s.is_empty())
+    .unwrap_or_else(|| NO_BLOB.to_string())
+}
+
 /// Keeps `approval` as the one approval for its record, replacing any earlier one.
 pub(crate) fn write_pending(repo_root: &Path, approval: &Approval) -> Result<(), String> {
-    let dir = approvals_dir(repo_root).ok_or("the repository's git directory was not found")?;
+    let dir = approvals_dir(repo_root).ok_or(
+        "the repository's own git directory was not found (or its common directory points outside it)",
+    )?;
     write(&file_for(&dir, &approval.path), approval)
 }
 
+/// Whether the host's transcript records `call` as a tool call. It raises the
+/// cost of a made-up post-edit payload; the transcript is the user's file and
+/// a shell can write it too.
+fn transcript_shows(transcript: Option<&Path>, call: &str) -> bool {
+    let Some(text) = transcript.and_then(|t| std::fs::read_to_string(t).ok()) else {
+        return false;
+    };
+    text.lines().any(|line| {
+        let Ok(v) = serde_json::from_str::<serde_json::Value>(line) else {
+            return false;
+        };
+        let mut found = false;
+        walk(&v, &mut |o| {
+            found |= o.get("type").and_then(|t| t.as_str()) == Some("tool_use")
+                && o.get("id").and_then(|i| i.as_str()) == Some(call);
+        });
+        found
+    })
+}
+
+fn walk(v: &serde_json::Value, f: &mut dyn FnMut(&serde_json::Map<String, serde_json::Value>)) {
+    match v {
+        serde_json::Value::Object(o) => {
+            f(o);
+            o.values().for_each(|x| walk(x, f));
+        }
+        serde_json::Value::Array(a) => a.iter().for_each(|x| walk(x, f)),
+        _ => {}
+    }
+}
+
 /// Confirms the pending approval for the host's call `call` once the file on
-/// disk is the approved one. `None` when no pending approval names the call;
-/// `Err` when one does and the file is not what was approved (it is dropped).
-pub(crate) fn confirm(repo_root: &Path, call: &str) -> Option<Result<Approval, String>> {
+/// disk is the approved one and the transcript shows the call. `None` when no
+/// pending approval names the call; `Err` when one does and does not hold (it
+/// is dropped).
+pub(crate) fn confirm(
+    repo_root: &Path,
+    call: &str,
+    transcript: Option<&Path>,
+) -> Option<Result<Approval, String>> {
     let dir = approvals_dir(repo_root)?;
     let entries = std::fs::read_dir(&dir).ok()?;
     for entry in entries.flatten() {
@@ -114,12 +193,19 @@ pub(crate) fn confirm(repo_root: &Path, call: &str) -> Option<Result<Approval, S
             continue;
         }
         let on_disk = urzua_io::sha256_hex_of_file(&repo_root.join(&approval.path));
-        if on_disk.as_deref() != Some(approval.body_sha256.as_str()) {
-            let _ = std::fs::remove_file(entry.path());
-            return Some(Err(format!(
-                "{} is not the file the person approved, so the approval was dropped",
+        let why = if on_disk.as_deref() != Some(approval.body_sha256.as_str()) {
+            Some(format!(
+                "{} is not the file the person approved",
                 approval.path
-            )));
+            ))
+        } else if !transcript_shows(transcript, call) {
+            Some("the host's transcript does not show this edit call".to_string())
+        } else {
+            None
+        };
+        if let Some(why) = why {
+            let _ = std::fs::remove_file(entry.path());
+            return Some(Err(format!("{why}, so the approval was dropped")));
         }
         approval.state = CONFIRMED.to_string();
         return Some(write(&entry.path(), &approval).map(|_| approval));
@@ -127,26 +213,29 @@ pub(crate) fn confirm(repo_root: &Path, call: &str) -> Option<Result<Approval, S
     None
 }
 
-/// What the local state says about the record `record_id` at `status` whose
-/// file is `rel`, or `None` when no approval names that file.
+/// What the local state says about the uncommitted record `record_id` at
+/// `status` whose file is `rel`, against the blob `head` it changes.
 pub(crate) fn judge_local(
     repo_root: &Path,
     rel: &str,
     record_id: &str,
     status: &str,
+    head: &str,
     now: i64,
-) -> Option<SessionApproval> {
-    let path = file_for(&approvals_dir(repo_root)?, rel);
+) -> SessionApproval {
+    let Some(path) = approvals_dir(repo_root).map(|d| file_for(&d, rel)) else {
+        return SessionApproval::Invalid(
+            "the repository's own git directory was not found, so no approval can be read".into(),
+        );
+    };
     if !path.exists() {
-        return None;
+        return SessionApproval::Missing;
     }
     let Some(a) = read(&path) else {
-        return Some(SessionApproval::Invalid(
-            "the approval kept for it could not be read".into(),
-        ));
+        return SessionApproval::Invalid("the approval kept for it could not be read".into());
     };
     let on_disk = urzua_io::sha256_hex_of_file(&repo_root.join(rel));
-    Some(if a.path != rel {
+    if a.path != rel {
         SessionApproval::Invalid(format!("the approval kept for it names {}", a.path))
     } else if a.record_id != record_id {
         SessionApproval::Invalid(format!(
@@ -158,29 +247,66 @@ pub(crate) fn judge_local(
             "the approval is for a move to '{}', and the record is at '{status}'",
             a.status
         ))
+    } else if a.state == CONSUMED {
+        SessionApproval::Invalid("the approval was already used by a commit".into())
+    } else if a.base_blob != head {
+        SessionApproval::Invalid(
+            "the approval was given for an edit of another version of the record (another branch or commit)".into(),
+        )
     } else if on_disk.as_deref() != Some(a.body_sha256.as_str()) {
         SessionApproval::Invalid(
             "the record changed after the person approved it (its bytes no longer match the approved edit)".into(),
         )
-    } else if now > a.expires_unix {
-        SessionApproval::Invalid(format!(
-            "the approval expired {} minute(s) ago",
-            (now - a.expires_unix) / 60 + 1
-        ))
+    } else if now < a.created_unix || now > a.expires_unix {
+        SessionApproval::Invalid(
+            "the approval is outside its time window (expired, or dated after now)".into(),
+        )
     } else if a.state != CONFIRMED {
         SessionApproval::Pending(
             "the approved edit is on disk but the host has not reported that edit call as landed, so whether a person approved it is not known".into(),
         )
     } else {
         SessionApproval::Valid(format!(
-            "approved in an agent session by {} (identity: {}), session {}",
-            a.identity, a.identity_source, a.session
+            "an approval recorded in an agent session names {} (the name as read from {}, not verified); it is a local record that CI does not rely on",
+            a.identity, a.identity_source
         ))
-    })
+    }
 }
 
-/// The approvals the local commit check reads for the changed records: only
-/// with `acceptance.in_session: ask`. The caller asks only on a run with no
+/// Marks used every confirmed approval whose bytes `HEAD` now holds.
+fn consume_committed(repo_root: &Path) {
+    let Some(dir) = approvals_dir(repo_root) else {
+        return;
+    };
+    let Ok(entries) = std::fs::read_dir(&dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let Some(mut a) = read(&entry.path()) else {
+            continue;
+        };
+        if a.state != CONFIRMED {
+            continue;
+        }
+        let committed = git(
+            repo_root,
+            &["cat-file", "blob", &format!("HEAD:{}", a.path)],
+        )
+        .map(|b| urzua_io::sha256_hex_of_bytes(&b));
+        if committed.as_deref() == Some(a.body_sha256.as_str()) {
+            a.state = CONSUMED.to_string();
+            let _ = write(&entry.path(), &a);
+        }
+    }
+}
+
+fn uncommitted(repo_root: &Path, rel: &str) -> bool {
+    git(repo_root, &["status", "--porcelain", "-z", "--", rel]).is_none_or(|o| !o.is_empty())
+}
+
+/// The approvals the local commit check reads, only with
+/// `acceptance.in_session: ask`, for each changed record whose working-tree or
+/// index copy differs from `HEAD`. The caller asks only on a run with no
 /// actors file: CI's evidence is the actors file, never this state.
 pub(crate) fn for_check(
     repo_root: &Path,
@@ -193,10 +319,15 @@ pub(crate) fn for_check(
     {
         return None;
     }
+    consume_committed(repo_root);
     let changed = changed?;
-    let now = urzua_io::now_unix();
+    let now = now();
     let mut out = std::collections::HashMap::new();
     for record in records.iter().filter(|r| changed.contains(&r.path)) {
+        let rel = record.path.to_string_lossy().to_string();
+        if !uncommitted(repo_root, &rel) {
+            continue;
+        }
         let field = urzua_core::rules::relation_field_name(
             config,
             &record.record_type,
@@ -205,15 +336,139 @@ pub(crate) fn for_check(
         let Some(status) = urzua_core::authority::gate_status(&record.header, field) else {
             continue;
         };
-        let Some(id) = urzua_core::rules::record_id(record) else {
-            continue;
-        };
-        let rel = record.path.to_string_lossy();
-        if let Some(found) = judge_local(repo_root, &rel, &id, status, now) {
-            out.insert(record.path.clone(), found);
-        }
+        let id = urzua_core::rules::record_id(record).unwrap_or_default();
+        let head = head_blob(repo_root, &rel);
+        out.insert(
+            record.path.clone(),
+            judge_local(repo_root, &rel, &id, status, &head, now),
+        );
     }
     Some(out)
+}
+
+/// Every approval file and its text.
+fn snapshot(dir: &Path) -> BTreeMap<String, String> {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return BTreeMap::new();
+    };
+    entries
+        .flatten()
+        .filter_map(|e| {
+            let name = e.file_name().to_string_lossy().to_string();
+            Some((name, std::fs::read_to_string(e.path()).ok()?))
+        })
+        .collect()
+}
+
+/// The edit tool calls the transcript shows ran without an error: their ids
+/// and the file each named.
+fn edits_that_ran(transcript: Option<&Path>) -> Vec<(String, String)> {
+    let Some(text) = transcript.and_then(|t| std::fs::read_to_string(t).ok()) else {
+        return Vec::new();
+    };
+    let mut uses = Vec::new();
+    let mut ok = std::collections::HashSet::new();
+    for line in text.lines() {
+        let Ok(v) = serde_json::from_str::<serde_json::Value>(line) else {
+            continue;
+        };
+        walk(&v, &mut |o| match o.get("type").and_then(|t| t.as_str()) {
+            Some("tool_use")
+                if matches!(
+                    o.get("name").and_then(|n| n.as_str()),
+                    Some("Write" | "Edit" | "MultiEdit")
+                ) =>
+            {
+                if let (Some(id), Some(file)) = (
+                    o.get("id").and_then(|i| i.as_str()),
+                    o.get("input")
+                        .and_then(|i| i.get("file_path"))
+                        .and_then(|f| f.as_str()),
+                ) {
+                    uses.push((id.to_string(), file.to_string()));
+                }
+            }
+            Some("tool_result") if o.get("is_error").and_then(|e| e.as_bool()) != Some(true) => {
+                if let Some(id) = o.get("tool_use_id").and_then(|i| i.as_str()) {
+                    ok.insert(id.to_string());
+                }
+            }
+            _ => {}
+        });
+    }
+    uses.retain(|(id, _)| ok.contains(id));
+    uses
+}
+
+/// Whether a change from `old` to `new` is one the hooks make: a pending or
+/// confirmed approval for an edit call the transcript shows ran on that file,
+/// or a confirmed approval marked used by a commit.
+fn hook_made(old: Option<&str>, new: &str, edits: &[(String, String)]) -> bool {
+    let Ok(a) = serde_json::from_str::<Approval>(new) else {
+        return false;
+    };
+    if let Some(o) = old.and_then(|o| serde_json::from_str::<Approval>(o).ok()) {
+        let mut used = o.clone();
+        used.state = CONSUMED.to_string();
+        if o.state == CONFIRMED && used == a {
+            return true;
+        }
+    }
+    a.state != CONSUMED
+        && edits
+            .iter()
+            .any(|(id, file)| *id == a.call && file.ends_with(&format!("/{}", a.path)))
+}
+
+/// After a shell command: one line for each approval created, changed or
+/// removed since the last post-command check that the hooks did not make (see
+/// [`hook_made`]). Only this check records what it saw, so an approval made by
+/// piping a payload to the hook commands is reported like one written by hand.
+/// It rests on the host's transcript, which the user's shell can also write:
+/// it makes a forgery visible and costlier, it does not prevent one.
+pub(crate) fn shell_changes(repo_root: &Path, transcript: Option<&Path>) -> Vec<String> {
+    let Some(dir) = approvals_dir(repo_root) else {
+        return Vec::new();
+    };
+    let Some(state) = dir.parent() else {
+        return Vec::new();
+    };
+    let seen: BTreeMap<String, String> = std::fs::read_to_string(state.join(SEEN))
+        .ok()
+        .and_then(|t| serde_json::from_str(&t).ok())
+        .unwrap_or_default();
+    let now = snapshot(&dir);
+    if now.is_empty() && seen.is_empty() {
+        return Vec::new();
+    }
+    let edits = edits_that_ran(transcript);
+    let mut lines = Vec::new();
+    for (name, text) in &now {
+        let old = seen.get(name).map(String::as_str);
+        if old == Some(text.as_str()) || hook_made(old, text, &edits) {
+            continue;
+        }
+        let act = if old.is_none() { "created" } else { "changed" };
+        lines.push(format!(
+            "  {} [acceptance] error: the command {act} an approval of a gated move that no edit call of this session made; approvals are written only by the agent harness's hooks during an edit call, so a shell command wrote this one. Do not commit the record it names on its strength; CI's actors file decides.",
+            dir.join(name).display()
+        ));
+    }
+    // The hooks drop only a pending approval that did not hold.
+    let removed = seen.iter().filter(|(n, t)| {
+        !now.contains_key(*n)
+            && serde_json::from_str::<Approval>(t).map_or(true, |a| a.state != PENDING)
+    });
+    for (name, _) in removed {
+        lines.push(format!(
+            "  {} [acceptance] error: the command removed an approval of a gated move.",
+            dir.join(name).display()
+        ));
+    }
+    if let Ok(text) = serde_json::to_string(&now) {
+        let _ = urzua_io::write_atomic(&state.join(SEEN), &text);
+    }
+    lines
 }
 
 /// The record's title: its first `# ` heading.
@@ -221,16 +476,49 @@ pub(crate) fn title_of(content: &str) -> String {
     content
         .lines()
         .find_map(|l| l.strip_prefix("# "))
-        .map(|t| t.trim().to_string())
         .unwrap_or_default()
+        .to_string()
 }
 
-/// Who approves, as far as the host can tell: the identity attestations use.
+/// `text` as it may appear in a prompt: control characters, bidirectional
+/// controls, quotes and line breaks dropped, runs of space collapsed, at most
+/// `max` characters.
+pub(crate) fn sanitize(text: &str, max: usize) -> String {
+    let bidi = |c: char| matches!(c, '\u{061C}' | '\u{200E}' | '\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}');
+    let quote = |c: char| {
+        "\"'`\u{2018}\u{2019}\u{201A}\u{201B}\u{201C}\u{201D}\u{201E}\u{201F}\u{00AB}\u{00BB}\u{2039}\u{203A}".contains(c)
+    };
+    let kept: String = text
+        .chars()
+        .map(|c| if c.is_whitespace() { ' ' } else { c })
+        .filter(|c| {
+            !c.is_control()
+                && !bidi(*c)
+                && !quote(*c)
+                && !matches!(
+                    c,
+                    '\u{2028}' | '\u{2029}' | '\u{FEFF}' | '\u{200B}'..='\u{200D}'
+                )
+        })
+        .collect();
+    let collapsed = kept
+        .split(' ')
+        .filter(|w| !w.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ");
+    if collapsed.chars().count() <= max {
+        collapsed
+    } else {
+        let cut: String = collapsed.chars().take(max.saturating_sub(1)).collect();
+        format!("{cut}…")
+    }
+}
+
+/// Who the session says is at the keyboard: the `gh` login, else
+/// `git config user.name`. Either is whatever the user's environment reports.
 pub(crate) struct Approver {
     pub name: String,
     pub source: &'static str,
-    /// The `gh` login, when `gh` answered.
-    pub login: Option<String>,
 }
 
 pub(crate) fn approver(repo_root: &Path, config: &Config) -> Result<Approver, String> {
@@ -239,15 +527,19 @@ pub(crate) fn approver(repo_root: &Path, config: &Config) -> Result<Approver, St
         require_verified: config.attestation.require_verified,
     };
     let r = urzua_io::resolve_identity_with(None, repo_root, policy)?;
-    let (source, login) = match r.source {
-        urzua_io::IdentitySource::GhVerified => ("gh-verified", Some(r.name.clone())),
-        urzua_io::IdentitySource::Asserted => ("asserted", r.verified_login.clone()),
-        urzua_io::IdentitySource::GitConfig => ("git-config", r.verified_login.clone()),
-    };
-    Ok(Approver {
-        name: r.name,
-        source,
-        login,
+    Ok(match (r.source, r.verified_login) {
+        (urzua_io::IdentitySource::GhVerified, _) => Approver {
+            name: r.name,
+            source: "gh",
+        },
+        (_, Some(login)) => Approver {
+            name: login,
+            source: "gh",
+        },
+        _ => Approver {
+            name: r.name,
+            source: "git config",
+        },
     })
 }
 
@@ -353,10 +645,16 @@ mod tests {
     }
 
     #[test]
-    fn the_title_is_the_first_heading() {
-        assert_eq!(
-            title_of("---\nA: b\n---\n# 10 — A title\n\n## x\n"),
-            "10 — A title"
+    fn a_title_loses_controls_bidi_quotes_and_breaks_and_is_capped() {
+        let raw = "ADR-1: Fix \"typo\"\r\u{1b}[2J\u{202E}moves\nStatus 'x'".to_string()
+            + &"a".repeat(3000);
+        let t = sanitize(&raw, 80);
+        assert!(t.chars().count() <= 80, "{t}");
+        assert!(
+            !t.chars()
+                .any(|c| c.is_control() || "\"'\u{202E}".contains(c)),
+            "{t:?}"
         );
+        assert!(t.starts_with("ADR-1: Fix typo [2Jmoves Status x"), "{t}");
     }
 }

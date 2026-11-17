@@ -201,9 +201,13 @@ pub(super) fn engine_owned(override_log: Option<&str>) -> Vec<String> {
     let mut owned: Vec<String> = [
         ".urzua/cache",
         super::lock::LOCK_PATH,
+        // The whole git directory: its hooks, its config, the hook's claims and
+        // the approvals under `urzua`, and the `commondir` files that say where
+        // all of those are. The walk for hard links never enters `.git`
+        // itself, so the parts a link could reach are named as well.
+        ".git",
         ".git/hooks",
         ".git/config",
-        // The hook's double-registration claims (`harness/hook/once.rs`).
         ".git/urzua",
     ]
     .iter()
@@ -220,6 +224,11 @@ pub(super) fn engine_owned(override_log: Option<&str>) -> Vec<String> {
 /// The engine-owned entry that covers `rel`, compared with Unicode case folding.
 fn owned_entry(config: &Config, rel: &Path) -> Option<String> {
     let folded = fold_path(&rel.to_string_lossy());
+    // A `.git` anywhere on the path: a nested or linked worktree's pointer
+    // file, or a git directory below the root.
+    if folded.split('/').any(|c| c == ".git") {
+        return Some(".git".to_string());
+    }
     engine_owned(config.override_log.as_deref())
         .into_iter()
         .find(|e| rules::path_matches_entry(Path::new(&folded), &fold_path(e)))
@@ -376,7 +385,7 @@ pub(super) fn judge(
                 gated_move: None,
                 guardrail: "protected-paths",
                 reason: format!(
-                    "{} is kept by urzua itself ({entry}: the post-command baselines, the harness lock, the override log, the git hooks and configuration); an agent's edit through the edit tools is refused, because a change there would disarm a report or a review. urzua writes it; a person edits it outside the agent harness",
+                    "{} is kept by urzua itself ({entry}: the post-command baselines, the harness lock, the override log, the git directory and any .git pointer file); an agent's edit through the edit tools is refused, because a change there would disarm a report or a review. urzua writes it; a person edits it outside the agent harness",
                     rel.display()
                 ),
             });

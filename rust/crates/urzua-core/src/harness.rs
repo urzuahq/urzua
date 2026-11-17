@@ -526,6 +526,13 @@ impl<'de> Deserialize<'de> for HarnessDecl {
                 ),
             }
         }
+        // The post-command check is what reports an approval a shell command
+        // wrote, so asking in the session without it would hide a forgery.
+        if decl.in_session() == InSession::Ask && !decl.enabled("post-command") {
+            return Err(D::Error::custom(
+                "harness.guardrails.acceptance.in_session: ask needs the post-command guardrail enabled (harness.guardrails.post-command: {enabled: true}), which reports an approval of a gated move written by a shell command",
+            ));
+        }
         if !decl.allow_paths.is_empty() && decl.outside_writes() != OutsideWrites::Deny {
             decl.problems.push(format!(
                 "harness.allow_paths is declared but harness.outside_writes is '{}', so it is read by nothing; it applies only with outside_writes: deny",
@@ -712,12 +719,16 @@ mod tests {
         assert_eq!(off.in_session(), InSession::Refuse);
         assert_eq!(off.approval_minutes(), DEFAULT_APPROVAL_MINUTES);
         let on = parse(
-            "guardrails:\n  acceptance: {enabled: true, in_session: ask, approval_minutes: 5}\n",
+            "guardrails:\n  post-command: {enabled: true}\n  acceptance: {enabled: true, in_session: ask, approval_minutes: 5}\n",
         )
         .unwrap();
         assert_eq!(on.in_session(), InSession::Ask);
         assert_eq!(on.approval_minutes(), 5);
         assert!(on.problems.is_empty(), "{:?}", on.problems);
+        let e = parse("guardrails:\n  acceptance: {enabled: true, in_session: ask}\n")
+            .unwrap_err()
+            .to_string();
+        assert!(e.contains("needs the post-command guardrail"), "{e}");
         for bad in [
             "in_session: yes",
             "approval_minutes: 0",

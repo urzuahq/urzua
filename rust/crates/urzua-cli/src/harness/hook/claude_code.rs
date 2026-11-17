@@ -528,7 +528,7 @@ fn main(run: &mut Run, payload: &[u8]) {
         "post-edit" => post_edit(run, &payload, cwd),
         "session-start" => {
             let request = run.request("session-start", None, cwd);
-            judge_simple(run, request, cwd)
+            judge_simple(run, request, cwd, &[])
         }
         "post-command" => {
             // Any Bash command: the engine reads git, never the command.
@@ -536,7 +536,8 @@ fn main(run: &mut Run, payload: &[u8]) {
                 return;
             }
             let request = run.request("post-command", Some("Bash"), cwd);
-            judge_simple(run, request, cwd)
+            let forged = forged_approvals(&payload, cwd);
+            judge_simple(run, request, cwd, &forged)
         }
         _ => edit(run, &payload, cwd),
     }
@@ -567,6 +568,18 @@ fn edit(run: &mut Run, payload: &J, cwd: Option<&str>) {
         "file_path"
     };
     let raw = inp.get(key);
+    if tool == "NotebookEdit" && !j_truthy(raw) {
+        // A notebook call that names its file under another key cannot be
+        // placed, so it is judged as an edit nobody could judge.
+        if let Some(other) = ["file_path", "path"]
+            .iter()
+            .find_map(|k| inp.get(k).filter(|v| j_truthy(Some(v))))
+        {
+            let named = shown(Some(other));
+            let message = format!("urzua harness: urzua did NOT judge this edit (NotebookEdit names its file under a key other than notebook_path: {named}), so it cannot be placed. Name the notebook in notebook_path, or edit the file with Write or Edit.");
+            return run.unjudged_edit(&message, cwd, vec![named], false);
+        }
+    }
     if !EDIT_TOOLS.contains(&tool) || !j_truthy(raw) {
         return;
     }
@@ -622,9 +635,10 @@ pub(super) fn unknown_verdict(kind: &str) -> String {
 }
 
 /// session-start and post-command: one request, one report, never a decision.
-fn judge_simple(run: &mut Run, request: serde_json::Value, cwd: Option<&str>) {
+fn judge_simple(run: &mut Run, request: serde_json::Value, cwd: Option<&str>, forged: &[String]) {
     let event = run.event.clone();
     let verdict = match engine(&event, &request, cwd) {
+        Ok(v) if !forged.is_empty() => with_forged(v, forged),
         Ok(v) => v,
         Err(_) => {
             if run.policy(cwd, &[]) == Unjudged::NotGoverned {
@@ -760,7 +774,11 @@ fn post_edit(run: &mut Run, payload: &J, cwd: Option<&str>) {
     let Some(root) = dir.as_deref().and_then(super::git_toplevel) else {
         return;
     };
-    let message = match super::super::approval::confirm(&root, call) {
+    let transcript = payload
+        .get("transcript_path")
+        .and_then(J::as_str)
+        .map(PathBuf::from);
+    let message = match super::super::approval::confirm(&root, call, transcript.as_deref()) {
         None => return,
         Some(Ok(a)) => format!("urzua harness (acceptance): the person approved {} moving to '{}' in this session, and the receipt is in {}. Commit it unchanged: the local commit check honours the receipt until the approval expires in {} minute(s), and CI still requires the pull request's actors file to name a decider.", a.record_id, a.status, a.path, (a.expires_unix - a.created_unix) / 60),
         Some(Err(e)) => format!("urzua harness (acceptance): {e}. The local commit check will refuse the move; approve it again in the agent session."),
@@ -772,4 +790,36 @@ fn post_edit(run: &mut Run, payload: &J, cwd: Option<&str>) {
             ("additionalContext", s(&message)),
         ]),
     )]));
+}
+
+/// The approvals a shell command wrote, as post-command report lines.
+fn forged_approvals(payload: &J, cwd: Option<&str>) -> Vec<String> {
+    let Some(root) = cwd.map(Path::new).and_then(super::git_toplevel) else {
+        return Vec::new();
+    };
+    let transcript = payload
+        .get("transcript_path")
+        .and_then(J::as_str)
+        .map(PathBuf::from);
+    super::super::approval::shell_changes(&root, transcript.as_deref())
+}
+
+/// `verdict` with the forged approvals added for the person and the agent.
+fn with_forged(mut verdict: serde_json::Value, forged: &[String]) -> serde_json::Value {
+    let text = format!(
+        "urzua harness (post-command): a shell command wrote under the approvals directory, which only the agent harness's hooks write during an edit call:\n{}",
+        forged.join("\n")
+    );
+    for key in ["person", "agent"] {
+        let old = vtext(&verdict, key).to_string();
+        verdict[key] = serde_json::json!(if old.is_empty() {
+            text.clone()
+        } else {
+            format!("{old}\n{text}")
+        });
+    }
+    if vtext(&verdict, "verdict") == "allow" {
+        verdict["verdict"] = serde_json::json!("allow-with-warnings");
+    }
+    verdict
 }
