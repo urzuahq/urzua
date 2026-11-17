@@ -2,7 +2,7 @@
 Stable-Id: 01M20SH9CXA18HFPABZJQY795D
 Status: Accepted
 Date: 2026-09-08
-Version: '0.30'
+Version: '0.31'
 Author: beauwilliams
 Subject: 'Repository agent guardrails -- mechanisms that constrain or guide an AI agent working in this repo; today, `AGENTS.md` and the drafting commands in `.claude/commands/`.'
 Implements: MILE-36
@@ -218,8 +218,8 @@ and this section claims only what each place does.
   judged against the session's), a change made before the session's baseline was taken is not reported, the
   agent's user-level and local settings files are neither protected nor read (a hook or `disableAllHooks`
   set only there is not seen), a link swapped between the judgement and the write is not seen, and an MCP tool that applies a patch or runs a shell command is not judged and not reported; (6) a Bash
-  command can write what the edit tools cannot: `.urzua/cache`, the lock, the override log, `.git/hooks`
-  and `.git/config`, and that is not reported; (7) without `python3` or the translator, the editor hook's
+  command can write what the edit tools cannot: `.urzua/cache`, the lock, the override log, `.git/hooks`,
+  `.git/config` and `.git/urzua`, and that is not reported; (7) without `urzua` on `PATH` (or with a release too old for `urzua harness hook`), the editor hook's
   command reads the configuration as text, a configuration that scan misreads is read as not closed, and an
   invalid or empty `.urzua/config.yaml` lets every edit through with a message; (8) a repository the session
   did not start in can add restrictions and never remove them; (9) the `AGENTS.md` instructions block is not a
@@ -299,3 +299,4 @@ and this section claims only what each place does.
 > | 2026-11-16 | Bumped to `0.29`. The session-start git-hook problem reads husky, the pre-commit framework and `core.hooksPath` layouts and names `urzua hooks install`; `harness status` lists unwired git hooks as warnings. **Why:** `MILE-220`: every session of an adopting repository warned about hooks no command installed. | **substantive** |
 > | 2026-11-16 | The session-start git-hook problem reads a declared hook as ready and a hand-written call as unmanaged. **Why:** `MILE-220`'s third review: text proves nothing but the managed block. | **substantive** |
 > | 2026-11-16 | Bumped to `0.30`. The session-start git-hook problem names a clone not pointed at `hooks.path`; the `on_unjudged: deny` paragraph appears only when a problem other than a git hook is listed. **Why:** `MILE-309`: the report stated a consequence that git-hook problems alone do not have. | **substantive** |
+> | 2026-11-17 | Bumped to `0.31`. The accepted-risk list names `.git/urzua` (the hook's double-registration claims) among what only a Bash command can write, and (7) reads "without `urzua` on `PATH`": the translator script is gone and the hook command calls the binary. **Why:** the harness runs from the binary (`ADR-89`, amendment of 2026-11-17; the move accepted by the maintainer that day, the claims directory decided by the builder, pending maintainer review). | **substantive** |
