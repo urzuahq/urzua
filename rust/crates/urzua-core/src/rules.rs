@@ -235,6 +235,9 @@ mod tests {
         )])
     }
 
+    /// Full builder for the config-level pointer/narrative-field validation
+    /// tests (MILE-90) -- the two helpers above default both new fields to
+    /// `None`, which isn't useful for testing them directly.
     pub(crate) fn type_config_pointer(
         required_fields: &[&str],
         known_fields: Option<&[&str]>,

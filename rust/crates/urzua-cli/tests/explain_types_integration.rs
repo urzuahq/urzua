@@ -538,6 +538,50 @@ fn new_writes_is_what_urzua_new_writes() {
     assert!(of(&r, "note")["states"].get("new_writes").is_none());
 }
 
+const STARTING: &str = "schema_version: 2
+record_types:
+  a:
+    dir: docs/a
+    required_fields: [Status]
+    statuses: {values: [P, Q]}
+  b:
+    dir: docs/b
+    required_fields: [Status]
+    statuses: {values: [P, Q, R], initial: [Q, R], transitions: {Q: [P], R: [P]}}
+";
+
+#[test]
+fn the_status_new_writes_agrees_with_the_summary_and_the_detail() {
+    let dir = write_repo("starting", STARTING);
+    let (_, summary) = run(&dir, &["explain", "--types"]);
+    for (t, initial) in [("a", None), ("b", Some(json!(["Q", "R"])))] {
+        let written = scaffolded_status(&dir, t).unwrap();
+        let (_, r) = run(&dir, &["explain", "--type", t]);
+        assert_eq!(
+            of(&r, t)["states"]["new_writes"]["value"],
+            written,
+            "{t}: `new_writes` is what a real `urzua new` wrote"
+        );
+        match initial {
+            Some(list) => {
+                assert_eq!(of(&summary, t)["states"]["initial"], list);
+                assert_eq!(
+                    list[0], written,
+                    "{t}: new writes the first declared initial"
+                );
+            }
+            None => {
+                assert!(of(&summary, t)["states"].get("initial").is_none());
+                assert_eq!(
+                    of(&summary, t)["states"]["values"][0],
+                    written,
+                    "{t}: with no initial, new writes the first of the values"
+                );
+            }
+        }
+    }
+}
+
 #[test]
 fn an_empty_target_intersection_says_none() {
     let config = NARROWED.replace("{name: Up, targets: [a, b]}", "{name: Up, targets: [a]}");
