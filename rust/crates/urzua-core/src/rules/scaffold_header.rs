@@ -277,7 +277,7 @@ mod tests {
     }
 
     const WHAT_NEW_WRITES: &str =
-        "Stable-Id: 01ABC\nStatus: Draft\nDate: 2026-11-14\nAuthor: ann\nSupersedes: null\n";
+        "Stable-Id: 01ABC\nStatus: Draft\nDate: 2026-11-14\nAuthor: ann\nSupersedes:\n";
 
     #[test]
     fn a_header_that_is_exactly_the_scaffold_is_conformant() {
@@ -289,7 +289,7 @@ mod tests {
 
     #[test]
     fn filling_a_null_field_is_conformant() {
-        let header = WHAT_NEW_WRITES.replace("Supersedes: null", "Supersedes: ADR-2");
+        let header = WHAT_NEW_WRITES.replace("Supersedes:", "Supersedes: ADR-2");
         let r = adr("docs/adr/ADR-4-t.md", &header);
         let (_, findings) = run(&[r], Some(&["docs/adr/ADR-4-t.md"]));
         assert!(findings.is_empty(), "{findings:?}");
@@ -297,7 +297,7 @@ mod tests {
 
     #[test]
     fn leaving_a_null_field_out_is_conformant() {
-        let header = WHAT_NEW_WRITES.replace("Supersedes: null\n", "");
+        let header = WHAT_NEW_WRITES.replace("Supersedes:\n", "");
         let r = adr("docs/adr/ADR-4-t.md", &header);
         let (exec, findings) = run(&[r], Some(&["docs/adr/ADR-4-t.md"]));
         assert!(findings.is_empty(), "{findings:?}");
@@ -364,7 +364,7 @@ mod tests {
     #[test]
     fn a_reordered_header_is_reported_as_an_order_difference() {
         let header =
-            "Status: Draft\nStable-Id: 01ABC\nDate: 2026-11-14\nAuthor: ann\nSupersedes: null\n";
+            "Status: Draft\nStable-Id: 01ABC\nDate: 2026-11-14\nAuthor: ann\nSupersedes:\n";
         let r = adr("docs/adr/ADR-4-t.md", header);
         let (_, findings) = run(&[r], Some(&["docs/adr/ADR-4-t.md"]));
         assert_eq!(findings.len(), 1, "{findings:?}");
@@ -417,7 +417,7 @@ mod tests {
         config.record_types.get_mut("adr").unwrap().known_fields = Some(vec!["Note".to_string()]);
         let template = "---\nNote: null\n---\n# 0 -- T\n";
         let texts: HashMap<String, String> = [("adr".to_string(), template.to_string())].into();
-        let with_note = format!("{WHAT_NEW_WRITES}Note: null\n");
+        let with_note = format!("{WHAT_NEW_WRITES}Note:\n");
         let r = adr("docs/adr/ADR-4-t.md", &with_note);
         let (_, findings) = header_scaffold_mismatch(
             &[r],
