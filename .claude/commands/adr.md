@@ -17,14 +17,14 @@ Record what the conversation actually supplies. You may draft a record; you may 
 1. Scaffold. Run this and keep the printed `path`; every later step names it as `RECORD`.
 
    ```bash step
-   bash .claude/hooks/urzua-record.sh new adr "$TITLE"
+   urzua harness record new adr "$TITLE"
    ```
 
 2. Read the scaffolded file and `.urzua/config.yaml` for this type. Fill the body sections and the
-   header fields that `urzua new` left `null`, from the conversation only. Take the section names,
+   header fields that `urzua new` left empty (listed in its `to_fill`, with the template's `hint`), from the conversation only. Take the section names,
    field names and allowed values from the file and the config, never from memory or from a nearby
    record. If `urzua rules` or the config says a field is a pointer, give it a clean reference that
-   resolves. Leave a field `null` when the conversation does not supply it.
+   resolves. Leave a field empty when the conversation does not supply it; never put the hint itself in it.
 3. Never decide. Do not change any value `urzua new` wrote (its state, dates, author, ids), do not add a
    field it did not write, and do not set an acceptance, completion or fix state or date. A record that
    is finished or fixed is marked by `/done`, which asks the engine; one that is accepted is a person's
@@ -34,7 +34,7 @@ Record what the conversation actually supplies. You may draft a record; you may 
    record and prints how many records it examined.
 
    ```bash step
-   bash .claude/hooks/urzua-record.sh finish "$RECORD"
+   urzua harness record finish "$RECORD"
    ```
 
 5. If `check` reports findings, fix the record's content (not the config, not a waiver) and run step 4

@@ -5,7 +5,7 @@ Phase: '0'
 Track: roadmap-tracking
 Implements: —
 Blocked-on: —
-Realized-by: code:AGENTS.md@sha256:b4528bdc6df6b4384117cce6d8067e5b127ef4603477d3233cf61f5d5cfff86c
+Realized-by: code:AGENTS.md@sha256:958c88d9d339c42e444dd1f0d330bc2588f8bcc8fdcf01f4b0ae70649188ac4a
 ---
 # 36 — Write AGENTS.md capturing this session's practices
 
@@ -23,12 +23,12 @@ something worth writing rather than letting it keep living nowhere.
 
 ## Done means
 
-- `AGENTS.md` exists at the repository root. — evidence: code:AGENTS.md@sha256:b4528bdc6df6b4384117cce6d8067e5b127ef4603477d3233cf61f5d5cfff86c
-- `AGENTS.md` instructs an agent to track work in the tool's own record types. — evidence: code:AGENTS.md@sha256:b4528bdc6df6b4384117cce6d8067e5b127ef4603477d3233cf61f5d5cfff86c
-- `AGENTS.md` instructs an agent to verify claims against real runs rather than memory. — evidence: code:AGENTS.md@sha256:b4528bdc6df6b4384117cce6d8067e5b127ef4603477d3233cf61f5d5cfff86c
-- `AGENTS.md` instructs an agent never to silently rewrite an Accepted decision (amend with a dated `## Amendment`). — evidence: code:AGENTS.md@sha256:b4528bdc6df6b4384117cce6d8067e5b127ef4603477d3233cf61f5d5cfff86c
-- `AGENTS.md` instructs an agent not to build speculative capability. — evidence: code:AGENTS.md@sha256:b4528bdc6df6b4384117cce6d8067e5b127ef4603477d3233cf61f5d5cfff86c
-- Each of these is a section an agent reads at session start. — evidence: code:AGENTS.md@sha256:b4528bdc6df6b4384117cce6d8067e5b127ef4603477d3233cf61f5d5cfff86c
+- `AGENTS.md` exists at the repository root. — evidence: code:AGENTS.md@sha256:958c88d9d339c42e444dd1f0d330bc2588f8bcc8fdcf01f4b0ae70649188ac4a
+- `AGENTS.md` instructs an agent to track work in the tool's own record types. — evidence: code:AGENTS.md@sha256:958c88d9d339c42e444dd1f0d330bc2588f8bcc8fdcf01f4b0ae70649188ac4a
+- `AGENTS.md` instructs an agent to verify claims against real runs rather than memory. — evidence: code:AGENTS.md@sha256:958c88d9d339c42e444dd1f0d330bc2588f8bcc8fdcf01f4b0ae70649188ac4a
+- `AGENTS.md` instructs an agent never to silently rewrite an Accepted decision (amend with a dated `## Amendment`). — evidence: code:AGENTS.md@sha256:958c88d9d339c42e444dd1f0d330bc2588f8bcc8fdcf01f4b0ae70649188ac4a
+- `AGENTS.md` instructs an agent not to build speculative capability. — evidence: code:AGENTS.md@sha256:958c88d9d339c42e444dd1f0d330bc2588f8bcc8fdcf01f4b0ae70649188ac4a
+- Each of these is a section an agent reads at session start. — evidence: code:AGENTS.md@sha256:958c88d9d339c42e444dd1f0d330bc2588f8bcc8fdcf01f4b0ae70649188ac4a
 
 > **Revision log**
 >
@@ -47,3 +47,6 @@ something worth writing rather than letting it keep living nowhere.
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `AGENTS.md` 48d431863e87 -> 2ea89528735a. Reason: Read the diff of AGENTS.md since the previous pin: one paragraph is added to 'A record's Status: who sets it' saying a maintainer-decision row quotes the instruction or cites the PR or review, and that a changed Done-when item keeps its text and is waived. No other line changed, so the claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `AGENTS.md` b4c539ee8370 -> 76cd697c2a77. Reason: Read the diff of AGENTS.md since the previous pin: one paragraph is added to 'A record's Status: who sets it' saying a maintainer-decision row quotes the instruction or cites the PR or review, and that a changed Done-when item keeps its text and is waived. No other line changed, so the claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-14 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `AGENTS.md` 76cd697c2a77 -> b4528bdc6df6. Reason: Read the diff of each pinned file since the previous pin. .urzua/config.yaml: one line is added to the milestone type's waiver_categories, declaring the scope-changed-by-decision category (no cite, no expiry); no other key changed, so the record_types::milestone section differs only by that entry. AGENTS.md: one paragraph is added under 'A record's Status: who sets it' about quoting maintainer decisions and waiving a changed Done-when item; no other line changed. The claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
+> | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `AGENTS.md` b4528bdc6df6 -> adf3721bd062. Reason: AGENTS.md: the harness block no longer names hook files under .claude/hooks, and the guardrail note says 'without urzua on PATH' for 'without python3 or the translator' **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `AGENTS.md` adf3721bd062 -> 76d534d10031. Reason: AGENTS.md: the files the harness keeps now include .git/urzua (the hook's double-registration claims), in the harness block and the two lists of protected and Bash-only paths **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `AGENTS.md` 76d534d10031 -> 958c88d9d339. Reason: AGENTS.md: the guardrail note says the editor hook's text fallback refuses every edit unless it reads with certainty that no guardrail refuses an unjudged edit **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |

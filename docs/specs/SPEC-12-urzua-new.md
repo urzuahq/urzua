@@ -1,10 +1,10 @@
 ---
 Stable-Id: 01M6R3NK5C0WX34AQKF79DQDS5
-Version: '0.35'
+Version: '0.42'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
-Realized-by: code:rust/crates/urzua-cli/src/commands/new.rs@sha256:17c7a9534720911110a6f238679ced2b79bedc79957afed8001e7b50b6deb233, code:rust/crates/urzua-core/src/new_record.rs@sha256:9ad96b4bc33122a1185b91e2d0af210a68e7c2acadc5efb2d16ea1ec1f0e9875, test:rust/crates/urzua-cli/tests/new_integration.rs@sha256:24cdee5f880f8a7c547e11efb4bb0350c8b9cfa1d5b634785ddc350e4c505c14
+Realized-by: code:rust/crates/urzua-cli/src/commands/new.rs@sha256:bbe0a325237d2d01852da4dd20f108e0b1a1ecba4f20d7f16bd33122c5ecc3e9, code:rust/crates/urzua-core/src/new_record.rs@sha256:7f1278fc462c827efd4c94b3a1c2d244c417fa97bb0a9f1bc8d877d25d813527, test:rust/crates/urzua-cli/tests/new_integration.rs@sha256:e25c6bfd1efb4450ea25e70da2703a41e423deb210d4410f4534f1ed7f13fb3b
 Author: beauwilliams
 Subject: '`urzua new` -- generating a record''s initial content with a real stable ID assigned.'
 Implements: ADR-27
@@ -16,24 +16,68 @@ Parent: SPEC-1
 
 Creates a record from the type's configuration with a stable ID assigned. Never asks the author to
 pick a number. Fills in only what the tool can compute; every decision a human makes stays the
-template's own placeholder text for a human to pick.
+template's own placeholder text for a human to pick, and the report lists those fields to fill.
 
 ## How a record is built
 
 The header is always synthesized as YAML frontmatter from the type's `required_fields`, the only
 header shape `new` writes (the `blockquote` and `bold-list` shapes were removed, `MILE-85`): every
-configured field is emitted as a blank frontmatter key, so the config alone drives what an author
-has to fill in. Fields `new` can compute are filled: a freshly generated `Stable-Id`, the date and
+configured field is emitted as a frontmatter key (see "A field `new` has no value for" below), so the
+config alone drives what an author has to fill in. Fields `new` can compute are filled: a freshly generated `Stable-Id`, the date and
 author fields (`relation_fields.date`/`author`, default `Date`/`Author`; the author resolved the same way `fix --apply` resolves an identity: `gh api user` wins even over an
 explicit `--by`, which wins over `git config user.name` -- SPEC-8's identity tiering, reused rather
-than redesigned), and the type's status field, which starts at the first value of the type's
-declared `statuses.values` (`MILE-151`). That is the vocabulary's entry state rather than a
+than redesigned), and the type's status field, which starts at the first of the type's
+declared `statuses.initial`, or at the first of `statuses.values` when the type declares no `initial`
+(`MILE-151`, `BUG-199`). The report's `status_from` says which: `{field, value, source, other_initial}`,
+`source` being `statuses.initial[0]` or `statuses.values[0]` and `other_initial` the remaining declared
+initial states, so a caller sees when the choice among several was made for it; `null` when the type
+declares no `statuses` or does not require its status field. The choice is one core function
+(`new_record::scaffold_status`), which `urzua explain --types` also calls for its `new_writes`, so the two
+cannot disagree. That is the vocabulary's entry state rather than a
 decision, so moving a record on from it stays a human's; a type that declares no `statuses` leaves
 the field blank. A type may also name the field that takes the record's title
 (`relation_fields.title`, a spec's `Subject`) and the version a record starts at
 (`revision_log.version_bump.initial`, written into the `version_bump` field, a spec's `Version`), so a
 scaffold does not fail `field.quality` on a required field the tool could fill (`MILE-74`). Every
-other field is a decision a human makes and stays blank.
+other field is a decision a human makes and is written as the next section says.
+
+## A field `new` has no value for (`MILE-322`)
+
+`new` never invents a value. A field it has no value for is written empty (`Kind:`, nothing after the
+colon: the same YAML null as `Kind: null`, read the same by every rule), required or optional, whenever
+the type's header carries the field; the set and order of fields `new` writes is unchanged, so an
+author fills an optional field without adding a line. `new` never writes `—` on the author's behalf
+(it asserts "deliberately no value") and never copies a template's text into a header field. The date,
+author and status are filled only in a field the type requires; a field only the template lists is
+written empty like any other.
+
+Accepted by the maintainer on 2026-11-17, in his words: "leave it empty and tell the agent what to
+fill ... that means it doesn't get filled with data that shouldn't be in there. The agent should
+explicitly have to fill in data that needs to be filled."
+
+The rest of this section is decided by the builder, pending maintainer review.
+
+The report's `to_fill` lists each such field as `{field, required, hint, allowed, if_empty}`:
+`required` says whether the type requires it; `allowed` is the list the type declares for it in
+`field_values`, or `null`; `hint` is that list in `field.quality`'s form (`allowed: a, b`) when there is
+one, else the template's text for the field (`feature | bug | chore`), or `null` when the template has
+none or its text is a dash or a built-in placeholder word (`TBD`, `name(s)`), which would invite the
+author to write what `field.quality` reports; `if_empty` says what leaving the field empty means where
+the configuration decides it (a suppression type's `Expires`, and the fields its `permanent` entries
+read), else `null`. `next_action_reason` names the required fields as required and the optional ones
+as optional, each with its `if_empty` meaning; when the record needs no staging, `next_action` is
+`urzua check <path>`.
+
+`new` followed by `git add` and `check` then reports, for a field `new` wrote, only the true
+`field.quality` finding on an empty required field ("field 'Kind' is empty", naming the allowed
+values when the type declares `field_values` for it). An empty optional field draws no finding from
+any rule that only judges it: it names no reference, no date and no vocabulary value, so
+`header.pointer-field-clean` does not report an empty optional pointer field; a required pointer field
+left empty is still reported by `field.quality`. A field whose emptiness would widen what is allowed is
+the exception: a present but empty `Expires` on a suppression record (`Expires:` or `Expires: null`)
+leaves the record without effect, so it suppresses nothing and is reported as expired, saying the
+expiry is empty and must be filled or the line removed, as releases 0.4.7 and 0.4.8 already treated
+it; an absent `Expires` line keeps its meaning. An empty value written by hand behaves the same.
 
 If a checked-in template exists (`.urzua/templates/<type>.md`), its body scaffolding (the H1 and the
 sections beneath the header) is appended under the synthesized header; the template's own header, in
@@ -58,7 +102,7 @@ without an edit:
   type's prefix and the number; a pattern no such name fits is a refusal naming the pattern, before
   anything is written. A type with no `identity` is numbered and named exactly as before.
 - **Template fields.** A field the template's header names beyond the type's `required_fields` is written
-  blank when the type declares it (`known_fields`, or any field when none is declared), so the record starts
+  as the section above says when the type declares it (`known_fields`, or any field when none is declared), so the record starts
   with the fields the template meant it to carry (`BUG-188`). A template field the type does not declare is
   left out, since it would only trip `header.field-set-consistency`.
 - **Field set.** `Stable-Id` is always written (ADR-21: every record type gets one). When the type
@@ -179,8 +223,10 @@ output is unchanged.
 fact, and the opt-in `header.scaffold-mismatch` rule (`SPEC-2`) does: under `check --base` it
 re-renders the header of each added record from the run's configuration and the type's template, with
 the record's own number, title, `Stable-Id`, author and date, and compares the fields `new` decides (which
-exist, their order, and the value each starts at). A field `new` leaves null may be filled in or left
-out; nothing else may differ. `new` carries no stamp or marker for this (a stamp is forgeable and changes the
+exist, their order, and the value each starts at). A field the scaffold leaves empty, as `new` writes
+it, may be filled in or left out; nothing else may differ, so a record made by `new` and then filled
+is not a mismatch. A record an older `new` wrote with `Field: null` compares the same, since both read
+as empty. `new` carries no stamp or marker for this (a stamp is forgeable and changes the
 record), and nothing here changes what `new` writes.
 
 `scripts/replay-header-comparator.py` runs that rule at every commit of the pull requests merged in
@@ -260,3 +306,23 @@ steps and in seconds, for each record type.
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/new.rs` 1a5415993507 -> 42834880ff2b, `rust/crates/urzua-cli/tests/new_integration.rs` c319a5750aa1 -> 24cdee5f880f. Reason: new.rs refuses to write a record into a path-gated directory through write_new_record, which waive shares; new_integration.rs gains a test that new refuses a path-gated directory; the record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Bumped to `0.35`. Re-pinned the evidence `MILE-288`, `MILE-289` and `MILE-290` changed (the pin attestation rule, path gates on write commands, one definition of blank); what this spec states is unchanged. **Why:** a re-pinned versioned spec carries a version above main's. | **structural** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/new.rs` 42834880ff2b -> 17c7a9534720. Reason: new.rs refuses a path-gated directory through write_new_record, and a misplaced doc comment moved back to write_new_file; the record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/new_record.rs` 9ad96b4bc331 -> 7e5e07d3aa32. Reason: new_record.rs: the status a scaffold writes is decided by a new public scaffold_status, which scaffold_record calls; it returns the first status value only when the status field is required, which is when the scaffold already wrote it, so every scaffold is unchanged **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/new.rs` 17c7a9534720 -> 6c20a4215aa2. Reason: new.rs: the header_shape: none refusal moves into scaffold_refusal, which urzua new calls before anything else as before; the message and behaviour are unchanged **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/new.rs` 6c20a4215aa2 -> ec4ca60b573b. Reason: new.rs: scaffold_refusal also refuses, before numbering, a declared identity pattern that does not compile or reads no PREFIX-N-slug name back, which urzua new refused later before; type_prefix and template_path are shared with explain; the record urzua new writes is unchanged **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-17 | Closing note on this change's re-pins of `rust/crates/urzua-cli/src/commands/new.rs`: in the final file, `scaffold_refusal` holds the two refusals decidable from the configuration alone (`header_shape: none`, and an identity pattern that does not compile), `type_prefix` and `template_path` hold the prefix and template path `urzua new` already used, and the identity-pattern fit stays in `build_filename` after numbering with the real name. `urzua new` and `urzua waive` behave as before this change; an intermediate commit had moved the fit check ahead of numbering, which the earlier row's "the record urzua new writes is unchanged" did not describe. **Why:** review of 2026-11-17 found that intermediate check refused patterns that fit the real number or title. | **evidence** |
+> | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/new.rs` ec4ca60b573b -> c8141253b244. Reason: new.rs: scaffold_refusal keeps only the refusals decidable from configuration (header_shape: none, an identity pattern that does not compile); the identity-pattern fit is back in build_filename after numbering with the real name, so urzua new and urzua waive behave as before this change **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-17 | Bumped to `0.36`. Adds `## A field `new` has no value for`: such a field carries the template's text, the `—` sentinel when required, or is left out, never `null`; the report gains `to_fill` and its next-action reason names those fields; `header.scaffold-mismatch` compares against the null form. Decided by the builder on 2026-11-17, pending maintainer review: the sentinel for a required field with no template text. **Why:** `MILE-322` -- `new` wrote `null`, so a new record started with `field.quality` and `header.pointer-field-clean` findings the author did not cause. | **substantive** |
+> | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/new.rs` 17c7a9534720 -> db754194da30, `rust/crates/urzua-core/src/new_record.rs` 9ad96b4bc331 -> 048a39513924, `rust/crates/urzua-cli/tests/new_integration.rs` 24cdee5f880f -> eafc3593c1d4. Reason: new.rs takes the fields to fill from the scaffold and puts them in the report as to_fill; numbering, naming, identity and writing are unchanged; new_integration.rs: two assertions that pinned a null field now expect the template's text and the em-dash sentinel; new_record.rs writes a field new has no value for as the template's text, the em-dash sentinel when required, or leaves it out, never null, and returns the fields still to fill through scaffold_record_reporting; ScaffoldSpec gains unset_as_null for the comparison scaffold; the tests that pinned null now assert the new forms. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-17 | Bumped to `0.37`. Replaces the design described in the `0.36` rows (template text, the `—` sentinel or omission) with the empty-value design. Rewrites `## A field `new` has no value for`: such a field is written empty, required or optional, never as the template's text, the `—` sentinel or `null`, and the field set is unchanged; `to_fill` entries are `{field, required, hint}` with the template's text as `hint`; an empty required field keeps `field.quality`'s Blank finding and an empty optional field draws none; `header.scaffold-mismatch` compares against the empty form. **Why:** maintainer decision of 2026-11-17 on `MILE-322` ("leave it empty and tell the agent what to fill"), after review found template prose landing in pointer, date and grouping fields under `0.36`. | **substantive** |
+> | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/new_record.rs` 048a39513924 -> 79c4d91d065f, `rust/crates/urzua-cli/tests/new_integration.rs` eafc3593c1d4 -> e25c6bfd1efb. Reason: new_integration.rs: two assertions now expect the empty form (Deciders:, Gist:) instead of template text and the em-dash sentinel; new_record.rs writes a field new has no value for empty (Field:), never the template's text, the em-dash sentinel or null, keeps the same field set, and returns to_fill entries {field, required, hint} with the template's text as hint; the unset_as_null comparison flag is removed since an empty field reads as null; its unit tests assert the empty form. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-17 | Bumped to `0.38`. States that a present but empty `Expires` on a suppression record leaves it without effect and is reported, as on release 0.4.7, and that an empty optional field is silent only where silence cannot widen what is allowed. **Why:** review of `MILE-322`'s pull request found that reading an empty `Expires` as absent made a waiver permanent. | **substantive** |
+> | 2026-11-17 | Bumped to `0.39`. `to_fill` entries carry `allowed`, the type's declared `field_values` for the field, and `hint` gives that list in `field.quality`'s `allowed:` form when it exists; a `—` template value is no hint; the status field starts at `statuses.initial` when declared, not the first of `statuses.values`; the empty required field's finding is quoted in the wording main adopted ("is empty"). **Why:** merging main, whose `field.quality` names declared values (`MILE-327`), into `MILE-322`'s pull request, so the hint and the finding agree. | **substantive** |
+> | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/new_record.rs` 79c4d91d065f -> 5909f7fd05b3. Reason: new_record.rs starts a record at statuses.initial when declared (BUG-199), adds `allowed` (the type's field_values) to each to_fill entry and words the hint as that list when declared, offers no em-dash template value as a hint, with unit tests for each. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-17 | Bumped to `0.40`. The report gains `status_from`, naming where the starting status came from and the other declared initial states. **Why:** `BUG-199` -- the maintainer asked for the initial-state defect to be fixed in this pull request (2026-11-17), and an agent should see when the choice among several initial states was made for it. | **substantive** |
+> | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/new.rs` db754194da30 -> 130b8b1d8bbd, `rust/crates/urzua-core/src/new_record.rs` 5909f7fd05b3 -> 08fe0a8a09c6. Reason: new.rs puts status_from into new's report; numbering, naming, identity and writing are unchanged; new_record.rs adds StatusFrom and status_from(), which picks the first of statuses.initial (else the first of statuses.values) and lists the other initial states; the scaffold takes its starting status from it. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-17 | The rows of 2026-11-17 (`0.36`), 2026-11-17 (`0.37`), 2026-11-17 (re-baseline) describe intermediate states of the pull request for `MILE-322` and `MILE-324` that the final change does not contain: a `ScaffoldSpec.unset_as_null` flag; writing a field `new` has no value for as the template's text, the `—` sentinel or nothing. The final change writes such a field empty and lists it in `to_fill`, has no such flag or function, leaves `is_record_reference`'s visibility as on main, and keeps a present but empty `Expires` expired, as releases 0.4.7 and 0.4.8 do. The earlier rows stay as history. **Why:** review of that pull request asked that rows naming designs absent from the final tree be closed. | **structural** |
+> | 2026-11-17 | Bumped to `0.41`. Gives the maintainer's acceptance its own sentence, covering only "leave it empty and tell the agent what to fill", and marks the rest of the section decided by the builder, pending maintainer review; date, author and status fill only a required field; `to_fill` gains `if_empty`, and a hint is never a dash or a built-in placeholder word; the next action separates required from optional fields; a required pointer left empty is still reported. **Why:** review of the pull request for `MILE-322` and `MILE-324`: the acceptance sat beside decisions the maintainer had not seen, template-only fields were filled where release 0.4.8 left them for the author, and the next action named optional fields as if required. | **substantive** |
+> | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/new.rs` 130b8b1d8bbd -> c71281cac1bd, `rust/crates/urzua-core/src/new_record.rs` 08fe0a8a09c6 -> 3fcf76bf181b. Reason: new.rs moves the staging decision into needs_staging so run stays within the function-length bound; behaviour is unchanged; new_record.rs fills date, author and status only in a field the type requires (a template-only field is written empty), adds if_empty to to_fill entries for a suppression type's Expires and permanent fields, offers no dash or built-in placeholder word as a hint, and rewords its comments without record ids; unit tests cover each. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-17 | Bumped to `0.42`. Merges main's `urzua explain --types` rows; the starting-status choice (`statuses.initial`, else the first of `statuses.values`, only for a required status field) lives in `new_record::scaffold_status`, which `explain`'s `new_writes` and `new`'s `status_from` share. **Why:** merging main, where `explain` (`#579`) moved the choice into that shared function. | **substantive** |
+> | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/new.rs` c8141253b244 -> bbe0a325237d, `rust/crates/urzua-core/src/new_record.rs` 7e5e07d3aa32 -> e0fddc5bea48. Reason: new.rs: render_record keeps returning to_fill and reads the template through main's template_path helper; it also carries main's merged `urzua explain --types` changes (#579), which main's own review covered; new_record.rs: scaffold_status now delegates to status_from, which holds the one starting-status choice (statuses.initial, else the first value, only for a required status field) shared by the scaffold, new's status_from and explain's new_writes; it also carries main's merged `urzua explain --types` changes (#579), which main's own review covered. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/new_record.rs` e0fddc5bea48 -> 7f1278fc462c. Reason: new_record.rs: scaffold_status delegates to status_from (its required-field gate uses contains), which holds the one starting-status choice (statuses.initial, else the first value, only for a required status field) shared by the scaffold, new's status_from and explain's new_writes; it also carries main's merged `urzua explain --types` changes (#579), which main's own review covered. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |

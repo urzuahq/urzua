@@ -186,6 +186,8 @@ pub(super) fn engine_owned(override_log: Option<&str>) -> Vec<String> {
         super::lock::LOCK_PATH,
         ".git/hooks",
         ".git/config",
+        // The hook's double-registration claims (`harness/hook/once.rs`).
+        ".git/urzua",
     ]
     .iter()
     .map(|p| p.to_string())

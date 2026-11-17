@@ -219,15 +219,37 @@ enum Command {
     /// is instead: its scope, the level this repository sets, its severity
     /// floor and waivable flag, its options with their current values, its
     /// action variants, its population unit and its spec (ADR-96).
-    #[command(override_usage = "urzua explain <PATH>\n       urzua explain --rule <RULE_ID>")]
+    /// With `--types`, a summary of every record type the configuration
+    /// declares; `--types --full` and `--type <name>` give every declaration
+    /// (fields, values, references, states, conditions, gates, the command that
+    /// creates one), each entry with the key path and line it was read from.
+    /// It does not say which rules apply to a type, nor whether a declared
+    /// condition is enforced: `urzua check` reports what ran.
+    #[command(
+        override_usage = "urzua explain <PATH>\n       urzua explain --rule <RULE_ID>\n       urzua explain --types [--full]\n       urzua explain --type <TYPE>"
+    )]
     Explain {
         /// A file, directory, glob or `path#scope`. Always a path, even when
         /// it spells a rule id; use `--rule` for a rule.
-        #[arg(required_unless_present = "rule", conflicts_with = "rule")]
+        #[arg(
+            required_unless_present_any = ["rule", "types", "record_type", "full"],
+            conflicts_with_all = ["rule", "types", "record_type"]
+        )]
         path: Option<String>,
         /// A rule id, as `urzua rules` lists them.
-        #[arg(long, value_name = "RULE_ID")]
+        #[arg(long, value_name = "RULE_ID", conflicts_with_all = ["types", "record_type"])]
         rule: Option<String>,
+        /// Every record type the configuration declares, one compact entry each.
+        #[arg(long, conflicts_with = "record_type")]
+        types: bool,
+        /// With `--types`: every type's full declaration, the rules set in the
+        /// configuration as written under `rules:`, the path gates, and the
+        /// repository's own settings.
+        #[arg(long, conflicts_with_all = ["path", "rule"])]
+        full: bool,
+        /// One declared record type.
+        #[arg(long = "type", value_name = "TYPE")]
+        record_type: Option<String>,
     },
 
     /// The full record-relationship graph: every `Implements`/
@@ -546,6 +568,25 @@ enum HarnessTarget {
     /// Print the effective `harness.limits` of the configuration: every key,
     /// declared or built in.
     Limits,
+    /// The agent's hook command: read the agent's hook event on stdin, judge it
+    /// with the guardrail core, and print the agent's hook output. Always exits
+    /// 0 once it has read the event; what it prints is the decision.
+    Hook {
+        /// The adapter that reads the event (`urzua harness adapters`).
+        adapter: String,
+        /// `edit`, `post-command` or `session-start`.
+        event: String,
+    },
+    /// The shared steps of the generated drafting and lifecycle commands:
+    /// `new <type> <title>`, `finish <record>`, `amend-finish <record>`,
+    /// `repin <record> <reason>`, `reverify <record> <reason>`, `done <record>`.
+    /// A drafting step may fill only what the scaffold left empty; an
+    /// amendment may only add.
+    Record {
+        step: String,
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
     /// Run a guardrail core: a neutral request on stdin, a verdict on stdout.
     Run {
         #[command(subcommand)]
@@ -703,7 +744,29 @@ fn dispatch(config: Option<PathBuf>, command: Command) -> ExitCode {
                 ..Default::default()
             },
         ),
-        Command::Explain { path, rule } => commands::explain::run(config, path, rule),
+        Command::Explain {
+            types: true, full, ..
+        } => commands::explain_types::run(
+            config,
+            if full {
+                commands::explain_types::Mode::Full
+            } else {
+                commands::explain_types::Mode::Summary
+            },
+        ),
+        Command::Explain {
+            record_type: Some(t),
+            full,
+            ..
+        } => {
+            if full {
+                commands::explain_types::refuse_full_with_type(&t)
+            } else {
+                commands::explain_types::run(config, commands::explain_types::Mode::One(t))
+            }
+        }
+        Command::Explain { full: true, .. } => commands::explain_types::refuse_full_alone(),
+        Command::Explain { path, rule, .. } => commands::explain::run(config, path, rule),
         Command::Graph => commands::graph::run(config),
         Command::Roadmap => commands::roadmap::run(config),
         Command::Mcp { root } => commands::mcp::run(config, root),
@@ -872,6 +935,8 @@ fn dispatch_harness(config: Option<PathBuf>, target: HarnessTarget) -> ExitCode 
         HarnessTarget::Uninstall { dry_run } => harness::run_uninstall(config, dry_run),
         HarnessTarget::Adapters => harness::run_adapters(),
         HarnessTarget::Limits => harness::run_limits(config),
+        HarnessTarget::Hook { adapter, event } => harness::run_hook(&adapter, &event),
+        HarnessTarget::Record { step, args } => harness::run_record(&step, &args),
         HarnessTarget::Run {
             event: HarnessRun::Edit,
         } => harness::run_edit(config),

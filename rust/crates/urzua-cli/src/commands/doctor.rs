@@ -41,7 +41,7 @@ pub(crate) fn git_hook_problems(repo_root: &std::path::Path) -> Vec<String> {
         .unwrap_or_default();
     hook_checks(repo_root, &decl)
         .into_iter()
-        .filter(|c| c.status != DoctorStatus::Ok)
+        .filter(|c| c.status > DoctorStatus::Info)
         .map(|c| c.message)
         .collect()
 }
@@ -105,6 +105,7 @@ fn hook_checks(
 #[serde(rename_all = "kebab-case")]
 enum DoctorStatus {
     Ok,
+    Info,
     Warn,
     Error,
 }
@@ -267,6 +268,8 @@ pub fn run(config: Option<PathBuf>) -> ExitCode {
     };
 
     config_shape_checks(&config, &repo_root, &mut checks);
+    let config_text = urzua_io::read_to_string(&config_path).unwrap_or_default();
+    declared_value_vocabulary_checks(&config, &config_text, &mut checks);
     template_section_checks(&config, &repo_root, &mut checks);
     checks.push(ci_wired_check(&repo_root));
 
@@ -378,6 +381,120 @@ fn config_shape_checks(
             ));
         }
     }
+}
+
+/// One check per value a type declares for a field (its status values, and
+/// each `field_values` entry) that a placeholder or pending vocabulary also
+/// reads as a marker. Overlap with the built-in words is `info`: the value is
+/// exempt in its own field and still reported in any other. A value the type
+/// itself lists under `statuses.placeholders` or `statuses.pending` is `warn`:
+/// the explicit list wins and the finding is reported, so the two declarations
+/// disagree and one of them is not meant.
+fn declared_value_vocabulary_checks(
+    config: &urzua_core::config::Config,
+    config_text: &str,
+    checks: &mut Vec<DoctorCheck>,
+) {
+    for name in config.sorted_type_names() {
+        let type_config = &config.record_types[name];
+        let decl = type_config.status_decl();
+        let status_field = type_config.relation_field(urzua_core::config::RelationRole::Status);
+        let mut declared: Vec<(&str, String, &str)> = decl
+            .iter()
+            .flat_map(|d| {
+                d.values
+                    .iter()
+                    .map(|v| (status_field, "statuses.values".to_string(), v.as_str()))
+            })
+            .collect();
+        for (field, values) in type_config.field_values.iter().flatten() {
+            let key = format!("field_values.{field}");
+            declared.extend(
+                values
+                    .iter()
+                    .map(|v| (field.as_str(), key.clone(), v.as_str())),
+            );
+        }
+        for (field, key, value) in declared {
+            let matched = urzua_core::field_state::vocabularies_of(value, decl.as_ref());
+            if matched.is_empty() {
+                continue;
+            }
+            let at = |k: &str| match config_line(config_text, name, k) {
+                Some(n) => format!("`{k}` (line {n})"),
+                None => format!("`{k}`"),
+            };
+            let listed: Vec<&str> = matched
+                .iter()
+                .filter(|(_, own)| *own)
+                .map(|(v, _)| *v)
+                .collect();
+            let (status, message) = if listed.is_empty() {
+                let names: Vec<&str> = matched.iter().map(|(v, _)| *v).collect();
+                (
+                    DoctorStatus::Info,
+                    format!(
+                        "record type '{name}' declares '{value}' for field '{field}' in {}, and the built-in {} words also include it -- it is a real value in that field and still reported in any other field",
+                        at(&key),
+                        names.join(" and ")
+                    ),
+                )
+            } else {
+                let lists: Vec<String> = listed
+                    .iter()
+                    .map(|v| {
+                        at(&format!(
+                            "statuses.{}",
+                            if *v == "placeholder" {
+                                "placeholders"
+                            } else {
+                                "pending"
+                            }
+                        ))
+                    })
+                    .collect();
+                (
+                    DoctorStatus::Warn,
+                    format!(
+                        "record type '{name}' declares '{value}' for field '{field}' in {} and also lists it in {}; the explicit list wins, so a record holding '{value}' is reported -- remove the declaration that is not meant",
+                        at(&key),
+                        lists.join(" and ")
+                    ),
+                )
+            };
+            checks.push(DoctorCheck::new(
+                "declared-value-vocabulary",
+                status,
+                message,
+            ));
+        }
+    }
+}
+
+/// The 1-based line of `key` (a dotted path such as `statuses.pending`) inside
+/// record type `type_name`'s block of the configuration text, read by
+/// indentation; `None` when the text does not show it, as for a config split
+/// across files.
+fn config_line(text: &str, type_name: &str, key: &str) -> Option<usize> {
+    let lines: Vec<&str> = text.lines().collect();
+    let indent = |l: &str| l.len() - l.trim_start().len();
+    let start = lines
+        .iter()
+        .position(|l| l.trim_start().trim_end() == format!("{type_name}:") && indent(l) > 0)?;
+    let base = indent(lines[start]);
+    let mut from = start;
+    let mut depth = base;
+    for part in key.split('.') {
+        let found = lines
+            .iter()
+            .enumerate()
+            .skip(from + 1)
+            .take_while(|(_, l)| l.trim().is_empty() || indent(l) > depth)
+            .find(|(_, l)| l.trim_start().starts_with(&format!("{part}:")))?;
+        from = found.0;
+        depth = indent(found.1);
+    }
+    Some(from + 1)
 }
 
 /// A declared entry the configuration then holds no rule to: the rule that

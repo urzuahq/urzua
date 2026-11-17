@@ -174,7 +174,7 @@ fn hook_command(dir: &Path, handler: &str) -> String {
         .flat_map(|groups| groups.as_array().unwrap())
         .flat_map(|g| g["hooks"].as_array().unwrap())
         .map(|h| h["command"].as_str().unwrap().to_string())
-        .find(|c| c.contains(&format!("urzua harness run {handler}")))
+        .find(|c| c.contains(&format!("urzua harness hook claude-code {handler}")))
         .unwrap_or_else(|| panic!("no {handler} hook command"))
 }
 
@@ -194,16 +194,15 @@ fn run_command(
     path: Option<&Path>,
     payload: &str,
 ) -> serde_json::Value {
+    // The command finds `urzua` on PATH: this build, unless the test gives a PATH.
+    let tools = path_with(&["urzua", "git", "sh", "awk", "cat"]);
     let mut c = Command::new("sh");
     c.args(["-c", &hook_command(dir, "edit")])
         .current_dir(cwd)
-        .env("URZUA_BIN", env!("CARGO_BIN_EXE_urzua"))
+        .env("PATH", path.unwrap_or(tools.path()))
         .env_remove("CLAUDE_PROJECT_DIR");
     if let Some(p) = project_dir {
         c.env("CLAUDE_PROJECT_DIR", p);
-    }
-    if let Some(p) = path {
-        c.env("PATH", p);
     }
     let out = run_with_stdin(&mut c, payload);
     assert_eq!(out.status.code(), Some(0), "{out:?}");
@@ -240,27 +239,38 @@ fn the_settings_command_refuses_when_it_cannot_run_and_the_configuration_says_de
     install(&dir);
     let target = dir.join(".claude/settings.json");
     let payload = write_payload(&dir, &target, "{}\n");
-    let tools = path_with(&["sh", "git", "awk", "cat"]);
-    // No python3: the shell fallback reads the configuration.
+    let tools = path_with(&["sh", "git", "awk", "cat", "dirname", "tr", "wc"]);
+    // No urzua on PATH: the shell fallback reads the configuration.
     let v = run_command(&dir, &dir, Some(&dir), Some(tools.path()), &payload);
     assert_eq!(decision(&v), Some("deny"), "{v}");
-    assert!(v["hookSpecificOutput"]["permissionDecisionReason"]
+    let reason = v["hookSpecificOutput"]["permissionDecisionReason"]
         .as_str()
-        .unwrap()
-        .contains("on_unjudged"));
-    // The translator deleted: the same.
-    std::fs::remove_file(dir.join(".claude/hooks/urzua-claude-code.py")).unwrap();
-    let v = run_command(&dir, &dir, Some(&dir), None, &payload);
+        .unwrap();
+    assert!(
+        reason.contains("every edit is refused") && reason.contains("urzua is not on PATH"),
+        "{reason}"
+    );
+    assert!(reason.contains("install.md"), "names the fix: {reason}");
+    // A urzua too old to have `harness hook` (its parser exits 2): the same.
+    std::fs::write(
+        tools.join("urzua"),
+        "#!/bin/sh\necho 'unrecognized subcommand' >&2\nexit 2\n",
+    )
+    .unwrap();
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::set_permissions(tools.join("urzua"), std::fs::Permissions::from_mode(0o755)).unwrap();
+    let v = run_command(&dir, &dir, Some(&dir), Some(tools.path()), &payload);
     assert_eq!(decision(&v), Some("deny"), "{v}");
+    assert!(v.to_string().contains("urzua exited 2"), "{v}");
 }
 
 #[test]
 fn the_settings_command_only_warns_when_the_configuration_allows_an_unjudged_edit() {
     let dir = fixture("b1-open", &config(", on_unjudged: allow"));
     install(&dir);
-    std::fs::remove_file(dir.join(".claude/hooks/urzua-claude-code.py")).unwrap();
+    let tools = path_with(&["sh", "git", "awk", "cat", "dirname", "tr", "wc"]);
     let payload = write_payload(&dir, &dir.join(".claude/settings.json"), "{}\n");
-    let v = run_command(&dir, &dir, Some(&dir), None, &payload);
+    let v = run_command(&dir, &dir, Some(&dir), Some(tools.path()), &payload);
     assert_eq!(decision(&v), None, "{v}");
     assert!(v["systemMessage"]
         .as_str()
@@ -347,16 +357,29 @@ fn mcp(dir: &Path, tool: &str, input: serde_json::Value) -> String {
 }
 
 fn translate(dir: &Path, payload: &str) -> serde_json::Value {
-    let mut c = Command::new("python3");
-    c.arg("-I")
-        .arg(
-            Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("bundle/claude-code/files/.claude/hooks/urzua-claude-code.py"),
-        )
-        .args(["edit", "--", "urzua", "harness", "run", "edit"])
-        .current_dir(dir)
-        .env("URZUA_BIN", env!("CARGO_BIN_EXE_urzua"));
-    let out = run_with_stdin(&mut c, payload);
+    translate_event(dir, "edit", payload)
+}
+
+/// What the binary hook prints for `event`: the hook output the agent harness
+/// reads (`additionalContext` for the agent, `systemMessage` for the person).
+fn translate_event(dir: &Path, event: &str, payload: &str) -> serde_json::Value {
+    let project = (event == "session-start").then_some(dir);
+    // The session-start check looks for `urzua` on PATH, so the binary under
+    // test is the one it must find, whatever the machine has installed.
+    let bin = Path::new(env!("CARGO_BIN_EXE_urzua")).parent().unwrap();
+    let mut path = vec![common::stub_gh_dir().to_path_buf(), bin.to_path_buf()];
+    path.extend(std::env::split_paths(
+        &std::env::var_os("PATH").unwrap_or_default(),
+    ));
+    let path = std::env::join_paths(path).unwrap();
+    let out = common::run_hook(
+        dir,
+        event,
+        payload,
+        None,
+        project,
+        &[("PATH", path.as_os_str())],
+    );
     assert_eq!(out.status.code(), Some(0), "{out:?}");
     if out.stdout.is_empty() {
         return serde_json::Value::Null;
@@ -500,31 +523,52 @@ fn session_start_compares_the_installed_files_the_hook_entries_and_the_kill_swit
     wire_git_hooks(&dir);
     let v = session(&dir);
     assert_eq!(v["verdict"], "allow", "installed and wired: {v}");
-    let translator = dir.join(".claude/hooks/urzua-claude-code.py");
-    let original = std::fs::read_to_string(&translator).unwrap();
-
-    // A neutered translator.
-    std::fs::write(&translator, "import sys\nsys.exit(0)\n").unwrap();
+    let start =
+        serde_json::json!({"hook_event_name": "SessionStart", "cwd": dir.to_string_lossy()})
+            .to_string();
+    let relayed = translate_event(&dir, "session-start", &start);
+    assert!(
+        relayed["hookSpecificOutput"]["additionalContext"]
+            .as_str()
+            .is_some_and(|c| c.contains("urzua explain --types")),
+        "the agent is told the record-types command: {relayed}"
+    );
+    assert!(
+        relayed.get("systemMessage").is_none(),
+        "a healthy session start shows the person nothing: {relayed}"
+    );
+    // A script an older bundle installed, left in the repository.
+    let leftover = dir.join(".claude/hooks/urzua-claude-code.py");
+    std::fs::create_dir_all(leftover.parent().unwrap()).unwrap();
+    std::fs::write(&leftover, "import sys\n").unwrap();
+    // A warning verdict reaches the person, with the line at its end.
+    let warned = translate_event(&dir, "session-start", &start);
+    let message = warned["systemMessage"].as_str().unwrap_or_default();
+    assert!(
+        message.contains("leftover") || message.contains("urzua-claude-code.py"),
+        "a session-start warning reaches the person: {warned}"
+    );
+    assert!(
+        message
+            .trim_end()
+            .ends_with("Record types: `urzua explain --types`"),
+        "the warning ends with the record-types line: {warned}"
+    );
     let v = session(&dir);
     assert_eq!(v["verdict"], "allow-with-warnings", "{v}");
     let p = problems(&v);
     assert_eq!(p.len(), 1, "{v}");
-    assert_eq!(p[0].0, "file");
-    assert!(p[0].1.contains("urzua-claude-code.py"), "{v}");
-    // A deleted one.
-    std::fs::remove_file(&translator).unwrap();
-    let v = session(&dir);
-    assert!(problems(&v)[0].1.contains("is missing"), "{v}");
-    std::fs::write(&translator, &original).unwrap();
-    assert_eq!(session(&dir)["verdict"], "allow", "restored");
+    assert_eq!(p[0].0, "leftover");
+    assert!(
+        p[0].1.contains("git rm .claude/hooks/urzua-claude-code.py"),
+        "{v}"
+    );
+    std::fs::remove_dir_all(leftover.parent().unwrap()).unwrap();
+    assert_eq!(session(&dir)["verdict"], "allow", "removed");
 
     // An edited hook entry, still present by handler.
     let settings = std::fs::read_to_string(dir.join(".claude/settings.json")).unwrap();
-    let edited = settings.replacen(
-        "urzua harness run edit; c=$?;",
-        "urzua harness run edit; c=0;",
-        1,
-    );
+    let edited = settings.replacen("else c=$?; fi;", "else c=0; fi;", 1);
     assert_ne!(edited, settings, "the fixture's command changed shape");
     std::fs::write(dir.join(".claude/settings.json"), &edited).unwrap();
     let v = session(&dir);
@@ -800,20 +844,7 @@ fn the_installed_settings_command_denies_the_minted_outer_repository_repro() {
     assert_eq!(decision(&v), Some("deny"), "{v}");
 }
 
-// ------------------------------------- round 4 S1: the translator's own hash
-
-fn sha256_of(path: &Path) -> String {
-    let out = Command::new("python3")
-        .args([
-            "-I",
-            "-c",
-            "import hashlib,sys;print(hashlib.sha256(open(sys.argv[1],'rb').read()).hexdigest())",
-        ])
-        .arg(path)
-        .output()
-        .unwrap();
-    String::from_utf8_lossy(&out.stdout).trim().to_string()
-}
+// ------------------------------------------ nothing to edit, nothing pinned
 
 fn status_of(dir: &Path) -> serde_json::Value {
     let out = urzua()
@@ -824,98 +855,31 @@ fn status_of(dir: &Path) -> serde_json::Value {
     json(&out)
 }
 
-fn command_for(dir: &Path, handler: &str, cwd: &Path, payload: &str) -> String {
-    let mut c = Command::new("sh");
-    c.args(["-c", &hook_command(dir, handler)])
-        .current_dir(cwd)
-        .env("URZUA_BIN", env!("CARGO_BIN_EXE_urzua"))
-        .env("CLAUDE_PROJECT_DIR", dir);
-    let out = run_with_stdin(&mut c, payload);
-    assert_eq!(out.status.code(), Some(0), "{out:?}");
-    String::from_utf8_lossy(&out.stdout).to_string()
-}
-
 #[test]
-fn every_hook_command_embeds_the_translators_hash_and_refuses_a_translator_that_differs() {
+fn no_hook_command_runs_a_file_of_the_repository_or_carries_a_hash() {
     let dir = fixture("s1", &config(""));
     install(&dir);
-    let translator = dir.join(".claude/hooks/urzua-claude-code.py");
-    let hash = sha256_of(&translator);
-    for handler in ["edit", "post-command", "session-start"] {
-        assert!(hook_command(&dir, handler).contains(&hash), "{handler}");
-    }
-    assert_eq!(status_of(&dir)["status"], "ok", "installed");
-
-    // A translator that exits 0 without doing anything, and leaves a mark if it runs.
-    let mark = dir.join("translator-ran");
-    let original = std::fs::read_to_string(&translator).unwrap();
-    std::fs::write(
-        &translator,
-        format!(
-            "open({:?}, 'w').write('x')\nimport sys\nsys.exit(0)\n",
-            mark.to_string_lossy()
-        ),
-    )
-    .unwrap();
-    let edit = write_payload(&dir, &dir.join(".claude/settings.json"), "{}\n");
-    let out = command_for(&dir, "edit", &dir, &edit);
-    let v: serde_json::Value = serde_json::from_str(&out).unwrap();
-    assert_eq!(decision(&v), Some("deny"), "{out}");
-    let reason = v["hookSpecificOutput"]["permissionDecisionReason"]
-        .as_str()
-        .unwrap();
-    assert!(reason.contains("does not match the sha256"), "{reason}");
-    let bash = serde_json::json!({"hook_event_name": "PostToolUse", "tool_name": "Bash", "cwd": dir.to_string_lossy(), "tool_input": {"command": "true"}}).to_string();
-    let out = command_for(&dir, "post-command", &dir, &bash);
     assert!(
-        out.contains("does not match the sha256") && out.contains("NOT judged"),
-        "{out}"
+        !dir.join(".claude/hooks").exists(),
+        "nothing executable is installed"
     );
-    let start =
-        serde_json::json!({"hook_event_name": "SessionStart", "cwd": dir.to_string_lossy()})
-            .to_string();
-    let out = command_for(&dir, "session-start", &dir, &start);
-    assert!(out.contains("does not match the sha256"), "{out}");
-    assert!(!mark.exists(), "the changed translator must not run");
-
-    // Where the configuration allows an unjudged edit the command states it.
-    // (The same configuration text is read by the shell, so rewrite it.)
-    let cfg = std::fs::read_to_string(dir.join(".urzua/config.yaml")).unwrap();
-    std::fs::write(
-        dir.join(".urzua/config.yaml"),
-        config(", on_unjudged: allow"),
-    )
-    .unwrap();
-    let out = command_for(&dir, "edit", &dir, &edit);
-    let v: serde_json::Value = serde_json::from_str(&out).unwrap();
-    assert_eq!(decision(&v), None, "{out}");
-    assert!(v["systemMessage"]
-        .as_str()
-        .unwrap()
-        .contains("does not match the sha256"));
-    std::fs::write(dir.join(".urzua/config.yaml"), cfg).unwrap();
-
-    // Restored, it runs again; `update` restores a changed one the same way.
-    std::fs::write(&translator, &original).unwrap();
-    let out = command_for(&dir, "edit", &dir, &edit);
-    let v: serde_json::Value = serde_json::from_str(&out).unwrap();
-    assert_eq!(
-        decision(&v),
-        Some("deny"),
-        "judged by the engine again: {out}"
-    );
-    assert!(!v["hookSpecificOutput"]["permissionDecisionReason"]
-        .as_str()
-        .unwrap()
-        .contains("does not match"));
+    for handler in ["edit", "post-command", "session-start"] {
+        let command = hook_command(&dir, handler);
+        assert!(
+            !command.contains("sha256") && !command.contains(".claude/hooks"),
+            "{handler}: {command}"
+        );
+    }
+    let lock = std::fs::read_to_string(dir.join(".urzua/harness.lock")).unwrap();
+    assert!(!lock.contains(".claude/hooks"), "{lock}");
+    assert_eq!(status_of(&dir)["status"], "ok", "installed");
 }
 
 #[test]
-fn install_update_and_uninstall_keep_the_hash_consistent() {
+fn install_update_and_uninstall_round_trip_the_settings() {
     let dir = fixture("s1-roundtrip", &config(""));
     install(&dir);
     let before = std::fs::read_to_string(dir.join(".claude/settings.json")).unwrap();
-    // update with nothing changed rewrites nothing.
     let out = urzua()
         .args(["harness", "update"])
         .current_dir(&dir)
@@ -926,20 +890,6 @@ fn install_update_and_uninstall_keep_the_hash_consistent() {
         before,
         std::fs::read_to_string(dir.join(".claude/settings.json")).unwrap()
     );
-    // A translator changed by hand is drift; update --force restores both file and hash.
-    let translator = dir.join(".claude/hooks/urzua-claude-code.py");
-    let hash = sha256_of(&translator);
-    std::fs::write(&translator, "import sys\nsys.exit(0)\n").unwrap();
-    assert_ne!(status_of(&dir)["status"], "ok", "drift is reported");
-    let out = urzua()
-        .args(["harness", "update", "--force"])
-        .current_dir(&dir)
-        .output()
-        .unwrap();
-    assert_eq!(out.status.code(), Some(0), "{out:?}");
-    assert_eq!(sha256_of(&translator), hash);
-    assert!(hook_command(&dir, "edit").contains(&hash));
-    assert_eq!(status_of(&dir)["status"], "ok");
     let out = urzua()
         .args(["harness", "uninstall"])
         .current_dir(&dir)
@@ -947,7 +897,7 @@ fn install_update_and_uninstall_keep_the_hash_consistent() {
         .unwrap();
     assert_eq!(out.status.code(), Some(0), "{out:?}");
     let left = std::fs::read_to_string(dir.join(".claude/settings.json")).unwrap_or_default();
-    assert!(!left.contains(&hash), "{left}");
+    assert!(!left.contains("urzua harness hook"), "{left}");
 }
 
 // ---------------------------- round 4 S2 and S3: MCP shapes outside the name

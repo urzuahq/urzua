@@ -137,14 +137,18 @@ impl WaiverRun<'_> {
                 return Outcome::Absent;
             }
             let expires = w.expires.as_deref().unwrap_or_default();
-            return report(
-                "waiver-expired",
-                "Expires",
+            let message = if expires.trim().is_empty() {
+                format!(
+                    "waiver ({claimed}) is expired: its Expires is empty, so it covers nothing; \
+                     fill it with a YYYY-MM-DD date or remove the Expires line"
+                )
+            } else {
                 format!(
                     "waiver ({claimed}) is expired: Expires '{expires}' has passed or is not a \
                      calendar date in YYYY-MM-DD form, so it covers nothing; remove it or set a new date"
-                ),
-            );
+                )
+            };
+            return report("waiver-expired", "Expires", message);
         }
         if !w.is_effective() {
             if !(self.reached)(&path) {

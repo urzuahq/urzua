@@ -567,6 +567,7 @@ dependencies = [
  "clap",
  "serde",
  "serde_json",
+ "urzua-cli",
  "urzua-core",
  "urzua-id",
  "urzua-io",
