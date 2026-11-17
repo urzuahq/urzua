@@ -182,7 +182,17 @@ pub struct Guardrail {
     pub on_unjudged: Option<OnUnjudged>,
     /// `editor-hook` only; `None` is `allow`.
     pub pending_pair: Option<PendingPair>,
+    /// `post-command` only: the ref whose tree a gated change is compared
+    /// with; `None` is [`DEFAULT_BASE`].
+    pub base: Option<String>,
+    /// `post-command` only: the level of a gated change whose content is the
+    /// one on `base`; `None` is `info`.
+    pub base_match: Option<crate::report::FindingSeverity>,
 }
+
+/// The post-command comparison ref when `base` is not declared: the remote's
+/// default branch as a clone records it.
+pub const DEFAULT_BASE: &str = "origin/HEAD";
 
 /// The `harness` key. An absent key is `None` in `Config`: it installs and
 /// enables nothing.
@@ -245,6 +255,8 @@ impl GuardrailInfo {
     fn keys(&self) -> &'static [&'static str] {
         if self.name == "editor-hook" {
             &["enabled", "on_unjudged", "pending_pair"]
+        } else if self.name == "post-command" {
+            &["enabled", "base", "base_match"]
         } else if self.takes_on_unjudged {
             &["enabled", "on_unjudged"]
         } else {
@@ -279,6 +291,8 @@ impl HarnessDecl {
             enabled: false,
             on_unjudged: None,
             pending_pair: None,
+            base: None,
+            base_match: None,
         };
         for (k, val) in body {
             match k.as_str().unwrap_or("?") {
@@ -309,6 +323,30 @@ impl HarnessDecl {
                         )),
                     })
                 }
+                "base" if name == "post-command" => match val.as_str().map(str::trim) {
+                    // A leading '-' would reach git as an option.
+                    Some(r) if !r.is_empty() && !r.starts_with('-') => {
+                        guardrail.base = Some(r.to_string())
+                    }
+                    _ => {
+                        return Err(D::Error::custom(
+                            "harness.guardrails.post-command.base must be a git ref not starting with '-'",
+                        ))
+                    }
+                },
+                "base_match" if name == "post-command" => {
+                    use crate::report::FindingSeverity as S;
+                    guardrail.base_match = Some(match val.as_str() {
+                        Some("info") => S::Info,
+                        Some("warning") => S::Warning,
+                        Some("error") => S::Error,
+                        _ => {
+                            return Err(D::Error::custom(
+                                "harness.guardrails.post-command.base_match must be info, warning or error",
+                            ))
+                        }
+                    })
+                }
                 other => self.note_unknown_key(
                     format!("harness.guardrails.{name}"),
                     other,
@@ -336,6 +374,22 @@ impl HarnessDecl {
             .get("editor-hook")
             .and_then(|g| g.pending_pair)
             .unwrap_or_default()
+    }
+
+    /// The effective `post-command.base`.
+    pub fn post_command_base(&self) -> &str {
+        self.guardrails
+            .get("post-command")
+            .and_then(|g| g.base.as_deref())
+            .unwrap_or(DEFAULT_BASE)
+    }
+
+    /// The effective `post-command.base_match`.
+    pub fn post_command_base_match(&self) -> crate::report::FindingSeverity {
+        self.guardrails
+            .get("post-command")
+            .and_then(|g| g.base_match)
+            .unwrap_or(crate::report::FindingSeverity::Info)
     }
 
     /// Whether the guardrail is named and on.

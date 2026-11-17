@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.159'
+Version: '0.160'
 Date: 2026-08-20
 Status: Shipped
 Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:b6ac9d56ae0f2e7cd44fcf834a4ff3700e9171e2f443d14f4b8e5261293e6f6f, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:09c2431a269316741c35b51dabd5766ecd3d50fab2b98069314bb1bc8857767d, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:255395e7d2caa34947cef28f463e2ec050e3eba798a4dc7573a3cad946fee1ae
@@ -949,7 +949,7 @@ harness:
   guardrails:
     editor-hook:    {enabled: true, on_unjudged: allow, pending_pair: allow}   # allow | deny; allow | refuse
     session-start:  {enabled: true}
-    post-command:   {enabled: false}
+    post-command:   {enabled: false, base: origin/HEAD, base_match: info}   # a ref; info | warning | error
     acceptance:     {enabled: false, on_unjudged: deny}
     protected-paths: {enabled: false, on_unjudged: deny}
   limits:                            # optional; each key undeclared is its built-in value
@@ -999,6 +999,34 @@ harness:
   refusal names the same command. Any other new error refuses either way, and the gates, `on_unjudged` and the
   override are unaffected. An unmatched pair left in the tree is still a `urzua check` finding, so the
   post-command hook reports it and pre-commit and CI block it. The default is `allow`, accepted by the maintainer on 2026-11-16 ("pad edit switch can be on by default", dictated for "paired edit switch"; confirmed: "Yeah, it should be on by default"): a deliberate exception to the `ADR-101` amendment of 2026-11-15, under which a configuration that does not declare a new key behaves as before. A configuration that wants the earlier refusal sets `refuse`. The key's name and values were decided by the builder on 2026-11-16, pending maintainer review.
+- **`post-command.base`** and **`post-command.base_match`** (`MILE-311`) set how the post-command report
+  weighs a gated change (a gated status move, a gated deletion, or a change to a protected path) that holds
+  exactly the content on a base ref. `base` is a git ref (default `origin/HEAD`, the remote's default branch
+  as a clone records it); a blank value, or one starting with `-`, is a load error. After a command, each gated path the command changed
+  matches when its working-tree mode (`120000` for a symlink, compared as its link text and never followed;
+  `100755` for an executable file; `100644` otherwise) and the blob of its raw bytes (no filters run, so a filter cannot forge a match and a CRLF or filtered checkout does not match) equal the entry
+  `git ls-tree <base> -- <path>` names; a path absent from both matches, and a status move matches only when
+  the whole record file does. A command that changed the configuration file is judged by the `base` and
+  `base_match` the baseline recorded before it, and nothing is lowered unless the configuration file itself
+  matches that base; with no recorded rule, nothing is lowered. `base_match` is `info`, `warning` or `error`
+  (default `info`; anything else is a load error) and is the level a matching change is reported at. A match lowers the level only when `base` is a
+  remote-tracking ref (`refs/remotes/...`); with a local ref (`HEAD`, a branch, a tag, a commit id) matching
+  paths are listed in one line at `error`, saying the match proves nothing. A change of `base` or `base_match`
+  from the rule the baseline recorded is itself reported at `error` (and, with the configuration file
+  unchanged, as an edited baseline), whether or not the configuration file is protected, and lowers nothing
+  for that command. When
+  every gated change matches, the report is one sentence naming their count, up to five of the paths and then
+  how many more (all of them in the verdict's `base_match`), and the ref as configured (a remote-tracking ref
+  that names another adds the branch it points at, as `origin/HEAD (origin/main)`; any other ref is called a
+  local ref, as `the local ref HEAD`), and saying that nothing needs doing; a change that differs keeps level `error` and its full report, grouped under its gate
+  with each gate named once, and the matching ones in the same command are summarised in one line. A base
+  that does not resolve compares nothing, so every change keeps level `error`, and the report says there is no
+  base ref to compare with. An invalid value of either key is a load error, as for the other guardrail keys
+  (`on_unjudged`, `pending_pair`); the `NOT judged` report then names the changed paths the previous
+  baseline protected. Every gated change is still
+  printed: the comparison uses local refs, which the agent the report is about can move or commit to, so it
+  is advisory and lowers only how loudly a change is reported, never whether; CI's `diff.decider-required`
+  against the real remote is the guarantee. No other guardrail takes these keys.
 - **A guardrail name the build does not ship is a load error.** A name under `harness.guardrails` that is
   not one of `editor-hook`, `post-command`, `session-start`, `acceptance`, `protected-paths` stops every
   command (`check` exits 2) with a message naming it and, when one is close, the nearest valid name
@@ -2901,5 +2929,10 @@ proves this configuration produces the three findings.
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` cc9ac43c376f -> 5b7ad3cd442c. Reason: config.rs: hooks.path also rejects names Windows or HFS+ read as .git (trailing dots or spaces, GIT~1, ignorable zero-width characters); every other key and default is unchanged **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 92f35c74119a -> 10513fd0fc15. Reason: merged main: the pin held main's config.rs; the merged file adds this branch's hooks.path and hooks.print_success keys and their validation to main's revision-log column validation, both unchanged **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-16 | Adds target types for reference fields: a `pointer_fields` entry may be `{name, targets}`, and a relation pair may declare `target_types`; both are judged by `pointer.target-type`, and `urzua graph` lists relation-pair edges. **Why:** `MILE-259`: a link to a record of the wrong type could not be expressed as a finding. | **substantive** |
+> | 2026-11-16 | Bumped to `0.156`. Adds `harness.guardrails.post-command.base` (default `origin/HEAD`) and `base_match` (default `info`): a gated change whose content is the base ref's is reported in one sentence at that level, still printed, advisory because the refs are local. **Why:** the maintainer reported on 2026-11-16 that the report after a pull of the default branch could not be understood. | **substantive** |
+> | 2026-11-16 | `post-command.base` lowers a report only when it is a remote-tracking ref; matching compares raw bytes; a change of `base` or `base_match` is reported at `error` and lowers nothing for that command. **Why:** `MILE-311`, decided by the orchestrator on 2026-11-16, pending maintainer review, after a security review of its pull request showed a clean filter could forge a match and a command could lower its own report through the comparison rule. | **substantive** |
+> | 2026-11-16 | Version set on merge (attested by beauwilliams, identity: gh-verified, actor: agent): `Version` is set to 0.158 by this merge, the next number above the higher side's 0.157, because `version_bump` requires a new version for the rows this merge combines. Rows added on the branches state versions 0.156 and 0.157, which were true there and are superseded by this merge. **Why:** `urzua fix --conflicts` resolved a conflict that lay only in re-pin lines; a person's row is never rewritten. | **evidence** |
 > | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 92f35c74119a -> 052ffdb64844. Reason: Merged main into the MILE-259 target-type branch. config.rs: a pointer_fields entry may be {name, targets}, Config gains a skipped pointer_targets map, RelationPair gains optional target_types, new load error InvalidPointerTargets; every other key unchanged. rules: new rule pointer.target-type (catalog.rs, pointer.rs, table.rs; default-on at error, not-enabled when nothing is declared); relation.rs cross-type-disallowed defers to it. graph.rs lists relation-pair edges. fix.rs, migrate.rs, property.rs, type_scope.rs, sequence.rs: fixtures add the new fields; fix.rs also carries main's change that a re-pin creates a missing revision log. check_integration.rs: the header-none fixture declares a target list. SPEC-3 documents the keys. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-17 | Pin recomputed on merge (attested by beauwilliams, identity: gh-verified, actor: agent): both merged sides re-pinned, `rust/crates/urzua-core/src/config.rs` (Realized-by) 052ffdb64844 and 10513fd0fc15 -> b6ac9d56ae0f; the new hash is the merged file's, which is git's automatic merge of the two re-pinned commits. No person wrote a reason for the merged state. `Version` is set to 0.159 by this merge, the next number above the higher side's 0.158, because `version_bump` requires a new version for the rows this merge combines. A row added on a branch states version 0.158, which was true there and is superseded by this merge. **Why:** `urzua fix --conflicts` resolved a conflict that lay only in re-pin lines; a reviewer of the pull request should confirm the merged pin. | **evidence** |
+> | 2026-11-17 | Version set on merge (attested by beauwilliams, identity: gh-verified, actor: agent): `Version` is set to 0.159 by this merge, the next number above the higher side's 0.158, because `version_bump` requires a new version for the rows this merge combines. A row added on a branch states version 0.158, which was true there and is superseded by this merge. **Why:** `urzua fix --conflicts` resolved a conflict that lay only in re-pin lines; a person's row is never rewritten. | **evidence** |
+> | 2026-11-17 | Version set on merge (attested by beauwilliams, identity: gh-verified, actor: agent): `Version` is set to 0.160 by this merge, the next number above the higher side's 0.159, because `version_bump` requires a new version for the rows this merge combines. A row added on a branch states version 0.159, which was true there and is superseded by this merge. **Why:** `urzua fix --conflicts` resolved a conflict that lay only in re-pin lines; a person's row is never rewritten. | **evidence** |
