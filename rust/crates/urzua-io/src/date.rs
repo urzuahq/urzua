@@ -4,6 +4,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 const SECS_PER_DAY: i64 = 86_400;
 
 /// Years a Unix time can name: [`Date::from_unix`] answers `None` outside them.
+/// Callers treat `None` as "no date", so the bounds are part of the contract.
 const MIN_YEAR: i64 = -262_143;
 const MAX_YEAR: i64 = 262_142;
 
