@@ -169,8 +169,8 @@ fn fill(record: &Path) {
                     _ => None,
                 }
             };
-            // `urzua new` writes a field to fill empty (`Key:`); an older one
-            // wrote `Key: null`.
+            // A field to fill is empty, written `Key:` or `Key: null`; the
+            // helper accepts both because they read the same.
             let empty = line
                 .strip_suffix(':')
                 .or_else(|| line.strip_suffix(": null"));

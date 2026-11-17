@@ -1,7 +1,7 @@
-//! `MILE-322` and `MILE-324`: a record `urzua new` writes starts with no finding
-//! the author did not cause. A field `new` has no value for carries the
-//! template's text, the `—` sentinel or nothing, never `null`; a status value
-//! the type declares is a real value in the status field.
+//! A record `urzua new` writes starts with no finding the author did not
+//! cause: a field `new` has no value for is written empty and listed in
+//! `to_fill`, and a status value the type declares is a real value in the
+//! status field.
 
 mod common;
 
@@ -121,7 +121,7 @@ fn every_initialised_profile_writes_empty_fields_and_check_reports_only_blank_re
 }
 
 #[test]
-fn the_adr_profile_leaves_deciders_empty_and_hands_its_hint_to_the_author() {
+fn the_adr_profile_leaves_deciders_empty_and_offers_no_placeholder_hint() {
     let dir = repo("adr-hint");
     run(dir.path(), &["init", "--types", "adr"]);
     common::git(&dir, &["add", "-A"]);
@@ -134,7 +134,8 @@ fn the_adr_profile_leaves_deciders_empty_and_hands_its_hint_to_the_author() {
         .into_iter()
         .find(|e| e["field"] == "Deciders")
         .unwrap_or_else(|| panic!("{report}"));
-    assert_eq!(entry["hint"], "name(s)", "{report}");
+    // `name(s)` is a built-in placeholder word: it is not offered to write.
+    assert_eq!(entry["hint"], serde_json::Value::Null, "{report}");
     assert!(entry["required"].is_boolean(), "{report}");
     let reason = report["next_action_reason"].as_str().unwrap_or_default();
     assert!(reason.contains("Deciders"), "{report}");
@@ -370,8 +371,9 @@ fn doctor_warns_when_a_type_lists_its_own_status_as_a_placeholder_or_pending() {
     let message = checks[0]["message"].as_str().unwrap();
     assert!(
         message.contains("'Draft'")
-            && message.contains("placeholder")
-            && message.contains("pending"),
+            && message.contains("`statuses.values` (line 7)")
+            && message.contains("`statuses.placeholders` (line 8)")
+            && message.contains("`statuses.pending` (line 9)"),
         "{message}"
     );
 }
@@ -406,7 +408,7 @@ fn status_repo(label: &str, statuses: &str) -> common::TempDir {
     dir
 }
 
-/// `BUG-199`: `new` starts at the first of `statuses.initial`, says so in
+/// `urzua new` starts at the first of `statuses.initial`, says so in
 /// `status_from`, and `check --base` finds the new record's status allowed.
 #[test]
 fn new_starts_at_the_declared_initial_status_and_says_where_it_came_from() {
@@ -479,5 +481,64 @@ fn new_without_initial_starts_at_the_first_value() {
     assert_eq!(
         report["status_from"]["source"], "statuses.values[0]",
         "{report}"
+    );
+}
+
+/// A required pointer field left empty is still reported, by `field.quality`.
+#[test]
+fn a_required_pointer_left_empty_is_still_reported() {
+    let dir = repo("required-pointer");
+    write(
+        dir.path(),
+        ".urzua/config.yaml",
+        "schema_version: 2\nrecord_types:\n  task:\n    dir: docs/tasks\n    prefix: TASK\n    header_shape: yaml-frontmatter\n    required_fields: [Parent]\n    pointer_fields: [Parent]\nrules:\n  field.quality: error\n  header.pointer-field-clean: warn\n",
+    );
+    std::fs::create_dir_all(dir.join("docs/tasks")).unwrap();
+    common::git(&dir, &["add", "-A"]);
+    common::git(&dir, &["commit", "-q", "-m", "config"]);
+    let (report, _) = new_staged(dir.path(), "task");
+    let findings = findings_on(dir.path(), report["path"].as_str().unwrap());
+    assert!(
+        findings.iter().any(|f| f["rule"] == "field.quality"
+            && f["message"].as_str().unwrap().contains("'Parent' is empty")),
+        "{findings:?}"
+    );
+}
+
+/// The next action names required fields as required and optional ones as
+/// optional, with what an empty `Expires` and the permanence fields mean.
+#[test]
+fn the_next_action_separates_required_from_optional_fields() {
+    let dir = repo("waiver-next");
+    write(
+        dir.path(),
+        ".urzua/config.yaml",
+        "schema_version: 2\nrecord_types:\n  waiver:\n    dir: docs/waiver\n    prefix: WAIVER\n    role: suppression\n    header_shape: yaml-frontmatter\n    required_fields: [Rule, Scope, Reason]\n    known_fields: [Expires, Category]\n    effective_requires: [Reason]\n    permanent:\n      - rule: field.quality\n        reason_field: Category\n        categories:\n          - {name: perf}\n",
+    );
+    write(
+        dir.path(),
+        ".urzua/templates/waiver.md",
+        "---\nRule: rule.id\nScope: a path\nReason: why\nExpires: YYYY-MM-DD\nCategory: a declared reason\n---\n# NNNN — Title\n",
+    );
+    std::fs::create_dir_all(dir.join("docs/waiver")).unwrap();
+    common::git(&dir, &["add", "-A"]);
+    common::git(&dir, &["commit", "-q", "-m", "config"]);
+    let report = run(dir.path(), &["new", "waiver", "w", "--by", "tester"]);
+    let reason = report["next_action_reason"]
+        .as_str()
+        .unwrap_or_else(|| panic!("{report}"));
+    assert!(
+        reason.contains("fill the required Rule, Scope, Reason"),
+        "{reason}"
+    );
+    assert!(
+        reason.contains(
+            "the optional Expires (the waiver takes no effect while Expires is present and empty"
+        ),
+        "{reason}"
+    );
+    assert!(
+        reason.contains("Category (read only for a waiver without Expires"),
+        "{reason}"
     );
 }

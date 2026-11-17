@@ -1617,10 +1617,10 @@ pub struct NewReport {
     /// nothing was skipped.
     pub skipped: Vec<SkippedReason>,
     /// The header fields written without a value of their own, which the
-    /// author still has to fill (`MILE-322`). Always present; empty when `new`
+    /// author still has to fill. Always present; empty when `new`
     /// filled every field it wrote.
     pub to_fill: Vec<crate::new_record::FieldToFill>,
-    /// Where the status `new` wrote came from (`BUG-199`); `null` when the type
+    /// Where the status `new` wrote came from; `null` when the type
     /// declares no `statuses`.
     pub status_from: Option<crate::new_record::StatusFrom>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -1750,14 +1750,32 @@ impl Report for NewReport {
     }
     fn next_action(&self) -> Option<NextAction> {
         let path = self.path.display().to_string();
-        let fields: Vec<&str> = self.to_fill.iter().map(|f| f.field.as_str()).collect();
+        let names = |required: bool| -> Vec<String> {
+            self.to_fill
+                .iter()
+                .filter(|f| f.required == required)
+                .map(|f| match &f.if_empty {
+                    Some(meaning) => format!("{} ({meaning})", f.field),
+                    None => f.field.clone(),
+                })
+                .collect()
+        };
+        let (required, optional) = (names(true), names(false));
+        let mut parts = Vec::new();
+        if !required.is_empty() {
+            parts.push(format!("fill the required {}", required.join(", ")));
+        }
+        if !optional.is_empty() {
+            parts.push(format!(
+                "the optional {} may stay empty",
+                optional.join(", ")
+            ));
+        }
+        let fields = parts.join("; ");
         let fill = if fields.is_empty() {
             String::new()
         } else {
-            format!(
-                "; then fill {} (listed in to_fill) and run urzua check",
-                fields.join(", ")
-            )
+            format!("; then {fields} (listed in to_fill), and run urzua check")
         };
         if self.stage {
             let words = git_add([path.as_str()]);
@@ -1769,10 +1787,7 @@ impl Report for NewReport {
         (!self.to_fill.is_empty()).then(|| {
             NextAction::runs_as_printed(
                 shell_command(&["urzua", "check", path.as_str()]),
-                format!(
-                    "checks the new record once {} (listed in to_fill) hold real values",
-                    fields.join(", ")
-                ),
+                format!("checks the new record once you {fields} (listed in to_fill)"),
             )
         })
     }

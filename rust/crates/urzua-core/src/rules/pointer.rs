@@ -661,8 +661,8 @@ mod tests {
         assert!(findings.is_empty());
     }
 
-    /// `MILE-322`: an empty pointer value (`Parent:` as `urzua new` writes it,
-    /// or an existing `Parent: null`) names no reference and is not unclean.
+    /// An empty pointer value (`Parent:` as `urzua new` writes it,
+    /// or `Parent: null`) names no reference and is not unclean.
     #[test]
     fn an_empty_or_null_pointer_value_is_not_flagged() {
         let config = config_with_types(vec![(

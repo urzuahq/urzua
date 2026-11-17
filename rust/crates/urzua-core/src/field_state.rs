@@ -141,7 +141,7 @@ fn classify_inner(
 /// Each of the type's vocabularies, `placeholder` and `pending`, that reads
 /// `value` as a marker, and whether the type listed it there itself rather than
 /// inheriting the compiled-in words: a declared value in its own declared
-/// vocabulary contradicts the declaration (`MILE-324`).
+/// vocabulary contradicts the declaration.
 pub fn vocabularies_of(
     value: &str,
     declared: Option<&crate::status_model::StatusDecl>,

@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5C0WX34AQKF79DQDS5
-Version: '0.40'
+Version: '0.41'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -42,29 +42,40 @@ other field is a decision a human makes and is written as the next section says.
 ## A field `new` has no value for (`MILE-322`)
 
 `new` never invents a value. A field it has no value for is written empty (`Kind:`, nothing after the
-colon: the same YAML null an older `new`'s `Kind: null` was, read the same by every rule), required or
-optional, whenever the type's header carries the field; the set and order of fields `new` writes is
-unchanged, so an author fills an optional field without adding a line. `new` never writes `—` on the
-author's behalf (it asserts "deliberately no value") and never copies a template's text into a header
-field.
+colon: the same YAML null as `Kind: null`, read the same by every rule), required or optional, whenever
+the type's header carries the field; the set and order of fields `new` writes is unchanged, so an
+author fills an optional field without adding a line. `new` never writes `—` on the author's behalf
+(it asserts "deliberately no value") and never copies a template's text into a header field. The date,
+author and status are filled only in a field the type requires; a field only the template lists is
+written empty like any other.
 
-The report's `to_fill` lists each such field as `{field, required, hint, allowed}`: `required` says
-whether the type requires it; `allowed` is the list the type declares for it in `field_values`, or
-`null`; `hint` is that list in `field.quality`'s form (`allowed: a, b`) when there is one, else the
-template's text for the field (`feature | bug | chore`, `name(s)`), or `null` when the template has
-none or its text is the `—` sentinel. `next_action_reason` names the fields to fill; when
-the record needs no staging, `next_action` is `urzua check <path>` once they are filled.
+Accepted by the maintainer on 2026-11-17, in his words: "leave it empty and tell the agent what to
+fill ... that means it doesn't get filled with data that shouldn't be in there. The agent should
+explicitly have to fill in data that needs to be filled."
+
+The rest of this section is decided by the builder, pending maintainer review.
+
+The report's `to_fill` lists each such field as `{field, required, hint, allowed, if_empty}`:
+`required` says whether the type requires it; `allowed` is the list the type declares for it in
+`field_values`, or `null`; `hint` is that list in `field.quality`'s form (`allowed: a, b`) when there is
+one, else the template's text for the field (`feature | bug | chore`), or `null` when the template has
+none or its text is a dash or a built-in placeholder word (`TBD`, `name(s)`), which would invite the
+author to write what `field.quality` reports; `if_empty` says what leaving the field empty means where
+the configuration decides it (a suppression type's `Expires`, and the fields its `permanent` entries
+read), else `null`. `next_action_reason` names the required fields as required and the optional ones
+as optional, each with its `if_empty` meaning; when the record needs no staging, `next_action` is
+`urzua check <path>`.
 
 `new` followed by `git add` and `check` then reports, for a field `new` wrote, only the true
 `field.quality` finding on an empty required field ("field 'Kind' is empty", naming the allowed
-values when the type declares `field_values` for it). An empty optional field
-draws no finding from any rule that only judges it: it names no reference, no date and no vocabulary
-value. A field whose emptiness would widen what is allowed is the exception: a present but empty
-`Expires` on a suppression record (`Expires:`, or an older `Expires: null`) leaves the record without
-effect, so it suppresses nothing and is reported as expired, saying the expiry is empty and must be
-filled or the line removed; an absent `Expires` line keeps its meaning. An empty value written by hand
-behaves the same. (Accepted by the maintainer on 2026-11-17: "leave it empty and tell
-the agent what to fill".)
+values when the type declares `field_values` for it). An empty optional field draws no finding from
+any rule that only judges it: it names no reference, no date and no vocabulary value, so
+`header.pointer-field-clean` does not report an empty optional pointer field; a required pointer field
+left empty is still reported by `field.quality`. A field whose emptiness would widen what is allowed is
+the exception: a present but empty `Expires` on a suppression record (`Expires:` or `Expires: null`)
+leaves the record without effect, so it suppresses nothing and is reported as expired, saying the
+expiry is empty and must be filled or the line removed, as releases 0.4.7 and 0.4.8 already treated
+it; an absent `Expires` line keeps its meaning. An empty value written by hand behaves the same.
 
 If a checked-in template exists (`.urzua/templates/<type>.md`), its body scaffolding (the H1 and the
 sections beneath the header) is appended under the synthesized header; the template's own header, in
@@ -302,3 +313,5 @@ steps and in seconds, for each record type.
 > | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/new_record.rs` 79c4d91d065f -> 5909f7fd05b3. Reason: new_record.rs starts a record at statuses.initial when declared (BUG-199), adds `allowed` (the type's field_values) to each to_fill entry and words the hint as that list when declared, offers no em-dash template value as a hint, with unit tests for each. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-17 | Bumped to `0.40`. The report gains `status_from`, naming where the starting status came from and the other declared initial states. **Why:** `BUG-199` -- the maintainer asked for the initial-state defect to be fixed in this pull request (2026-11-17), and an agent should see when the choice among several initial states was made for it. | **substantive** |
 > | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/src/commands/new.rs` db754194da30 -> 130b8b1d8bbd, `rust/crates/urzua-core/src/new_record.rs` 5909f7fd05b3 -> 08fe0a8a09c6. Reason: new.rs puts status_from into new's report; numbering, naming, identity and writing are unchanged; new_record.rs adds StatusFrom and status_from(), which picks the first of statuses.initial (else the first of statuses.values) and lists the other initial states; the scaffold takes its starting status from it. The record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-17 | The rows of 2026-11-17 (`0.36`), 2026-11-17 (`0.37`), 2026-11-17 (re-baseline) describe intermediate states of the pull request for `MILE-322` and `MILE-324` that the final change does not contain: a `ScaffoldSpec.unset_as_null` flag; writing a field `new` has no value for as the template's text, the `—` sentinel or nothing. The final change writes such a field empty and lists it in `to_fill`, has no such flag or function, leaves `is_record_reference`'s visibility as on main, and keeps a present but empty `Expires` expired, as releases 0.4.7 and 0.4.8 do. The earlier rows stay as history. **Why:** review of that pull request asked that rows naming designs absent from the final tree be closed. | **structural** |
+> | 2026-11-17 | Bumped to `0.41`. Gives the maintainer's acceptance its own sentence, covering only "leave it empty and tell the agent what to fill", and marks the rest of the section decided by the builder, pending maintainer review; date, author and status fill only a required field; `to_fill` gains `if_empty`, and a hint is never a dash or a built-in placeholder word; the next action separates required from optional fields; a required pointer left empty is still reported. **Why:** review of the pull request for `MILE-322` and `MILE-324`: the acceptance sat beside decisions the maintainer had not seen, template-only fields were filled where release 0.4.8 left them for the author, and the next action named optional fields as if required. | **substantive** |

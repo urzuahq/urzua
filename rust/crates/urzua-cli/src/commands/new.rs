@@ -110,9 +110,7 @@ pub fn run(
 
     emit(&NewReport {
         status: ReportStatus::Ok,
-        // An untracked record is not examined unless the repository opts in
-        // (`ADR-92`), so `check` would read it as nothing until it is staged.
-        stage: !config.discovery.include_untracked,
+        stage: needs_staging(&config),
         path: repo_relative(&repo_root, &file_path),
         display_number,
         stable_id: Some(stable_id.as_str().to_string()),
@@ -122,6 +120,12 @@ pub fn run(
         status_from: urzua_core::new_record::status_from(type_config),
         notices,
     })
+}
+
+/// An untracked record is not examined unless the repository opts in
+/// (`ADR-92`), so `check` would read a new record as nothing until it is staged.
+fn needs_staging(config: &urzua_core::config::Config) -> bool {
+    !config.discovery.include_untracked
 }
 
 fn repo_relative(repo_root: &std::path::Path, path: &std::path::Path) -> PathBuf {

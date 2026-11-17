@@ -396,8 +396,7 @@ fn expired_messages(report: &serde_json::Value) -> Vec<String> {
         .collect()
 }
 
-/// `MILE-322`: a present but empty `Expires`, as `urzua new` writes it or as an
-/// older `null`, leaves the waiver without effect and is reported, even where
+/// A present but empty `Expires`, written `Expires:` or `Expires: null`, leaves the waiver without effect and is reported, even where
 /// the type declares no `permanent`; it never makes the waiver permanent.
 #[test]
 fn an_empty_or_null_expires_covers_nothing_and_is_reported() {

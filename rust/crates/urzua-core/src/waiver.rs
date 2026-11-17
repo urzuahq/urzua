@@ -567,8 +567,8 @@ mod tests {
         assert!(!w("2026-11-06").is_active("2026-11-07"));
     }
 
-    /// `MILE-322`: a present but empty `Expires`, as `urzua new` writes it or as
-    /// an older `null`, is not a date: the waiver is expired and covers nothing,
+    /// A present but empty `Expires`, written `Expires:` or `Expires: null`, is
+    /// not a date: the waiver is expired and covers nothing,
     /// never permanent. An absent `Expires` line keeps its meaning.
     #[test]
     fn an_empty_expires_leaves_the_waiver_without_effect() {
