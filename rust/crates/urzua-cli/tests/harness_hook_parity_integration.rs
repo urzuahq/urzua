@@ -1,5 +1,5 @@
 //! `urzua harness hook claude-code <event>` does what the Python translator it
-//! replaced did (`MILE-339`): every event shape the translator's tests fed is fed
+//! replaced did (`ADR-89`, amendment of 2026-11-17): every event shape the translator's tests fed is fed
 //! to both, each in its own copy of the same repository, and their outputs are
 //! compared byte for byte (the repository's path written as `<DIR>`). The
 //! script is kept here, under `tests/fixtures/harness/`, for this comparison

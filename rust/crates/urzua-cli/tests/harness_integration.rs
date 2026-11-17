@@ -1331,7 +1331,7 @@ fn the_session_start_command_relays_its_message_to_the_agent() {
 // ----------------------------------------------------- vendor neutrality
 
 #[test]
-fn no_engine_source_file_outside_the_adapter_layer_names_an_agent_vendor() {
+fn no_engine_source_file_names_an_agent_vendor_and_the_bundle_is_the_one_exclusion() {
     const VENDORS: &[&str] = &[
         "claude",
         "anthropic",

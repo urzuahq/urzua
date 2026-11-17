@@ -1,4 +1,4 @@
-//! `MILE-339` and `MILE-280`: the harness runs from the binary. An install writes
+//! `MILE-280` and the amendment of `ADR-89` of 2026-11-17: the harness runs from the binary. An install writes
 //! no executable file and no hash; reformatting what it writes is not drift; a
 //! script or pinned entry an older bundle left is named with the steps that
 //! remove it; `status` says which registration is in effect; a hook registered
