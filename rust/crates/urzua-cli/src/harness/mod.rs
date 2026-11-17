@@ -16,10 +16,13 @@
 mod block;
 mod bundle;
 mod gate;
+mod hook;
 mod json;
 mod limits;
 mod lock;
 mod post_command;
+mod presence;
+mod record;
 mod run;
 mod settings;
 
@@ -35,7 +38,9 @@ use crate::session::Workspace;
 use json::J;
 use lock::{BlockHash, EntryHash, Lock, LOCK_PATH};
 
+pub use hook::run_hook;
 pub use post_command::run_post_command;
+pub use record::run_record;
 pub use run::{run_edit, run_session_start};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -68,6 +73,9 @@ struct HarnessReport {
     problems: Vec<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     notices: Vec<Notice>,
+    /// `status` only: which registration of the hooks is in effect, per adapter.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    registration: Vec<presence::Registration>,
     #[serde(skip)]
     exit: u8,
 }
@@ -92,6 +100,7 @@ impl HarnessReport {
             items: Vec::new(),
             problems: Vec::new(),
             notices: Vec::new(),
+            registration: Vec::new(),
             exit: 0,
         }
     }
@@ -213,13 +222,11 @@ fn desired(env: &Env, adapters: &[String]) -> Result<Desired, String> {
     Ok(want)
 }
 
-/// The adapter's settings fragment with every `{{sha256:PATH}}` replaced by the
-/// sha256 (hex) of the adapter's file installed at `PATH`. A hook command that
-/// runs an installed file embeds that file's hash this way and refuses to run
-/// the file when it no longer matches (`ADR-89`, amendment of 2026-11-08); the
-/// value is written by `install` and `update` and read back by `status`. Every
-/// `{{limit:KEY}}` is replaced by the effective `harness.limits.KEY`, so an
-/// installed value that differs from the configuration shows as out of date.
+/// The adapter's settings fragment with every `"{{hook:EVENT}}"` replaced by
+/// the hook command the adapter generates for that event (`hook::command`), and
+/// every `{{limit:KEY}}` by the effective `harness.limits.KEY`, so an installed
+/// value that differs from the configuration shows as out of date. No command
+/// carries a file hash: nothing executable is installed.
 fn render_fragment(
     adapter: &bundle::Adapter,
     limits: &urzua_core::harness::Limits,
@@ -248,27 +255,21 @@ fn render_fragment(
                 &limits.get(&key).to_string(),
             );
     }
-    while let Some(at) = text.find("{{sha256:") {
-        let rest = &text[at + "{{sha256:".len()..];
-        let end = rest.find("}}").ok_or_else(|| {
-            format!(
-                "the {} settings fragment has an unterminated {{{{sha256:",
-                adapter.name
-            )
-        })?;
-        let path = rest[..end].to_string();
-        let (_, content) = adapter
-            .files
-            .iter()
-            .find(|(p, _)| *p == path)
+    while let Some(at) = text.find("\"{{hook:") {
+        let rest = &text[at + "\"{{hook:".len()..];
+        let event = rest.find("}}\"").map(|end| rest[..end].to_string());
+        let command = event
+            .as_deref()
+            .and_then(|e| hook::command(adapter.name, e))
             .ok_or_else(|| {
                 format!(
-                    "the {} settings fragment names {path}, which the adapter does not install",
+                    "the {} settings fragment has a {{{{hook:}}}} for an event its adapter has no hook command for",
                     adapter.name
                 )
             })?;
-        let marker = format!("{{{{sha256:{path}}}}}");
-        text = text.replace(&marker, &urzua_io::sha256_hex_of_str(content));
+        let marker = format!("\"{{{{hook:{}}}}}\"", event.unwrap_or_default());
+        let quoted = serde_json::to_string(&command).expect("a string serializes");
+        text = text.replace(&marker, &quoted);
     }
     Ok(text)
 }
@@ -551,6 +552,9 @@ fn install(env: &Env, flag: Option<String>, dry_run: bool) -> HarnessReport {
             );
         }
     }
+    for message in presence::leftovers(&env.root, &adapters) {
+        report.notice(NoticeSeverity::Warning, message);
+    }
     if !plan.conflicts.is_empty() {
         // Nothing is written, so no item may say it was: report what the
         // install would do once the conflict is cleared.
@@ -577,6 +581,7 @@ fn install(env: &Env, flag: Option<String>, dry_run: bool) -> HarnessReport {
         report.notice(NoticeSeverity::Warning, p.clone());
     }
     report.problems.extend(unprovided);
+    skipped_notice(env, &mut report);
 
     let new_lock = install_lock(&want, adapters);
     report.item(
@@ -591,6 +596,25 @@ fn install(env: &Env, flag: Option<String>, dry_run: bool) -> HarnessReport {
     match write_install(env, &plan, &new_lock) {
         Ok(()) => report,
         Err(m) => report.refuse(m),
+    }
+}
+
+/// Names the guardrails the configuration leaves off and the key that turns
+/// each on: an install skips nothing without saying so.
+fn skipped_notice(env: &Env, report: &mut HarnessReport) {
+    let off: Vec<&str> = GUARDRAILS
+        .iter()
+        .map(|g| g.name)
+        .filter(|g| !env.harness.as_ref().is_some_and(|h| h.enabled(g)))
+        .collect();
+    if !off.is_empty() {
+        report.notice(
+            NoticeSeverity::Info,
+            format!(
+                "skipped by the configuration: the guardrail(s) {}; their hook entries are installed and say nothing while off. Each is enabled by harness.guardrails.<name>.enabled: true in .urzua/config.yaml",
+                off.join(", ")
+            ),
+        );
     }
 }
 
@@ -610,13 +634,13 @@ fn plan_install_files(
                 report.item("file", path, None, past(dry_run, "created", "would-create"));
                 plan.file_writes.push((path.clone(), content.clone()));
             }
-            Some(existing) if existing == *content => {
+            Some(existing) if lock::same_text(&existing, content) => {
                 report.item("file", path, None, "unchanged");
             }
             Some(existing) => {
                 let owned = old_lock
                     .and_then(|l| l.files.get(path))
-                    .is_some_and(|h| *h == lock::hash(&existing));
+                    .is_some_and(|h| lock::text_matches(h, &existing));
                 report.item(
                     "file",
                     path,
@@ -675,10 +699,9 @@ fn plan_install_block(
 ) -> Result<(), String> {
     match &want.block {
         None => {
-            report.item("block", "", None, "not-configured");
             report.notice(
                 NoticeSeverity::Info,
-                "harness.instructions_file is not set, so no agent-instructions block was written; the engine assumes no file name".to_string(),
+                "skipped: the agent-instructions block, because harness.instructions_file is not set (set it to the file the agent reads, such as AGENTS.md); the engine assumes no file name".to_string(),
             );
         }
         Some((file, rendered)) => {
@@ -700,7 +723,9 @@ fn install_lock(want: &Desired, adapters: Vec<String>) -> Lock {
     let mut new_lock = Lock::new(adapters);
     new_lock.adapters.sort();
     for (path, content) in &want.files {
-        new_lock.files.insert(path.clone(), lock::hash(content));
+        new_lock
+            .files
+            .insert(path.clone(), lock::text_hash(content));
     }
     for (file, entry) in &want.entries {
         new_lock.entries.push(entry_hash(file, entry, entry.hash()));
@@ -708,7 +733,7 @@ fn install_lock(want: &Desired, adapters: Vec<String>) -> Lock {
     if let Some((file, rendered)) = &want.block {
         new_lock.blocks.push(BlockHash {
             file: file.clone(),
-            hash: lock::hash(rendered),
+            hash: lock::text_hash(rendered),
         });
     }
     new_lock
@@ -781,6 +806,14 @@ fn status(env: &Env, lock: &Lock) -> HarnessReport {
     report
         .problems
         .extend(run::kill_switch_messages(&env.root, lock));
+    report
+        .problems
+        .extend(presence::leftovers(&env.root, &lock.adapters));
+    report.registration = lock
+        .adapters
+        .iter()
+        .filter_map(|a| presence::registration(&env.root, a))
+        .collect();
     if drift || !report.problems.is_empty() {
         report = report.drift();
     }
@@ -829,9 +862,9 @@ fn status_files(env: &Env, lock: &Lock, want: &Desired, run: &mut StatusRun) -> 
     for (path, locked) in &lock.files {
         let state = match read(&env.root, path)? {
             None => "missing",
-            Some(t) if lock::hash(&t) != *locked => "modified",
+            Some(t) if !lock::text_matches(locked, &t) => "modified",
             Some(_) => match want.files.get(path) {
-                Some(bundle) if lock::hash(bundle) != *locked => "out-of-date",
+                Some(bundle) if !lock::text_matches(locked, bundle) => "out-of-date",
                 _ => "ok",
             },
         };
@@ -848,7 +881,7 @@ fn status_files(env: &Env, lock: &Lock, want: &Desired, run: &mut StatusRun) -> 
     {
         let state = match read(&env.root, path)? {
             None => "missing",
-            Some(t) if t == *bundle => "out-of-date",
+            Some(t) if lock::same_text(&t, bundle) => "out-of-date",
             Some(_) => "modified",
         };
         run.mark("file", path, None, state);
@@ -895,9 +928,9 @@ fn status_blocks(
             None => "missing",
             Some(t) => match block::extract(&t) {
                 Err(_) | Ok(None) => "missing",
-                Ok(Some(found)) if lock::hash(found) != b.hash => "modified",
+                Ok(Some(found)) if !lock::text_matches(&b.hash, found) => "modified",
                 Ok(Some(_)) => match &want.block {
-                    Some((_, rendered)) if lock::hash(rendered) != b.hash => "out-of-date",
+                    Some((_, rendered)) if !lock::text_matches(&b.hash, rendered) => "out-of-date",
                     _ => "ok",
                 },
             },
@@ -999,21 +1032,21 @@ impl UpdateRun<'_> {
     fn wanted_files(&mut self) -> Result<(), String> {
         for (path, content) in &self.want.files {
             let locked = self.old.files.get(path);
-            let want_hash = lock::hash(content);
+            let want_hash = lock::text_hash(content);
             let state = match read(&self.env.root, path)? {
                 None => {
                     self.file_writes.push((path.clone(), content.clone()));
                     self.lock.files.insert(path.clone(), want_hash);
                     past(self.dry_run, "created", "would-create")
                 }
-                Some(t) if t == *content => {
+                Some(t) if lock::same_text(&t, content) => {
                     self.lock.files.insert(path.clone(), want_hash);
                     "unchanged"
                 }
-                Some(t) if locked.is_some_and(|h| *h == lock::hash(&t)) || self.force => {
+                Some(t) if locked.is_some_and(|h| lock::text_matches(h, &t)) || self.force => {
                     self.file_writes.push((path.clone(), content.clone()));
                     self.lock.files.insert(path.clone(), want_hash);
-                    if locked.is_some_and(|h| *h == lock::hash(&t)) {
+                    if locked.is_some_and(|h| lock::text_matches(h, &t)) {
                         past(self.dry_run, "updated", "would-update")
                     } else {
                         past(self.dry_run, "forced", "would-force")
@@ -1041,7 +1074,7 @@ impl UpdateRun<'_> {
             }
             match read(&self.env.root, path)? {
                 None => self.report.item("file", path, None, "gone"),
-                Some(t) if lock::hash(&t) == *locked || self.force => {
+                Some(t) if lock::text_matches(locked, &t) || self.force => {
                     self.deletes.push(path.clone());
                     self.report.item(
                         "file",
@@ -1145,7 +1178,7 @@ impl UpdateRun<'_> {
         };
         let state = match &current {
             Some(c) if c == rendered => "unchanged",
-            Some(c) if locked.is_some_and(|l| l.hash == lock::hash(c)) || self.force => {
+            Some(c) if locked.is_some_and(|l| lock::text_matches(&l.hash, c)) || self.force => {
                 past(self.dry_run, "updated", "would-update")
             }
             Some(_) => "kept-modified",
@@ -1159,7 +1192,7 @@ impl UpdateRun<'_> {
         } else {
             self.lock.blocks.push(BlockHash {
                 file: file.clone(),
-                hash: lock::hash(rendered),
+                hash: lock::text_hash(rendered),
             });
             if state != "unchanged" {
                 match block::apply(&text, rendered) {
@@ -1259,7 +1292,7 @@ impl UninstallRun<'_> {
         for (path, locked) in &self.lock.files {
             let state = match read(&self.env.root, path)? {
                 None => "missing",
-                Some(t) if lock::hash(&t) == *locked => {
+                Some(t) if lock::text_matches(locked, &t) => {
                     self.deletes.push(path.clone());
                     past(self.dry_run, "removed", "would-remove")
                 }
@@ -1298,7 +1331,7 @@ impl UninstallRun<'_> {
             let state = match text.as_deref().map(|t| (t, block::extract(t))) {
                 None => "missing",
                 Some((_, Err(_) | Ok(None))) => "missing",
-                Some((t, Ok(Some(found)))) if lock::hash(found) == b.hash => {
+                Some((t, Ok(Some(found)))) if lock::text_matches(&b.hash, found) => {
                     match block::remove(t) {
                         Ok(new) => self.block_writes.push((b.file.clone(), new)),
                         Err(m) => return Err(format!("{}: {m}", b.file)),
@@ -1671,6 +1704,22 @@ pub(crate) fn doctor_checks(
         out.extend(installed_checks(&env));
     }
     out.extend(legacy_hook_checks(&env, &adapters));
+    for message in presence::leftovers(root, &adapters) {
+        out.push((Level::Warn, "harness-leftover", message));
+    }
+    for name in &adapters {
+        if let Some(r) = presence::registration(root, name) {
+            out.push((
+                if r.in_effect == "none" {
+                    Level::Warn
+                } else {
+                    Level::Ok
+                },
+                "harness-registration",
+                format!("{name}: {} ({})", r.in_effect, r.note),
+            ));
+        }
+    }
     if harness.any_enabled() && harness.outside_writes.is_none() {
         out.push((
             Level::Warn,

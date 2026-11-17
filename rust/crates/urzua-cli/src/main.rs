@@ -568,6 +568,25 @@ enum HarnessTarget {
     /// Print the effective `harness.limits` of the configuration: every key,
     /// declared or built in.
     Limits,
+    /// The agent's hook command: read the agent's hook event on stdin, judge it
+    /// with the guardrail core, and print the agent's hook output. Always exits
+    /// 0 once it has read the event; what it prints is the decision.
+    Hook {
+        /// The adapter that reads the event (`urzua harness adapters`).
+        adapter: String,
+        /// `edit`, `post-command` or `session-start`.
+        event: String,
+    },
+    /// The shared steps of the generated drafting and lifecycle commands:
+    /// `new <type> <title>`, `finish <record>`, `amend-finish <record>`,
+    /// `repin <record> <reason>`, `reverify <record> <reason>`, `done <record>`.
+    /// A drafting step may fill only what the scaffold left empty; an
+    /// amendment may only add.
+    Record {
+        step: String,
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
     /// Run a guardrail core: a neutral request on stdin, a verdict on stdout.
     Run {
         #[command(subcommand)]
@@ -916,6 +935,8 @@ fn dispatch_harness(config: Option<PathBuf>, target: HarnessTarget) -> ExitCode 
         HarnessTarget::Uninstall { dry_run } => harness::run_uninstall(config, dry_run),
         HarnessTarget::Adapters => harness::run_adapters(),
         HarnessTarget::Limits => harness::run_limits(config),
+        HarnessTarget::Hook { adapter, event } => harness::run_hook(&adapter, &event),
+        HarnessTarget::Record { step, args } => harness::run_record(&step, &args),
         HarnessTarget::Run {
             event: HarnessRun::Edit,
         } => harness::run_edit(config),

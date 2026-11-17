@@ -1,0 +1,10 @@
+{
+  "name": "urzua",
+  "description": "The urzua harness for Claude Code: registers the editor, post-command and session-start hooks, each calling `urzua harness hook claude-code <event>`, and the /amend, /done, /repin and /reverify commands. Needs the urzua binary on PATH; every rule comes from the repository's .urzua/config.yaml.",
+  "author": {
+    "name": "urzua"
+  },
+  "homepage": "https://github.com/urzuahq/urzua",
+  "repository": "https://github.com/urzuahq/urzua",
+  "license": "MIT"
+}

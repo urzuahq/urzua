@@ -12,6 +12,16 @@ publish.workspace = true
 name = "urzua"
 path = "src/main.rs"
 
+# The test seams (a stand-in engine for the agent hook) exist only in a build
+# whose dev-dependencies are active, `cargo test`: the dev-dependency on this
+# package turns the feature on there and nowhere else, so neither `cargo build`
+# nor `cargo install` nor a release archive carries it.
+[features]
+test-seams = []
+
+[lib]
+path = "src/lib.rs"
+
 [dependencies]
 urzua-core = { workspace = true }
 urzua-io = { workspace = true }
@@ -28,3 +38,6 @@ serde_json = { workspace = true }
 [[test]]
 name = "acceptance"
 harness = false
+
+[dev-dependencies]
+urzua-cli = { path = ".", features = ["test-seams"] }

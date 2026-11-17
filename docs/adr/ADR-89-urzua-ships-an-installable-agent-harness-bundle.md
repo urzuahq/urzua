@@ -989,6 +989,145 @@ baseline recorded, or a configuration change while the baseline records no rule,
 `error` and lowers nothing for that command; with the configuration file unchanged, a differing recorded rule
 is reported as an edited baseline. The agent receives its own line in every case, not the person's text.
 
+## Amendment (2026-11-17): the enforcer lives in the binary, and the script and its pin are removed
+
+Accepted by the maintainer on 2026-11-17, for these points, in their words: the translation belongs in the
+binary ("it should [be] in urzua. This is much better. If we just own that code, then we don't also have to
+install it, and then they have to be in their repo and everything"); the binary holds all the code and an agent
+plugin only tells the agent to call it ("will actually just basically tell [Claude] Code to call the binary");
+there is no harness migration and the removal is manual, a breaking change ("we don't need a harness update.
+We're going to do a manual removal ... we can just do a breaking migration"); and it ships as one change ("all
+in one single PR, because it can all be tested together").
+
+Where the enforcer lives. The translation the installed script did (an agent's hook event in, the neutral
+request of section 6, the verdict back out as the agent's hook output) is `urzua harness hook <adapter>
+<event>`, in the binary, one module per adapter. The drafting helper is `urzua harness record`. `urzua harness
+install` writes no executable file into the repository, and no settings entry carries a file hash: the hook
+entries call the binary, the generated commands call the binary, and the lock records the rest. The amendment
+of 2026-11-08 that pinned the translator's sha256 in the hook command is superseded by this one (decided by
+the builder, pending maintainer review).
+
+What verifies it. The binary is verified when it is installed (the release's build attestation, or the
+archive's sha256 the installer is given, `docs/reference/install.md`); code that lives in it needs no second
+check, and nothing in the repository can be edited to change what judges an edit. What is left for an agent to
+edit is the agent's settings file, which holds the hook entries, and the configuration; both stay protected
+paths wherever the configuration gates them, as this repository's does. The property the pin gave is kept: an
+agent cannot weaken the enforcer by editing a file in the repository. (This paragraph: decided by the builder,
+pending maintainer review.)
+
+No migration command. A repository installed by an older release keeps the script, the drafting helper and the
+pinned entries until a person removes them; `urzua harness status`, `urzua doctor`, `urzua harness install` and
+the session-start check name each leftover with the steps that remove it, and the release notes list them
+(how leftovers are named: decided by the builder, pending maintainer review).
+
+Decided by the builder, pending maintainer review: the hook command falls back, only when the binary cannot
+run (not on `PATH`, a release without `harness hook`), to reading `.urzua/config.yaml` as text and refusing an
+edit where `acceptance` or `protected-paths` is on without `on_unjudged: allow`, so a missing binary closes the
+gate it would have enforced; a generated instruction or command file is compared by its words, so a formatter
+is not drift; an allowed edit says nothing about an editor hook the session's own configuration turned off; a
+hook registered twice (repository settings and the plugin) judges a call once and both registrations print the
+same answer; the plugin ships the hooks and the lifecycle commands, and per-type drafting commands stay with
+`harness install`; `status` reports which registration is in effect, never more than the files it reads show;
+and a debug build reads a stand-in engine from `URZUA_HOOK_ENGINE_FOR_TESTS` for its tests, which a release
+build ignores.
+
+## Amendment (2026-11-17, review): the hook fails closed
+
+Decided by the orchestrator on 2026-11-17, pending maintainer review: when the binary cannot run, the hook
+command's text fallback fails closed. It lets an edit through only when it reads with certainty that neither
+`acceptance` nor `protected-paths` refuses an unjudged edit; a configuration shape it cannot read that way, an
+unreadable file, or no configuration found is a refusal that tells the person to install or upgrade urzua. This
+replaces the fallback of the amendment above, which refused only where it found those guardrails enabled.
+
+Decided by the builder on 2026-11-17, pending maintainer review: the hook command prints the binary's stdout only
+when it exits 0; a panic inside `urzua harness hook` ends in a refusal of the edit as one JSON document; the
+hook stops waiting for the engine 15 seconds before `hook_timeout_seconds` and refuses the edit, because the
+agent lets a call through at its own timeout; a verdict word the adapter does not know is an edit nobody judged;
+a generated file's code (fenced lines, inline code) is compared exactly, its prose by words; and the tests'
+stand-in engine is read only in a build with the `test-seams` feature, which only `cargo test` turns on, in
+place of the debug-build rule of the amendment above.
+
+## Amendment (2026-11-17, second review): one rule for an unjudged edit, and no configuration is not governed
+
+Decided by the orchestrator on 2026-11-17, pending maintainer review: with no `.urzua/config.yaml` in the
+repository or any parent, the repository is not governed, and the hook allows an edit silently, whether the
+binary runs or not. A configuration that is found but cannot be read, or not read with certainty as open, stays
+a refusal.
+
+Decided by the builder on 2026-11-17, pending maintainer review: when the engine cannot give a verdict, the
+binary decides from the configuration parsed as YAML. It is open only when it parses and neither `acceptance` nor
+`protected-paths` is enabled without `on_unjudged: allow`, with a guardrail off only when `enabled` is absent,
+null or `false`. The hook command's text fallback follows the same rule, accepting only shapes it reads with
+certainty. With the binary present and no configuration found, the hooks print nothing. The plugin's hook
+timeout is the top of the `hook_timeout_seconds` range, because a plugin cannot read a repository's
+configuration; the binary reads it and ends the wait itself. A line of markup in a generated file (a heading
+level, a comment opening or closing, a rule) counts as a change, as code does. In the first amendment of this
+date, the statements that are not the maintainer's quoted words are marked as decided by the builder, pending
+maintainer review.
+
+## Amendment (2026-11-17, third review): an unjudged edit is decided from the engine's inputs
+
+Decided by the orchestrator on 2026-11-17, pending maintainer review: when the engine gives no verdict, the hook
+decides from the inputs the engine would have read, through the engine's own functions: every edited path made
+absolute against the request's directory and its links resolved, and every configuration at or above each path
+(as written and as resolved) and the session's own. It refuses where it cannot place a path or cannot read with
+certainty that every configuration found lets an unjudged edit through; it allows silently only when no path
+and no session directory has a configuration in any ancestor. A generated file's prose tolerates only a closed
+list of formatter differences (whitespace and wrapping, blank lines, indentation, list markers and numbering, the
+emphasis marker, table padding, trailing whitespace); any other character added, removed or changed is drift.
+
+Decided by the builder on 2026-11-17, pending maintainer review: `editor-hook` with `on_unjudged: deny` also
+closes an unjudged edit. With the binary missing, the shell fallback also reads the payload's `file_path`,
+`notebook_path` and `path` strings to find their configurations. Accepted limit, pending maintainer review: a
+fallback with no JSON parser cannot see a file named under any other key (as an MCP call may), so such an edit of
+a file in a refusing repository is allowed from a session in an ungoverned directory or an open repository.
+
+## Amendment (2026-11-17, fourth review): every candidate path counts, and the shell refuses what it cannot place
+
+Decided by the builder on 2026-11-17, pending maintainer review: when the engine gives no verdict and a
+configuration that governs a candidate path is not certainly open, the edit is refused whether or not the call
+looked like an edit, because the engine judges every candidate path either way. The shell fallback refuses a path
+with a `.` or `..` component and a path through a dangling directory link. Accepted limits, pending maintainer
+review: the fallback does not see a key written with a unicode escape, or a line break between a key and its
+value. Generated prose tolerates the emphasis marker only where it opens or closes emphasis, never inside a word,
+path, glob or inline code; front matter is compared as the YAML value it parses to; a table's separator row
+tolerates only its padding; a number starts a list item only where a list can start or continue.
+
+The shell fallback behaviour this amendment describes was removed by the sixth-review amendment below.
+
+## Amendment (2026-11-17, fifth review): the shell fallback places only plain paths
+
+Decided by the builder on 2026-11-17, pending maintainer review: the shell fallback places a value under
+`file_path`, `notebook_path` or `path` only when it is a plain path as written. Any other value under those keys
+is refused when the session's directory has a configuration; without one, every string holding a `/` is placed
+as the engine reads it (a `file:` prefix dropped, `~` and `$HOME` expanded, padding and a trailing slash
+dropped) and the edit is refused when any finds a configuration. The binary refuses an edit whose payload cannot
+be read, since it names no file the hook can place. Front matter is compared as YAML written back as YAML, and
+a table separator cell must be one of `---`, `:---`, `---:`, `:---:`. Accepted limit, pending maintainer review:
+in a repository that does not use urzua, the fallback refuses an edit whose path has a `.` or `..` component.
+
+The shell fallback behaviour this amendment describes was removed by the sixth-review amendment below.
+
+## Amendment (2026-11-17, sixth review): without the binary, the hook decides from the session alone
+
+Decided by the orchestrator on 2026-11-17, pending maintainer review: when urzua cannot run, the hook command reads
+no path from the payload. It finds the configuration at or above the session's directory; with none it says
+nothing, with one read with certainty as open it lets the call through with a notice, and with any other it
+refuses every edit and MCP call until urzua is installed or upgraded. This replaces the payload reading of the
+third, fourth and fifth review amendments of this date, which a text scanner in sh and awk cannot do the way the
+engine does.
+
+The accepted limit: with urzua missing or too old, the hook decides from the session's directory only. A session
+rooted in a directory with no configuration, or in a repository whose configuration is open, is not stopped from
+editing a file in a different, governed repository. Install urzua to close it: with the binary present every
+edited path is placed and judged. Accepted by the maintainer on 2026-11-17, for the part he accepted, in his
+words: "I think acceptable limits winners was not installed. For example, file named under an unusual key is not
+checked. Fair enough yet?" The orchestrator reads this as accepting that a file the fallback cannot see is not
+checked; that reading, and the simplification itself, are the orchestrator's decision, pending maintainer review.
+
+Decided by the builder on 2026-11-17, pending maintainer review: an edit whose payload the binary cannot read is
+decided from the session (silent where nothing governs, refused where the configuration is not certainly open).
+
 ## References
 
 - `ADR-69`, `ADR-70`, `ADR-71`: the hook, drafting commands and layered gate this extends; `ADR-70` gains an
@@ -1041,3 +1180,11 @@ is reported as an edited baseline. The agent receives its own line in every case
 > | 2026-11-16 | Added an `## Amendment (2026-11-16): path gates bind the commands that write for someone`, decided by the builder on 2026-11-16, pending maintainer review: `fix --apply`, `fix --rebaseline --apply`, `fix --conflicts --apply` and `reverify --apply` write a path-gated record only for `--actor human` under a `gh`-verified login in the gate's group; `waive`, `index`, `migrate ids`, `migrate filenames` and `new` refuse under a path gate; the refusal says who can make the change; the gate rests on the verified login, since `--actor human` is a claim, and is weaker than the edit hook. `Status` stays Accepted. **Why:** `MILE-289` -- an agent's `fix --apply` wrote a record the edit hook would have refused. | **substantive** |
 > | 2026-11-16 | Added an `## Amendment (2026-11-16): the post-command report weighs a gate event by the base branch`: the "arrived by a git move" wording and the stash tracking are removed, and a gate event matching the configured base ref is reported in one sentence at a lower level, still printed. **Why:** `MILE-311`, decided by the orchestrator on 2026-11-16, pending maintainer review, after the maintainer reported on 2026-11-16 that the report after a pull could not be understood. | **substantive** |
 > | 2026-11-16 | Added an `## Amendment (2026-11-16): a match lowers the report only against a remote-tracking ref`, correcting the earlier amendment of that day: raw-byte and mode matching, deletion-only absent-from-both, non-UTF-8 names never match, the remote-tracking-only downgrade, the rule-change event, and the agent's own line. **Why:** `MILE-311`, decided by the orchestrator on 2026-11-16, pending maintainer review, after the third review of its pull request. | **substantive** |
+> | 2026-11-17 | Added an `## Amendment (2026-11-17): the enforcer lives in the binary, and the script and its pin are removed`: the translation is `urzua harness hook`, the drafting helper `urzua harness record`, nothing executable is installed and no entry carries a hash, the binary is verified at install, the settings file and the configuration stay protected, and leftovers are removed by hand with no migration command. **Why:** `MILE-339` and `MILE-280`; accepted by the maintainer on 2026-11-17 for the points quoted in the amendment, the rest decided by the builder on 2026-11-17, pending maintainer review. | **substantive** |
+> | 2026-11-17 | Added an `## Amendment (2026-11-17, review): the hook fails closed`: the text fallback refuses whatever it cannot read with certainty, stdout is printed only on success, a panic or the hook's deadline refuses, an unknown verdict is unjudged, generated code compares exactly, the test seams need the `test-seams` feature. **Why:** review of the pull request that moved the harness into the binary; the fallback decided by the orchestrator on 2026-11-17, the rest by the builder, both pending maintainer review. | **substantive** |
+> | 2026-11-17 | Added an `## Amendment (2026-11-17, second review): one rule for an unjudged edit, and no configuration is not governed`, and marked the builder's statements in the first amendment of this date as pending maintainer review. **Why:** second review of the pull request that moved the harness into the binary; the not-governed rule decided by the orchestrator on 2026-11-17, the rest by the builder, both pending maintainer review. | **substantive** |
+> | 2026-11-17 | Added an `## Amendment (2026-11-17, third review): an unjudged edit is decided from the engine's inputs`: path placement and configuration discovery as the engine does them, silence only where nothing governs any path, the closed list of formatter differences, `editor-hook` deny honoured, and the shell fallback's limit stated. **Why:** third review of the pull request that moved the harness into the binary; the placement rule and the drift list decided by the orchestrator on 2026-11-17, the rest by the builder, all pending maintainer review. | **substantive** |
+> | 2026-11-17 | Added an `## Amendment (2026-11-17, fourth review): every candidate path counts, and the shell refuses what it cannot place`. **Why:** fourth review of the pull request that moved the harness into the binary; decided by the builder on 2026-11-17, pending maintainer review. | **substantive** |
+> | 2026-11-17 | Added an `## Amendment (2026-11-17, fifth review): the shell fallback places only plain paths`. **Why:** fifth review of the pull request that moved the harness into the binary; decided by the builder on 2026-11-17, pending maintainer review. | **substantive** |
+> | 2026-11-17 | Added an `## Amendment (2026-11-17, sixth review): without the binary, the hook decides from the session alone`, replacing the shell fallback's payload reading and stating the one accepted limit. **Why:** sixth review of the pull request that moved the harness into the binary; the simplification decided by the orchestrator on 2026-11-17, pending maintainer review; the limit's acceptance quoted from the maintainer for the part he accepted. | **substantive** |
+> | 2026-11-17 | Noted in the fourth- and fifth-review amendments that the shell fallback behaviour they describe was removed by the sixth; in the sixth, the maintainer's sentence stands alone and the gloss is stated as the orchestrator's reading. **Why:** seventh review of the pull request that moved the harness into the binary. | **evidence** |

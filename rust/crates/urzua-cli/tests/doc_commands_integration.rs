@@ -197,7 +197,8 @@ fn every_documented_urzua_command_runs_against_a_fixture() {
             continue;
         }
         // `init --types` starts a repository, `init` adopts one with records
-        // and no configuration; everything else works on a governed one.
+        // and no configuration, `harness update` and `harness status` read an
+        // installed harness; everything else works on a governed one.
         let (dir, _origin) = if command.starts_with("urzua init --types") {
             (empty(&format!("{i}")), None)
         } else if command.starts_with("urzua init") {
@@ -205,6 +206,18 @@ fn every_documented_urzua_command_runs_against_a_fixture() {
             std::fs::remove_file(dir.join(".urzua/config.yaml")).unwrap();
             git(&dir, &["add", "-A"]);
             git(&dir, &["commit", "-q", "-m", "unconfigured"]);
+            (dir, Some(origin))
+        } else if command.starts_with("urzua harness update")
+            || command.starts_with("urzua harness status")
+        {
+            let (dir, origin) = governed(&format!("{i}"));
+            let out = common::urzua()
+                .args(["harness", "install", "--adapter", "claude-code"])
+                .current_dir(&dir)
+                .output()
+                .unwrap();
+            assert_eq!(out.status.code(), Some(0), "{out:?}");
+            commit_all(&dir, 0);
             (dir, Some(origin))
         } else {
             let (dir, origin) = governed(&format!("{i}"));

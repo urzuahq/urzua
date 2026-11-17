@@ -24,6 +24,14 @@ const ALLOWED_NON_LITERAL: &[(&str, &str)] = &[
     ("urzua-cli/src/commands/hooks.rs", "exe"),
     // `urzua hooks verify --run` runs a hook file as git would.
     ("urzua-cli/src/commands/hooks_verify.rs", "hook_path"),
+    // The editor hook runs `urzua harness run` in this same binary
+    // (`current_exe`): the engine changes directory and keeps per-process state.
+    ("urzua-cli/src/harness/hook/mod.rs", "exe"),
+    // The engine command a test names; compiled only with the `test-seams`
+    // feature, which only `cargo test` turns on.
+    ("urzua-cli/src/harness/hook/mod.rs", "&argv[0]"),
+    // `urzua harness record` runs this binary, or the build `URZUA_BIN` names.
+    ("urzua-cli/src/harness/record.rs", "exe"),
 ];
 
 fn find(hay: &[u8], needle: &[u8]) -> Option<usize> {
