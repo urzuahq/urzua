@@ -291,25 +291,21 @@ fn an_unreadable_payload_is_refused_when_acceptance_or_protected_paths_deny_unju
         v["hookSpecificOutput"]["permissionDecisionReason"]
             .as_str()
             .unwrap()
-            .contains("on_unjudged"),
+            .contains("names no file"),
         "{v}"
     );
 }
 
 #[test]
-fn an_unreadable_payload_is_allowed_with_a_notice_when_the_configuration_allows() {
+fn an_unreadable_payload_is_refused_whatever_the_configuration_because_it_names_no_file() {
     let dir = fixture("open-payload", &config(", on_unjudged: allow"));
     let v = translate(&dir, "garbage{", &ENGINE);
-    assert_eq!(decision(&v), None, "{v}");
-    assert!(
-        v["systemMessage"].as_str().unwrap().contains("NOT judged"),
-        "{v}"
-    );
+    assert_eq!(decision(&v), Some("deny"), "{v}");
     // No gate on at all: the same.
     let off = format!("{TYPES}harness:\n  guardrails:\n    editor-hook: {{enabled: true}}\n    session-start: {{enabled: true}}\n");
     let dir = fixture("off-payload", &off);
     let v = translate(&dir, "garbage{", &ENGINE);
-    assert_eq!(decision(&v), None, "{v}");
+    assert_eq!(decision(&v), Some("deny"), "{v}");
 }
 
 #[test]
@@ -1959,13 +1955,11 @@ fn a_lone_surrogate_in_a_tool_input_is_refused_by_the_translator_where_a_gate_de
     let dir = fixture("surrogate-translated", &config(""));
     let v = translate(&dir, &payload(&dir), &ENGINE);
     assert_eq!(decision(&v), Some("deny"), "{v}");
+    // A payload that cannot be read names no file: refused whatever the
+    // configuration.
     let open = fixture("surrogate-translated-open", &config(", on_unjudged: allow"));
     let v = translate(&open, &payload(&open), &ENGINE);
-    assert_eq!(decision(&v), None, "{v}");
-    assert!(
-        v["systemMessage"].as_str().unwrap().contains("NOT judge"),
-        "{v}"
-    );
+    assert_eq!(decision(&v), Some("deny"), "{v}");
 }
 
 #[test]

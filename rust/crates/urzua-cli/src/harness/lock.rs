@@ -115,7 +115,8 @@ fn words(text: &str) -> String {
     let mut prose: Vec<&str> = Vec::new();
     let mut fence = false;
     let mut all = text.lines().peekable();
-    // Front matter is YAML the host reads: compared as the value it parses to,
+    // Front matter is YAML the host reads: compared as the value it parses to
+    // (written back as YAML, so `.nan`, `null` and the key `1` stay distinct),
     // so a formatter that folds a long value over lines changes nothing and a
     // changed key, value, nesting or delimiter does. One that does not parse is
     // compared line for line.
@@ -133,7 +134,7 @@ fn words(text: &str) -> String {
         let text = body.join("\n");
         let parsed = yaml_serde::from_str::<yaml_serde::Value>(&text)
             .ok()
-            .and_then(|v| serde_json::to_string(&v).ok());
+            .and_then(|v| yaml_serde::to_string(&v).ok());
         out.push(match (closed, parsed) {
             (true, Some(v)) => format!("\nfm:{v}"),
             _ => format!("\nfm-text:{closed}:{text}"),
@@ -177,55 +178,102 @@ fn list_marker(t: &str, in_list: bool) -> usize {
 /// A table's separator row (cells of dashes and colons between pipes) as its
 /// cells without padding: a token no other line can equal.
 fn table_separator(t: &str) -> Option<String> {
-    if !t.contains('|')
-        || !t.contains('-')
-        || !t.chars().all(|c| matches!(c, '|' | '-' | ':' | ' '))
-    {
+    if !t.contains('|') {
         return None;
     }
-    let cells: Vec<String> = t
-        .trim_matches('|')
-        .split('|')
-        .map(|c| {
-            let c = c.trim();
-            format!(
-                "{}-{}",
-                if c.starts_with(':') { ":" } else { "" },
-                if c.ends_with(':') { ":" } else { "" }
-            )
-        })
-        .collect();
+    let mut cells = Vec::new();
+    for c in t.trim().trim_matches('|').split('|') {
+        let c = c.trim();
+        let core = c.strip_prefix(':').unwrap_or(c);
+        let core = core.strip_suffix(':').unwrap_or(core);
+        // A cell is `---`, `:---`, `---:` or `:---:`, any number of dashes.
+        if core.is_empty() || !core.chars().all(|x| x == '-') {
+            return None;
+        }
+        cells.push(format!(
+            "{}-{}",
+            if c.starts_with(':') { ":" } else { "" },
+            if c.len() > 1 && c.ends_with(':') {
+                ":"
+            } else {
+                ""
+            }
+        ));
+    }
     Some(format!("\u{1}table:{}", cells.join("|")))
 }
 
-/// An emphasis marker `_` read as `*`: only one that opens emphasis (after the
-/// start, whitespace or an opening bracket or quote, before a letter or digit)
-/// or closes it (after a letter or digit, before the end, whitespace or
-/// sentence punctuation). Never inside a word, a path or a glob.
-fn emphasis_as_star(s: &str) -> String {
-    let c: Vec<char> = s.chars().collect();
-    let mut out = String::with_capacity(s.len());
-    for (i, ch) in c.iter().enumerate() {
-        if *ch != '_' {
-            out.push(*ch);
+/// Whether the whitespace-delimited word around each character looks like a
+/// path, a file name or a variable: it holds a `/`, a `.` before a letter or
+/// digit, or starts with `$` or `~`.
+fn path_like(c: &[char]) -> Vec<bool> {
+    let mut out = vec![false; c.len()];
+    let mut i = 0;
+    while i < c.len() {
+        if c[i].is_whitespace() {
+            i += 1;
             continue;
         }
-        let (mut a, mut b) = (i, i + 1);
-        while a > 0 && c[a - 1] == '_' {
-            a -= 1;
+        let start = i;
+        while i < c.len() && !c[i].is_whitespace() {
+            i += 1;
         }
-        while b < c.len() && c[b] == '_' {
-            b += 1;
+        let w = &c[start..i];
+        let like = w.contains(&'/')
+            || w.windows(2).any(|p| p[0] == '.' && p[1].is_alphanumeric())
+            || matches!(w.first(), Some('$' | '~'));
+        out[start..i].iter_mut().for_each(|x| *x = like);
+    }
+    out
+}
+
+/// Emphasis markers written with `_` read as `*`: only a run that opens
+/// emphasis (after the start, whitespace or an opening bracket or quote, before
+/// a letter or digit) paired with a later run of the same length that closes it
+/// (after a letter or digit, before the end, whitespace or sentence
+/// punctuation), neither inside a word that looks like a path, file name or
+/// variable. Every other `_` stays as written.
+fn emphasis_as_star(s: &str) -> String {
+    let c: Vec<char> = s.chars().collect();
+    let like = path_like(&c);
+    let mut runs: Vec<(usize, usize, bool, bool)> = Vec::new();
+    let mut i = 0;
+    while i < c.len() {
+        if c[i] != '_' {
+            i += 1;
+            continue;
+        }
+        let a = i;
+        while i < c.len() && c[i] == '_' {
+            i += 1;
         }
         let before = a.checked_sub(1).map(|j| c[j]);
-        let after = c.get(b).copied();
+        let after = c.get(i).copied();
         let opens = before.is_none_or(|x| x.is_whitespace() || "([{\"'".contains(x))
             && after.is_some_and(char::is_alphanumeric);
         let closes = before.is_some_and(char::is_alphanumeric)
             && after.is_none_or(|x| x.is_whitespace() || ".,;:!?)]}\"'".contains(x));
-        out.push(if opens || closes { '*' } else { '_' });
+        if !like[a] {
+            runs.push((a, i - a, opens, closes));
+        }
     }
-    out
+    let mut marker = vec![false; c.len()];
+    let mut open: Option<(usize, usize)> = None;
+    for (at, len, opens, closes) in runs {
+        match open {
+            Some((o, olen)) if closes && olen == len => {
+                marker[o..o + len].iter_mut().for_each(|x| *x = true);
+                marker[at..at + len].iter_mut().for_each(|x| *x = true);
+                open = None;
+            }
+            _ if opens => open = Some((at, len)),
+            _ => {}
+        }
+    }
+    c.iter()
+        .zip(marker)
+        .map(|(ch, m)| if m { '*' } else { *ch })
+        .collect()
 }
 
 /// Prose lines (indentation kept) as one string, with the tolerated
@@ -463,6 +511,31 @@ mod tests {
         assert!(!same_text(doc, "Wait\n5. seconds.\n"));
         let list = "Steps:\n\n1. one\n2. two\n";
         assert!(same_text(list, "Steps:\n\n1. one\n1. two\n"));
+    }
+
+    #[test]
+    fn front_matter_keeps_special_values_and_key_types_apart() {
+        let fm = |v: &str| format!("---\nx: {v}\n---\n\n# t\n");
+        assert!(!same_text(&fm(".nan"), &fm("null")));
+        assert!(!same_text(&fm(".inf"), &fm("-.inf")));
+        assert!(!same_text(&fm(".inf"), &fm("null")));
+        assert!(!same_text("---\n1: a\n---\n", "---\n'1': a\n---\n"));
+    }
+
+    #[test]
+    fn an_underscore_in_a_path_or_unpaired_is_never_an_emphasis_marker() {
+        assert!(!same_text(
+            "Edit _config.yml now.\n",
+            "Edit *config.yml now.\n"
+        ));
+        assert!(!same_text("Set DIR_ first.\n", "Set DIR* first.\n"));
+        assert!(same_text("Read _this_ now.\n", "Read *this* now.\n"));
+    }
+
+    #[test]
+    fn a_malformed_table_cell_is_not_a_separator() {
+        assert!(!same_text("| a |\n|-:-|\n", "| a |\n|---|\n"));
+        assert!(same_text("| a |\n|:--:|\n", "| a |\n| :------: |\n"));
     }
 
     #[test]

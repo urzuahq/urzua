@@ -145,8 +145,20 @@ pub fn as_paths(value: &str, max_path: usize) -> (Option<String>, Vec<String>) {
         value = value.split('\0').next().unwrap_or("").to_string();
     }
     let mut value = value.trim_matches(is_blank).to_string();
-    if value.is_empty() || value.contains('\n') {
+    if value.is_empty() {
         return (None, Vec::new());
+    }
+    // A string with a line break inside is no path a server would use as
+    // written, but each of its lines may be one: they are looked at for a
+    // refusal.
+    if value.contains('\n') {
+        let mut lines = Vec::new();
+        for line in value.split('\n') {
+            let (p, more) = as_paths(line, max_path);
+            lines.extend(p);
+            lines.extend(more);
+        }
+        return (None, lines);
     }
     if value.len() >= 5 && value[..5].eq_ignore_ascii_case("file:") {
         extras.push(super::super::normpath(&value));

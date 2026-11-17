@@ -24,17 +24,32 @@ const FIND_CONFIG: &str = r#"r="${CLAUDE_PROJECT_DIR:-}"; if [ -z "$r" ]; then d
 const CERTAIN_ALLOW: &str = r#"awk 'function trim(s){sub(/^[ \t]+/,"",s);sub(/[ \t]+$/,"",s);return s} function item(x){if(x=="enabled: true")en=1;else if(x=="enabled: false")en=0;else if(x=="on_unjudged: allow"){al=1;as=1}else if(x=="on_unjudged: deny"){al=0;as=1}else u=1} function closes(){return en&&(nm=="editor-hook"?(as&&!al):!al)} function shut(){if(blk&&closes())c=1;blk=0} {l=$0;sub(/\r$/,"",l);if(l~/^[ \t]*#/)l="";p=index(l," #");q=index(l,"\t#");if(q&&(!p||q<p))p=q;if(p)l=substr(l,1,p-1);if(l~/^[ \t]*$/)next;if(l~/(^|[ \t,:{[])[&*!]/||index(l,"<<")||(NR>1&&l~/^(---|[.][.][.])/))u=1;i=match(l,/[^ \t]/)-1;t=trim(l);if(blk){if(i>bi){item(t);next}shut()}if(l~/acceptance|protected-paths|editor-hook/){en=0;al=0;as=0;if(t=="acceptance:"||t=="protected-paths:"||t=="editor-hook:"){nm=substr(t,1,length(t)-1);blk=1;bi=i;next}if(t~/^(acceptance|protected-paths|editor-hook): [{][^{}]*[}]$/){nm=t;sub(/:.*/,"",nm);b=t;sub(/^[^{]*[{]/,"",b);sub(/[}]$/,"",b);n=split(b,parts,",");for(k=1;k<=n;k++)item(trim(parts[k]));if(closes())c=1;next}u=1}} END{shut();if(!u&&!c)print "allow"}' "$k" 2>/dev/null"#;
 
 /// Every configuration that governs the edit, as far as the shell can place
-/// it: the session's (`$cfg`), and every `.urzua/config.yaml` at or above each
-/// `file_path`, `notebook_path` or `path` string in the payload, walked both as
-/// written and through the physical path of its nearest existing directory. A
-/// path the shell cannot place sets `bad`, a refusal: an escape inside the
-/// string; a `.` or `..` component, because the host normalises it lexically and
-/// the walk would start somewhere else; a final component that is a symlink; or
-/// a missing directory that is a symlink (a dangling link the write would
-/// follow). Paths under any other
-/// key, as an MCP call may use, are not read: the documented limit of a
-/// fallback that has no JSON parser.
-const PAYLOAD_CONFIGS: &str = r#"nl=$(printf '\n_'); nl=${nl%_}; cs="$cfg"; bad=""; printf '%s' "$p" | grep -qE '"(file_path|notebook_path|path)"[[:space:]]*:[[:space:]]*"[^"]*\\' && bad=1; fs=$(printf '%s' "$p" | grep -oE '"(file_path|notebook_path|path)"[[:space:]]*:[[:space:]]*"[^"\\]*"' | sed -e 's/^[^:]*:[[:space:]]*"//' -e 's/"$//'); set -f; o_ifs=$IFS; IFS=$nl; for f in $fs; do case "/$f/" in */./*|*/../*) bad=1;; esac; case "$f" in /*) ;; *) f="$PWD/$f";; esac; [ -L "$f" ] && bad=1; d=$(dirname "$f"); while [ ! -d "$d" ]; do [ -L "$d" ] && bad=1; d=$(dirname "$d"); done; for e in "$d" "$(cd -P "$d" 2>/dev/null && pwd -P)"; do while [ -n "$e" ]; do [ -e "$e/.urzua/config.yaml" ] && cs="$cs$nl$e/.urzua/config.yaml"; [ "$e" = / ] && break; e=$(dirname "$e"); done; done; done; IFS=$o_ifs; set +f; "#;
+/// it, in `$cs`; `bad` set when it cannot place one with certainty (a refusal).
+///
+/// A value under those keys that holds an escape, a control character or a raw
+/// line break is refused outright: no host writes one, and where the break
+/// falls decides what the parts name.
+///
+/// A value under `file_path`, `notebook_path` or `path` is placed only when it
+/// is a plain path as written: a JSON string with no escape, starting with `/`
+/// or a name character (`[A-Za-z0-9_.-]`), with no scheme (`name:`) at the start,
+/// no whitespace or control character at either end, and no trailing slash.
+/// Such a path is walked from its nearest existing directory, as written and as
+/// that directory's physical path (`cd -P`); it is refused when it has a `.` or
+/// `..` component (the host normalises it lexically and the walk would start
+/// elsewhere), when its last component is a symlink, or when a missing
+/// directory on it is a symlink (a dangling link the write would follow).
+///
+/// Any other value under those keys (a URL, `~` or `$HOME`, padding, a trailing
+/// slash, a line break, an array, an object, a number) is refused when the
+/// session has a configuration. Without one, every string in the payload that
+/// holds a `/` is placed as the engine would read it (a `file:` prefix dropped,
+/// `~`, `$HOME` and `${HOME}` expanded, padding split off, a trailing slash
+/// dropped) and the edit is refused when any finds a configuration, a `.` or
+/// `..` component, or a symlink as its last component; so an ordinary edit in a
+/// repository that does not use urzua stays quiet. Paths under any other key
+/// are not read: the documented limit of a fallback with no JSON parser.
+const PAYLOAD_CONFIGS: &str = r#"nl=$(printf '\n_'); nl=${nl%_}; cs="$cfg"; bad=""; odd=""; walk() { d=$(dirname "$1"); while [ ! -d "$d" ]; do [ -L "$d" ] && bad=1; d=$(dirname "$d"); done; for e in "$d" "$(cd -P "$d" 2>/dev/null && pwd -P)"; do while [ -n "$e" ]; do [ -e "$e/.urzua/config.yaml" ] && cs="$cs$nl$e/.urzua/config.yaml"; [ "$e" = / ] && break; e=$(dirname "$e"); done; done; }; printf '%s' "$p" | grep -qE '"(file_path|notebook_path|path)"[[:space:]]*:[[:space:]]*"[^"]*(\\|[[:cntrl:]]|$)' && bad=1; nk=$(printf '%s' "$p" | grep -oE '"(file_path|notebook_path|path)"[[:space:]]*:' | wc -l); fs=$(printf '%s' "$p" | grep -oE '"(file_path|notebook_path|path)"[[:space:]]*:[[:space:]]*"[^"\\]*"' | sed -e 's/^[^:]*:[[:space:]]*"//' -e 's/"$//' | grep -E '^(/|[A-Za-z0-9_.-])' | grep -vE '^[A-Za-z][A-Za-z0-9+.-]*:|/$|[[:space:][:cntrl:]]$'); np=$(printf '%s' "$fs" | grep -c .); [ "$np" -lt "$nk" ] && odd=1; set -f; o_ifs=$IFS; IFS=$nl; for f in $fs; do case "/$f/" in */./*|*/../*) bad=1;; esac; case "$f" in /*) ;; *) f="$PWD/$f";; esac; [ -L "$f" ] && bad=1; walk "$f"; done; if [ -n "$odd" ]; then if [ -n "$cfg" ]; then bad=1; else n0=$cs; for f in $(printf '%s' "$p" | sed 's/\${HOME}/$HOME/g' | tr '\042\133\135\173\175\054\072' '\n\n\n\n\n\n\n' | tr '[:space:]' '\n' | grep /); do case "$f" in '~/'*) f="$HOME/${f#'~/'}";; '$HOME/'*) f="$HOME/${f#'$HOME/'}";; esac; case "$f" in /*) ;; *) f="$PWD/$f";; esac; while [ "$f" != / ] && [ "${f%/}" != "$f" ]; do f=${f%/}; done; case "/$f/" in */./*|*/../*) bad=1;; esac; [ -L "$f" ] && bad=1; walk "$f"; done; [ "$cs" = "$n0" ] || bad=1; fi; fi; IFS=$o_ifs; set +f; "#;
 
 /// `allow` in `$v` when every configuration in `$cs` reads with certainty as
 /// open and no path was unplaceable.

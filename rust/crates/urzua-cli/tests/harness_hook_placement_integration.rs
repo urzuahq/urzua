@@ -400,8 +400,19 @@ fn without_urzua_using(
     shell: &[PathBuf],
     awk: &Path,
 ) -> String {
+    without_urzua_home(cmd, cwd, payload, shell, awk, None)
+}
+
+fn without_urzua_home(
+    cmd: &str,
+    cwd: &Path,
+    payload: &str,
+    shell: &[PathBuf],
+    awk: &Path,
+    home: Option<&Path>,
+) -> String {
     let tools = common::TempDir::new("urzua-placement-shells");
-    for tool in ["git", "dirname", "cat", "grep", "sed", "pwd"] {
+    for tool in ["git", "dirname", "cat", "grep", "sed", "pwd", "tr", "wc"] {
         if let Some(found) = which(tool) {
             std::os::unix::fs::symlink(found, tools.join(tool)).unwrap();
         }
@@ -417,11 +428,90 @@ fn without_urzua_using(
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+    if let Some(h) = home {
+        c.env("HOME", h);
+    }
     let mut child = c.spawn().unwrap();
     let _ = child.stdin.take().unwrap().write_all(payload.as_bytes());
     let out = child.wait_with_output().unwrap();
     assert_eq!(out.status.code(), Some(0), "{out:?}");
     String::from_utf8(out.stdout).unwrap()
+}
+
+fn shells_and_awks() -> (Vec<Vec<PathBuf>>, Vec<PathBuf>) {
+    let mut shells: Vec<Vec<PathBuf>> = vec![vec![PathBuf::from("/bin/sh")]];
+    shells.extend(which("bash").map(|b| vec![b]));
+    shells.extend(which("busybox").map(|b| vec![b, PathBuf::from("sh")]));
+    let mut awks: Vec<PathBuf> = ["mawk", "gawk"].iter().filter_map(|a| which(a)).collect();
+    awks.extend(which("busybox"));
+    (shells, awks)
+}
+
+#[test]
+fn without_urzua_a_value_that_is_not_a_plain_path_is_placed_as_the_engine_reads_it_or_refused() {
+    let cmd = edit_command();
+    let w = world();
+    let root = w.ung.parent().unwrap().to_path_buf();
+    let g = w
+        .gov
+        .join(".claude/settings.json")
+        .to_string_lossy()
+        .to_string();
+    let ung = w.ung.to_string_lossy().to_string();
+    let mcp = |input: serde_json::Value| {
+        serde_json::json!({"tool_name": "mcp__fs__write_file", "cwd": ung, "tool_input": input})
+            .to_string()
+    };
+    let (head, tail) = g.split_at(g.len() / 2);
+    let rows: Vec<(&str, String)> = vec![
+        ("a file:// URL", mcp(serde_json::json!({"path": format!("file://{g}"), "content": "x"}))),
+        ("a file: URL", mcp(serde_json::json!({"path": format!("file:{g}"), "content": "x"}))),
+        ("an upper-case FILE:// URL", mcp(serde_json::json!({"path": format!("FILE://{g}"), "content": "x"}))),
+        ("a leading space", mcp(serde_json::json!({"path": format!(" {g}"), "content": "x"}))),
+        ("a ~ path", mcp(serde_json::json!({"path": "~/gov/.claude/settings.json", "content": "x"}))),
+        ("a $HOME path", mcp(serde_json::json!({"path": "$HOME/gov/.claude/settings.json", "content": "x"}))),
+        ("a ${HOME} path", mcp(serde_json::json!({"path": "${HOME}/gov/.claude/settings.json", "content": "x"}))),
+        ("a list", mcp(serde_json::json!({"path": [g], "content": "x"}))),
+        ("an object", mcp(serde_json::json!({"path": {"p": g}, "content": "x"}))),
+        ("a trailing slash on a symlink to a file", payload(&w.ung, &format!("{ung}/leaf/"))),
+        ("a raw line break inside the value", format!("{{\"tool_name\": \"mcp__fs__write_file\", \"cwd\": \"{ung}\", \"tool_input\": {{\"path\": \"{head}\n{tail}\", \"content\": \"x\"}}}}")),
+    ];
+    let home = [("HOME", root.as_os_str())];
+    for (name, p) in &rows {
+        let out = common::run_hook(&w.ung, "edit", p, None, Some(&w.ung), &home);
+        let engine = String::from_utf8(out.stdout).unwrap();
+        // A raw line break makes the payload JSON no host writes: the engine
+        // reads two partial paths, neither of them protected, and lets the
+        // call through. The fallback cannot read even that much, so it refuses.
+        if *name == "a raw line break inside the value" {
+            assert!(rank(&engine) < 2, "{name}: {engine}");
+            continue;
+        }
+        assert_eq!(rank(&engine), 2, "{name}: the engine refuses: {engine}");
+    }
+    let (shells, awks) = shells_and_awks();
+    for shell in &shells {
+        for awk in &awks {
+            for (name, p) in &rows {
+                let out = without_urzua_home(&cmd, &w.ung, p, shell, awk, Some(&root));
+                assert_eq!(rank(&out), 2, "{shell:?} {awk:?} {name}: {out}");
+            }
+            // The ordinary case stays quiet: an odd value naming a file where
+            // nothing is governed, and a plain write.
+            let quiet = mcp(serde_json::json!({"path": [format!("{ung}/a.txt")], "content": "x"}));
+            assert_eq!(
+                without_urzua_home(&cmd, &w.ung, &quiet, shell, awk, Some(&root)),
+                "",
+                "{shell:?} {awk:?}"
+            );
+            let plain = payload(&w.ung, &format!("{ung}/a.txt"));
+            assert_eq!(
+                without_urzua_home(&cmd, &w.ung, &plain, shell, awk, Some(&root)),
+                "",
+                "{shell:?} {awk:?}"
+            );
+        }
+    }
 }
 
 #[test]

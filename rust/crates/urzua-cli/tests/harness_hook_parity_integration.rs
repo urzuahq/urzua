@@ -3,10 +3,21 @@
 //! in two copies of the same repository and the outputs are compared byte for
 //! byte (the repository's path written as `<DIR>`). Where the two differ on
 //! purpose, the case asserts the binary is at least as strict and its name says
-//! why. Nothing installs the reference. Needs `git`, `sh`, and `python3` to
-//! run the reference.
+//! why. Nothing installs the reference. Needs `git` and `sh`, and the
+//! reference interpreter on PATH; each test skips without it.
 
 mod common;
+
+/// Whether the interpreter that runs the reference is on PATH; a test that
+/// needs it says so and skips without it.
+fn reference_runs() -> bool {
+    let found = std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default())
+        .any(|d| d.join("python3").is_file());
+    if !found {
+        eprintln!("the reference interpreter is not on PATH; skipped");
+    }
+    found
+}
 
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -258,8 +269,14 @@ fn edit_cases() -> Vec<Case> {
         c("bad-cwd", |d| {
             serde_json::json!({"tool_name": "Write", "cwd": "/nonexistent-urzua-cwd", "tool_input": {"file_path": abs(d, ".claude/settings.json"), "content": "{}"}}).to_string()
         }),
-        c("unreadable", |_| "garbage{".to_string()),
-        c("not-an-object", |_| "[1, 2]".to_string()),
+        c(
+            "unreadable-binary-is-stricter-it-cannot-place-a-file",
+            |_| "garbage{".to_string(),
+        ),
+        c(
+            "not-an-object-binary-is-stricter-it-cannot-place-a-file",
+            |_| "[1, 2]".to_string(),
+        ),
     ]
 }
 
@@ -786,6 +803,9 @@ fn path_cases() -> Vec<Case> {
 
 #[test]
 fn every_path_shape_and_project_setting_gives_the_scripts_output_or_a_stricter_one() {
+    if !reference_runs() {
+        return;
+    }
     compare("deny", &config(""), path_cases());
     compare("allow", &config(", on_unjudged: allow"), path_cases());
 }
@@ -795,6 +815,9 @@ fn every_path_shape_and_project_setting_gives_the_scripts_output_or_a_stricter_o
 /// configuration refuses where a guardrail refuses an unjudged edit.
 #[test]
 fn a_payload_that_is_not_utf8_binary_is_stricter_it_reads_it_as_unreadable() {
+    if !reference_runs() {
+        return;
+    }
     for (name, cfg) in [
         ("deny", config("")),
         ("allow", config(", on_unjudged: allow")),
@@ -843,6 +866,9 @@ fn a_payload_that_is_not_utf8_binary_is_stricter_it_reads_it_as_unreadable() {
 /// let the call through. The binary is the stricter.
 #[test]
 fn an_unknown_event_binary_is_stricter_it_exits_nonzero_so_the_fallback_answers() {
+    if !reference_runs() {
+        return;
+    }
     let dir = fixture("unknown-event", &config(""));
     let out = common::run_hook(&dir, "frob", "{}", None, Some(&dir), &[]);
     assert_eq!(out.status.code(), Some(2), "{out:?}");
@@ -853,18 +879,27 @@ fn an_unknown_event_binary_is_stricter_it_exits_nonzero_so_the_fallback_answers(
 
 #[test]
 fn every_edit_tool_shape_gives_the_scripts_output_byte_for_byte() {
+    if !reference_runs() {
+        return;
+    }
     compare("deny", &config(""), edit_cases());
     compare("allow", &config(", on_unjudged: allow"), edit_cases());
 }
 
 #[test]
 fn every_mcp_shape_gives_the_scripts_output_byte_for_byte() {
+    if !reference_runs() {
+        return;
+    }
     compare("deny", &config(""), mcp_cases());
     compare("allow", &config(", on_unjudged: allow"), mcp_cases());
 }
 
 #[test]
 fn post_command_session_start_and_a_failed_engine_give_the_scripts_output_byte_for_byte() {
+    if !reference_runs() {
+        return;
+    }
     compare("deny", &config(""), other_cases());
     compare("allow", &config(", on_unjudged: allow"), other_cases());
 }

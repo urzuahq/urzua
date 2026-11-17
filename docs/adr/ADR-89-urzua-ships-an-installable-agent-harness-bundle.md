@@ -1093,6 +1093,17 @@ value. Generated prose tolerates the emphasis marker only where it opens or clos
 path, glob or inline code; front matter is compared as the YAML value it parses to; a table's separator row
 tolerates only its padding; a number starts a list item only where a list can start or continue.
 
+## Amendment (2026-11-17, fifth review): the shell fallback places only plain paths
+
+Decided by the builder on 2026-11-17, pending maintainer review: the shell fallback places a value under
+`file_path`, `notebook_path` or `path` only when it is a plain path as written. Any other value under those keys
+is refused when the session's directory has a configuration; without one, every string holding a `/` is placed
+as the engine reads it (a `file:` prefix dropped, `~` and `$HOME` expanded, padding and a trailing slash
+dropped) and the edit is refused when any finds a configuration. The binary refuses an edit whose payload cannot
+be read, since it names no file the hook can place. Front matter is compared as YAML written back as YAML, and
+a table separator cell must be one of `---`, `:---`, `---:`, `:---:`. Accepted limit, pending maintainer review:
+in a repository that does not use urzua, the fallback refuses an edit whose path has a `.` or `..` component.
+
 ## References
 
 - `ADR-69`, `ADR-70`, `ADR-71`: the hook, drafting commands and layered gate this extends; `ADR-70` gains an
@@ -1150,3 +1161,4 @@ tolerates only its padding; a number starts a list item only where a list can st
 > | 2026-11-17 | Added an `## Amendment (2026-11-17, second review): one rule for an unjudged edit, and no configuration is not governed`, and marked the builder's statements in the first amendment of this date as pending maintainer review. **Why:** second review of the pull request that moved the harness into the binary; the not-governed rule decided by the orchestrator on 2026-11-17, the rest by the builder, both pending maintainer review. | **substantive** |
 > | 2026-11-17 | Added an `## Amendment (2026-11-17, third review): an unjudged edit is decided from the engine's inputs`: path placement and configuration discovery as the engine does them, silence only where nothing governs any path, the closed list of formatter differences, `editor-hook` deny honoured, and the shell fallback's limit stated. **Why:** third review of the pull request that moved the harness into the binary; the placement rule and the drift list decided by the orchestrator on 2026-11-17, the rest by the builder, all pending maintainer review. | **substantive** |
 > | 2026-11-17 | Added an `## Amendment (2026-11-17, fourth review): every candidate path counts, and the shell refuses what it cannot place`. **Why:** fourth review of the pull request that moved the harness into the binary; decided by the builder on 2026-11-17, pending maintainer review. | **substantive** |
+> | 2026-11-17 | Added an `## Amendment (2026-11-17, fifth review): the shell fallback places only plain paths`. **Why:** fifth review of the pull request that moved the harness into the binary; decided by the builder on 2026-11-17, pending maintainer review. | **substantive** |
