@@ -1136,23 +1136,26 @@ permission prompt instead of refusing it, when the configuration sets `in_sessio
 record to a reserved status is a person's act; this amendment states how such an approval stands under it. Everything
 below is decided by the builder on 2026-11-17, pending maintainer review.
 
-1. **A person's act.** Approving the host's prompt for a gated edit is the person's decision to make that move, as
-   editing the file outside the agent is. The agent proposed and typed the edit; the person decided it. The receipt says
-   so: the move was approved in an agent session by the named person. It never says the person edited the file.
-2. **What it proves locally.** A confirmed approval kept under `.git/urzua/approvals` proves, on that machine, that the
-   host showed a prompt for that edit of that record into that status, in that session, that the call then ran (the host
-   runs its post-edit hook only after an approved tool call), and that the file still holds exactly the approved bytes.
-   The pre-commit check accepts the move on that basis, without an actors file and without `--no-verify`.
-3. **What it does not prove.** Which person clicked: only as far as the identity source says (`gh-verified` names the
-   signed-in login, `git-config` names whatever the configuration holds), and the host's own guarantee that a prompt it
-   shows in a given permission mode is answered by a person. That nothing else answered the prompt: a host program or
-   extension that answers prompts defeats it, as it defeats any prompt. That no shell command wrote the approval: the edit
-   tools cannot (`.git/urzua` is protected state), but a shell command can, as it can write the record itself; the
-   post-command check reports such a command's status move, and this stays inside the accepted risk of section 4.
-4. **CI is unchanged.** The approval lives in the git directory, which no commit carries, so CI never reads it.
-   `diff.decider-required` still requires the gate action's actors file to name a login in the decider group; a receipt
-   in the record is not evidence there. A repository that needs proof of who decided keeps acceptance in a pull request
-   authored or approved by the decider.
+1. **A person's act, recorded as local.** Approving the host's prompt for a gated edit is the person's decision to make
+   that move, as editing the file outside the agent is. The receipt says the move was approved in an agent session, names
+   the person as the host session reported them and where the name was read (`gh` or `git config`), and says it is a
+   local record CI does not rely on. It never says the person edited the file, and never calls the name verified.
+2. **What it shows locally, when nothing forged it.** A confirmed approval under `.git/urzua/approvals` shows that the
+   host's post-edit hook ran for an edit call of that record into that status, from that status and that `HEAD` blob,
+   that the transcript records the call, and that the file holds exactly the approved bytes. With the mode on, the
+   pre-commit check accepts an uncommitted gated move only on that basis, once, and refuses one without it whatever
+   `require_evidence` says.
+3. **What it does not prove.** Which person clicked: the name is whatever `gh` or `git config` reports, held only to
+   being a login in the gate's group. That a person answered: a headless permission-prompt tool, a `PermissionRequest`
+   hook, an SDK permission callback or a `permissions.allow` rule can answer instead, and the payload does not show it.
+   That the approval is genuine at all: the hooks run as the agent's own user, so a shell command can forge one by piping
+   made-up payloads to the hook commands or by writing the files, and with a decider's name in `git config` or a `gh`
+   shim the receipt names that decider. The post-command check reports any approval a shell command created or changed,
+   and the shell's status move, at error level; a shell that also rewrites the transcript or that check's record hides
+   it. The edit tools cannot write a git directory or a `.git` pointer file.
+4. **The control to rely on is unchanged.** The approval lives in the git directory, which no commit carries, so CI never
+   reads it. `diff.decider-required` on the pull request, with the gate action's actors file naming a login in the decider
+   group, is the only control a repository should rely on; a receipt in the record is not evidence there.
 
 ## References
 
@@ -1215,3 +1218,4 @@ below is decided by the builder on 2026-11-17, pending maintainer review.
 > | 2026-11-17 | Added an `## Amendment (2026-11-17, sixth review): without the binary, the hook decides from the session alone`, replacing the shell fallback's payload reading and stating the one accepted limit. **Why:** sixth review of the pull request that moved the harness into the binary; the simplification decided by the orchestrator on 2026-11-17, pending maintainer review; the limit's acceptance quoted from the maintainer for the part he accepted. | **substantive** |
 > | 2026-11-17 | Noted in the fourth- and fifth-review amendments that the shell fallback behaviour they describe was removed by the sixth; in the sixth, the maintainer's sentence stands alone and the gloss is stated as the orchestrator's reading. **Why:** seventh review of the pull request that moved the harness into the binary. | **evidence** |
 > | 2026-11-17 | Added an `## Amendment (2026-11-17): an approval given at the agent host's prompt is a person's act, and what it proves`. **Why:** `ADR-102` Consequences require it, and the maintainer accepted the amendment of `ADR-102` on 2026-11-17 ("I'm happy for you to amend ADR 102. I'll give you my acceptance.") that makes the host's prompt the first mechanism; the amendment's content was decided by the builder on 2026-11-17, pending maintainer review. | **substantive** |
+> | 2026-11-17 | Rewrote the amendment of the same day on approvals given at the agent host's prompt after a security review: the receipt is a local record and names the person as the session reported them, not as verified; the limits of a forgery by shell, what reports it and the one control to rely on are stated in full. **Why:** a security review of the pull request that builds it showed a shell can forge an approval naming a decider; decided by the builder on 2026-11-17, pending maintainer review. | **substantive** |

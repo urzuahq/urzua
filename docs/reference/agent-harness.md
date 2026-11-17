@@ -183,51 +183,78 @@ pull request by the `diff.decider-required` rule, fed by the gate action's `acto
 
 By default the `acceptance` guardrail refuses an agent's move to a status the `authority` table reserves, and a
 person makes the move outside the agent. Set `in_session: ask` to have the person asked instead, in the session
-(`ADR-102`, amendment of 2026-11-17):
+(`ADR-102`, amendment of 2026-11-17). It needs the `post-command` guardrail on (a load error otherwise), because that
+check is what reports a forged approval:
 
 ```yaml
 harness:
   guardrails:
-    acceptance: {enabled: true, in_session: ask, approval_minutes: 60}   # refuse (default) | ask; 1 to 1440
+    acceptance:   {enabled: true, in_session: ask, approval_minutes: 60}   # refuse (default) | ask; 1 to 1440
+    post-command: {enabled: true}
 ```
 
-A configuration that does not declare `in_session` refuses, exactly as before. With `ask`, an agent's Write, Edit or
-MultiEdit that moves one record into a gated status goes to the person through the agent host's own permission
-prompt:
+A configuration that does not declare `in_session` refuses, and the local commit check reports exactly what it did
+before. What the mode is for: letting the agent's own edit tool make a gated move when the person approves it in the
+agent host, with a record of that. It is not a stronger control than before; see the limits below.
 
-- The hook writes the prompt's reason, never the agent: the record's id and title, the status it leaves, the status it
-  enters and the decider group that may make the move, read from the record and the configuration.
+With `ask`, an agent's Write, Edit or MultiEdit that moves one record into a gated status goes to the person through the
+agent host's own permission prompt:
+
+- The prompt's reason opens with urzua's own sentence, complete on its own and built only from values checked against
+  the configuration: the record's id (only in the form its type's prefix and a number give), the status it leaves and
+  the status it enters (only as values the type declares), the gate and the decider group. It says that approving
+  writes the whole file as shown, including any change to its body. The record's title follows, marked as the record's
+  own text, with control characters, bidirectional controls, quotes and line breaks removed, at most 80 characters.
 - The edit shown is the agent's edit plus its receipt, which the hook adds: each date field the entered status requires
   (`statuses.require`) that is missing or blank and that `date.field-valid` declares gets today's date, and the
-  revision log gets a row reading that the move was approved in an agent session by the named person, with the identity
-  source (`gh-verified`, `asserted` or `git-config`, as attestations resolve it). It never says the person edited the
-  file. An Edit or MultiEdit is put to the person as one replacement of the whole file, because the receipt lies outside
-  the lines the agent changed.
+  revision log gets a row reading that the move was approved in an agent session, by the person as the host session
+  reported them, with where the name was read (`gh` or `git config`), and that it is a local record CI does not rely
+  on. It never says the person edited the file, and never calls the name verified. An Edit or MultiEdit is put to the
+  person as one replacement of the whole file, because the receipt lies outside the lines the agent changed.
 - Approving writes the edit and its receipt in one write, so no commit can land between them. Declining writes nothing.
-- When `gh` names a login outside the gate's decider group, the person is not asked: approving would prove nothing CI
-  accepts.
+- The name the session reports (the `gh` login, else `git config user.name`) must be a login in the gate's decider
+  group, whatever its source; otherwise the person is not asked and the edit is refused.
 
 It stays refused, with a message saying what to do, where the person cannot be asked: a call from a subagent (hand back
 to the main session), a NotebookEdit or a file-writing MCP tool, and every permission mode in which the host does not
 show the prompt. For Claude Code only Manual (`default`) asks; `acceptEdits`, `auto`, `dontAsk`, `bypassPermissions`,
-`plan`, a mode the adapter does not know and a payload with no mode are refused.
+`plan`, a mode the adapter does not know and a payload with no mode are refused. The adapter reads two things from the
+payload to decide this: `permission_mode` and `agent_id`. It cannot see, and so cannot rule out, anything else that
+answers a prompt in place of a person: a headless run's permission-prompt tool, a `PermissionRequest` hook, an SDK
+permission callback (`canUseTool`), or a `permissions.allow` rule that matches the call.
 
-**What the receipt proves, and where.** Before asking, the hook keeps a pending approval under `.git/urzua/approvals`
-naming the record, the status entered, a sha256 of the file as the approved edit writes it, the session, the host's
-id for the call, the person and an expiry (`approval_minutes`, default 60). Claude Code runs the post-edit hook
-(`PostToolUse` on Write, Edit and MultiEdit) only after the tool ran, which in Manual mode means after the person
-approved; it confirms the approval for that call. `urzua check` with no `--actors` file (the pre-commit hook) then
-accepts the gated move, reported at `info`, when a confirmed approval names that record and that status, the file's
-bytes match and it has not expired. Anything else is the usual `diff.decider-required` finding, with the reason the
-approval does not hold; the same bytes written without the host reporting the call (a shell write after a decline) are
-an error even without `require_evidence`.
+**The approval.** Before asking, the hook keeps a pending approval under `.git/urzua/approvals` (only when the git
+common directory is the repository's own) naming the record, the status it leaves, the status it enters, the git blob of
+the record at `HEAD`, a sha256 of the file as the approved edit writes it, the session, the host's id for the call, the
+decider login and where the name was read, and a creation time and expiry (`approval_minutes`, default 60). Claude Code
+runs the post-edit hook (`PostToolUse` on Write, Edit and MultiEdit) only after the tool ran, which in Manual mode means
+after the person approved; the hook confirms the approval for that call only when the file holds the approved bytes and
+the host's transcript (`transcript_path`) records the call. The transcript check raises the cost of a forgery; it is not
+a boundary, since the transcript is the user's own file.
 
-The agent's edit tools cannot write `.git/urzua` (the `protected-paths` guardrail refuses them). A shell command can,
-as it can write any file the user can, and it can run the post-edit hook itself with a made-up payload; either way the
-record's status has to be written by a shell command too, and the post-command check reports that move to you. The approval
-proves, on this machine, that a person answered the host's prompt for that move; who, only as far as the identity source
-says. CI cannot read `.git/urzua` and never counts it: `diff.decider-required` there still requires the gate action's
-actors file to name a login in the decider group, exactly as without the mode.
+**At the local commit check** (`urzua check` with no `--actors`, as the pre-commit hook runs it), with the mode on, a
+gated move in a record whose working-tree or index copy differs from `HEAD` passes, reported at `info`, only with a
+confirmed approval for that record and status, those exact bytes, on that same `HEAD` blob, inside its time window
+(created at or before now, not expired; the wall clock, never `--as-of`) and not yet used. Anything else is an error,
+whatever `require_evidence` says, with the reason: no approval, an unconfirmed one, or one that does not hold. The first
+check that finds the approved bytes committed marks the approval used, so the same bytes restored later or on another
+branch need a new approval. Pending maintainer review: the mode is a statement that local gated moves need a person, so
+a person's own edit outside the agent is held to it too; turn the mode off to commit such a move without an approval.
+With the mode off, nothing here applies: with `require_evidence` off (the default), a gated move committed locally is
+reported at `info` and the pull request check decides.
+
+**Limits.** The hooks run as the agent's own user, so there is no secret to anchor on. A shell command can forge an
+approval in a few steps: pipe a made-up PreToolUse payload into `urzua harness hook claude-code edit`, copy the content
+it returns over the record, pipe the same payload as PostToolUse into `post-edit` with a transcript of its own; or write
+the confirmed file by hand. With `git config user.name`, or a `gh` shim first on `PATH`, set to a decider's name, the
+receipt then names that decider. What reports it: the post-command check reports, at error level and naming the file,
+any approval created, changed or removed since its last run that no edit call of the session made (an approval counts as
+made by an edit call only when the session's transcript shows a Write, Edit or MultiEdit of that file with that call id
+that ran without error); and it reports the shell's status move as a gated move. A shell that also rewrites the
+transcript or the post-command check's record of what it saw hides it. The edit tools cannot write anything under a git
+directory or a `.git` pointer file (the `protected-paths` guardrail refuses them). **The pull request check, with the
+gate action's actors file naming a login in the decider group, is the only control a repository should rely on.** CI
+cannot read `.git/urzua` and never counts a receipt.
 
 `outside_writes` decides how a write outside the session's repository is judged: `allow` (leave it to
 that repository), `shared` (also judge a file of a linked worktree of the same repository by the
