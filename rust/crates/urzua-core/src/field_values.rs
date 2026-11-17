@@ -115,6 +115,20 @@ pub fn undeclared<'a>(allowed: &[String], value: &'a str) -> Vec<&'a str> {
     out
 }
 
+/// How a finding words a required field that holds nothing real: absent from
+/// the header (`missing from the header`) or present with no value (`empty`),
+/// the distinction `header.required-fields` already draws, then the values the
+/// type declares for it in the ` (allowed: a, b)` form `field.value-not-declared`
+/// uses.
+pub fn no_value_text(absent: bool, allowed: Option<&[String]>) -> String {
+    let allowed = allowed.map_or_else(String::new, |a| format!(" (allowed: {})", a.join(", ")));
+    if absent {
+        format!("missing from the header{allowed}")
+    } else {
+        format!("empty -- not a real, present value{allowed}")
+    }
+}
+
 impl RecordTypeConfig {
     /// The values `field` may hold, when the type declares a vocabulary for it.
     pub fn field_vocabulary(&self, field: &str) -> Option<&[String]> {
@@ -249,5 +263,23 @@ mod tests {
             ["Bug", "feature"]
         );
         assert!(undeclared(&allowed, "chore").is_empty());
+    }
+
+    #[test]
+    fn a_field_with_no_value_is_missing_or_empty_and_names_what_may_go_there() {
+        let allowed = ["bug".to_string(), "feature".to_string()];
+        assert_eq!(
+            no_value_text(true, Some(&allowed)),
+            "missing from the header (allowed: bug, feature)"
+        );
+        assert_eq!(
+            no_value_text(false, Some(&allowed)),
+            "empty -- not a real, present value (allowed: bug, feature)"
+        );
+        assert_eq!(no_value_text(true, None), "missing from the header");
+        assert_eq!(
+            no_value_text(false, None),
+            "empty -- not a real, present value"
+        );
     }
 }

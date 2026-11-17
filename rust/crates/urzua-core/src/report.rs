@@ -291,6 +291,14 @@ impl ActionSource {
         self
     }
 
+    /// [`ActionSource::list`] when there is a list to carry.
+    pub fn list_if<S: Into<String>>(self, value: Option<impl IntoIterator<Item = S>>) -> Self {
+        match value {
+            Some(list) => self.list(list),
+            None => self,
+        }
+    }
+
     pub fn list<S: Into<String>>(mut self, value: impl IntoIterator<Item = S>) -> Self {
         self.value = Some(ActionValue::List(
             value.into_iter().map(Into::into).collect(),

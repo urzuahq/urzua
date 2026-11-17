@@ -2,7 +2,7 @@
 Stable-Id: 01M6R3NK4S1K3KKMGNV0RC498S
 Status: Superseded
 Embodiment: Deprecated
-Realized-by: code:rust/crates/urzua-core/src/report.rs@sha256:90915f8005bd2d3827644cddb5cb672722dc8171fd39af8825c9ed6bf2110811, spec:docs/specs/SPEC-2-urzua-check.md
+Realized-by: code:rust/crates/urzua-core/src/report.rs@sha256:64f91fcf464741e3032e7bd81ea8a9acfaff91c66a7edfa70fd77094b25f7d8c, spec:docs/specs/SPEC-2-urzua-check.md
 Date: 2026-09-04
 Accepted-on: 2026-09-05
 Author: beauwilliams
@@ -102,3 +102,4 @@ Cheap to revise before v0 ships to any external user.
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/report.rs` 2e520ef8c20d -> 69f193aaf7ee. Reason: report.rs gives a refused conflict a take_side and makes the next action the git checkout of the merged-in side's record, with the re-pin named in its reason; the record's claim still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/report.rs` 69f193aaf7ee -> eb3849d69814. Reason: report.rs adds an unserialised failure_action to FixReport that its next_action returns first, the rest of the output contract unchanged; the claim this record makes still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/report.rs` eb3849d69814 -> 90915f8005bd. Reason: report.rs adds the RevisionLogBase struct and an optional revision_log_base field on FixReport, absent unless a revision log is planned or created; the claim this record makes still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-17 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/report.rs` 90915f8005bd -> 64f91fcf4647. Reason: rust/crates/urzua-core/src/report.rs: ActionSource gains list_if, which carries a list as the action's value when there is one; no existing field or method changed **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |

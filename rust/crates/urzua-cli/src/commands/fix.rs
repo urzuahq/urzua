@@ -47,12 +47,9 @@ pub fn run(config_path: Option<PathBuf>, args: FixArgs) -> ExitCode {
     run_checked(config_path, args).unwrap_or_else(|e| emit(&CouldNotRun::from(e)))
 }
 
-/// Whether the configuration declares `rule` at a level above `off`.
+/// Whether `rule` runs: declared above `off`, or on by declaration.
 pub(crate) fn rule_enabled(config: &Config, rule: &str) -> bool {
-    config
-        .rules
-        .get(rule)
-        .is_some_and(|s| s.level != RuleLevel::Off)
+    urzua_core::rules::effective_level(config, rule) != RuleLevel::Off
 }
 
 /// `run` with every refusal as an `Err`, so each step can stop with `?`.
