@@ -1,0 +1,13 @@
+id: new-starts-at-the-declared-initial-status
+bugs: [BUG-199]
+corpus: corpus-j
+# The type lists Accepted first in `values` and declares Proposed as its only
+# initial state: `urzua new` must start the record at Proposed, and say so.
+invocation: [--config, .urzua/initial-not-first.yaml, new, adr, "Starts where the graph starts"]
+expect_exit: 0
+expect_json:
+  - {at: /status_from/value, equals: Proposed}
+  - {at: /status_from/source, equals: "statuses.initial[0]"}
+  - {at: /status_from/other_initial, equals: []}
+mutation_exempt: >-
+  the starting status is not a rule; the case proves `urzua new` writes the declared initial state, not the first declared value.

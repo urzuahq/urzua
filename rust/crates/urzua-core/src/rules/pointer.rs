@@ -260,7 +260,8 @@ pub fn header_pointer_field_clean(
             let Some(value) = record.header.get(field_name.as_str()) else {
                 return Outcome::Absent;
             };
-            if crate::values::is_no_value_sentinel(value) {
+            // An empty value (`Field:`) names no reference: nothing to judge.
+            if value.trim().is_empty() || crate::values::is_no_value_sentinel(value) {
                 return Outcome::Examined;
             }
 
@@ -658,6 +659,33 @@ mod tests {
         )]);
         let (_, findings) = header_pointer_field_clean(&[r], &config);
         assert!(findings.is_empty());
+    }
+
+    /// An empty pointer value (`Parent:` as `urzua new` writes it,
+    /// or `Parent: null`) names no reference and is not unclean.
+    #[test]
+    fn an_empty_or_null_pointer_value_is_not_flagged() {
+        let config = config_with_types(vec![(
+            "adr",
+            type_config_pointer(&[], None, Some(&["Parent"]), None),
+        )]);
+        for empty in [
+            "Parent:",
+            "Parent: null",
+            "Parent: ''",
+            "Parent: \"\"",
+            "Parent: ~",
+            "Parent:    ",
+        ] {
+            let r = record(
+                "docs/adr/ADR-12-x.md",
+                "adr",
+                &format!("---\nStatus: Accepted\n{empty}\n---\n"),
+            );
+            let (exec, findings) = header_pointer_field_clean(&[r], &config);
+            assert!(findings.is_empty(), "{empty}: {findings:?}");
+            assert_eq!(examined(&exec), 1, "{empty}");
+        }
     }
 
     /// The doc comment above this rule says explicitly: "every comma-separated

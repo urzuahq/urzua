@@ -15,7 +15,7 @@ really run, so the wall-clock figure is the time of the commands themselves
   new   scaffold   bash .claude/hooks/urzua-record.sh new <type> <title>
         read       the scaffolded record
         read       .urzua/config.yaml
-        edit       fill the fields the scaffold left null, and the body
+        edit       fill the fields the scaffold left empty, and the body
         finish     bash .claude/hooks/urzua-record.sh finish <record>
                    (guard, stage, `urzua index --apply`, `urzua check`)
 
@@ -58,7 +58,7 @@ from pathlib import Path
 TYPES = ["adr", "bug", "milestone", "rfc", "spec"]
 
 # What an author supplies after the scaffold: values for the fields `urzua new`
-# leaves null, and body text. Chosen so each type ends at a record `urzua check`
+# leaves empty, and body text. Chosen so each type ends at a record `urzua check`
 # accepts; the same fill is used by both arms.
 FILL = {
     "adr": {"header": {"Deciders": "team"}, "body": []},
@@ -103,12 +103,12 @@ def repo_root(start):
 
 
 def apply_fill(text, record_type):
-    """Fill the null header fields and the body; returns (text, authored_bytes),
+    """Fill the empty header fields and the body; returns (text, authored_bytes),
     the bytes of the lines the author had to produce."""
     fill = FILL[record_type]
     authored = 0
     for key, value in fill["header"].items():
-        new = re.sub(rf"^{re.escape(key)}: null$", f"{key}: {value}", text, flags=re.M)
+        new = re.sub(rf"^{re.escape(key)}:( null)?$", f"{key}: {value}", text, flags=re.M)
         if new != text:
             authored += len(f"{key}: {value}\n".encode())
         text = new

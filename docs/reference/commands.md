@@ -124,12 +124,16 @@ fetched are invisible). With `new.check_open_prs: true` in the config it also
 fetches pull request head refs so numbers taken by open pull requests are skipped.
 
 The header is built from the type's `required_fields`, with the `Stable-Id`, the date, the author
-(from `--by`, `gh`, or `git config user.name`) and the first declared status filled in; every other
-field is left for you. If `.urzua/templates/<type>.md` exists, its body (title and sections) is
+(from `--by`, `gh`, or `git config user.name`) and the type's declared initial status (or its first status when it declares none) filled in; every other
+field is left for you. A field left for you is written empty (`Kind:`), required or optional, never
+with the template's text, `—` or `null`. `to_fill` lists each such field as `{field, required, hint, allowed}`:
+`allowed` is the type's declared `field_values` for it, and `hint` is that list (`allowed: a, b`) or else
+the template's text, or `null`; `next_action_reason` names them. `check` then reports an empty required
+field as empty and an empty optional field not at all. If `.urzua/templates/<type>.md` exists, its body (title and sections) is
 appended. A type with `header_shape: none` is refused, since it has nowhere to store a stable id.
 
 Output: `status`, `path`, `display_number`, `stable_id`, `pull_refs` (whether the open pull request
-fetch ran, and which numbers it skipped and who held them), `skipped` and `notices` (when present: the identity used in place of `--by`, a failed fetch, a type directory that does not exist yet; whatever `new` prints to stderr is also a notice). `skipped` is always present and empty
+fetch ran, and which numbers it skipped and who held them), `skipped`, `to_fill`, `status_from` (where the starting status came from: `statuses.initial[0]` or `statuses.values[0]`, with the other declared initial states) and `notices` (when present: the identity used in place of `--by`, a failed fetch, a type directory that does not exist yet; whatever `new` prints to stderr is also a notice). `skipped` is always present and empty
 when nothing was skipped: one `{number, reason}` per number, with `reason` `local`, `worktree <path>`
 or `open-pr <ref>`. When the type's directory does not exist yet, `new` numbers from 1 and creates it,
 saying so on stderr and in a `notices` entry. It resolves an identity with `gh api user` first (see [What uses the
@@ -269,14 +273,15 @@ whether it parses (an unrecognized key is an error here), whether each record ty
 exists, whether a CI workflow invokes `urzua check` or the gate action, whether git pre-commit and
 pre-push hooks run it, and the harness and authority declarations.
 
-Output: `status` (`ok`, `warn` or `error`) and `checks`, each with `check`, `status` and `message`.
+Output: `status` (`ok`, `warn` or `error`) and `checks`, each with `check`, `status` (`ok`, `info`,
+`warn` or `error`; `info` never changes the report's `status`) and `message`.
 A `hook-wired` check also carries `layer`, `state`, `hook_layout` (`default`, `hooks-path`, `husky` or
 `pre-commit-framework`) and, when the hook is not wired, `fix`: the command that wires it,
 usually `urzua hooks install`. The report's `next_action` is the first such command.
 The `check` ids include `config-exists`, `config-parses`, `record-type-dir`, `ci-wired`, `hook-wired`,
 `authority-host` (whether the declared authority gates anything), `authority-decider-table`,
 `authority-waivable`, `harness-config` (the declared harness, and any key of it this build does not
-recognize) and `template-sections` (whether a type's starter template has a heading for each section
+recognize), `declared-value-vocabulary` (a declared status or `field_values` value that a placeholder or pending vocabulary also reads as a marker: `info`, or `warn` when the type lists it in its own `statuses.placeholders` or `statuses.pending`) and `template-sections` (whether a type's starter template has a heading for each section
 the type requires).
 Exit 0 for `ok` and `warn`, 1 for `error`, 2 when there is no config to read.
 
