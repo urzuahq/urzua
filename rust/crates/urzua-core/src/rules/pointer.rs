@@ -142,7 +142,7 @@ pub fn pointer_target_type(
                     record.path.clone(),
                     ActionSource::new("pointer-target-type").field(field_name.as_str()),
                     format!(
-                        "{field_name}: {reference} is a '{}' record, but {field_name} on a '{}' record may only name records of type {}",
+                        "{field_name}: {reference} is of type '{}', but {field_name} on type '{}' may only name records of type {}",
                         target.record_type,
                         record.record_type,
                         allowed.join(", ")

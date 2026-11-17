@@ -1,6 +1,6 @@
 ---
 Stable-Id: 01M6R3NK5DB4YPSWZ6MQV85PQ7
-Version: '0.22'
+Version: '0.23'
 Date: 2026-09-07
 Status: Shipped
 Embodiment: Verified
@@ -16,7 +16,7 @@ Parent: SPEC-1
 
 Two read-only relationship queries over data every other rule already parses — neither needs a new
 schema field. `explain` needs no config change either; `graph` reads `pointer_fields`/
-`narrative_fields` from existing config (MILE-90/ADR-44), not a new key. Bundled into one spec
+`narrative_fields` and the declared `relation_pairs` from existing config (MILE-90/ADR-44, MILE-259), not a new key. Bundled into one spec
 because they're the same feature area (queryable relationship data) answering two directions of the
 same question: "which decisions govern this file" (`explain`) and "what does the whole graph look
 like" (`graph`).
@@ -86,6 +86,8 @@ corpus: the report is the build's rule table and the repository's configuration.
 ## `urzua graph`
 
 Every edge named by a type's config-declared `pointer_fields` ∪ `narrative_fields` (MILE-90/ADR-44),
+plus the forward and inverse fields of every declared `relation_pairs` entry the record's type carries
+and declares (MILE-259; tagged `pointer`, and listed once when a pair field is also a pointer field),
 plus the still-hardcoded `Supersedes`/`Superseded-by` (its own mechanism, outside that axis), across
 every record with a resolvable identity (`record_id`) — a record whose filename doesn't match its
 type's configured prefix/number shape contributes no outgoing edges, the same precondition
@@ -122,7 +124,7 @@ reimplementing reference-parsing a third time; `graph` additionally reuses `buil
 the same normalized-lookup helper `pointer_resolution`/`narrative_field_stale` use (MILE-90 closed
 BUG-11 here: this function's own index used to skip normalization, unlike `pointer_resolution`'s).
 Both are stdout-JSON-always (ADR-23) and never write. `graph` reads `pointer_fields`/
-`narrative_fields` from config (MILE-90/ADR-44); `explain` still requires no config change.
+`narrative_fields` and `relation_pairs` from config (MILE-90/ADR-44, MILE-259); `explain` still requires no config change.
 
 ## What's deliberately not built
 
@@ -182,3 +184,4 @@ Both are stdout-JSON-always (ADR-23) and never write. `graph` reads `pointer_fie
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/record_types_own_config_integration.rs` a9004c5b0c23 -> 459b7bc6fe09. Reason: the doctor test in record_types_own_config_integration.rs expects not-pointed at .git-hooks with the fix urzua hooks install, since this repository's config names hooks.path; no other test in the file changed **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-cli/tests/record_types_own_config_integration.rs` 459b7bc6fe09 -> 95790a97cb28. Reason: record_types_own_config_integration.rs is back to its content on main: the doctor test again expects declared-missing, since this repository's config does not name hooks.path until a release reads it **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/graph.rs` 02ace1051d4b -> 9b36fa2ee136. Reason: Adds declared target types for reference fields (MILE-259). config.rs: a pointer_fields entry may be {name, targets} (the typed parse keeps only names), Config gains a skipped pointer_targets map, RelationPair gains optional target_types, a new load error InvalidPointerTargets; every other key unchanged. rules: new rule pointer.target-type (catalog.rs, pointer.rs, table.rs, default-on at error, not-enabled when nothing is declared); relation.rs cross-type-disallowed defers to it for a claim outside target_types. graph.rs lists relation-pair edges. fix.rs, migrate.rs, property.rs, type_scope.rs, sequence.rs: test fixtures add the new fields only. check_integration.rs: the header-none fixture declares a target list so the new rule is exercised. SPEC-3 documents the keys. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-17 | Bumped to `0.23`. The `urzua graph` section is corrected to include relation-pair edges: the forward and inverse fields of every declared `relation_pairs` entry a record's type carries are edges, tagged `pointer`. **Why:** `MILE-259` added these edges in `graph.rs`, and the re-pin rows of 2026-11-16 and 2026-11-17 on this spec said the claim still held, which was untrue for this section until this correction. | **substantive** |

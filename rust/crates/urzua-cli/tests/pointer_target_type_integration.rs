@@ -94,11 +94,51 @@ fn a_pointer_to_a_record_of_an_undeclared_type_is_a_finding() {
     let got = findings(&report, "pointer.target-type");
     assert_eq!(got.len(), 1, "{report}");
     let message = got[0]["message"].as_str().unwrap();
-    for part in ["Parent", "A-2", "'a'", "type b"] {
-        assert!(message.contains(part), "{message}");
-    }
+    assert_eq!(
+        message,
+        "Parent: A-2 is of type 'a', but Parent on type 'a' may only name records of type b"
+    );
     assert_eq!(got[0]["severity"], "error", "{report}");
     assert_eq!(out.status.code(), Some(1));
+}
+
+#[test]
+fn a_suppression_record_suppresses_a_wrong_type_finding() {
+    let tail = "  waiver:
+    dir: docs/waiver
+    role: suppression
+    effective_requires: [Reason]
+    required_fields: [Rule, Scope, Reason]
+    known_fields: [Expires]
+    pointer_fields: []
+    narrative_fields: []
+rules:
+  pointer.target-type: error
+";
+    let cfg = config("[{name: Parent, targets: [b]}]", tail);
+    let a1 = parent("A-2");
+    let waiver = "---\nRule: pointer.target-type\nScope: docs/a/A-1-one.md\nReason: the parent is deliberately a sibling\nExpires: 2999-01-01\n---\n# 1 - Sibling parent\n";
+    let dir = repo(
+        "waived",
+        &cfg,
+        &[("docs/a/A-1-one.md", &a1), ("docs/a/A-2-two.md", A2)],
+    );
+    std::fs::create_dir_all(dir.join("docs/waiver")).unwrap();
+    std::fs::write(dir.join("docs/waiver/WAIVER-1-sibling.md"), waiver).unwrap();
+    assert!(Command::new("git")
+        .args(["add", "-A"])
+        .current_dir(&dir)
+        .status()
+        .unwrap()
+        .success());
+    let (report, out) = urzua(&dir, &["check", "docs/"]);
+    let got = findings(&report, "pointer.target-type");
+    assert_eq!(got.len(), 1, "{report}");
+    assert_eq!(
+        got[0]["waived"], "docs/waiver/WAIVER-1-sibling.md",
+        "{report}"
+    );
+    assert_eq!(out.status.code(), Some(0), "{report}");
 }
 
 #[test]

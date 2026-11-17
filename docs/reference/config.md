@@ -168,7 +168,7 @@ relation_pairs:
   - {name: parent, forward: Parent-of, inverse: Child-of, reciprocity: required, target_types: [story]}
 ```
 
-Each element of a list is judged; with no target types declared anywhere the rule reports `not-enabled`. A reference that names no record stays `pointer.resolution`'s. Each target type
+Each element of a list is judged; with no target types declared anywhere the rule reports `not-enabled`. A reference that names no record is not this rule's finding but `pointer.resolution`'s, and that rule must be enabled for a dangling link to be reported; a freshly initialised config does not turn it on. Each target type
 must be a declared record type, the list must not be empty, and only a `pointer_fields` entry takes `targets`. A pair
 with `cross_type: false` may list only types that carry its forward field.
 

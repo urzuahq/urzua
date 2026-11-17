@@ -96,7 +96,15 @@ pub(crate) fn collect(content: &str) -> Result<PointerTargets, ConfigError> {
     let doc: Doc = yaml_serde::from_str(crate::config::strip_bom(content))?;
     let mut out = PointerTargets::new();
     for (type_name, decl) in doc.record_types {
-        for entry in decl.pointer_fields.into_iter().flatten() {
+        let entries = decl.pointer_fields.unwrap_or_default();
+        if let Some(name) = repeated_constrained(&entries) {
+            return Err(ConfigError::InvalidPointerTargets {
+                reason: format!(
+                    "record type '{type_name}' pointer_fields lists '{name}' more than once with targets; declare it once"
+                ),
+            });
+        }
+        for entry in entries {
             if let Some(targets) = entry.targets {
                 out.entry(type_name.clone())
                     .or_default()
@@ -105,6 +113,15 @@ pub(crate) fn collect(content: &str) -> Result<PointerTargets, ConfigError> {
         }
     }
     Ok(out)
+}
+
+/// A field listed more than once where any listing carries `targets`: which
+/// constraint was meant is ambiguous. Two bare names are left as they loaded before.
+fn repeated_constrained(entries: &[Entry]) -> Option<&str> {
+    entries.iter().find_map(|e| {
+        let same: Vec<&Entry> = entries.iter().filter(|o| o.name == e.name).collect();
+        (same.len() > 1 && same.iter().any(|o| o.targets.is_some())).then_some(e.name.as_str())
+    })
 }
 
 fn bad(reason: String) -> Result<(), ConfigError> {
@@ -265,6 +282,18 @@ mod tests {
             reason(&cfg("[{name: Parent, targets: []}]", "")).contains("at least one record type")
         );
         assert!(reason(&cfg("[{name: Parent, targets: [b, b]}]", "")).contains("twice"));
+    }
+
+    #[test]
+    fn a_field_listed_twice_with_targets_is_a_load_error_naming_it() {
+        for list in [
+            "[{name: Parent, targets: [b]}, {name: Parent, targets: [a]}]",
+            "[Parent, {name: Parent, targets: [b]}]",
+            "[{name: Parent, targets: [b]}, Parent]",
+        ] {
+            let r = reason(&cfg(list, ""));
+            assert!(r.contains("'Parent' more than once"), "{list}: {r}");
+        }
     }
 
     #[test]
