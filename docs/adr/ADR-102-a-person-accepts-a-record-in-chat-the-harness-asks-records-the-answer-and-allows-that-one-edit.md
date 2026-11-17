@@ -105,8 +105,8 @@ record be amended to say so. He answered: "I'm happy for you to amend ADR 102. I
 same day he said of a typed command: "I also think the typed command would be useful, actually having other typed commands
 in the harness is actually good to have." And an adopting repository's agent relayed his objection to a command that
 accepts a record: it "adds weird behaviour to the engine", because types, statuses and gates are configuration and such a
-command names one status of one profile. Those three things are the maintainer's. Everything marked "specified" below is
-decided by the orchestrator on 2026-11-17, pending maintainer review.
+command names one status of one profile. The first two are his words; the third is that agent's report of his objection. Everything in the list and paragraphs
+below, apart from those, is specified by the orchestrator on 2026-11-17, pending maintainer review.
 
 What prompted it. An adopting repository's maintainer approved a decision record in chat and expected that to be enough;
 the agent's change was then stopped at commit, and the same rule would have stopped the person.
@@ -134,15 +134,19 @@ set by the amendment of 2026-11-16 and rules one mechanism out.
 
 Specified: effect on the Decision's points. Point 1 (the mode) and point 7 (the rule that requires a receipt) are kept.
 Point 2 is narrowed: the refusal names the mechanism the adapter supports, which is now the host's prompt on the edit or
-the typed command, not a structured question. Point 3 is superseded for the first mechanism, where nothing is stored, and
-kept for the typed command. Point 4 is kept for the typed command and does not apply to the host's prompt, whose approval
+the typed command, not a structured question. Point 3 is superseded for the first mechanism, where nothing is stored; for the typed
+command it is kept for what the approval names (the record, the status, the body hash, the session, an expiry), and its
+source changes from the question tool's result to the person's typed input. The subagent clause of point 2 is kept: a call
+made by a subagent is told to hand back to the main session. Point 4 is kept for the typed command and does not apply to the host's prompt, whose approval
 is the edit itself. Point 5 is kept: the harness writes the receipt on either path. Point 6 becomes the first mechanism.
 Point 8 is narrowed: the instructions block tells the agent that its gated edit will prompt the person and that it must
 never change a status without that answer.
 
-Specified: what is written. Approving the host's prompt stores no approval; the edit is allowed or refused. The harness
-writes the receipt in the same edit (the acceptance fields and a revision-log row reading that the move was approved in an
-agent session by the named person), and that receipt is the one record both the local git hook and the rule that checks in
+Specified: what is written. Approving the host's prompt stores no approval; the edit is allowed or refused. After an
+approved edit the harness writes the receipt (the acceptance fields and a revision-log row reading that the move was
+approved in an agent session by the named person), in a following write that the gate allows because it matches the
+approved move; the build determines the hook that does it and must show that no commit can land between the two writes.
+That receipt is the one record both the local git hook and the rule that checks in
 CI who made a gated move read. The typed command stores a one-use approval that the next matching edit consumes, and the
 same receipt is written then. A receipt never states that the person edited the file.
 
