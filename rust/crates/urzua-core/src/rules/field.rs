@@ -261,20 +261,35 @@ pub fn field_leading_reserved_indicator(
     )
 }
 
-/// Whether `field` holds only values its type's `field_values` declares: a
-/// declared word (`Todo`, `pending`) is then a real value, not a marker.
+/// Whether `field` holds a value its type declares for that field (its
+/// `field_values`, or `statuses.values` in the status field), so the engine's
+/// built-in placeholder and pending words do not apply to it: a status named
+/// `Todo` is a real value. A value the type also lists in its own
+/// `statuses.placeholders` or `statuses.pending` is not exempt, since what the
+/// type writes explicitly wins over the inference from its value list.
 fn holds_declared_value(config: &Config, record: &Record, field: &str) -> bool {
-    let Some(allowed) = config
-        .record_types
-        .get(&record.record_type)
-        .and_then(|t| t.field_vocabulary(field))
-    else {
+    let Some(type_config) = config.record_types.get(&record.record_type) else {
         return false;
     };
-    record.header.get(field).is_some_and(|v| {
-        crate::field_values::elements(v).next().is_some()
-            && crate::field_values::undeclared(allowed, v).is_empty()
-    })
+    let Some(value) = record.header.get(field) else {
+        return false;
+    };
+    let in_field_values = type_config.field_vocabulary(field).is_some_and(|allowed| {
+        crate::field_values::elements(value).next().is_some()
+            && crate::field_values::undeclared(allowed, value).is_empty()
+    });
+    let status_field = relation_field_name(
+        config,
+        &record.record_type,
+        crate::config::RelationRole::Status,
+    );
+    let decl = type_config.status_decl();
+    let declared = in_field_values
+        || (field == status_field && decl.as_ref().is_some_and(|d| d.declares(value.trim())));
+    declared
+        && !crate::field_state::vocabularies_of(value, decl.as_ref())
+            .iter()
+            .any(|(_, listed_by_type)| *listed_by_type)
 }
 
 /// The state `field.quality` judges `field` of `record` to be in: against the
@@ -401,9 +416,69 @@ mod tests {
     use super::*;
     use crate::rules::tests::*;
 
-    /// Full builder for the config-level pointer/narrative-field validation
-    /// tests (MILE-90) -- the two helpers above default both new fields to
-    /// `None`, which isn't useful for testing them directly.
+    /// A status value the type declares is a real value in the
+    /// status field, though `todo` is in both default vocabularies; the same
+    /// word in a field that declares no values is still reported.
+    #[test]
+    fn a_declared_status_value_is_not_a_placeholder_or_pending_in_that_field() {
+        let yaml = "schema_version: 2\nrecord_types:\n  task:\n    dir: docs/tasks\n    header_shape: yaml-frontmatter\n    required_fields: [Status, Next]\n    statuses:\n      values: [Todo, InProgress, Done]\n      initial: [Todo]\n      transitions:\n        Todo: [InProgress]\n        InProgress: [Done]\n";
+        let config = crate::config::parse(yaml).unwrap();
+        let record = Record::parse_with_shape_and_prefix(
+            PathBuf::from("docs/tasks/TASK-1-x.md"),
+            "task".to_string(),
+            "---\nStatus: Todo\nNext: Todo\n---\n# 1 - X\n",
+            crate::header::HeaderShape::YamlFrontmatter,
+            "TASK".to_string(),
+        );
+        let templates = crate::new_record::TemplateValues::new();
+        let (_, quality) = field_quality(std::slice::from_ref(&record), &config, &templates);
+        let (_, pending) = field_pending(std::slice::from_ref(&record), &config);
+        let fields = |f: &[Finding]| -> Vec<String> {
+            f.iter()
+                .map(|f| f.message.split('\'').nth(1).unwrap_or_default().to_string())
+                .collect()
+        };
+        assert_eq!(fields(&quality), ["Next"], "{quality:?}");
+        assert!(
+            !fields(&pending).contains(&"Status".to_string()),
+            "{pending:?}"
+        );
+    }
+
+    /// A type that lists its own declared status in its own `statuses.pending`
+    /// keeps that rule: the explicit list wins over the declared-value exemption.
+    #[test]
+    fn a_status_the_type_lists_as_pending_is_still_reported_pending() {
+        let yaml = "schema_version: 2\nrecord_types:\n  task:\n    dir: docs/tasks\n    header_shape: yaml-frontmatter\n    required_fields: [Status]\n    statuses:\n      values: [Draft, Blocked, Done]\n      pending: [Blocked]\n";
+        let config = crate::config::parse(yaml).unwrap();
+        let record = Record::parse_with_shape_and_prefix(
+            PathBuf::from("docs/tasks/TASK-1-x.md"),
+            "task".to_string(),
+            "---\nStatus: Blocked\n---\n# 1 - X\n",
+            crate::header::HeaderShape::YamlFrontmatter,
+            "TASK".to_string(),
+        );
+        let (_, pending) = field_pending(std::slice::from_ref(&record), &config);
+        assert_eq!(pending.len(), 1, "{pending:?}");
+    }
+
+    /// The same for an explicit `statuses.placeholders` entry.
+    #[test]
+    fn a_status_the_type_lists_as_a_placeholder_is_still_reported() {
+        let yaml = "schema_version: 2\nrecord_types:\n  task:\n    dir: docs/tasks\n    header_shape: yaml-frontmatter\n    required_fields: [Status]\n    statuses:\n      values: [Draft, Done]\n      placeholders: [Draft]\n";
+        let config = crate::config::parse(yaml).unwrap();
+        let record = Record::parse_with_shape_and_prefix(
+            PathBuf::from("docs/tasks/TASK-1-x.md"),
+            "task".to_string(),
+            "---\nStatus: Draft\n---\n# 1 - X\n",
+            crate::header::HeaderShape::YamlFrontmatter,
+            "TASK".to_string(),
+        );
+        let templates = crate::new_record::TemplateValues::new();
+        let (_, quality) = field_quality(std::slice::from_ref(&record), &config, &templates);
+        assert_eq!(quality.len(), 1, "{quality:?}");
+    }
+
     /// BUG-65: a type that declares its pending vocabulary is judged by whole
     /// values; a value merely mentioning the word is a real value.
     #[test]

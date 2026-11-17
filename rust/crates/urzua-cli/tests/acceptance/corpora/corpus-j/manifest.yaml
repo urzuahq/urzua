@@ -3,6 +3,8 @@ fixtures:
   irregularity: 'an adr lifecycle graph: Proposed to Accepted to Superseded, starting at Proposed; not a record.'
 - path: .urzua/unreachable.yaml
   irregularity: the same graph with a declared status, Lost, that no edge reaches; not a record.
+- path: .urzua/initial-not-first.yaml
+  irregularity: the same graph with Accepted listed first in statuses.values and Proposed declared initial, so the first value is not the initial state; not a record.
 - path: .urzua/bad-graph.yaml
   irregularity: a graph whose edge names Approved, which statuses.values does not declare; not a record.
 - path: records/ADR-0001-proposed.md

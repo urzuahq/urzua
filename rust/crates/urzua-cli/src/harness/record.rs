@@ -162,10 +162,11 @@ fn new(root: &Path, ty: &str, title: &str) -> ExitCode {
 }
 
 /// The header problems of `now` against the scaffold: a field renamed, added,
-/// removed or moved, or a value the scaffold set (anything but `null`) changed.
+/// removed or moved, or a value the scaffold set changed. A field the scaffold
+/// left empty (`Field:`, or `null` from an older urzua) may be filled.
 fn header_problems(scaffold: &str, now: &str) -> Vec<String> {
     let (old, new) = (header(scaffold), header(now));
-    let key = |l: &str| l.split(": ").next().unwrap_or("").to_string();
+    let key = |l: &str| l.split(':').next().unwrap_or("").to_string();
     let value = |l: &str| match l.find(':') {
         Some(at) => l[at + 1..].trim_start_matches(' ').to_string(),
         None => l.to_string(),
@@ -178,7 +179,7 @@ fn header_problems(scaffold: &str, now: &str) -> Vec<String> {
         );
         if key(o) != key(n) {
             problems.push(format!("header field {} became {}", key(o), key(n)));
-        } else if value(n) != value(o) && value(o) != "null" {
+        } else if value(n) != value(o) && value(o) != "null" && !value(o).is_empty() {
             problems.push(format!(
                 "scaffolded value of {} was changed ({} -> {})",
                 key(o),
@@ -201,7 +202,7 @@ fn finish(root: &Path, path: &str) -> ExitCode {
     let Ok(before) = std::fs::read_to_string(&scaffold) else {
         return fail(2, &format!("{path} was not scaffolded by '{P} new'"));
     };
-    // Never decide: only a field the scaffold left null may change. A scaffolded
+    // Never decide: only a field the scaffold left empty may change. A scaffolded
     // state, date or id is a decision or an identity, not content.
     let problems = header_problems(&before, &now);
     if !problems.is_empty() {
@@ -210,7 +211,7 @@ fn finish(root: &Path, path: &str) -> ExitCode {
         }
         return fail(
             1,
-            "refusing; a drafting command fills null fields and the body only",
+            "refusing; a drafting command fills empty fields and the body only",
         );
     }
     if let Err(e) = git_add(path) {
@@ -462,5 +463,16 @@ mod tests {
             amendment_problems("@@ -1,0 +2 @@\n+## Amendment (d): t\n", "x")[0]
                 .contains("revision-log row")
         );
+    }
+
+    #[test]
+    fn a_field_left_empty_or_null_may_be_filled_and_a_scaffolded_value_may_not_change() {
+        let scaffold = "---\nStatus: Proposed\nDeciders:\nTrack: null\n---\n";
+        let filled = "---\nStatus: Proposed\nDeciders: a\nTrack: t\n---\n";
+        assert!(header_problems(scaffold, filled).is_empty());
+        let decided = "---\nStatus: Accepted\nDeciders: a\nTrack: t\n---\n";
+        let p = header_problems(scaffold, decided);
+        assert_eq!(p.len(), 1, "{p:?}");
+        assert!(p[0].contains("scaffolded value of Status"), "{p:?}");
     }
 }

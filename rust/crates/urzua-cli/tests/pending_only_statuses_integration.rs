@@ -171,7 +171,7 @@ fn new_leaves_the_status_blank_for_a_type_with_no_values() {
         .lines()
         .find(|l| l.starts_with("Status:"))
         .unwrap_or_else(|| panic!("no Status line: {text}"));
-    assert_eq!(status.trim_end(), "Status: null", "{text}");
+    assert_eq!(status.trim_end(), "Status:", "{text}");
 }
 
 /// A type declaring `values` is unchanged: `new` starts it at its first value.
