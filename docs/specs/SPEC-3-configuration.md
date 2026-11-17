@@ -1,9 +1,9 @@
 ---
 Stable-Id: 01M6R3NK5J3T1JRZ9DY1C0PZJF
-Version: '0.156'
+Version: '0.158'
 Date: 2026-08-20
 Status: Shipped
-Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:2c3f3a74884d997bc5cb57b8b9f52d8e4869edd4347b3c7a6b7f279ecfb7f7e4, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:09c2431a269316741c35b51dabd5766ecd3d50fab2b98069314bb1bc8857767d, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:255395e7d2caa34947cef28f463e2ec050e3eba798a4dc7573a3cad946fee1ae
+Realized-by: code:rust/crates/urzua-core/src/config.rs@sha256:92f35c74119ad06535fca61253557eb5e22190ae13e15b6b67eaf834105517bc, test:rust/crates/urzua-cli/tests/own_config_integration.rs@sha256:09c2431a269316741c35b51dabd5766ecd3d50fab2b98069314bb1bc8857767d, test:rust/crates/urzua-cli/tests/field_levels_integration.rs@sha256:255395e7d2caa34947cef28f463e2ec050e3eba798a4dc7573a3cad946fee1ae
 Embodiment: Verified
 Author: beauwilliams
 Subject: '`.urzua/config.yaml` -- the schema for record types, required/known fields, and per-type behavior.'
@@ -142,6 +142,7 @@ Two details carry weight:
     date_column: Date                    # a header cell's name
     tool_class: structural               # what fix writes
     evidence_class: evidence             # what re-pin rows carry (optional)
+    narrative_column: Change             # a created log's narrative header (optional)
   ```
 
   Undeclared, each keeps today's behaviour from defaults held in the engine: `classes` is
@@ -165,7 +166,12 @@ Two details carry weight:
   undeclared), else a load error, and left out of `version_bump.classes` a re-pin needs no version
   bump (`ADR-67` amendment of 2026-11-16, `SPEC-8`). With `classes` undeclared, `version_bump.classes`
   is not checked against the default pair. A declared class absent from `version_bump.classes`
-  requires no bump. These keys are additive and optional, so `schema_version` is unchanged.
+  requires no bump. A `class_column`, `date_column` or `narrative_column` holding `|` or a line
+  break is a load error naming the key: a table header cell cannot hold one. `narrative_column`
+  (optional, default `Change`, not blank) names the middle
+  header cell of a log `fix --rebaseline --apply` or `fix --pin --apply` creates on a record that has
+  none and whose type's template has no log section to copy (`SPEC-8`). These keys are additive and
+  optional, so `schema_version` is unchanged.
 - **A record type may declare that it is the suppression type: `role: suppression`** (`BUG-74`).
   The records of that type suppress the findings they name (`SPEC-10`); the engine reads this
   declaration and knows no type name:
@@ -2847,5 +2853,9 @@ proves this configuration produces the three findings.
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` e56be4912522 -> f74531f49e9c. Reason: config.rs: hooks.<hook> may be a map with command and managed (block or declared) as well as a list, and args() fills in each hook's default; every other key and default is unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **structural** |
 > | 2026-11-16 | Adds `hooks.verify_timeout_seconds` (default 600). **Why:** a fourth review of `MILE-220`'s pull request: `urzua hooks verify --run` ran a hook with no time limit. | **substantive** |
 > | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` f74531f49e9c -> 04472363242c. Reason: config.rs: the hooks key gains verify_timeout_seconds (default 600, at least 1), and hooks.<hook> may be a map with command and managed; every other key and default is unchanged. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-16 | Bumped to `0.156`. Documents the optional `revision_log.narrative_column` (default `Change`): the narrative header cell of a log `fix` creates; it may stand alone. **Why:** `MILE-310` -- the created log's header comes from configuration, not an engine literal. | **substantive** |
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 04472363242c -> 9a0e556d7191. Reason: config.rs adds the optional revision_log.narrative_column key (default Change, not blank, may stand alone) to RevisionLogDecl and RevisionLogShape, leaving a config that omits it unchanged; the claim this record makes still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-16 | Bumped to `0.157`. A revision-log column-name key (`class_column`, `date_column`, `narrative_column`) holding `\|` or a line break is a load error. **Why:** review of `MILE-310`'s pull request -- such a name would break the header of a log `fix` creates. | **substantive** |
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 9a0e556d7191 -> 9b878358f929. Reason: config.rs rejects a pipe or line break in a revision-log column-name key and moves the per-key name checks into named_key_problem; the claim this record makes still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
+> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 9b878358f929 -> 92f35c74119a. Reason: config.rs moves the doc comment of revision_log_problem back above that function, with no change in behaviour; the claim this record makes still holds. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |
 > | 2026-11-16 | Adds target types for reference fields: a `pointer_fields` entry may be `{name, targets}`, and a relation pair may declare `target_types`; both are judged by `pointer.target-type`, and `urzua graph` lists relation-pair edges. **Why:** `MILE-259`: a link to a record of the wrong type could not be expressed as a finding. | **substantive** |
-> | 2026-11-16 | Re-baselined (attested by beauwilliams, identity: gh-verified, actor: agent): re-pinned `rust/crates/urzua-core/src/config.rs` 04472363242c -> 2c3f3a74884d. Reason: Adds declared target types for reference fields (MILE-259). config.rs: a pointer_fields entry may be {name, targets} (the typed parse keeps only names), Config gains a skipped pointer_targets map, RelationPair gains optional target_types, a new load error InvalidPointerTargets; every other key unchanged. rules: new rule pointer.target-type (catalog.rs, pointer.rs, table.rs, default-on at error, not-enabled when nothing is declared); relation.rs cross-type-disallowed defers to it for a claim outside target_types. graph.rs lists relation-pair edges. fix.rs, migrate.rs, property.rs, type_scope.rs, sequence.rs: test fixtures add the new fields only. check_integration.rs: the header-none fixture declares a target list so the new rule is exercised. SPEC-3 documents the keys. **Why:** the pinned evidence changed and an agent re-verified that the claim still holds, to be confirmed by a reviewer in the PR. | **evidence** |

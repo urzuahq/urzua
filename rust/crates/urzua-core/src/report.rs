@@ -1769,6 +1769,23 @@ pub struct FixReport {
     pub identity: Option<AttestationReport>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub notices: Vec<Notice>,
+    /// The command that clears a failure the caller must act on first.
+    #[serde(skip)]
+    pub failure_action: Option<NextAction>,
+    /// The base a planned or created revision log was checked against.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub revision_log_base: Option<RevisionLogBase>,
+}
+
+/// What a run that plans or creates a revision log compared committed copies
+/// against: the base ref, the commit read and whether the ref is
+/// remote-tracking, local or absent.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct RevisionLogBase {
+    #[serde(rename = "ref")]
+    pub reference: Option<String>,
+    pub commit: Option<String>,
+    pub kind: &'static str,
 }
 
 /// The identity `fix --apply` wrote under (`ADR-89` section 5).
@@ -1818,6 +1835,9 @@ impl Report for FixReport {
     fn next_action(&self) -> Option<NextAction> {
         if let Some(next) = unmerged_next_action(&self.notices) {
             return Some(next);
+        }
+        if let Some(next) = &self.failure_action {
+            return Some(next.clone());
         }
         match self.status {
             FixStatus::RepairsAvailable if !self.repairs.is_empty() => {
