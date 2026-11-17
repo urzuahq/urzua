@@ -296,6 +296,11 @@ pub const DEFAULT_ON_RULES: &[DefaultOn] = &[
         under_selection: false,
     },
     DefaultOn {
+        id: RULE_POINTER_TARGET_TYPE,
+        level: crate::config::RuleLevel::Error,
+        under_selection: false,
+    },
+    DefaultOn {
         id: RULE_DIFF_PIN_CHANGED_UNATTESTED,
         level: crate::config::RuleLevel::Error,
         under_selection: false,
@@ -396,6 +401,30 @@ pub const RULE_TABLE: &[RuleDef] = &[
         run: |c| {
             let opts: PointerTargetOpts = c.config.rule_opts(RULE_POINTER_TARGET_STATUS);
             pointer_target_status(c.records, c.config, &opts.not_in, opts.fields.as_deref(), c.index)
+        },
+    },
+    RuleDef {
+        id: RULE_POINTER_TARGET_TYPE,
+        description: "A reference resolves, but its target's record type is outside the types the field declares it may name (`MILE-259`): a `pointer_fields` entry written `{name, targets}`, or a relation pair's `target_types` for its forward field; declared in both places, a target must satisfy both. Each element of a list-valued field is judged. Only a constrained field is in the population; the rule is on by default at `error`, and reports `not-enabled` in a configuration that declares no target types, so such a configuration reports as before. A dangling reference is `pointer.resolution`'s, and a claim this rule reports is not also reported by `relation.cross-type-disallowed`.",
+        scope: Scope::Records,
+        anchor: Anchor::Record,
+        judges: Judges::CrossRecord,
+        needs_identity_index: true,
+        requires_relation_pairs: false,
+        requires_acyclic_pair: false,
+        requires_override_log: false,
+        requires_authority: false,
+        reads_declaration: None,
+        header_none: HeaderNone::OutOfScope,
+        options: &[],
+        population: PopulationUnit::Field,
+        actions: &[
+            VariantAction::new("pointer-target-type", ActionDecl::FIELD_SET),
+        ],
+        phase: Phase::Main,
+        companion: None,
+        run: |c| {
+            pointer_target_type(c.records, c.config, c.index)
         },
     },
     RuleDef {

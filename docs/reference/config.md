@@ -139,7 +139,7 @@ record_types:
 | `header_shape` | `yaml-frontmatter` (default) or `none`. |
 | `required_fields` | Fields every record must carry with a real value. `header.required-fields` and `field.quality` read it. |
 | `known_fields` | The closed set of fields a record may carry besides `required_fields`. Declare it, even as `[]`, to make the field set a conscious choice. |
-| `pointer_fields` | Fields that name other records, resolved by `pointer.resolution`. |
+| `pointer_fields` | Fields that name other records, resolved by `pointer.resolution`. An entry may be `{name: Parent, targets: [epic]}` to limit the record types the field may name; see below. |
 | `narrative_fields` | Fields that name other records without being a dependency. They are resolved like pointer fields and appear in `urzua graph` tagged `narrative`. |
 | `spec` | The id of the spec that documents the type (`SPEC-16`). |
 | `relation_fields` | Which field plays which role, for the tool: `status`, `embodiment_state`, `embodiment_locator`, `supersession`, `date`, `author`, `title`. `new` fills `date`, `author` and `title`. |
@@ -153,6 +153,24 @@ record_types:
 | `rejected_values` | For a suppression type: whole values (compared without case) that never meet an `effective_requires` field or an `Expires`, added to the built-in placeholder words and `pending`, which cannot be removed. |
 | `waiver_fields` | For a suppression type: `{reason: <field>, owner: <field>}`, the fields `urzua waive` writes a draft's reason and owner into; `Reason` and `Owner` by default. `Rule`, `Scope`, `Expires`, `Variant` and `Key-path` are read by name and cannot be renamed. |
 | `fields` | `{from: prefix-lines}` (or `yaml-frontmatter`, or `none`): where a record's fields are read from. `header_shape` is the usual way to say it; `fields` exists for a corpus whose headers are bare `Key: value` lines. |
+
+### Target types of a reference field
+
+A `pointer_fields` entry is a field name or `{name, targets}`. With `targets`, a reference to an existing record of
+any other type is a `pointer.target-type` error, on by default. A relation pair limits its forward field the same way
+with `target_types`:
+
+```yaml
+record_types:
+  story:
+    pointer_fields: [Implements, {name: Parent, targets: [epic]}]
+relation_pairs:
+  - {name: parent, forward: Parent-of, inverse: Child-of, reciprocity: required, target_types: [story]}
+```
+
+Each element of a list is judged; with no target types declared anywhere the rule reports `not-enabled`. A reference that names no record is not this rule's finding but `pointer.resolution`'s, and that rule must be enabled for a dangling link to be reported; a freshly initialised config does not turn it on. Each target type
+must be a declared record type, the list must not be empty, and only a `pointer_fields` entry takes `targets`. A pair
+with `cross_type: false` may list only types that carry its forward field.
 
 ### `statuses`
 

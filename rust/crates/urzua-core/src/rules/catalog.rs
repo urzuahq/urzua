@@ -17,6 +17,7 @@ pub const RULE_CONFIG_HEADER_NONE_HAS_NO_REQUIRED_FIELDS: &str =
 pub const RULE_CONFIG_COMPANION_DECLARATION_MISSING: &str = "config.companion-declaration-missing";
 pub const RULE_POINTER_RESOLUTION: &str = "pointer.resolution";
 pub const RULE_POINTER_TARGET_STATUS: &str = "pointer.target-status";
+pub const RULE_POINTER_TARGET_TYPE: &str = "pointer.target-type";
 pub const RULE_HEADER_POINTER_FIELD_CLEAN: &str = "header.pointer-field-clean";
 pub const RULE_NARRATIVE_FIELD_STALE: &str = "narrative-field.stale";
 pub const RULE_FIELD_QUALITY: &str = "field.quality";
