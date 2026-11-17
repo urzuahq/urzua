@@ -364,7 +364,22 @@ fn translate(dir: &Path, payload: &str) -> serde_json::Value {
 /// reads (`additionalContext` for the agent, `systemMessage` for the person).
 fn translate_event(dir: &Path, event: &str, payload: &str) -> serde_json::Value {
     let project = (event == "session-start").then_some(dir);
-    let out = common::run_hook(dir, event, payload, None, project, &[]);
+    // The session-start check looks for `urzua` on PATH, so the binary under
+    // test is the one it must find, whatever the machine has installed.
+    let bin = Path::new(env!("CARGO_BIN_EXE_urzua")).parent().unwrap();
+    let mut path = vec![common::stub_gh_dir().to_path_buf(), bin.to_path_buf()];
+    path.extend(std::env::split_paths(
+        &std::env::var_os("PATH").unwrap_or_default(),
+    ));
+    let path = std::env::join_paths(path).unwrap();
+    let out = common::run_hook(
+        dir,
+        event,
+        payload,
+        None,
+        project,
+        &[("PATH", path.as_os_str())],
+    );
     assert_eq!(out.status.code(), Some(0), "{out:?}");
     if out.stdout.is_empty() {
         return serde_json::Value::Null;
