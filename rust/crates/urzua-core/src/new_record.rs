@@ -344,85 +344,30 @@ pub fn render_synthetic_yaml(
     .0
 }
 
-/// Why a field `urzua new` wrote still needs an author's value.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum FillReason {
-    /// It carries the template's text for it.
-    Placeholder,
-    /// It is required, the template has no text for it, and it is written as
-    /// the `—` no-value sentinel.
-    RequiredEmpty,
-}
-
-/// A header field `urzua new` wrote without a value of its own (`MILE-322`).
+/// A header field `urzua new` wrote empty, for the author to fill
+/// (`MILE-322`): whether the type requires it, and the template's text for it
+/// as a hint. `new` never writes the hint into the header.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct FieldToFill {
     pub field: String,
-    pub reason: FillReason,
+    pub required: bool,
+    pub hint: Option<String>,
 }
 
-/// How a field `new` has no value for is written (`MILE-322`): the template's
-/// text when it has some, else the `—` sentinel when required, else omitted.
-/// `as_null` keeps the earlier form, every such field `null`, for the scaffold
-/// `header.scaffold-mismatch` compares against, where null means "the author's
-/// to fill".
+/// The template's header text per field, read for `to_fill` hints only.
 #[derive(Default)]
 struct UnsetFields<'a> {
     template_values: Option<&'a std::collections::HashMap<String, String>>,
-    pointer_fields: &'a [String],
-    status_declared: bool,
-    as_null: bool,
 }
-
-const NO_VALUE: &str = "—";
 
 impl UnsetFields<'_> {
-    /// The value to write for unset `field`, or `None` to omit it, and whether
-    /// it still needs filling.
-    fn value(
-        &self,
-        field: &str,
-        required: bool,
-        status_field: &str,
-    ) -> (Option<yaml_serde::Value>, Option<FillReason>) {
-        use yaml_serde::Value;
-        if self.as_null {
-            return (Some(Value::Null), None);
-        }
-        let text = self
-            .template_values
+    fn hint(&self, field: &str) -> Option<String> {
+        self.template_values
             .and_then(|t| t.get(field))
             .map(|v| v.trim())
-            .filter(|v| !v.is_empty() && !matches!(*v, "null" | "~"));
-        // A declared status vocabulary's template line lists the values; it
-        // is not one, and `status.undeclared-value` would report it.
-        let text = text.filter(|_| !(self.status_declared && field == status_field));
-        let is_pointer = self.pointer_fields.iter().any(|p| p == field);
-        let text = text.filter(|t| !is_pointer || pointer_text_is_clean(t));
-        match text {
-            Some(t) if crate::values::is_no_value_sentinel(t) => {
-                (Some(Value::String(t.to_string())), None)
-            }
-            Some(t) => (
-                Some(Value::String(t.to_string())),
-                Some(FillReason::Placeholder),
-            ),
-            None if required => (
-                Some(Value::String(NO_VALUE.to_string())),
-                Some(FillReason::RequiredEmpty),
-            ),
-            None => (None, None),
-        }
+            .filter(|v| !v.is_empty() && !matches!(*v, "null" | "~"))
+            .map(str::to_string)
     }
-}
-
-/// Whether template text for a pointer field would pass
-/// `header.pointer-field-clean`: every entry a reference or the sentinel.
-fn pointer_text_is_clean(text: &str) -> bool {
-    text.split(',')
-        .map(str::trim)
-        .all(|e| crate::values::is_no_value_sentinel(e) || crate::rules::is_record_reference(e))
 }
 
 /// What [`render_yaml_with`] writes: the type's required and template fields,
@@ -463,18 +408,12 @@ fn render_yaml_with(params: &NewRecordParams, plan: &HeaderPlan) -> (String, Vec
             mapping.insert(key, value);
             continue;
         }
-        let (value, reason) = plan
-            .unset
-            .value(field, required(field), params.status_field);
-        if let Some(value) = value {
-            mapping.insert(key, value);
-        }
-        if let Some(reason) = reason {
-            to_fill.push(FieldToFill {
-                field: field.clone(),
-                reason,
-            });
-        }
+        mapping.insert(key, Value::Null);
+        to_fill.push(FieldToFill {
+            field: field.clone(),
+            required: required(field),
+            hint: plan.unset.hint(field),
+        });
     }
 
     for field in plan.omitted {
@@ -493,13 +432,36 @@ fn render_yaml_with(params: &NewRecordParams, plan: &HeaderPlan) -> (String, Vec
 
     let yaml_body = yaml_serde::to_string(&Value::Mapping(mapping)).unwrap_or_default();
     let mut out = String::from("---\n");
-    out.push_str(yaml_body.trim_start_matches("---\n"));
+    out.push_str(&without_null_scalars(
+        yaml_body.trim_start_matches("---\n"),
+        &to_fill,
+    ));
     if !out.ends_with('\n') {
         out.push('\n');
     }
     out.push_str("---\n");
     out.push_str(&format!("# {} — {}\n", params.h1_number(), params.title));
     (out, to_fill)
+}
+
+/// `yaml` with each `Field: null` line of a field to fill written `Field:`:
+/// the same YAML null, read the same by every rule, without the word `null`
+/// an author might take for a value.
+fn without_null_scalars(yaml: &str, to_fill: &[FieldToFill]) -> String {
+    let mut out = String::with_capacity(yaml.len());
+    for line in yaml.lines() {
+        let key = line.strip_suffix(": null");
+        let unquoted = key.map(|k| k.trim_matches(|c| c == '\'' || c == '"'));
+        match (key, unquoted) {
+            (Some(k), Some(u)) if to_fill.iter().any(|f| f.field == u) => {
+                out.push_str(k);
+                out.push(':');
+            }
+            _ => out.push_str(line),
+        }
+        out.push('\n');
+    }
+    out
 }
 
 /// The value `new` resolves for `field` itself: the date, the author, the
@@ -554,11 +516,6 @@ pub struct ScaffoldSpec<'a> {
     /// The narrative of a first revision-log row, written under the log's own
     /// layout when the type declares a log. `None` writes none.
     pub log_row: Option<&'a str>,
-    /// Write every field `new` has no value for as `null` rather than the
-    /// template's text, the sentinel or nothing: the scaffold
-    /// `header.scaffold-mismatch` compares against, where null marks a field
-    /// the author may fill or leave out.
-    pub unset_as_null: bool,
 }
 
 impl<'a> ScaffoldSpec<'a> {
@@ -592,7 +549,6 @@ impl<'a> ScaffoldSpec<'a> {
             omit_fields: &[],
             extra_body: None,
             log_row: None,
-            unset_as_null: false,
         }
     }
 }
@@ -649,9 +605,6 @@ pub fn scaffold_record_reporting(
     let template_values = template.map(template_header_values);
     let unset = UnsetFields {
         template_values: template_values.as_ref(),
-        pointer_fields: type_config.pointer_fields.as_deref().unwrap_or_default(),
-        status_declared: status_decl.is_some(),
-        as_null: spec.unset_as_null,
     };
     let (mut out, to_fill) = render_yaml_with(
         &params,
@@ -1052,7 +1005,7 @@ mod tests {
     }
 
     #[test]
-    fn render_synthetic_yaml_writes_unset_required_fields_as_the_sentinel() {
+    fn render_synthetic_yaml_writes_unset_fields_empty() {
         let params = NewRecordParams {
             h1_prefix: None,
             h1_width: 0,
@@ -1071,10 +1024,10 @@ mod tests {
         let required = vec!["Status".to_string(), "Severity".to_string()];
         let result = render_synthetic_yaml(&params, &required, &[]);
         assert!(result.starts_with("---\n"));
-        // No template text and no value: a required field is written as the
-        // `—` sentinel, never `null` (`MILE-322`).
-        assert!(result.contains("Status: —\n"), "{result}");
-        assert!(result.contains("Severity: —\n"), "{result}");
+        // No value: the field is written empty, never `null` or a stand-in
+        // (`MILE-322`).
+        assert!(result.contains("\nStatus:\n"), "{result}");
+        assert!(result.contains("\nSeverity:\n"), "{result}");
         assert!(!result.contains("null"), "{result}");
         assert!(result.contains("# 1 — X"));
     }
@@ -1273,7 +1226,7 @@ mod tests {
             "{rendered}"
         );
         assert!(rendered.contains("Owner: beau"), "{rendered}");
-        assert!(rendered.contains("Date: —"), "{rendered}");
+        assert!(rendered.contains("\nDate:\n"), "{rendered}");
     }
 
     #[test]
@@ -1304,15 +1257,15 @@ mod tests {
             rendered.contains("Version: '0.1'") || rendered.contains("Version: \"0.1\""),
             "a version stays a string: {rendered}"
         );
-        assert!(rendered.contains("Other: —"), "{rendered}");
+        assert!(rendered.contains("\nOther:\n"), "{rendered}");
         let undeclared = NewRecordParams {
             title_field: None,
             initial_version: None,
             ..params
         };
         let rendered = render_synthetic_yaml(&undeclared, &required, &[]);
-        assert!(rendered.contains("Subject: —"), "{rendered}");
-        assert!(rendered.contains("Version: —"), "{rendered}");
+        assert!(rendered.contains("\nSubject:\n"), "{rendered}");
+        assert!(rendered.contains("\nVersion:\n"), "{rendered}");
     }
 
     #[test]
@@ -1338,7 +1291,7 @@ mod tests {
         assert!(rendered.contains("# ADR-4 — T\n"), "{rendered}");
         params.initial_status = None;
         let rendered = render_synthetic_yaml(&params, &["State".to_string()], &[]);
-        assert!(rendered.contains("State: —"), "{rendered}");
+        assert!(rendered.contains("\nState:\n"), "{rendered}");
     }
 
     #[test]
@@ -1371,17 +1324,15 @@ mod tests {
             omit_fields: &[],
             extra_body: None,
             log_row: None,
-            unset_as_null: false,
         };
         let out = scaffold_record(&spec, Some(template));
         // Header: generated id, filled author, blank decisions, the declared
         // template field kept and the undeclared one dropped.
         assert!(out.starts_with("---\nStable-Id: 01SYNTH\n"), "{out}");
         assert!(out.contains("Author: tester\n"), "{out}");
-        // A template value of `null` is no text: the required field takes the
-        // sentinel and the optional one is left out (`MILE-322`).
-        assert!(out.contains("Status: —\n"), "{out}");
-        assert!(!out.contains("Note"), "{out}");
+        // Fields `new` has no value for are written empty (`MILE-322`).
+        assert!(out.contains("\nStatus:\n"), "{out}");
+        assert!(out.contains("\nNote:\n"), "{out}");
         assert!(!out.contains("Other"), "{out}");
         assert!(out.contains("# 3 — Synthetic\n"), "{out}");
         // The template's body scaffolding follows the synthesized header.
@@ -1505,7 +1456,7 @@ mod tests {
         };
         let out = scaffold_record(&spec, Some(WAIVER_TEMPLATE));
         assert!(!out.contains("Expires"), "{out}");
-        assert!(!out.contains("Owner"), "{out}");
+        assert!(out.contains("\nOwner:\n"), "{out}");
     }
 
     #[test]
@@ -1523,23 +1474,26 @@ mod tests {
             "2026-11-13",
         );
         let out = scaffold_record(&spec, Some(WAIVER_TEMPLATE));
-        assert!(out.contains("Rule: —\nScope: —\nReason: —\n---\n"), "{out}");
+        assert!(
+            out.contains("Rule:\nScope:\nReason:\nExpires:\nOwner:\n---\n"),
+            "{out}"
+        );
         assert!(out.ends_with("> |---|---|---|\n"), "{out}");
     }
 
-    /// `MILE-322`: a field `new` has no value for carries the template's text,
-    /// is listed to fill, and an optional pointer field whose template text is
-    /// not a clean reference is left out rather than written as prose.
+    /// `MILE-322`: a field `new` has no value for is written empty, required or
+    /// optional, pointer or not; `to_fill` lists it with the template's text as
+    /// a hint, and the header never carries that text.
     #[test]
-    fn unset_fields_carry_the_template_text_and_are_listed_to_fill() {
+    fn unset_fields_are_written_empty_and_listed_with_the_template_hint() {
         let type_config = crate::config::RecordTypeConfig {
             dir: "docs/x".to_string(),
             required_fields: vec!["Kind".to_string(), "Owner".to_string()],
-            known_fields: Some(vec!["Parent".to_string(), "Replaces".to_string()]),
-            pointer_fields: Some(vec!["Parent".to_string(), "Replaces".to_string()]),
+            known_fields: Some(vec!["Parent".to_string()]),
+            pointer_fields: Some(vec!["Parent".to_string()]),
             ..Default::default()
         };
-        let template = "---\nKind: feature | bug | chore\nOwner:\nParent: the record this belongs to\nReplaces: —\n---\n# 0 -- T\n\n## What\n";
+        let template = "---\nKind: feature | bug | chore\nOwner:\nParent: the record this belongs to\n---\n# 0 -- T\n\n## What\n";
         let spec = ScaffoldSpec::plain(
             &type_config,
             None,
@@ -1552,31 +1506,32 @@ mod tests {
             "2026-11-17",
         );
         let (out, to_fill) = scaffold_record_reporting(&spec, Some(template));
-        assert!(out.contains("Kind: feature | bug | chore\n"), "{out}");
-        assert!(out.contains("Owner: —\n"), "{out}");
-        assert!(!out.contains("Parent"), "{out}");
-        assert!(out.contains("Replaces: —\n"), "{out}");
+        assert!(out.contains("\nKind:\nOwner:\nParent:\n---\n"), "{out}");
         assert!(!out.contains("null"), "{out}");
+        assert!(!out.contains("feature"), "{out}");
+        assert!(!out.contains("belongs"), "{out}");
+        let hint = |s: &str| Some(s.to_string());
         assert_eq!(
             to_fill,
             vec![
                 FieldToFill {
                     field: "Kind".to_string(),
-                    reason: FillReason::Placeholder
+                    required: true,
+                    hint: hint("feature | bug | chore"),
                 },
                 FieldToFill {
                     field: "Owner".to_string(),
-                    reason: FillReason::RequiredEmpty
+                    required: true,
+                    hint: None,
+                },
+                FieldToFill {
+                    field: "Parent".to_string(),
+                    required: false,
+                    hint: hint("the record this belongs to"),
                 },
             ]
         );
-        let compared = scaffold_record(
-            &ScaffoldSpec {
-                unset_as_null: true,
-                ..spec
-            },
-            Some(template),
-        );
-        assert!(compared.contains("Kind: null\n"), "{compared}");
+        let header = crate::header::parse(&out);
+        assert_eq!(header.get("Kind").map(str::trim), Some(""));
     }
 }

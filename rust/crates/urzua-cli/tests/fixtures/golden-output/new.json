@@ -34,13 +34,15 @@
     "to_fill": [
       {
         "field": "Status",
-        "reason": "required-empty"
+        "hint": null,
+        "required": true
       },
       {
         "field": "Embodiment",
-        "reason": "required-empty"
+        "hint": null,
+        "required": true
       }
     ]
   },
-  "written": "---\nStable-Id: <STABLE-ID>\nStatus: —\nEmbodiment: —\n---\n# 4 — Golden title\n"
+  "written": "---\nStable-Id: <STABLE-ID>\nStatus:\nEmbodiment:\n---\n# 4 — Golden title\n"
 }

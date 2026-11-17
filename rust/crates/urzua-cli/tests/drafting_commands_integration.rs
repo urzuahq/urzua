@@ -169,7 +169,12 @@ fn fill(record: &Path) {
                     _ => None,
                 }
             };
-            if let Some((key, "null")) = line.split_once(": ") {
+            // `urzua new` writes a field to fill empty (`Key:`); an older one
+            // wrote `Key: null`.
+            let empty = line
+                .strip_suffix(':')
+                .or_else(|| line.strip_suffix(": null"));
+            if let Some(key) = empty {
                 if let Some(v) = value(key) {
                     out.push_str(&format!("{key}: {v}\n"));
                     continue;

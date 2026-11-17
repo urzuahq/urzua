@@ -393,9 +393,6 @@ mod tests {
     use super::*;
     use crate::rules::tests::*;
 
-    /// Full builder for the config-level pointer/narrative-field validation
-    /// tests (MILE-90) -- the two helpers above default both new fields to
-    /// `None`, which isn't useful for testing them directly.
     /// MILE-324: a status value the type declares is a real value in the
     /// status field, though `todo` is in both default vocabularies; the same
     /// word in a field that declares no values is still reported.

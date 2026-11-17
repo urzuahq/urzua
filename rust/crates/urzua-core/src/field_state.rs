@@ -138,18 +138,35 @@ fn classify_inner(
     FieldState::Present
 }
 
-/// Which of the type's vocabularies, `placeholder` or `pending`, would read
-/// `value` as a marker: the declared words when the type declares them, else
-/// the compiled-in ones. `None` when neither does.
-pub fn default_vocabulary_of(
+/// Each of the type's vocabularies, `placeholder` and `pending`, that reads
+/// `value` as a marker, and whether the type listed it there itself rather than
+/// inheriting the compiled-in words: a declared value in its own declared
+/// vocabulary contradicts the declaration (`MILE-324`).
+pub fn vocabularies_of(
     value: &str,
     declared: Option<&crate::status_model::StatusDecl>,
-) -> Option<&'static str> {
-    match classify_with(Some(value), declared) {
-        FieldState::Placeholder => Some("placeholder"),
-        FieldState::Pending => Some("pending"),
-        _ => None,
+) -> Vec<(&'static str, bool)> {
+    let trimmed = value.trim();
+    let mut out = Vec::new();
+    if trimmed.is_empty() {
+        return out;
     }
+    let lower = trimmed.to_ascii_lowercase();
+    let own_placeholders = declared.and_then(|d| d.placeholders.as_deref());
+    let word = match own_placeholders {
+        Some(_) => trimmed.to_lowercase(),
+        None => lower.clone(),
+    };
+    if is_placeholder_word(&word, own_placeholders) || is_placeholder_reference(&lower) {
+        out.push(("placeholder", own_placeholders.is_some()));
+    }
+    match declared.and_then(|d| d.is_pending_value(trimmed)) {
+        Some(true) => out.push(("pending", true)),
+        Some(false) => {}
+        None if has_pending_word(&lower) || lower == "todo" => out.push(("pending", false)),
+        None => {}
+    }
+    out
 }
 
 /// The compiled-in vocabulary read against the WHOLE trimmed value, case

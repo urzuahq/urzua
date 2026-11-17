@@ -159,20 +159,17 @@ pub(crate) fn scaffold_header_for(
     let author = own(record.header.get(type_config.author_field()));
     let today = own(record.header.get(type_config.date_field()));
     let text = crate::new_record::scaffold_record(
-        &crate::new_record::ScaffoldSpec {
-            unset_as_null: true,
-            ..crate::new_record::ScaffoldSpec::plain(
-                type_config,
-                compiled.as_ref(),
-                &record.type_prefix,
-                file_name,
-                number,
-                &title,
-                &stable_id,
-                &author,
-                &today,
-            )
-        },
+        &crate::new_record::ScaffoldSpec::plain(
+            type_config,
+            compiled.as_ref(),
+            &record.type_prefix,
+            file_name,
+            number,
+            &title,
+            &stable_id,
+            &author,
+            &today,
+        ),
         template,
     );
     Some(crate::header::parse(&text))

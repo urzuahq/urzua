@@ -375,30 +375,53 @@ fn config_shape_checks(
     }
 }
 
-/// One `info` check per declared status value that the type's placeholder or
-/// pending vocabulary also holds (`MILE-324`). The value is exempt in the
-/// status field, so nothing is wrong; the overlap is named so a reader of the
-/// same word in another field knows why it is reported there.
+/// One check per value a type declares for a field (its status values, and
+/// each `field_values` entry) that a placeholder or pending vocabulary also
+/// reads as a marker (`MILE-324`). The value is exempt in its own field, so an
+/// overlap with the compiled-in words is `info`; a value the type itself lists
+/// under `statuses.placeholders` or `statuses.pending` contradicts its own
+/// declaration and is `warn`. Each names every vocabulary that matched.
 fn declared_value_vocabulary_checks(
     config: &urzua_core::config::Config,
     checks: &mut Vec<DoctorCheck>,
 ) {
     for name in config.sorted_type_names() {
-        let Some(decl) = config.record_types[name].status_decl() else {
-            continue;
-        };
-        for value in &decl.values {
-            if let Some(vocabulary) =
-                urzua_core::field_state::default_vocabulary_of(value, Some(&decl))
-            {
-                checks.push(DoctorCheck::new(
-                    "declared-value-vocabulary",
-                    DoctorStatus::Info,
-                    format!(
-                        "record type '{name}' declares status '{value}', which is also in the {vocabulary} vocabulary -- it is a real value in the status field and still reported in any other field"
-                    ),
-                ));
+        let type_config = &config.record_types[name];
+        let decl = type_config.status_decl();
+        let status_field = type_config.relation_field(urzua_core::config::RelationRole::Status);
+        let mut declared: Vec<(&str, &str)> = decl
+            .iter()
+            .flat_map(|d| d.values.iter().map(|v| (status_field, v.as_str())))
+            .collect();
+        for (field, values) in type_config.field_values.iter().flatten() {
+            declared.extend(values.iter().map(|v| (field.as_str(), v.as_str())));
+        }
+        for (field, value) in declared {
+            let matched = urzua_core::field_state::vocabularies_of(value, decl.as_ref());
+            if matched.is_empty() {
+                continue;
             }
+            let own = matched.iter().any(|(_, own)| *own);
+            let names: Vec<&str> = matched.iter().map(|(v, _)| *v).collect();
+            let (status, consequence) = if own {
+                (
+                    DoctorStatus::Warn,
+                    "the type lists it there itself, contradicting its own declaration; remove it from that list",
+                )
+            } else {
+                (
+                    DoctorStatus::Info,
+                    "it is a real value in that field and still reported in any other field",
+                )
+            };
+            checks.push(DoctorCheck::new(
+                "declared-value-vocabulary",
+                status,
+                format!(
+                    "record type '{name}' declares '{value}' for field '{field}', which the {} vocabulary also reads as a marker -- {consequence}",
+                    names.join(" and ")
+                ),
+            ));
         }
     }
 }

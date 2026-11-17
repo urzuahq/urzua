@@ -347,7 +347,7 @@ pub(super) fn strip_possessive(token: &str) -> &str {
 /// Shares its segment grammar with [`crate::new_record::parse_record_filename`]
 /// (`BUG-133`): two independent copies of "is this a valid record identifier"
 /// is how they drifted apart once already (`BUG-114`).
-pub(crate) fn is_record_reference(token: &str) -> bool {
+pub(super) fn is_record_reference(token: &str) -> bool {
     use crate::new_record::{is_digit_segment, is_prefix_segment};
 
     let segments: Vec<&str> = token.split('-').collect();
