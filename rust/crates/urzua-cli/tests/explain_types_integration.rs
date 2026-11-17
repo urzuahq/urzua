@@ -12,11 +12,13 @@ const FIXTURE: &str = include_str!("fixtures/explain_types/config.yaml");
 const EVERY_KEY: &str = include_str!("fixtures/explain_types/every_key.yaml");
 
 /// The summary of the three-type fixture, as printed, stays under this many bytes.
-const MAX_SUMMARY_BYTES: usize = 2_350;
+const MAX_SUMMARY_BYTES: usize = 1_900;
+/// The summary of the fixture declaring every added key stays under this many bytes.
+const MAX_CHECKLIST_SUMMARY_BYTES: usize = 1_500;
 /// The full report of the three-type fixture stays under this many bytes.
-const MAX_FULL_BYTES: usize = 10_400;
+const MAX_FULL_BYTES: usize = 10_800;
 /// The summary of this repository's own configuration stays under this many bytes.
-const MAX_OWN_SUMMARY_BYTES: usize = 6_050;
+const MAX_OWN_SUMMARY_BYTES: usize = 6_200;
 
 fn repo(name: &str, config: &str) -> common::TempDir {
     let dir = common::TempDir::new(&format!("urzua-explain-types-{name}"));
@@ -109,11 +111,12 @@ fn every_declaration_is_reported_with_its_position() {
     assert_eq!(issue["header_shape"]["value"], "yaml-frontmatter");
     assert_eq!(
         issue["template"],
-        json!({"value": ".urzua/templates/issue.md", "default": true, "source": "conventional_template_path"})
+        json!({"value": ".urzua/templates/issue.md", "default": true, "source": "conventional_template_path", "exists_when_run": true})
     );
-    assert!(
-        of(&r, "task").get("template").is_none(),
-        "no file, no entry"
+    assert_eq!(
+        of(&r, "task")["template"],
+        json!({"value": ".urzua/templates/task.md", "default": true, "source": "conventional_template_path", "exists_when_run": false}),
+        "the path is printed with the fact that no file is there"
     );
     assert_eq!(field(issue, "Kind")["required"], true);
     assert_eq!(
@@ -209,7 +212,13 @@ fn the_summary_is_compact_and_points_at_the_detail() {
     assert_eq!(issue["required"], json!(["State", "Kind", "Stable-Id"]));
     assert_eq!(issue["references"]["Fixes"], json!(["task"]));
     assert_eq!(issue["states"]["initial"], json!(["Open"]));
-    assert_eq!(issue["conditions"], 2);
+    assert_eq!(
+        issue["conditions"],
+        json!([
+            "declared: when State is Closed and Kind is bug, Severity is required",
+            "declared: when State is Open, Fixes is forbidden"
+        ])
+    );
     assert_eq!(
         of(&r, "task")["prefix"],
         json!({"value": "TASK", "default": true, "source": "type_name_uppercased"})
@@ -242,6 +251,12 @@ fn the_reports_stay_under_their_sizes() {
         full < MAX_FULL_BYTES,
         "{full} bytes: three-type full report"
     );
+    let declared = repo("size-declared", CHECKLIST);
+    let all = bytes(&declared, &["explain", "--types"]);
+    assert!(
+        all < MAX_CHECKLIST_SUMMARY_BYTES,
+        "{all} bytes: summary with gates, values, conditions, classes and a checklist"
+    );
     let own = bytes(&own_root(), &["explain", "--types"]);
     assert!(
         own < MAX_OWN_SUMMARY_BYTES,
@@ -261,7 +276,7 @@ fn a_bare_type_prints_nothing_it_does_not_declare() {
     keys.sort();
     assert_eq!(
         keys,
-        ["at", "create_command", "dirs", "name", "prefix"],
+        ["at", "create_command", "dirs", "name", "prefix", "template"],
         "{note}"
     );
     assert_eq!(note["prefix"]["default"], true);
@@ -847,4 +862,274 @@ relation_pairs:
     assert_eq!(down["inverse"], "Down");
     assert_eq!(down["at"], "relation_pairs[0]:12");
     assert!(down.get("target_types").is_none());
+}
+
+const CHECKLIST: &str = include_str!("fixtures/explain_types/checklist.yaml");
+
+fn line_of(config: &str, needle: &str) -> usize {
+    config
+        .lines()
+        .position(|l| l.contains(needle))
+        .unwrap_or_else(|| panic!("no line holds {needle}"))
+        + 1
+}
+
+fn summary_of(dir: &Path) -> Value {
+    run(dir, &["explain", "--types"]).1
+}
+
+fn detail_of(dir: &Path, name: &str) -> Value {
+    of(&run(dir, &["explain", "--type", name]).1, name).clone()
+}
+
+#[test]
+fn the_summary_carries_what_a_type_declares_to_gate_constrain_and_log() {
+    let dir = repo("summary-additions", CHECKLIST);
+    let task = of(&summary_of(&dir), "task").clone();
+    assert_eq!(
+        task["gated"],
+        json!({"Done": ["owners", "leads"], "WontDo": "leads"}),
+        "a status two gates name lists both groups, in declaration order; no logins"
+    );
+    assert_eq!(task["field_values"], json!({"Kind": ["feature", "fix"]}));
+    assert_eq!(
+        task["conditions"],
+        json!(["declared: when Status is Done and Kind is fix, Author is required"])
+    );
+    assert_eq!(task["revision_log_classes"], json!(["major", "minor"]));
+    assert_eq!(
+        task["checklist"],
+        json!({
+            "section": "Acceptance",
+            "evidence": {"code": "Implemented", "record": "Decided", "spec": "Specified", "test": "Verified"},
+            "resolving_tiers": ["Implemented", "Verified", "Decided"]
+        }),
+        "every category has a declared tier, so none is listed as without one"
+    );
+}
+
+#[test]
+fn a_type_that_declares_none_of_it_has_none_of_the_keys() {
+    let dir = repo("summary-absent", CHECKLIST);
+    let note = of(&summary_of(&dir), "note").clone();
+    let keys: Vec<&String> = note.as_object().unwrap().keys().collect();
+    for absent in [
+        "gated",
+        "field_values",
+        "conditions",
+        "revision_log_classes",
+        "checklist",
+    ] {
+        assert!(!keys.iter().any(|k| *k == absent), "{absent} in {note}");
+    }
+    let dir = repo("summary-absent-fixture", FIXTURE);
+    let s = summary_of(&dir);
+    let issue = of(&s, "issue");
+    assert!(
+        issue.get("revision_log_classes").is_none(),
+        "a revision_log that declares no classes adds no key: {issue}"
+    );
+    assert!(issue.get("checklist").is_none(), "{issue}");
+    let task = of(&s, "task");
+    assert!(task.get("gated").is_none() && task.get("field_values").is_none());
+    assert!(task.get("conditions").is_none(), "no count either: {task}");
+}
+
+#[test]
+fn the_summary_values_are_the_detail_values() {
+    let dir = repo("one-source", CHECKLIST);
+    let s = summary_of(&dir);
+    let summary = of(&s, "task");
+    let detail = detail_of(&dir, "task");
+    for f in detail["header_fields"].as_array().unwrap() {
+        if let Some(values) = f.get("values") {
+            assert_eq!(
+                summary["field_values"][f["name"].as_str().unwrap()],
+                values["value"]
+            );
+        }
+    }
+    let sentences: Vec<&Value> = detail["conditions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| &c["sentence"])
+        .collect();
+    assert_eq!(
+        summary["conditions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .collect::<Vec<_>>(),
+        sentences
+    );
+    for g in detail["gates"].as_array().unwrap() {
+        for status in g["to"].as_array().unwrap() {
+            let shown = &summary["gated"][status.as_str().unwrap()];
+            let by = &g["by"];
+            assert!(
+                shown == by || shown.as_array().is_some_and(|a| a.contains(by)),
+                "{status}: {shown} vs {by}"
+            );
+        }
+    }
+    assert_eq!(
+        summary["revision_log_classes"],
+        detail["revision_log"]["value"]["classes"]
+    );
+    let checklist = &detail["checklist"];
+    assert_eq!(
+        summary["checklist"]["section"],
+        checklist["section"]["value"]
+    );
+    assert_eq!(
+        summary["checklist"]["resolving_tiers"],
+        checklist["resolving_tiers"]["value"]
+    );
+    for row in checklist["evidence_tiers"].as_array().unwrap() {
+        let category = row["category"].as_str().unwrap();
+        match row.get("tier") {
+            Some(tier) => assert_eq!(summary["checklist"]["evidence"][category], *tier),
+            None => assert!(summary["checklist"]["no_tier_declares"]
+                .as_array()
+                .unwrap()
+                .contains(&row["category"])),
+        }
+    }
+}
+
+#[test]
+fn a_checklist_names_its_categories_tiers_and_where_each_is_declared() {
+    let dir = repo("checklist-detail", CHECKLIST);
+    let c = detail_of(&dir, "task")["checklist"].clone();
+    assert_positions(&c);
+    assert_eq!(
+        c["section"]["at"],
+        format!(
+            "record_types.task.statuses.delivery.items.section:{}",
+            line_of(CHECKLIST, "section: Acceptance")
+        )
+    );
+    assert_eq!(c["evidence_marker"]["value"], "evidence:");
+    assert_eq!(
+        c["evidence_categories"],
+        json!({"value": ["spec", "code", "test", "record"], "source": "engine_locator_categories"})
+    );
+    let rows = c["evidence_tiers"].as_array().unwrap();
+    let row = |category: &str| rows.iter().find(|r| r["category"] == category).unwrap();
+    assert_eq!(
+        row("code"),
+        &json!({
+            "category": "code",
+            "tier": "Implemented",
+            "in_resolving_tiers": true,
+            "at": format!("embodiment.tiers[1]:{}", line_of(CHECKLIST, "evidence: code"))
+        })
+    );
+    assert_eq!(row("record")["tier"], "Decided");
+    assert_eq!(
+        row("spec")["in_resolving_tiers"],
+        false,
+        "a tier the type does not list as resolving"
+    );
+    assert_eq!(
+        c["resolving_tiers"]["at"],
+        format!(
+            "record_types.task.statuses.delivery.items.resolving_tiers:{}",
+            line_of(CHECKLIST, "resolving_tiers:")
+        )
+    );
+    assert_eq!(
+        c["resolving_tiers"]["value"],
+        json!(["Implemented", "Verified", "Decided"])
+    );
+    let form = c["locator_form"]["value"].as_str().unwrap();
+    assert!(form.contains("`<category>:<locator>`") && form.contains("path[#scope][@anchor]"));
+    assert_eq!(c["locator_form"]["source"], "engine_locator_grammar");
+}
+
+#[test]
+fn without_declared_tiers_or_resolving_tiers_the_engines_are_shown_as_defaults() {
+    let config = CHECKLIST
+        .replace(
+            "          resolving_tiers: [Implemented, Verified, Decided]\n",
+            "",
+        )
+        .split("embodiment:")
+        .next()
+        .unwrap()
+        .to_string()
+        + "authority:\n  deciders:\n    owners: {logins: [someone]}\n";
+    let dir = repo("checklist-defaults", &config);
+    let c = detail_of(&dir, "task")["checklist"].clone();
+    assert_positions(&c);
+    assert_eq!(
+        c["resolving_tiers"],
+        json!({"value": ["Implemented", "Verified"], "default": true, "source": "delivered_tiers"})
+    );
+    let rows = c["evidence_tiers"].as_array().unwrap();
+    let code = rows.iter().find(|r| r["category"] == "code").unwrap();
+    assert_eq!(code["default"], true);
+    assert_eq!(code["source"], "built_in_embodiment_tiers");
+    assert!(code.get("at").is_none());
+    let record = rows.iter().find(|r| r["category"] == "record").unwrap();
+    assert_eq!(record["no_tier_declares_it"], true);
+    let s = summary_of(&dir);
+    let marker = &of(&s, "task")["checklist"];
+    assert_eq!(
+        marker["resolving_tiers"],
+        json!({"value": ["Implemented", "Verified"], "default": true, "source": "delivered_tiers"})
+    );
+    assert_eq!(marker["evidence"]["default"], true);
+    assert_eq!(marker["no_tier_declares"], json!(["record"]));
+}
+
+#[test]
+fn the_summary_puts_scalar_arrays_on_one_line_and_the_other_outputs_do_not() {
+    let dir = repo("format", FIXTURE);
+    let text = |args: &[&str]| {
+        String::from_utf8(
+            common::urzua()
+                .args(args)
+                .current_dir(&dir)
+                .output()
+                .unwrap()
+                .stdout,
+        )
+        .unwrap()
+    };
+    let summary = text(&["explain", "--types"]);
+    assert!(
+        summary.contains("\"dirs\": [\"docs/issues\", \"docs/issues-archive\"],"),
+        "{summary}"
+    );
+    serde_json::from_str::<Value>(&summary).unwrap();
+    assert_eq!(summary, text(&["explain", "--types"]), "deterministic");
+    for args in [
+        &["explain", "--types", "--full"][..],
+        &["explain", "--type", "issue"][..],
+    ] {
+        let t = text(args);
+        assert!(
+            t.contains("\"value\": [\n"),
+            "{args:?} keeps one element per line"
+        );
+    }
+}
+
+#[test]
+fn the_template_says_whether_its_file_exists() {
+    let dir = repo("template-exists", FIXTURE);
+    std::fs::write(dir.join(".urzua/templates/issue.md"), "# {title}\n").unwrap();
+    for (name, exists) in [("issue", true), ("task", false)] {
+        let t = detail_of(&dir, name)["template"].clone();
+        assert_eq!(t["exists_when_run"], exists, "{t}");
+        assert_eq!(t["value"], format!(".urzua/templates/{name}.md"));
+        assert_eq!(t["default"], true);
+    }
+    std::fs::remove_file(dir.join(".urzua/templates/issue.md")).unwrap();
+    assert_eq!(
+        detail_of(&dir, "issue")["template"]["exists_when_run"],
+        false
+    );
 }

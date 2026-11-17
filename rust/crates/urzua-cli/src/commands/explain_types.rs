@@ -3,7 +3,8 @@
 //! its key path and line (`path:line`). Four entries the configuration does
 //! not declare are printed, marked `"default": true` with a `source` and no
 //! `at`: an undeclared initial state, a rule on by declaration, an undeclared
-//! identifier prefix, and the conventional template file when it exists.
+//! identifier prefix, and the conventional template path with whether that
+//! file exists when the command runs.
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -11,13 +12,14 @@ use std::process::ExitCode;
 use serde::Serialize;
 use serde_json::{json, Map, Value};
 use urzua_core::config::{Config, RecordTypeConfig};
+use urzua_core::locator::{CATEGORIES, GRAMMAR};
 use urzua_core::report::{ActionInput, Failure, NextAction, Notice, Report, ReportStatus};
 use urzua_core::rules::RULE_EMBODIMENT_CLAIM_EXPIRED;
-use urzua_core::status_model::{StatusDecl, StatusFieldRule};
+use urzua_core::status_model::{DeliveryDecl, StatusDecl, StatusFieldRule};
 
 use super::config_lines::{index, key, ConfigLines};
-use crate::emit;
 use crate::session::{emit_or_not_run, Workspace};
+use crate::{emit, emit_compact};
 
 /// Per-type keys with a rendering of their own; every other declared key is
 /// printed raw under its own name, so no declaration can go unreported.
@@ -88,7 +90,16 @@ impl Report for ExplainTypesReport {
 }
 
 pub fn run(config_path: Option<PathBuf>, mode: Mode) -> ExitCode {
-    emit_or_not_run(build(config_path, mode).map(|r| emit(&r)))
+    let compact = matches!(mode, Mode::Summary);
+    emit_or_not_run(build(config_path, mode).map(
+        |r| {
+            if compact {
+                emit_compact(&r)
+            } else {
+                emit(&r)
+            }
+        },
+    ))
 }
 
 /// `--full` with `--type`: the one-type report is already the full one.
@@ -229,6 +240,24 @@ fn obj(pairs: Vec<(&str, Value)>) -> Value {
     Value::Object(m)
 }
 
+/// An evidence category and the first tier that declares it, with that tier's position.
+type EvidenceRow<'a> = (&'static str, Option<(usize, &'a str)>);
+
+/// The one sentence on how a locator is written, from the engine's own
+/// grammar.
+fn locator_form() -> String {
+    format!("a locator is written `<category>:<locator>`; <locator> is {GRAMMAR}")
+}
+
+/// A declared value without its position; a marked default keeps its marker.
+fn bare(v: Value) -> Value {
+    if v.get("default").is_some() {
+        v
+    } else {
+        v["value"].clone()
+    }
+}
+
 fn yaml_json(v: &yaml_serde::Value) -> Value {
     serde_json::to_value(v).unwrap_or(Value::Null)
 }
@@ -322,6 +351,7 @@ impl Ctx<'_> {
         if let Some(d) = &decl {
             out.push(("states", self.states(name, t, d)));
             out.push(("conditions", Value::from(self.conditions(name, t, d))));
+            out.push(("checklist", self.checklist(name, d)));
         }
         out.push(("gates", Value::from(self.gates(name))));
         let aliases: Vec<Value> = self
@@ -357,47 +387,41 @@ impl Ctx<'_> {
             let initial = self.initial(name, d);
             obj(vec![
                 ("values", json!(d.values)),
-                (
-                    "initial",
-                    if initial.get("default").is_some() {
-                        initial
-                    } else {
-                        initial["value"].clone()
-                    },
-                ),
+                ("initial", bare(initial)),
             ])
         });
-        let conditions = decl
+        let conditions = decl.as_ref().map_or_else(Vec::new, |d| {
+            self.condition_rules(t, d)
+                .into_iter()
+                .map(|(_, _, _, sentence)| Value::from(sentence))
+                .collect()
+        });
+        let checklist = decl
             .as_ref()
-            .map_or(0, |d| d.require.len() + d.forbid.len());
+            .map_or(Value::Null, |d| self.checklist_summary(name, d));
+        let revision_log_classes = t
+            .revision_log
+            .as_ref()
+            .and_then(|r| r.classes.as_ref())
+            .map_or(Value::Null, |_| json!(t.revision_log_shape().classes));
         let prefix = self.prefix(name, t);
         let mut dirs = vec![t.dir.clone()];
         dirs.extend(t.extra_dirs.iter().cloned());
         obj(vec![
             ("name", Value::from(name)),
             ("at", self.at(&base(name))),
-            (
-                "prefix",
-                if prefix.get("default").is_some() {
-                    prefix
-                } else {
-                    prefix["value"].clone()
-                },
-            ),
+            ("prefix", bare(prefix)),
             ("dirs", json!(dirs)),
             ("cannot_create", self.cannot_create(name, t)),
             ("required", json!(required)),
             ("optional", json!(optional)),
             ("states", states.unwrap_or(Value::Null)),
             ("references", Value::Object(references)),
-            (
-                "conditions",
-                if conditions > 0 {
-                    json!(conditions)
-                } else {
-                    Value::Null
-                },
-            ),
+            ("conditions", Value::from(conditions)),
+            ("gated", self.gated(name)),
+            ("field_values", json!(t.field_values)),
+            ("revision_log_classes", revision_log_classes),
+            ("checklist", checklist),
         ])
     }
 
@@ -438,11 +462,8 @@ impl Ctx<'_> {
         let rel = crate::commands::new::template_path(name)
             .to_string_lossy()
             .replace('\\', "/");
-        if self.repo_root.join(&rel).is_file() {
-            json!({"value": rel, "default": true, "source": "conventional_template_path"})
-        } else {
-            Value::Null
-        }
+        let exists = self.repo_root.join(&rel).is_file();
+        json!({"value": rel, "default": true, "source": "conventional_template_path", "exists_when_run": exists})
     }
 
     /// Every field the type names: required, then known, then any other a
@@ -693,7 +714,6 @@ impl Ctx<'_> {
 
     fn conditions(&self, name: &str, t: &RecordTypeConfig, d: &StatusDecl) -> Vec<Value> {
         let s = key(&base(name), "statuses");
-        let status_field = t.relation_field(urzua_core::config::RelationRole::Status);
         // A pending or placeholder value meets no requirement, so the sentence
         // alone would overstate what satisfies it.
         let missing = obj(["pending", "placeholders"]
@@ -706,39 +726,222 @@ impl Ctx<'_> {
                 (k, v)
             })
             .collect());
+        self.condition_rules(t, d)
+            .into_iter()
+            .map(|(kind, i, r, sentence)| {
+                obj(vec![
+                    ("kind", Value::from(kind)),
+                    ("when", json!(r.when)),
+                    ("when_field", json!(r.when_field)),
+                    ("fields", json!(r.fields)),
+                    ("sentence", Value::from(sentence)),
+                    (
+                        "counts_as_missing",
+                        if kind == "require" {
+                            missing.clone()
+                        } else {
+                            Value::Null
+                        },
+                    ),
+                    ("at", self.at(&index(&key(&s, kind), i))),
+                ])
+            })
+            .collect()
+    }
+
+    /// Each requirement, then each prohibition, with its position in its list
+    /// and its one-sentence form; the one source of both the summary's and the
+    /// detail's wording.
+    fn condition_rules<'d>(
+        &self,
+        t: &RecordTypeConfig,
+        d: &'d StatusDecl,
+    ) -> Vec<(&'static str, usize, &'d StatusFieldRule, String)> {
+        let status_field = t.relation_field(urzua_core::config::RelationRole::Status);
         [
             ("require", &d.require, "required"),
             ("forbid", &d.forbid, "forbidden"),
         ]
         .into_iter()
         .flat_map(|(kind, rules, verb)| {
-            rules
-                .iter()
-                .enumerate()
-                .map(move |(i, r)| (kind, verb, i, r))
-        })
-        .map(|(kind, verb, i, r)| {
-            obj(vec![
-                ("kind", Value::from(kind)),
-                ("when", json!(r.when)),
-                ("when_field", json!(r.when_field)),
-                ("fields", json!(r.fields)),
-                (
-                    "sentence",
-                    Value::from(format!("declared: {}", sentence(status_field, r, verb))),
-                ),
-                (
-                    "counts_as_missing",
-                    if kind == "require" {
-                        missing.clone()
-                    } else {
-                        Value::Null
-                    },
-                ),
-                ("at", self.at(&index(&key(&s, kind), i))),
-            ])
+            rules.iter().enumerate().map(move |(i, r)| {
+                let said = format!("declared: {}", sentence(status_field, r, verb));
+                (kind, i, r, said)
+            })
         })
         .collect()
+    }
+
+    /// For each status a gate naming this type lists under `to`, the group
+    /// that gate names under `by`, as declared; a list when several gates name
+    /// the same status.
+    fn gated(&self, name: &str) -> Value {
+        let Some(auth) = &self.config.authority else {
+            return Value::Null;
+        };
+        let mut by_status: Map<String, Value> = Map::new();
+        for g in auth
+            .gates
+            .iter()
+            .filter(|g| g.record_type.as_deref() == Some(name))
+        {
+            for status in &g.to {
+                let slot = by_status.entry(status.clone()).or_insert(Value::Null);
+                *slot = match std::mem::take(slot) {
+                    Value::Null => Value::from(g.by.clone()),
+                    Value::String(first) if first == g.by => Value::String(first),
+                    Value::String(first) => json!([first, g.by]),
+                    Value::Array(mut groups) => {
+                        if !groups.iter().any(|x| x == &Value::from(g.by.clone())) {
+                            groups.push(Value::from(g.by.clone()));
+                        }
+                        Value::Array(groups)
+                    }
+                    other => other,
+                };
+            }
+        }
+        Value::Object(by_status)
+    }
+
+    /// The `statuses.delivery.items` declaration of the type, with the
+    /// delivery declaration it sits in and its key path.
+    fn items_decl<'d>(
+        &self,
+        name: &str,
+        d: &'d StatusDecl,
+    ) -> Option<(
+        &'d DeliveryDecl,
+        &'d urzua_core::done_items::ItemsDecl,
+        String,
+    )> {
+        let delivery = d.delivery.as_ref()?;
+        let items = delivery.items.as_ref()?;
+        let path = key(&key(&key(&base(name), "statuses"), "delivery"), "items");
+        Some((delivery, items, path))
+    }
+
+    /// Each category an evidence clause may name, with the first tier under
+    /// `embodiment.tiers` that declares `evidence:` for it and that tier's
+    /// position; whether the configuration declares `embodiment` at all.
+    fn evidence_tiers(&self) -> (Vec<EvidenceRow<'_>>, bool) {
+        let declared = raw_get(self.raw, &["embodiment", "tiers"]).is_some();
+        let tiers = &self.config.embodiment.tiers;
+        let rows = CATEGORIES
+            .iter()
+            .map(|c| {
+                let tier = tiers
+                    .iter()
+                    .enumerate()
+                    .find(|(_, t)| t.evidence.as_str() == *c)
+                    .map(|(i, t)| (i, t.state.as_str()));
+                (*c, tier)
+            })
+            .collect();
+        (rows, declared)
+    }
+
+    /// The tiers at which an item's own locators resolve it, as declared under
+    /// `items.resolving_tiers`, else as the engine reads them (`delivered_tiers`).
+    fn resolving_tiers(&self, delivery: &DeliveryDecl, items_path: &str) -> Value {
+        match &delivery
+            .items
+            .as_ref()
+            .and_then(|i| i.resolving_tiers.as_ref())
+        {
+            Some(v) => self.declared(&key(items_path, "resolving_tiers"), json!(v)),
+            None => {
+                json!({"value": delivery.resolving_tiers(), "default": true, "source": "delivered_tiers"})
+            }
+        }
+    }
+
+    /// The checklist a type declares, with the evidence categories its items
+    /// may cite and the tier each is declared to compute to.
+    fn checklist(&self, name: &str, d: &StatusDecl) -> Value {
+        let Some((delivery, items, path)) = self.items_decl(name, d) else {
+            return Value::Null;
+        };
+        let (rows, declared) = self.evidence_tiers();
+        let resolving = self.resolving_tiers(delivery, &path);
+        let counted: Vec<&str> = delivery
+            .resolving_tiers()
+            .iter()
+            .map(String::as_str)
+            .collect();
+        let rows: Vec<Value> = rows
+            .into_iter()
+            .map(|(category, tier)| match tier {
+                None => json!({"category": category, "no_tier_declares_it": true}),
+                Some((i, state)) => {
+                    let mut row = json!({
+                        "category": category,
+                        "tier": state,
+                        "in_resolving_tiers": counted.contains(&state),
+                    });
+                    if declared {
+                        row["at"] = self.at(&index("embodiment.tiers", i));
+                    } else {
+                        row["default"] = Value::Bool(true);
+                        row["source"] = Value::from("built_in_embodiment_tiers");
+                    }
+                    row
+                }
+            })
+            .collect();
+        obj(vec![
+            (
+                "section",
+                self.declared(&key(&path, "section"), json!(items.section)),
+            ),
+            (
+                "evidence_marker",
+                self.declared(&key(&path, "evidence_marker"), json!(items.evidence_marker)),
+            ),
+            (
+                "evidence_categories",
+                json!({"value": CATEGORIES, "source": "engine_locator_categories"}),
+            ),
+            ("evidence_tiers", Value::from(rows)),
+            ("resolving_tiers", resolving),
+            (
+                "locator_form",
+                json!({"value": locator_form(), "source": "engine_locator_grammar"}),
+            ),
+        ])
+    }
+
+    /// The summary's checklist marker: the section, each category that has a
+    /// declared tier with that tier, the categories that have none, and the
+    /// tiers listed as resolving, each read from the same rows as `checklist`.
+    fn checklist_summary(&self, name: &str, d: &StatusDecl) -> Value {
+        let Some((delivery, items, path)) = self.items_decl(name, d) else {
+            return Value::Null;
+        };
+        let (rows, declared) = self.evidence_tiers();
+        let evidence: Map<String, Value> = rows
+            .iter()
+            .filter_map(|(c, t)| t.map(|(_, state)| (c.to_string(), Value::from(state))))
+            .collect();
+        let no_tier: Vec<&str> = rows
+            .iter()
+            .filter(|(_, t)| t.is_none())
+            .map(|(c, _)| *c)
+            .collect();
+        let evidence = if declared {
+            Value::Object(evidence)
+        } else {
+            json!({"value": evidence, "default": true, "source": "built_in_embodiment_tiers"})
+        };
+        obj(vec![
+            ("section", json!(items.section)),
+            ("evidence", evidence),
+            ("no_tier_declares", json!(no_tier)),
+            (
+                "resolving_tiers",
+                bare(self.resolving_tiers(delivery, &path)),
+            ),
+        ])
     }
 
     /// The gates declared for this type by name, as declared.

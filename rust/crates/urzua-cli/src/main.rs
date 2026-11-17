@@ -19,6 +19,7 @@ use clap::{Parser, Subcommand};
 use urzua_core::report::{CouldNotRun, Report};
 
 mod commands;
+mod compact_json;
 mod diff_scope;
 mod discovery;
 mod file_texts;
@@ -47,12 +48,26 @@ pub(crate) const NOTICE_RULE_APPLICABILITY: &str = "rule-applicability";
 /// the payload -- each `Report` stays its own real, fully-typed struct; this
 /// just gives every one of them the same last step.
 pub(crate) fn emit<T: Report>(report: &T) -> ExitCode {
+    emit_as(report, false)
+}
+
+/// [`emit`] with each array of scalars on one line, for a report an agent
+/// reads whole and for which line count is most of the bytes.
+pub(crate) fn emit_compact<T: Report>(report: &T) -> ExitCode {
+    emit_as(report, true)
+}
+
+fn emit_as<T: Report>(report: &T, inline_arrays: bool) -> ExitCode {
     use std::io::Write;
     // writeln!, not println!: a closed stdout (`urzua check | head -1`) must
     // end the run quietly, not panic (MILE-176). The reader leaving is not an
     // error of ours, so the write result is dropped and the exit code stays
     // the report's.
     let (text, code) = match serde_json::to_string_pretty(&with_next_action(report)) {
+        Ok(text) if inline_arrays => (
+            compact_json::inline_scalar_arrays(&text),
+            report.exit_code(),
+        ),
         Ok(text) => (text, report.exit_code()),
         // A report that cannot be written as a JSON object (the two keys are
         // appended to it) is a could-not-run, never a panic.

@@ -300,17 +300,35 @@ values and its `actions`.
 With `--types`: a summary, one compact entry per declared record type in name order (`name`, `at`,
 `prefix`, `dirs`, `cannot_create` when `urzua new` refuses the type, `required` and `optional` field
 names, `states`, `references` with `"any"` for an unconstrained field and `none` when no type
-satisfies every declaration, and the number of `conditions`), then `path_gates` as declared; a default keeps its
-marker object; `next_action` is `urzua explain --type <name>` when a type is declared.
+satisfies every declaration), then `path_gates` as declared; a default keeps its marker object;
+`next_action` is `urzua explain --type <name>` when a type is declared. Each of these keys is printed
+for a type only when the type declares it, copied from the same declaration `--type` shows:
+
+- `conditions`: the `declared: when ...` sentence of each `statuses.require` and `statuses.forbid` entry.
+- `gated`: for each status that an `authority.gates` entry naming the type lists under `to`, the group
+  that entry names under `by` (a list when several entries name the status); no logins.
+- `field_values`: each field that declares `field_values`, with its values.
+- `revision_log_classes`: the classes the type declares under `revision_log.classes`.
+- `checklist`: the type declares `statuses.delivery.items`: its `section`; `evidence`, each evidence
+  category that a tier under `embodiment.tiers` declares (`evidence:`) with that tier's state;
+  `no_tier_declares`, the categories no tier declares; and `resolving_tiers`.
+
+The summary prints each array of scalars on one line; `--full` and `--type` print one element per line.
 
 With `--types --full`, or `--type <name>` for one type (always full; `--type <name> --full` and
 `--full` alone exit 2 and name the command to run): every declaration, each with `at`
-(`key.path:line`): `create_command` (shell-quoted) or `cannot_create`, `prefix`, `dirs`, `template`,
-`header_fields` (a `pointer` gives its own `targets`, each pair's `target_types` with the pair's name,
+(`key.path:line`): `create_command` (shell-quoted) or `cannot_create`, `prefix`, `dirs`, `template`
+(the conventional path `.urzua/templates/<type>.md`, a default, with `exists_when_run`, whether that
+file was there when the command ran), `header_fields` (a `pointer` gives its own `targets`, each pair's `target_types` with the pair's name,
 and `effective_targets`; a field a relation pair declares lists that pair as declared), `states`
 (with `new_writes`, the status `urzua new` writes, and `expiry`, the claim periods with the rule
 setting's level as written), `conditions` (keys, a `declared: ...` sentence, `counts_as_missing` for a
-requirement), `gates` (only gates declared for the type by name), `aliases` (each alias with its
+requirement), `checklist` (when the type declares `statuses.delivery.items`: the `section` and
+`evidence_marker`, the engine's `evidence_categories`, for each category the tier an
+`embodiment.tiers` entry declares for it with its line and whether the tier is listed in
+`resolving_tiers`, or `no_tier_declares_it`, the `resolving_tiers` declared or, marked as a default,
+the type's `delivered_tiers`, and one sentence from the engine's grammar on how a locator is written;
+no resolution rule is described), `gates` (only gates declared for the type by name), `aliases` (each alias with its
 anchor's line, once per alias), and every other declared key raw under its own name.
 `create_command` can still be refused for the given title (the identity pattern is fitted to the real
 number and title) or by a path gate; `urzua new` says why.
