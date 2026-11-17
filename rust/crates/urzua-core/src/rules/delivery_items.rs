@@ -365,12 +365,12 @@ fn evidence_standing(
             .parsed
             .as_ref()
             .map_or_else(|_| entry.raw.clone(), |l| l.path.clone());
-        if locator_defect(entry, "the evidence clause", env).is_some() {
+        if file_locator_defect(entry, "the evidence clause", env).is_some() {
             return EvidenceStanding::Fails {
                 cause: missing_locator_cause(&entry.category, &path, env),
             };
         }
-        if entry.category == "record" && !env.records.iter().any(|r| r.path == Path::new(&path)) {
+        if record_locator_defect(entry, "the evidence clause", env).is_some() {
             return EvidenceStanding::Fails {
                 cause: format!(
                     "locator {path} is under `record:` but is not a record of any declared type"
@@ -395,22 +395,55 @@ fn evidence_standing(
             tier: tier.to_string(),
         }
     } else {
-        let paths: Vec<String> = entries
-            .iter()
-            .map(|e| {
-                e.parsed
-                    .as_ref()
-                    .map_or_else(|_| e.raw.clone(), |l| l.path.clone())
-            })
-            .collect();
         EvidenceStanding::Fails {
-            cause: format!(
-                "locator {} resolves only to {tier}, which is not in resolving_tiers ({}): add '{tier}' to `record_types.{record_type}.statuses.delivery.items.resolving_tiers` in the configuration to make it count",
-                paths.join(", "),
-                delivery.resolving_tiers().join(", ")
-            ),
+            cause: not_counted_cause(&entries, tier, config, delivery, record_type),
         }
     }
+}
+
+/// Why locators that all exist compute to a tier the type does not count, and
+/// the repair that loads: a tier no category computes to is declared under
+/// `embodiment.tiers`, since `resolving_tiers` may name only a declared tier;
+/// a declared tier that does not count is added to `resolving_tiers`.
+fn not_counted_cause(
+    entries: &[crate::locator::LocatorEntry],
+    tier: &str,
+    config: &Config,
+    delivery: &DeliveryDecl,
+    record_type: &str,
+) -> String {
+    let paths: Vec<String> = entries
+        .iter()
+        .map(|e| {
+            e.parsed
+                .as_ref()
+                .map_or_else(|_| e.raw.clone(), |l| l.path.clone())
+        })
+        .collect();
+    if tier == config.embodiment.none {
+        let mut categories: Vec<&str> = entries
+            .iter()
+            .map(|e| e.category.as_str())
+            .filter(|c| {
+                !config
+                    .embodiment
+                    .tiers
+                    .iter()
+                    .any(|t| t.evidence.as_str() == *c)
+            })
+            .collect();
+        categories.dedup();
+        return format!(
+            "locator {} computes to {tier}, because no tier in `embodiment.tiers` declares `evidence: {}`: declare one and add its state to `record_types.{record_type}.statuses.delivery.items.resolving_tiers` to make the category count",
+            paths.join(", "),
+            categories.join("`, `evidence: ")
+        );
+    }
+    format!(
+        "locator {} resolves only to {tier}, which is not in resolving_tiers ({}): add '{tier}' to `record_types.{record_type}.statuses.delivery.items.resolving_tiers` in the configuration to make it count",
+        paths.join(", "),
+        delivery.resolving_tiers().join(", ")
+    )
 }
 
 /// Judges every item of a record against the tree (`ADR-96` section 2).

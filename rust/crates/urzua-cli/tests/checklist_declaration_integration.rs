@@ -681,3 +681,255 @@ fn fix_repairs_a_checklist_status_with_no_rule_named() {
     assert_eq!(report["status"], "repairs-available", "{report}");
     assert_eq!(report["repairs"][0]["computed_value"], "Done", "{report}");
 }
+
+// ------------------------------------ a rule applied by declaration must read a record
+
+const REQUIRE_ONLY: &str = "schema_version: 2
+record_types:
+  task:
+    dir: docs/task
+    prefix: TASK
+    required_fields: [Status, Kind]
+    header_shape: yaml-frontmatter
+    statuses:
+      values: [Open, Done]
+      success: [Done]
+      require:
+        - {when: [Done], fields: [Kind]}
+  note:
+    dir: docs/note
+    prefix: NOTE
+    required_fields: [Status]
+    header_shape: yaml-frontmatter
+";
+
+fn note_repo(label: &str, task: Option<String>) -> common::TempDir {
+    let dir = common::TempDir::new(&format!("urzua-checklist-{label}"));
+    for d in ["docs/task", "docs/note", ".urzua"] {
+        std::fs::create_dir_all(dir.join(d)).unwrap();
+    }
+    std::fs::write(dir.join(".urzua/config.yaml"), REQUIRE_ONLY).unwrap();
+    std::fs::write(
+        dir.join("docs/note/NOTE-1-n.md"),
+        "---\nStatus: Open\n---\n# 1 - N\n",
+    )
+    .unwrap();
+    if let Some(task) = task {
+        std::fs::write(dir.join("docs/task/TASK-1-t.md"), task).unwrap();
+    }
+    common::git(&dir, &["init", "-q"]);
+    common::git(&dir, &["add", "-A"]);
+    dir
+}
+
+#[test]
+fn a_rule_applied_by_declaration_that_read_no_record_leaves_the_run_not_run() {
+    let dir = note_repo("declared-reads-nothing", None);
+    let (code, report) = run(&dir, &["check"]);
+    assert_eq!(report["status"], "not-run", "{report}");
+    assert_eq!(code, 2, "{report}");
+    assert_eq!(report["records_read_by_any_rule"], 0, "{report}");
+}
+
+#[test]
+fn a_rule_applied_by_declaration_that_read_a_record_makes_a_clean_run_ok() {
+    let dir = note_repo(
+        "declared-reads-one",
+        Some("---\nStatus: Done\nKind: bug\n---\n# 1 - T\n".to_string()),
+    );
+    let (code, report) = run(&dir, &["check"]);
+    assert_eq!(report["status"], "ok", "{report}");
+    assert_eq!(code, 0, "{report}");
+}
+
+// ---------------------------- a selected rule that applies nowhere says why
+
+#[test]
+fn a_selected_rule_that_applies_by_declaration_names_its_own_declaration() {
+    let dir = repo(
+        "selection-notice",
+        &config("[]", "", ""),
+        &[("TASK-1-t.md", record("Open", "bug", "- x\n"))],
+    );
+    let want = [
+        ("status.delivery-agreement", "`statuses.delivery.items`"),
+        ("status.done-items-shape", "`statuses.delivery.items`"),
+        ("status.waived-item-stale", "`statuses.delivery.items`"),
+        ("status.required-field-missing", "`statuses.require`"),
+        ("status.forbidden-field-present", "`statuses.forbid`"),
+    ];
+    for (rule, key) in want {
+        let selection = format!("header.required-fields,{rule}");
+        let (_, report) = run(&dir, &["check", "--rules", &selection]);
+        let notice = report["notices"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|n| n["subject"] == rule)
+            .unwrap_or_else(|| panic!("no notice for {rule}: {report}"));
+        let message = notice["message"].as_str().unwrap();
+        assert!(
+            message.contains(&format!("is on only where {key} is declared")),
+            "{rule}: {message}"
+        );
+    }
+}
+
+// ------------------------- a suggested repair is one that loads
+
+#[test]
+fn a_record_locator_with_no_tier_for_the_category_points_at_the_embodiment_tiers() {
+    let message = done_cause(
+        "- Decided. — evidence: record:docs/adr/ADR-1-use-x.md\n",
+        SMALL_CHECKLIST,
+        "",
+    );
+    assert!(
+        message.contains("no tier in `embodiment.tiers` declares `evidence: record`")
+            && message.contains("declare one and add its state to"),
+        "{message}"
+    );
+    assert!(
+        !message.contains("add 'Not started'"),
+        "'Not started' is not a tier a resolving_tiers entry may name: {message}"
+    );
+}
+
+#[test]
+fn the_repair_a_finding_suggests_loads() {
+    let spec_message = done_cause(
+        "- Decided. — evidence: spec:docs/adr/ADR-1-use-x.md\n",
+        SMALL_CHECKLIST,
+        "",
+    );
+    assert!(
+        spec_message.contains("add 'Specified' to"),
+        "{spec_message}"
+    );
+    let repaired = SMALL_CHECKLIST.replace(
+        "          partial_status: InProgress\n",
+        "          partial_status: InProgress\n          resolving_tiers: [Implemented, Verified, Specified]\n",
+    );
+    let dir = repo(
+        "repair-loads",
+        &config("[]", &repaired, ""),
+        &[(
+            "TASK-1-t.md",
+            record("Done", "bug", "- Built. — evidence: code:src/a.rs\n- Decided. — evidence: spec:docs/adr/ADR-1-use-x.md\n"),
+        )],
+    );
+    let (code, report) = run(&dir, &["check"]);
+    assert_eq!(code, 0, "{report}");
+    assert!(report.get("error").is_none(), "{report}");
+
+    let no_tier = done_cause(
+        "- Decided. — evidence: record:docs/adr/ADR-1-use-x.md\n",
+        SMALL_CHECKLIST,
+        "",
+    );
+    assert!(no_tier.contains("declare one"), "{no_tier}");
+    let items = SMALL_CHECKLIST.replace(
+        "          partial_status: InProgress\n",
+        "          partial_status: InProgress\n          resolving_tiers: [Implemented, Verified, Decided]\n",
+    );
+    let dir = repo(
+        "repair-loads-record",
+        &config("[]", &items, RECORD_TIER),
+        &[(
+            "TASK-1-t.md",
+            record("Done", "bug", "- Built. — evidence: code:src/a.rs\n- Decided. — evidence: record:docs/adr/ADR-1-use-x.md\n"),
+        )],
+    );
+    let (code, report) = run(&dir, &["check"]);
+    assert_eq!(code, 0, "{report}");
+}
+
+#[test]
+fn a_record_locator_in_a_header_must_name_a_record_as_an_item_one_must() {
+    let tiers = RECORD_TIER;
+    let cfg = config("[Realized-by]", "", tiers)
+        .replace("rules:\n", "rules:\n  embodiment.locator-exists: error\n");
+    let header = |locator: &str| {
+        format!(
+            "---\nStatus: Open\nKind: bug\nStable-Id: 01JTASK000000000000000001\nRealized-by: {locator}\n---\n# 1 - T\n"
+        )
+    };
+    let dir = repo(
+        "record-header",
+        &cfg,
+        &[
+            ("TASK-1-a.md", header("record:src/a.rs")),
+            ("TASK-2-b.md", header("record:docs/adr/ADR-1-use-x.md")),
+        ],
+    );
+    let (_, report) = run(&dir, &["check"]);
+    let found = findings(&report, "embodiment.locator-exists");
+    assert_eq!(found.len(), 1, "{report}");
+    assert!(
+        found[0]["file"].as_str().unwrap().contains("TASK-1"),
+        "{report}"
+    );
+    assert!(
+        found[0]["message"]
+            .as_str()
+            .unwrap()
+            .contains("under `record:`, which is not a record of any declared type"),
+        "{report}"
+    );
+}
+
+// -------------------------- init proposes none of the rules that apply by declaration
+
+const BY_DECLARATION: [&str; 5] = [
+    "status.delivery-agreement",
+    "status.done-items-shape",
+    "status.waived-item-stale",
+    "status.required-field-missing",
+    "status.forbidden-field-present",
+];
+
+fn rules_written(dir: &Path) -> String {
+    let text = std::fs::read_to_string(dir.join(".urzua/config.yaml")).unwrap();
+    text[text.find("\nrules:").expect("a rules table")..].to_string()
+}
+
+#[test]
+fn init_proposes_none_of_the_rules_that_apply_by_declaration() {
+    let adopt = common::TempDir::new("urzua-checklist-init-adopt");
+    std::fs::create_dir_all(adopt.join("docs/adr")).unwrap();
+    std::fs::write(
+        adopt.join("docs/adr/ADR-0001-x.md"),
+        "---\nStatus: Accepted\nDate: 2026-01-01\nDeciders: a\n---\n# 1 - X\n",
+    )
+    .unwrap();
+    common::git(&adopt, &["init", "-q"]);
+    common::git(&adopt, &["add", "-A"]);
+    let out = common::urzua()
+        .arg("init")
+        .current_dir(&adopt)
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stdout)
+    );
+    let green = common::TempDir::new("urzua-checklist-init-green");
+    common::git(&green, &["init", "-q"]);
+    let out = common::urzua()
+        .args(["init", "--types", "adr,rfc,spec,prd", "--dir", "docs"])
+        .current_dir(&green)
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stdout)
+    );
+    for dir in [&adopt, &green] {
+        let rules = rules_written(dir);
+        for rule in BY_DECLARATION {
+            assert!(!rules.contains(rule), "{rule} is not proposed:\n{rules}");
+        }
+    }
+}

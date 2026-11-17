@@ -724,6 +724,22 @@ fn session_notices(
     notices
 }
 
+/// The declaration a rule that is on only where it exists reads, as a notice
+/// names it.
+fn declaration_read_by(id: &str) -> &'static str {
+    match id {
+        rules::RULE_POINTER_TARGET_TYPE => {
+            "`targets` on a `pointer_fields` entry or `target_types` on a relation pair"
+        }
+        rules::RULE_STATUS_REQUIRED_FIELD_MISSING => "`statuses.require`",
+        rules::RULE_STATUS_FORBIDDEN_FIELD_PRESENT => "`statuses.forbid`",
+        rules::RULE_STATUS_DELIVERY_AGREEMENT
+        | rules::RULE_STATUS_DONE_ITEMS_SHAPE
+        | rules::RULE_STATUS_WAIVED_ITEM_STALE => "`statuses.delivery.items`",
+        _ => "`field_values`",
+    }
+}
+
 /// A selected rule that is on only where its declaration exists, in a
 /// configuration without it, runs as `not-enabled` like an unselected one, and
 /// the run says why. When no selected rule applies the report is left as it
@@ -746,11 +762,7 @@ fn inapplicable_selection_notices(config: &Config, selection: Option<&[String]>)
     inapplicable
         .into_iter()
         .map(|id| {
-            let key = if id == rules::RULE_POINTER_TARGET_TYPE {
-                "`targets` on a `pointer_fields` entry or `target_types` on a relation pair"
-            } else {
-                "`field_values`"
-            };
+            let key = declaration_read_by(id);
             Notice {
                 severity: NoticeSeverity::Info,
                 subject: id.clone(),
@@ -3036,7 +3048,6 @@ fn status_and_examined(
         executions,
         &|rule| {
             session.config.rules.contains_key(rule)
-                || urzua_core::rules::counts_as_declared(&session.config, rule)
                 || selection.is_some_and(|s| s.iter().any(|r| r == rule))
         },
         active.count(),

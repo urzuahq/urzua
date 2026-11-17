@@ -471,6 +471,37 @@ pub(crate) fn locator_defect(
     field: &str,
     env: &LocatorEnv<'_>,
 ) -> Option<LocatorDefect> {
+    file_locator_defect(entry, field, env).or_else(|| record_locator_defect(entry, field, env))
+}
+
+/// A `record:` locator names a record of a declared type, in a Done-means item
+/// and in a `Realized-by` header alike. `None` for any other category.
+pub(crate) fn record_locator_defect(
+    entry: &crate::locator::LocatorEntry,
+    field: &str,
+    env: &LocatorEnv<'_>,
+) -> Option<LocatorDefect> {
+    if entry.category != "record" {
+        return None;
+    }
+    let path = match &entry.parsed {
+        Ok(l) => l.path.clone(),
+        Err(_) => normalize_locator(&entry.raw),
+    };
+    let is_record = env.records.iter().any(|r| r.path == Path::new(&path));
+    (!is_record).then(|| {
+        (
+            "locator-missing",
+            format!("{field} names '{path}' under `record:`, which is not a record of any declared type"),
+        )
+    })
+}
+
+pub(crate) fn file_locator_defect(
+    entry: &crate::locator::LocatorEntry,
+    field: &str,
+    env: &LocatorEnv<'_>,
+) -> Option<LocatorDefect> {
     use crate::locator;
     let l = match &entry.parsed {
         Ok(l) => l,

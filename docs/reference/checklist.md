@@ -6,8 +6,8 @@ the items, and `check` reports a `Status` that disagrees. The mechanism answers 
 without a person ticking a box. It is a mechanism, not a workflow: you choose the type, the section
 and every status word.
 
-This page is the whole recipe. The configuration block and the record below are loaded by a test, so
-they cannot drift from the code.
+This page is the whole recipe (`MILE-335`, extending the checklist example `MILE-323` asks for). The
+configuration block and the record below are loaded by a test, so they cannot drift from the code.
 
 ## The configuration
 
@@ -166,8 +166,11 @@ embodiment:
 and add the tier to the type's `items.resolving_tiers` (`[Implemented, Verified, Decided]`). Without
 that line the finding says the locator resolves only to a tier that is not in `resolving_tiers`, lists the
 tiers that count, and names the key to change: `record_types.task.statuses.delivery.items.resolving_tiers`
-in the configuration. A `record:` locator that is not a record of
-a declared type does not resolve. To count a cited record only once it is accepted, declare a `kind` with
+in the configuration. Without a tier that declares `evidence: record`, the finding says that no tier in `embodiment.tiers`
+declares `evidence: record`, and the repair it names (declare the tier, then list its state in
+`resolving_tiers`) is the one above, because `resolving_tiers` may name only a declared tier. A `record:`
+locator must name a record of a declared type, in an item and in a `Realized-by` header alike; one that
+does not is a finding, and in an item it does not resolve. To count a cited record only once it is accepted, declare a `kind` with
 `cited_records: success` (see `SPEC-3`, "Done-means items").
 
 ## What `urzua fix` does and does not change

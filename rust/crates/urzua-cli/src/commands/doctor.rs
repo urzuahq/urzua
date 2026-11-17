@@ -382,7 +382,7 @@ fn config_shape_checks(
 
 /// A declared entry the configuration then holds no rule to: the rule that
 /// reports it is on by declaration, so only a `rules:` entry turning it off
-/// leaves the declaration reporting nothing (`MILE-326`). A checklist whose
+/// leaves the declaration reporting nothing. A checklist whose
 /// rule is off is refused at load instead.
 fn declared_entry_checks(
     config: &urzua_core::config::Config,

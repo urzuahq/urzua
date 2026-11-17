@@ -423,6 +423,26 @@ fn invalid(record_type: &str, reason: String) -> ConfigError {
     }
 }
 
+/// The status entries some type declares, which decide whether the rules that
+/// read them are on by default.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct DeclaredStatusEntries {
+    pub require: bool,
+    pub forbid: bool,
+    pub delivery_items: bool,
+}
+
+impl DeclaredStatusEntries {
+    pub(crate) fn of(decls: &BTreeMap<String, StatusDecl>) -> Self {
+        let any = |f: fn(&StatusDecl) -> bool| decls.values().any(f);
+        DeclaredStatusEntries {
+            require: any(|d| !d.require.is_empty()),
+            forbid: any(|d| !d.forbid.is_empty()),
+            delivery_items: any(|d| d.delivery.as_ref().is_some_and(|d| d.items.is_some())),
+        }
+    }
+}
+
 /// The smallest declaration of a checklist that loads: every key it needs, no
 /// optional one. Names are the repository's to replace; the load error shows
 /// it, and a test loads it.
